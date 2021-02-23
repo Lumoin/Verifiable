@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Code data types and algorithms for decentralized Sidetree protocol</Title>
+    <Description>Includes and implements core data types and algorithms for decentralized Sidetree protocol.</Description>
+    <PackageTags>decentralized sidetree</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  
+  <PropertyGroup>
+    <Title>Code data types and algorithms for decentralized data storage</Title>
+    <Description>Includes and implements core data types and algorithms for decentralized data storage.</Description>
+    <PackageTags>decentralized data storage</PackageTags>
+  </PropertyGroup>
+
+</Project>
