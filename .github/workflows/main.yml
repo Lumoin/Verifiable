@@ -1,66 +1,206 @@
-name: DotDecentralized
+name: Verifable .NET build
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ master ]
   pull_request:
-    branches: [ master ]
+  release:
+    types:
+      - published
+    branches:
+    - main
+  schedule:
+  # A daily build to check all is still functioning.
+  - cron: "0 0 * * *"
+
+env:
+  # This environment variable is checked in tests.
+  # For TPM either a Windows simulator or a platform TPM is used.
+  # Tests check that platform TPM tests must be run on Windows or Linux,
+  # MacOS tests are skipped.
+  USE_PLATFORM_TPM: true
+
+  DOTNET_ENVIRONMENT: CI
+  BUILD_CONFIGURATION: release
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+  NUGET_XMLDOC_MODE: skip
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+  NUGET_FEED: https://api.nuget.org/v3/index.json
+  GITHUB_USER: ${{ github.repository_owner }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_FEED: https://nuget.pkg.github.com/veikkoeeva/
+  DOTSSI: DotSsi
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    env:
-      config: 'Release'
-      
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+
     steps:
-    - uses: actions/checkout@v2
-    - name: .NET5 setup
-      uses: actions/setup-dotnet@v1
+    # Windows builds may have insufficient resource limits, so they're increased.
+    - name: Configure Windows Pagefile
+      if: ${{ matrix.os == 'windows-latest' }}
+      uses: al-cheb/configure-pagefile-action@7e234852c937eea04d6ee627c599fb24a5bfffee
       with:
-        dotnet-version: 5.n
-      
-      # Restore dependencies.
+          minimum-size: 8GB
+          maximum-size: 32GB
+          disk-root: "D:"
+
+    # This needs to run always. Only when there is a problem that could
+    # be because of system changes.
+    # - name: Windows system information
+    #  if: ${{ matrix.os == 'windows-latest' }}
+    #  run: Get-ComputerInfo
+
+    - name: Get Windows TPM information
+      if: ${{ matrix.os == 'windows-latest' }}
+      run: Get-Tpm
+
+    # This follows instructions at https://wiki.ubuntu.com/TPM/Testing.
+    - name: Install Linux TPM 2.0 module (tpm2-abrmd)
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: |
+        sudo apt-get update
+        sudo apt-get install tpm2-abrmd
+        sudo apt-get install libtss2-tcti-tabrmd-dev
+
+    - name: Check Linux TPM 2.0 module functionality
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: |
+        sudo service tpm2-abrmd start
+        sudo tpm2-abrmd --tcti=mssim --allow-root --logger=stdout
+
+    - name: Checkout code
+      uses: actions/checkout@v2.3.4
+      with:
+        fetch-depth: 2
+
+    - name: Cache Nuget packages '${{ matrix.os }}'
+      uses: actions/cache@v2.1.6
+      with:
+        path: ${{ env.NUGET_PACKAGES }}
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+        restore-keys: |
+          ${{runner.os}}-nuget-
+
+    - name: Setup .NET 5.0 SDK
+      uses: actions/setup-dotnet@v1.8.1
+      with:
+        dotnet-version: 5.*
+
     - name: Install dependencies
-      run: dotnet restore
-      
-      # Build project.
+      run: dotnet restore --locked-mode
+
     - name: Build
-      run: dotnet build --configuration $config --no-restore
-      
-    - name: Set build number for the PR
-      id: PRNUMBER
-      if: ${{ github.event_name == 'pull_request' }}
-      uses: kkak10/pr-number-action@v1.3
-      
-      # Creates the report file. 
-    - name: Set Test Title
-      run: | 
-            if ${{ github.event_name == 'pull_request' }}
+      run: dotnet build --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true
+      timeout-minutes: 5
+
+    - name: Set PR markdown title name
+      run: |
+           if ${{ true }}
             then
-              echo "::set-env name=title::Test Run for PR #${{steps.PRNUMBER.outputs.pr}} (${{github.run_number}})"
-              echo "::set-env name=file_name::TestReport.${{steps.PRNUMBER.outputs.pr}}.${{github.run_number}}.md"
+              echo "title=Test Run for PR #${{ 123 }} (${{ github.run_number }})" >> $GITHUB_ENV
+              echo "file_name=TestReport.${{ 123 }}.${{ github.run_number }}.md" >> $GITHUB_ENV
             else
-              echo "::set-env name=title::Test Run ${{github.run_number}}"
-              echo "::set-env name=file_name::TestReport.${{github.run_number}}.md"
+              echo "title=Test Run ${{ 123 }}" >> $GITHUB_ENV
+              echo "file_name=TestReport.${{ 123 }}.md" >> $GITHUB_ENV
             fi
-      
-      # Tests the built project.
-    - name: Testing the pull request
-      run: dotnet test --no-restore --no-build --configuration $config --logger:"liquid.md;LogFileName=${{github.workspace}}/${{env.file_name}};Title=${{env.title}};"
-      
-      # Uploads the build artefacts.
-    - name: Upload a Build Artifact
+
+      # Bash shell is pre-installed on Github Windows build machines, so this does not increase run time.
+      # There is not also shell related dependencies that ought to be noticed on Windows.
+      shell: bash
+
+    - name: Test PR
+      run: dotnet test --verbosity normal --no-restore --no-build --configuration ${{ env.BUILD_CONFIGURATION }} --logger:'liquid.md;LogFileName=${{ github.workspace }}/${{ env.file_name }};Title=${{ env.title }};' -property:CollectCoverage=true -property:DeterministicSourcePaths=true -property:IncludeTestAssembly=true -property:CoverletOutputFormat=cobertura /p:CoverletOutput='${{ github.workspace }}/reports/coverage/'
+      timeout-minutes: 5
+
+    # Currently reports collected only from Ubuntu.
+    # TODO: How to collect from all platforms...
+    - name: ReportGenerator
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      uses: danielpalme/ReportGenerator-GitHub-Action@7c638c8bedf7ffa556608cd62ad7a6b91b3fa76b
+      with:
+        reports: '${{ github.workspace }}/reports/coverage/coverage.cobertura.xml'
+        targetdir: '${{ github.workspace }}/reports/coverage/'
+        reporttypes: 'HtmlInline;Cobertura;MarkdownSummary'
+        assemblyfilters: '-xunit*'
+
+    - name: Publish coverage summary
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      uses: marocchino/sticky-pull-request-comment@322a2451dae6c7831d1a8b931275a7f78147c888
+      with:
+        path: '${{ github.workspace }}/reports/coverage/Summary.md'
+
+    - name: Upload PR build information artefact
       uses: actions/upload-artifact@v2
-      if: ${{always()}}
+      if: ${{ always() }}
       with:
         name: 'Test Run'
-        path: ${{github.workspace}}/${{env.file_name}}
-      
-      # Adds the generated report as a comment by the CI.
-    - name: CI commenting the PR.
-      uses: machine-learning-apps/pr-comment@master
-      if: ${{ github.event_name == 'pull_request' }}
+        path: ${{ github.workspace }}/${{ env.file_name }}
+
+    - name: Comment PR with the generated test Markdown
+      uses: machine-learning-apps/pr-comment@78e77cd435e0f9706512ea294d846058ae46f7ff
+      if: ${{ matrix.os == 'ubuntu-latest' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        path: ${{env.file_name}}
+        path: ${{ env.file_name }}
+
+    # Only one environment is needed for uploading artefacts. Ubuntu seem to be the fastest one.
+    # This borrows the release idea from Dustin Gorski's writing at https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
+    - name: Pack DotSsi
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore --include-symbols --include-source -property:PackageVersion=$GITHUB_RUN_ID src/$DOTSSI/$DOTSSI.*proj
+
+    - name: Upload DotSsi Nuget packages
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: nupkg
+        path: ./src/${{ env.DOTSSI }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+
+  prerelease:
+      needs: build
+      if: ${{ github.ref == 'refs/heads/develop' }}
+      runs-on: ubuntu-latest
+      steps:
+        - name: Download Artifact
+          uses: actions/download-artifact@v2.0.10
+          with:
+            name: nupkg
+
+        - name: Push to GitHub registry
+          run: dotnet nuget push "**/*.nupkg" --source ${{ env.GITHUB_FEED }} --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+
+  deploy:
+    needs: build
+    if: ${{ github.event_name == 'release' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: 5.*
+
+      - name: Create Release NuGet package
+        run: |
+          arrTag=(${GITHUB_REF//\// })
+          VERSION="${arrTag[2]}"
+          echo Version: $VERSION
+          VERSION="${VERSION//v}"
+          echo Clean Version: $VERSION
+          dotnet pack --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore --include-symbols --include-source -property:PackageVersion=$GITHUB_RUN_ID --output ./nupkg src/$DOTSSI/$DOTSSI.csproj
+
+      - name: Push to GitHub Feed
+        run: dotnet nuget push "**/*.nupkg" --source ${{ env.GITHUB_FEED }} --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+
+      - name: Push to NuGet feed
+        run: dotnet nuget push **/*.*nupkg --source $NUGET_FEED --skip-duplicate --api-key $NUGET_API_KEY

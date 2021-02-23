@@ -1,0 +1,20 @@
+{
+  "@context": [ "https://www.w3.org/ns/did/v1", "http://example.com" ],
+  "id": "did:example:alice",
+  "extraField": "This field is extra from additional context that makes this invalid without extended parsing that may be a security risk and so is not on by defaut.",
+  "keyAgreement": [
+    "#key-1"
+  ],
+  "verificationMethod": [
+    {
+      "id": "#key-1",
+      "controller": "did:example:alice",
+      "type": "JsonWebKey2020",
+      "publicKeyJwk": {
+        "kty": "OKP",
+        "crv": "X25519",
+        "x": "OeXe54Y0Dnk0WNWsQ6PqKUBB2x6bos0DZ_WkdFNdt3M"
+      }
+    }
+  ]
+}
