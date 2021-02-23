@@ -1,0 +1,29 @@
+# See more at
+# https://help.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+
+version: 2
+updates:  
+  - package-ecosystem: nuget
+    directory: '/'
+    schedule:
+      interval: daily
+      time: '05:00'
+      timezone: Etc/GMT
+    labels:
+      - dependencies
+    commit-message:
+      prefix: fix
+      prefix-development: chore
+      include: scope
+  
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: daily
+      time: '05:00'
+      timezone: Etc/GMT
+    labels:
+      - dependencies
+    commit-message:
+      prefix: ci
+      include: scope
