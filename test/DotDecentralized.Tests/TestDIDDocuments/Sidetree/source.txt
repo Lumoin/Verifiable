@@ -1,0 +1,2 @@
+https://identity.foundation/sidetree/spec/#create-3
+https://identity.foundation/sidetree/api/

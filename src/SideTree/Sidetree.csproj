@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Multitargeting requires some slight changes to current code on GetHash and some other places. Not done currently. -->
+  <PropertyGroup>
+    <!-- <TargetFrameworks>netstandard2.0;net5.0</TargetFrameworks> -->
+    <TargetFramework>net5.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>9.0</LangVersion>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AssemblyName>DotDecentralized.Sidetree</AssemblyName>
+    <RootNamespace>DotDecentralized.Sidetree</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DotDecentralized.Core\DotDecentralized.Core.csproj" />
+  </ItemGroup>
+
+</Project>

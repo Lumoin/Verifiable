@@ -1,0 +1,1 @@
+The source of these are at https://www.w3.org/TR/did-core/ and related documents.
