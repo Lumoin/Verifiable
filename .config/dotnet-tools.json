@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "dotnet-format": {
+      "version": "5.0.211103",
+      "commands": [
+        "dotnet-format"
+      ]
+    },
+    "dotnet-stryker": {
+      "version": "0.22.10",
+      "commands": [
+        "dotnet-stryker"
+      ]
+    },
+    "winsharpfuzz.commandline": {
+      "version": "1.0.0",
+      "commands": [
+        "winsharpfuzz"
+      ]
+    },
+    "winsharpfuzz.instrument": {
+      "version": "1.0.0",
+      "commands": [
+        "winsharpfuzz-instrument"
+      ]
+    },
+    "sharpfuzz.commandline": {
+      "version": "1.6.3",
+      "commands": [
+        "sharpfuzz"
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Windows specific security functionality</Title>
+    <Description>Includes Windows specific security functionality, such as ProtectedData implementation.</Description>
+    <PackageTags>Windows security ProtectedData</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="6.0.0-preview.7.21377.19" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+  </ItemGroup>
+  
+</Project>
