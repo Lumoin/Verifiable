@@ -1,0 +1,24 @@
+<Project>
+  <!-- Set the repository root into a variable -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <SourceRoot>$(MSBuildThisFileDirectory)</SourceRoot>
+  </PropertyGroup>
+
+  <!-- Common assembly and nuget package parameters. -->
+  <PropertyGroup>
+    <Authors>Lumoin and contributors</Authors>
+    <Product>Verifable</Product>
+    <Copyright>Lumoin</Copyright>
+    <PackageLicenseExpression>Apache2.0</PackageLicenseExpression>
+    <PackageTags>Decentralized identifiers data models</PackageTags>
+  </PropertyGroup>
+
+  <!-- Common compiler parameters. -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <NoWarn>$(NoWarn);1591;2003</NoWarn>
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+</Project>
