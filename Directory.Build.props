@@ -1,0 +1,101 @@
+<Project>
+
+  <PropertyGroup>
+    <LangVersion>9.0</LangVersion>
+    <SourceRoot>$(MSBuildThisFileDirectory)</SourceRoot>
+
+    <TargetFramework>net5.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);1591;2003</NoWarn>
+    <IncludeSymbols>true</IncludeSymbols>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+
+    <!-- There seem to be a bug that causes problems in lock file between Windows and Linux systems. -->
+    <!-- <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile> -->
+  </PropertyGroup>
+
+  <!-- Common nuget package parameters and resources. -->
+  <PropertyGroup>
+    <PackageId>$(AssemblyName)</PackageId>
+    <Authors>Lumoin and contributors</Authors>
+    <Product>Verifiable</Product>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <Copyright>Lumoin</Copyright>
+    <PackageIcon>resources/verifiable-nuget-logo.png</PackageIcon>
+    <PackageProjectUrl>https://github.com/lumoin/Verifiable/</PackageProjectUrl>
+    <Company>Lumoin</Company>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <RepositoryUrl>https://github.com/lumoin/Verifiable</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <!-- These should be distributed to packages as appropriate when packages diverge. -->
+    <PackageVersion>0.0.0.1-alpha</PackageVersion>
+    <AssemblyVersion>0.0.0.1</AssemblyVersion>
+    <FileVersion>0.0.0.1</FileVersion>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <Version>0.0.1</Version>
+
+    <AppendToReleaseNotesProperty>
+      <![CDATA[
+See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.md.]]>
+    </AppendToReleaseNotesProperty>
+    <ChangelogFile>../../CHANGELOG.md</ChangelogFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0" PrivateAssets="All"/>
+    <PackageReference Include="SIL.ReleaseTasks" Version="2.5.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="5.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
+    <PackageReference Update="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="3.3.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+
+    <PackageReference Update="Microsoft.VisualStudio.Threading.Analyzers" Version="16.10.56">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+
+    <!-- Disabled temporarily until the API is stablized. -->
+    <!--
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="3.3.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    -->
+
+    <!-- Disabled temporarily until a good rule set is created. -->
+    <!--
+    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.354">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    -->
+  </ItemGroup>
+
+  <!-- As this file is used in project file locations, the path is relative to them. -->
+  <ItemGroup>
+    <None Include="../../resources/verifiable-nuget-logo.png">
+      <Pack>True</Pack>
+      <PackagePath>/resources</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <!-- This is set in main.yml build script. -->
+  <!--
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+  -->
+
+</Project>

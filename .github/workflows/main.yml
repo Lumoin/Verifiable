@@ -1,0 +1,294 @@
+name: Verifiable .NET build
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+    paths-ignore:
+      - "**.md"
+  release:
+    types:
+      - published
+    branches:
+    - main
+    paths-ignore:
+      - "**.md"
+  schedule:
+  # A daily build to check all is still functioning.
+  - cron: "0 0 * * *"
+
+env:
+  # This environment variable is checked in tests.
+  # For TPM either a Windows simulator or a platform TPM is used.
+  # Tests check that platform TPM tests must be run on Windows or Linux,
+  # MacOS tests are skipped.
+  USE_PLATFORM_TPM: true
+
+  DOTNET_ENVIRONMENT: CI
+  BUILD_CONFIGURATION: Release
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+  NUGET_XMLDOC_MODE: skip
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  NUGET_FEED: https://api.nuget.org/v3/index.json
+  GITHUB_USER: ${{ github.repository_owner }}
+  GITHUB_FEED: https://nuget.pkg.github.com/lumoin/
+
+  # These are the Nuget packages that will be packed and uploaded.
+  VERIFIABLE: Verifiable
+  VERIFIABLE_BOUNCYCASTLE: Verifiable.BouncyCastle
+  VERIFIABLE_CORE: Verifiable.Core
+  VERIFIABLE_DATASTORAGE: Verifiable.DataStorage
+  VERIFIABLE_NSEC: Verifiable.NSec
+  VERIFIABLE_SECURITY_WINDOWS: Verifiable.Security.Windows
+  VERIFIABLE_SIDETREE: Verifiable.Sidetree
+  VERIFIABLE_TPM: Verifiable.Tpm
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+
+    steps:
+    # Windows builds may have insufficient resource limits, so they're increased.
+    - name: Configure Windows Pagefile
+      if: ${{ matrix.os == 'windows-latest' }}
+      uses: al-cheb/configure-pagefile-action@7e234852c937eea04d6ee627c599fb24a5bfffee
+      with:
+          minimum-size: 8GB
+          maximum-size: 32GB
+          disk-root: "D:"
+
+    # This needs to run always. Only when there is a problem that could
+    # be because of system changes.
+    # - name: Windows system information
+    #  if: ${{ matrix.os == 'windows-latest' }}
+    #  run: Get-ComputerInfo
+
+    # - name: Get Windows TPM information
+    #  if: ${{ matrix.os == 'windows-latest' }}
+    #  run: Get-Tpm
+
+    # This follows instructions at https://wiki.ubuntu.com/TPM/Testing.
+    # - name: Install Linux TPM 2.0 module (tpm2-abrmd)
+    #  if: ${{ matrix.os == 'ubuntu-latest' }}
+    #  run: |
+    #    sudo apt-get update
+    #    sudo apt-get install tpm2-abrmd
+    #    sudo apt-get install libtss2-tcti-tabrmd-dev
+
+    #- name: Check Linux TPM 2.0 module functionality
+    #  if: ${{ matrix.os == 'ubuntu-latest' }}
+    #  run: |
+    #    sudo service tpm2-abrmd start
+    #    sudo tpm2-abrmd --tcti=mssim --allow-root --logger=stdout
+
+    - name: Checkout code
+      uses: actions/checkout@v2.3.4
+      with:
+        fetch-depth: 2
+
+    # - name: Cache Nuget packages '${{ matrix.os }}'
+    #  uses: actions/cache@v2.1.6
+    #  with:
+    #    path: ${{ env.NUGET_PACKAGES }}
+    #    key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+    #    restore-keys: |
+    #      ${{runner.os}}-nuget-
+
+    - name: Setup .NET 5.* SDK
+      uses: actions/setup-dotnet@v1.8.1
+      with:
+        dotnet-version: 5.*
+
+    - name: Install dependencies
+      run: dotnet restore
+
+    - name: Restore local tools
+      run: dotnet tool restore
+
+    - name: Add Problem Matcher for dotnet-format
+      uses: xt0rted/dotnet-format-problem-matcher@b90c4f18e3daa4f8fd266e41eba4f351b2e00b75
+
+    # - name: Run dotnet format
+    #  run: dotnet format --check
+
+    # CodeQL requires to have a compilation step between initialize and analysis as it uses the
+    # files used for building to analyze the source code.
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v1
+      with:
+        queries: security-and-quality
+        languages: csharp
+
+    # The version numbers are determined and set here so it can be set appropriately to code and NuGet packages.
+    - name: Set version numbers
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: |
+          if [[ $GITHUB_EVENT_NAME == 'release' ]]; then
+              arrTag=(${GITHUB_REF//\// })
+              GIT_TAG_VERSION="${arrTag[2]}"
+              echo Version: $GIT_TAG_VERSION
+              VERSION="${GIT_TAG_VERSION//v}"
+              echo Clean Version: $VERSION
+              echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          else
+              echo "VERSION=$GITHUB_RUN_ID-dev" >> "$GITHUB_ENV"
+          fi
+
+    - name: Print version
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: echo $VERSION
+
+    - name: Build
+      run: dotnet build --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true
+      timeout-minutes: 5
+
+    - name: Set PR markdown title name
+      run: |
+           if ${{ true }}
+            then
+              echo "title=Test Run for (${{ github.run_number }})" >> $GITHUB_ENV
+              echo "file_name=TestReport.${{ github.run_number }}.md" >> $GITHUB_ENV
+            else
+              echo "title=Test Run ${{ github.run_number }}" >> $GITHUB_ENV
+              echo "file_name=TestReport.${{ github.run_number }}.md" >> $GITHUB_ENV
+            fi
+
+      # Bash shell is pre-installed on Github Windows build machines, so this does not increase run time.
+      # There is not also shell related dependencies that ought to be noticed on Windows.
+      shell: bash
+
+    - name: Test
+      run: dotnet test --verbosity normal --no-restore --no-build --configuration ${{ env.BUILD_CONFIGURATION }} --logger:'liquid.md;LogFileName=${{ github.workspace }}/${{ env.file_name }};Title=${{ env.title }};' -property:CollectCoverage=true -property:DeterministicSourcePaths=true -property:IncludeTestAssembly=true -property:CoverletOutputFormat=cobertura /p:CoverletOutput='${{ github.workspace }}/reports/coverage/'
+      timeout-minutes: 5
+
+    - name: Stryker.NET mutation Tests
+      run: dotnet stryker --solution-path Verifiable.sln --test-runner DotnetTest --reporters "['html']"
+      timeout-minutes: 15
+
+    # - name: Publish
+    #  run: dotnet publish -c Release --verbosity normal -o ./publish/
+
+    # - name: Archive publish results
+    #  uses: actions/upload-artifact@v2
+    #  with:
+    #    name: Verifiable.Benchmarks
+    #    path: ./publish/*
+
+    # - name: Run Benchmarks
+    #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
+
+    # - name: Upload benchmark results
+    #  uses: actions/upload-artifact@v2
+    #  with:
+    #    name: Benchmark_Results
+    #    path: ./BenchmarkDotNet.Artifacts/results/*
+
+    # This step is run always (e.g. also for non-PRs) so the results can be inspected on the command line too.
+    - name: ReportGenerator
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+       # run: reportgenerator -reports:**/coverage.cobertura.xml -targetdir:Report -reporttypes:HtmlInline;Cobertura;MarkdownSummary
+      uses: danielpalme/ReportGenerator-GitHub-Action@7c638c8bedf7ffa556608cd62ad7a6b91b3fa76b
+      with:
+        reports: '${{ github.workspace }}/reports/coverage/coverage.cobertura.xml'
+        targetdir: '${{ github.workspace }}/reports/coverage/'
+        reporttypes: 'HtmlInline;Cobertura;MarkdownSummary'
+        assemblyfilters: '-xunit*'
+
+    - name: Publish coverage report
+      if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' }}
+      uses: 5monkeys/cobertura-action@master
+      with:
+        path: '${{ github.workspace }}/reports/coverage/coverage.cobertura.xml'
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        tag: '${{ github.run_number }}_${{ github.run_id }}'
+        minimum_coverage: 75
+
+    - name: Publish coverage summary
+      if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' }}
+      uses: marocchino/sticky-pull-request-comment@322a2451dae6c7831d1a8b931275a7f78147c888
+      with:
+        header: Report
+        path: '${{ github.workspace }}/reports/coverage/Summary.md'
+        recreate: true
+
+    - name: Upload PR build information artefact
+      uses: actions/upload-artifact@v2
+      if: ${{ always() }}
+      with:
+        name: 'Test Run'
+        path: ${{ github.workspace }}/${{ env.file_name }}
+
+    # - name: Comment PR with the generated test Markdown
+    #  if: ${{ matrix.os == 'ubuntu-latest' }} && ${{ github.event_name == 'pull_request' }}
+    #  uses: machine-learning-apps/pr-comment@78e77cd435e0f9706512ea294d846058ae46f7ff
+    #  env:
+    #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #  with:
+    #    path: ${{ env.file_name }}
+
+    # - name: Perform CodeQL Analysis
+    #  uses: github/codeql-action/analyze@v1
+    #  timeout-minutes: 100
+
+    - name: Pack Nuget files
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: |
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE/$VERIFIABLE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE_BOUNCYCASTLE/$VERIFIABLE_BOUNCYCASTLE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:NoWarn=NU5104 -property:PackageVersion=$VERSION src/$VERIFIABLE_CORE/$VERIFIABLE_CORE.csproj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE_DATASTORAGE/$VERIFIABLE_DATASTORAGE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:NoWarn=NU5104 -property:PackageVersion=$VERSION src/$VERIFIABLE_NSEC/$VERIFIABLE_NSEC.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE_SECURITY_WINDOWS/$VERIFIABLE_SECURITY_WINDOWS.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE_SIDETREE/$VERIFIABLE_SIDETREE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE_TPM/$VERIFIABLE_TPM.*proj
+
+    - name: Upload Verifiable Nuget packages
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: nupkg
+        path: |
+          ./src/${{ env.VERIFIABLE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+          ./src/${{ env.VERIFIABLE_BOUNCYCASTLE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+          ./src/${{ env.VERIFIABLE_CORE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+          ./src/${{ env.VERIFIABLE_DATASTORAGE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+          ./src/${{ env.VERIFIABLE_NSEC }}//bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+          ./src/${{ env.VERIFIABLE_SECURITY_WINDOWS }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+          ./src/${{ env.VERIFIABLE_SIDETREE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+          ./src/${{ env.VERIFIABLE_TPM }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+
+  # The release idea is inspired by https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
+  prerelease:
+      needs: build
+      if: ${{ github.ref == 'refs/heads/develop' }}
+      runs-on: ubuntu-latest
+      steps:
+        - name: Download NuGet artifacts
+          uses: actions/download-artifact@v2.0.10
+          with:
+            name: nupkg
+
+        - name: Push to GitHub developer feed
+          run: dotnet nuget push "**/*.nupkg" --source ${{ env.GITHUB_FEED }} --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+
+  deploy:
+    needs: build
+    if: ${{ github.event_name == 'release' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download NuGet artifacts
+        uses: actions/download-artifact@v2.0.10
+        with:
+          name: nupkg
+
+      - name: Push to GitHub developer feed
+        run: dotnet nuget push "**/*.nupkg" --source ${{ env.GITHUB_FEED }} --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+
+      - name: Push to NuGet feed
+        run: dotnet nuget push **/*.nupkg --source $NUGET_FEED --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
