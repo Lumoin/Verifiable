@@ -22,6 +22,14 @@ Since this technology and its likely applications rely on cryptography, these li
 - Various related protocols to DIDs and VCs.
 - Key and secrets management.
 
+#### Quick links
+
+- [Decentralized Identifiers data model](https://www.w3.org/TR/did-core/)
+- [Decentralized Identifiers conformance and test suite](https://w3c.github.io/did-test-suite/)
+- [Verifiable Credentials data model](https://w3c.github.io/vc-data-model/)
+- [Verifiable Credentials conformance and test suite](https://w3c.github.io/vc-test-suite/implementations/)
+- [Trusted Platform Module (TPM 2.0) specifications](https://trustedcomputinggroup.org/resource/tpm-library-specification/)
+
 <hr>
 
 ## The design principles
@@ -44,7 +52,7 @@ Please, read [contribution guidelines](.github/contributing.md) for technicaliti
 
 For development, the code and project should run on Windows, Linux and MacOS. Some hardware specific elements may work on only some operating systems.
 
-.NET 6 is needed. Community at [TPM.DEV](https://developers.tpm.dev/) for TPM related study materials and discussions could be great, they have also.
+Community at [TPM.DEV](https://developers.tpm.dev/) for TPM related study materials and discussions could be great, they have also.
 
 Taking something from contribution guide and adding specific ideas.
 
@@ -54,7 +62,7 @@ Taking something from contribution guide and adding specific ideas.
 
 :raised_hands: By all means, do create pull requests (see [contribution guidelines](.github/contributing.md)).
 
-:star: Stars also help.
+:star: Stars are always nice. :)
 
 #### The code things
 
