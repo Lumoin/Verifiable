@@ -3,7 +3,21 @@
 #### Decentralized identifiers, verifiable credentials, associated protocols and key management with hardware security elements.
 
 ![Main build workflow](https://github.com/lumoin/Verifiable/actions/workflows/main.yml/badge.svg)
-[![NuGet](https://img.shields.io/nuget/v/Verifiable.svg?style=flat)](http://www.nuget.org/profiles/Verifiable/)
+
+| Library         | NuGet   |
+|---------------- | :-----: |
+| Verifiable      | [![NuGet](https://img.shields.io/nuget/v/Verifiable.svg?style=flat)](https://www.nuget.org/packages/Verifiable/)
+| Verifiable.NSec | [![NuGet](https://img.shields.io/nuget/v/Verifiable.NSec.svg?style=flat)](https://www.nuget.org/packages/Verifiable.NSec/) |
+| Verifiable.Core | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Core.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Core/) |
+| Verifiable.BouncyCastle | [![NuGet](https://img.shields.io/nuget/v/Verifiable.BouncyCastle.svg?style=flat)](https://www.nuget.org/packages/Verifiable.BouncyCastle/) |
+| Verifiable.Tpm | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Tpm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Tpm/) |
+| Verifiable.Sidetree | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Sidetree.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Sidetree/) |
+| Verifiable.Security.Windows | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Security.Windows.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Security.Windows/) |
+| Verifiable.Security.DataStorage | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DataStorage.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DataStorage/) |
+
+<hr>
+
+# This is an early version under development. Do not use yet.
 
 <hr>
 
