@@ -4,8 +4,18 @@
 
 ![Main build workflow](https://github.com/lumoin/Verifiable/actions/workflows/main.yml/badge.svg)
 
+<hr>
+
+## Features
+
+- Decentralized identifiers (DID).
+- Verifiable credentials (VC).
+- Various related protocols to DIDs and VCs.
+- Key and secrets management.
+- A simple [.NET tool](https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install), Verifiable, to use the libraries. 
+
 | Library         | NuGet   |
-|---------------- | :-----: |
+|---------------- | :------:|
 | Verifiable      | [![NuGet](https://img.shields.io/nuget/v/Verifiable.svg?style=flat)](https://www.nuget.org/packages/Verifiable/)
 | Verifiable.NSec | [![NuGet](https://img.shields.io/nuget/v/Verifiable.NSec.svg?style=flat)](https://www.nuget.org/packages/Verifiable.NSec/) |
 | Verifiable.Core | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Core.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Core/) |
@@ -15,9 +25,20 @@
 | Verifiable.Security.Windows | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Security.Windows.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Security.Windows/) |
 | Verifiable.Security.DataStorage | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DataStorage.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DataStorage/) |
 
+
+
 <hr>
 
-# This is an early version under development. Do not use yet.
+### Quickly about practicalities
+
+Please, open an issue if you have a suggestion, improvement (e.g. even fixing a typo) or something in mind that could be useful and worth considering.
+
+Pressing **.** on keyboard on this repository page or when viewing any file to open this codebase in VS Code web editor is also a good way to get a feel of the code. See more great tips at [10 Fun Things You Can Do With GitHub.dev](https://dev.to/lostintangent/10-awesome-things-you-can-do-with-github-dev-5fm7) by [@lostintangent](https://github.com/lostintangent).
+
+Otherwise the usual things about forking and sending pull requests work too. :)
+
+#### This is an early version under development. All will be breaking.
+
 
 <hr>
 
@@ -27,14 +48,7 @@ In simple terms these libraries implement a specification for documents that hav
 
 Since this technology and its likely applications rely on cryptography, these libraries include basic implementation for management of secrets such as the created documents and their material. Technologies include _trusted platform modules_ (TPM), _hardware security modules_ (HSM) and other potential technology such secure enclaves.
 
-<hr>
 
-## Features
-
-- Decentralized identifiers (DID).
-- Verifiable credentials (VC).
-- Various related protocols to DIDs and VCs.
-- Key and secrets management.
 
 #### Quick links
 
@@ -99,6 +113,7 @@ Taking something from contribution guide and adding specific ideas.
 :memo: Threat and privacy modelling diagrams and explanations would be cool! [LINDDUN](https://www.linddun.org/) is a great one! But not the only one! A nice compilation to choose from is [SEI: Threat Modeling: 12 Available Methods](https://insights.sei.cmu.edu/blog/threat-modeling-12-available-methods/). These really need to be written down at some point.
 
 :book: Draft plans, add documents and [eIDAS](https://en.wikipedia.org/wiki/EIDAS) data objects and some algorithms.
+
 
 
 ## Repository visualization
