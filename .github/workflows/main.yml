@@ -2,7 +2,6 @@ name: Verifiable .NET build
 
 on:
   workflow_dispatch:
-  push:
   pull_request:
     paths-ignore:
       - "**.md"
@@ -118,10 +117,28 @@ jobs:
     # - name: Run dotnet format
     #  run: dotnet format --check
 
+    # .NET 6 is not supported yet.
+    # - name: Generate Verifiable JSON SBOM
+    #  uses: CycloneDX/gh-dotnet-generate-sbom@master
+    #  with:
+    #    path: ./Verifiable.sln
+    #    json: true
+    #    github-bearer-token: ${{ secrets.GITHUB_TOKEN }}
+
+    # - name: Upload Verifiable JSON SBOM
+    #  uses: actions/upload-artifact@v1
+    #  with:
+    #    name: report
+    #    path: ${{ github.workspace }}/app/bom.json
+
     # CodeQL requires to have a compilation step between initialize and analysis as it uses the
     # files used for building to analyze the source code.
+    #
+    # Dependabot runs are skipped since they do not have write access to the repository.
+    # Reason: https://securitylab.github.com/research/github-actions-preventing-pwn-requests/.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v1
+      if: ${{ github.actor != 'dependabot[bot]' }}
       with:
         queries: security-and-quality
         languages: csharp
@@ -149,16 +166,15 @@ jobs:
       run: dotnet build --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true
       timeout-minutes: 5
 
+    # CodeQL does not yet support C# 10.0 or .NET6, see at https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/troubleshooting-the-codeql-workflow.
+    # - name: Perform CodeQL Analysis
+    #  uses: github/codeql-action/analyze@v1
+    #  timeout-minutes: 100
+
     - name: Set PR markdown title name
       run: |
-           if ${{ true }}
-            then
-              echo "title=Test Run for (${{ github.run_number }})" >> $GITHUB_ENV
-              echo "file_name=TestReport.${{ github.run_number }}.md" >> $GITHUB_ENV
-            else
-              echo "title=Test Run ${{ github.run_number }}" >> $GITHUB_ENV
-              echo "file_name=TestReport.${{ github.run_number }}.md" >> $GITHUB_ENV
-            fi
+            echo "title=Test Run (${{ github.run_number }})" >> $GITHUB_ENV
+            echo "file_name=TestReport.${{ github.run_number }}.md" >> $GITHUB_ENV
 
       # Bash shell is pre-installed on Github Windows build machines, so this does not increase run time.
       # There is not also shell related dependencies that ought to be noticed on Windows.
@@ -202,22 +218,27 @@ jobs:
         reporttypes: 'HtmlInline;Cobertura;MarkdownSummary'
         assemblyfilters: '-xunit*'
 
-    - name: Publish coverage report
-      if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' }}
-      uses: 5monkeys/cobertura-action@master
-      with:
-        path: '${{ github.workspace }}/reports/coverage/coverage.cobertura.xml'
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        tag: '${{ github.run_number }}_${{ github.run_id }}'
-        minimum_coverage: 75
+    # - name: Publish coverage report
+    #  if: ${{ matrix.os == 'ubuntu-latest' }}
+    #  uses: 5monkeys/cobertura-action@master
+    #  with:
+    #    path: '${{ github.workspace }}/reports/coverage/Cobertura.xml'
+    #    repo_token: ${{ secrets.GITHUB_TOKEN }}
+    #    minimum_coverage: 75
 
     - name: Publish coverage summary
-      if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' }}
+      if: ${{ matrix.os == 'ubuntu-latest' }}
       uses: marocchino/sticky-pull-request-comment@322a2451dae6c7831d1a8b931275a7f78147c888
       with:
         header: Report
         path: '${{ github.workspace }}/reports/coverage/Summary.md'
         recreate: true
+
+    - name: Comment PR with the generated test Markdown
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      uses: marocchino/sticky-pull-request-comment@322a2451dae6c7831d1a8b931275a7f78147c888
+      with:
+        path: ${{ env.file_name }}
 
     - name: Upload PR build information artefact
       uses: actions/upload-artifact@v2
@@ -227,16 +248,12 @@ jobs:
         path: ${{ github.workspace }}/${{ env.file_name }}
 
     # - name: Comment PR with the generated test Markdown
-    #  if: ${{ matrix.os == 'ubuntu-latest' }} && ${{ github.event_name == 'pull_request' }}
+    #  if: ${{ matrix.os == 'ubuntu-latest' }}
     #  uses: machine-learning-apps/pr-comment@78e77cd435e0f9706512ea294d846058ae46f7ff
     #  env:
     #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     #  with:
     #    path: ${{ env.file_name }}
-
-    # - name: Perform CodeQL Analysis
-    #  uses: github/codeql-action/analyze@v1
-    #  timeout-minutes: 100
 
     - name: Pack Nuget files
       if: ${{ matrix.os == 'ubuntu-latest' }}
