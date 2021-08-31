@@ -8,7 +8,7 @@
   <ItemGroup>
     <PackageReference Include="SharpFuzz" Version="1.6.2" />
     <PackageReference Include="WinSharpFuzz" Version="1.0.0" />
-    <PackageReference Include="FsCheck.Xunit" Version="2.16.0" />
+    <PackageReference Include="FsCheck.Xunit" Version="2.16.2" />
     <PackageReference Include="LiquidTestReports.Markdown" Version="1.0.9" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
     <PackageReference Include="System.Net.Http.Json" Version="6.0.0-preview.7.21377.19" />
