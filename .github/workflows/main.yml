@@ -230,7 +230,7 @@ jobs:
     #    minimum_coverage: 75
 
     - name: Publish coverage summary
-      if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' }}
+      if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
       uses: marocchino/sticky-pull-request-comment@82e7a0d3c51217201b3fedc4ddde6632e969a477
       with:
         header: Report
@@ -238,7 +238,7 @@ jobs:
         recreate: true
 
     - name: Comment PR with the generated test Markdown
-      if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' }}
+      if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
       uses: marocchino/sticky-pull-request-comment@82e7a0d3c51217201b3fedc4ddde6632e969a477
       with:
         path: ${{ env.file_name }}
