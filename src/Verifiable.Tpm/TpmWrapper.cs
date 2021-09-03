@@ -1,4 +1,3 @@
-using System;
 using Tpm2Lib;
 
 namespace Verifiable.Tpm
@@ -57,6 +56,10 @@ namespace Verifiable.Tpm
         }
 
 
+        /// <summary>
+        /// Performs application-defined tasks associated with freeing, releasing, or resetting umanaged resources.
+        /// </summary>
+        /// <param name="disposing">If this instance is currently disposing.</param>
         protected virtual void Dispose(bool disposing)
         {
             if(disposed)

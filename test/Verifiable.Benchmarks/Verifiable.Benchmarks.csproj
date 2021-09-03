@@ -10,5 +10,9 @@
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.13.1" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="SIL.ReleaseTasks" Version="2.6.0-beta0008" />
+  </ItemGroup>
   
 </Project>

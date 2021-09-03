@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.InteropServices;
 using Tpm2Lib;
 
@@ -35,7 +34,7 @@ namespace Verifiable.Tpm
                 return new LinuxTpmDevice();
             }
 
-            throw new PlatformNotSupportedException($"The library doesn't support the current OS platform: {RuntimeInformation.OSDescription}.");
+            throw new PlatformNotSupportedException($"The library doesn't support \"{RuntimeInformation.OSDescription}\".");
         }
     }
 }

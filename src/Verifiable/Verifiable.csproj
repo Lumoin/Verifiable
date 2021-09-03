@@ -12,7 +12,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Spectre.Console" Version="0.41.0" />
+    <PackageReference Include="Spectre.Console" Version="0.41.1-preview.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Tpm\Verifiable.Tpm.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="SIL.ReleaseTasks" Version="2.6.0-beta0008" />
   </ItemGroup>
   
 </Project>

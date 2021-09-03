@@ -1,83 +1,10 @@
-using Verifiable.Tpm;
-using System;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
-using Tpm2Lib;
+using Verifiable.Tpm;
 using Xunit;
+
 
 namespace Verifiable.Tests
 {
-    /// <summary>
-    /// Wraps the simular and has the correct start sequence for the simulator.
-    /// </summary>
-    public sealed class TpmSimulatorWrapper: TpmWrapper
-    {
-        /// <summary>
-        /// A handle to the process that is connected to the TPM simulator
-        /// executable.
-        /// </summary>
-        private Process TpmSimulatorProcessHandle { get; }
-
-
-        /// <summary>
-        /// A default simulator constructor.
-        /// </summary>
-        /// <param name="pathToSimulator">Path to the simulator executable.</param>
-        public TpmSimulatorWrapper(string pathToSimulator = @"..\..\..\TpmSimulator\Simulator.exe"): base(isSimulator: true)
-        {
-            TpmSimulatorProcessHandle = CreateTpmSimulatorHandle(pathToSimulator);
-            _ = TpmSimulatorProcessHandle.Start();
-
-            TpmDevice.Connect();
-
-            //Then specific initiation logic for this TCP TPM simulator.
-            TpmDevice.PowerCycle();
-            Tpm.Startup(Su.Clear);
-
-            //Reset the dictionary - attack logic that exists also in the TPM simulator.
-            //Very forgiving parameters so that the simulator won't simulate
-            //lock-out!
-            Tpm.DictionaryAttackParameters(TpmHandle.RhLockout, 1000, 10, 1);
-
-            //Zero out all counters.
-            Tpm.DictionaryAttackLockReset(TpmHandle.RhLockout);
-        }
-
-
-        /// <inheritdoc />
-        protected override void Dispose(bool disposing)
-        {
-            if(disposing)
-            {
-                TpmSimulatorProcessHandle.Dispose();
-            }
-
-            base.Dispose(disposing);
-        }
-
-        /// <summary>
-        /// Creates a process handle for the simular.
-        /// </summary>
-        /// <returns>Process handle for the simulator.</returns>
-        /// <remarks>Currently only for Windows.</remarks>
-        private static Process CreateTpmSimulatorHandle(string pathToSimulator)
-        {
-            return new Process()
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = pathToSimulator,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WindowStyle = ProcessWindowStyle.Hidden
-                }
-            };
-        }
-    }
-
-
     /// <summary>
     /// Quick test container TPM check for tests...
     /// </summary>
@@ -127,16 +54,43 @@ namespace Verifiable.Tests
         }
 
 
+        /// <summary>
+        /// Checks that calling supported TPM platforms does not throw.
+        /// </summary>
+        [SkippableFact]
+        public void TpmIsPlatformSupported()
+        {
+            _ = TpmExtensions.IsTpmPlatformSupported();
+        }
+
+                
         [SkippableFact]
         public void TpmGetPropertiesSucceeds()
         {
-            var properties = TpmWrapper.Tpm.GetTpmProperties();
+            var tpmInfo = TpmWrapper.Tpm.GetAllTpmInfo();
 
             //A sampling of properties are checked here against known values.
-            Assert.True(properties.IsFips1402);
+            Assert.True(!string.IsNullOrWhiteSpace(tpmInfo.Properties.VendorString));
+            Assert.True(!string.IsNullOrWhiteSpace(tpmInfo.Properties.ManufacturerName));
+            Assert.True(tpmInfo.Properties.IsFips1402);
+            Assert.True(tpmInfo.PrcBanks.Count > 0);
         }
 
 
+        [SkippableFact]
+        public void TpmGetPcrBanksSucceeds()
+        {
+            var pcrBanks = TpmWrapper.Tpm.GetPcrBanks();
+
+            Assert.True(pcrBanks.Count > 0, "There should be one or more banks after querying the TPM.");
+            foreach(var pcrBank in pcrBanks)
+            {
+                Assert.True(TpmValidator.IsValidBank(pcrBank), "One or more of the buffer lengths in the PCR bank length did not match the bank algorithm.");
+            }
+        }
+
+
+        /// <inheritdoc />
         public void Dispose()
         {
             TpmWrapper?.Dispose();

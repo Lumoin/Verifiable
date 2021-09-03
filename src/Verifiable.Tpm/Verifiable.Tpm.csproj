@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <Title>Implements functionality to intereact with trusted platform module</Title>
@@ -8,6 +8,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.TSS" Version="2.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="SIL.ReleaseTasks" Version="2.6.0-beta0008" />
   </ItemGroup>
   
 </Project>

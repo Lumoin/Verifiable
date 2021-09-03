@@ -1,78 +1,53 @@
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using Tpm2Lib;
 
 namespace Verifiable.Tpm
 {
     /// <summary>
-    /// TPM Properties according to <see href="https://trustedcomputinggroup.org/wp-content/uploads/TCG_TPM2_r1p59_Part2_Structures_pub.pdf">
-    /// Trusted Platform Module Library Part 2: Structures [pdf]</see>.
+    /// Extensions to work with a connected <see cref="Tpm2"/> instance.
     /// </summary>
-    public record TpmProperties(
-        string SpecificationLevel,
-        string FamilyIndicator,
-        string SpecificationRevision,
-        DateTime SpecificationDate,
-        string ManufacturerName,
-        string VendorString,
-        string VendorType,
-        string PlatformSpecificationLevel,
-        string PlatformSpecificationRevision,
-        DateTime PlatformSpecificationDate,
-        Version FirmwareVersion,
-        uint ActiveSessionsMax,
-        string PlatformMemoryInMegaBytes,
-        bool IsFips1402)
-    {
-        /// <summary>
-        /// Test docs 2.
-        /// </summary>
-        public string SpecificationLevel { get; init; } = Validate(SpecificationLevel, nameof(SpecificationLevel));
-
-        public string FamilyIndicator { get; init; } = Validate(FamilyIndicator, nameof(FamilyIndicator));
-
-        public string SpecificationRevision { get; init; } = Validate(SpecificationRevision, nameof(SpecificationRevision));
-
-        public DateTime SpecificationDate { get; init; } = SpecificationDate;
-
-        public string ManufacturerName { get; init; } = Validate(ManufacturerName, nameof(ManufacturerName));
-
-        public string VendorString { get; init; } = Validate(VendorString, nameof(VendorString));
-
-        public string VendorType { get; init; } = Validate(VendorType, nameof(VendorType));
-
-        public string PlatformSpecificationLevel { get; init; } = Validate(PlatformSpecificationLevel, nameof(PlatformSpecificationLevel));
-
-        public string PlatformSpecificationRevision { get; init; } = Validate(PlatformSpecificationRevision, nameof(PlatformSpecificationRevision));
-
-        public DateTime PlatformSpecificationDate { get; init; } = PlatformSpecificationDate;
-
-        public Version FirmwareVersion { get; init; } = FirmwareVersion;
-
-        public uint ActiveSessionsMax { get; init; } = ActiveSessionsMax;
-
-        public string PlatformMemoryInMegaBytes { get; init; } = Validate(PlatformMemoryInMegaBytes, nameof(PlatformMemoryInMegaBytes));
-
-        /// <summary>
-        /// Indicates that the TPM is designed to comply with all of the FIPS 140-2 requirements at Level 1 or higher.
-        /// </summary>
-        public bool IsFips1402 { get; set; } = IsFips1402;
-
-        
-        private static string Validate(string value, string parameterName)
-        {
-            ArgumentNullException.ThrowIfNull(value, parameterName);
-
-            return value;
-        }
-    };
-
-
     public static class TpmExtensions
     {
+        /// <summary>
+        /// Checks if the calling platform is supported by this TPM library.
+        /// </summary>
+        /// <returns><see langword="True"/> if this library supports TPM. <see langword="False"/> otherwise.</returns>
+        /// <remarks>It may be TPM is supported by the platform, but not by this library.</remarks>
+        public static bool IsTpmPlatformSupported()
+        {
+            //TPMs are supported only on Windows or Linux at the moment.
+            return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+        }
+
+
+        /// <summary>
+        /// Gets all TPM information available from the system.
+        /// </summary>
+        /// <returns>All available TPM information that is available and extracted.</returns>
+        public static TpmInfo GetAllTpmInfo(this Tpm2 tpm)
+        {
+            ArgumentNullException.ThrowIfNull(tpm, nameof(tpm));
+
+            var properties = GetTpmProperties(tpm);
+            var pcrBanks = GetPcrBanks(tpm);
+
+            return new TpmInfo(properties, pcrBanks);
+        }
+
+
+        /// <summary>
+        /// Query the <paramref name="tpm"/> for its properties.
+        /// </summary>
+        /// <param name="tpm">The connected TPM to query.</param>
+        /// <returns>The queries properties.</returns>
         public static TpmProperties GetTpmProperties(this Tpm2 tpm)
         {
+            ArgumentNullException.ThrowIfNull(tpm, nameof(tpm));
+                            
             //TODO: Get all of these properties...
             /*
             None = 0,
@@ -183,15 +158,14 @@ namespace Verifiable.Tpm
             tpmProperty = tpmProperties.tpmProperty[Pt.PsRevision - Pt.PtFixed].value;
             string platformSpecificationRevision = ((float)tpmProperty / 100).ToString(CultureInfo.InvariantCulture);
 
-            //TODO: See DateOnly type at https://www.infoq.com/news/2021/04/Net6-Date-Time/.
             tpmProperty = tpmProperties.tpmProperty[Pt.PsYear - Pt.PtFixed].value;
-            var platformSpecificationDate = new DateTime((int)tpmProperty - 1, 12, 31);
+            var platformSpecificationDate = new DateOnly((int)tpmProperty - 1, 12, 31);
             tpmProperty = tpmProperties.tpmProperty[Pt.PsDayOfYear - Pt.PtFixed].value;
-            platformSpecificationDate = platformSpecificationDate.AddDays(tpmProperty);
+            platformSpecificationDate = platformSpecificationDate.AddDays((int)tpmProperty);
 
             uint tpmFirmwareVersionHigherBits = tpmProperties.tpmProperty[Pt.FirmwareVersion1 - Pt.PtFixed].value;
             uint tpmFirmwareVersionLowerBits = tpmProperties.tpmProperty[Pt.FirmwareVersion2 - Pt.PtFixed].value;
-            Version firmwareVersion = new Version(
+            Version firmwareVersion = new(
                 (int)tpmFirmwareVersionHigherBits >> 16,
                 (int)tpmFirmwareVersionHigherBits & 0xFFFF,
                 (int)tpmFirmwareVersionLowerBits >> 16,
@@ -205,7 +179,7 @@ namespace Verifiable.Tpm
 
             //tpmProperty = tpmProperties.tpmProperty[Pt.Modes - Pt.PtFixed].value;
             //properties.Add(new Property { Name = nameof(Pt.Modes), Value = tpmModes.ToString() });
-            bool isFips1402 = ((Tpm2.GetProperty(tpm, Pt.Modes) & (uint)ModesAttr.Fips1402) != 0);
+            bool isFips1402 = (Tpm2.GetProperty(tpm, Pt.Modes) & (uint)ModesAttr.Fips1402) != 0;
 
             /*tpm.GetCapability(Cap.TpmProperties, (uint)Pt.PtVar, 1000, out var capPropertiesVar);
             tpmProperties = (TaggedTpmPropertyArray)capPropertiesVar;
@@ -218,7 +192,7 @@ namespace Verifiable.Tpm
             var tpmStartupClear = (StartupClearAttr)tpmProperty;
             properties.Add(new Property { Name = nameof(Pt.StartupClear), Value = tpmStartupClear.ToString() });*/
 
-            var x = new TpmProperties(
+            return new TpmProperties(
                 specificationLevel,
                 familyIndicator,
                 specificationRevision.ToString(CultureInfo.InvariantCulture),
@@ -234,9 +208,76 @@ namespace Verifiable.Tpm
                 platformMemoryInMegaBytes,
                 isFips1402
             );
+        }
 
-            var tmp = x.SpecificationLevel;
-            return x;
+
+        /// <summary>
+        /// Queries the TPM for all the available PCR banks and their data.
+        /// </summary>
+        /// <param name="tpm">The TPM to query.</param>
+        /// <returns>All the PRC bank data available.</returns>
+        public static IReadOnlyCollection<PcrBank> GetPcrBanks(this Tpm2 tpm)
+        {
+            ArgumentNullException.ThrowIfNull(tpm, nameof(tpm));
+
+            var pcrBanksWithIndex = new List<PcrBank>();
+
+            _ = tpm.GetCapability(Cap.Pcrs, 0, 255, out ICapabilitiesUnion caps);
+            var pcrBanks = (PcrSelectionArray)caps;
+
+            foreach(var pcrBank in pcrBanks.pcrSelections)
+            {
+                var pcrBankData = new List<PcrData>();
+                
+                //Select all PCRs of this bank. Likely only a subset of these can be read on any given
+                //time, so they need to be read in a loop.
+                var bankPcrsBeingProcessed = new PcrSelection[] { new PcrSelection(pcrBank.hash, pcrBank.GetSelectedPcrs()) };
+                var maxPcrs = (uint)bankPcrsBeingProcessed[0].GetSelectedPcrs().Length;
+                do
+                {
+                    _ = tpm.PcrRead(bankPcrsBeingProcessed, out PcrSelection[] pcrValuesBatchToRead, out Tpm2bDigest[] pcrValues);
+                    if(pcrValues.Length == 0)
+                    {
+                        break;
+                    }
+
+                    //Only on bank of values is read at once, indicated by pcrBank.hash.
+                    //So there's only one element in the array constructed and correspondingly
+                    //received as an out parameter.
+                    var pcrsCurrentlyBeingRead = pcrValuesBatchToRead[0].GetSelectedPcrs();
+
+                    var currentRoundPcrsLeftToBeProcessed = bankPcrsBeingProcessed[0].GetSelectedPcrs();
+                    var pcrsLefToBeReadForTheNextRounds = currentRoundPcrsLeftToBeProcessed.Except(pcrsCurrentlyBeingRead);
+
+                    for(int i = 0; i < pcrValues.Length; i++)
+                    {
+                        pcrBankData.Add(new PcrData(pcrsCurrentlyBeingRead[i], ImmutableArray.Create(pcrValues[i].buffer)));
+                    }
+
+
+                    //This construct can be used to read the full bank. But some TPMs may
+                    //have more counters, like used in industrial systems or cars. Also,
+                    //this likely less than PcrSelection.MaxPcrs indexes, likely only the first eight indexes
+                    //pcrs[0] = PcrSelection.FullPcrBank(tpmAlgId, PcrSelection.MaxPcrs);
+
+                    //... So indexes are being read like this, together with the
+                    //other loop logic.
+                    bankPcrsBeingProcessed[0] = new PcrSelection(pcrBank.hash, maxPcrs);
+
+                    //This loop selects new PCRs to be read for the next round
+                    //on the loop from the set of all PCRs in the bank that have
+                    //not been read yet. Note that the set of PCRs left to be
+                    //read may be larger, or smaller than what the TPM will return
+                    //in on batch.
+                    foreach(var nextRoundPcr in pcrsLefToBeReadForTheNextRounds)
+                    {
+                        bankPcrsBeingProcessed[0].SelectPcr(nextRoundPcr);
+                    }
+                } while(bankPcrsBeingProcessed[0].GetSelectedPcrs().Length > 0);
+                pcrBanksWithIndex.Add(new PcrBank(pcrBank.hash.ToString(), pcrBankData));
+            }
+
+            return pcrBanksWithIndex.AsReadOnly();
         }
 
 
