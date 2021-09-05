@@ -14,5 +14,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="SIL.ReleaseTasks" Version="2.6.0-beta0008" />
+  </ItemGroup>
   
 </Project>

@@ -1,7 +1,10 @@
 using Spectre.Console;
 using Spectre.Console.Cli;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Verifiable.Tpm;
 
 namespace Verifiable
 {
@@ -82,8 +85,31 @@ namespace Verifiable
     {
         public override Task<int> ExecuteAsync(CommandContext context)
         {
-            AnsiConsole.MarkupLine("[bold blue]Trusted platform module (TPM) information (coming)[/]");
-            return Task.FromResult(0);
+            bool isTpmPlatformSupported = TpmExtensions.IsTpmPlatformSupported();
+            if(!isTpmPlatformSupported)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Trusted platform module (TPM) information is not supported on {RuntimeInformation.OSDescription}.[/]");
+                return Task.FromResult(1);
+            }
+
+            try
+            {
+                var tpm = new TpmWrapper();
+                var tpmInfo = TpmExtensions.GetAllTpmInfo(tpm.Tpm);
+
+                string tpmInfoJson = JsonSerializer.Serialize(tpmInfo);
+                AnsiConsole.MarkupLine(tpmInfoJson);
+
+                return Task.FromResult(0);
+            }
+            catch(Exception ex)
+            {
+                //TODO: Fix this.
+                AnsiConsole.MarkupLine($"[bold red]Unknown error: {ex}.[/]");
+            }
+
+            return Task.FromResult(1);
+
         }
     }
 
@@ -104,7 +130,7 @@ namespace Verifiable
             app.Configure(config =>
             {
                 config.CaseSensitivity(CaseSensitivity.None);
-                config.SetApplicationName("DotSsi");
+                config.SetApplicationName("verifiable");
                 config.ValidateExamples();
 
                 config.AddBranch("did", did =>
@@ -132,7 +158,6 @@ namespace Verifiable
                 config.AddBranch("info", info =>
                 {
                     info.SetDescription("Print selected platform information (only tpm currently)");
-
                     info.AddCommand<InfoTpmCommand>("tpm")
                         .WithDescription("Print trusted platform module (TPM) information")
                         .WithExample(new[] { "info", "tpm" });
