@@ -3,7 +3,6 @@ using Spectre.Console.Cli;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.Tpm;
 
 namespace Verifiable
@@ -83,13 +82,13 @@ namespace Verifiable
 
     public class InfoTpmCommand: AsyncCommand
     {
-        public override Task<int> ExecuteAsync(CommandContext context)
+        public override async Task<int> ExecuteAsync(CommandContext context)
         {
             bool isTpmPlatformSupported = TpmExtensions.IsTpmPlatformSupported();
             if(!isTpmPlatformSupported)
             {
                 AnsiConsole.MarkupLine($"[bold red]Trusted platform module (TPM) information is not supported on {RuntimeInformation.OSDescription}.[/]");
-                return Task.FromResult(1);
+                return 1;
             }
 
             try
@@ -97,10 +96,16 @@ namespace Verifiable
                 var tpm = new TpmWrapper();
                 var tpmInfo = TpmExtensions.GetAllTpmInfo(tpm.Tpm);
 
+                const string JsonFileName = "tpm_data.json";
                 string tpmInfoJson = JsonSerializer.Serialize(tpmInfo);
-                AnsiConsole.MarkupLine(tpmInfoJson);
+                using(var createStream = new FileStream(JsonFileName, FileMode.Create, FileAccess.Write))
+                {
+                    await JsonSerializer.SerializeAsync(createStream, tpmInfo);
+                }
 
-                return Task.FromResult(0);
+                AnsiConsole.MarkupLine($"[bold blue]tpm_data.json created[/]");
+
+                return 0;
             }
             catch(Exception ex)
             {
@@ -108,7 +113,7 @@ namespace Verifiable
                 AnsiConsole.MarkupLine($"[bold red]Unknown error: {ex}.[/]");
             }
 
-            return Task.FromResult(1);
+            return 1;
 
         }
     }
