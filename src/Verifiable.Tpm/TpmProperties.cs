@@ -1,3 +1,5 @@
+using System;
+
 namespace Verifiable.Tpm
 {
     /// <summary>

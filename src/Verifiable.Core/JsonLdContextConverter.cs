@@ -28,17 +28,18 @@ namespace Verifiable.Core.Did
             //or is an object that can contain whatever elements.
             var context = new Context { Contexes = new List<object>(), AdditionalData = new Dictionary<string, object>() };
             var tokenType = reader.TokenType;
-            if(reader.TokenType == JsonTokenType.PropertyName)
+            if(reader.TokenType == JsonTokenType.PropertyName && reader.ValueTextEquals("@context"))
             {
-                if(reader.ValueTextEquals("@context"))
-                //if(propertyName == "@context")
-                {
-                    _ = reader.Read();
-                }
+                _ = reader.Read();
             }
 
             if(tokenType == JsonTokenType.String)
             {
+                if(reader.ValueTextEquals("@context"))
+                {
+                    _ = reader.Read();
+                }
+
                 var ctx = reader.GetString();
                 if(ctx != null)
                 {

@@ -1,8 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Verifiable.Tests
 {
@@ -12,24 +8,24 @@ namespace Verifiable.Tests
     public static class TestInfrastructureConstants
     {
         /// <summary>
-        /// Path to current tests.
+        /// Path to test DID files.
         /// </summary>
-        public const string RelativeTestPathToCurrent = "..//..//../TestDIDDocuments//current//";
+        public const string RelativeTestPathToCurrent = "..//..//../TestDocuments//Did//";
+
+        /// <summary>
+        /// Path to test DID files that contain DID documents that contain extensions to the W3C specification.
+        /// </summary>
+        public const string RelativeTestPathToExtended = "..//..//../TestDocuments//Extended//";
 
         /// <summary>
         /// Path to deprecated documents according to tests.
         /// </summary>
-        public const string RelativeTestPathToDeprecated = "..//..//..//TestDIDDocuments//deprecated//";
-
-        /// <summary>
-        /// Path to extended documents according to tests.
-        /// </summary>
-        public const string RelativeTestPathToExtended = "..//..//../TestDIDDocuments//extended//";
+        public const string RelativeTestPathToDeprecated = "..//..//..//TestDocuments//Deprecated//";
 
         /// <summary>
         /// Path to Sidetree documents.
         /// </summary>
-        public const string RelativeTestPathToSidetree = "..//..//../TestDIDDocuments//Sidetree//";
+        public const string RelativeTestPathToSidetree = "..//..//../TestDocuments//Sidetree//";
 
         /// <summary>
         /// Test material is loaded from external files. This check preconditions assumed on them hold.

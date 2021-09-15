@@ -10,9 +10,11 @@ namespace Verifiable.Core.Did
     public abstract class VerificationRelationship
     {
         public string? VerificationReferenceId { get; }
+
         public VerificationMethod? EmbeddedVerification { get; }
 
         protected VerificationRelationship(string verificationReferenceId) => VerificationReferenceId = verificationReferenceId;
+
         protected VerificationRelationship(VerificationMethod embeddedVerification) => EmbeddedVerification = embeddedVerification;
 
         public string? Id => EmbeddedVerification == null ? VerificationReferenceId : EmbeddedVerification.Id?.ToString();

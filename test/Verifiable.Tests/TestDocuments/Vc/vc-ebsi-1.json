@@ -1,0 +1,33 @@
+{
+  "@context": [
+    "https://www.w3.org/2018/credentials/v1",
+    "https://EBSI-WEBSITE.EU/schemas/vc/2019/v1#",
+    "https://EBSI-WEBSITE.EU/schemas/eidas/2019/v1#"
+  ],
+  "id": "ebsi:type-version-of-the-credential",
+  "type": [
+    "VerifiableCredential",
+    "EssifVerifiableID"
+  ],
+  "issuer": "did:ebsi:0x4B59e08A51C7CdF9017c58E8Bf767db6d34daD7E",
+  "issuanceDate": "2020-11-12T12:08:08.161Z",
+  "expirationDate": "2030-11-12T12:08:08.162Z",
+  "credentialSubject": {
+    "id": "did:ebsi:0x3072255A164C8e17c7c6b0F77E6574dda9FCe349",
+    "personIdentifier": "BE/BE/02635542Y",
+    "currentFamilyName": "Eva",
+    "currentGivenName": "Adams",
+    "birthName": "Eva",
+    "dateOfBirth": "1998-02-14",
+    "placeOfBirth": "Brussels",
+    "currentAddress": "44, rue de Fame",
+    "gender": "Female"
+  },
+  "proof": {
+    "type": "EcdsaSecp256k1Signature2019",
+    "created": "2020-11-12T12:08:08.163Z",
+    "proofPurpose": "assertionMethod",
+    "verificationMethod": "did:ebsi:0x4B59e08A51C7CdF9017c58E8Bf767db6d34daD7E#keys-1",
+    "jws": "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NkstUiJ9..xSfnO21PsmCPgLkE34wZQ5mLOcRmb4NPiBSKw3EULCBZiVSWrR_VhddwMuyydBwkimA04f2NJQofD3gF3t5tuAE"
+  }
+}

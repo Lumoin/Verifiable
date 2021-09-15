@@ -1,3 +1,4 @@
+using System;
 using Tpm2Lib;
 
 namespace Verifiable.Tpm

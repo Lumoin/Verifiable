@@ -9,6 +9,7 @@ namespace Verifiable.Core.Did
     public class CapabilityDelegationMethod: VerificationRelationship
     {
         public CapabilityDelegationMethod(string verificationReferenceId) : base(verificationReferenceId) { }
+
         public CapabilityDelegationMethod(VerificationMethod embeddedVerification) : base(embeddedVerification) { }
     }
 }

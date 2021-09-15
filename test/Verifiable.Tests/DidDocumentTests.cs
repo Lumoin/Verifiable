@@ -1,12 +1,11 @@
-using Verifiable.Core;
-using Verifiable.Core.Did;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Collections.ObjectModel;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Verifiable.Core;
+using Verifiable.Core.Did;
 using Xunit;
 
 namespace Verifiable.Tests
@@ -129,6 +128,8 @@ namespace Verifiable.Tests
                 PropertyNameCaseInsensitive = true,
                 Converters =
                 {
+                    new SingleOrArrayControllerConverter(),
+                    new SingleOrArrayVerificationMethodConverter(),
                     new VerificationRelationshipConverterFactory(),
                     new VerificationMethodConverter(),
                     new ServiceConverterFactory(serviceTypeMap.ToImmutableDictionary()),
@@ -166,7 +167,7 @@ namespace Verifiable.Tests
         /// <remarks>Compared to <see cref="CanRoundtripDidDocumentWithoutStronglyTypedService(string, string)"/>
         /// this tests provides strong type to see if <see cref="VerifiableCredentialService"/> in particular is serialized.</remarks>
         [Theory]
-        [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrent + "generic//", "did-verifiablecredentialservice-1.json")]
+        [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrent, "did-verifiablecredentialservice-1.json")]
         public void CanRoundtripDidDocumentWithStronglyTypedService(string didDocumentFilename, string didDocumentFileContents)
         {
             TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
@@ -213,12 +214,16 @@ namespace Verifiable.Tests
         /// <remarks>Compared to <see cref="CanRoundtripDidDocumentWithStronglyTypedService(string, string)"/>
         /// this tests without a provided strong type to see if <see cref="Service"/> is serialized.</remarks>
         [Theory]
-        [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrent + "generic//", "did-verifiablecredentialservice-1.json")]
+        [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrent, "did-verifiablecredentialservice-1.json")]
         public void CanRoundtripDidDocumentWithoutStronglyTypedService(string didDocumentFilename, string didDocumentFileContents)
         {
             TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
 
-            var serviceTypeMap = new Dictionary<string, Type>(ServiceConverterFactory.DefaultTypeMap);
+            var verificationMethodTypeMap = new Dictionary<string, Func<string, JsonSerializerOptions, KeyFormat>>(VerificationMethodConverter.DefaultTypeMap)
+            {
+                { "JsonWebKey2020", new Func<string, JsonSerializerOptions, PublicKeyJwk>((json, options) => JsonSerializer.Deserialize<PublicKeyJwk>(json, options)!) }
+            };
+
             var options = new JsonSerializerOptions
             {
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -226,8 +231,8 @@ namespace Verifiable.Tests
                 Converters =
                 {
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(),
-                    new ServiceConverterFactory(serviceTypeMap.ToImmutableDictionary()),
+                    new VerificationMethodConverter(verificationMethodTypeMap.ToImmutableDictionary()),
+                    new ServiceConverterFactory(),
                     new JsonLdContextConverter()
                 }
             };
@@ -258,7 +263,7 @@ namespace Verifiable.Tests
         /// <param name="didDocumentFileContents">The DID document data file contents.</param>
         /// <remarks>By default reading is disallowed due to security and information leak concerns.</remarks>
         [Theory]
-        [FilesData(TestInfrastructureConstants.RelativeTestPathToExtended, "did-extended-1.json")]
+        [FilesData(TestInfrastructureConstants.RelativeTestPathToExtended, "did-w3c-extended-1.json")]
         public void CanRoundtripExtendedDidOnlyWithExtendedType(string didDocumentFilename, string didDocumentFileContents)
         {
             TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
@@ -311,13 +316,20 @@ namespace Verifiable.Tests
         {
             TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
 
+            var verificationMethodTypeMap = new Dictionary<string, Func<string, JsonSerializerOptions, KeyFormat>>(VerificationMethodConverter.DefaultTypeMap)
+            {
+                { "JsonWebKey2020", new Func<string, JsonSerializerOptions, PublicKeyJwk>((json, options) => JsonSerializer.Deserialize<PublicKeyJwk>(json, options)!) }
+            };
+
             var options = new JsonSerializerOptions
             {
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
                 PropertyNamingPolicy = new DefaultNamingNamingPolicy(Array.AsReadOnly(new JsonNamingPolicy[] { JsonNamingPolicy.CamelCase })),
                 Converters =
                 {
+                    new SingleOrArrayControllerConverter(),
                     new VerificationRelationshipConverterFactory(),
+                    new VerificationMethodConverter(verificationMethodTypeMap.ToImmutableDictionary()),
                     new VerificationMethodConverter(),
                     new ServiceConverterFactory(),
                     new JsonLdContextConverter()

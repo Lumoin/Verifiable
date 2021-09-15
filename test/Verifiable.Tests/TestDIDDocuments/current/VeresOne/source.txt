@@ -1,2 +1,0 @@
-The source of Veres One DIDs is at
-https://github.com/veres-one/did-veres-one/tree/master/tests/dids.

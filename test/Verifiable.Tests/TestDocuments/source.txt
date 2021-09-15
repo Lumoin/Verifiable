@@ -1,0 +1,10 @@
+EBSI and ESSIF examples:
+https://ec.europa.eu/cefdigital/wiki/display/EBSIDOC/Verifiable+Credential+API+and+Library
+https://ec.europa.eu/cefdigital/wiki/display/EBSIDOC/1.3.2.2.+Verifiable+Credentials+ESSIF+v2
+
+Veres One:
+https://github.com/veres-one/did-veres-one/tree/master/tests/dids
+
+Other examples:
+https://www.w3.org/TR/did-core/ and related documents
+https://w3c.github.io/vc-data-model/

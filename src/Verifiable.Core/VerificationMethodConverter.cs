@@ -11,6 +11,14 @@ namespace Verifiable.Core.Did
     /// </summary>
     public class VerificationMethodConverter: JsonConverter<VerificationMethod>
     {
+        public override bool CanConvert(Type typeToConvert)
+        {
+            return typeToConvert == typeof(VerificationMethod);
+            //var canConvert = typeToConvert == typeof(VerificationMethod) || typeToConvert == typeof(VerificationMethod[]);
+            //return typeToConvert == typeof(VerificationMethod) || typeToConvert == typeof(VerificationMethod[]);
+        }
+
+
         /// <summary>
         /// Default converters for the verification key types and formats.
         /// This can be used as a basis for an extened type map that is
