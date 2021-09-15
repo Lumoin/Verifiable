@@ -6,11 +6,13 @@ root = true
 # All Files
 [*]
 charset = utf-8
-end_of_line = crlf
+end_of_line = lf
 indent_style = space
 indent_size = 4
 insert_final_newline = false
 trim_trailing_whitespace = true
+csharp_space_before_colon_in_inheritance_clause=false
+csharp_space_after_keywords_in_control_flow_statements=false
 
 # Solution Files
 [*.sln]

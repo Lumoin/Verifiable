@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 namespace Verifiable.Tpm
 {
     public record TpmData(string Algorithm, int BankLength)

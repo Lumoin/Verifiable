@@ -1,0 +1,43 @@
+{
+  "@context": [
+    "https://www.w3.org/2018/credentials/v1",
+    "https://essif.europa.eu/schemas/vc/2020/v1"
+  ],
+  "id": "did:ebsi-eth:00000001/credentials/1872",
+  "type": [
+    "VerifiableCredential",
+    "VerifiableAttestation"
+  ],
+  "issuer": "did:ebsi:00000003",
+  "issuanceDate": "2019-06-22T14:11:44Z",
+  "credentialSubject": {
+    "id": "did:ebsi:00000004",
+    "currentFamilyName": "Skywalker",
+    "currentGivenName": "Lea"
+  },
+  "credentialStatus": {
+    "id": "https://essif.europa.eu/status/43",
+    "type": "CredentialsStatusList2020"
+  },
+  "credentialSchema": {
+    "id": "https://essif.europa.eu/tsr-123/verifiableattestation.json",
+    "type": "JsonSchemaValidator2018"
+  },
+  "evidence": [
+    {
+      "id": "https://essif.europa.eu/evidence/f2aeec97-fc0d-42bf-8ca7-0548192d4231",
+      "type": [ "DocumentVerification" ],
+      "verifier": "https:// essif.europa.eu /issuers/48",
+      "evidenceDocument": "Passport",
+      "subjectPresence": "Physical",
+      "documentPresence": "Physical"
+    }],
+    "proof":
+    {
+      "type": "EcdsaSecp256k1Signature2019",
+      "created": "2019-06-22T14:11:44Z",
+      "proofPurpose": "assertionMethod",
+      "verificationMethod": "did:ebsi-eth:00000001#key-1",
+      "jws": "eyJhbGciOiJSUzI1NiIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..TCYt5X"
+    }
+}

@@ -1,5 +1,6 @@
+using System;
 using System.Diagnostics;
-
+using System.Linq;
 
 namespace Verifiable.Core.Did
 {
@@ -41,12 +42,11 @@ namespace Verifiable.Core.Did
         /// https://w3c.github.io/did-core/#also-known-as.
         /// </summary>
         public string[]? AlsoKnownAs { get; set; }
-
-        //TODO: Make this a Controller class, maybe with implicit and explicit conversion to and from string. Same for some key formats?
+        
         /// <summary>
-        /// https://w3c.github.io/did-core/#control
+        /// https://w3c.github.io/did-core/#did-controller
         /// </summary>
-        public string[]? Controller { get; set; }
+        public Controller[]? Controller { get; set; }
 
         /// <summary>
         /// https://w3c.github.io/did-core/#verification-methods

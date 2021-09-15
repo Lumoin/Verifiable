@@ -9,6 +9,7 @@ namespace Verifiable.Core.Did
     public class AssertionMethod: VerificationRelationship
     {
         public AssertionMethod(string verificationReferenceId) : base(verificationReferenceId) { }
+        
         public AssertionMethod(VerificationMethod embeddedVerification) : base(embeddedVerification) { }
     }
 }

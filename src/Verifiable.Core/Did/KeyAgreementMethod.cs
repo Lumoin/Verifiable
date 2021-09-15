@@ -9,6 +9,7 @@ namespace Verifiable.Core.Did
     public class KeyAgreementMethod: VerificationRelationship
     {
         public KeyAgreementMethod(string verificationReferenceId) : base(verificationReferenceId) { }
+
         public KeyAgreementMethod(VerificationMethod embeddedVerification) : base(embeddedVerification) { }
     }
 }

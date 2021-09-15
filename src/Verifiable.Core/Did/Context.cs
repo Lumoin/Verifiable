@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Verifiable.Core.Did
 {
     //TODO: Should the additional data be typed or a generic? In .NET5 it could be

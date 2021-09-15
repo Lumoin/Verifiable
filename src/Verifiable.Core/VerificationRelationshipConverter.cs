@@ -34,11 +34,12 @@ namespace Verifiable.Core.Did
     /// Converts a <see cref="VerificationRelationship"/> to or from JSON.
     /// </summary>
     /// <typeparam name="TVerificationRelationship">The type of <see cref="VerificationRelationship"/> to convert.</typeparam>
-    public class VerificationRelationshipConverter<TVerificationRelationship>: JsonConverter<TVerificationRelationship> where TVerificationRelationship : VerificationRelationship
+    public class VerificationRelationshipConverter<TVerificationRelationship>: JsonConverter<TVerificationRelationship> where TVerificationRelationship: VerificationRelationship
     {
         /// <inheritdoc/>
         public override TVerificationRelationship Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
+            //String token type should mean a reference relationship. Object should mean embedded relationship.
             if(reader.TokenType != JsonTokenType.String && reader.TokenType != JsonTokenType.StartObject)
             {
                 ThrowHelper.ThrowJsonException();
@@ -54,14 +55,25 @@ namespace Verifiable.Core.Did
             }
             else if(reader.TokenType == JsonTokenType.StartObject)
             {
+                var newOptions = new JsonSerializerOptions
+                {
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                    PropertyNamingPolicy = new DefaultNamingNamingPolicy(Array.AsReadOnly(new JsonNamingPolicy[] { JsonNamingPolicy.CamelCase })),
+                    Converters =
+                    {
+                        new VerificationMethodConverter()
+                    }
+                };
+
                 constructorParameter = JsonSerializer.Deserialize<VerificationMethod>(ref reader, options);
             }
             else
             {
-                //Make the reason be an unexpected token JSON token type.
-                ThrowHelper.ThrowJsonException();
+                ThrowHelper.ThrowJsonException("Unexpected JSON token type.");
             }
 
+            //Different verification relationships enable the associated verification methods to be used for different purposes.
+            //The data content is the same, but the relationship is named and has some additional rules.
             return (TVerificationRelationship)Activator.CreateInstance(typeof(TVerificationRelationship), new object[] { constructorParameter! })!;
         }
 
@@ -86,7 +98,7 @@ namespace Verifiable.Core.Did
         }
 
 
-        private static JsonConverter<TVerificationMethod> GetKeyConverter<TVerificationMethod>(JsonSerializerOptions options) where TVerificationMethod : VerificationMethod
+        private static JsonConverter<TVerificationMethod> GetKeyConverter<TVerificationMethod>(JsonSerializerOptions options) where TVerificationMethod: VerificationMethod
         {
             return (JsonConverter<TVerificationMethod>)options.GetConverter(typeof(TVerificationMethod));
         }

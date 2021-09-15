@@ -77,6 +77,7 @@ namespace Verifiable.Core.Did
         /// so that recursion would not occur or provide possibility for users to pass in collection either for
         /// all or per type. This could by default, if nothing else is passed in, use a version of options the
         /// framework passes with this converter removed or this particular here as a quick'n'dirty.
+        /// Look also at https://github.com/dotnet/docs/issues/17924.
         ///
         /// This is basically needed to dynamically detect types and if the user wants to have a strong
         /// type for it.

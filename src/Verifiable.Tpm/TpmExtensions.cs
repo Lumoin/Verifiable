@@ -1,5 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -248,7 +251,6 @@ namespace Verifiable.Tpm
 
                     var currentRoundPcrsLeftToBeProcessed = bankPcrsBeingProcessed[0].GetSelectedPcrs();
                     var pcrsLefToBeReadForTheNextRounds = currentRoundPcrsLeftToBeProcessed.Except(pcrsCurrentlyBeingRead);
-
                     for(int i = 0; i < pcrValues.Length; i++)
                     {
                         pcrBankData.Add(new PcrData(pcrsCurrentlyBeingRead[i], ImmutableArray.Create(pcrValues[i].buffer)));

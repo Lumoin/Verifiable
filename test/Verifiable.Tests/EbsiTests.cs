@@ -1,8 +1,8 @@
-using Verifiable.Core;
-using Verifiable.Core.Did;
 using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Verifiable.Core;
+using Verifiable.Core.Did;
 using Xunit;
 
 namespace Verifiable.Tests
@@ -15,10 +15,10 @@ namespace Verifiable.Tests
         /// <summary>
         /// The reader should be able to deserialize all these test files correctly.
         /// </summary>
-        /// <param name="didDocumentFileName">The DID document data file under test.</param>
+        /// <param name="didDocumentFilename">The DID document data file under test.</param>
         /// <param name="didDocumentFileContents">The DID document data file contents.</param>
         [Theory]
-        [FilesData(TestInfrastructureConstants.RelativeTestPathToDeprecated + "EBSI", "ebsi-did-1.json")]
+        [FilesData(TestInfrastructureConstants.RelativeTestPathToDeprecated, "ebsi-did-1.json")]
         public void CanRoundtripLegacyEbsiDid(string didDocumentFilename, string didDocumentFileContents)
         {
             TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);

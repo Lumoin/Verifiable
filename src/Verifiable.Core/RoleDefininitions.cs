@@ -15,7 +15,7 @@ namespace Verifiable.Core
         //These are used by Verified to call VerifiableDataRegistry.
         public void VerifyIdentifierKeys() { }
         public void VerifyIdentifierSchemas() { }
-        public void VerifyIdetifiers(VerifiableDataRegistry verifificationRegister, Credential credential, string schema) { }
+        public void VerifyIdetifiers(VerifiableDataRegistry verifificationRegister, Verifiable credential, string schema) { }
     }
 
 
@@ -28,7 +28,7 @@ namespace Verifiable.Core
     public class Issuer
     {
         //This is called by someone to issue a credential to some Holder.
-        public Credential Issue(string someParams) { return new Credential();  }
+        public Verifiable Issue(string someParams) { return new Verifiable();  }
     }
 
     public class Subject { }
@@ -41,7 +41,7 @@ namespace Verifiable.Core
         //These are used by Verified to call VerifiableDataRegistry.
         public void VerifyIdentifierKeys() { }
         public void VerifyIdentifierSchemas() { }
-        public void VerifyIdetifiers(VerifiableDataRegistry verifificationRegister, Credential credential, string schema) { }
+        public void VerifyIdetifiers(VerifiableDataRegistry verifificationRegister, Verifiable credential, string schema) { }
     }
 
 
@@ -51,7 +51,7 @@ namespace Verifiable.Core
     public class Wallet
     {
         //These are used by the holder.
-        public void StoreCredential(Credential credential) { }
-        public Credential RetrieveCredential(string id) { return new Credential(); }
+        public void StoreCredential(Verifiable credential) { }
+        public Verifiable RetrieveCredential(string id) { return new Verifiable(); }
     }
 }
