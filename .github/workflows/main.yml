@@ -170,9 +170,9 @@ jobs:
       timeout-minutes: 5
 
     # CodeQL does not yet support C# 10.0 or .NET6, see at https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/troubleshooting-the-codeql-workflow.
-    # - name: Perform CodeQL Analysis
-    #  uses: github/codeql-action/analyze@v1
-    #  timeout-minutes: 100
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v1
+      timeout-minutes: 100
 
     - name: Set PR markdown title name
       run: |
