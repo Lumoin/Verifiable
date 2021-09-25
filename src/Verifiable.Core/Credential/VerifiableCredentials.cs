@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.Immutable;
 
 namespace Verifiable.Core
 {
@@ -14,10 +15,11 @@ namespace Verifiable.Core
         public List<string>? Context { get; set; }
 
         /// <summary>
+        /// Make mandatory.
         /// Each presentation or credential must have a type property.
         /// Look more at <a href="https://w3c.github.io/vc-data-model/#types">types</a>.
         /// </summary>
-        public List<string> Type {  get; set; } = new List<string>();
+        public string[]? Type { get; set; }
     }
 
 
@@ -42,6 +44,13 @@ namespace Verifiable.Core
         /// See more at <a href="https://w3c.github.io/vc-data-model/#issuer">issuer</a>.
         /// </summary>
         public string Issuer { get; set; } = string.Empty;
+
+
+        /// <summary>
+        /// This must exit.
+        /// https://w3c.github.io/vc-data-model/#credential-subject
+        /// </summary>
+        public CredentialSubject[]? CredentialSubject { get; set; }
     }
 
 
@@ -51,7 +60,7 @@ namespace Verifiable.Core
     /// </summary>
     public class CredentialSubject
     {
-
+        public string? Id { get; set;  }
     }
 
     public class Presentation { }

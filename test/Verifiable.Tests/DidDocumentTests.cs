@@ -167,7 +167,7 @@ namespace Verifiable.Tests
         /// <remarks>Compared to <see cref="CanRoundtripDidDocumentWithoutStronglyTypedService(string, string)"/>
         /// this tests provides strong type to see if <see cref="VerifiableCredentialService"/> in particular is serialized.</remarks>
         [Theory]
-        [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrent, "did-verifiablecredentialservice-1.json")]
+        [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrentDid, "did-verifiablecredentialservice-1.json")]
         public void CanRoundtripDidDocumentWithStronglyTypedService(string didDocumentFilename, string didDocumentFileContents)
         {
             TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
@@ -214,7 +214,7 @@ namespace Verifiable.Tests
         /// <remarks>Compared to <see cref="CanRoundtripDidDocumentWithStronglyTypedService(string, string)"/>
         /// this tests without a provided strong type to see if <see cref="Service"/> is serialized.</remarks>
         [Theory]
-        [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrent, "did-verifiablecredentialservice-1.json")]
+        [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrentDid, "did-verifiablecredentialservice-1.json")]
         public void CanRoundtripDidDocumentWithoutStronglyTypedService(string didDocumentFilename, string didDocumentFileContents)
         {
             TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
@@ -311,7 +311,7 @@ namespace Verifiable.Tests
         /// <param name="didDocumentFilename">The DID document data file under test.</param>
         /// <param name="didDocumentFileContents">The DID document data file contents.</param>
         [Theory]
-        [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrent, ".json", SearchOption.AllDirectories)]
+        [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrentDid, ".json", SearchOption.AllDirectories)]
         public void AllTestDIDsAsPlainDocumentsRountrip(string didDocumentFilename, string didDocumentFileContents)
         {
             TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);

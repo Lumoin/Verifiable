@@ -10,7 +10,7 @@ namespace Verifiable.Tests
         /// <summary>
         /// Path to test DID files.
         /// </summary>
-        public const string RelativeTestPathToCurrent = "..//..//../TestDocuments//Did//";
+        public const string RelativeTestPathToCurrentDid = "..//..//../TestDocuments//Did//";
 
         /// <summary>
         /// Path to test DID files that contain DID documents that contain extensions to the W3C specification.
@@ -26,6 +26,12 @@ namespace Verifiable.Tests
         /// Path to Sidetree documents.
         /// </summary>
         public const string RelativeTestPathToSidetree = "..//..//../TestDocuments//Sidetree//";
+
+        /// <summary>
+        /// Path to test DID files.
+        /// </summary>
+        public const string RelativeTestPathToCurrentVc = "..//..//../TestDocuments//Vc//";
+
 
         /// <summary>
         /// Test material is loaded from external files. This check preconditions assumed on them hold.
