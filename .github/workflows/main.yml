@@ -94,6 +94,14 @@ jobs:
       with:
         fetch-depth: 2
 
+    # Use hashes of lock files when they are used.
+    - uses: actions/cache@v2.1.7
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
     # - name: Cache Nuget packages '${{ matrix.os }}'
     #  uses: actions/cache@v2.1.6
     #  with:
@@ -102,7 +110,7 @@ jobs:
     #    restore-keys: |
     #      ${{runner.os}}-nuget-
 
-    - name: Setup .NET 6.0.* SDK
+    - name: Setup .NET 6.* SDK
       uses: actions/setup-dotnet@v1.9.0
       with:
         dotnet-version: '6.*'
@@ -120,7 +128,6 @@ jobs:
     #  run: dotnet format --check
 
     # There may a difference in libraries between platforms.
-    # However, for now only Linux libraries are scanned.
     - name: Run BOM analysis
       run: dotnet CycloneDX Verifiable.sln --json --out ${{ github.workspace }}/bom/${{ matrix.os }}/
 
@@ -167,9 +174,17 @@ jobs:
       timeout-minutes: 5
 
     # This either requires cd to test directory or --solution-path Verifiable.sln (which may not work).
-    # - name: Stryker.NET mutation Tests for Verifiable.Core.csproj
-    #  run: dotnet stryker --config-file-path stryker-config.json --project-file "Verifiable.Core.csproj"
-    #  timeout-minutes: 15
+    - name: Stryker.NET mutation Tests for Verifiable.Core.csproj
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: dotnet stryker --config-file stryker-config.json --reporter progress --reporter html --reporter dashboard --dashboard-api-key ${{ secrets.STRYKER_API_KEY }} --project Verifiable.Core.csproj
+      timeout-minutes: 15
+
+    - name: Upload Stryker output artefacts
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      uses: actions/upload-artifact@v2.3.1
+      with:
+        name: 'Stryker output artefacts'
+        path: ${{ github.workspace }}/StrykerOutput/
 
     # - name: Publish
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
@@ -224,7 +239,6 @@ jobs:
 
     - name: Upload PR build information artefact
       uses: actions/upload-artifact@v2.3.1
-      if: ${{ always() }}
       with:
         name: 'Test Run'
         path: ${{ github.workspace }}/${{ env.file_name }}

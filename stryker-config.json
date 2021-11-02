@@ -1,23 +1,9 @@
 {
     "stryker-config":
     {
-        "reporters": [
-            "progress",
-            "html"
-        ],
 		"language-version": "preview",
-        "log-level": "info",
-        "log-file": true,
-        "timeout-ms": 10000,
-        "test-projects": "['test/Verifiable.Tests/Verifiable.Tests.csproj']",
-        "threshold-high": 80,
-        "threshold-low": 70,
-        "threshold-break": 60,
+        "test-projects": ["test/Verifiable.Tests/Verifiable.Tests.csproj"],
         "mutation-level": "Standard",
-        "excluded-mutations": [
-            "string",
-            "Logical operators"
-        ],
         "ignore-methods": [
             "*Log*",
             "ToString",
