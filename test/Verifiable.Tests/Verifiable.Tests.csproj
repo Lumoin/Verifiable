@@ -12,7 +12,7 @@
     <PackageReference Include="LiquidTestReports.Markdown" Version="1.2.1-beta" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
     <PackageReference Include="System.Net.Http.Json" Version="6.0.0-rc.1.21451.13" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="6.0.0-rc.1.21451.13" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="6.0.0" />
     <PackageReference Include="xunit" Version="2.4.1" />
     <PackageReference Include="xunit.analyzers" Version="0.10.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3">
