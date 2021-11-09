@@ -57,7 +57,7 @@ namespace Verifiable.Tests
             //
             //OBS! And test for testing extra registry types that are not part of the core specification
             //but that can nevertheless be part of core Nuget library.
-            Assert.Single(deseserializedDidDocument?.AdditionalData);
+            Assert.Single(deseserializedDidDocument?.AdditionalData!);
             Assert.IsType<JsonElement>(deseserializedDidDocument!.AdditionalData!["publicKey"]);
 
             var comparer = new JsonElementComparer();
