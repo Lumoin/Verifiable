@@ -120,7 +120,6 @@ jobs:
     #  run: dotnet format --check
 
     # There may a difference in libraries between platforms.
-    # However, for now only Linux libraries are scanned.
     - name: Run BOM analysis
       run: dotnet CycloneDX Verifiable.sln --json --out ${{ github.workspace }}/bom/${{ matrix.os }}/
 
@@ -188,6 +187,29 @@ jobs:
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
+
+    - name: Run Infer#
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      uses: microsoft/infersharpaction@v1.2.1
+      with:
+        binary-path: ./src/${{ env.VERIFIABLE }}/bin/${{ env.BUILD_CONFIGURATION }}
+
+    - name: Show Infer# analysis results
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: echo ${{ github.workspace }}/infer-out/report.txt
+
+    - name: Upload Infer# report
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: Infer# report
+        path: ${{ github.workspace }}/infer-out/report.txt
+
+    - name: Upload SARIF output to GitHub Security Center
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      uses: github/codeql-action/upload-sarif@v1
+      with:
+        sarif_file: ${{ github.workspace }}/infer-out/report.sarif
 
     # This step is run always (e.g. also for non-PRs) so the results can be inspected on the command line too.
     - name: ReportGenerator
