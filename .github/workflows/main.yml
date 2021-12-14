@@ -105,7 +105,7 @@ jobs:
     - name: Setup .NET 6.0.* SDK
       uses: actions/setup-dotnet@v1.9.0
       with:
-        dotnet-version: '6.0.*'
+        dotnet-version: '6.*'
 
     - name: Install dependencies
       run: dotnet restore
@@ -133,18 +133,6 @@ jobs:
     #    name: report
     #    path: ${{ github.workspace }}/app/bom.json
 
-    # CodeQL requires to have a compilation step between initialize and analysis as it uses the
-    # files used for building to analyze the source code.
-    #
-    # Dependabot runs are skipped since they do not have write access to the repository.
-    # Reason: https://securitylab.github.com/research/github-actions-preventing-pwn-requests/.
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v1
-      if: ${{ github.actor != 'dependabot[bot]' }}
-      with:
-        queries: security-and-quality
-        languages: csharp
-
     # The version numbers are determined and set here so it can be set appropriately to code and NuGet packages.
     - name: Set version numbers
       if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -167,11 +155,6 @@ jobs:
     - name: Build
       run: dotnet build --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true
       timeout-minutes: 5
-
-    # CodeQL does not yet support C# 10.0 or .NET6, see at https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/troubleshooting-the-codeql-workflow.
-    # - name: Perform CodeQL Analysis
-    #  uses: github/codeql-action/analyze@v1
-    #  timeout-minutes: 100
 
     - name: Set PR markdown title name
       run: |
