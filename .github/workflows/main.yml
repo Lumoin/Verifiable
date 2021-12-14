@@ -119,19 +119,16 @@ jobs:
     # - name: Run dotnet format
     #  run: dotnet format --check
 
-    # .NET 6 is not supported yet.
-    # - name: Generate Verifiable JSON SBOM
-    #  uses: CycloneDX/gh-dotnet-generate-sbom@master
-    #  with:
-    #    path: ./Verifiable.sln
-    #    json: true
-    #    github-bearer-token: ${{ secrets.GITHUB_TOKEN }}
+    # There may a difference in libraries between platforms.
+    # However, for now only Linux libraries are scanned.
+    - name: Restore local tools
+      run: dotnet CycloneDX Verifiable.sln --json --out ${{ github.workspace }}/bom/${{ matrix.os }}/
 
-    # - name: Upload Verifiable JSON SBOM
-    #  uses: actions/upload-artifact@v1
-    #  with:
-    #    name: report
-    #    path: ${{ github.workspace }}/app/bom.json
+    - name: Upload Verifiable JSON SBOM
+      uses: actions/upload-artifact@v1
+      with:
+        name: Verifiable BOM report
+        path: ${{ github.workspace }}/bom/${{ matrix.os }}/bom.json
 
     # The version numbers are determined and set here so it can be set appropriately to code and NuGet packages.
     - name: Set version numbers
