@@ -31,6 +31,12 @@
       "commands": [
         "sharpfuzz"
       ]
+    },
+    "cyclonedx": {
+      "version": "2.3.0",
+      "commands": [
+        "dotnet-CycloneDX"
+      ]
     }
   }
 }
