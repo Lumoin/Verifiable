@@ -121,7 +121,7 @@ jobs:
 
     # There may a difference in libraries between platforms.
     # However, for now only Linux libraries are scanned.
-    - name: Restore local tools
+    - name: Run BOM analysis
       run: dotnet CycloneDX Verifiable.sln --json --out ${{ github.workspace }}/bom/${{ matrix.os }}/
 
     - name: Upload Verifiable JSON SBOM
