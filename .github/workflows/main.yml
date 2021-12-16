@@ -125,7 +125,7 @@ jobs:
       run: dotnet CycloneDX Verifiable.sln --json --out ${{ github.workspace }}/bom/${{ matrix.os }}/
 
     - name: Upload Verifiable JSON SBOM
-      uses: actions/upload-artifact@v2.3.0
+      uses: actions/upload-artifact@v2.3.1
       with:
         name: Verifiable BOM report
         path: ${{ github.workspace }}/bom/${{ matrix.os }}/bom.json
@@ -175,7 +175,7 @@ jobs:
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
 
     # - name: Archive publish results
-    #  uses: actions/upload-artifact@v2.3.0
+    #  uses: actions/upload-artifact@v2.3.1
     #  with:
     #    name: Verifiable.Benchmarks
     #    path: ./publish/*
@@ -184,7 +184,7 @@ jobs:
     #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
 
     # - name: Upload benchmark results
-    #  uses: actions/upload-artifact@v2.3.0
+    #  uses: actions/upload-artifact@v2.3.1
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
@@ -223,7 +223,7 @@ jobs:
         path: ${{ env.file_name }}
 
     - name: Upload PR build information artefact
-      uses: actions/upload-artifact@v2.3.0
+      uses: actions/upload-artifact@v2.3.1
       if: ${{ always() }}
       with:
         name: 'Test Run'
@@ -251,7 +251,7 @@ jobs:
 
     - name: Upload Verifiable Nuget packages
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: actions/upload-artifact@v2.3.0
+      uses: actions/upload-artifact@v2.3.1
       with:
         name: nupkg
         path: |
