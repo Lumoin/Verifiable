@@ -10,9 +10,13 @@
     <NoWarn>$(NoWarn);1591;2003</NoWarn>
     <IncludeSymbols>true</IncludeSymbols>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludePackageReferencesDuringMarkupCompilation>true</IncludePackageReferencesDuringMarkupCompilation>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
 
-    <!-- There seem to be a bug that causes problems in lock file between Windows and Linux systems. -->
+    <!-- Lock files and so https://github.com/dotnet/reproducible-builds do not work
+         cross-platform yet. Explanations can be had at https://github.com/NuGet/Home/issues/9195.
+         About reproducle builds at large: https://github.com/dotnet/reproducible-builds.
+     -->
     <!-- <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile> -->
   </PropertyGroup>
 
