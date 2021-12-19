@@ -9,7 +9,7 @@
       ]
     },
     "dotnet-stryker": {
-      "version": "0.22.10",
+      "version": "1.2.1",
       "commands": [
         "dotnet-stryker"
       ]

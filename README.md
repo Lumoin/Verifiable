@@ -4,6 +4,8 @@
 
 ![Main build workflow](https://github.com/lumoin/Verifiable/actions/workflows/main.yml/badge.svg)
 
+[![Mutation testing badge](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2Flumoin%2FVerifiable%2Fmain)](https://dashboard.stryker-mutator.io/reports/github.com/lumoin/Verifiable/main)
+
 <hr>
 
 ## Features
