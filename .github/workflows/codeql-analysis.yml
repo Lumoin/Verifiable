@@ -40,7 +40,7 @@ jobs:
         languages: 'csharp'
 
     - name: Setup .NET 6.* SDK
-      uses: actions/setup-dotnet@v1.9.0
+      uses: actions/setup-dotnet@v1.9.1
       with:
         dotnet-version: '6.*'
 
