@@ -285,7 +285,7 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - name: Download NuGet artifacts
-          uses: actions/download-artifact@v2.1.0
+          uses: actions/download-artifact@v3
           with:
             name: nupkg
 
@@ -298,7 +298,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download NuGet artifacts
-        uses: actions/download-artifact@v2.1.0
+        uses: actions/download-artifact@v3
         with:
           name: nupkg
 
