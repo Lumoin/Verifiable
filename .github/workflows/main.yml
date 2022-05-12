@@ -208,7 +208,7 @@ jobs:
     - name: ReportGenerator
       if: ${{ matrix.os == 'ubuntu-latest' }}
        # run: reportgenerator -reports:**/coverage.cobertura.xml -targetdir:Report -reporttypes:HtmlInline;Cobertura;MarkdownSummary
-      uses: danielpalme/ReportGenerator-GitHub-Action@144108ca5fb5604cec16b02bd8e3a0ac2c5f0e31
+      uses: danielpalme/ReportGenerator-GitHub-Action@dc606da55bc9ef605e07b64879620c7d56c371bc
       with:
         reports: '${{ github.workspace }}/reports/coverage/coverage.cobertura.xml'
         targetdir: '${{ github.workspace }}/reports/coverage/'
