@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "ms-vscode.csharp",
+    "VisualStudioExptTeam.vscodeintellicode",
+    "MS-vsliveshare.vsliveshare-pack",
+    "redhat.vscode-yaml"
+  ]
+}
