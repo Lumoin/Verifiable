@@ -41,7 +41,7 @@ env:
   VERIFIABLE: Verifiable
   VERIFIABLE_BOUNCYCASTLE: Verifiable.BouncyCastle
   VERIFIABLE_CORE: Verifiable.Core
-  VERIFIABLE_DATASTORAGE: Verifiable.DataStorage
+  VERIFIABLE_DECENTRALIZEDWEBNODE: Verifiable.DecentralizedWebNode
   VERIFIABLE_NSEC: Verifiable.NSec
   VERIFIABLE_SECURITY_WINDOWS: Verifiable.Security.Windows
   VERIFIABLE_SIDETREE: Verifiable.Sidetree
@@ -138,39 +138,51 @@ jobs:
         path: ${{ github.workspace }}/bom/${{ matrix.os }}/bom.json
 
     # The version numbers are determined and set here so it can be set appropriately to code and NuGet packages.
-    - name: Set version numbers
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+    # See explanation at https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
+    - name: Set NuGet packages and suffix version
       run: |
           if [[ $GITHUB_EVENT_NAME == 'release' ]]; then
               arrTag=(${GITHUB_REF//\// })
-              GIT_TAG_VERSION="${arrTag[2]}"
-              echo Version: $GIT_TAG_VERSION
-              VERSION="${GIT_TAG_VERSION//v}"
-              echo Clean Version: $VERSION
+              VERSION="${arrTag[2]}"
+              VERSION="${VERSION//v}-${GITHUB_SHA::7}"
+              echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
               echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+              echo "VERSION_SUFFIX=$VERSION-release" >> "$GITHUB_ENV"
+          elif [[ $GITHUB_REF == 'refs/heads/develop' ]]; then
+              echo "PACKAGE_VERSION=0.0.0.1-${GITHUB_SHA::7}-develop" >> "$GITHUB_ENV"
+              echo "PACKAGE=0.0.0.1" >> "$GITHUB_ENV"
+              echo "VERSION_SUFFIX=${GITHUB_SHA::7}-develop" >> "$GITHUB_ENV"
           else
-              echo "VERSION=$GITHUB_RUN_ID-dev" >> "$GITHUB_ENV"
+              echo "PACKAGE_VERSION=0.0.0.1-${GITHUB_SHA::7}-dev" >> "$GITHUB_ENV"
+              echo "VERSION=0.0.0.1" >> "$GITHUB_ENV"
+              echo "VERSION_SUFFIX=${GITHUB_SHA::7}-dev" >> "$GITHUB_ENV"
           fi
-
-    - name: Print version
-      if: ${{ matrix.os == 'ubuntu-latest' }}
-      run: echo $VERSION
-
-    - name: Build
-      run: dotnet build --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true
-      timeout-minutes: 5
-
-    - name: Set PR markdown title name
-      run: |
-            echo "title=Test Run (${{ github.run_number }})" >> $GITHUB_ENV
-            echo "file_name=TestReport.${{ github.run_number }}.md" >> $GITHUB_ENV
-
-      # Bash shell is pre-installed on Github Windows build machines, so this does not increase run time.
-      # There is not also shell related dependencies that ought to be noticed on Windows.
       shell: bash
 
+    - name: Print NuGet packages version
+      run: echo $PACKAGE_VERSION
+      shell: bash
+
+    - name: Print version
+      run: echo $VERSION-$VERSION_SUFFIX
+      shell: bash
+
+    - name: Build
+      # The flag /p:Version=$NUGET_VERSION is not used here. The versions are adjusted manually on individual component basis.
+      run: dotnet build --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true /p:Version=${{ env.VERSION }}-${{ env.VERSION_SUFFIX }}
+      timeout-minutes: 5
+
+    # - name: Set PR markdown title name
+    #  run: |
+    #        echo "title=Test Run (${{ github.run_number }})" >> $GITHUB_ENV
+    #        echo "file_name=TestReport.${{ github.run_number }}.md" >> $GITHUB_ENV
+    #  shell: bash
+
     - name: Test
-      run: dotnet test --verbosity normal --no-restore --no-build --configuration ${{ env.BUILD_CONFIGURATION }} --logger:'liquid.md;LogFileName=${{ github.workspace }}/${{ env.file_name }};Title=${{ env.title }};' -property:CollectCoverage=true -property:DeterministicSourcePaths=true -property:IncludeTestAssembly=true -property:CoverletOutputFormat=cobertura /p:CoverletOutput='${{ github.workspace }}/reports/coverage/'
+      # See the difference on drivers and paths at https://github.com/microsoft/vstest/issues/2378 and further
+      # here on generating the reports.
+      # run: dotnet test --verbosity normal --no-restore --no-build --configuration ${{ env.BUILD_CONFIGURATION }} -property:CollectCoverage=true -property:CoverletOutputFormat=cobertura -property:DeterministicSourcePaths=true -property:IncludeTestAssembly=true -property:CoverletOutput='${{ github.workspace }}/reports/coverage/'
+      run: dotnet test --collect:"XPlat Code Coverage" --verbosity normal --no-restore --no-build --configuration ${{ env.BUILD_CONFIGURATION }} --logger JUnit -property:DeterministicSourcePaths=true -property:IncludeTestAssembly=true --results-directory '${{ github.workspace }}/reports/coverage/'
       timeout-minutes: 5
 
     # This either requires cd to test directory or --solution-path Verifiable.sln (which may not work).
@@ -207,13 +219,11 @@ jobs:
     # This step is run always (e.g. also for non-PRs) so the results can be inspected on the command line too.
     - name: ReportGenerator
       if: ${{ matrix.os == 'ubuntu-latest' }}
-       # run: reportgenerator -reports:**/coverage.cobertura.xml -targetdir:Report -reporttypes:HtmlInline;Cobertura;MarkdownSummary
-      uses: danielpalme/ReportGenerator-GitHub-Action@ed6480f7565a259764d07529ded77d6de4278666
-      with:
-        reports: '${{ github.workspace }}/reports/coverage/coverage.cobertura.xml'
-        targetdir: '${{ github.workspace }}/reports/coverage/'
-        reporttypes: 'HtmlInline;Cobertura;MarkdownSummary'
-        assemblyfilters: '-xunit*'
+
+      # If not using MSBuild driver but the VSTest one, the files need to be explicitly found due to randomized path segmenets.
+      # See more at https://github.com/microsoft/vstest/issues/2378.
+      # run: dotnet reportgenerator -assemblyfilters:'-xunit*' -reports:'${{ github.workspace }}/reports/coverage/coverage.cobertura.xml' -targetdir:'${{ github.workspace }}/reports/coverage/' -reporttypes:'HtmlInline;Cobertura;MarkdownSummary'
+      run: dotnet reportgenerator -assemblyfilters:'-xunit*' -reports:`find ${{ github.workspace }}/reports/coverage/ -name coverage.cobertura.xml` -targetdir:'${{ github.workspace }}/reports/coverage/' -reporttypes:'HtmlInline;Cobertura;MarkdownSummary'
 
     # - name: Publish coverage report
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -231,17 +241,25 @@ jobs:
         path: '${{ github.workspace }}/reports/coverage/Summary.md'
         recreate: true
 
-    - name: Comment PR with the generated test Markdown
+    - name: Create test summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: marocchino/sticky-pull-request-comment@39c5b5dc7717447d0cba270cd115037d32d28443
+      uses: test-summary/action@v1
       with:
-        path: ${{ env.file_name }}
+        paths: '${{ github.workspace }}/reports/coverage/TestResults.xml'
+        # output: '${{ github.workspace }}/${{ env.file_name }}'
 
-    - name: Upload PR build information artefact
-      uses: actions/upload-artifact@v3
-      with:
-        name: 'Test Run'
-        path: ${{ github.workspace }}/${{ env.file_name }}
+    # - name: Comment PR with the generated test Markdown
+    #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
+    #  uses: marocchino/sticky-pull-request-comment@39c5b5dc7717447d0cba270cd115037d32d28443
+    #  with:
+    #    path: ${{ env.file_name }}
+
+    # - name: Upload PR build information artefact
+    #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
+    #  uses: actions/upload-artifact@v3
+    #  with:
+    #    name: 'Test Run'
+    #    path: ${{ github.workspace }}/${{ env.file_name }}
 
     # - name: Comment PR with the generated test Markdown
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -254,14 +272,14 @@ jobs:
     - name: Pack Nuget files
       if: ${{ matrix.os == 'ubuntu-latest' }}
       run: |
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE/$VERIFIABLE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE_BOUNCYCASTLE/$VERIFIABLE_BOUNCYCASTLE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:NoWarn=NU5104 -property:PackageVersion=$VERSION src/$VERIFIABLE_CORE/$VERIFIABLE_CORE.csproj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE_DATASTORAGE/$VERIFIABLE_DATASTORAGE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:NoWarn=NU5104 -property:PackageVersion=$VERSION src/$VERIFIABLE_NSEC/$VERIFIABLE_NSEC.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE_SECURITY_WINDOWS/$VERIFIABLE_SECURITY_WINDOWS.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE_SIDETREE/$VERIFIABLE_SIDETREE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$VERSION src/$VERIFIABLE_TPM/$VERIFIABLE_TPM.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE/$VERIFIABLE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_BOUNCYCASTLE/$VERIFIABLE_BOUNCYCASTLE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:NoWarn=NU5104 -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_CORE/$VERIFIABLE_CORE.csproj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_DECENTRALIZEDWEBNODE/$VERIFIABLE_DECENTRALIZEDWEBNODE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:NoWarn=NU5104 -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_NSEC/$VERIFIABLE_NSEC.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_SECURITY_WINDOWS/$VERIFIABLE_SECURITY_WINDOWS.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_SIDETREE/$VERIFIABLE_SIDETREE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_TPM/$VERIFIABLE_TPM.*proj
 
     - name: Upload Verifiable Nuget packages
       if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -272,7 +290,7 @@ jobs:
           ./src/${{ env.VERIFIABLE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
           ./src/${{ env.VERIFIABLE_BOUNCYCASTLE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
           ./src/${{ env.VERIFIABLE_CORE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
-          ./src/${{ env.VERIFIABLE_DATASTORAGE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+          ./src/${{ env.VERIFIABLE_DECENTRALIZEDWEBNODE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
           ./src/${{ env.VERIFIABLE_NSEC }}//bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
           ./src/${{ env.VERIFIABLE_SECURITY_WINDOWS }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
           ./src/${{ env.VERIFIABLE_SIDETREE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
