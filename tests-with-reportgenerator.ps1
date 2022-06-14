@@ -1,0 +1,2 @@
+dotnet test --configuration Release --verbosity normal --collect:"XPlat Code Coverage" -property:CollectCoverage=true -property:DeterministicSourcePaths=true -property:IncludeTestAssembly=true -property:CoverletOutputFormat=cobertura /p:CoverletOutput='./generated-reports/coverage/'
+dotnet reportgenerator -assemblyfilters:'-xunit*' -reports:'./generated-reports/coverage/coverage.cobertura.xml' -targetdir:'./generated-reports/coverage/' -reporttypes:'HtmlInline;Cobertura;MarkdownSummary'
