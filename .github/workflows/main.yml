@@ -243,7 +243,7 @@ jobs:
 
     - name: Create test summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: test-summary/action@v1
+      uses: test-summary/action@v2
       with:
         paths: '${{ github.workspace }}/reports/coverage/TestResults.xml'
         # output: '${{ github.workspace }}/${{ env.file_name }}'
