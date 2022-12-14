@@ -9,7 +9,7 @@
   <ItemGroup>
     <!-- <PackageReference Include="Microsoft.CodeAnalysis" Version="3.10.0" /> -->
     <PackageReference Include="System.Collections.Immutable" Version="6.0.0" />
-    <PackageReference Include="System.Text.Json" Version="6.0.4" NoWarn="NU5104" />
+    <PackageReference Include="System.Text.Json" Version="7.0.1" NoWarn="NU5104" />
     <PackageReference Include="SimpleBase" Version="3.1.0" />
   </ItemGroup>
 
