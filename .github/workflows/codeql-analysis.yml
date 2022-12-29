@@ -39,10 +39,10 @@ jobs:
       with:
         languages: 'csharp'
 
-    - name: Setup .NET 6.* SDK
-      uses: actions/setup-dotnet@v2
+    - name: Setup .NET 7.* SDK
+      uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: '6.*'
+        dotnet-version: '7.*'
 
     - name: Autobuild
       if: ${{ github.actor != 'dependabot[bot]' }}
