@@ -8,7 +8,7 @@
   
   <ItemGroup>
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="1.1.1" />
-    <PackageReference Update="SIL.ReleaseTasks" Version="2.6.0-beta0008" />
+    <PackageReference Update="SIL.ReleaseTasks" Version="2.6.0-beta0024" />
   </ItemGroup>
 
 </Project>
