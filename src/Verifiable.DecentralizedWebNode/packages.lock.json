@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net7.0": {
+      "SIL.ReleaseTasks": {
+        "type": "Direct",
+        "requested": "[2.6.0-beta0024, )",
+        "resolved": "2.6.0-beta0024",
+        "contentHash": "gUIKoQk8aD6aF/Cs7b0hW3Qn8i/Lvk4fj6P7kgks1KG5osoqO920E4buwQFkyCSYt7v28L3PZ1TPRmejfplkuQ==",
+        "dependencies": {
+          "Markdig.Signed": "0.30.2"
+        }
+      },
+      "Markdig.Signed": {
+        "type": "Transitive",
+        "resolved": "0.30.2",
+        "contentHash": "nQlUtPbp9pQFoArFSp/CZb699W6pqBG/DSpnWHgKbIuQjAu3KNjTZHaIir2vSCPJZuSMGii7tbI6K+nalh4X7w=="
+      }
+    }
+  }
+}

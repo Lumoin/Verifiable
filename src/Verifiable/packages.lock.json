@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net7.0": {
+      "SIL.ReleaseTasks": {
+        "type": "Direct",
+        "requested": "[2.6.0-beta0024, )",
+        "resolved": "2.6.0-beta0024",
+        "contentHash": "gUIKoQk8aD6aF/Cs7b0hW3Qn8i/Lvk4fj6P7kgks1KG5osoqO920E4buwQFkyCSYt7v28L3PZ1TPRmejfplkuQ==",
+        "dependencies": {
+          "Markdig.Signed": "0.30.2"
+        }
+      },
+      "Spectre.Console": {
+        "type": "Direct",
+        "requested": "[0.46.1-preview.0.2, )",
+        "resolved": "0.46.1-preview.0.2",
+        "contentHash": "mYTyWEJZmMPX4r0WKswCqTzU+lNKbHJLxGFAJbcI2+v1KQPEGyO4jqtiY0sJ26990id9d1meRGjwL0ksmhFbMQ==",
+        "dependencies": {
+          "System.Memory": "4.5.5"
+        }
+      },
+      "Spectre.Console.Cli": {
+        "type": "Direct",
+        "requested": "[0.46.1-preview.0.2, )",
+        "resolved": "0.46.1-preview.0.2",
+        "contentHash": "yjT35l0dJ/qB5v+sS4vRBZ/Synrsenq9QEnj1Ou1sWi0zAnYGCkT6NJyuM9ezfv8XhSFVdUWheGASJwA7LL6oQ==",
+        "dependencies": {
+          "Spectre.Console": "0.46.1-preview.0.2"
+        }
+      },
+      "Markdig.Signed": {
+        "type": "Transitive",
+        "resolved": "0.30.2",
+        "contentHash": "nQlUtPbp9pQFoArFSp/CZb699W6pqBG/DSpnWHgKbIuQjAu3KNjTZHaIir2vSCPJZuSMGii7tbI6K+nalh4X7w=="
+      },
+      "Microsoft.TSS": {
+        "type": "Transitive",
+        "resolved": "2.1.1",
+        "contentHash": "87DBN+4ANSFO8TDRmFjjTBl6PL7tmrfofmxki4LUnE34gOdyQiBfJK/X1QSu0UfCGUtpoBVv/tD985s4FDpKiA=="
+      },
+      "System.Memory": {
+        "type": "Transitive",
+        "resolved": "4.5.5",
+        "contentHash": "XIWiDvKPXaTveaB7HVganDlOCRoj03l+jrwNvcge/t8vhGYKvqV+dMv6G4SAX2NoNmN0wZfVPTAlFwZcZvVOUw=="
+      },
+      "verifiable.tpm": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.TSS": "[2.1.1, )"
+        }
+      }
+    }
+  }
+}

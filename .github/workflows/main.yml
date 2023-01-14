@@ -61,7 +61,15 @@ jobs:
       if: ${{ matrix.os == 'ubuntu-latest' }}
       uses: step-security/harden-runner@18bf8ad2ca49c14cbb28b91346d626ccfb00c518
       with:
-        egress-policy: audit
+        disable-sudo: true
+        egress-policy: block
+        allowed-endpoints: >
+          aka.ms:443
+          api.github.com:443
+          api.nuget.org:443
+          dashboard.stryker-mutator.io:443
+          dotnetcli.azureedge.net:443
+          github.com:443
 
     - name: Configure Windows Pagefile
       if: ${{ matrix.os == 'windows-latest' }}
@@ -100,29 +108,21 @@ jobs:
       with:
         fetch-depth: 2
 
-    # Use hashes of lock files when they are used.
-    - uses: actions/cache@58c146cc91c5b9e778e71775dfe9bf1442ad9a12
+    - name: Cache Nuget packages '${{ matrix.os }}'
+      uses: actions/cache@58c146cc91c5b9e778e71775dfe9bf1442ad9a12
       with:
-        path: ~/.nuget/packages
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        path: ${{ env.NUGET_PACKAGES }}
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
         restore-keys: |
-          ${{ runner.os }}-nuget-
+          ${{runner.os}}-nuget-
 
-    # - name: Cache Nuget packages '${{ matrix.os }}'
-    #  uses: actions/cache@v2.1.6
-    #  with:
-    #    path: ${{ env.NUGET_PACKAGES }}
-    #    key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
-    #    restore-keys: |
-    #      ${{runner.os}}-nuget-
-
-    - name: Setup .NET 6.* SDK
+    - name: Setup .NET 7.* SDK
       uses: actions/setup-dotnet@607fce577a46308457984d59e4954e075820f10a
       with:
-        dotnet-version: '6.*'
+        dotnet-version: '7.*'
 
     - name: Install dependencies
-      run: dotnet restore
+      run: dotnet restore --locked-mode
 
     - name: Restore local tools
       run: dotnet tool restore
@@ -314,7 +314,15 @@ jobs:
         - name: Harden Runner
           uses: step-security/harden-runner@18bf8ad2ca49c14cbb28b91346d626ccfb00c518
           with:
-            egress-policy: audit
+            disable-sudo: true
+            egress-policy: block
+            allowed-endpoints: >
+              aka.ms:443
+              api.github.com:443
+              api.nuget.org:443
+              dashboard.stryker-mutator.io:443
+              dotnetcli.azureedge.net:443
+              github.com:443
 
         - name: Download NuGet artifacts
           uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a
@@ -335,7 +343,15 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@18bf8ad2ca49c14cbb28b91346d626ccfb00c518
         with:
-          egress-policy: audit
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            aka.ms:443
+            api.github.com:443
+            api.nuget.org:443
+            dashboard.stryker-mutator.io:443
+            dotnetcli.azureedge.net:443
+            github.com:443
 
       - name: Download NuGet artifacts
         uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a

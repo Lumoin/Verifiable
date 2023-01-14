@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net7.0": {
+      "SIL.ReleaseTasks": {
+        "type": "Direct",
+        "requested": "[2.6.0-beta0024, )",
+        "resolved": "2.6.0-beta0024",
+        "contentHash": "gUIKoQk8aD6aF/Cs7b0hW3Qn8i/Lvk4fj6P7kgks1KG5osoqO920E4buwQFkyCSYt7v28L3PZ1TPRmejfplkuQ==",
+        "dependencies": {
+          "Markdig.Signed": "0.30.2"
+        }
+      },
+      "Markdig.Signed": {
+        "type": "Transitive",
+        "resolved": "0.30.2",
+        "contentHash": "nQlUtPbp9pQFoArFSp/CZb699W6pqBG/DSpnWHgKbIuQjAu3KNjTZHaIir2vSCPJZuSMGii7tbI6K+nalh4X7w=="
+      },
+      "SimpleBase": {
+        "type": "Transitive",
+        "resolved": "4.0.0",
+        "contentHash": "X9VdQGnMwRZ7ve1eGgzoRxV/srWCQfMWRaFzK8KsnA9P2N0LKUcELAdSW8noAY0JPKkDXNDtpH65CeVQwDDf+w==",
+        "dependencies": {
+          "System.Memory": "4.5.5"
+        }
+      },
+      "System.Collections.Immutable": {
+        "type": "Transitive",
+        "resolved": "7.0.0",
+        "contentHash": "dQPcs0U1IKnBdRDBkrCTi1FoajSTBzLcVTpjO4MBCMC7f4pDOIPzgBoX8JjG7X6uZRJ8EBxsi8+DR1JuwjnzOQ=="
+      },
+      "System.Memory": {
+        "type": "Transitive",
+        "resolved": "4.5.5",
+        "contentHash": "XIWiDvKPXaTveaB7HVganDlOCRoj03l+jrwNvcge/t8vhGYKvqV+dMv6G4SAX2NoNmN0wZfVPTAlFwZcZvVOUw=="
+      },
+      "System.Text.Encodings.Web": {
+        "type": "Transitive",
+        "resolved": "7.0.0",
+        "contentHash": "OP6umVGxc0Z0MvZQBVigj4/U31Pw72ITihDWP9WiWDm+q5aoe0GaJivsfYGq53o6dxH7DcXWiCTl7+0o2CGdmg=="
+      },
+      "System.Text.Json": {
+        "type": "Transitive",
+        "resolved": "7.0.1",
+        "contentHash": "OtDEmCCiNl8JAduFKZ/r0Sw6XZNHwIicUYy/mXgMDGeOsZLshH37qi3oPRzFYiryVktiMoQLByMGPtRCEMYbeQ==",
+        "dependencies": {
+          "System.Text.Encodings.Web": "7.0.0"
+        }
+      },
+      "verifiable.core": {
+        "type": "Project",
+        "dependencies": {
+          "SimpleBase": "[4.0.0, )",
+          "System.Collections.Immutable": "[7.0.0, )",
+          "System.Text.Json": "[7.0.1, )"
+        }
+      }
+    }
+  }
+}
