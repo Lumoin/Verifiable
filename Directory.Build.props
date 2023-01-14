@@ -12,14 +12,7 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludePackageReferencesDuringMarkupCompilation>true</IncludePackageReferencesDuringMarkupCompilation>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
-
-    <!-- Lock files and so https://github.com/dotnet/reproducible-builds do not work
-         cross-platform yet. Explanations can be had at https://github.com/NuGet/Home/issues/9195.
-         This may happen for .NET 7. Once lock-files become cross-platform and
-         reproducible builds are possible, global.json should be introduced
-         (at the expense of developer experience).
-     -->
-    <!-- <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile> -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <!-- Common nuget package parameters and resources. -->
