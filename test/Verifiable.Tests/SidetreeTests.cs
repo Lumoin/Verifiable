@@ -1,12 +1,12 @@
-using Verifiable.Core;
-using Verifiable.Core.Did;
-using Verifiable.Sidetree;
 using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Verifiable.Core.Did;
+using Verifiable.Sidetree;
+using Verifiable.Tests.TestInfrastructure;
 using Xunit;
 
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     /// <summary>
     /// Sidetree specific tests. See https://identity.foundation/ion/explorer/ for documents.

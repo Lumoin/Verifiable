@@ -1,10 +1,11 @@
 using System;
-using System.Runtime.InteropServices;
+using Tpm2Lib;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Xunit;
 
 
-namespace Verifiable.Tests
+namespace Verifiable.Tests.Tpm
 {
     /// <summary>
     /// Quick test container TPM check for tests...
@@ -13,59 +14,25 @@ namespace Verifiable.Tests
     {
         private TpmWrapper TpmWrapper { get; }
 
+
         public TpmTests()
-        {
-            string? usePlatformTpmString = Environment.GetEnvironmentVariable("USE_PLATFORM_TPM");
-            string? dotNetPlatformString = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
-
-            bool usePlatformTpm = string.IsNullOrWhiteSpace(usePlatformTpmString) && bool.TryParse(usePlatformTpmString, out usePlatformTpm);
-            bool isCiEnvironment = dotNetPlatformString?.Equals("ci", StringComparison.InvariantCultureIgnoreCase) == true;
-
-            //It is not possible to test TPM functionality at all unless on supported platforms.
-            Skip.IfNot(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || RuntimeInformation.IsOSPlatform(OSPlatform.Linux),
-                $"Trust Platform Module (TPM) 2.0 is supported only on {OSPlatform.Windows} and {OSPlatform.Linux}.");
-
-            //CI TPM tests skipped until an emulator or a platform can be used.
-            Skip.If(isCiEnvironment);
-
-            //Local builds are currently possible only on simulator and Windows.
-            //CI builds are done using TPM, but currently it works only on Linux.
-            //TODO: Add simulator for local Linux builds too. Running on physical TPM may cause unexpected
-            //systemwide problems. Only test platform TPMs on CI as the environments can be thrown away.
-            Skip.If(
-                /* This first condition checks if this is a CI environment. Skip if parameters are not set correctly. */
-                (!usePlatformTpm && isCiEnvironment && !RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-
-                /* And this one if this this is a local Windows environment with simulator. */
-                || (!isCiEnvironment && !usePlatformTpm && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)),
-                $"Trust Platform Module (TPM) 2.0 on continuous environment is supported only on {OSPlatform.Linux}.");
-
-            //TODO: Linux simulator for local runs should be added and something like runSettings that makes it
-            //easy enough to choose where to run (messing with hardware TPM can cause trouble, so can't be
-            //used by default).
-            if(!usePlatformTpm && !isCiEnvironment && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                TpmWrapper = new TpmSimulatorWrapper();
-            }
-            else
-            {
-                //The CI pipeline installs TPM libraries on Linux...
-                TpmWrapper = new TpmWrapper();
-            }
+        {          
+            //The CI pipeline installs TPM libraries on Linux...
+            TpmWrapper = new TpmWrapper();
         }
 
 
         /// <summary>
         /// Checks that calling supported TPM platforms does not throw.
         /// </summary>
-        [SkippableFact]
+        [SkipTpmTestOnCiFact]
         public void TpmIsPlatformSupported()
         {
             _ = TpmExtensions.IsTpmPlatformSupported();
         }
 
-                
-        [SkippableFact]
+
+        [SkipTpmTestOnCiFact]
         public void TpmGetPropertiesSucceeds()
         {
             var tpmInfo = TpmWrapper.Tpm.GetAllTpmInfo();
@@ -78,7 +45,7 @@ namespace Verifiable.Tests
         }
 
 
-        [SkippableFact]
+        [SkipTpmTestOnCiFact]
         public void TpmGetPcrBanksSucceeds()
         {
             var pcrBanks = TpmWrapper.Tpm.GetPcrBanks();
@@ -88,6 +55,19 @@ namespace Verifiable.Tests
             {
                 Assert.True(TpmValidator.IsValidBank(pcrBank), "One or more of the buffer lengths in the PCR bank length did not match the bank algorithm.");
             }
+        }
+
+        [SkipTpmTestOnCiFact]
+        public void HashCheck()
+        {
+
+            TkHashcheck validation;
+            byte[] hashData = TpmWrapper.Tpm.Hash(new byte[] { 1, 2, 3 },   // Data to hash
+                                       TpmAlgId.Sha256,          // Hash algorithm
+                                       TpmRh.Owner,              // Hierarchy for ticket (not used here)
+                                       out validation);          // Ticket (not used in this example)
+            Console.WriteLine("Hashed data (Hash): " + BitConverter.ToString(hashData));
+
         }
 
 

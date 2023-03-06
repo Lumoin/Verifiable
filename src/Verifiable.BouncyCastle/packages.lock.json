@@ -1,18 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "dependencies": {
     "net7.0": {
-      "Microsoft.IdentityModel.Tokens": {
-        "type": "Direct",
-        "requested": "[6.27.0, )",
-        "resolved": "6.27.0",
-        "contentHash": "DnI9Ov6vbWrGQeGg6X/xp+3dkap2JDlQ9hUbP/rBvIZaEVjew5etS+bVXGH9fFDMTVghHVpBWiCREQnzRHuv2w==",
-        "dependencies": {
-          "Microsoft.CSharp": "4.5.0",
-          "Microsoft.IdentityModel.Logging": "6.27.0",
-          "System.Security.Cryptography.Cng": "4.5.0"
-        }
-      },
       "Portable.BouncyCastle": {
         "type": "Direct",
         "requested": "[1.9.0, )",
@@ -33,26 +22,31 @@
         "resolved": "0.30.2",
         "contentHash": "nQlUtPbp9pQFoArFSp/CZb699W6pqBG/DSpnWHgKbIuQjAu3KNjTZHaIir2vSCPJZuSMGii7tbI6K+nalh4X7w=="
       },
-      "Microsoft.CSharp": {
+      "System.Memory": {
         "type": "Transitive",
-        "resolved": "4.5.0",
-        "contentHash": "kaj6Wb4qoMuH3HySFJhxwQfe8R/sJsNJnANrvv8WdFPMoNbKY5htfNscv+LHCu5ipz+49m2e+WQXpLXr9XYemQ=="
+        "resolved": "4.5.5",
+        "contentHash": "XIWiDvKPXaTveaB7HVganDlOCRoj03l+jrwNvcge/t8vhGYKvqV+dMv6G4SAX2NoNmN0wZfVPTAlFwZcZvVOUw=="
       },
-      "Microsoft.IdentityModel.Abstractions": {
+      "System.Text.Encodings.Web": {
         "type": "Transitive",
-        "resolved": "6.27.0",
-        "contentHash": "HO3yJcG+9gp/qTlwBuiGfqvvRMyul/BKbflMC4+rnxoTvVQIto0iSCmhGTqsC4LXYK8GPU3etd4kMw6mBuvnQg=="
+        "resolved": "7.0.0",
+        "contentHash": "OP6umVGxc0Z0MvZQBVigj4/U31Pw72ITihDWP9WiWDm+q5aoe0GaJivsfYGq53o6dxH7DcXWiCTl7+0o2CGdmg=="
       },
-      "Microsoft.IdentityModel.Logging": {
-        "type": "Transitive",
-        "resolved": "6.27.0",
-        "contentHash": "4IzWb/CjtSYzq4FRcxRZSkkhhosj6DuDltBjj7BIq8f83O0J0lS8Wv50puiGyzAJH3WMjpZXz0TVOTjBi+BhQA==",
+      "verifiable.core": {
+        "type": "Project",
         "dependencies": {
-          "Microsoft.IdentityModel.Abstractions": "6.27.0"
+          "SimpleBase": "[4.0.0, )",
+          "System.Collections.Immutable": "[7.0.0, )",
+          "System.Text.Json": "[7.0.3, )",
+          "Verifiable.Jwt": "[0.0.0.1-alpha, )"
         }
       },
+      "verifiable.jwt": {
+        "type": "Project"
+      },
       "SimpleBase": {
-        "type": "Transitive",
+        "type": "CentralTransitive",
+        "requested": "[4.0.0, )",
         "resolved": "4.0.0",
         "contentHash": "X9VdQGnMwRZ7ve1eGgzoRxV/srWCQfMWRaFzK8KsnA9P2N0LKUcELAdSW8noAY0JPKkDXNDtpH65CeVQwDDf+w==",
         "dependencies": {
@@ -60,39 +54,18 @@
         }
       },
       "System.Collections.Immutable": {
-        "type": "Transitive",
+        "type": "CentralTransitive",
+        "requested": "[7.0.0, )",
         "resolved": "7.0.0",
         "contentHash": "dQPcs0U1IKnBdRDBkrCTi1FoajSTBzLcVTpjO4MBCMC7f4pDOIPzgBoX8JjG7X6uZRJ8EBxsi8+DR1JuwjnzOQ=="
       },
-      "System.Memory": {
-        "type": "Transitive",
-        "resolved": "4.5.5",
-        "contentHash": "XIWiDvKPXaTveaB7HVganDlOCRoj03l+jrwNvcge/t8vhGYKvqV+dMv6G4SAX2NoNmN0wZfVPTAlFwZcZvVOUw=="
-      },
-      "System.Security.Cryptography.Cng": {
-        "type": "Transitive",
-        "resolved": "4.5.0",
-        "contentHash": "WG3r7EyjUe9CMPFSs6bty5doUqT+q9pbI80hlNzo2SkPkZ4VTuZkGWjpp77JB8+uaL4DFPRdBsAY+DX3dBK92A=="
-      },
-      "System.Text.Encodings.Web": {
-        "type": "Transitive",
-        "resolved": "7.0.0",
-        "contentHash": "OP6umVGxc0Z0MvZQBVigj4/U31Pw72ITihDWP9WiWDm+q5aoe0GaJivsfYGq53o6dxH7DcXWiCTl7+0o2CGdmg=="
-      },
       "System.Text.Json": {
-        "type": "Transitive",
-        "resolved": "7.0.2",
-        "contentHash": "/LZf/JrGyilojqwpaywb+sSz8Tew7ij4K/Sk+UW8AKfAK7KRhR6mKpKtTm06cYA7bCpGTWfYksIW+mVsdxPegQ==",
+        "type": "CentralTransitive",
+        "requested": "[7.0.3, )",
+        "resolved": "7.0.3",
+        "contentHash": "AyjhwXN1zTFeIibHimfJn6eAsZ7rTBib79JQpzg8WAuR/HKDu9JGNHTuu3nbbXQ/bgI+U4z6HtZmCHNXB1QXrQ==",
         "dependencies": {
           "System.Text.Encodings.Web": "7.0.0"
-        }
-      },
-      "verifiable.core": {
-        "type": "Project",
-        "dependencies": {
-          "SimpleBase": "[4.0.0, )",
-          "System.Collections.Immutable": "[7.0.0, )",
-          "System.Text.Json": "[7.0.2, )"
         }
       }
     }

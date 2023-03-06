@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.Json;
@@ -73,7 +72,7 @@ namespace Verifiable.Core.Did
 
                 if(reader.TokenType != JsonTokenType.PropertyName)
                 {
-                    throw new JsonException("JsonTokenType was not PropertyName");
+                    throw new JsonException($"JsonTokenType was not {nameof(JsonTokenType.PropertyName)}");
                 }
 
                 var propertyName = reader.GetString();
@@ -133,7 +132,7 @@ namespace Verifiable.Core.Did
             switch(reader.TokenType)
             {
                 case JsonTokenType.String:
-                    if(reader.TryGetDateTime(out var date))
+                    if(reader.TryGetDateTime(out DateTime date))
                     {
                         return date;
                     }
@@ -145,14 +144,15 @@ namespace Verifiable.Core.Did
                 case JsonTokenType.Null:
                     return null;
                 case JsonTokenType.Number:
-                    if(reader.TryGetInt64(out var result))
+                    if(reader.TryGetInt64(out long result))
                     {
                         return result;
                     }
                     return reader.GetDecimal();
                 case JsonTokenType.StartObject:
+                {
                     return JsonSerializer.Deserialize(ref reader, typeof(object));
-
+                }
                 case JsonTokenType.StartArray:
 
                     var list = new List<object>();

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     /// <summary>
     /// Nothing here yet. The idea is to test simple flows where

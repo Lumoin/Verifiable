@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using Tpm2Lib;
@@ -166,6 +165,9 @@ namespace Verifiable.Tpm
             tpmProperty = tpmProperties.tpmProperty[Pt.PsDayOfYear - Pt.PtFixed].value;
             platformSpecificationDate = platformSpecificationDate.AddDays((int)tpmProperty);
 
+            var mv = Pt.FirmwareVersion1 - Pt.PtFixed;
+            var min = Pt.FirmwareVersion2 - Pt.PtFixed;
+            Console.WriteLine($"{mv}, {min}");
             uint tpmFirmwareVersionHigherBits = tpmProperties.tpmProperty[Pt.FirmwareVersion1 - Pt.PtFixed].value;
             uint tpmFirmwareVersionLowerBits = tpmProperties.tpmProperty[Pt.FirmwareVersion2 - Pt.PtFixed].value;
             Version firmwareVersion = new(
@@ -244,7 +246,7 @@ namespace Verifiable.Tpm
                         break;
                     }
 
-                    //Only on bank of values is read at once, indicated by pcrBank.hash.
+                    //Only one bank of values is read at once, indicated by pcrBank.hash.
                     //So there's only one element in the array constructed and correspondingly
                     //received as an out parameter.
                     var pcrsCurrentlyBeingRead = pcrValuesBatchToRead[0].GetSelectedPcrs();
@@ -287,8 +289,7 @@ namespace Verifiable.Tpm
         /// Reverses the bytes in <paramref name="value"/> and gives the result as return value.
         /// </summary>
         /// <param name="value">The value in which to reverse the bytes.</param>
-        /// <returns>The reversed bytes.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        /// <returns>The reversed bytes.</returns>        
         private static uint ReverseBytes(uint value)
         {
             return
@@ -298,8 +299,7 @@ namespace Verifiable.Tpm
                 | (value & 0xFF000000U) >> 24;
         }
 
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        
         private static uint CombineToUint(uint highBytes, uint lowBytes)
         {
             return (highBytes << 16) | (lowBytes & 0xFFFF);

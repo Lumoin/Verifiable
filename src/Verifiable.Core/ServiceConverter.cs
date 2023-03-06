@@ -14,11 +14,7 @@ namespace Verifiable.Core.Did
     /// TODO: Customize this if more extensive type mapping and converter selection is needed.
     /// </summary>
     public class ServiceConverterFactory: JsonConverterFactory
-    {
-        /// <summary>
-        /// TODO: What are the standardized services in https://www.w3.org/TR/did-spec-registries/ and could be here? The rest ought to be moved out.
-        /// When refactoring TODO, retain this observation: Service needs to be always handled unless the library user explicitly removes it.
-        /// </summary>
+    {        
         public static ImmutableDictionary<string, Type> DefaultTypeMap => new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase) { { nameof(Service), typeof(Service) } }.ToImmutableDictionary();
 
         private ImmutableDictionary<string, Type> TypeMap { get; }
@@ -131,7 +127,7 @@ namespace Verifiable.Core.Did
 
                 if(!string.IsNullOrEmpty(serviceType))
                 {
-                    if(TypeMap.TryGetValue(serviceType, out var targetType))
+                    if(TypeMap.TryGetValue(serviceType, out Type? targetType))
                     {
                         return (T)JsonSerializer.Deserialize(ref elementStartPosition, targetType, DefaultOptionsForAll)!;
                     }

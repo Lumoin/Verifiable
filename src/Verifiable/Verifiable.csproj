@@ -11,9 +11,17 @@
     <ApplicationIcon>resources/verifiable-nuget-logo.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <!--
+  https://docs.microsoft.com/en-us/dotnet/core/deploying/trimming/prepare-libraries-for-trimming
+  <PropertyGroup>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimmerDefaultAction>link</TrimmerDefaultAction>
+  </PropertyGroup>
+  -->
+
   <ItemGroup>
-    <PackageReference Include="Spectre.Console" Version="0.46.1-preview.0.2" />
-    <PackageReference Include="Spectre.Console.Cli" Version="0.46.1-preview.0.2" />
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="Spectre.Console.Cli" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,7 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="SIL.ReleaseTasks" Version="2.6.0-beta0024" />
+    
   </ItemGroup>
   
 </Project>

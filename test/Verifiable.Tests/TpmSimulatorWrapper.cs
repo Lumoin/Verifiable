@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Tpm2Lib;
 using Verifiable.Tpm;
 
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     /// <summary>
     /// Wraps the simular and has the correct start sequence for the simulator.

@@ -4,11 +4,12 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Verifiable.Core;
 using Verifiable.Core.Did;
+using Verifiable.Jwt;
+using Verifiable.Tests.TestInfrastructure;
 using Xunit;
 
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     /// <summary>
     /// General DID tests.
@@ -133,28 +134,32 @@ namespace Verifiable.Tests
                     new VerificationRelationshipConverterFactory(),
                     new VerificationMethodConverter(),
                     new ServiceConverterFactory(serviceTypeMap.ToImmutableDictionary()),
-                    new JsonLdContextConverter()
+                    new JsonLdContextConverter(),
+                    new DictionaryStringObjectJsonConverter(),
+                    new DidIdConverter(did =>
+                    {
+                        return did switch
+                        {
+                            "did:key:" => new KeyDidId(did),
+                            "did:ebsi:" => new EbsiDidId(did),
+                            _ => new GenericDidId(did)
+                        };
+                    })
                 }
             };
 
-            DidDocument? deseserializedDidDocument = JsonSerializer.Deserialize<DidDocument>(MultiServiceTestDocument, options);
-            string reserializedDidDocument = JsonSerializer.Serialize(deseserializedDidDocument, options);
-
-            //All the DID documents need to have an ID and a context. This one needs to have also a strongly type element.
-            //The strongly typed services should be in document order (e.g. not in type map order).
-            Assert.NotNull(deseserializedDidDocument?.Id);
-            Assert.NotNull(deseserializedDidDocument?.Context);
-            Assert.NotNull(deseserializedDidDocument?.Service);
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(MultiServiceTestDocument, options);            
+            Assert.NotNull(deserializedDidDocument?.Id);
+            Assert.NotNull(deserializedDidDocument?.Context);
+            Assert.NotNull(deserializedDidDocument?.Service);
             Assert.NotNull(reserializedDidDocument);
-            Assert.IsType<OpenIdConnectVersion1>(deseserializedDidDocument!.Service![0]);
-            Assert.IsType<VerifiableCredentialService>(deseserializedDidDocument!.Service![5]);
-            Assert.IsType<SocialWebInboxService>(deseserializedDidDocument!.Service![6]);
-            Assert.IsType<Service>(deseserializedDidDocument!.Service![7]);
+            Assert.IsType<OpenIdConnectVersion1>(deserializedDidDocument!.Service![0]);
+            Assert.IsType<VerifiableCredentialService>(deserializedDidDocument!.Service![5]);
+            Assert.IsType<SocialWebInboxService>(deserializedDidDocument!.Service![6]);
+            Assert.IsType<Service>(deserializedDidDocument!.Service![7]);
 
-            var comparer = new JsonElementComparer();
-            using var originalDIDDocument = JsonDocument.Parse(MultiServiceTestDocument);
-            using var parsedReserializedDIDDocument = JsonDocument.Parse(reserializedDidDocument);
-            Assert.True(comparer.Equals(originalDIDDocument.RootElement, parsedReserializedDIDDocument.RootElement), $"JSON string \"{MultiServiceTestDocument}\" did not pass roundtrip test.");
+            bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(MultiServiceTestDocument, reserializedDidDocument);
+            Assert.True(areJsonElementsEqual, $"JSON string \"{MultiServiceTestDocument}\" did not pass roundtrip test.");
         }
 
 
@@ -185,24 +190,29 @@ namespace Verifiable.Tests
                     new VerificationRelationshipConverterFactory(),
                     new VerificationMethodConverter(),
                     new ServiceConverterFactory(serviceTypeMap.ToImmutableDictionary()),
-                    new JsonLdContextConverter()
+                    new JsonLdContextConverter(),
+                    new DictionaryStringObjectJsonConverter(),
+                    new DidIdConverter(did =>
+                    {
+                        return did switch
+                        {
+                            "did:key:" => new KeyDidId(did),
+                            "did:ebsi:" => new EbsiDidId(did),
+                            _ => new GenericDidId(did)
+                        };
+                    })
                 }
             };
 
-            DidDocument? deseserializedDidDocument = JsonSerializer.Deserialize<DidDocument>(didDocumentFileContents, options);
-            string reserializedDidDocument = JsonSerializer.Serialize(deseserializedDidDocument, options);
-
-            //All the DID documents need to have an ID and a context. This one needs to have also a strongly type element.
-            Assert.NotNull(deseserializedDidDocument?.Id);
-            Assert.NotNull(deseserializedDidDocument?.Context);
-            Assert.NotNull(deseserializedDidDocument?.Service);
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);            
+            Assert.NotNull(deserializedDidDocument?.Id);
+            Assert.NotNull(deserializedDidDocument?.Context);
+            Assert.NotNull(deserializedDidDocument?.Service);
             Assert.NotNull(reserializedDidDocument);
-            Assert.IsType<VerifiableCredentialService>(deseserializedDidDocument!.Service![0]);
+            Assert.IsType<VerifiableCredentialService>(deserializedDidDocument!.Service![0]);
 
-            var comparer = new JsonElementComparer();
-            using var originalDIDDocument = JsonDocument.Parse(didDocumentFileContents);
-            using var parsedReserializedDIDDocument = JsonDocument.Parse(reserializedDidDocument);
-            Assert.True(comparer.Equals(originalDIDDocument.RootElement, parsedReserializedDIDDocument.RootElement), $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
+            bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(didDocumentFileContents, reserializedDidDocument);
+            Assert.True(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
         }
 
 
@@ -231,27 +241,38 @@ namespace Verifiable.Tests
                 Converters =
                 {
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(verificationMethodTypeMap.ToImmutableDictionary()),
+                    new VerificationMethodConverter(cryptoSuite =>
+                    {
+                        return cryptoSuite switch
+                        {
+                            "JsonWebKey2020" => new JsonWebKey2020(),
+                            "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
+                            _ => new Core.Did.CryptoSuite(cryptoSuite, new List<string>())
+                        };
+                    },verificationMethodTypeMap.ToImmutableDictionary()),
                     new ServiceConverterFactory(),
-                    new JsonLdContextConverter()
+                    new JsonLdContextConverter(),
+                    new DidIdConverter(did =>
+                    {
+                        return did switch
+                        {
+                            "did:key:" => new KeyDidId(did),
+                            "did:ebsi:" => new EbsiDidId(did),
+                            _ => new GenericDidId(did)
+                        };
+                    })
                 }
             };
 
-            DidDocument? deseserializedDidDocument = JsonSerializer.Deserialize<DidDocument>(didDocumentFileContents, options);
-            string reserializedDidDocument = JsonSerializer.Serialize(deseserializedDidDocument, options);
-
-            //All the DID documents need to have an ID and a context. This one needs to have also a strongly typed Service,
-            //VerifiableCredentialService, since no type was provided for it. The data is in Service ExtensionData element.
-            Assert.NotNull(deseserializedDidDocument?.Id);
-            Assert.NotNull(deseserializedDidDocument?.Context);
-            Assert.NotNull(deseserializedDidDocument?.Service);
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);            
+            Assert.NotNull(deserializedDidDocument?.Id);
+            Assert.NotNull(deserializedDidDocument?.Context);
+            Assert.NotNull(deserializedDidDocument?.Service);
             Assert.NotNull(reserializedDidDocument);
-            Assert.IsType<Service>(deseserializedDidDocument!.Service![0]);
+            Assert.IsType<Service>(deserializedDidDocument!.Service![0]);
 
-            var comparer = new JsonElementComparer();
-            using var originalDIDDocument = JsonDocument.Parse(didDocumentFileContents);
-            using var parsedReserializedDIDDocument = JsonDocument.Parse(reserializedDidDocument);
-            Assert.True(comparer.Equals(originalDIDDocument.RootElement, parsedReserializedDIDDocument.RootElement), $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
+            bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(didDocumentFileContents, reserializedDidDocument);
+            Assert.True(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
         }
 
 
@@ -277,30 +298,36 @@ namespace Verifiable.Tests
                     new VerificationRelationshipConverterFactory(),
                     new VerificationMethodConverter(),
                     new ServiceConverterFactory(),
-                    new JsonLdContextConverter()
+                    new JsonLdContextConverter(),
+                    new DictionaryStringObjectJsonConverter(),
+                    new DidIdConverter(did =>
+                    {
+                        return did switch
+                        {
+                            "did:key:" => new KeyDidId(did),
+                            "did:ebsi:" => new EbsiDidId(did),
+                            _ => new GenericDidId(did)
+                        };
+                    })
                 }
             };
 
-            DidDocument? deseserializedDidDocumentNonExtended = JsonSerializer.Deserialize<DidDocument>(didDocumentFileContents, options);
-            TestExtendedDidDocument? deseserializedDidDocumentExtended = JsonSerializer.Deserialize<TestExtendedDidDocument>(didDocumentFileContents, options);
-            string reserializedDidDocumentNonExtended = JsonSerializer.Serialize(deseserializedDidDocumentNonExtended, options);
-            string reserializedDidDocumentExtended = JsonSerializer.Serialize(deseserializedDidDocumentExtended, options);
+            var (deserializedDidDocumentNonExtended, deserializedDidDocumentExtended, reserializedDidDocumentNonExtended, reserializedDidDocumentExtended) =
+                JsonTestingUtilities.PerformExtendedSerializationCycle<DidDocument, TestExtendedDidDocument>(didDocumentFileContents, options);
 
-            //All the DID documents need to have an ID and a context. Here the extra data should not exist.
-            Assert.NotNull(deseserializedDidDocumentNonExtended?.Id);
-            Assert.NotNull(deseserializedDidDocumentNonExtended?.Context);
+            //Assertions for DidDocument...
+            Assert.NotNull(deserializedDidDocumentNonExtended?.Id);
+            Assert.NotNull(deserializedDidDocumentNonExtended?.Context);
             Assert.NotNull(reserializedDidDocumentNonExtended);
 
-            //Here there should be additional data.
-            Assert.NotNull(deseserializedDidDocumentExtended?.Id);
-            Assert.NotNull(deseserializedDidDocumentExtended?.Context);
-            Assert.NotNull(deseserializedDidDocumentExtended?.AdditionalData);
+            //Assertions for TestExtendedDidDocument...
+            Assert.NotNull(deserializedDidDocumentExtended?.Id);
+            Assert.NotNull(deserializedDidDocumentExtended?.Context);
+            Assert.NotNull(deserializedDidDocumentExtended?.AdditionalData);
             Assert.NotNull(reserializedDidDocumentExtended);
 
-            var comparer = new JsonElementComparer();
-            using var originalDIDDocument = JsonDocument.Parse(didDocumentFileContents);
-            using var parsedReserializedDIDDocument = JsonDocument.Parse(reserializedDidDocumentExtended);
-            Assert.True(comparer.Equals(originalDIDDocument.RootElement, parsedReserializedDIDDocument.RootElement), $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
+            bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(didDocumentFileContents, reserializedDidDocumentExtended);
+            Assert.True(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
         }
 
 
@@ -329,25 +356,38 @@ namespace Verifiable.Tests
                 {
                     new SingleOrArrayControllerConverter(),
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(verificationMethodTypeMap.ToImmutableDictionary()),
-                    new VerificationMethodConverter(),
+                    new VerificationMethodConverter(cryptoSuite =>
+                    {
+                        return cryptoSuite switch
+                        {
+                            "JsonWebKey2020" => new JsonWebKey2020(),
+                            "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
+                            _ => new Core.Did.CryptoSuite(cryptoSuite, new List<string>())
+                        };
+                    },verificationMethodTypeMap.ToImmutableDictionary()),
                     new ServiceConverterFactory(),
-                    new JsonLdContextConverter()
+                    new JsonLdContextConverter(),
+                    new DictionaryStringObjectJsonConverter(),
+                    new DidIdConverter(did =>
+                    {
+                        return did switch
+                        {
+                            "did:key:" => new KeyDidId(did),
+                            "did:ebsi:" => new EbsiDidId(did),
+                            _ => new GenericDidId(did)
+                        };
+                    })
                 }
             };
 
-            DidDocument? deseserializedDidDocument = JsonSerializer.Deserialize<DidDocument>(didDocumentFileContents, options);
-            string reserializedDidDocument = JsonSerializer.Serialize(deseserializedDidDocument, options);
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
 
-            //All the DID documents need to have an ID and a context.
-            Assert.NotNull(deseserializedDidDocument?.Id);
-            Assert.NotNull(deseserializedDidDocument?.Context);
+            //All the DID documents need to have an ID.
+            Assert.NotNull(deserializedDidDocument?.Id);
             Assert.NotNull(reserializedDidDocument);
 
-            var comparer = new JsonElementComparer();
-            using var originalDIDDocument = JsonDocument.Parse(didDocumentFileContents);
-            using var parsedReserializedDIDDocument = JsonDocument.Parse(reserializedDidDocument);
-            Assert.True(comparer.Equals(originalDIDDocument.RootElement, parsedReserializedDIDDocument.RootElement), $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
+            bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(didDocumentFileContents, reserializedDidDocument);
+            Assert.True(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
         }
     }
 }

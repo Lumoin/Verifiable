@@ -8,8 +8,9 @@ namespace Verifiable.Core
     /// Helper methods to throw. Extracting throw makes conditional branches smaller, more inlinable and reduces
     /// generic codegen size.
     /// </summary>
-    /// <remarks>Based on https://github.com/dotnet/corefx/blob/e1991a4f9c5cff43908a03d2c787e8246cfa5583/src/System.Text.Json/src/System/Text/Json/ThrowHelper.cs
-    /// and https://github.com/dotnet/corefx/blob/master/src/System.Text.Json/src/System/Text/Json/ThrowHelper.Serialization.cs .</remarks>
+    /// <remarks>Based on <see href="https://github.com/dotnet/runtime/blob/main/src/libraries/System.Text.Json/src/System/Text/Json/ThrowHelper.cs">
+    /// ThrowHelper.cs</see> and <see href="https://github.com/dotnet/runtime/blob/main/src/libraries/System.Text.Json/src/System/Text/Json/ThrowHelper.Serialization.cs">
+    /// ThrowHelper.Serialization.cs</see></remarks>.
     public static class ThrowHelper
     {
         /// <summary>

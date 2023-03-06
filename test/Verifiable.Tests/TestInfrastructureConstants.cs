@@ -1,6 +1,6 @@
 using System;
 
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     /// <summary>
     /// Some constants and utilities used in tests.
@@ -34,11 +34,8 @@ namespace Verifiable.Tests
         /// <param name="didDocumentFileContents">The contents of the file being tested.</param>
         public static void ThrowIfPreconditionFails(string didDocumentFilename, string didDocumentFileContents)
         {
-            if(didDocumentFilename is null)
-            {
-                throw new ArgumentNullException(nameof(didDocumentFilename));
-            }
-
+            ArgumentNullException.ThrowIfNull(didDocumentFilename);
+            
             if(string.IsNullOrWhiteSpace(didDocumentFileContents))
             {
                 throw new ArgumentException($"The test file {didDocumentFilename} must not be empty or null.", nameof(didDocumentFileContents));

@@ -3,13 +3,13 @@
   "isRoot": true,
   "tools": {
     "dotnet-format": {
-      "version": "5.0.211103",
+      "version": "5.1.250801",
       "commands": [
         "dotnet-format"
       ]
     },
     "dotnet-stryker": {
-      "version": "3.4.0",
+      "version": "3.10.0",
       "commands": [
         "dotnet-stryker"
       ]
@@ -27,19 +27,19 @@
       ]
     },
     "sharpfuzz.commandline": {
-      "version": "1.6.3",
+      "version": "2.1.1",
       "commands": [
         "sharpfuzz"
       ]
     },
     "cyclonedx": {
-      "version": "2.3.0",
+      "version": "2.9.0",
       "commands": [
         "dotnet-CycloneDX"
       ]
     },
     "dotnet-reportgenerator-globaltool": {
-      "version": "5.1.9",
+      "version": "5.1.26",
       "commands": [
         "reportgenerator"
       ]

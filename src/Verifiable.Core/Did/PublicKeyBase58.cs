@@ -11,7 +11,6 @@ namespace Verifiable.Core.Did
         public PublicKeyBase58(string key)
         {
             ArgumentNullException.ThrowIfNull(key, nameof(key));
-
             Key = key;
         }
     }

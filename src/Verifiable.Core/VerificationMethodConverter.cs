@@ -29,31 +29,54 @@ namespace Verifiable.Core.Did
         public static ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> DefaultTypeMap =>
             new Dictionary<string, Func<string, JsonSerializerOptions, KeyFormat>>(StringComparer.OrdinalIgnoreCase)
         {
-            { "publicKeyBase58", new Func<string, JsonSerializerOptions, PublicKeyBase58>((json, _) => new PublicKeyBase58(json)) },
+            { "publicKeyMultibase", new Func<string, JsonSerializerOptions, PublicKeyMultibase>((json, _) => new PublicKeyMultibase(json)) },
+            { "publicKeyBase58", new Func<string, JsonSerializerOptions, PublicKeyBase58>((json, _) => new PublicKeyBase58(json)) },            
             { "publicKeyPem", new Func<string, JsonSerializerOptions, PublicKeyPem>((json, _) => new PublicKeyPem(json)) },
             { "publicKeyHex", new Func<string, JsonSerializerOptions, PublicKeyHex>((json, _) => new PublicKeyHex(json)) },
-            { "publicKeyJwk", new Func<string, JsonSerializerOptions, PublicKeyJwk>((json, options) => JsonSerializer.Deserialize<PublicKeyJwk>(json, options)!) }
+            { "publicKeyJwk", new Func<string, JsonSerializerOptions, PublicKeyJwk>((json, options) =>
+            {
+                var headers = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options)!;
+                return new PublicKeyJwk { Header = headers };
+            })}
         }.ToImmutableDictionary();
+
+        private static CryptoSuiteFactoryDelegate DefaultCryptoSuiteFactory { get; } = cryptoSuite =>
+        {
+            return cryptoSuite switch
+            {
+                "JsonWebKey2020" => new JsonWebKey2020(),
+                "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
+                "Secp256k1VerificationKey2018" => new Secp256k1VerificationKey2018(),
+                "multikey" => new Multikey(),
+                _ => new CryptoSuite(cryptoSuite, new List<string>())
+            };
+        };
 
         /// <summary>
         /// Xyz.
         /// </summary>
         private ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> TypeMap { get; }
 
+        private CryptoSuiteFactoryDelegate CryptoSuiteFactory { get; }
+
 
         /// <summary>
         /// A default constructor that maps <see cref="DefaultTypeMap"/> to be used.
         /// </summary>
-        public VerificationMethodConverter(): this(DefaultTypeMap) { }
+        public VerificationMethodConverter() : this(DefaultCryptoSuiteFactory, DefaultTypeMap) { }
 
 
         /// <summary>
         /// A default constructor for <see cref="VerificationMethod"/> and sub-type conversions.
         /// </summary>
         /// <param name="typeMap">A runtime map of <see cref="Service"/> and sub-types.</param>
-        public VerificationMethodConverter(ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> typeMap)
+        public VerificationMethodConverter(CryptoSuiteFactoryDelegate cryptoSuiteFactory, ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> typeMap)
         {
-            TypeMap =  typeMap ?? throw new ArgumentNullException(nameof(typeMap));
+            ArgumentNullException.ThrowIfNull(nameof(typeMap));
+            ArgumentNullException.ThrowIfNull(nameof(cryptoSuiteFactory));
+
+            TypeMap = typeMap;
+            CryptoSuiteFactory = cryptoSuiteFactory;
         }
 
 
@@ -65,6 +88,9 @@ namespace Verifiable.Core.Did
                 ThrowHelper.ThrowJsonException();
             }
 
+            //TODO: There can be also other properties. So there likely needs to be a simlar construct to
+            //as ServiceConverter, e.g. "public class SocialWebInboxService: Service".
+
             //Parsing the document forwards moves the index. The element start position
             //is stored to a temporary variable here so it can be given directly to JsonSerializer.
             var verificationMethod = new VerificationMethod();
@@ -75,7 +101,7 @@ namespace Verifiable.Core.Did
                 //First the values are filled to the object.
                 verificationMethod.Id = element.GetProperty("id").GetString()!;
                 verificationMethod.Controller = element.GetProperty("controller").GetString();
-                verificationMethod.Type = element.GetProperty("type").GetString();
+                verificationMethod.Type = CryptoSuiteFactory(element.GetProperty("type").GetString()!);
 
                 //Then the known key format tags are tested and its corresponding transformation
                 //function is used. This is done like this because JSON can contain any format tags
@@ -83,7 +109,7 @@ namespace Verifiable.Core.Did
                 //be tried one-by-one.
                 //
                 //N.B.! Or find a way to read the next property directly!
-                foreach(var serviceTypeDiscriminator in TypeMap.Keys)
+                foreach(string serviceTypeDiscriminator in TypeMap.Keys)
                 {
                     Func<string, JsonSerializerOptions, KeyFormat> keyFunc;
                     if(element.TryGetProperty(serviceTypeDiscriminator, out JsonElement serviceTypeElement)
@@ -107,11 +133,16 @@ namespace Verifiable.Core.Did
             writer.WriteStartObject();
             writer.WriteString("id", value?.Id?.ToString());
             writer.WriteString("controller", value?.Controller);
-            writer.WriteString("type", value?.Type);
+            writer.WriteString("type", value?.Type!);
 
             if(value?.KeyFormat is PublicKeyHex hex)
             {
                 writer.WriteString("publicKeyHex", hex?.Key);
+            }
+
+            if(value?.KeyFormat is PublicKeyMultibase multibase)
+            {
+                writer.WriteString("publicKeyMultibase", multibase?.Key);
             }
 
             if(value?.KeyFormat is PublicKeyBase58 base58)
@@ -122,39 +153,10 @@ namespace Verifiable.Core.Did
             if(value?.KeyFormat is PublicKeyJwk jwk)
             {
                 writer.WriteStartObject("publicKeyJwk");
-                if(!string.IsNullOrWhiteSpace(jwk.Crv))
-                {
-                    writer.WriteString("crv", jwk.Crv);
-                }
 
-                if(!string.IsNullOrWhiteSpace(jwk.X))
+                foreach(var header in jwk.Header)
                 {
-                    writer.WriteString("x", jwk.X);
-                }
-
-                if(!string.IsNullOrWhiteSpace(jwk.Y))
-                {
-                    writer.WriteString("y", jwk.Y);
-                }
-
-                if(!string.IsNullOrWhiteSpace(jwk.Kty))
-                {
-                    writer.WriteString("kty", jwk.Kty);
-                }
-
-                if(!string.IsNullOrWhiteSpace(jwk.Kid))
-                {
-                    writer.WriteString("kid", jwk.Kid);
-                }
-
-                if(!string.IsNullOrWhiteSpace(jwk.E))
-                {
-                    writer.WriteString("e", jwk.E);
-                }
-
-                if(!string.IsNullOrWhiteSpace(jwk.N))
-                {
-                    writer.WriteString("n", jwk.N);
+                    writer.WriteString(header.Key, (string)header.Value);
                 }
 
                 writer.WriteEndObject();
@@ -166,6 +168,23 @@ namespace Verifiable.Core.Did
             }
 
             writer.WriteEndObject();
+        }
+
+        private JsonSerializerOptions CopyOptionsWithoutThisConverter(JsonSerializerOptions options)
+        {
+            var newOptions = new JsonSerializerOptions(options);
+            Type thisConverterType = this.GetType();
+
+            for(int i = newOptions.Converters.Count - 1; i >= 0; i--)
+            {
+                if(newOptions.Converters[i].GetType() == thisConverterType)
+                {
+                    newOptions.Converters.RemoveAt(i);
+                    break;
+                }
+            }
+
+            return newOptions;
         }
     }
 }

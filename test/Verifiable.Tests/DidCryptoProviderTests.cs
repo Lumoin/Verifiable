@@ -1,9 +1,5 @@
-using Verifiable.Core.Did;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using Xunit;
 
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     /// <summary>
     /// These are general purpose cryptography tests that rely on DID Core specific

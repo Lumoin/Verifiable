@@ -6,7 +6,7 @@ using System.Buffers;
 using System.Text;
 using Xunit;
 
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     //TODO: Automate the combinations in testing.
 
@@ -23,28 +23,26 @@ namespace Verifiable.Tests
 
         [Fact]
         public void BouncyGeneratedKeysUsedByNSecOnEd25519()
-        {
-            var bouncyGenerator = new BouncyCastleKeyGenerator();
-            var keys = bouncyGenerator.GenerateEd25519PublicPrivateKeyPair(MemoryPool<byte>.Shared);
-            var publicKey = keys.Item1;
-            var privateKey = keys.Item2;
+        {            
+            var keys = BouncyCastleKeyCreator.CreateEd25519Keys(ExactSizeMemoryPool<byte>.Shared);
+            var publicKey = keys.PublicKey;
+            var privateKey = keys.PrivateKey;
 
             var data = (ReadOnlySpan<byte>)TestData;
-            using var signature = privateKey.Sign(data, NSecAlgorithms.SignEd25519, MemoryPool<byte>.Shared);
+            using var signature = privateKey.Sign(data, NSecAlgorithms.SignEd25519, ExactSizeMemoryPool<byte>.Shared);
             Assert.True(publicKey.Verify(data, signature, NSecAlgorithms.VerifyEd25519));
         }
 
 
         [Fact]
         public void NSecGeneratedKeysUsedByBouncyOnEd25519()
-        {
-            var nsecKeyGenerator = new NSecKeyGenerator();
-            var keys = nsecKeyGenerator.GenerateEd25519PublicPrivateKeyPair(MemoryPool<byte>.Shared);
-            var publicKey = keys.Item1;
-            var privateKey = keys.Item2;
+        {            
+            var keys = NSecKeyCreator.CreateEd25519Keys(ExactSizeMemoryPool<byte>.Shared);
+            var publicKey = keys.PublicKey;
+            var privateKey = keys.PrivateKey;
 
             var data = (ReadOnlySpan<byte>)TestData;
-            using var signature = privateKey.Sign(data, BouncyCastleAlgorithms.SignEd25519, MemoryPool<byte>.Shared);
+            using var signature = privateKey.Sign(data, BouncyCastleAlgorithms.SignEd25519, ExactSizeMemoryPool<byte>.Shared);
             Assert.True(publicKey.Verify(data, signature, BouncyCastleAlgorithms.VerifyEd25519));
         }
 
@@ -52,10 +50,9 @@ namespace Verifiable.Tests
         [Fact]
         public void NSecGeneratedSignatureVerifiedByBouncyOnEd25519()
         {
-            var nsecKeyGenerator = new NSecKeyGenerator();
-            var keys = nsecKeyGenerator.GenerateEd25519PublicPrivateKeyPair(MemoryPool<byte>.Shared);
-            var publicKey = keys.Item1;
-            var privateKey = keys.Item2;
+            var keys = NSecKeyCreator.CreateEd25519Keys(ExactSizeMemoryPool<byte>.Shared);
+            var publicKey = keys.PublicKey;
+            var privateKey = keys.PrivateKey;
 
             var data = (ReadOnlySpan<byte>)TestData;
             using var signature = privateKey.Sign(data, NSecAlgorithms.SignEd25519, MemoryPool<byte>.Shared);
@@ -66,13 +63,12 @@ namespace Verifiable.Tests
         [Fact]
         public void BouncyGeneratedSignatureVerifiedByBouncyOnEd25519()
         {
-            var bouncyGenerator = new BouncyCastleKeyGenerator();
-            var keys = bouncyGenerator.GenerateEd25519PublicPrivateKeyPair(MemoryPool<byte>.Shared);
-            var publicKey = keys.Item1;
-            var privateKey = keys.Item2;
+            var keys = BouncyCastleKeyCreator.CreateEd25519Keys(ExactSizeMemoryPool<byte>.Shared);            
+            var publicKey = keys.PublicKey;
+            var privateKey = keys.PrivateKey;
 
             var data = (ReadOnlySpan<byte>)TestData;
-            using var signature = privateKey.Sign(data, BouncyCastleAlgorithms.SignEd25519, MemoryPool<byte>.Shared);
+            using var signature = privateKey.Sign(data, BouncyCastleAlgorithms.SignEd25519, ExactSizeMemoryPool<byte>.Shared);
             Assert.True(publicKey.Verify(data, signature, NSecAlgorithms.VerifyEd25519));
         }
     }

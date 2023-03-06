@@ -1,1 +1,1 @@
- dotnet stryker --config-file stryker-config.json --repoter progress --reporter html --project Verifiable.Core.csproj
+dotnet stryker --config-file stryker-config.json --reporter progress --reporter html --project Verifiable.Core.csproj

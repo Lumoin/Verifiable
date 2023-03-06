@@ -15,7 +15,7 @@ namespace Verifiable.Core.Cryptography
         /// <summary>
         /// The piece of memory held by this key.
         /// </summary>
-        protected readonly SensitiveMemory KeyMemory;
+        protected readonly SensitiveMemory KeyMaterial;
 
         /// <summary>
         /// The key identity.
@@ -23,12 +23,13 @@ namespace Verifiable.Core.Cryptography
         public string Id { get; }
 
         /// <summary>
-        /// PlainMemory constructor.
+        /// Key constructor.
         /// </summary>
-        /// <param name="sensitiveMemory">The piece of memory representing this key.</param>
-        protected Key(SensitiveMemory sensitiveMemory, string id)
+        /// <param name="keyMaterial">The piece of memory representing this key.</param>
+        /// <param name="id">The identity of this key.</param>
+        protected Key(SensitiveMemory keyMaterial, string id)
         {
-            KeyMemory = sensitiveMemory ?? throw new ArgumentNullException(nameof(sensitiveMemory));
+            KeyMaterial = keyMaterial ?? throw new ArgumentNullException(nameof(keyMaterial));
             Id = id ?? throw new ArgumentNullException(nameof(id));
         }
 
@@ -55,7 +56,7 @@ namespace Verifiable.Core.Cryptography
 
             if(disposing)
             {
-                KeyMemory.Dispose();
+                KeyMaterial.Dispose();
             }
 
             disposed = true;

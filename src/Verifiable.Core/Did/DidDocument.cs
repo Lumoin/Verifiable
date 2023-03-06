@@ -3,10 +3,7 @@ using System.Diagnostics;
 using System.Linq;
 
 namespace Verifiable.Core.Did
-{
-    //TODO: Probably the explanations from https://www.w3.org/TR/did-core/#architecture-overview
-    //should be added directly to DidDocument.
-
+{    
     //These at https://www.w3.org/TR/did-core/#did-parameters could be extension methods
     //and something like HasService(), GetService() so the core type remains open to extension
     //and simple. These are extensible, although official DID registries are recommended.
@@ -24,7 +21,7 @@ namespace Verifiable.Core.Did
     /// <summary>
     /// https://w3c.github.io/did-core/
     /// </summary>
-    [DebuggerDisplay("DidDocument(Id = {Id})")]
+    [DebuggerDisplay("{Id}")]
     public class DidDocument: IEquatable<DidDocument>
     {
         /// <summary>
@@ -35,14 +32,14 @@ namespace Verifiable.Core.Did
         /// <summary>
         /// https://w3c.github.io/did-core/#did-subject
         /// </summary>
-        public Uri? Id { get; set; }
+        public GenericDidId? Id { get; set; }
 
         //TODO: Make this a real class.
         /// <summary>
         /// https://w3c.github.io/did-core/#also-known-as.
         /// </summary>
         public string[]? AlsoKnownAs { get; set; }
-        
+
         /// <summary>
         /// https://w3c.github.io/did-core/#did-controller
         /// </summary>
@@ -103,17 +100,17 @@ namespace Verifiable.Core.Did
         /// <inheritdoc/>
         public override bool Equals(object? obj)
         {
-            if (obj is null)
+            if(obj is null)
             {
                 return false;
             }
 
-            if (ReferenceEquals(this, obj))
+            if(ReferenceEquals(this, obj))
             {
                 return true;
             }
 
-            if (GetType() != obj.GetType())
+            if(GetType() != obj.GetType())
             {
                 return false;
             }
@@ -125,13 +122,13 @@ namespace Verifiable.Core.Did
         /// <inheritdoc/>
         public bool Equals(DidDocument? other)
         {
-            if (other is null)
+            if(other is null)
             {
                 return false;
             }
 
-            return Context == other.Context
-                && Id == other?.Id
+            return Id == other?.Id
+                && Context == other?.Context                
                 && (AlsoKnownAs?.SequenceEqual(other!.AlsoKnownAs!)).GetValueOrDefault()
                 && (Controller?.SequenceEqual(other!.Controller!)).GetValueOrDefault()
                 && (VerificationMethod?.SequenceEqual(other!.VerificationMethod!)).GetValueOrDefault()
@@ -149,48 +146,48 @@ namespace Verifiable.Core.Did
             var hash = new HashCode();
             hash.Add(Context);
             hash.Add(Id);
-
-            for (int i = 0; i < AlsoKnownAs?.Length; ++i)
+                        
+            for(int i = 0; i < AlsoKnownAs?.Length; ++i)
             {
                 hash.Add(AlsoKnownAs[i]);
             }
 
-            for (int i = 0; i < Controller?.Length; ++i)
+            for(int i = 0; i < Controller?.Length; ++i)
             {
                 hash.Add(Controller[i]);
             }
 
-            for (int i = 0; i < VerificationMethod?.Length; ++i)
+            for(int i = 0; i < VerificationMethod?.Length; ++i)
             {
                 hash.Add(VerificationMethod[i]);
             }
 
-            for (int i = 0; i < Authentication?.Length; ++i)
+            for(int i = 0; i < Authentication?.Length; ++i)
             {
                 hash.Add(Authentication[i]);
             }
 
-            for (int i = 0; i < AssertionMethod?.Length; ++i)
+            for(int i = 0; i < AssertionMethod?.Length; ++i)
             {
                 hash.Add(AssertionMethod[i]);
             }
 
-            for (int i = 0; i < KeyAgreement?.Length; ++i)
+            for(int i = 0; i < KeyAgreement?.Length; ++i)
             {
                 hash.Add(KeyAgreement[i]);
             }
 
-            for (int i = 0; i < KeyAgreement?.Length; ++i)
+            for(int i = 0; i < KeyAgreement?.Length; ++i)
             {
                 hash.Add(KeyAgreement[i]);
             }
 
-            for (int i = 0; i < CapabilityDelegation?.Length; ++i)
+            for(int i = 0; i < CapabilityDelegation?.Length; ++i)
             {
                 hash.Add(CapabilityDelegation[i]);
             }
 
-            for (int i = 0; i < Service?.Length; ++i)
+            for(int i = 0; i < Service?.Length; ++i)
             {
                 hash.Add(Service[i]);
             }
