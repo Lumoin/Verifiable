@@ -13,9 +13,9 @@
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Direct",
-        "requested": "[7.0.0, )",
-        "resolved": "7.0.0",
-        "contentHash": "xSPiLNlHT6wAHtugASbKAJwV5GVqQK351crnILAucUioFqqieDN79evO1rku1ckt/GfjIn+b17UaSskoY03JuA=="
+        "requested": "[7.0.1, )",
+        "resolved": "7.0.1",
+        "contentHash": "3evI3sBfKqwYSwuBcYgShbmEgtXcg8N5Qu+jExLdkBXPty2yGDXq5m1/4sx9Exb8dqdeMPUs/d9DQ0wy/9Adwg=="
       },
       "Markdig.Signed": {
         "type": "Transitive",
@@ -47,8 +47,8 @@
       },
       "System.Text.Json": {
         "type": "Transitive",
-        "resolved": "7.0.1",
-        "contentHash": "OtDEmCCiNl8JAduFKZ/r0Sw6XZNHwIicUYy/mXgMDGeOsZLshH37qi3oPRzFYiryVktiMoQLByMGPtRCEMYbeQ==",
+        "resolved": "7.0.2",
+        "contentHash": "/LZf/JrGyilojqwpaywb+sSz8Tew7ij4K/Sk+UW8AKfAK7KRhR6mKpKtTm06cYA7bCpGTWfYksIW+mVsdxPegQ==",
         "dependencies": {
           "System.Text.Encodings.Web": "7.0.0"
         }
@@ -58,7 +58,7 @@
         "dependencies": {
           "SimpleBase": "[4.0.0, )",
           "System.Collections.Immutable": "[7.0.0, )",
-          "System.Text.Json": "[7.0.1, )"
+          "System.Text.Json": "[7.0.2, )"
         }
       }
     }

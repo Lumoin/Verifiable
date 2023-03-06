@@ -4,12 +4,12 @@
     "net7.0": {
       "Microsoft.IdentityModel.Tokens": {
         "type": "Direct",
-        "requested": "[6.25.1, )",
-        "resolved": "6.25.1",
-        "contentHash": "QY6V5wMCh+9dcaZnfM2wxlhAbtGLcEy8Mlo7WHQpwM9bNmfuu0P+h+J39zZ46O81yQlT1qZp759LQvlDsNe8dg==",
+        "requested": "[6.27.0, )",
+        "resolved": "6.27.0",
+        "contentHash": "DnI9Ov6vbWrGQeGg6X/xp+3dkap2JDlQ9hUbP/rBvIZaEVjew5etS+bVXGH9fFDMTVghHVpBWiCREQnzRHuv2w==",
         "dependencies": {
           "Microsoft.CSharp": "4.5.0",
-          "Microsoft.IdentityModel.Logging": "6.25.1",
+          "Microsoft.IdentityModel.Logging": "6.27.0",
           "System.Security.Cryptography.Cng": "4.5.0"
         }
       },
@@ -40,15 +40,15 @@
       },
       "Microsoft.IdentityModel.Abstractions": {
         "type": "Transitive",
-        "resolved": "6.25.1",
-        "contentHash": "B/WteJwwEuSu4MzTe30w0zfBUi5H9yWiAHACLT5WhLcuyY6WmU82TXY+g55E665/CMxhPCMsPit6Q5PiPBh60w=="
+        "resolved": "6.27.0",
+        "contentHash": "HO3yJcG+9gp/qTlwBuiGfqvvRMyul/BKbflMC4+rnxoTvVQIto0iSCmhGTqsC4LXYK8GPU3etd4kMw6mBuvnQg=="
       },
       "Microsoft.IdentityModel.Logging": {
         "type": "Transitive",
-        "resolved": "6.25.1",
-        "contentHash": "ymv/f8a65m7im+BXTK18XZzFB+x9IIP4l7rEeQ39VH8N5ZxAFTF6J6Nh0lX9Kzr7pWE+CmSd5+TBw0KTohn5CQ==",
+        "resolved": "6.27.0",
+        "contentHash": "4IzWb/CjtSYzq4FRcxRZSkkhhosj6DuDltBjj7BIq8f83O0J0lS8Wv50puiGyzAJH3WMjpZXz0TVOTjBi+BhQA==",
         "dependencies": {
-          "Microsoft.IdentityModel.Abstractions": "6.25.1"
+          "Microsoft.IdentityModel.Abstractions": "6.27.0"
         }
       },
       "SimpleBase": {
@@ -81,8 +81,8 @@
       },
       "System.Text.Json": {
         "type": "Transitive",
-        "resolved": "7.0.1",
-        "contentHash": "OtDEmCCiNl8JAduFKZ/r0Sw6XZNHwIicUYy/mXgMDGeOsZLshH37qi3oPRzFYiryVktiMoQLByMGPtRCEMYbeQ==",
+        "resolved": "7.0.2",
+        "contentHash": "/LZf/JrGyilojqwpaywb+sSz8Tew7ij4K/Sk+UW8AKfAK7KRhR6mKpKtTm06cYA7bCpGTWfYksIW+mVsdxPegQ==",
         "dependencies": {
           "System.Text.Encodings.Web": "7.0.0"
         }
@@ -92,7 +92,7 @@
         "dependencies": {
           "SimpleBase": "[4.0.0, )",
           "System.Collections.Immutable": "[7.0.0, )",
-          "System.Text.Json": "[7.0.1, )"
+          "System.Text.Json": "[7.0.2, )"
         }
       }
     }
