@@ -109,7 +109,7 @@ jobs:
         fetch-depth: 2
 
     - name: Cache Nuget packages '${{ matrix.os }}'
-      uses: actions/cache@58c146cc91c5b9e778e71775dfe9bf1442ad9a12
+      uses: actions/cache@940f3d7cf195ba83374c77632d1e2cbb2f24ae68
       with:
         path: ${{ env.NUGET_PACKAGES }}
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
