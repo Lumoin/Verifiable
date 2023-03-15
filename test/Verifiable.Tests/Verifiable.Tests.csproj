@@ -15,7 +15,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.5.0" />
     <PackageReference Include="Microsoft.CodeCoverage" Version="17.5.0" />
     <PackageReference Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />    
-    <PackageReference Include="System.Net.Http.Json" Version="7.0.0" />
+    <PackageReference Include="System.Net.Http.Json" Version="7.0.1" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="7.0.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5">
       <PrivateAssets>all</PrivateAssets>
