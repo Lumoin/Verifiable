@@ -11,10 +11,7 @@ on:
   release:
     types:
       - published
-    branches:
-    - main
-    paths-ignore:
-      - "**.md"
+
   schedule:
   # A daily build to check all is still functioning.
   - cron: "0 0 * * *"
