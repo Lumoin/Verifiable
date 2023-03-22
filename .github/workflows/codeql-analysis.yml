@@ -38,6 +38,7 @@ jobs:
       uses: github/codeql-action/init@v2
       with:
         languages: 'csharp'
+        queries: security-and-quality
 
     - name: Setup .NET 7.* SDK
       uses: actions/setup-dotnet@v3
