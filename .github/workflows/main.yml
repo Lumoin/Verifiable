@@ -56,7 +56,7 @@ jobs:
     # Windows builds may have insufficient resource limits, so they're increased.
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: step-security/harden-runner@03bee3930647ebbf994244c21ddbc0d4933aab4f
+      uses: step-security/harden-runner@6b3083af2869dc3314a0257a42f4af696cc79ba3
       with:
         disable-sudo: true
         egress-policy: block
@@ -309,7 +309,7 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - name: Harden Runner
-          uses: step-security/harden-runner@03bee3930647ebbf994244c21ddbc0d4933aab4f
+          uses: step-security/harden-runner@6b3083af2869dc3314a0257a42f4af696cc79ba3
           with:
             disable-sudo: true
             egress-policy: block
@@ -338,7 +338,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@03bee3930647ebbf994244c21ddbc0d4933aab4f
+        uses: step-security/harden-runner@6b3083af2869dc3314a0257a42f4af696cc79ba3
         with:
           disable-sudo: true
           egress-policy: block
