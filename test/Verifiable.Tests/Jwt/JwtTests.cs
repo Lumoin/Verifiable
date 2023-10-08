@@ -1,0 +1,630 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+using Verifiable.BouncyCastle;
+using Verifiable.Jwt;
+using Verifiable.Tests.DataProviders;
+using Xunit;
+
+namespace Verifiable.Tests.Jwt
+{
+    /// <summary>
+    /// These are JWT tests that use predefined data from services such as  https://jwt.io/.
+    /// The purpose of these tests is to cross-check this JWT implementation for
+    /// compatibility with other implementations.
+    /// </summary>
+    public class JwtTestsWithPrefinedData
+    {
+        [Theory]
+        [ClassData(typeof(HsJwtTestTheory))]
+        public async Task HsJwtTokenEncodingSigningAndVerifyingSucceeds(HsTestData testData)
+        {
+            string signedJwt = JwtExtensions.SignJwt(
+                serializer: section => { return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(section)); },
+                base64UrlEncoder: Base64Url.Encode,
+                header: testData.Header,
+                payload: testData.Payload,
+                keyIdentifierSelector: header => { return Encoding.UTF8.GetBytes(testData.PrivateKey); },
+                contextLoader: (header, KeyIdentifier) =>
+                {
+                    return new CryptoContext
+                    {
+                        Parameters = testData.Header,
+                        Key = Encoding.UTF8.GetBytes(testData.PrivateKey)
+                    };
+                },
+                signingFunctionMatcher: DefaultVerifierSelector.JwtDefaultSigner);
+
+            var isSignatureValid = await JwtExtensions.VerifyCompactSignature(
+                jwtDataWithSignature: signedJwt,
+                base64UrlDecoder: Base64Url.Decode,
+                partDecoder: section =>
+                {
+                    //The validation rules at https://www.rfc-editor.org/rfc/rfc7519#section-7.2.
+                    //If this were encrypted, there would be five parts in the split and more processing.
+                    //So "to be be certain" more delegates would be needed as parameters.
+                    //See https://www.scottbrady91.com/jose/json-web-encryption.
+                    var part = Encoding.UTF8.GetString(section);
+
+                    var converter = new DictionaryStringObjectJsonConverter();
+                    return JsonSerializer.Deserialize<Dictionary<string, object>>(part, new JsonSerializerOptions { Converters = { converter } })!;
+                },
+                keyIdentifierSelector: header =>
+                {
+                    //Uses the previously decoded header and payload to load the right key material.
+                    //SO! Not from the jwtTestData like here. In fact, this test should use a facility
+                    //where the key data is used!                    
+                    string thisISReallyAKidOrSomethingToChooseTheKeyToLoad = (string)header[JwkProperties.Alg];
+                    return thisISReallyAKidOrSomethingToChooseTheKeyToLoad;
+                },
+                contextLoader: (header, keyIdentifier) =>
+                {
+                    return new CryptoContext { Key = Encoding.UTF8.GetBytes(testData.PrivateKey) };
+                },
+                DefaultVerifierSelector.MicrosoftJwtDefaultMatcher,
+                verificationFunction: (keyIdentifierSelector, contextLoader, jwaAlgorithm, dataToVerify, signature, header, payload) =>
+                {
+                    //Here signature should be checked before the whole JWT is converted.
+                    string alg = (string)header[JwkProperties.Alg];
+                    string keyIdentifier = keyIdentifierSelector(header);
+                    CryptoContext context = contextLoader(header, keyIdentifier);
+
+                    bool result = false;
+                    if(WellKnownJwaValues.IsHs256(alg))
+                    {
+                        result = MicrosofCryptographicFunctions.VerifyHs256(context.Key, dataToVerify, signature);
+                    }
+                    else if(WellKnownJwaValues.IsHs384(alg))
+                    {
+                        result = MicrosofCryptographicFunctions.VerifyHs384(context.Key, dataToVerify, signature);
+                    }
+                    else if(WellKnownJwaValues.IsHs512(alg))
+                    {
+                        result = MicrosofCryptographicFunctions.VerifyHs512(context.Key, dataToVerify, signature);
+                    }
+                    else
+                    {
+                        throw new Exception("HSxx");
+                    }
+
+                    return ValueTask.FromResult(result);
+                });
+
+            //There is no random components, so all values should match
+            //with the given test values.
+            Assert.True(isSignatureValid);
+            Assert.Equal(testData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
+            Assert.Equal(testData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
+            Assert.Equal(testData.CrossCheckJwt.Split('.')[2], signedJwt.Split('.')[2]);
+            Assert.Equal(testData.CrossCheckJwt, signedJwt);
+        }
+
+
+        [Theory]
+        [ClassData(typeof(ESJwtTestTheory))]
+        public async Task ESJwtTokenEncodingSigningAndVerifyingSucceeds(ESTestData jwtTestData)
+        {
+            string signedJwt = JwtExtensions.SignJwt(
+                serializer: section => { return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(section)); },
+                base64UrlEncoder: Base64Url.Encode,
+                header: jwtTestData.Header,
+                payload: jwtTestData.Payload,
+                keyIdentifierSelector: header => { return Encoding.UTF8.GetBytes(jwtTestData.PrivateKeyInPem); },
+                contextLoader: (header, KeyIdentifier) =>
+                {
+                    static ReadOnlySpan<byte> GetPrivateKeyBytes(ESTestData jwtTestData)
+                    {
+                        var key = ECDsa.Create();
+                        key.ImportFromPem(jwtTestData.PrivateKeyInPem);
+                        return key.ExportParameters(includePrivateParameters: true).D;
+                    };
+
+                    return new CryptoContext
+                    {
+                        Parameters = jwtTestData.Header,
+                        Key = GetPrivateKeyBytes(jwtTestData).ToArray()
+                    };
+                },
+                signingFunctionMatcher: DefaultVerifierSelector.JwtDefaultSigner);
+
+            var isSignatureValid = await JwtExtensions.VerifyCompactSignature(
+                jwtDataWithSignature: signedJwt,
+                base64UrlDecoder: Base64Url.Decode,
+                partDecoder: section =>
+                {
+                    //The validation rules at https://www.rfc-editor.org/rfc/rfc7519#section-7.2.
+                    //If this were encrypted, there would be five parts in the split and more processing.
+                    //So "to be be certain" more delegates would be needed as parameters.
+                    //See https://www.scottbrady91.com/jose/json-web-encryption.
+                    var part = Encoding.UTF8.GetString(section);
+
+                    var converter = new DictionaryStringObjectJsonConverter();
+                    return JsonSerializer.Deserialize<Dictionary<string, object>>(part, new JsonSerializerOptions { Converters = { converter } })!;
+                },
+                keyIdentifierSelector: header =>
+                {
+                    //Uses the previously decoded header and payload to load to construct the information
+                    //on how to identify the key material.
+                    string thisISReallyAKidOrSomethingToChooseTheKeyToLoad = (string)header[JwkProperties.Alg];
+                    return new CryptoContext
+                    {
+                        KeyIdentifier = thisISReallyAKidOrSomethingToChooseTheKeyToLoad
+                    };
+                },
+                contextLoader: (header, context) =>
+                {
+                    var alg = (string)header[JwkProperties.Alg];
+                    context.Algorithm = alg;
+                    context.Parameters["alg"] = alg;
+                    context.Parameters["kty"] = "EC";
+                    var key = ECDsa.Create();
+                    key.ImportFromPem(jwtTestData.PublicKeyInPem);
+
+                    context.Key = key.ExportSubjectPublicKeyInfo();
+                    return context;
+                },
+                DefaultVerifierSelector.MicrosoftJwtDefaultMatcher,
+                verificationFunction: (keyIdentifierSelector, contextLoader, jwtAlgorithm, dataToVerify, signature, header, payload) =>
+                {
+                    CryptoContext keyIdentifier = keyIdentifierSelector(header);
+                    CryptoContext context = contextLoader(header, keyIdentifier);
+                    var verifier = jwtAlgorithm(context);
+
+                    return ValueTask.FromResult(verifier(dataToVerify, signature, context.Key));
+                });
+
+            Assert.True(isSignatureValid);
+
+            //The signature varies since it has a random component.
+            Assert.Equal(jwtTestData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
+            Assert.Equal(jwtTestData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
+        }
+
+
+        [Theory]
+        [ClassData(typeof(RsaRsJwtTestTheory))]
+        public async Task RsaRsJwtTokenEncodingSigningAndVerifyingSucceeds(RsaRSTestData testData)
+        {
+            string signedJwt = JwtExtensions.SignJwt(
+                section => { return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(section)); },
+                Base64Url.Encode,
+                testData.Header,
+                testData.Payload,
+                keyIdentifierSelector: header => { return Encoding.UTF8.GetBytes(testData.PrivateKeyInPem); },
+                contextLoader: (header, KeyIdentifier) =>
+                {
+                    static ReadOnlySpan<byte> GetPrivateKeyBytes(RsaRSTestData jwtTestData)
+                    {
+                        var key = RSA.Create();
+                        key.ImportFromPem(jwtTestData.PrivateKeyInPem);
+
+                        return key.ExportPkcs8PrivateKey();
+                    };
+
+                    return new CryptoContext
+                    {
+                        Parameters = testData.Header,
+                        Key = GetPrivateKeyBytes(testData).ToArray()
+                    };
+                },
+                signingFunctionMatcher: DefaultVerifierSelector.JwtDefaultSigner);
+
+            var isSignatureValid = await JwtExtensions.VerifyCompactSignature(
+                jwtDataWithSignature: signedJwt,
+                base64UrlDecoder: Base64Url.Decode,
+                partDecoder: section =>
+                {
+                    //The validation rules at https://www.rfc-editor.org/rfc/rfc7519#section-7.2.
+                    //If this were encrypted, there would be five parts in the split and more processing.
+                    //So "to be be certain" more delegates would be needed as parameters.
+                    //See https://www.scottbrady91.com/jose/json-web-encryption.
+                    var part = Encoding.UTF8.GetString(section);
+
+                    var converter = new DictionaryStringObjectJsonConverter();
+                    return JsonSerializer.Deserialize<Dictionary<string, object>>(part, new JsonSerializerOptions { Converters = { converter } })!;
+                },
+                keyIdentifierSelector: header =>
+                {
+                    //Uses the previously decoded header and payload to load the right key material.
+                    //SO! Not from the jwtTestData like here. In fact, this test should use a facility
+                    //where the key data is used!
+                    var h = header[JwkProperties.Alg];
+                    string thisISReallyAKidOrSomethingToChooseTheKeyToLoad = (string)header[JwkProperties.Alg];
+                    return thisISReallyAKidOrSomethingToChooseTheKeyToLoad;
+                },
+                contextLoader: (header, keyHandle) =>
+                {
+                    var key = RSA.Create();
+                    key.ImportFromPem(testData.PrivateKeyInPem);
+
+                    return new CryptoContext { Key = key.ExportSubjectPublicKeyInfo() };
+                },
+                DefaultVerifierSelector.MicrosoftJwtDefaultMatcher,
+                verificationFunction: (keyIdentifierSelector, keyLoadingFunction, jwaAlgorithm, dataToVerify, signature, header, payload) =>
+                {
+                    string keyIdentifier = keyIdentifierSelector(header);
+                    CryptoContext context = keyLoadingFunction(header, keyIdentifier);
+                    using(var key = RSA.Create())
+                    {
+                        key.ImportSubjectPublicKeyInfo(context.Key, out _);
+
+                        HashAlgorithmName hashAlgorithm = HashAlgorithmName.SHA256;
+                        var alg = (string)testData.Header[JwkProperties.Alg];
+                        if(WellKnownJwaValues.IsRs256(alg))
+                        {
+                            hashAlgorithm = HashAlgorithmName.SHA256;
+                        }
+
+                        if(WellKnownJwaValues.IsRs384(alg))
+                        {
+                            hashAlgorithm = HashAlgorithmName.SHA384;
+                        }
+
+                        if(WellKnownJwaValues.IsRs512(alg))
+                        {
+                            hashAlgorithm = HashAlgorithmName.SHA512;
+                        }
+
+                        return ValueTask.FromResult(key.VerifyData(dataToVerify, signature, hashAlgorithm, RSASignaturePadding.Pkcs1));
+                    }
+                });
+
+            Assert.True(isSignatureValid);
+            Assert.Equal(testData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
+            Assert.Equal(testData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
+            Assert.Equal(testData.CrossCheckJwt.Split('.')[2], signedJwt.Split('.')[2]);
+            Assert.Equal(testData.CrossCheckJwt, signedJwt);
+        }
+
+
+        [Theory]
+        [ClassData(typeof(RsaPSJwtTestTheory))]
+        public async Task RsaPSJwtTokenEncodingSigningAndVerifyingSucceeds(RsaPSTestData testData)
+        {
+            string signedJwt = JwtExtensions.SignJwt(
+                section => { return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(section)); },
+                Base64Url.Encode,
+                testData.Header,
+                testData.Payload,
+                keyIdentifierSelector: header => { return Encoding.UTF8.GetBytes(testData.PrivateKeyInPem); },
+                contextLoader: (header, KeyIdentifier) =>
+                {
+                    static ReadOnlySpan<byte> GetPrivateKeyBytes(RsaPSTestData jwtTestData)
+                    {
+                        using(var key = RSA.Create())
+                        {
+                            key.ImportFromPem(jwtTestData.PrivateKeyInPem);
+                            return key.ExportPkcs8PrivateKey();
+                        }
+                    };
+
+                    return new CryptoContext
+                    {
+                        Parameters = testData.Header,
+                        Key = GetPrivateKeyBytes(testData).ToArray()
+                    };
+                },
+                signingFunctionMatcher: DefaultVerifierSelector.JwtDefaultSigner);
+
+            var isSignatureValid = await JwtExtensions.VerifyCompactSignature(
+                jwtDataWithSignature: signedJwt,
+                base64UrlDecoder: Base64Url.Decode,
+                partDecoder: section =>
+            {
+                //The validation rules at https://www.rfc-editor.org/rfc/rfc7519#section-7.2.
+                //If this were encrypted, there would be five parts in the split and more processing.
+                //So "to be be certain" more delegates would be needed as parameters.
+                //See https://www.scottbrady91.com/jose/json-web-encryption.
+                var part = Encoding.UTF8.GetString(section);
+
+                var converter = new DictionaryStringObjectJsonConverter();
+                return JsonSerializer.Deserialize<Dictionary<string, object>>(part, new JsonSerializerOptions { Converters = { converter } })!;
+            },
+            keyIdentifierSelector: header =>
+            {
+                //KeyIdentifierSelector<Dictionary<string, object>, string> keyIdentifierSelector = header => (string)header[JwkProperties.Kid];
+
+                //Uses the previously decoded header and payload to load the right key material.
+                //SO! Not from the jwtTestData like here. In fact, this test should use a facility
+                //where the key data is used!
+                var h = header[JwkProperties.Alg];
+                string thisISReallyAKidOrSomethingToChooseTheKeyToLoad = (string)header[JwkProperties.Alg];
+                return thisISReallyAKidOrSomethingToChooseTheKeyToLoad;
+            },
+            contextLoader: (header, keyHandle) =>
+            {
+                var key = RSA.Create();
+                key.ImportFromPem(testData.PrivateKeyInPem);
+
+                return new CryptoContext { Key = key.ExportSubjectPublicKeyInfo() };
+            },
+            DefaultVerifierSelector.MicrosoftJwtDefaultMatcher,
+            verificationFunction: (keyIdentifierSelector, keyLoadingFunction, jwaAlgorithm, dataToVerify, signature, header, payload) =>
+            {
+                string keyIdentifier = keyIdentifierSelector(header);
+                CryptoContext context = keyLoadingFunction(header, keyIdentifier);
+                using(var key = RSA.Create())
+                {
+                    key.ImportSubjectPublicKeyInfo(context.Key, out _);
+                    {
+                        HashAlgorithmName hashAlgorithm = HashAlgorithmName.SHA256;
+                        string alg = (string)testData.Header[JwkProperties.Alg];
+                        if(WellKnownJwaValues.IsPs256(alg))
+                        {
+                            hashAlgorithm = HashAlgorithmName.SHA256;
+                        }
+
+                        if(WellKnownJwaValues.IsPs384(alg))
+                        {
+                            hashAlgorithm = HashAlgorithmName.SHA384;
+                        }
+
+                        if(WellKnownJwaValues.IsPs512(alg))
+                        {
+                            hashAlgorithm = HashAlgorithmName.SHA512;
+                        }
+
+                        return ValueTask.FromResult(key.VerifyData(dataToVerify, signature, hashAlgorithm, RSASignaturePadding.Pss));
+                    }
+                }
+            });
+
+            //The signature varies since it has a random component. Consequently
+            //the signature value cannot be compared byte-by-byte.
+            Assert.True(isSignatureValid);
+            Assert.Equal(testData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
+            Assert.Equal(testData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
+        }
+
+
+        [Theory]
+        [ClassData(typeof(MixedJwtTestTheory))]
+        public void MixedJwtTokenEncodingSigningAndVerifyingSucceeds(BaseJwtTestData testData)
+        {
+            string signedJwt = JwtExtensions.SignJwt(
+               serializer: section => { return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(section)); },
+               base64UrlEncoder: Base64Url.Encode,
+               header: testData.Header,
+               payload: testData.Payload,
+               keyIdentifierSelector: header => { return Encoding.UTF8.GetBytes(testData.PrivateKey); },
+               contextLoader: (header, KeyIdentifier) =>
+               {
+                   return new CryptoContext
+                   {
+                       Parameters = testData.Header,
+                       Key = Encoding.UTF8.GetBytes(testData.PrivateKey)
+                   };
+               },
+               signingFunctionMatcher: DefaultVerifierSelector.JwtDefaultSigner);
+
+            Assert.Equal(testData.CrossCheckJwt, signedJwt);
+        }        
+    }
+
+
+    public static class DefaultVerifierSelector
+    {
+        public static VerifyImplementationMatcher<CryptoContext, byte> JwtDefaultMatcher => context =>
+        {
+            string kty = (string)context.Parameters["kty"];
+            string alg = (string)context.Parameters["alg"];
+            VerifyImplementation<byte> operation = (kty, alg) switch
+            {
+                (null, "ES256") or ("", "ES256") or ("EC", "ES256") => BouncyCastleCryptographicFunctions.VerifyP256,
+                (null, "ES384") or ("", "ES384") or ("EC", "ES384") => BouncyCastleCryptographicFunctions.VerifyP384,
+                (null, "ES512") or ("", "ES512") or ("EC", "ES512") => BouncyCastleCryptographicFunctions.VerifyP521,
+                (null, "ES256K") or ("", "ES256K") or ("EC", "ES256K") => BouncyCastleCryptographicFunctions.VerifySeckpk1,
+                (null, "EdDSA") or ("", "EdDSA") or ("OKP", "EdDSA") => BouncyCastleCryptographicFunctions.VerifyEd25519,
+
+                //Default delegate always returns false for unsupported combinations.
+                _ => (dataToVerify, signature, publicKeyMaterial) => false
+            };
+
+            return operation;
+        };
+
+
+        public static VerifyImplementationMatcher<CryptoContext, byte> MicrosoftJwtDefaultMatcher => context =>
+        {
+            string kty = (string)context.Parameters["kty"];
+            string alg = (string)context.Parameters["alg"];
+            VerifyImplementation<byte> operation = (kty, alg) switch
+            {
+                (null, "ES256") or ("", "ES256") or ("EC", "ES256") => MicrosofCryptographicFunctions.VerifyP256,
+                (null, "ES384") or ("", "ES384") or ("EC", "ES384") => MicrosofCryptographicFunctions.VerifyP384,
+                (null, "ES512") or ("", "ES512") or ("EC", "ES512") => MicrosofCryptographicFunctions.VerifyP521,
+                (null, "ES256K") or ("", "ES256K") or ("EC", "ES256K") => BouncyCastleCryptographicFunctions.VerifySeckpk1,
+                (null, "EdDSA") or ("", "EdDSA") or ("OKP", "EdDSA") => BouncyCastleCryptographicFunctions.VerifyEd25519,
+
+                //Default delegate always returns false for unsupported combinations.
+                _ => (dataToVerify, signature, publicKeyMaterial) => false
+            };
+
+            return operation;
+        };
+
+
+        public static SignImplementationMatcher<CryptoContext, byte> JwtDefaultSigner => context =>
+        {
+            string alg = (string)context.Parameters[JwkProperties.Alg];
+            SignImplementation<byte> operation = alg switch
+            {
+                "HS256" => MicrosofCryptographicFunctions.SignHs256,
+                "HS384" => MicrosofCryptographicFunctions.SignHs384,
+                "HS512" => MicrosofCryptographicFunctions.SignHs512,
+                "RS256" => MicrosofCryptographicFunctions.SignRs256,
+                "RS384" => MicrosofCryptographicFunctions.SignRs384,
+                "RS512" => MicrosofCryptographicFunctions.SignRs512,
+                "ES256" => MicrosofCryptographicFunctions.SignP256,
+                "ES384" => MicrosofCryptographicFunctions.SignP384,
+                "ES512" => MicrosofCryptographicFunctions.SignP521,
+                "PS256" => MicrosofCryptographicFunctions.SignPs256,
+                "PS384" => MicrosofCryptographicFunctions.SignPs384,
+                "PS512" => MicrosofCryptographicFunctions.SignPs512,
+                _ => throw new NotSupportedException("Unsupported algorithm: " + alg)
+            };
+
+            return operation;
+        };
+    }
+
+
+    public static class MicrosofCryptographicFunctions
+    {
+        public static bool VerifyP256(ReadOnlySpan<byte> dataToVerify, ReadOnlySpan<byte> signature, ReadOnlySpan<byte> publicKeyMaterial)
+        {
+            HashAlgorithmName hashAlgorithm = HashAlgorithmName.SHA256;
+            ECCurve curve = ECCurve.NamedCurves.nistP256;
+
+            return VerifyEcdsa(dataToVerify, signature, publicKeyMaterial, hashAlgorithm, curve);
+        }
+
+
+        public static bool VerifyP384(ReadOnlySpan<byte> dataToVerify, ReadOnlySpan<byte> signature, ReadOnlySpan<byte> publicKeyMaterial)
+        {
+            HashAlgorithmName hashAlgorithm = HashAlgorithmName.SHA384;
+            ECCurve curve = ECCurve.NamedCurves.nistP384;
+
+            return VerifyEcdsa(dataToVerify, signature, publicKeyMaterial, hashAlgorithm, curve);
+        }
+
+
+        public static bool VerifyP521(ReadOnlySpan<byte> dataToVerify, ReadOnlySpan<byte> signature, ReadOnlySpan<byte> publicKeyMaterial)
+        {
+            HashAlgorithmName hashAlgorithm = HashAlgorithmName.SHA512;
+            ECCurve curve = ECCurve.NamedCurves.nistP521;
+
+            return VerifyEcdsa(dataToVerify, signature, publicKeyMaterial, hashAlgorithm, curve);
+        }
+
+        public static ReadOnlySpan<byte> SignP256(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            var key = ECDsa.Create(new ECParameters
+            {
+                Curve = ECCurve.NamedCurves.nistP256,
+                D = privateKeyBytes.ToArray()
+            });
+
+            return key.SignData(dataToSign, HashAlgorithmName.SHA256);
+        }
+
+
+        public static ReadOnlySpan<byte> SignP384(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            var key = ECDsa.Create(new ECParameters
+            {
+                Curve = ECCurve.NamedCurves.nistP384,
+                D = privateKeyBytes.ToArray()
+            });
+
+            return key.SignData(dataToSign, HashAlgorithmName.SHA384);
+        }
+
+
+        public static ReadOnlySpan<byte> SignP521(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            var key = ECDsa.Create(new ECParameters
+            {
+                Curve = ECCurve.NamedCurves.nistP521,
+                D = privateKeyBytes.ToArray()
+            });
+
+            return key.SignData(dataToSign, HashAlgorithmName.SHA512);
+        }
+
+
+        public static ReadOnlySpan<byte> SignHs256(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            return HMACSHA256.HashData(privateKeyBytes, dataToSign);
+        }
+
+
+        public static ReadOnlySpan<byte> SignHs384(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            return HMACSHA384.HashData(privateKeyBytes, dataToSign);
+        }
+
+
+        public static ReadOnlySpan<byte> SignHs512(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            return HMACSHA512.HashData(privateKeyBytes, dataToSign);
+        }
+
+
+        public static ReadOnlySpan<byte> SignRs256(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            return SignRsa(privateKeyBytes, dataToSign, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        }
+
+
+        public static ReadOnlySpan<byte> SignRs384(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            return SignRsa(privateKeyBytes, dataToSign, HashAlgorithmName.SHA384, RSASignaturePadding.Pkcs1);
+        }
+
+
+        public static ReadOnlySpan<byte> SignRs512(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            return SignRsa(privateKeyBytes, dataToSign, HashAlgorithmName.SHA512, RSASignaturePadding.Pkcs1);
+        }
+
+
+        public static ReadOnlySpan<byte> SignPs256(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            return SignRsa(privateKeyBytes, dataToSign, HashAlgorithmName.SHA256, RSASignaturePadding.Pss);
+        }
+
+
+        public static ReadOnlySpan<byte> SignPs384(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            return SignRsa(privateKeyBytes, dataToSign, HashAlgorithmName.SHA384, RSASignaturePadding.Pss);
+        }
+
+
+        public static ReadOnlySpan<byte> SignPs512(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign)
+        {
+            return SignRsa(privateKeyBytes, dataToSign, HashAlgorithmName.SHA512, RSASignaturePadding.Pss);
+        }
+
+
+        public static bool VerifyHs256(ReadOnlySpan<byte> publicKeyBytes, ReadOnlySpan<byte> dataToSign, ReadOnlySpan<byte> signatureBytesToVerify)
+        {
+            return signatureBytesToVerify.SequenceEqual(SignHs256(publicKeyBytes, dataToSign));
+        }
+
+
+        public static bool VerifyHs384(ReadOnlySpan<byte> publicKeyBytes, ReadOnlySpan<byte> dataToSign, ReadOnlySpan<byte> signatureBytesToVerify)
+        {
+            return signatureBytesToVerify.SequenceEqual(SignHs384(publicKeyBytes, dataToSign));
+        }
+
+
+        public static bool VerifyHs512(ReadOnlySpan<byte> publicKeyBytes, ReadOnlySpan<byte> dataToSign, ReadOnlySpan<byte> signatureBytesToVerify)
+        {
+            return signatureBytesToVerify.SequenceEqual(SignHs512(publicKeyBytes, dataToSign));
+        }
+
+
+        private static ReadOnlySpan<byte> SignRsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, HashAlgorithmName hashAlgorithmName, RSASignaturePadding rsaSignaturePadding)
+        {
+            using(var key = RSA.Create())
+            {
+                key.ImportPkcs8PrivateKey(privateKeyBytes, out _);
+                return key.SignData(dataToSign, hashAlgorithmName, rsaSignaturePadding);
+            }
+        }
+
+
+        private static bool VerifyEcdsa(ReadOnlySpan<byte> dataToVerify, ReadOnlySpan<byte> signature, ReadOnlySpan<byte> publicKeyMaterial, HashAlgorithmName hashAlgorithm, ECCurve curve)
+        {
+            using(var key = ECDsa.Create(curve))
+            {
+                key.ImportSubjectPublicKeyInfo(publicKeyMaterial, out _);
+                return key.VerifyData(dataToVerify, signature, hashAlgorithm);
+            }
+        }
+    }
+}

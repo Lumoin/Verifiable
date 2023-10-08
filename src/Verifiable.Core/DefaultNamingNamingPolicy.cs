@@ -32,12 +32,9 @@ namespace Verifiable.Core
         /// <inheritdoc />
         public override string ConvertName(string name)
         {
+            ArgumentException.ThrowIfNullOrEmpty(nameof(name));
+            
             string convertedName = name;
-            if(string.IsNullOrWhiteSpace(name))
-            {
-                throw new ArgumentException(nameof(name));
-            }
-
             if(name.Equals("@context", StringComparison.InvariantCultureIgnoreCase))
             {
                 convertedName = "Context";

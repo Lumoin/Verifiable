@@ -1,6 +1,8 @@
 using System;
 using System.Buffers;
-using System.Runtime.CompilerServices;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Core.Cryptography
 {
@@ -20,6 +22,21 @@ namespace Verifiable.Core.Cryptography
     public delegate TResult VerificationFunction<TPublicKeyBytes, TDataToVerify, in TSignature, out TResult>(ReadOnlySpan<TPublicKeyBytes> publicKeyBytes, ReadOnlySpan<TDataToVerify> dataToVerify, TSignature signature);
 
     /// <summary>
+    /// Encapsulates a method that receives objects of type read-only span <typeparamref name="TPublicKeyBytes"/>
+    /// and return a result of type <typeparamref name="TResult"/> that is likely <see cref="bool"/>.
+    /// The function should verify the data using key and signature.
+    /// </summary>
+    /// <typeparam name="TPublicKeyBytes">The type of the objects in the read-only span. Likely <see cref="byte"/>.</typeparam>
+    /// <typeparam name="TDataToVerify">Verification data type. Likely <see cref="byte"/>.</typeparam>
+    /// <typeparam name="TSignatureBytes">Bytes of a previously calcuated signature.</typeparam>
+    /// <typeparam name="TResult">The result of verification type. Likely <see cref="bool"/>.</typeparam>
+    /// <param name="publicKeyBytes">The public key bytes representation.</param>
+    /// <param name="dataToVerify">The data to verify.</param>
+    /// <param name="signatureBytes">The signature.</param>
+    /// <returns>The verification result. <em>True</em> if verification succeeeds. <em>False</em> otherwise.</returns>
+    public delegate TResult VerificationFunctionWithBytes<TPublicKeyBytes, TDataToVerify, TSignatureBytes, out TResult>(ReadOnlySpan<TPublicKeyBytes> publicKeyBytes, ReadOnlySpan<TDataToVerify> dataToVerify, ReadOnlySpan<TSignatureBytes> signatureBytes);
+
+    /// <summary>
     /// Encapsulates a method that receives objects of type read-only span <typeparamref name="TPrivateKeyBytes"/>
     /// and return a result of type <typeparamref name="TResult"/> that is likely <see cref="bool"/>.
     /// The function should calculate a signature of the data.
@@ -30,8 +47,8 @@ namespace Verifiable.Core.Cryptography
     /// <param name="privateKeyTypes">The private key bytes representation.</param>
     /// <param name="dataToSign">The data to calculate a signature from.</param>
     /// <param name="signaturePool">The memory pool from which to rent signature space.</param>
-    /// <returns>The signing result</returns>
-    public delegate TResult SigningFunction<TPrivateKeyBytes, TDataToSign, out TResult>(ReadOnlySpan<TPrivateKeyBytes> privateKeyTypes, ReadOnlySpan<TDataToSign> dataToSign, MemoryPool<byte> signaturePool) where TResult: Signature;
+    /// <returns>The signing result.</returns>
+    public delegate TResult SigningFunction<TPrivateKeyBytes, TDataToSign, out TResult>(ReadOnlySpan<TPrivateKeyBytes> privateKeyTypes, ReadOnlySpan<TDataToSign> dataToSign, MemoryPool<byte> signaturePool);
 
     /// <summary>
     /// Encapsulates a method that receives objects of type read-only span <typeparamref name="T"/>
@@ -45,6 +62,177 @@ namespace Verifiable.Core.Cryptography
 
 
     /// <summary>
+    /// A type for tagging data with additional out-of-band information.
+    /// </summary>
+    /// <param name="Data">The metadata associated with the tag.</param>
+    /// <remarks>
+    /// The Tag is not tightly bound to the data, such as a cryptographic key material. 
+    /// Instead, it provides metadata to assist in managing otherwise opaque data blocks. 
+    /// This could include identifiers, storage locations (like a trusted platform module or database), 
+    /// or data format specifications (such as whether an EC public key is compressed).
+    /// Despite the provided metadata, all inputs should be validated.
+    /// </remarks>    
+    public record Tag(IReadOnlyDictionary<Type, object> Data)
+    {
+        /// <summary>
+        /// And empty tag.
+        /// </summary>
+        public static Tag Empty { get; } = new(new Dictionary<Type, object>());
+
+        public static Tag P256PublicKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P256,
+            [typeof(Purpose)] = Purpose.Public,
+            [typeof(EncodingScheme)] = EncodingScheme.EcCompressed
+        });
+
+        public static Tag P256PrivateKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P256,
+            [typeof(Purpose)] = Purpose.Private,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag P384PublicKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P384,
+            [typeof(Purpose)] = Purpose.Public,
+            [typeof(EncodingScheme)] = EncodingScheme.EcCompressed
+        });
+
+        public static Tag P384PrivateKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P384,
+            [typeof(Purpose)] = Purpose.Private,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag P521PublicKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P521,
+            [typeof(Purpose)] = Purpose.Public,
+            [typeof(EncodingScheme)] = EncodingScheme.EcCompressed
+        });
+
+        public static Tag P521PrivateKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P521,
+            [typeof(Purpose)] = Purpose.Private,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag Secp256k1PublicKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Secp256k1,
+            [typeof(Purpose)] = Purpose.Public,
+            [typeof(EncodingScheme)] = EncodingScheme.EcCompressed
+        });
+
+        public static Tag Secp256k1PrivateKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Secp256k1,
+            [typeof(Purpose)] = Purpose.Private,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag Rsa2048PublicKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Rsa2048,
+            [typeof(Purpose)] = Purpose.Public,
+            [typeof(EncodingScheme)] = EncodingScheme.Der
+        });
+
+        public static Tag Rsa2048PrivateKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Rsa2048,
+            [typeof(Purpose)] = Purpose.Private,
+            [typeof(EncodingScheme)] = EncodingScheme.Der
+        });
+
+        public static Tag Rsa4096PublicKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Rsa4096,
+            [typeof(Purpose)] = Purpose.Public,
+            [typeof(EncodingScheme)] = EncodingScheme.Der
+        });
+
+        public static Tag Rsa4096PrivateKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Rsa4096,
+            [typeof(Purpose)] = Purpose.Private,
+            [typeof(EncodingScheme)] = EncodingScheme.Der
+        });
+
+        public static Tag Ed25519PublicKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Ed25519,
+            [typeof(Purpose)] = Purpose.Public,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag Ed25519PrivateKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Ed25519,
+            [typeof(Purpose)] = Purpose.Private,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag Ed25519Signature { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Ed25519,
+            [typeof(Purpose)] = Purpose.Signature,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        
+        public static Tag X25519PublicKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.X25519,
+            [typeof(Purpose)] = Purpose.Exchange,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag X25519PrivateKey { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.X25519,
+            [typeof(Purpose)] = Purpose.Private,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag WindowsPlatformEncrypted { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.WindowsPlatformEncrypted,
+            [typeof(Purpose)] = Purpose.Encryption,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+
+
+        /// <summary>
+        /// Gets the value associated with the specified key in the Tag data.
+        /// </summary>
+        /// <param name="key">The key of the value to get.</param>
+        /// <returns>The value associated with the specified key. If the specified key is not found, 
+        /// a get operation throws a <see cref="KeyNotFoundException"/>.</returns>
+        public object this[Type key] => Data[key];
+    }
+
+
+    public abstract class SensitiveData
+    {
+        public Tag Tag { get; }
+
+
+        protected SensitiveData(Tag tag)
+        {
+            ArgumentNullException.ThrowIfNull(tag, nameof(tag));
+            Tag = tag;
+        }
+    }
+
+    
+
+    /// <summary>
     /// A base class for memory that makes it implicit the wrapped memory is sensitive in some specific way.
     /// It could be private key, public key or other sensitive data. The implementation is responsible for
     /// unwrapping the memory during operations.
@@ -52,28 +240,39 @@ namespace Verifiable.Core.Cryptography
     /// <remarks>
     /// Sensitive data may be present in crash dumps, page files or temporary variables in memory
     /// or in other places. When possible, security sensitive operations should be done on locked systems
-    /// with restricted priviledges (e.g. no crash dumps sent anywhere).
+    /// with restricted privileges (e.g. no crash dumps sent anywhere).
     /// </remarks>
-    public abstract class SensitiveMemory: IDisposable
+    public abstract class SensitiveMemory: SensitiveData, IDisposable, IEquatable<SensitiveMemory>
     {
         /// <summary>
-        /// Detects and prevents redudant dispose calls.
+        /// Detects and prevents redundant dispose calls.
         /// </summary>
         private bool disposed;
-
+        
         /// <summary>
         /// The piece of sensitive data.
         /// </summary>
-        protected readonly IMemoryOwner<byte> SensitiveData;
+        private readonly IMemoryOwner<byte> sensitiveMemory;
 
-
+        
         /// <summary>
         /// Sensitive memory default constructor.
         /// </summary>
         /// <param name="sensitiveMemory">The piece of sensitive memory that is wrapped and owned.</param>
-        protected SensitiveMemory(IMemoryOwner<byte> sensitiveMemory)
+        /// <param name="tag">Tags the memory with out-of-band information such as key material information.</param>
+        protected SensitiveMemory(IMemoryOwner<byte> sensitiveMemory, Tag tag): base(tag)
         {
-            SensitiveData = sensitiveMemory ?? throw new ArgumentNullException(nameof(sensitiveMemory));
+            ArgumentNullException.ThrowIfNull(sensitiveMemory);            
+            this.sensitiveMemory = sensitiveMemory;            
+        }
+
+
+        /// <summary>
+        /// Exposes the internal sensitive memory for some special purposes, such as formatting.
+        /// </summary>
+        public ReadOnlySpan<byte> AsReadOnlySpan()
+        {
+            return (ReadOnlySpan<byte>)sensitiveMemory.Memory.Span;
         }
 
 
@@ -99,11 +298,76 @@ namespace Verifiable.Core.Cryptography
 
             if(disposing)
             {
-                // Dispose managed state (managed objects).
-                SensitiveData?.Dispose();
+                //Clearing the memory is in case there is not a pooled memory owner
+                //that clears it. One example is Verifiable.Core.SensitiveMemoryPool.
+                sensitiveMemory.Memory.Span.Clear();
+                sensitiveMemory?.Dispose();                
             }
 
             disposed = true;
+        }
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool Equals([NotNullWhen(true)] SensitiveMemory? other)
+        {
+            //The reason for this is that Memory<T> does not implement deep hashing
+            //due to performance concerns.
+            return other is not null
+                && MemoryExtensions.SequenceEqual(sensitiveMemory.Memory.Span, other.sensitiveMemory.Memory.Span);
+        }
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public override bool Equals([NotNullWhen(true)] object? o) => (o is SensitiveMemory s) && Equals(s);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator ==(in SensitiveMemory s1, in SensitiveMemory s2) => Equals(s1, s2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator !=(in SensitiveMemory s1, in SensitiveMemory s2) => !Equals(s1, s2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator ==(in object s1, in SensitiveMemory s2) => Equals(s1, s2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator ==(in SensitiveMemory s1, in object s2) => Equals(s1, s2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator !=(in object s1, in SensitiveMemory s2) => !Equals(s1, s2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator !=(in SensitiveMemory s1, in object s2) => !Equals(s1, s2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public override int GetHashCode()
+        {
+            //The reason for this is that Memory<T> does not implement deep hashing
+            //due to performance concerns.
+            var hash = new HashCode();
+            ReadOnlySpan<byte> memorySpan = sensitiveMemory.Memory.Span;
+            for(int i = 0; i < memorySpan.Length; ++i)
+            {
+                hash.Add(memorySpan[i].GetHashCode());
+            }
+
+            return hash.ToHashCode();
         }
     }
 }

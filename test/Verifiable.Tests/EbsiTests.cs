@@ -1,11 +1,11 @@
 using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Verifiable.Core;
 using Verifiable.Core.Did;
+using Verifiable.Tests.TestInfrastructure;
 using Xunit;
 
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     /// <summary>
     /// EBSI specific tests. The source is at <a href="https://api.ebsi.xyz/docs/?urls.primaryName=DID%20API#/DID/get-did-v1-identifier">EBSI DID API Swagger</a>.
@@ -32,7 +32,15 @@ namespace Verifiable.Tests
                     new VerificationRelationshipConverterFactory(),
                     new VerificationMethodConverter(),
                     new ServiceConverterFactory(),
-                    new JsonLdContextConverter()
+                    new JsonLdContextConverter(),
+                    new DidIdConverter(did =>
+                    {
+                        return did switch
+                        {
+                            "did:ebsi:" => new EbsiDidId(did),
+                            _ => new GenericDidId(did)
+                        };
+                    })
                 }
             };
 

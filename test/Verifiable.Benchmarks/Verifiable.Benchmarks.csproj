@@ -8,11 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.13.5" />
+    <PackageReference Include="BenchmarkDotNet" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="SIL.ReleaseTasks" Version="2.6.0-beta0024" />
+    
   </ItemGroup>
   
 </Project>

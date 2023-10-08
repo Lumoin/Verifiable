@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Microsoft .NET cryptographic implementation and Windows specific security functionality</Title>
+    <Description>.NET cryptographic implementation and ProtectedData enhancement.</Description>
+    <PackageTags>.NET cryptographic implementation and ProtectedData</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    
+  </ItemGroup>
+  
+</Project>

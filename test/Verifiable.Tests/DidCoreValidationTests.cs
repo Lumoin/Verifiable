@@ -1,13 +1,24 @@
-using Verifiable.Core;
-using Verifiable.Core.Did;
+using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.ComponentModel.DataAnnotations;
-using System.Linq;
+using Verifiable.Assessment;
+using Verifiable.Core.Did;
 using Xunit;
 
-namespace Verifiable.Tests
+
+namespace Verifiable.Core
 {
+    public static class DidCoreValidation
+    {
+        public static Claim ValidateJsonLdUriAsFirst(Context obj)
+        {            
+            var firstContext = obj.Contexes?[0] as string;            
+            bool isSuccess = firstContext?.Equals(DidCoreConstants.JsonLdContextFirstUri, StringComparison.InvariantCultureIgnoreCase) == true;
+
+            return new Claim(ClaimId.DidCoreJsonLdUriAsFirst, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure);
+        }
+    }
+
+
     /// <summary>
     /// Validation tests.
     /// </summary>
@@ -19,19 +30,13 @@ namespace Verifiable.Tests
         [Fact]
         public void ContextFirstUriIsValidatedCorrectly()
         {
-            var faultyContext = new Context();
-            ICollection<ValidationResult> faultyValidationResults = new Collection<ValidationResult>();
-            bool faultyResult = DidCoreValidation.TryValidJsonLdUriAsFirst(faultyContext, out faultyValidationResults);
-            Assert.False(faultyResult, "Faulty context validation should fail.");
-            Assert.NotEmpty(faultyValidationResults);
-            Assert.True(faultyValidationResults.Count == 1, "There should be exactly one validation result for one validation error.");
-            Assert.False(string.IsNullOrWhiteSpace(faultyValidationResults.ElementAt(0).ErrorMessage));
-
-            var correctContext = new Context() { Contexes = new List<object>(new string[] { DidCoreConstants.JsonLdContextFirstUri }) };
-            ICollection<ValidationResult> correctValidationResults = new Collection<ValidationResult>();
-            bool correctResult = DidCoreValidation.TryValidJsonLdUriAsFirst(correctContext, out correctValidationResults);
-            Assert.True(correctResult, "Correct context validation should not fail.");
-            Assert.Empty(correctValidationResults);
+            var faultyContext = new Context();            
+            var faultyValidationResult = DidCoreValidation.ValidateJsonLdUriAsFirst(faultyContext);
+            Assert.False(faultyValidationResult.Outcome == ClaimOutcome.Success, "Faulty context validation should fail.");                        
+            
+            var correctContext = new Context() { Contexes = new List<object>(new string[] { DidCoreConstants.JsonLdContextFirstUri }) };            
+            var correctValidationResult = DidCoreValidation.ValidateJsonLdUriAsFirst(correctContext);
+            Assert.True(correctValidationResult.Outcome == ClaimOutcome.Success, "Correct context validation should not fail.");            
         }
     }
 }

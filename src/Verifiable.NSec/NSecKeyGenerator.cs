@@ -1,38 +1,57 @@
-using Verifiable.Core.Cryptography;
-using NSec.Cryptography;
+﻿using NSec.Cryptography;
 using System;
 using System.Buffers;
+using Verifiable.Core.Cryptography;
+using Key = NSec.Cryptography.Key;
 
 namespace Verifiable.NSec
 {
-    /// <inheritdoc />
-    public class NSecKeyGenerator: IKeyGenerator
+    public static class NSecKeyCreator
     {
-        /// <inheritdoc />
-        public Tuple<PublicKeyMemory, PrivateKeyMemory> GenerateEd25519PublicPrivateKeyPair(MemoryPool<byte> keyMemoryPool)
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEd25519Keys(MemoryPool<byte> memoryPool)
         {
-            var algorithm = SignatureAlgorithm.Ed25519;
-            var creationParameters = new KeyCreationParameters
+            return CreateKeys(SignatureAlgorithm.Ed25519, memoryPool, Tag.Ed25519PublicKey, Tag.Ed25519PrivateKey);
+        }
+
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateX25519Keys(MemoryPool<byte> memoryPool)
+        {
+            return CreateKeys(KeyAgreementAlgorithm.X25519, memoryPool, Tag.X25519PublicKey, Tag.X25519PrivateKey);
+        }
+
+        
+
+        private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateKeys(
+            Algorithm algorithm,
+            MemoryPool<byte> memoryPool,
+            Tag publicKeyTag,
+            Tag privateKeyTag)
+        {
+            using(var key = Key.Create(algorithm, new KeyCreationParameters { ExportPolicy = KeyExportPolicies.AllowPlaintextExport }))
             {
-                ExportPolicy = KeyExportPolicies.AllowPlaintextExport
-            };
+                var publicKeyBytes = key.Export(KeyBlobFormat.RawPublicKey);
+                var privateKeyBytes = key.Export(KeyBlobFormat.RawPrivateKey);
+                
+                var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKeyBytes, memoryPool), publicKeyTag);
+                var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool), privateKeyTag);
+                Array.Clear(publicKeyBytes, 0, publicKeyBytes.Length);
+                Array.Clear(privateKeyBytes, 0, privateKeyBytes.Length);
 
-            using(var publicPrivateKey = global::NSec.Cryptography.Key.Create(algorithm, creationParameters))
-            {
-                ReadOnlySpan<byte> publicKeyBytes = publicPrivateKey.Export(KeyBlobFormat.RawPublicKey);
-                ReadOnlySpan<byte> privateKeyBytes = publicPrivateKey.Export(KeyBlobFormat.RawPrivateKey);
-
-                var publicKeyBuffer = keyMemoryPool.Rent(publicKeyBytes.Length);
-                var privateKeyBuffer = keyMemoryPool.Rent(privateKeyBytes.Length);
-
-                privateKeyBytes.CopyTo(privateKeyBuffer.Memory.Span);
-                publicKeyBytes.CopyTo(publicKeyBuffer.Memory.Span);
-
-                var publicKey = new PublicKeyMemory(publicKeyBuffer);
-                var privateKey = new PrivateKeyMemory(privateKeyBuffer);
-
-                return Tuple.Create(publicKey, privateKey);
+                return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
             }
+        }
+
+
+        private static IMemoryOwner<byte> AsPooledMemory(byte[] keyBytes, MemoryPool<byte> memoryPool)
+        {
+            IMemoryOwner<byte> keyBuffer = memoryPool.Rent(keyBytes.Length);
+            if(keyBuffer.Memory.Length != keyBytes.Length)
+            {
+                throw new InvalidOperationException("The rented buffer size does not match the requested size.");
+            }
+
+            keyBytes.AsSpan().CopyTo(keyBuffer.Memory.Span.Slice(0, keyBytes.Length));
+
+            return keyBuffer;
         }
     }
 }

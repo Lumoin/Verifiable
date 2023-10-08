@@ -1,20 +1,28 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />	
+  </ItemGroup>
 
   <PropertyGroup>
     <Title>Core data types and algorithms for DIDs and VCs</Title>
     <Description>Includes and implements core data types and algorithms for decentralized identifiers and verifiable credentials.</Description>
-    <PackageTags>DID VC decentralized-identifier verifiable credential, signing, encryption</PackageTags>
+    <PackageTags>DID VC decentralized-identifier verifiable credential, signing, encryption</PackageTags>	
   </PropertyGroup>
 
   <ItemGroup>
     <!-- <PackageReference Include="Microsoft.CodeAnalysis" Version="3.10.0" /> -->
-    <PackageReference Include="System.Collections.Immutable" Version="7.0.0" />
-    <PackageReference Include="System.Text.Json" Version="7.0.2" NoWarn="NU5104" />
-    <PackageReference Include="SimpleBase" Version="4.0.0" />
+    <PackageReference Include="System.Collections.Immutable" />
+    <PackageReference Include="System.Text.Json" NoWarn="NU5104" />
+    <PackageReference Include="SimpleBase" />    
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="SIL.ReleaseTasks" Version="2.6.0-beta0024" />
+    <ProjectReference Include="..\Verifiable.Jwt\Verifiable.Jwt.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    
   </ItemGroup>
   
 </Project>

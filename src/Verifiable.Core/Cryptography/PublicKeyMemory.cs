@@ -1,5 +1,7 @@
 using System;
 using System.Buffers;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace Verifiable.Core.Cryptography
@@ -10,18 +12,70 @@ namespace Verifiable.Core.Cryptography
     /// </summary>
     /// <remarks>If counters, statistics or other statistics or functionality
     /// is needed this class can be inherited.</remarks>
-    public class PublicKeyMemory: SensitiveMemory
+    public class PublicKeyMemory: SensitiveMemory, IEquatable<PublicKeyMemory>
     {
         /// <summary>
         /// KeyMemory constructor.
         /// </summary>
-        /// <param name="sensitiveData">The piece of sensitive data.</param>
-        public PublicKeyMemory(IMemoryOwner<byte> sensitiveData): base(sensitiveData)
+        /// <param name="sensitiveMemory">The piece of sensitive data.</param>
+        /// <param name="tag">Tags the memory with out-of-band information such as key material information.</param>
+        public PublicKeyMemory(IMemoryOwner<byte> sensitiveMemory, Tag tag): base(sensitiveMemory, tag)
         {
-            if(sensitiveData == null)
-            {
-                throw new ArgumentNullException(nameof(sensitiveData));
-            }
+            ArgumentNullException.ThrowIfNull(sensitiveMemory);
+        }
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool Equals([NotNullWhen(true)] PublicKeyMemory? other)
+        {
+            //The reason for this is that Memory<T> does not implement deep hashing
+            //due to performance concerns.
+            return other is not null && base.Equals(other);
+                
+        }
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public override bool Equals([NotNullWhen(true)] object? o) => (o is PublicKeyMemory p) && Equals(p);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator ==(in PublicKeyMemory p1, in PublicKeyMemory p2) => Equals(p1, p2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator !=(in PublicKeyMemory p1, in PublicKeyMemory p2) => !Equals(p1, p2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator ==(in object p1, in PublicKeyMemory p2) => Equals(p1, p2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator ==(in PublicKeyMemory p1, in object p2) => Equals(p1, p2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator !=(in object p1, in PublicKeyMemory p2) => !Equals(p1, p2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator !=(in PublicKeyMemory p1, in object p2) => !Equals(p1, p2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
         }
 
 
@@ -34,11 +88,10 @@ namespace Verifiable.Core.Cryptography
         /// <param name="sensitiveFunc">The function that uses this memory. Example caller: <see cref="PublicKey"/>.</param>
         /// <param name="arg0">An argument given to <paramref name="sensitiveFunc"/>.</param>
         /// <param name="arg1">An argument given to <paramref name="sensitiveFunc"/>.</param>
-        /// <returns>The result of calling An argument given to <paramref name="sensitiveFunc"/>.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        /// <returns>The result of calling An argument given to <paramref name="sensitiveFunc"/>.</returns>        
         public TResult WithKeyBytes<TArg0, TArg1, TResult>(VerificationFunction<byte, TArg0, TArg1, TResult> sensitiveFunc, ReadOnlySpan<TArg0> arg0, TArg1 arg1)
         {
-            return sensitiveFunc(SensitiveData.Memory.Span, arg0, arg1);
+            return sensitiveFunc(AsReadOnlySpan(), arg0, arg1);
         }
     }
 }

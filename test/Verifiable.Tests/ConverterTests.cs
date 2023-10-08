@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 using System.IO;
 using System.Linq;
 
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     /// <summary>
     /// Tests for individual converters. The fragments are objects that contain the property under test.

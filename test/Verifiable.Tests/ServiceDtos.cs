@@ -1,7 +1,7 @@
 using Verifiable.Core.Did;
 using System.Diagnostics;
 
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     //TODO: Work in progress.
     //Quickly done some DTOs to test serialization of more specialized services in DidDocumentTests.

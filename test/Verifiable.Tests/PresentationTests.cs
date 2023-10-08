@@ -1,4 +1,4 @@
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     /// <summary>
     /// Nothing here yet, see https://identity.foundation/working-groups/claims-credentials.html for links.

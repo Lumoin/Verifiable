@@ -1,2 +1,3 @@
-dotnet test --configuration Release --verbosity normal --collect:"XPlat Code Coverage" -property:CollectCoverage=true -property:DeterministicSourcePaths=true -property:IncludeTestAssembly=true -property:CoverletOutputFormat=cobertura /p:CoverletOutput='./generated-reports/coverage/'
-dotnet reportgenerator -assemblyfilters:'-xunit*' -reports:'./generated-reports/coverage/coverage.cobertura.xml' -targetdir:'./generated-reports/coverage/' -reporttypes:'HtmlInline;Cobertura;MarkdownSummary'
+$TestOutput = dotnet test --configuration Release --verbosity normal --collect:"XPlat Code Coverage" -property:CollectCoverage=true -property:DeterministicSourcePaths=true -property:IncludeTestAssembly=true -property:CoverletOutputFormat=cobertura /p:CoverletOutput='./generated-reports/coverage/'
+$TestReports = $TestOutput | Select-String coverage.cobertura.xml | ForEach-Object { $_.Line.Trim() } | Join-String -Separator ';'
+dotnet reportgenerator -assemblyfilters:'-xunit*' -reports:'$TestReports' -targetdir:'./generated-reports/coverage/' -reporttypes:'HtmlInline;Cobertura;MarkdownSummary'

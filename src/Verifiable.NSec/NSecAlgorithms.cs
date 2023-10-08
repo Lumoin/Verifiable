@@ -5,11 +5,22 @@ using System.Buffers;
 
 namespace Verifiable.NSec
 {
+    /// <summary>
+    /// This class has a collection of adapter functions used in <see cref="Key"/> operations matching delegates in <see cref="SensitiveMemory"/>.
+    /// </summary>
     public static class NSecAlgorithms
     {
+        /// <summary>
+        /// A function that adapts <see cref="PrivateKey.Sign(ReadOnlySpan{byte}, MemoryPool{byte})"/> with delegate <see cref="SigningFunction{TPrivateKeyBytes, TDataToSign, TResult}"/>.
+        /// </summary>
+        /// <param name="privateKeyBytes">The private key bytes.</param>
+        /// <param name="dataToSign">The data to be signed.</param>
+        /// <param name="signaturePool">The pool from where to reserve the memory for <see cref="Signature"/>.</param>
+        /// <returns>The signature created from <paramref name="dataToSign"/> using <paramref name="privateKeyBytes"/>.</returns>
         public static Signature SignEd25519(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, MemoryPool<byte> signaturePool)
         {
-            //TODO: Failures...
+            //TODO: Parameter checking...
+            
             var algorithm = SignatureAlgorithm.Ed25519;
             _ = global::NSec.Cryptography.Key.TryImport(algorithm, privateKeyBytes, KeyBlobFormat.RawPrivateKey, out global::NSec.Cryptography.Key? signingKey);
 
@@ -17,7 +28,7 @@ namespace Verifiable.NSec
             var memoryPooledSignature = signaturePool.Rent(signature.Length);
             signature.CopyTo(memoryPooledSignature.Memory.Span);
 
-            return new Signature(memoryPooledSignature);
+            return new Signature(memoryPooledSignature, Tag.Ed25519Signature);
         }
 
 

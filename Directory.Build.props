@@ -1,18 +1,27 @@
 <Project>
 
   <PropertyGroup>
-    <LangVersion>11.0</LangVersion>
-    <SourceRoot>$(MSBuildThisFileDirectory)</SourceRoot>
-
     <TargetFramework>net7.0</TargetFramework>
+    <LangVersion>11.0</LangVersion>
+    <SourceRoot>$(MSBuildThisFileDirectory)</SourceRoot>    
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <NoWarn>$(NoWarn);1591;2003</NoWarn>
+    <RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>
+    <EnablePackageVulnerabilityAnalysis>true</EnablePackageVulnerabilityAnalysis>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <NoWarn>$(NoWarn);1591;2003;RCS1036</NoWarn>
     <IncludeSymbols>true</IncludeSymbols>
-    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>    
     <IncludePackageReferencesDuringMarkupCompilation>true</IncludePackageReferencesDuringMarkupCompilation>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+
+    <!--
+    TODO: https://docs.microsoft.com/en-us/dotnet/core/deploying/trimming/prepare-libraries-for-trimming
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    -->
   </PropertyGroup>
 
   <!-- Common nuget package parameters and resources. -->
@@ -45,8 +54,8 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="1.1.1" />
-    <PackageReference Include="SIL.ReleaseTasks" Version="2.6.0-beta0024" PrivateAssets="all" />
+    
+    <PackageReference Include="SIL.ReleaseTasks" PrivateAssets="all" />    
   </ItemGroup>
 
   <ItemGroup>

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "dependencies": {
     "net7.0": {
       "SIL.ReleaseTasks": {
@@ -13,31 +13,26 @@
       },
       "Spectre.Console": {
         "type": "Direct",
-        "requested": "[0.46.1-preview.0.2, )",
-        "resolved": "0.46.1-preview.0.2",
-        "contentHash": "mYTyWEJZmMPX4r0WKswCqTzU+lNKbHJLxGFAJbcI2+v1KQPEGyO4jqtiY0sJ26990id9d1meRGjwL0ksmhFbMQ==",
+        "requested": "[0.47.0, )",
+        "resolved": "0.47.0",
+        "contentHash": "wz8mszcZr0cSOo8GyoG9e2DFW0SkMT8/n78Q/lIXX7EbCtHNXOoOKWpJ9Str+rCYtmQOGGyDutZzubrUHK/XkA==",
         "dependencies": {
           "System.Memory": "4.5.5"
         }
       },
       "Spectre.Console.Cli": {
         "type": "Direct",
-        "requested": "[0.46.1-preview.0.2, )",
-        "resolved": "0.46.1-preview.0.2",
-        "contentHash": "yjT35l0dJ/qB5v+sS4vRBZ/Synrsenq9QEnj1Ou1sWi0zAnYGCkT6NJyuM9ezfv8XhSFVdUWheGASJwA7LL6oQ==",
+        "requested": "[0.47.0, )",
+        "resolved": "0.47.0",
+        "contentHash": "S2cZCbve4fAgRtigNUNZbF+NLQJcAapSqSbbDYqLtqXJcIZ6tKiRTveYe05d+oLY2bAmP7sgnLdzVknGXruy2Q==",
         "dependencies": {
-          "Spectre.Console": "0.46.1-preview.0.2"
+          "Spectre.Console": "0.47.0"
         }
       },
       "Markdig.Signed": {
         "type": "Transitive",
         "resolved": "0.30.2",
         "contentHash": "nQlUtPbp9pQFoArFSp/CZb699W6pqBG/DSpnWHgKbIuQjAu3KNjTZHaIir2vSCPJZuSMGii7tbI6K+nalh4X7w=="
-      },
-      "Microsoft.TSS": {
-        "type": "Transitive",
-        "resolved": "2.1.1",
-        "contentHash": "87DBN+4ANSFO8TDRmFjjTBl6PL7tmrfofmxki4LUnE34gOdyQiBfJK/X1QSu0UfCGUtpoBVv/tD985s4FDpKiA=="
       },
       "System.Memory": {
         "type": "Transitive",
@@ -49,6 +44,12 @@
         "dependencies": {
           "Microsoft.TSS": "[2.1.1, )"
         }
+      },
+      "Microsoft.TSS": {
+        "type": "CentralTransitive",
+        "requested": "[2.1.1, )",
+        "resolved": "2.1.1",
+        "contentHash": "87DBN+4ANSFO8TDRmFjjTBl6PL7tmrfofmxki4LUnE34gOdyQiBfJK/X1QSu0UfCGUtpoBVv/tD985s4FDpKiA=="
       }
     }
   }

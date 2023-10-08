@@ -1,15 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace Verifiable.Core
-{
-    //Look at https://github.com/dotnet/runtime/issues/29690, https://github.com/steveharter/designs/blob/6437453395619af937bf84a60c13d1bc43d7ca05/accepted/2020/serializer/WriteableDomAndDynamic.md#api-walkthrough
-    //and https://github.com/dotnet/designs/pull/163 for a writeable DOM and complex object logic with STJ (and Newtonsoft).
-
-    //These implement the roles at https://www.w3.org/TR/vc-data-model/#ecosystem-overview.
+{       
     public class Holder
     {
         //These are used by Verified to call VerifiableDataRegistry.

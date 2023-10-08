@@ -1,14 +1,10 @@
-using Verifiable.Core.Did;
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
+using Verifiable.Core.Did;
 
-namespace Verifiable.Tests
+namespace Verifiable.Core
 {
     /// <summary>
     /// https://www.w3.org/TR/did-core/#service-endpoints
