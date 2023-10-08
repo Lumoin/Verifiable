@@ -329,6 +329,7 @@ jobs:
               dashboard.stryker-mutator.io:443
               dotnetcli.azureedge.net:443
               github.com:443
+              nuget.pkg.github.com:443
 
         - name: Download NuGet artifacts
           uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a
@@ -358,6 +359,7 @@ jobs:
             dashboard.stryker-mutator.io:443
             dotnetcli.azureedge.net:443
             github.com:443
+            nuget.pkg.github.com:443
 
       - name: Download NuGet artifacts
         uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a
