@@ -147,23 +147,40 @@ jobs:
     # See explanation at https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
     - name: Set NuGet packages and suffix version
       run: |
+          # Obtain the latest tag, default to 0.0.1 if no tags are found.
+          latestTag=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.1)
+          
+          # Case 1: A release is being created.
           if [[ $GITHUB_EVENT_NAME == 'release' ]]; then
-              arrTag=(${GITHUB_REF//\// })
-              VERSION="${arrTag[2]}"
-              VERSION="${VERSION//v}-${GITHUB_SHA::7}"
-              echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
-              echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-              echo "VERSION_SUFFIX=$VERSION-release" >> "$GITHUB_ENV"
+            # Extract the version number from the release tag and remove any 'v' prefix.
+            arrTag=(${GITHUB_REF//\// })
+            VERSION="${arrTag[2]}"
+            VERSION="${VERSION//v}"
+            
+            # Set the PACKAGE_VERSION and VERSION.
+            # Add a VERSION_SUFFIX that identifies this as a release and includes the short SHA.
+            echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
+            echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+            echo "VERSION_SUFFIX=release-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+            
+          # Case 2: The 'develop' branch.
           elif [[ $GITHUB_REF == 'refs/heads/develop' ]]; then
-              echo "PACKAGE_VERSION=0.0.0.1-$GITHUB_RUN_ID-${GITHUB_SHA::7}-develop" >> "$GITHUB_ENV"
-              echo "PACKAGE=0.0.0.1" >> "$GITHUB_ENV"
-              echo "VERSION_SUFFIX=$GITHUB_RUN_ID-${GITHUB_SHA::7}-develop" >> "$GITHUB_ENV"
+            # Set the PACKAGE_VERSION and PACKAGE.
+            # Add a VERSION_SUFFIX with the 'develop' label, the run ID, and the short SHA.
+            echo "PACKAGE_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
+            echo "PACKAGE=${latestTag//v}" >> "$GITHUB_ENV"
+            echo "VERSION_SUFFIX=develop-${GITHUB_RUN_ID}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+            
+          # Case 3: Any other build.
           else
-              echo "PACKAGE_VERSION=0.0.0.1-$GITHUB_RUN_ID-${GITHUB_SHA::7}-dev" >> "$GITHUB_ENV"
-              echo "VERSION=0.0.0.1" >> "$GITHUB_ENV"
-              echo "VERSION_SUFFIX=$GITHUB_RUN_ID-${GITHUB_SHA::7}-dev" >> "$GITHUB_ENV"
+            # Set the PACKAGE_VERSION and VERSION.
+            # Add a VERSION_SUFFIX with the 'build' label, the run ID, and the short SHA.
+            echo "PACKAGE_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
+            echo "VERSION=${latestTag//v}" >> "$GITHUB_ENV"
+            echo "VERSION_SUFFIX=build-${GITHUB_RUN_ID}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           fi
       shell: bash
+
 
     - name: Print NuGet packages version
       run: echo $PACKAGE_VERSION
