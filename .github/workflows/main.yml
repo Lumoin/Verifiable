@@ -337,7 +337,7 @@ jobs:
             name: nupkg
 
         - name: Push to GitHub developer feed
-          run: dotnet nuget push "**/*.nupkg" --source ${{ env.GITHUB_FEED }} --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+          run: dotnet nuget push "**/*.nupkg" --source $GITHUB_FEED --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
 
   deploy:
     permissions:
@@ -367,7 +367,7 @@ jobs:
           name: nupkg
 
       - name: Push to GitHub developer feed
-        run: dotnet nuget push "**/*.nupkg" --source ${{ env.GITHUB_FEED }} --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+        run: dotnet nuget push "**/*.nupkg" --source $GITHUB_FEED --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
 
       - name: Push to NuGet feed
         run: dotnet nuget push **/*.nupkg --source $NUGET_FEED --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
