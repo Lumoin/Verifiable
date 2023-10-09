@@ -147,52 +147,46 @@ jobs:
     # See explanation at https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
     - name: Set NuGet packages and suffix version
       run: |
-          # Obtain the latest tag, default to 0.0.1 if no tags are found.
-          latestTag=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.1)
-          
-          # Case 1: A release is being created.
-          if [[ $GITHUB_EVENT_NAME == 'release' ]]; then
-            # Extract the version number from the release tag and remove any 'v' prefix.
-            arrTag=(${GITHUB_REF//\// })
-            VERSION="${arrTag[2]}"
-            VERSION="${VERSION//v}"
-            
-            # Set the PACKAGE_VERSION and VERSION.
-            # Add a VERSION_SUFFIX that identifies this as a release and includes the short SHA.
-            echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
-            echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-            echo "VERSION_SUFFIX=release-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-            
-          # Case 2: The 'develop' branch.
-          elif [[ $GITHUB_REF == 'refs/heads/develop' ]]; then
-            # Set the PACKAGE_VERSION and PACKAGE.
-            # Add a VERSION_SUFFIX with the 'develop' label, the run ID, and the short SHA.
-            echo "PACKAGE_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
-            echo "PACKAGE=${latestTag//v}" >> "$GITHUB_ENV"
-            echo "VERSION_SUFFIX=develop-${GITHUB_RUN_ID}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-            
-          # Case 3: Any other build.
-          else
-            # Set the PACKAGE_VERSION and VERSION.
-            # Add a VERSION_SUFFIX with the 'build' label, the run ID, and the short SHA.
-            echo "PACKAGE_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
-            echo "VERSION=${latestTag//v}" >> "$GITHUB_ENV"
-            echo "VERSION_SUFFIX=build-${GITHUB_RUN_ID}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          fi
+        # Bash script to determine the version and version suffix for CI/CD
+        # Use git to find the latest tag; if none are found, default to "0.0.1".
+        latestTag=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.1)
+        
+        # Case 1: A release is being created.
+        # Extract the version from the tag and add a suffix with the short SHA.
+        if [[ $GITHUB_EVENT_NAME == 'release' ]]; then
+          # Extract the version number from the release tag and remove any 'v' prefix.
+          arrTag=(${GITHUB_REF//\// })
+          VERSION="${arrTag[2]}"
+          VERSION="${VERSION//v}"
+          # Set PACKAGE_VERSION and VERSION, and add a VERSION_SUFFIX for clarity in identifying the release and commit.
+          echo "PACKAGE_VERSION=${VERSION}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+        
+        # Case 2: The 'develop' branch.
+        # Use the latestTag as the base version and add a suffix with "develop", the run_id, and the short SHA.
+        elif [[ $GITHUB_REF == 'refs/heads/develop' ]]; then
+          # Set PACKAGE_VERSION and PACKAGE, and add a VERSION_SUFFIX for clarity in identifying the development build, run, and commit.
+          echo "PACKAGE_VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "PACKAGE=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+        
+        # Case 3: Any other build (e.g., feature branches).
+        # Use the latestTag as the base version and add a suffix with "build", the run_id, and the short SHA.
+        else
+          # Set PACKAGE_VERSION and VERSION, and add a VERSION_SUFFIX for clarity in identifying the build, run, and commit.
+          echo "PACKAGE_VERSION=${latestTag//v}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${latestTag//v}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+        fi      
       shell: bash
-
 
     - name: Print NuGet packages version
-      run: echo $PACKAGE_VERSION
+      run: |
+          echo "PACKAGE_VERSION: ${{ env.PACKAGE_VERSION }}"
+          echo "VERSION:  ${{ env.VERSION }}"
       shell: bash
-
-    - name: Print version
-      run: echo $VERSION-$VERSION_SUFFIX
-      shell: bash
-
+        
     - name: Build
       # At the moment Verifiable.Tests cannot be built with -isolate alone due to Coverlet.
-      run: dotnet build --binaryLogger --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true /p:Version=${{ env.VERSION }}-${{ env.VERSION_SUFFIX }}
+      run: dotnet build --binaryLogger --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true /p:Version=${{ env.VERSION }}
       timeout-minutes: 5
 
     # - name: Set PR markdown title name
