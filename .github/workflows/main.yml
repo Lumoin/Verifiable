@@ -168,6 +168,7 @@ jobs:
           # Set PACKAGE_VERSION and PACKAGE, and add a VERSION_SUFFIX for clarity in identifying the development build, run, and commit.
           echo "PACKAGE_VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           echo "PACKAGE=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
         
         # Case 3: Any other build (e.g., feature branches).
         # Use the latestTag as the base version and add a suffix with "build", the run_id, and the short SHA.
