@@ -245,7 +245,7 @@ jobs:
 
     - name: Publish coverage summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: marocchino/sticky-pull-request-comment@f6a2580ed520ae15da6076e7410b088d1c5dddd9
+      uses: marocchino/sticky-pull-request-comment@efaaab3fd41a9c3de579aba759d2552635e590fd
       with:
         header: Report
         path: '${{ github.workspace }}/reports/coverage/Summary.md'
@@ -260,7 +260,7 @@ jobs:
 
     # - name: Comment PR with the generated test Markdown
     #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: marocchino/sticky-pull-request-comment@f6a2580ed520ae15da6076e7410b088d1c5dddd9
+    #  uses: marocchino/sticky-pull-request-comment@efaaab3fd41a9c3de579aba759d2552635e590fd
     #  with:
     #    path: ${{ env.file_name }}
 
