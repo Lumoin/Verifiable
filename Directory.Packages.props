@@ -16,7 +16,7 @@
     <PackageVersion Include="NSec.Cryptography" Version="22.4.0" />
     <PackageVersion Include="Portable.BouncyCastle" Version="1.9.0" />
     <PackageVersion Include="SharpFuzz" Version="2.1.1" />
-    <PackageVersion Include="SIL.ReleaseTasks" Version="2.6.0-beta0024" />
+    <PackageVersion Include="SIL.ReleaseTasks" Version="2.6.0-beta0030" />
     <PackageVersion Include="SimpleBase" Version="4.0.0" />
     <PackageVersion Include="Spectre.Console" Version="0.47.0" />
     <PackageVersion Include="Spectre.Console.Cli" Version="0.47.0" />
