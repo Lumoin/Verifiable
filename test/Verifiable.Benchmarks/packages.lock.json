@@ -22,9 +22,9 @@
       },
       "SIL.ReleaseTasks": {
         "type": "Direct",
-        "requested": "[2.6.0-beta0024, )",
-        "resolved": "2.6.0-beta0024",
-        "contentHash": "gUIKoQk8aD6aF/Cs7b0hW3Qn8i/Lvk4fj6P7kgks1KG5osoqO920E4buwQFkyCSYt7v28L3PZ1TPRmejfplkuQ==",
+        "requested": "[2.6.0-beta0030, )",
+        "resolved": "2.6.0-beta0030",
+        "contentHash": "iytkRVZ7tEBY00kzB55Qs0/TyfYBJ0GyvRnDPKw2AfakBWrBBTkTCdBSAGmCFoL4Wf6asRFOrenRJ6VGGhCuUQ==",
         "dependencies": {
           "Markdig.Signed": "0.30.2"
         }
