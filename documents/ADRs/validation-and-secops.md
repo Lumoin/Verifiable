@@ -1,8 +1,14 @@
-# Introducing Claim, Assessor, and Archiving for Validation in Verifiable Library
+# Introducing Claim, Assessor, and Archiving for validation in Verifiable
 
 ## Context
 
-The Verifiable library seeks to establish a framework for a variety of operations as delineated in the [project README.md](../../README.md). This decision centers around structuring the validation, monitoring, and secure operations logic. The objectives are as follows:
+The Verifiable library establishes a framework for various socio-economic and technical operations within decentralized, digital signature data architectures. It is designed to enhance trustworthy decision support systems, crucial for transitioning to a regenerative future. Our focus is to integrate traditional validation with artificial intelligence, ensuring valid data usage and trust in automated decision-making.
+
+The integration of AI into the Verifiable library addresses complex data scenarios and decision-making processes. AI's ability to efficiently parse and analyze large datasets, identify patterns, and provide data-driven insights is crucial in decentralized environments characterized by diverse and abundant data. This AI integration aims to automate and improve the accuracy of validation processes, which are essential for establishing the trustworthiness of transactions and decisions.
+
+Artificial intelligence can significantly reduce transaction costs, demystify complex concepts, and facilitate easier collaboration. However, this potential is fully realized only when AI operates on valid data and when there's a verifiable mechanism to trust and, importantly, retrospectively review or appeal automated decisions. This need underscores our library's commitment to recording inputs, outputs, data models, platform details, and versioning—elements critical for post-process evaluation and modification of AI decisions.
+
+This decision document centers around structuring the validation, monitoring, and secure operations logic. Our primary objectives are:
 
 1. Facilitate ease of understanding, maintenance, and operation, anticipating the construction of larger, software intensive systems. Users of Verifiable should have the capability to monitor and refactor its functioning reliably.
 
@@ -20,15 +26,15 @@ The Verifiable library seeks to establish a framework for a variety of operation
 
 ### Additionally
 
-a. There are plans to introduce for remote claim generation and assessments potentially and other system behaviors. This will be subject to a separate ADR and will involve extensive threat modeling.
+a. There are plans to introduce remote claim generation and assessments potentially and other system behaviors. This will be subject to a separate ADR and will involve extensive threat modeling.
 
-b. Point a. is partially driven by consideration for cross-sector, secure data operations as part of the circular and regenerative economy, and data structures. It appears such dependent data systems are governed in distributed fashion and include socio-economic, system external factors that may influence some operations. There may be need to blend them in to operational system seamlessly.
+b. Point `a.` is partially driven by consideration for cross-sector, secure data operations as part of the circular and regenerative economy, and data structures. It appears such dependent data systems are governed in distributed fashion and include socio-economic, system external factors that may influence some operations. There may be need to blend them in to operational system seamlessly.
 
 ## Decision
 
-We will introduce a Claim, Assessor, and Archiving model for validation.
+We will introduce a `Claim`, `Assessor`, and `Archiving` model for validation.
 
-- **Claim**: An immutable record containing a unique identifier and a boolean indicating validation result. Since these are immutable records, they can be cached and reused. NOTE: Future refactoring may introduce a chance to capture claim generation context and non-binary result, pursuant to **point a.** in previous section.
+- **Claim**: An immutable record containing a unique identifier and a boolean indicating validation result. Since these are immutable records, they can be cached and reused. NOTE: Future refactoring may introduce a chance to capture claim generation context and non-binary result, pursuant to point a. in the previous section.
 
 - **Assessor**: Aggregates multiple Claims to provide an auditable record of a series of validation operations. A function within will interpret the success or failure based on its understanding of the context in which the claims were made. The Assessor has an identifier so it can be tracked.
 
@@ -36,13 +42,15 @@ We will introduce a Claim, Assessor, and Archiving model for validation.
 
 ## Rationale
 
-1. **Distributed and Decentralized Systems**: Claim, Assessor, and Archiving model are tailored to operate within distributed and decentralized systems, providing a structured, verifiable, and auditable mechanism to capture, assess, and archive validations and decisions across disparate systems and networks.
+1. **Distributed and decentralized systems**: Claim, Assessor, and Archiving model are tailored to operate within distributed and decentralized systems, providing a structured, verifiable, and auditable mechanism to capture, assess, and archive validations and decisions across disparate systems and networks.
 
-2. **Regulatory Adherence and Contractual Obligations**: The immutable and traceable nature of Claims supports adherence to various sector-specific, regulatory, and contractual obligations, ensuring that actions and decisions taken by the system can be audited and verified against predefined legal and contractual frameworks.
+2. **Regulatory adherence and contractual obligations**: The immutable and traceable nature of Claims supports adherence to various sector-specific, regulatory, and contractual obligations, ensuring that actions and decisions taken by the system can be audited and verified against predefined legal and contractual frameworks.
 
-3. **Multi-Temporal and Multi-Stakeholder Environments**: The model facilitates validations and decision-making processes that span various time scales – from real-time to slower, deliberate processes – and caters to environments where multiple stakeholders (systems, entities, or individuals) with varying obligations and operational cadences are involved.
+3. **Multi-temporal and multi-stakeholder environments**: The model facilitates validations and decision-making processes that span various time scales – from real-time to slower, deliberate processes – and caters to environments where multiple stakeholders (systems, entities, or individuals) with varying obligations and operational cadences are involved.
 
-4. **Demonstrable Duty of Care**: By capturing and preserving the context and outcome of each validation operation in Claims, the system demonstrates a duty of care, ensuring that actions and decisions are transparent, verifiable, and auditable, fulfilling both immediate and future verification and auditability requirements.
+4. **Demonstrable duty of care**: By capturing and preserving the context and outcome of each validation operation in Claims, the system demonstrates a duty of care, ensuring that actions and decisions are transparent, verifiable, and auditable, fulfilling both immediate and future verification and auditability requirements.
+
+5. **Risk management and trust creation:** The structure facilitates risk management and trust creation in software-intensive data architectures, enabling collaboration and decision support while complying with regulatory frameworks like SSI, eIDAS and others. This approach supports creating real trust among stakeholders and managing inherent unknowns in dynamic environments.
 
 ## Alternatives Considered
 
@@ -66,7 +74,7 @@ Accepted.
 
 ## References
 
-None.
+[Explainable Artificial Intelligence (XAI) 2.0: A Manifesto of Open Challenges and Interdisciplinary Research Directions](https://arxiv.org/abs/2310.19775).
 
 ## Revision History
 
