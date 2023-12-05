@@ -116,7 +116,7 @@ jobs:
           ${{runner.os}}-nuget-
 
     - name: Setup .NET SDK
-      uses: actions/setup-dotnet@607fce577a46308457984d59e4954e075820f10a
+      uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3
       with:
         global-json-file: global.json
 
