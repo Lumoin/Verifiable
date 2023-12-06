@@ -4,7 +4,7 @@
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="BenchmarkDotNet" Version="0.13.10" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.13.11" />
     <PackageVersion Include="coverlet.collector" Version="6.0.0" />
     <PackageVersion Include="FsCheck.Xunit" Version="2.16.6" />
     <PackageVersion Include="JunitXml.TestLogger" Version="3.0.134" />
@@ -18,8 +18,8 @@
     <PackageVersion Include="SharpFuzz" Version="2.1.1" />
     <PackageVersion Include="SIL.ReleaseTasks" Version="2.6.0-beta0030" />
     <PackageVersion Include="SimpleBase" Version="4.0.0" />
-    <PackageVersion Include="Spectre.Console" Version="0.47.0" />
-    <PackageVersion Include="Spectre.Console.Cli" Version="0.47.0" />
+    <PackageVersion Include="Spectre.Console" Version="0.48.0" />
+    <PackageVersion Include="Spectre.Console.Cli" Version="0.48.0" />
     <PackageVersion Include="System.Collections.Immutable" Version="8.0.0" />
     <PackageVersion Include="System.Net.Http.Json" Version="8.0.0" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
