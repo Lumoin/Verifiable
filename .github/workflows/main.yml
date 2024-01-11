@@ -344,7 +344,7 @@ jobs:
               nuget.pkg.github.com:443
 
         - name: Download NuGet artifacts
-          uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a
+          uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935
           with:
             name: nupkg
 
@@ -374,7 +374,7 @@ jobs:
             nuget.pkg.github.com:443
 
       - name: Download NuGet artifacts
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a
+        uses: actions/download-artifact@6b208ae046db98c579e8a3aa621ab581ff575935
         with:
           name: nupkg
 
