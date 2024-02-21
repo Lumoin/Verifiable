@@ -35,7 +35,7 @@ jobs:
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v2
+      uses: github/codeql-action/init@v3
       with:
         languages: 'csharp'
         queries: security-and-quality
@@ -46,9 +46,9 @@ jobs:
 
     - name: Autobuild
       if: ${{ github.actor != 'dependabot[bot]' }}
-      uses: github/codeql-action/autobuild@v2
+      uses: github/codeql-action/autobuild@v3
 
     - name: CodeQL Analysis
       if: ${{ github.actor != 'dependabot[bot]' }}
-      uses: github/codeql-action/analyze@v2
+      uses: github/codeql-action/analyze@v3
       timeout-minutes: 100

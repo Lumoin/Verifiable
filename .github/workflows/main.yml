@@ -108,7 +108,7 @@ jobs:
         fetch-depth: 2
 
     - name: Cache Nuget packages '${{ matrix.os }}'
-      uses: actions/cache@704facf57e6136b1bc63b828d79edcd491f0ee84
+      uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2
       with:
         path: ${{ env.NUGET_PACKAGES }}
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
@@ -134,14 +134,7 @@ jobs:
 
     # There may a difference in libraries between platforms.
     - name: Run BOM analysis
-      run: dotnet CycloneDX Verifiable.sln --json --out ${{ github.workspace }}/bom/${{ matrix.os }}/
-
-    # Uploading BOM does not seem to succeed at the moment...
-    - name: Upload Verifiable JSON SBOM
-      uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32
-      with:
-        name: Verifiable BOM report
-        path: ${{ github.workspace }}/bom/${{ matrix.os }}/bom.json
+      run: dotnet CycloneDX Verifiable.sln --json --out ${{ github.workspace }}/bom/${{ matrix.os }}    
 
     # The version numbers are determined and set here so it can be set appropriately to code and NuGet packages.
     # See explanation at https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
@@ -215,7 +208,7 @@ jobs:
 
     #- name: Upload Stryker output artefacts
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32
+    #  uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3
     #  with:
     #    name: 'Stryker output artefacts'
     #    path: ${{ github.workspace }}/StrykerOutput/
@@ -224,7 +217,7 @@ jobs:
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
 
     # - name: Archive publish results
-    #  uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+    #  uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v3.1.3
     #  with:
     #    name: Verifiable.Benchmarks
     #    path: ./publish/*
@@ -233,7 +226,7 @@ jobs:
     #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
 
     # - name: Upload benchmark results
-    #  uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+    #  uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v3.1.3
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
@@ -265,7 +258,7 @@ jobs:
 
     - name: Create test summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: test-summary/action@62bc5c68de2a6a0d02039763b8c754569df99e3f
+      uses: test-summary/action@fee35d7df20790255fe6aa92cf0f6d28092ecf2f
       with:
         paths: '${{ github.workspace }}/reports/coverage/TestResults.xml'
         # output: '${{ github.workspace }}/${{ env.file_name }}'
@@ -278,7 +271,7 @@ jobs:
 
     # - name: Upload PR build information artefact
     #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+    #  uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v3.1.3
     #  with:
     #    name: 'Test Run'
     #    path: ${{ github.workspace }}/${{ env.file_name }}
@@ -306,7 +299,7 @@ jobs:
 
     - name: Upload Verifiable Nuget packages
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v3.1.3
       with:
         name: nupkg
         path: |
@@ -344,7 +337,7 @@ jobs:
               nuget.pkg.github.com:443
 
         - name: Download NuGet artifacts
-          uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a
+          uses: actions/download-artifact@eaceaf801fd36c7dee90939fad912460b18a1ffe
           with:
             name: nupkg
 
@@ -374,7 +367,7 @@ jobs:
             nuget.pkg.github.com:443
 
       - name: Download NuGet artifacts
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a
+        uses: actions/download-artifact@eaceaf801fd36c7dee90939fad912460b18a1ffe
         with:
           name: nupkg
 
