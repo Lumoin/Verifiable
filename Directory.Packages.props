@@ -4,13 +4,13 @@
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="BenchmarkDotNet" Version="0.13.11" />
-    <PackageVersion Include="coverlet.collector" Version="6.0.0" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.13.12" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.1" />
     <PackageVersion Include="FsCheck.Xunit" Version="2.16.6" />
-    <PackageVersion Include="JunitXml.TestLogger" Version="3.0.134" />
+    <PackageVersion Include="JunitXml.TestLogger" Version="3.1.12" />
     <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
-    <PackageVersion Include="Microsoft.CodeCoverage" Version="17.8.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageVersion Include="Microsoft.CodeCoverage" Version="17.9.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
     <PackageVersion Include="Microsoft.TSS" Version="2.1.1" />
     <PackageVersion Include="NSec.Cryptography" Version="22.4.0" />
@@ -23,12 +23,12 @@
     <PackageVersion Include="System.Collections.Immutable" Version="8.0.0" />
     <PackageVersion Include="System.Net.Http.Json" Version="8.0.0" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
-    <PackageVersion Include="System.Text.Json" Version="8.0.0" />
+    <PackageVersion Include="System.Text.Json" Version="8.0.2" />
     <PackageVersion Include="WinSharpFuzz" Version="1.0.0" />
-    <PackageVersion Include="xunit" Version="2.6.2" />
-    <PackageVersion Include="xunit.analyzers" Version="1.6.0" />
-    <PackageVersion Include="xunit.extensibility.execution" Version="2.6.2" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="2.5.4" />
+    <PackageVersion Include="xunit" Version="2.7.0" />
+    <PackageVersion Include="xunit.analyzers" Version="1.11.0" />
+    <PackageVersion Include="xunit.extensibility.execution" Version="2.7.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.5.7" />
     <PackageVersion Include="Xunit.SkippableFact" Version="1.4.13" />
   </ItemGroup>
 </Project>

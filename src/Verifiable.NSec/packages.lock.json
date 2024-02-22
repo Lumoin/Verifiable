@@ -45,7 +45,7 @@
         "dependencies": {
           "SimpleBase": "[4.0.0, )",
           "System.Collections.Immutable": "[8.0.0, )",
-          "System.Text.Json": "[8.0.0, )",
+          "System.Text.Json": "[8.0.2, )",
           "Verifiable.Jwt": "[0.0.0.1-alpha, )"
         }
       },
@@ -69,9 +69,9 @@
       },
       "System.Text.Json": {
         "type": "CentralTransitive",
-        "requested": "[8.0.0, )",
-        "resolved": "8.0.0",
-        "contentHash": "OdrZO2WjkiEG6ajEFRABTRCi/wuXQPxeV6g8xvUJqdxMvvuCCEk86zPla8UiIQJz3durtUEbNyY/3lIhS0yZvQ==",
+        "requested": "[8.0.2, )",
+        "resolved": "8.0.2",
+        "contentHash": "29KA2StjWDYp32FvREifawRtNpTziLE1xyuDV9pVQ+MsaE9bIcIieP0io/eZZeLMxR+Nx9zI55RtUtpVpEIdeg==",
         "dependencies": {
           "System.Text.Encodings.Web": "8.0.0"
         }
