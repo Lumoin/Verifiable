@@ -72,7 +72,7 @@ jobs:
     # Windows builds may have insufficient resource limits, so they're increased.
     - name: Configure Windows Pagefile
       if: ${{ matrix.os == 'windows-latest' }}
-      uses: al-cheb/configure-pagefile-action@86589fd789a4de3e62ba628dda2cb10027b66d67
+      uses: al-cheb/configure-pagefile-action@a3b6ebd6b634da88790d9c58d4b37a7f4a7b8708
       with:
           minimum-size: 8GB
           maximum-size: 32GB
