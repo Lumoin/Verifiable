@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Verifiable.Core.Cryptography.Context;
 using Verifiable.Core.Did;
 using Verifiable.Jwt;
 

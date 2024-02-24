@@ -1,0 +1,3 @@
+Remove-Item "./sbom" -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path "./sbom"
+dotnet tool run sbom-tool generate -DeleteManifestDirIfPresent true -BuildDropPath "./sbom" -FetchLicenseInformation true -EnablePackageMetadataParsing true -BuildComponentPath . -PackageName "Verifiable" -PackageSupplier "Lumoin" -NamespaceUriBase "https://lumoin.com/verifiable" -PackageVersion 1.0.0 -Verbosity Verbose

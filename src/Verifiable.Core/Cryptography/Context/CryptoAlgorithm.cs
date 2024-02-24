@@ -1,14 +1,30 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 
-namespace Verifiable.Core.Cryptography
+
+namespace Verifiable.Core.Cryptography.Context
 {
+    [AttributeUsage(AttributeTargets.Property, Inherited = false, AllowMultiple = false)]
+    public sealed class CryptoAlgorithmRegistrationAttribute: Attribute
+    {
+    }
+
+
     /// <summary>
     /// This record represents different cryptographic algorithms that are used to generate key material.
     /// Each algorithm is represented by an integer constant.
     /// </summary>
-    public sealed class CryptoAlgorithm
+    /// <remarks>
+    /// This class is part of a structured tagging mechanism designed to clearly
+    /// define cryptographic contexts without relying on OIDs, JWT values, or other
+    /// identifiers that could be ambiguous over time or need extensive parsing. This works in
+    /// conjunction with <see cref="EncodingScheme"/> and <see cref="Purpose"/>
+    /// to provide a comprehensive framework for representing and manipulating 
+    /// cryptographic material.
+    /// </remarks>
+    public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     {
         /// <summary>
         /// Secp256k1.
@@ -19,6 +35,7 @@ namespace Verifiable.Core.Cryptography
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/>.
         /// Encoding method is defined in <see cref="EncodingScheme"/>.
         /// </remarks>
+        [CryptoAlgorithmRegistration]
         public static CryptoAlgorithm Secp256k1 { get; } = new CryptoAlgorithm(0);
 
         /// <summary>
@@ -138,28 +155,84 @@ namespace Verifiable.Core.Cryptography
         /// </remarks>
         public static CryptoAlgorithm WindowsPlatformEncrypted { get; } = new CryptoAlgorithm(11);
 
-        private static List<CryptoAlgorithm> algorithms = new List<CryptoAlgorithm>(new[] { Rsa2048 });
+        private static List<CryptoAlgorithm> algorithms = new([Rsa2048]);
 
         public static IReadOnlyList<CryptoAlgorithm> Algorithms => algorithms.AsReadOnly();
 
         public int Algorithm { get; }
 
-        private CryptoAlgorithm(int algorithm)
-        {
-            Algorithm = algorithm;
-        }
 
         public static CryptoAlgorithm Create(int algorithm)
         {
-            if(algorithms.Any(p => p.Algorithm == algorithm))
+            for(int i = 0; i < algorithms.Count; ++i)
             {
-                throw new ArgumentException("Code already exists.");
+                if(algorithms[i].Algorithm == algorithm)
+                {
+                    throw new ArgumentException("Code already exists.");
+                }
             }
 
             var newAlgorithm = new CryptoAlgorithm(algorithm);
             algorithms.Add(newAlgorithm);
 
             return newAlgorithm;
+        }
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool Equals(CryptoAlgorithm other)
+        {            
+            return Algorithm == other.Algorithm;
+        }
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public override bool Equals([NotNullWhen(true)] object? o) => o is CryptoAlgorithm cryptoAlgorithm && Equals(cryptoAlgorithm);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator ==(in CryptoAlgorithm cryptoAlgorithm1, in CryptoAlgorithm cryptoAlgorithm2) => Equals(cryptoAlgorithm1, cryptoAlgorithm2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator !=(in CryptoAlgorithm cryptoAlgorithm1, in CryptoAlgorithm cryptoAlgorithm2) => !Equals(cryptoAlgorithm1, cryptoAlgorithm2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator ==(in object cryptoAlgorithm1, in CryptoAlgorithm cryptoAlgorithm2) => Equals(cryptoAlgorithm1, cryptoAlgorithm2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator ==(in CryptoAlgorithm cryptoAlgorithm1, in object cryptoAlgorithm2) => Equals(cryptoAlgorithm1, cryptoAlgorithm2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator !=(in object cryptoAlgorithm1, in CryptoAlgorithm cryptoAlgorithm2) => !Equals(cryptoAlgorithm1, cryptoAlgorithm2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool operator !=(in CryptoAlgorithm cryptoAlgorithm1, in object cryptoAlgorithm2) => !Equals(cryptoAlgorithm1, cryptoAlgorithm2);
+
+
+        /// <inheritdoc />
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+
+
+        private CryptoAlgorithm(int algorithm)
+        {
+            Algorithm = algorithm;
         }
     }
 }

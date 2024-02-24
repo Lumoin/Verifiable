@@ -1,1 +1,0 @@
-dotnet CycloneDX Verifiable.sln --json --out './bom-analysis'

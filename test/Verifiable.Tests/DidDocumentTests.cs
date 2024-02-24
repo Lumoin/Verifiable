@@ -5,6 +5,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Did;
+using Verifiable.Core.Did.Methods;
 using Verifiable.Jwt;
 using Verifiable.Tests.TestInfrastructure;
 using Xunit;
@@ -140,9 +141,9 @@ namespace Verifiable.Core
                     {
                         return did switch
                         {
-                            "did:key:" => new KeyDidId(did),
-                            "did:ebsi:" => new EbsiDidId(did),
-                            _ => new GenericDidId(did)
+                            "did:key:" => new KeyDidMethod(did),
+                            "did:ebsi:" => new EbsiDidMethod(did),
+                            _ => new GenericDidMethod(did)
                         };
                     })
                 }
@@ -196,9 +197,9 @@ namespace Verifiable.Core
                     {
                         return did switch
                         {
-                            "did:key:" => new KeyDidId(did),
-                            "did:ebsi:" => new EbsiDidId(did),
-                            _ => new GenericDidId(did)
+                            "did:key:" => new KeyDidMethod(did),
+                            "did:ebsi:" => new EbsiDidMethod(did),
+                            _ => new GenericDidMethod(did)
                         };
                     })
                 }
@@ -256,9 +257,9 @@ namespace Verifiable.Core
                     {
                         return did switch
                         {
-                            "did:key:" => new KeyDidId(did),
-                            "did:ebsi:" => new EbsiDidId(did),
-                            _ => new GenericDidId(did)
+                            "did:key:" => new KeyDidMethod(did),
+                            "did:ebsi:" => new EbsiDidMethod(did),
+                            _ => new GenericDidMethod(did)
                         };
                     })
                 }
@@ -304,9 +305,9 @@ namespace Verifiable.Core
                     {
                         return did switch
                         {
-                            "did:key:" => new KeyDidId(did),
-                            "did:ebsi:" => new EbsiDidId(did),
-                            _ => new GenericDidId(did)
+                            "did:key:" => new KeyDidMethod(did),
+                            "did:ebsi:" => new EbsiDidMethod(did),
+                            _ => new GenericDidMethod(did)
                         };
                     })
                 }
@@ -372,9 +373,9 @@ namespace Verifiable.Core
                     {
                         return did switch
                         {
-                            "did:key:" => new KeyDidId(did),
-                            "did:ebsi:" => new EbsiDidId(did),
-                            _ => new GenericDidId(did)
+                            "did:key:" => new KeyDidMethod(did),
+                            "did:ebsi:" => new EbsiDidMethod(did),
+                            _ => new GenericDidMethod(did)
                         };
                     })
                 }

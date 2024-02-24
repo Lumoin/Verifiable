@@ -4,19 +4,20 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core;
 using Verifiable.Core.Did;
+using Verifiable.Core.Did.Methods;
 using Verifiable.Jwt;
 
 namespace Verifiable.Tests
 {
     public static class JsonSerializerOptionsExtensions
     {        
-        public static DidIdFactoryDelegate DefaultDidIdFactory = did =>
+        public static DidMethodFactoryDelegate DefaultDidIdFactory = did =>
         {
             return did switch
             {
-                var d when did.StartsWith(KeyDidId.Prefix) => new KeyDidId(did),
-                var d when did.StartsWith(EbsiDidId.Prefix) => new EbsiDidId(did),
-                _ => new GenericDidId(did)
+                var d when did.StartsWith(KeyDidMethod.Prefix) => new KeyDidMethod(did),
+                var d when did.StartsWith(EbsiDidMethod.Prefix) => new EbsiDidMethod(did),
+                _ => new GenericDidMethod(did)
             };
         };
 

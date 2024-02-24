@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Did;
 using Verifiable.Sidetree;
@@ -44,11 +45,10 @@ namespace Verifiable.Core
             Assert.NotNull(deseserializedDidDocument?.Context);
             Assert.NotNull(deseserializedDidDocument?.DidDocument);
             Assert.NotNull(reserializedDidDocument);
-
-            var comparer = new JsonElementComparer();
-            using var originalDIDDocument = JsonDocument.Parse(didDocumentFileContents);
-            using var parsedReserializedDIDDocument = JsonDocument.Parse(reserializedDidDocument);
-            Assert.True(comparer.Equals(originalDIDDocument.RootElement, parsedReserializedDIDDocument.RootElement), $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
+            
+            var originalDIDDocument = JsonNode.Parse(didDocumentFileContents);
+            var parsedReserializedDIDDocument = JsonNode.Parse(reserializedDidDocument);
+            Assert.True(JsonNode.DeepEquals(originalDIDDocument, parsedReserializedDIDDocument), $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
         }
     }
 }

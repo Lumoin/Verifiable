@@ -33,7 +33,7 @@ bld/
 [Ll]ogs/
 
 # Script result directories
-bom-analysis/
+sbom/
 generated-reports/
 generated-nugets/
 

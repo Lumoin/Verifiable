@@ -1,0 +1,1 @@
+dotnet tool list | Select-Object -Skip 2 | ForEach-Object { $_.Split()[0] } | ForEach-Object { dotnet tool update $_ }
