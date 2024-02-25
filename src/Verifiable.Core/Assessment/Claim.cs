@@ -192,7 +192,7 @@ namespace Verifiable.Assessment
         /// </summary>
         /// <param name="id">The identifier for this claim.</param>
         /// <param name="outcome">The outcome of the claim check.</param>
-        public Claim(ClaimId id, ClaimOutcome outcome) : this(id, outcome, ClaimContext.None) { }
+        public Claim(ClaimId id, ClaimOutcome outcome): this(id, outcome, ClaimContext.None) { }
     }
 
 

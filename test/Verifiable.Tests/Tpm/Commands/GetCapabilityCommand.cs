@@ -103,7 +103,7 @@ namespace Verifiable.Tpm.Commands
                     {
                         do
                         {
-                            var commandBufferAsHex = BitConverter.ToString(commandBuffer).Replace("-", " ");
+                            var commandBufferAsHex = BitConverter.ToString(commandBuffer).Replace("-", " ", StringComparison.InvariantCulture);
                             tbsResultCode = TpmWindowsPlatform.Tbsip_Submit_Command(
                                 TpmContext,
                                 TBS_COMMAND_LOCALITY.TBS_COMMAND_LOCALITY_ZERO,
@@ -118,7 +118,7 @@ namespace Verifiable.Tpm.Commands
                                 TpmResponse response = TpmResponse.FromByteArray(responseBuffer, (uint)Tpm2Cc.GetCapability);
                                 if(response.ResponseCode == 0)
                                 {
-                                    var responseBufferAsHex = BitConverter.ToString(responseBuffer, 0, (int)responseBufferLength).Replace("-", " ");
+                                    var responseBufferAsHex = BitConverter.ToString(responseBuffer, 0, (int)responseBufferLength).Replace("-", " ", StringComparison.InvariantCulture);
                                     uint capability = BinaryPrimitives.ReadUInt32BigEndian(responseBuffer.AsSpan(11));
                                     moreDataAvailable = BitConverter.ToBoolean(responseBuffer, 10);
                                     int propertyCount = BinaryPrimitives.ReadInt32BigEndian(responseBuffer.AsSpan(15));

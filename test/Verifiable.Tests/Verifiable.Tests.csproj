@@ -12,6 +12,7 @@
   </PropertyGroup>
     
   <ItemGroup>
+    <PackageReference Include="dotNetRdf" />
     <PackageReference Include="JunitXml.TestLogger" />    
     <PackageReference Include="SharpFuzz" />    
     <PackageReference Include="WinSharpFuzz" />

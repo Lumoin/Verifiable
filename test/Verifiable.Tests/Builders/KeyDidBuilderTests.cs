@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Verifiable.Assessment;
 using Verifiable.Core.Builders;
@@ -71,5 +72,48 @@ namespace Verifiable.Tests.Builders
             Assert.True(areJsonElementsEqual, $"JSON string \"{serializedDidDocument}\" did not pass roundtrip test.");                       
             Assert.Equal(typeof(KeyDidMethod), deserializedDidDocument?.Id?.GetType());            
         }        
+    }
+}
+
+public class Version1
+{
+
+}
+
+public class Version2
+{
+    
+}
+
+
+public static class Transformer
+{
+    public static TTransformed Transform<TTransformed, TOriginal>(TOriginal toBeTransformed, Func<TOriginal, TTransformed> transformer)
+    {
+        return transformer(toBeTransformed);
+    }
+}
+
+public static class GrainTransformer
+{
+    public static Func<object, TTransformed> GetTransformer<TTransformed>(string grainId, string grainType, string siloId)
+    {        
+        return grainState =>
+        {            
+            return (TTransformed)grainState;
+        };
+    }
+}
+
+
+public class Test
+{
+    public void TestMethod()
+    {
+        Version1 v1 = new();
+        Version2 v2 = Transformer.Transform(v1, (v1) => new Version2());
+        
+        var transformer = GrainTransformer.GetTransformer<Version2>("grain1", "typeA", "siloX");
+        Version2 transformedState = transformer(v1);
     }
 }

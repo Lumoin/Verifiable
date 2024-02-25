@@ -259,7 +259,7 @@ namespace Verifiable.Tpm
             };
 
             byte[] selfTestCommandBuffer = selfTestCommand.ToByteArray();
-            var selfTestCommandBufferAsHex = BitConverter.ToString(selfTestCommandBuffer).Replace("-", " ");
+            var selfTestCommandBufferAsHex = BitConverter.ToString(selfTestCommandBuffer).Replace("-", " ", StringComparison.InvariantCulture);
 
             using(TpmSafeHandleWindows tpmHandle = new TpmSafeHandleWindows())
             {
@@ -561,7 +561,7 @@ namespace Verifiable.Tpm
 
 
             byte[] startHashSequenceCommandBuffer = startHashSequenceCommand.ToByteArray();
-            var startHashSequenceCommandBufferAsHex = BitConverter.ToString(startHashSequenceCommandBuffer).Replace("-", " ");
+            var startHashSequenceCommandBufferAsHex = BitConverter.ToString(startHashSequenceCommandBuffer).Replace("-", " ", StringComparison.InvariantCulture);
 
             TpmSafeHandleWindows tpmHandle = new TpmSafeHandleWindows();
             if(tpmHandle.Open())
@@ -614,7 +614,7 @@ namespace Verifiable.Tpm
             };
 
             byte[] sequenceUpdateCommandBuffer = sequenceUpdateCommand.ToByteArray();
-            var updateHashSequenceCommandAsHex = BitConverter.ToString(sequenceUpdateCommandBuffer).Replace("-", " ");
+            var updateHashSequenceCommandAsHex = BitConverter.ToString(sequenceUpdateCommandBuffer).Replace("-", " ", StringComparison.InvariantCulture);
 
             uint sequenceUpdateCommandResponseBufferLength = 1024;
             byte[] sequenceUpdateCommandResponseBuffer = new byte[sequenceUpdateCommandResponseBufferLength];

@@ -4,6 +4,14 @@ using System.Diagnostics;
 
 namespace Verifiable.Assessment
 {
+    public static class WebDidClaims
+    {
+        /// <summary>
+        /// Represents a claim for <c>did:web</c> ID encoding.
+        /// </summary>
+        //public static ClaimId WebDidIdEncoding { get; } = ClaimId.Create(600, "WebDidIdEncoding");
+    }
+
     /// <summary>
     /// Represents a unique identifier for a claim generated from a specific check that either succeeds or fails.
     /// <see cref="ClaimId"/> acts as a bridge between code and operational aspects like Security Development Operations (SecDevOps)
@@ -32,7 +40,9 @@ namespace Verifiable.Assessment
     /// </code>
     /// </example>    
     [DebuggerDisplay("{DebuggerDisplay,nq}")]
+#pragma warning disable CA1815 // Override equals and operator equals on value types
     public readonly struct ClaimId
+#pragma warning restore CA1815 // Override equals and operator equals on value types
     {                
         /// <summary>
         /// Gets the code representing the claim identifier.
@@ -217,6 +227,21 @@ namespace Verifiable.Assessment
 
 
         /// <summary>
+        /// Represents a claim for <c>did:web</c> ID encoding.
+        /// </summary>
+        public static ClaimId WebDidIdEncoding { get; } = new ClaimId(600, "WebDidIdEncoding");
+
+        /// <summary>
+        /// Represents a claim for <c>did:web</c> ID encoding ID format.
+        /// </summary>        
+        public static ClaimId WebDidIdFormat { get; } = new ClaimId(601, "WebDidIdFormat");
+
+        /// <summary>
+        /// Represents a claim for <c>did:web</c> format.
+        /// </summary>
+        public static ClaimId WebDidKeyFormat { get; } = new ClaimId(602, "WebDidKeyFormat");
+
+        /// <summary>
         /// Creates a new claim identifier.
         /// </summary>
         /// <param name="code">The code representing the claim identifier.</param>
@@ -280,12 +305,12 @@ namespace Verifiable.Assessment
         /// </summary>
         private static class CodeDescriptions
         {
-            private static readonly object descriptionsLock = new object();
+            private static readonly object descriptionsLock = new();
 
             /// <summary>
             /// Descriptions of dynamically created claim identifiers.
             /// </summary>
-            public static Dictionary<int, string> Descriptions { get; } = new();
+            public static Dictionary<int, string> Descriptions { get; } = [];
 
 
             /// <summary>

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Security.Cryptography;
 
 
 namespace Verifiable.Assessment
@@ -17,7 +18,20 @@ namespace Verifiable.Assessment
         /// <returns>A string representing the TraceId.</returns>
         public static string GetOrCreateTraceId()
         {
-            return Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString();
+            return Activity.Current?.TraceId.ToString() ?? Activity.TraceIdGenerator?.Invoke().ToHexString() ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+
+        }
+
+
+        /// <summary>
+        /// Retrieves the current <see cref="Activity.TraceFlags"/> or generates a new one if none exists.
+        /// </summary>
+        /// <returns>A string representing not sampled and produced in random flags <c>'02'</c>.</returns>
+        public static string GetOrCreateTraceFlags()
+        {
+            //TODO: "02" can be depedent on Activity.TraceIdGenerator?
+            const string NotSampledAndValuesProducesinRandom = "02";
+            return Activity.Current?.ActivityTraceFlags.ToString() ?? NotSampledAndValuesProducesinRandom;
         }
 
 
@@ -26,9 +40,10 @@ namespace Verifiable.Assessment
         /// </summary>
         /// <returns>A string representing the SpanId.</returns>
         public static string GetOrCreateSpanId()
-        {
-            return Activity.Current?.SpanId.ToString() ?? Guid.NewGuid().ToString();
+        {            
+            return Activity.Current?.SpanId.ToString() ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(8));
         }
+
 
         /// <summary>
         /// Retrieves the current

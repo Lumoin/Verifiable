@@ -6,7 +6,7 @@ namespace Verifiable.Core.Did
     /// <summary>
     /// 
     /// </summary>
-    [DebuggerDisplay("{Key}")]
+    [DebuggerDisplay("PublicKeyMultibase({Key,nq})")]
     public class PublicKeyMultibase: KeyFormat
     {
         public string Key { get; set; }

@@ -23,7 +23,9 @@ namespace Verifiable.Cryptography
     public static class DefaultEncoderSelector
     {
         /// <summary>
-        /// <para>Gets or sets a delegate that selects an encoder based on a given key format type.</para>
+        /// <para>Gets or sets a delegate that selects an encoder based on a given key format type.
+        /// If the format type is known to <c>Verifiable</c>, it is enumerated in <see cref="WellKnownKeyFormats"/>.
+        /// </para>
         /// 
         /// <para>The delegate receives the type of the key format and returns a delegate that can 
         /// perform the required encoding operation. If the key format does not require encoding, 
@@ -65,6 +67,8 @@ namespace Verifiable.Cryptography
         {
             InitializerProviders(keyFormatType =>
             {
+                //TODO: Here base58BtcEncoder for PublicKeyJwk works because it's not actually used. It's just a placeholder when
+                //MultibaseSerializer.DefaultKeyFormatCreator is used to create default key format.
                 return keyFormatType switch
                 {
                     var kt when keyFormatType == WellKnownKeyFormats.PublicKeyMultibase => base58BtcEncoder,

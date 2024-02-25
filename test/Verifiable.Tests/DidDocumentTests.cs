@@ -141,8 +141,8 @@ namespace Verifiable.Core
                     {
                         return did switch
                         {
-                            "did:key:" => new KeyDidMethod(did),
-                            "did:ebsi:" => new EbsiDidMethod(did),
+                            "did:key:" => new KeyDidMethod(did),                            
+                            "did:ebsi:" => new EbsiDidMethod(did),                            
                             _ => new GenericDidMethod(did)
                         };
                     })

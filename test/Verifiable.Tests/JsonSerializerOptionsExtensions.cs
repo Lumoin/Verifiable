@@ -15,8 +15,9 @@ namespace Verifiable.Tests
         {
             return did switch
             {
-                var d when did.StartsWith(KeyDidMethod.Prefix) => new KeyDidMethod(did),
                 var d when did.StartsWith(EbsiDidMethod.Prefix) => new EbsiDidMethod(did),
+                var d when did.StartsWith(KeyDidMethod.Prefix) => new KeyDidMethod(did),
+                var d when did.StartsWith(WebDidMethod.Prefix) => new WebDidMethod(did),                
                 _ => new GenericDidMethod(did)
             };
         };

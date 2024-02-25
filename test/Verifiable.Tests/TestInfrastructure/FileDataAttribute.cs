@@ -33,7 +33,7 @@ namespace Verifiable.Tests.TestInfrastructure
         /// Loads the given file.
         /// </summary>
         /// <param name="file">The file to load.</param>
-        public FilesDataAttribute(string file) : this(Path.GetDirectoryName(file ?? Path.GetTempPath()) ?? Path.GetTempPath(), Path.GetFileName(file ?? Path.GetTempFileName()), SearchOption.TopDirectoryOnly) { }
+        public FilesDataAttribute(string file): this(Path.GetDirectoryName(file ?? Path.GetTempPath()) ?? Path.GetTempPath(), Path.GetFileName(file ?? Path.GetTempFileName()), SearchOption.TopDirectoryOnly) { }
 
 
         /// <summary>

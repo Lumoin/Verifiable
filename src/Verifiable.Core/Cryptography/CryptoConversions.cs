@@ -84,22 +84,22 @@ namespace Verifiable.Core.Cryptography
 
         public static AlgorithmToBase58Delegate DefaultAlgorithmToBase58Converter => (algorithm, purpose, keyMaterial, encoder) =>
         {
-            static string EncodeKey(ReadOnlySpan<byte> keyMaterial, BufferAllocationEncodeDelegate encoder, ReadOnlySpan<byte> multicodecHeader)
+            static string EncodeKey(ReadOnlySpan<byte> keyMaterial, ReadOnlySpan<byte> multicodecHeader, BufferAllocationEncodeDelegate encoder)
             {
-                return SsiSerializer.Encode(keyMaterial, multicodecHeader, MultibaseAlgorithms.Base58Btc, ExactSizeMemoryPool<char>.Shared, encoder);
+                return MultibaseSerializer.Encode(keyMaterial, multicodecHeader, MultibaseAlgorithms.Base58Btc, ExactSizeMemoryPool<char>.Shared, encoder);
             }
 
             return (algorithm, purpose) switch
             {
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, encoder, MulticodecHeaders.P256PublicKey),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, encoder, MulticodecHeaders.P384PublicKey),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, encoder, MulticodecHeaders.P521PublicKey),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, encoder, MulticodecHeaders.Secp256k1PublicKey),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, encoder, MulticodecHeaders.RsaPublicKey),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, encoder, MulticodecHeaders.RsaPublicKey),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Bls12381G1) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, encoder, MulticodecHeaders.Bls12381G1PublicKey),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, encoder, MulticodecHeaders.Ed25519PublicKey),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) => EncodeKey(keyMaterial, encoder, MulticodecHeaders.X25519PublicKey),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, MulticodecHeaders.P256PublicKey, encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, MulticodecHeaders.P384PublicKey, encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, MulticodecHeaders.P521PublicKey, encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, MulticodecHeaders.Secp256k1PublicKey, encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, MulticodecHeaders.RsaPublicKey, encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, MulticodecHeaders.RsaPublicKey, encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Bls12381G1) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, MulticodecHeaders.Bls12381G1PublicKey, encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Public) => EncodeKey(keyMaterial, MulticodecHeaders.Ed25519PublicKey, encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) => EncodeKey(keyMaterial, MulticodecHeaders.X25519PublicKey, encoder),
                 _ => throw new ArgumentException($"Unknown combination of algorithm and purpose: {algorithm}, {purpose}")
             };
         };

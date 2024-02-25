@@ -94,5 +94,37 @@ namespace Verifiable.Assessment
 
             return await ValueTask.FromResult(assessmentResult);
         }
+
+
+        public static async ValueTask<AssessmentResult> DefaultWebDidAssessorAsync(
+            ClaimIssueResult claimsToAssess,
+            string assessorId,
+            string? traceId,
+            string? spanId,
+            IReadOnlyDictionary<string, string>? baggage)
+        {
+            var allClaimsValid = claimsToAssess.Claims.All(claim => claim.Outcome == ClaimOutcome.Success);
+
+            var assessmentId = Guid.NewGuid().ToString();
+            var assessorVersion = "1.0.0";  // Assume a version for the assessor
+            var creationTimestampInUtc = DateTime.UtcNow;
+            var assessmentContext = new AssessmentContext();  // Assume an empty context
+
+            var assessmentResult = new AssessmentResult(
+                IsSuccess: allClaimsValid,
+                assessorId,
+                AssessmentId: assessmentId,
+                CorrelationId: claimsToAssess.CorrelationId,
+                AssessorVersion: assessorVersion,
+                CreationTimestampInUtc: creationTimestampInUtc,
+                AssessmentContext: assessmentContext,
+                ClaimsResult: claimsToAssess,
+                TraceId: traceId,
+                SpanId: spanId,
+                Baggage: baggage
+            );
+
+            return await ValueTask.FromResult(assessmentResult);
+        }
     }
 }

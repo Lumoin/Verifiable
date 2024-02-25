@@ -22,6 +22,21 @@ dotnet_separate_import_directive_groups = false
 dotnet_sort_system_directives_first = false
 file_header_template = unset
 
+# Warning and severity.
+dotnet_diagnostic.CA1416.severity = error
+
+# Code analyzers.
+dotnet_diagnostic.CA1307.severity = error
+dotnet_diagnostic.CA1309.severity = error
+dotnet_diagnostic.CA1311.severity = error
+dotnet_diagnostic.CA1815.severity = error
+dotnet_diagnostic.CA1825.severity = error
+
+# nullability checks.
+dotnet_diagnostic.IDE0029.severity = error
+dotnet_diagnostic.IDE0031.severity = error
+dotnet_diagnostic.IDE0041.severity = error
+
 # this. and Me. preferences
 dotnet_style_qualification_for_event = false
 dotnet_style_qualification_for_field = false
@@ -158,7 +173,10 @@ csharp_indent_switch_labels = true
 
 # Space preferences
 csharp_space_after_cast = false
+csharp_space_before_attribute_colon = false
+csharp_space_after_attribute_colon = false
 csharp_space_after_colon_in_inheritance_clause = true
+csharp_space_before_type_parameter_constraint_colon = false
 csharp_space_after_comma = true
 csharp_space_after_dot = false
 csharp_space_after_keywords_in_control_flow_statements = false
@@ -225,6 +243,7 @@ dotnet_naming_style.begins_with_i.required_prefix = I
 dotnet_naming_style.begins_with_i.required_suffix = 
 dotnet_naming_style.begins_with_i.word_separator = 
 dotnet_naming_style.begins_with_i.capitalization = pascal_case
+csharp_style_prefer_primary_constructors = true:suggestion
 
 # C++ Files
 [*.{cpp,h,in}]
@@ -276,3 +295,4 @@ dotnet_style_operator_placement_when_wrapping = beginning_of_line
 tab_width = 4
 indent_size = 4
 end_of_line = crlf
+dotnet_style_prefer_collection_expression = true:suggestion
