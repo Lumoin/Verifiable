@@ -4,10 +4,7 @@ using System.Linq;
 using System.Text.Json;
 
 namespace Verifiable.Tests.TestInfrastructure
-{
-    //TODO: In .NET 8 there is .DeepEquals that probably does the same thing.
-    //https://devblogs.microsoft.com/dotnet/system-text-json-in-dotnet-8/
-
+{    
     /// <summary>
     /// Does deep, semantic comparison between two JSON documents.
     /// </summary>

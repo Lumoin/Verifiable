@@ -36,7 +36,7 @@ namespace Verifiable.Assessment
         /// <returns></returns>
         public static IReadOnlyDictionary<string, string> GetOrCreateBaggage()
         {
-            return Activity.Current?.Baggage?.ToDictionary(kv => kv.Key ?? string.Empty, kv => kv.Value ?? string.Empty) ?? new Dictionary<string, string>();
+            return Activity.Current?.Baggage?.ToDictionary(kv => kv.Key ?? string.Empty, kv => kv.Value ?? string.Empty) ?? [];
         }
     }
 }

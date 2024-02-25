@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Verifiable.Tests.TestInfrastructure
 {
@@ -29,12 +30,11 @@ namespace Verifiable.Tests.TestInfrastructure
         /// <param name="reserializedJson">The re-serialized JSON string.</param>
         /// <returns>True if the two JSON strings represent the same JSON structure; otherwise, false.</returns>
         public static bool CompareJsonElements(string originalJson, string reserializedJson)
-        {
-            var comparer = new JsonElementComparer();
-            using var originalDocument = JsonDocument.Parse(originalJson);
-            using var reserializedDocument = JsonDocument.Parse(reserializedJson);
+        {            
+            var originalDocument = JsonNode.Parse(originalJson);
+            var reserializedDocument = JsonNode.Parse(reserializedJson);
 
-            return comparer.Equals(originalDocument.RootElement, reserializedDocument.RootElement);
+            return JsonNode.DeepEquals(originalDocument, reserializedDocument);
         }
 
         /// <summary>

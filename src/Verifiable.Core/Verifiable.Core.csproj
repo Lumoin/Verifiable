@@ -20,9 +20,5 @@
   <ItemGroup>
     <ProjectReference Include="..\Verifiable.Jwt\Verifiable.Jwt.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    
-  </ItemGroup>
   
 </Project>

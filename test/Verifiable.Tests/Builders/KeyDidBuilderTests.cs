@@ -2,15 +2,16 @@
 using System.Threading.Tasks;
 using Verifiable.Assessment;
 using Verifiable.Core.Builders;
-using Verifiable.Core.Cryptography;
+using Verifiable.Core.Cryptography.Context;
 using Verifiable.Core.Did;
+using Verifiable.Core.Did.Methods;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using Xunit;
 
 
 namespace Verifiable.Tests.Builders
-{           
+{
     /// <summary>
     /// Tests for <see cref="KeyDidBuilder"/>.
     /// </summary>
@@ -47,7 +48,7 @@ namespace Verifiable.Tests.Builders
             Assert.IsType(testData.ExpectedKeyFormat, actualKeyFormat);
 
             //The builder produced DID identifier type should match KeyDidId, as the type of the document is key DID.                                               
-            Assert.IsType<KeyDidId>(keyDidDocument.Id);
+            Assert.IsType<KeyDidMethod>(keyDidDocument.Id);
 
             //This catches if there is a mismatch in generated tag for the key format
             //AND if the identifier does not match the used crypto algorithm. In
@@ -68,7 +69,7 @@ namespace Verifiable.Tests.Builders
             var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(serializedDidDocument, TestSetup.DefaultSerializationOptions);            
             bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(serializedDidDocument, reserializedDidDocument);
             Assert.True(areJsonElementsEqual, $"JSON string \"{serializedDidDocument}\" did not pass roundtrip test.");                       
-            Assert.Equal(typeof(KeyDidId), deserializedDidDocument?.Id?.GetType());            
+            Assert.Equal(typeof(KeyDidMethod), deserializedDidDocument?.Id?.GetType());            
         }        
     }
 }

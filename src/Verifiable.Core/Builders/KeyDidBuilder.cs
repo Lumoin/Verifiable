@@ -1,5 +1,7 @@
 ﻿using Verifiable.Core.Cryptography;
+using Verifiable.Core.Cryptography.Context;
 using Verifiable.Core.Did;
+using Verifiable.Core.Did.Methods;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Builders
@@ -27,10 +29,10 @@ namespace Verifiable.Core.Builders
                 PublicKeyMemory publicKey = buildInvariant.PublicKey;
                 CryptoSuite cryptoSuiteChosen = buildInvariant.Suite;
 
-                var keyFormatSelected = SsiKeyFormatSelector.DefaultKeyFormatSelector(typeof(KeyDidId), cryptoSuiteChosen);
+                var keyFormatSelected = SsiKeyFormatSelector.DefaultKeyFormatSelector(typeof(KeyDidMethod), cryptoSuiteChosen);
                 var keyFormat = SsiKeyFormatSelector.DefaultKeyFormatCreator(keyFormatSelected, publicKey);
-                didDocument.VerificationMethod = new[]
-                {
+                didDocument.VerificationMethod =
+                [
                     new VerificationMethod
                     {
                         //TODO: Add a method to create 
@@ -39,7 +41,7 @@ namespace Verifiable.Core.Builders
                         Controller = $"did:key:{encodedPublicKey}",
                         KeyFormat = keyFormat
                     }
-                };
+                ];
 
                 return didDocument;
             })
@@ -52,7 +54,7 @@ namespace Verifiable.Core.Builders
                 var didId = $"did:key:{base58EncodedKey}";
                 var didFormalId = $"did:key:{base58EncodedKey}#{base58EncodedKey}";
 
-                didDocument.Id = new KeyDidId(didId);
+                didDocument.Id = new KeyDidMethod(didId);
 
                 didDocument.AssertionMethod = new[] { new AssertionMethod(didFormalId) };
                 didDocument.Authentication = new[] { new AuthenticationMethod(didFormalId) };

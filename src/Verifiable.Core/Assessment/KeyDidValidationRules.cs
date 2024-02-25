@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.Did;
+using Verifiable.Core.Did.Methods;
 
 
 namespace Verifiable.Assessment
@@ -40,7 +41,7 @@ namespace Verifiable.Assessment
                 var idFormat = document.Id.Id.AsSpan();
                 var didNameAndVerb = idFormat[0..8];
                 var keyDidType = idFormat[8..];
-                if(didNameAndVerb.SequenceEqual(KeyDidId.Prefix))
+                if(didNameAndVerb.SequenceEqual(KeyDidMethod.Prefix))
                 {
                     if(
                         keyDidType.StartsWith(Base58BtcEncodedMulticodecHeaders.P256PublicKey)

@@ -9,13 +9,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.gitattributes = .gitattributes
 		.gitignore = .gitignore
 		BannedSymbols.txt = BannedSymbols.txt
-		.github\dependabot.yml = .github\dependabot.yml
 		resources\diagram.svg = resources\diagram.svg
 		Directory.Build.props = Directory.Build.props
 		Directory.Packages.props = Directory.Packages.props
 		global.json = global.json
 		LICENSE = LICENSE
-		.github\workflows\main.yml = .github\workflows\main.yml
 		README.md = README.md
 	EndProjectSection
 EndProject
@@ -47,6 +45,18 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Verifiable.DecentralizedWebNode", "src\Verifiable.DecentralizedWebNode\Verifiable.DecentralizedWebNode.csproj", "{4256AF88-B47D-44E3-AEC7-D9F227749468}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Verifiable.Jwt", "src\Verifiable.Jwt\Verifiable.Jwt.csproj", "{FF947DEC-29E7-4700-94A4-0E84B2917BF5}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".github", ".github", "{737B175F-5A06-480C-B93F-42B31EF4EFA7}"
+	ProjectSection(SolutionItems) = preProject
+		.github\dependabot.yml = .github\dependabot.yml
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{1B79A5A8-0754-4F72-AD32-E791F9A8ED23}"
+	ProjectSection(SolutionItems) = preProject
+		.github\workflows\codeql-analysis.yml = .github\workflows\codeql-analysis.yml
+		.github\workflows\diagram.yml = .github\workflows\diagram.yml
+		.github\workflows\main.yml = .github\workflows\main.yml
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -114,6 +124,8 @@ Global
 		{5BDA0E33-003F-4500-8AFD-D51A8643E8CA} = {5E61E0DC-3195-4CE2-B9BD-A06D38FBE2BB}
 		{4256AF88-B47D-44E3-AEC7-D9F227749468} = {5E61E0DC-3195-4CE2-B9BD-A06D38FBE2BB}
 		{FF947DEC-29E7-4700-94A4-0E84B2917BF5} = {5E61E0DC-3195-4CE2-B9BD-A06D38FBE2BB}
+		{737B175F-5A06-480C-B93F-42B31EF4EFA7} = {35CAB8A9-7332-4D46-BBD3-83A37A747F5E}
+		{1B79A5A8-0754-4F72-AD32-E791F9A8ED23} = {737B175F-5A06-480C-B93F-42B31EF4EFA7}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {B3AC63DE-C110-4924-B7DB-FFAC4704246F}

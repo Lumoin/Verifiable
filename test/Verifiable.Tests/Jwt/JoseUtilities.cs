@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System;
+using System.Security.Cryptography;
 using System.Text;
 
 
@@ -26,7 +27,7 @@ namespace Verifiable.Jwt
         public static byte[] ComputeECThumbprint(string crv, string kty, string x, string y)
         {
             var canonicalJwk = string.Format(ECTThumbprintTemplate, crv, kty, x, y);
-            return GenerateSha256Hash(canonicalJwk);
+            return GenerateSha256Hash(Encoding.UTF8.GetBytes(canonicalJwk));
         }
 
 
@@ -34,35 +35,34 @@ namespace Verifiable.Jwt
         {
             //TODO: The parameters can be checked here too.
             var canonicalJwk = string.Format(EcdhTemplate, crv, kty, x);
-            return GenerateSha256Hash(canonicalJwk);
+            return GenerateSha256Hash(Encoding.UTF8.GetBytes(canonicalJwk));
         }
 
 
         public static byte[] ComputeEdDsaThumbprint(string crv, string kty, string x)
         {
             var canonicalJwk = string.Format(EdDsaTemplate, crv, kty, x);
-            return GenerateSha256Hash(canonicalJwk);
+            return GenerateSha256Hash(Encoding.UTF8.GetBytes(canonicalJwk));
         }
 
 
         public static byte[] ComputeRsaThumbprint(string e, string kty, string n)
         {
-            var canonicalJwk = string.Format(RsaThumbprintTemplate, e, kty, n);            
-            return GenerateSha256Hash(canonicalJwk);
+            var canonicalJwk = string.Format(RsaThumbprintTemplate, e, kty, n);
+            return GenerateSha256Hash(Encoding.UTF8.GetBytes(canonicalJwk));
         }
 
 
         public static byte[] ComputeOctThumbprint(string k, string kty)
         {
             var canonicalJwk = string.Format(OctThumbprintTemplate, k, kty);
-            return GenerateSha256Hash(canonicalJwk);
+            return GenerateSha256Hash(Encoding.UTF8.GetBytes(canonicalJwk));
         }
         
                 
-        private static byte[] GenerateSha256Hash(string input)
-        {
-            //TODO: The output will always be 32 bytes. So, Memory<byte> could be used here.
-            return SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        private static byte[] GenerateSha256Hash(ReadOnlySpan<byte> input)
+        {            
+            return SHA256.HashData(input);
         }
     }
 }

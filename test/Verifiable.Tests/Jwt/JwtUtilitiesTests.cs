@@ -1,7 +1,7 @@
 using Verifiable.Jwt;
 using Xunit;
 
-namespace Verifiable.Core
+namespace Verifiable.Tests.Jwt
 {
     public class JwtUtilitiesTests
     {

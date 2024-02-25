@@ -1,7 +1,9 @@
 using System;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Did;
+using Verifiable.Core.Did.Methods;
 using Verifiable.Tests.TestInfrastructure;
 using Xunit;
 
@@ -37,8 +39,8 @@ namespace Verifiable.Core
                     {
                         return did switch
                         {
-                            "did:ebsi:" => new EbsiDidId(did),
-                            _ => new GenericDidId(did)
+                            "did:ebsi:" => new EbsiDidMethod(did),
+                            _ => new GenericDidMethod(did)
                         };
                     })
                 }
@@ -67,11 +69,10 @@ namespace Verifiable.Core
             //but that can nevertheless be part of core Nuget library.
             Assert.Single(deseserializedDidDocument?.AdditionalData!);
             Assert.IsType<JsonElement>(deseserializedDidDocument!.AdditionalData!["publicKey"]);
-
-            var comparer = new JsonElementComparer();
-            using var originalDIDDocument = JsonDocument.Parse(didDocumentFileContents);
-            using var parsedReserializedDIDDocument = JsonDocument.Parse(reserializedDidDocument);
-            Assert.True(comparer.Equals(originalDIDDocument.RootElement, parsedReserializedDIDDocument.RootElement), $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
+            
+            var originalDIDDocument = JsonNode.Parse(didDocumentFileContents);
+            var parsedReserializedDIDDocument = JsonNode.Parse(reserializedDidDocument);            
+            Assert.True(JsonNode.DeepEquals(originalDIDDocument, parsedReserializedDIDDocument), $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
         }
     }
 }

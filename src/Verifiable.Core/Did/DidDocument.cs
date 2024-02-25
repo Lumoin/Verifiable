@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Linq;
+using Verifiable.Core.Did.Methods;
 
 namespace Verifiable.Core.Did
 {    
@@ -32,7 +33,7 @@ namespace Verifiable.Core.Did
         /// <summary>
         /// https://w3c.github.io/did-core/#did-subject
         /// </summary>
-        public GenericDidId? Id { get; set; }
+        public GenericDidMethod? Id { get; set; }
 
         //TODO: Make this a real class.
         /// <summary>

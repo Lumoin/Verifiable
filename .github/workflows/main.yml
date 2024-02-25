@@ -68,11 +68,12 @@ jobs:
           dashboard.stryker-mutator.io:443
           dotnetcli.azureedge.net:443
           github.com:443
+          api.clearlydefined.io:443
     
     # Windows builds may have insufficient resource limits, so they're increased.
     - name: Configure Windows Pagefile
       if: ${{ matrix.os == 'windows-latest' }}
-      uses: al-cheb/configure-pagefile-action@86589fd789a4de3e62ba628dda2cb10027b66d67
+      uses: al-cheb/configure-pagefile-action@a3b6ebd6b634da88790d9c58d4b37a7f4a7b8708
       with:
           minimum-size: 8GB
           maximum-size: 32GB
@@ -132,10 +133,14 @@ jobs:
     # - name: Run dotnet format
     #  run: dotnet format --check
 
-    # There may a difference in libraries between platforms.
-    - name: Run BOM analysis
-      run: dotnet CycloneDX Verifiable.sln --json --out ${{ github.workspace }}/bom/${{ matrix.os }}    
+    # - name: The sbom-tool does not generate the output directory and fails if it not present.
+    - name: Install sbom-tool
+      run: mkdir -p "${{ github.workspace }}/${{ matrix.os }}/sbom/"
 
+    # There may a difference in libraries between platforms, so the tool is being run on all platforms.
+    - name: Run BOM analysis
+      run: dotnet tool run sbom-tool generate -DeleteManifestDirIfPresent true -BuildDropPath "${{ github.workspace }}/${{ matrix.os }}/sbom/" -FetchLicenseInformation true -EnablePackageMetadataParsing true -BuildComponentPath . -PackageName "Verifiable" -PackageSupplier "Lumoin" -NamespaceUriBase "https://lumoin.com/verifiable" -PackageVersion 1.0.0 -Verbosity Verbose  
+      
     # The version numbers are determined and set here so it can be set appropriately to code and NuGet packages.
     # See explanation at https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
     - name: Set NuGet packages and suffix version
@@ -250,7 +255,7 @@ jobs:
 
     - name: Publish coverage summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: marocchino/sticky-pull-request-comment@efaaab3fd41a9c3de579aba759d2552635e590fd
+      uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
       with:
         header: Report
         path: '${{ github.workspace }}/reports/coverage/Summary.md'
@@ -258,14 +263,14 @@ jobs:
 
     - name: Create test summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: test-summary/action@fee35d7df20790255fe6aa92cf0f6d28092ecf2f
+      uses: test-summary/action@032c8a9cec6aaa3c20228112cae6ca10a3b29336
       with:
         paths: '${{ github.workspace }}/reports/coverage/TestResults.xml'
         # output: '${{ github.workspace }}/${{ env.file_name }}'
 
     # - name: Comment PR with the generated test Markdown
     #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: marocchino/sticky-pull-request-comment@efaaab3fd41a9c3de579aba759d2552635e590fd
+    #  uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
     #  with:
     #    path: ${{ env.file_name }}
 
@@ -299,7 +304,7 @@ jobs:
 
     - name: Upload Verifiable Nuget packages
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v3.1.3
+      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3
       with:
         name: nupkg
         path: |
@@ -335,6 +340,7 @@ jobs:
               dotnetcli.azureedge.net:443
               github.com:443
               nuget.pkg.github.com:443
+              api.clearlydefined.io:443
 
         - name: Download NuGet artifacts
           uses: actions/download-artifact@eaceaf801fd36c7dee90939fad912460b18a1ffe

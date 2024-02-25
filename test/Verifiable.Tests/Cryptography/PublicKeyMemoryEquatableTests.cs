@@ -1,14 +1,15 @@
 using System.Buffers;
+using Verifiable.Core;
 using Verifiable.Core.Cryptography;
 using Xunit;
 
-namespace Verifiable.Core
+namespace Verifiable.Tests.Cryptography
 {
     /// <summary>
     /// Tests for <see cref="PublicKeyMemory" /> <see cref="System.IEquatable{T}" /> implementation.
     /// </summary>
     public class PublicKeyMemoryEquatableTests
-    {        
+    {
         /// <summary>
         /// First instance of a buffer for memory in multiple comparisons.
         /// </summary>
@@ -22,34 +23,34 @@ namespace Verifiable.Core
         /// <summary>
         /// A first instance of public key memory used in multiple tests.
         /// </summary>        
-        private static PublicKeyMemory PublicKeyMemory1 => new PublicKeyMemory(Buffer1, Tag.Empty);
+        private static PublicKeyMemory PublicKeyMemory1 => new(Buffer1, Tag.Empty);
 
         /// <summary>
         /// A second instance of public key memory used in multiple tests.
         /// </summary>        
-        private static PublicKeyMemory PublicKeyMemory2 => new PublicKeyMemory(Buffer2, Tag.Empty);
+        private static PublicKeyMemory PublicKeyMemory2 => new(Buffer2, Tag.Empty);
 
         /// <summary>
         /// A third instance of public key memory used in multiple tests.
         /// </summary>        
-        private static PublicKeyMemory PublicKeyMemory3 => new PublicKeyMemory(Buffer1, Tag.Empty);
+        private static PublicKeyMemory PublicKeyMemory3 => new(Buffer1, Tag.Empty);
 
 
         [Fact]
         public void InstancesFromDifferentSizedBuffersAreNotEqual()
-        {            
+        {
             Assert.False(PublicKeyMemory1.Equals(PublicKeyMemory2));
             Assert.False(PublicKeyMemory1 == PublicKeyMemory2);
             Assert.True(PublicKeyMemory1 != PublicKeyMemory2);
-        }        
+        }
 
 
         [Fact]
         public void InstancesFromSameMemoryAreEqual()
-        {            
+        {
             var publicKeyMemory1 = new PublicKeyMemory(Buffer1, Tag.Empty);
             var publicKeyMemory2 = new PublicKeyMemory(Buffer1, Tag.Empty);
-            
+
             Assert.True(publicKeyMemory1.Equals(publicKeyMemory2));
             Assert.True(publicKeyMemory1 == publicKeyMemory2);
             Assert.False(publicKeyMemory1 != publicKeyMemory2);
@@ -77,14 +78,14 @@ namespace Verifiable.Core
 
         [Fact]
         public void ComparisonWithTypeAndObjectSucceeds()
-        {            
+        {
             Assert.True((object)PublicKeyMemory1 == PublicKeyMemory3);
             Assert.True(PublicKeyMemory1 == (object)PublicKeyMemory3);
             Assert.False((object)PublicKeyMemory1 != PublicKeyMemory3);
             Assert.False(PublicKeyMemory1 != (object)PublicKeyMemory3);
         }
 
-        
+
         [Fact]
         public void EqualsWithTypeAndObjectSucceeds()
         {
