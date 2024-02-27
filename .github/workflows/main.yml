@@ -343,7 +343,7 @@ jobs:
               api.clearlydefined.io:443
 
         - name: Download NuGet artifacts
-          uses: actions/download-artifact@eaceaf801fd36c7dee90939fad912460b18a1ffe
+          uses: actions/download-artifact@87c55149d96e628cc2ef7e6fc2aab372015aec85
           with:
             name: nupkg
 
@@ -373,7 +373,7 @@ jobs:
             nuget.pkg.github.com:443
 
       - name: Download NuGet artifacts
-        uses: actions/download-artifact@eaceaf801fd36c7dee90939fad912460b18a1ffe
+        uses: actions/download-artifact@87c55149d96e628cc2ef7e6fc2aab372015aec85
         with:
           name: nupkg
 
