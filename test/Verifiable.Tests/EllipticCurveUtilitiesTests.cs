@@ -89,7 +89,7 @@ namespace Verifiable.Core
         {
             RunOnlyOnPlatformFactAttribute.SkipTestIfNotOnWindowsOrLinux();
 
-            var curveType = td.CurveIdentifier.Equals(EllipticCurveTheoryData.EllipticSecP256k1, StringComparison.InvariantCultureIgnoreCase) ? EllipticCurveTypes.Secp256k1 : EllipticCurveTypes.NistCurves;
+            var curveType = td.CurveIdentifier.Equals(EllipticCurveTheoryData.EllipticSecP256k1, StringComparison.OrdinalIgnoreCase) ? EllipticCurveTypes.Secp256k1 : EllipticCurveTypes.NistCurves;
 
             byte[] evenCompressedPoint = EllipticCurveUtilities.Compress(td.PublicKeyMaterialX, td.PublicKeyMaterialY);
             byte[] evenUncompressedY = EllipticCurveUtilities.Decompress(evenCompressedPoint, curveType);
@@ -112,7 +112,7 @@ namespace Verifiable.Core
                 _ => throw new NotSupportedException()
             };
 
-            var curveType = td.CurveIdentifier.Equals(EllipticCurveTheoryData.EllipticSecP256k1, StringComparison.InvariantCultureIgnoreCase) ? EllipticCurveTypes.Secp256k1 : EllipticCurveTypes.NistCurves;
+            var curveType = td.CurveIdentifier.Equals(EllipticCurveTheoryData.EllipticSecP256k1, StringComparison.OrdinalIgnoreCase) ? EllipticCurveTypes.Secp256k1 : EllipticCurveTypes.NistCurves;
             CheckPointOnCurveForEvenAndOdd(td.PublicKeyMaterialX, td.PublicKeyMaterialY, curveType, primeBytes, isEven: td.IsEven);            
         }
 

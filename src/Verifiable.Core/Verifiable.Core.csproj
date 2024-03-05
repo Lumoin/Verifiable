@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <SupportedPlatform Include="browser" />	
+    <SupportedPlatform Include="browser" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -14,7 +14,8 @@
     <!-- <PackageReference Include="Microsoft.CodeAnalysis" Version="3.10.0" /> -->
     <PackageReference Include="System.Collections.Immutable" />
     <PackageReference Include="System.Text.Json" NoWarn="NU5104" />
-    <PackageReference Include="SimpleBase" />    
+    <PackageReference Include="SimpleBase" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" />
   </ItemGroup>
 
   <ItemGroup>

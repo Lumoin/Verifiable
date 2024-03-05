@@ -35,16 +35,18 @@ namespace Verifiable.Core
             ArgumentException.ThrowIfNullOrEmpty(nameof(name));
             
             string convertedName = name;
+#pragma warning disable CA1309 // Use ordinal string comparison
             if(name.Equals("@context", StringComparison.InvariantCultureIgnoreCase))
             {
                 convertedName = "Context";
             }
 
+
             if(name.Equals("Context", StringComparison.InvariantCultureIgnoreCase))
             {
                 return "@context";
             }
-
+#pragma warning restore CA1309 // Use ordinal string comparison
             int policyCount = Policies.Count;
             for(int i = 0; i < policyCount; ++i)
             {

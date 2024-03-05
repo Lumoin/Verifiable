@@ -107,11 +107,11 @@ namespace Verifiable.Assessment
         /// <returns>The <see cref="ClaimIssueResult"/> with the generated claims.</returns>
         public async ValueTask<ClaimIssueResult> GenerateClaimsAsync(TInput input, string correlationId)
         {
-            List<Claim> claims = new();
+            List<Claim> claims = [];
             foreach(var ruleWrapper in ValidationRules)
             {
                 try
-                {
+                {                    
                     var ruleClaims = await ruleWrapper.Delegate(input).ConfigureAwait(false);
                     claims.AddRange(ruleClaims);
                 }

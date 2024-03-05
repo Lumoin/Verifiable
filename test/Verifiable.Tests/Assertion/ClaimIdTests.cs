@@ -9,6 +9,7 @@ namespace Verifiable.Tests.Assertion
 {
     public class ClaimIdTests
     {
+        //TODO: 
         /// <summary>
         /// This collects the library defined, or pre-defined, static instances of <see cref="ClaimId"/>.
         /// </summary>
@@ -90,7 +91,10 @@ namespace Verifiable.Tests.Assertion
                 { nameof(ClaimId.KeyDidIdPrefixMatch), (505, "KeyDidIdPrefixMatch") },
                 { nameof(ClaimId.KeyDidIdPrefixMismatch), (506, "KeyDidIdPrefixMismatch") },
                 { nameof(ClaimId.KeyDidIdPrefixMissing), (507, "KeyDidIdPrefixMissing") },
-                { nameof(ClaimId.KeyDidFragmentIdentifierRepetition), (508, "KeyDidFragmentIdentifierRepetition") }
+                { nameof(ClaimId.KeyDidFragmentIdentifierRepetition), (508, "KeyDidFragmentIdentifierRepetition") },
+                { nameof(ClaimId.WebDidIdEncoding), (600, "WebDidIdEncoding") },
+                { nameof(ClaimId.WebDidIdFormat), (601, "WebDidIdFormat") },
+                { nameof(ClaimId.WebDidKeyFormat), (602, "WebDidKeyFormat") }
             };
 
             var reflectedIds = AllClaimIdProperties.ToDictionary(
@@ -140,7 +144,7 @@ namespace Verifiable.Tests.Assertion
             var exception = Assert.Throws<ArgumentOutOfRangeException>(() => ClaimId.Create(code, "Description"));
             Assert.Equal(nameof(code), exception.ParamName);
             Assert.Equal(code, exception.ActualValue);
-            Assert.Contains("Value must be greater than zero.", exception.Message);
+            Assert.Contains("Value must be greater than zero.", exception.Message, StringComparison.InvariantCulture);
         }
 
 
@@ -150,7 +154,7 @@ namespace Verifiable.Tests.Assertion
             var exception = Assert.Throws<ArgumentException>(() => ClaimId.Create(1, string.Empty));
 
             Assert.Equal("description", exception.ParamName);
-            Assert.Contains("The value cannot be an empty string. (Parameter 'description')", exception.Message);
+            Assert.Contains("The value cannot be an empty string. (Parameter 'description')", exception.Message, StringComparison.InvariantCulture);
         }
 
 

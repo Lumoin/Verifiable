@@ -4,11 +4,18 @@ namespace Verifiable.Core.Did.Methods
 {
     public record WebDidMethod: GenericDidMethod
     {
-        public WebDidMethod(string didString) : base(didString)
+        /// <summary>
+        /// The prefix of <c>did:web</c> method, including suffix <c>':'</c>.
+        /// </summary>
+        /// <remarks>This is <see cref="WellKnownDidMethodPrefixes.WebDidMethodPrefix"/> with colon.</remarks>
+        public static new string Prefix { get; } = $"{WellKnownDidMethodPrefixes.WebDidMethodPrefix}:";
+
+
+        public WebDidMethod(string didString): base(didString)
         {
-            if(!didString.StartsWith("did:web:"))
+            if(!didString.StartsWith(WellKnownDidMethodPrefixes.WebDidMethodPrefix))
             {
-                throw new ArgumentException("The DID string must start with 'did:web:'", nameof(didString));
+                throw new ArgumentException($"The DID string must start with '{Prefix}'.", nameof(didString));
             }
         }
 

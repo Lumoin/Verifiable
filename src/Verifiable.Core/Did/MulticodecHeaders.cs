@@ -18,96 +18,96 @@ namespace Verifiable.Core
         /// <summary>
         /// This is a special value that is used to indicate that no multicodec header is present.
         /// </summary>
-        public static ReadOnlySpan<byte> None => Array.Empty<byte>();
+        public static ReadOnlySpan<byte> None => [];
 
         /// <summary>
         /// Identity (0x00). Raw binary. See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L2">identity (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: permanent.</remarks>
-        public static ReadOnlySpan<byte> Identity => new byte[] { 0x00 };
+        public static ReadOnlySpan<byte> Identity => [0x00];
 
         /// <summary>
         /// CIDv1 (0x01). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L3">CIDv1 (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: permanent.</remarks>
-        public static ReadOnlySpan<byte> Cidv1 => new byte[] { 0x01 };
+        public static ReadOnlySpan<byte> Cidv1 => [0x01];
 
         /// <summary>
         /// Secp256k1-pub (0xe7). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L89">Secp256k1 public key (compressed) (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> Secp256k1PublicKey => new byte[] { 0xe7, 0x01 };
+        public static ReadOnlySpan<byte> Secp256k1PublicKey => [0xe7, 0x01];
 
         /// <summary>
         /// Bls12_381-g1-pub (0xea). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L91">BLS12-381 public key in the G1 field (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> Bls12381G1PublicKey => new byte[] { 0xea, 0x01 };
+        public static ReadOnlySpan<byte> Bls12381G1PublicKey => [0xea, 0x01];
 
         /// <summary>
         /// Bls12_381-g2-pub (0xec). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L92">BLS12-381 public key in the G2 field (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> Bls12381G2PublicKey => new byte[] { 0xeb, 0x01 };
+        public static ReadOnlySpan<byte> Bls12381G2PublicKey => [0xeb, 0x01];
 
         /// <summary>
         /// X25519-pub (0xec). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L93">Curve25519 public key (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> X25519PublicKey => new byte[] { 0xec, 0x01 };
+        public static ReadOnlySpan<byte> X25519PublicKey => [0xec, 0x01];
 
         /// <summary>
         /// Ed25519-pub (0xed). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L94">Ed25519 public key (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> Ed25519PublicKey => new byte[] { 0xed, 0x01 };
+        public static ReadOnlySpan<byte> Ed25519PublicKey => [0xed, 0x01];
 
         /// <summary>
         /// Bls12_381-g1g2-pub (0xee). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L95">BLS12-381 concatenated public keys in both the G1 and G2 fields (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> Bls12381G1G2PublicKey => new byte[] { 0xee, 0x01 };
+        public static ReadOnlySpan<byte> Bls12381G1G2PublicKey => [0xee, 0x01];
 
         /// <summary>
         /// P256-pub (0x1200). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L145">P-256 public Key (compressed) (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> P256PublicKey => new byte[] { 0x80, 0x24 };
+        public static ReadOnlySpan<byte> P256PublicKey => [0x80, 0x24];
 
         /// <summary>
         /// P2384-pub (0x1201). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L146">P-384 public Key (compressed) (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> P384PublicKey => new byte[] { 0x81, 0x24 };
+        public static ReadOnlySpan<byte> P384PublicKey => [0x81, 0x24];
 
         /// <summary>
         /// P521-pub (0x1202). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L147">P-512 public Key (compressed) (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> P521PublicKey => new byte[] { 0x82, 0x24 };
+        public static ReadOnlySpan<byte> P521PublicKey => [0x82, 0x24];
 
         /// <summary>
         /// Rsa-pub (0x1205). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L150">RSA public key. DER-encoded ASN.1 type RSAPublicKey according to IETF RFC 8017 (PKCS #1) (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> RsaPublicKey => new byte[] { 0x85, 0x24 };
+        public static ReadOnlySpan<byte> RsaPublicKey => [0x85, 0x24];
 
         /// <summary>
         /// Ed25519-priv (0x1300). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L151">Ed25519 private key (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> Ed25519PrivateKey => new byte[] { 0x80, 0x26 };
+        public static ReadOnlySpan<byte> Ed25519PrivateKey => [0x80, 0x26];
 
         /// <summary>
         /// Secp256k1-priv (0x1301). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L152">Secp256k1 private key (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> Secp256k1PrivateKey => new byte[] { 0x81, 0x26 };
+        public static ReadOnlySpan<byte> Secp256k1PrivateKey => [0x81, 0x26];
 
         /// <summary>
         /// X25519-priv (0x1302). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L153">Curve25519 private key (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
-        public static ReadOnlySpan<byte> X25519PrivateKey => new byte[] { 0x82, 0x26 };
+        public static ReadOnlySpan<byte> X25519PrivateKey => [0x82, 0x26];
     }
 }

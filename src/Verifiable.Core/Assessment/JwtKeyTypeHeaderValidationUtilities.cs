@@ -56,8 +56,7 @@ namespace Verifiable.Assessment
         /// <returns>A ClaimCheckPoint object indicating the result of the validation check.</returns>
         public static List<Claim> ValidateHeader(Dictionary<string, object> jwtHeaders)
         {
-            List<Claim> claims = new();
-
+            List<Claim> claims = [];
             if(!jwtHeaders.TryGetValue(JwkProperties.Kty, out object? ktyValue) || ktyValue is not string kty || string.IsNullOrEmpty(kty))
             {
                 claims.Add(new Claim(ClaimId.KtyMissingOrEmpty, ClaimOutcome.Failure));
@@ -75,8 +74,8 @@ namespace Verifiable.Assessment
                     claims.Add(new Claim(ClaimId.RsaKeyType, ClaimOutcome.Success));
                     break;
                 case string k when WellKnownKeyTypeValues.IsOct(k):
-                    // Additional validation logic for 'oct' can go here
-                    claims.Add(new Claim(ClaimId.OctKeyType, ClaimOutcome.Success)); // Placeholder
+                    //TODO:Additional validation logic for 'oct' can go here...
+                    claims.Add(new Claim(ClaimId.OctKeyType, ClaimOutcome.Success)); //TODO: Placeholder...
                     break;
                 case string k when WellKnownKeyTypeValues.IsOkp(k):
                     List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> algCrvPairsForOkp = new()
@@ -177,8 +176,7 @@ namespace Verifiable.Assessment
 
         public static List<Claim> ValidateRsa(Dictionary<string, object> jwtHeaders)
         {
-            List<Claim> claims = new();
-
+            List<Claim> claims = [];
             if(!jwtHeaders.TryGetValue("e", out object? eValue) || eValue is not string eStr || string.IsNullOrEmpty(eStr))
             {
                 claims.Add(new Claim(ClaimId.RsaMissingExponent, ClaimOutcome.Failure));
@@ -191,6 +189,7 @@ namespace Verifiable.Assessment
                 return claims;
             }
 
+            //TODO: Constants for RSA key lengths...
             // Expected lengths for DER-encoded, Base64Url-encoded RSA keys
             const int Rsa2048DerEncodedBase64UrlEncodedLength = 360;
             const int Rsa4096DerEncodedBase64UrlEncodedLength = 702;
@@ -208,8 +207,7 @@ namespace Verifiable.Assessment
 
         public static List<Claim> ValidateOkp(Dictionary<string, object> jwtHeaders, List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> algCrvPairs, bool isOkpAlgRequired = false)
         {
-            List<Claim> claims = new();
-
+            List<Claim> claims = [];
             if(!jwtHeaders.TryGetValue(JwkProperties.Crv, out object? crvValue) || crvValue is not string crvStr || string.IsNullOrEmpty(crvStr))
             {
                 claims.Add(new Claim(ClaimId.OkpMissingCurve, ClaimOutcome.Failure));

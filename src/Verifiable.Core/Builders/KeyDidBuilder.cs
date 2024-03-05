@@ -6,13 +6,15 @@ using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Builders
 {
+#pragma warning disable CA1815 // Override equals and operator equals on value types
     public struct BuildState
+#pragma warning restore CA1815 // Override equals and operator equals on value types
     {
-        public string EncodedKey { get; set; }
+        public string EncodedKey { get; init; }
 
-        public PublicKeyMemory PublicKey { get; set; }
+        public PublicKeyMemory PublicKey { get; init; }
 
-        public CryptoSuite Suite { get; set; }
+        public CryptoSuite Suite { get; init; }
     }
 
 
@@ -56,11 +58,11 @@ namespace Verifiable.Core.Builders
 
                 didDocument.Id = new KeyDidMethod(didId);
 
-                didDocument.AssertionMethod = new[] { new AssertionMethod(didFormalId) };
-                didDocument.Authentication = new[] { new AuthenticationMethod(didFormalId) };
-                didDocument.CapabilityDelegation = new[] { new CapabilityDelegationMethod(didFormalId) };
-                didDocument.CapabilityInvocation = new[] { new CapabilityInvocationMethod(didFormalId) };
-                didDocument.KeyAgreement = new[] { new KeyAgreementMethod(didFormalId) };
+                didDocument.AssertionMethod = [new AssertionMethod(didFormalId)];
+                didDocument.Authentication = [new AuthenticationMethod(didFormalId)];
+                didDocument.CapabilityDelegation = [new CapabilityDelegationMethod(didFormalId)];
+                didDocument.CapabilityInvocation = [new CapabilityInvocationMethod(didFormalId)];
+                didDocument.KeyAgreement = [new KeyAgreementMethod(didFormalId)];
 
                 return didDocument;
             });

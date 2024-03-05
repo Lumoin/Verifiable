@@ -5,16 +5,17 @@ namespace Verifiable.Core.Did.Methods
     public record KeyDidMethod: GenericDidMethod
     {
         /// <summary>
-        /// The prefix of this particular DID method.
+        /// The prefix of <c>did:key</c> method, including suffix <c>':'</c>.
         /// </summary>
-        public static new string Prefix => WellKnownDidMethodPrefixes.KeyDidPrefix;
+        /// <remarks>This is <see cref="WellKnownDidMethodPrefixes.KeyDidMethodPrefix"/> with colon.</remarks>
+        public static new string Prefix { get; } = $"{WellKnownDidMethodPrefixes.KeyDidMethodPrefix}:";
 
 
-        public KeyDidMethod(string didString) : base(didString)
-        {
+        public KeyDidMethod(string didString): base(didString)
+        {            
             if(!didString.StartsWith(Prefix))
             {
-                throw new ArgumentException("The DID string must start with 'did:key:'", nameof(didString));
+                throw new ArgumentException($"The DID string must start with '{Prefix}'.", nameof(didString));
             }
         }
 

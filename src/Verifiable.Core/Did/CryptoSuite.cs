@@ -29,16 +29,24 @@ namespace Verifiable.Core.Did
     /// </summary>
     public record CryptoSuite
     {
-        public static CryptoSuite DefaultInstance => new CryptoSuite();
+        /// <summary>
+        /// The default crypto suite instance. Usually there is no need to create additional instances.
+        /// </summary>
+        public static CryptoSuite DefaultInstance => new();
 
+        /// <summary>
+        /// The identifier of the crypto suite. This should be defined in a respective DID method specification.
+        /// </summary>
+        /// <remarks></remarks>
         public string CryptoSuiteId { get; set; }
 
         public List<string> AllowedAlgorithms { get; set; }
-        
+
+
         public CryptoSuite()
         {
             CryptoSuiteId = string.Empty;
-            AllowedAlgorithms = new List<string>();
+            AllowedAlgorithms = [];
         }
 
         public CryptoSuite(string suiteIdentifier, List<string> allowedAlgorithms)
@@ -65,6 +73,10 @@ namespace Verifiable.Core.Did
        
     public record JsonWebKey2020: CryptoSuite
     {
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <remarks><see href="https://www.w3.org/community/reports/credentials/CG-FINAL-lds-jws2020-20220721/"/></remarks>
         public static new JsonWebKey2020 DefaultInstance => new();
 
 
@@ -94,8 +106,16 @@ namespace Verifiable.Core.Did
     }
 
 
+    /// <summary>
+    /// Ed25519 cryptosuite.
+    /// </summary>
+    /// <remarks>This is deprecated. See more at <see href="https://www.w3.org/TR/vc-di-eddsa/#ed25519verificationkey2020">Ed25519VerificationKey2020</see>.</remarks>
+    //[Obsolete(DeprecationInfo.Ed25519VerificationKey2020Message, DiagnosticId = DeprecationInfo.Ed25519VerificationKey2020DiagId, UrlFormat = DeprecationInfo.DeprecationUrlBase)]
     public record Ed25519VerificationKey2020: CryptoSuite
     {
+        public static new Ed25519VerificationKey2020 DefaultInstance => new();
+
+
         public Ed25519VerificationKey2020(): base("Ed25519VerificationKey2020", new List<string> { "EdDSA" }) { }
 
 

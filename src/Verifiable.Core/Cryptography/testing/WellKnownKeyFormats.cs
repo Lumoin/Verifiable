@@ -73,16 +73,32 @@ namespace Verifiable.Core
         /// </summary>
         public static Type PublicKeyMultibase { get; } = typeof(PublicKeyMultibase);
     }
-    
+
+
+    /// <summary>
+    /// Selects a key format given a set of parameters. The purpose of this is to formalize key format selection.
+    /// </summary>
+    /// <param name="didMethod">The DID method. If this is known to <c>Verifiable</c> it is inherited from <see cref="GenericDidId"/>.</param>
+    /// <param name="cryptoSuite">The cryptosuite. If this is known to <c>Verifiable</c> it is inherited from <see cref="CryptoSuite"/>.</param>
+    /// <param name="preferredFormat">A format preference. If it's a known type for <c>Verifiable</c>, it is enumerated in <see cref="WellKnownKeyFormats"/>.</param>
+    /// <returns>Returns a preferred format. If it's a known type for <c>Verifiable</c>, it is enumerated in <see cref="WellKnownKeyFormats"/>.</returns>
     public delegate Type KeyFormatSelector(Type didMethod, CryptoSuite cryptoSuite, Type? preferredFormat = null);
-    public delegate KeyFormat KeyFormatCreator(Type keyFormatSelector, PublicKeyMemory keyMaterial);
+
+
+    /// <summary>
+    /// Creates a <see cref="KeyFormat"/> based on the provided <paramref name="format"/> and <paramref name="keyMaterial"/>
+    /// </summary>
+    /// <param name="format">A well known key format. If it's a known type for <c>Verifiable</c>, it is enumerated in <see cref="WellKnownKeyFormats"/>.</param>
+    /// <param name="keyMaterial">The key material from which to create the <see cref="KeyFormat"/>.</param>
+    /// <returns>The created <see cref="KeyFormat"/>.</returns>
+    public delegate KeyFormat KeyFormatCreator(Type format, PublicKeyMemory keyMaterial);
 
 
     public static class SsiKeyFormatSelector
     {
-        public static KeyFormatSelector DefaultKeyFormatSelector = (Type didMethod, CryptoSuite cryptoSuite, Type? preferredFormat) =>
+        public static KeyFormatSelector DefaultKeyFormatSelector { get; set; } = (Type didMethod, CryptoSuite cryptoSuite, Type? preferredFormat) =>
         {
-            //TOOD: If a preferred format is provided and it matches one of the well-known formats, return it. No other reasong at the moment...
+            //TOOD: If a preferred format is provided and it matches one of the well-known formats, return it. No other reason at the moment...
             //Should there be a parameter "application" or something to that effect, as it probably can't be covered with "preferred format".
             return (didMethod, cryptoSuite, preferredFormat) switch
             {
@@ -93,28 +109,31 @@ namespace Verifiable.Core
                 var (method, suite, pfa) when pfa == WellKnownKeyFormats.PublicKeyMultibase => WellKnownKeyFormats.PublicKeyMultibase,
                 var (method, suite, pfa) when suite is JsonWebKey2020 => WellKnownKeyFormats.PublicKeyJwk,
                 var (method, suite, pfa) when suite is Multikey => WellKnownKeyFormats.PublicKeyMultibase,
-                _ => throw new ArgumentException($"Unsupported preferred format: ")
+                var (method, suite, pfa) when suite is Ed25519VerificationKey2020 => WellKnownKeyFormats.PublicKeyMultibase,
+                _ => throw new ArgumentException($"Not matching format for the given parameters.")
             };
         };
 
 
-        public static KeyFormatCreator DefaultKeyFormatCreator = (Type format, PublicKeyMemory keyMaterial) =>
+        /// <summary>
+        /// Returns a delegate that creates a <see cref="KeyFormat"/> based on the provided <paramref name="format"/> and <paramref name="keyMaterial"/>.
+        /// </summary>
+        public static KeyFormatCreator DefaultKeyFormatCreator { get; set; } = (Type format, PublicKeyMemory keyMaterial) =>
         {
             Tag tag = keyMaterial.Tag;
             CryptoAlgorithm cryptoAlgorithm = (CryptoAlgorithm)tag[typeof(CryptoAlgorithm)];
             Purpose purpose = (Purpose)tag[typeof(Purpose)];
 
-            //Select the appropriate encoder based on the format.
+            //Select the appropriate encoder based on the format that was selected based on choice in
+            //SsiKeyFormatSelector.DefaultKeyFormatSelector.
+            //TODO: The Base64Url is hardcoded at the moment, so it does not have a parameter. It should have one.
             BufferAllocationEncodeDelegate? encoder = DefaultEncoderSelector.Select(format);
 
             return format switch
             {
-                var pfa when format == WellKnownKeyFormats.PublicKeyJwk => new PublicKeyJwk
-                {
-                    Header = KeyHeaderConversion.DefaultAlgorithmToJwkConverter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan())
-                },
+                var pfa when format == WellKnownKeyFormats.PublicKeyJwk => new PublicKeyJwk { Header = KeyHeaderConversion.DefaultAlgorithmToJwkConverter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan()) },
                 var pfa when format == WellKnownKeyFormats.PublicKeyMultibase => new PublicKeyMultibase(KeyHeaderConversion.DefaultAlgorithmToBase58Converter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan(), encoder)),                
-                _ => throw new ArgumentException($"Unsupported format: {format}")
+                _ => throw new ArgumentException($"Unsupported format: \"{format}\".")
             };
         };
     }

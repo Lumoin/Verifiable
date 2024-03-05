@@ -40,6 +40,7 @@ namespace Verifiable.Core.Did
             })}
         }.ToImmutableDictionary();
 
+
         private static CryptoSuiteFactoryDelegate DefaultCryptoSuiteFactory { get; } = cryptoSuite =>
         {
             return cryptoSuite switch
@@ -48,7 +49,7 @@ namespace Verifiable.Core.Did
                 "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
                 "Secp256k1VerificationKey2018" => new Secp256k1VerificationKey2018(),
                 "multikey" => new Multikey(),
-                _ => new CryptoSuite(cryptoSuite, new List<string>())
+                _ => new CryptoSuite(cryptoSuite, [])
             };
         };
 

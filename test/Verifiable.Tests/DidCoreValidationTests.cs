@@ -12,7 +12,7 @@ namespace Verifiable.Core
         public static Claim ValidateJsonLdUriAsFirst(Context obj)
         {            
             var firstContext = obj.Contexes?[0] as string;            
-            bool isSuccess = firstContext?.Equals(DidCoreConstants.JsonLdContextFirstUri, StringComparison.InvariantCultureIgnoreCase) == true;
+            bool isSuccess = firstContext?.Equals(DidCoreConstants.JsonLdContextFirstUri, StringComparison.OrdinalIgnoreCase) == true;
 
             return new Claim(ClaimId.DidCoreJsonLdUriAsFirst, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure);
         }

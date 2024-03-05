@@ -19,12 +19,12 @@ namespace Verifiable.Assessment
         /// </summary>        
         public static IList<ClaimDelegate<DidDocument>> AllRules { get; } = new List<ClaimDelegate<DidDocument>>
         {
-            new(ValidateIdEncodingAsync, new List<ClaimId>{ ClaimId.KeyDidIdEncoding }),
-            new(ValidateKeyFormatAsync, new List<ClaimId>{ ClaimId.KeyDidKeyFormat }),
-            new(ValidateIdFormatAsync, new List<ClaimId>{ ClaimId.KeyDidIdFormat }),
-            new(ValidateSingleVerificationMethodAsync, new List<ClaimId>{ ClaimId.KeyDidSingleVerificationMethod }),
-            new(ValidateIdPrefixMatchAsync, new List<ClaimId>{ ClaimId.KeyDidIdPrefixMatch }),
-            new(ValidateFragmentIdentifierRepetitionAsync, new List<ClaimId>{ ClaimId.KeyDidFragmentIdentifierRepetition }),            
+            new(ValidateIdEncodingAsync, [ClaimId.KeyDidIdEncoding]),
+            new(ValidateKeyFormatAsync, [ClaimId.KeyDidKeyFormat]),
+            new(ValidateIdFormatAsync, [ClaimId.KeyDidIdFormat]),
+            new(ValidateSingleVerificationMethodAsync, [ClaimId.KeyDidSingleVerificationMethod]),
+            new(ValidateIdPrefixMatchAsync, [ClaimId.KeyDidIdPrefixMatch]),
+            new(ValidateFragmentIdentifierRepetitionAsync, [ClaimId.KeyDidFragmentIdentifierRepetition]),            
         };
 
 
@@ -145,7 +145,7 @@ namespace Verifiable.Assessment
                     ReadOnlySpan<char> fragmentSpan = vmIdSpan.Slice(hashIndex + 1);
                     
                     //Remove the "did:key:" prefix from docIdSpan...
-                    ReadOnlySpan<char> docIdSpanWithoutPrefix = docIdSpan.Slice("did:key:".Length);
+                    ReadOnlySpan<char> docIdSpanWithoutPrefix = docIdSpan.Slice(KeyDidMethod.Prefix.Length);
                     isSuccess = fragmentSpan.SequenceEqual(docIdSpanWithoutPrefix);
                 }
             }
@@ -168,11 +168,11 @@ namespace Verifiable.Assessment
             if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyJwk keyFormat)
             {
                 var headers = keyFormat.Header;
-                resultClaims = JwtKeyTypeHeaderValidationUtilities.ValidateHeader(headers);
+                resultClaims = JwtKeyTypeHeaderValidationUtilities.ValidateHeader(headers);                
             }
             else if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyMultibase multiKeyFormat)
             {
-                //TODO: This here will be refactored.
+                //TODO: This here will be refactored, since this does not validate the multibase format yet.
                 resultClaims.Add(new Claim(ClaimId.KeyDidKeyFormat, ClaimOutcome.Success, ClaimContext.None));
             }
 

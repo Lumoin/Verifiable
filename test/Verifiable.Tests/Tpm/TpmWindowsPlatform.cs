@@ -38,7 +38,9 @@ namespace Verifiable.Tpm
         }
 
         [StructLayout(LayoutKind.Sequential)]
+#pragma warning disable CA1815 // Override equals and operator equals on value types
         public struct TBS_CONTEXT_PARAMS
+#pragma warning restore CA1815 // Override equals and operator equals on value types
         {
             public TBS_CONTEXT_VERSION Version;
             public TBS_CONTEXT_CREATE_FLAGS Flags;

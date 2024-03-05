@@ -4,17 +4,44 @@ namespace Verifiable.Core.Did.Methods
 {
     public static class WellKnownDidMethodPrefixes
     {
-        /// <summary>
-        /// 
+        /// <summary>        
+        /// The prefix of <see cref="KeyDidMethod"/> method.
         /// </summary>
-        public static string KeyDidPrefix { get; } = "did:key:";
+        public static string KeyDidMethodPrefix { get; } = "did:key";
 
-        /// <summary>
-        /// If <paramref name="didPrefix"/> is <see cref="KeyDidPrefix"/> or not.
+        /// <summary>        
+        /// The prefix of <see cref="WebDidMethod"/> method.
+        /// </summary>
+        public static string WebDidMethodPrefix { get; } = "did:web";
+
+        /// <summary>        
+        /// The prefix of <see cref="EbsiDidMethod"/> method.
+        /// </summary>
+        public static string EbsiDidMethodPrefix { get; } = "did:ebsi";
+
+
+        /// If <paramref name="didPrefix"/> is <see cref="EbsiDidMethodPrefix"/> or not.
         /// </summary>
         /// <param name="didPrefix">The did method prefix.</param>.
-        /// <returns><see langword="true" /> if  <paramref name="didPrefix"/> is <see cref="KeyDidPrefix"/>; otherwise, <see langword="false" /></returns>.
-        public static bool IsKeyDidPrefix(string didPrefix) => Equals(KeyDidPrefix, didPrefix);
+        /// <returns><see langword="true" /> if  <paramref name="didPrefix"/> is <see cref="KeyDidMethodPrefix"/>; otherwise, <see langword="false" /></returns>.
+        public static bool IsEbsiDidPrefix(string didPrefix) => Equals(EbsiDidMethodPrefix, didPrefix);
+
+
+        /// <summary>
+        /// If <paramref name="didPrefix"/> is <see cref="KeyDidMethodPrefix"/> or not.
+        /// </summary>
+        /// <param name="didPrefix">The did method prefix.</param>.
+        /// <returns><see langword="true" /> if  <paramref name="didPrefix"/> is <see cref="KeyDidMethodPrefix"/>; otherwise, <see langword="false" /></returns>.
+        public static bool IsKeyDidPrefix(string didPrefix) => Equals(KeyDidMethodPrefix, didPrefix);
+
+
+        /// If <paramref name="didPrefix"/> is <see cref="WebDidMethodPrefix"/> or not.
+        /// </summary>
+        /// <param name="didPrefix">The did method prefix.</param>.
+        /// <returns><see langword="true" /> if  <paramref name="didPrefix"/> is <see cref="KeyDidMethodPrefix"/>; otherwise, <see langword="false" /></returns>.
+        public static bool IsWebDidPrefix(string didPrefix) => Equals(WebDidMethodPrefix, didPrefix);
+
+        
 
         /// <summary>
         /// Returns the equivalent static instance, or the original instance if none match.
@@ -24,7 +51,9 @@ namespace Verifiable.Core.Did.Methods
         /// <returns>The equivalent static instance of <paramref name="didPrefix"/>, or the original instance if none match.</returns>
         public static string GetCanonicalizedValue(string didPrefix) => didPrefix switch
         {
-            string _ when IsKeyDidPrefix(didPrefix) => KeyDidPrefix,
+            string _ when IsEbsiDidPrefix(didPrefix) => KeyDidMethodPrefix,
+            string _ when IsKeyDidPrefix(didPrefix) => KeyDidMethodPrefix,            
+            string _ when IsWebDidPrefix(didPrefix) => KeyDidMethodPrefix,            
             string _ => didPrefix
         };
 

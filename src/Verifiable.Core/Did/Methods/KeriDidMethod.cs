@@ -9,7 +9,7 @@ namespace Verifiable.Core.Did.Methods
     /// The 3. did:keri Format: 3.1 Method Name</see>.</remarks>
     public record KeriDidMethod: GenericDidMethod
     {
-        public KeriDidMethod(string didString) : base(didString)
+        public KeriDidMethod(string didString): base(didString)
         {
             if(!didString.StartsWith("did:keri:"))
             {

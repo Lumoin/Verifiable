@@ -70,7 +70,9 @@ namespace Verifiable.Core
         /// Tracks cryptographic memory blocks in a separate pool.
         /// </summary>
         /// <remarks>The memory tracked is exactly the size requested.</remarks>
+#pragma warning disable CA1815 // Override equals and operator equals on value types
         public struct SensitiveMemoryOwner: IMemoryOwner<T>
+#pragma warning restore CA1815 // Override equals and operator equals on value types
         {
             /// <summary>
             /// The rented array. This may be larger than the exactBufferSize parameter received.

@@ -4,22 +4,21 @@ using Verifiable.Core.Cryptography;
 
 namespace Verifiable.Core
 {
-
     public delegate TResult[] ArrayDecodeDelegate<T, TResult>(ReadOnlySpan<char> data);
 
     public delegate IMemoryOwner<TResult> DecodeDelegate<T, TResult>(ReadOnlySpan<T> data, MemoryPool<TResult> memoryPool);
     public delegate IMemoryOwner<byte> BufferAllocationDecodeDelegate(ReadOnlySpan<char> data, int codecHeaderLength, MemoryPool<byte> resultMemoryPool);
+    
 
-
-    public delegate string EncodeDelegate<T, TResult>(ReadOnlySpan<T> data, MemoryPool<TResult> memoryPool);
+    //TODO: There should be a version for BaseUrl.Encoding as well.
     public delegate string BufferAllocationEncodeDelegate(ReadOnlySpan<byte> data, ReadOnlySpan<byte> codecHeader, MemoryPool<char> pool);
 
-    public delegate IMemoryOwner<TResult> SsiMatcherDelegate<T, TResult>(ReadOnlySpan<T> inputParam, MemoryPool<byte> resultMemoryPool, DecodeDelegate<char, byte> decoder);
+    public delegate IMemoryOwner<TResult> MultibaseMatcherDelegate<T, TResult>(ReadOnlySpan<T> inputParam, MemoryPool<byte> resultMemoryPool, DecodeDelegate<char, byte> decoder);
 
 
-    public static class SsiSerializer
+    public static class MultibaseSerializer
     {
-        public static SsiMatcherDelegate<char, byte> DefaultMatcher => (inputToDecode, memoryPool, decoder) =>
+        public static MultibaseMatcherDelegate<char, byte> DefaultDecoderMatcher { get; set; } = (inputToDecode, memoryPool, decoder) =>
         {
             //TODO: There should probably be a second parameter, that being the corresponding MulticodecHeaders
             //for the string. This way the decoder function can do further logic, such as check the array length.
@@ -45,7 +44,7 @@ namespace Verifiable.Core
         public static IMemoryOwner<byte> Decode(ReadOnlySpan<char> data, MemoryPool<byte> resultMemoryPool, ArrayDecodeDelegate<char, byte> arrayDecoder)
         {
             //This just forwards the call to buffer delegate call.
-            BufferAllocationDecodeDelegate bufferAllocatorDecoder = (inputData, codecHeaderLength, memoryPool) =>
+            IMemoryOwner<byte> bufferAllocatorDecoder(ReadOnlySpan<char> inputData, int codecHeaderLength, MemoryPool<byte> memoryPool)
             {
                 byte[] decodedArray = arrayDecoder(inputData);
                 var actualBufferLength = decodedArray.Length - codecHeaderLength;
@@ -53,7 +52,7 @@ namespace Verifiable.Core
                 decodedArray.AsSpan(codecHeaderLength, actualBufferLength).CopyTo(output.Memory.Span);
 
                 return output;
-            };
+            }
 
             return Decode(data, resultMemoryPool, bufferAllocatorDecoder);
         }
@@ -79,16 +78,14 @@ namespace Verifiable.Core
             codecHeader.CopyTo(dataWithEncodingHeaders);
             data.CopyTo(dataWithEncodingHeaders[codecHeader.Length..]);
 
-            BufferAllocationEncodeDelegate bufferAllocatorEncoder = (inputData, inputCodecHeader, memoryPool) =>
+            string bufferAllocatorEncoder(ReadOnlySpan<byte> inputData, ReadOnlySpan<byte> inputCodecHeader, MemoryPool<char> memoryPool)
             {
                 string encodedString = arrayEncoder(inputData);
-
                 return encodedString;
-            };
-            
+            }
+
             return Encode(dataWithEncodingHeaders, codecHeader, codecId, pool, bufferAllocatorEncoder);
         }
-
 
 
         public static string Encode(ReadOnlySpan<byte> data, ReadOnlySpan<byte> codecHeader, char codecId, MemoryPool<char> pool, BufferAllocationEncodeDelegate encoder)

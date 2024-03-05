@@ -5,16 +5,17 @@ namespace Verifiable.Core.Did.Methods
     public record EbsiDidMethod: GenericDidMethod
     {
         /// <summary>
-        /// The prefix of this particular DID method.
+        /// The prefix of this particular DID method, including suffix <c>':'</c>.
         /// </summary>
+        /// <remarks>This is <see cref="WellKnownDidMethodPrefixes.Ebsi"/> with colon.</remarks>
         public static new string Prefix => "did:ebsi:";
 
 
         public EbsiDidMethod(string didString) : base(didString)
         {
-            if(!didString.StartsWith("did:ebsi:"))
+            if(!didString.StartsWith(Prefix))
             {
-                throw new ArgumentException("The DID string must start with 'did:ebsi:'", nameof(didString));
+                throw new ArgumentException($"The DID string must start with '{Prefix}'.", nameof(didString));
             }
         }
 

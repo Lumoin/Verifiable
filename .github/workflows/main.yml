@@ -57,7 +57,7 @@ jobs:
     
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895
+      uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142
       with:
         disable-sudo: true
         egress-policy: block
@@ -68,7 +68,14 @@ jobs:
           dashboard.stryker-mutator.io:443
           dotnetcli.azureedge.net:443
           github.com:443
+          nuget.pkg.github.com:443
           api.clearlydefined.io:443
+          cacerts.digicert.com:80
+          ts-crl.ws.symantec.com:80
+          crl3.digicert.com:80
+          crl4.digicert.com:80
+          s.symcb.com:80
+          ocsp.digicert.com:80
     
     # Windows builds may have insufficient resource limits, so they're increased.
     - name: Configure Windows Pagefile
@@ -109,7 +116,7 @@ jobs:
         fetch-depth: 2
 
     - name: Cache Nuget packages '${{ matrix.os }}'
-      uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2
+      uses: actions/cache@ab5e6d0c87105b4c9c2047343972218f562e4319
       with:
         path: ${{ env.NUGET_PACKAGES }}
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
@@ -133,8 +140,8 @@ jobs:
     # - name: Run dotnet format
     #  run: dotnet format --check
 
-    # - name: The sbom-tool does not generate the output directory and fails if it not present.
-    - name: Install sbom-tool
+    # The sbom-tool does not generate the output directory and fails if it is not present.
+    - name: Create directory for SBOM
       run: mkdir -p "${{ github.workspace }}/${{ matrix.os }}/sbom/"
 
     # There may a difference in libraries between platforms, so the tool is being run on all platforms.
@@ -317,6 +324,13 @@ jobs:
           ./src/${{ env.VERIFIABLE_MICROSOFT }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
           ./src/${{ env.VERIFIABLE_SIDETREE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
           ./src/${{ env.VERIFIABLE_TPM }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+    
+    - name: Upload SBOM Artifacts
+      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3
+      with:
+        name: sbom-${{ matrix.os }}
+        path: ${{ github.workspace }}/${{ matrix.os }}/sbom/
+
 
   # The release idea is inspired by https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
   prerelease:
@@ -328,7 +342,7 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - name: Harden Runner
-          uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895
+          uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142
           with:
             disable-sudo: true
             egress-policy: block
@@ -341,9 +355,15 @@ jobs:
               github.com:443
               nuget.pkg.github.com:443
               api.clearlydefined.io:443
+              cacerts.digicert.com:80
+              ts-crl.ws.symantec.com:80
+              crl3.digicert.com:80
+              crl4.digicert.com:80
+              s.symcb.com:80
+              ocsp.digicert.com:80
 
         - name: Download NuGet artifacts
-          uses: actions/download-artifact@eaceaf801fd36c7dee90939fad912460b18a1ffe
+          uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427
           with:
             name: nupkg
 
@@ -359,7 +379,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142
         with:
           disable-sudo: true
           egress-policy: audit
@@ -371,9 +391,16 @@ jobs:
             dotnetcli.azureedge.net:443
             github.com:443
             nuget.pkg.github.com:443
+            api.clearlydefined.io:443
+            cacerts.digicert.com:80
+            ts-crl.ws.symantec.com:80
+            crl3.digicert.com:80
+            crl4.digicert.com:80
+            s.symcb.com:80
+            ocsp.digicert.com:80
 
       - name: Download NuGet artifacts
-        uses: actions/download-artifact@eaceaf801fd36c7dee90939fad912460b18a1ffe
+        uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427
         with:
           name: nupkg
 

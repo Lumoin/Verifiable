@@ -3,19 +3,34 @@ using System.Diagnostics;
 namespace Verifiable.Core.Did
 {
     /// <summary>
-    /// A cryptographic suite specification is responsible for specifying the verification method type and its associated verification material.For example, see JSON Web Signature 2020 and Ed25519 Signature 2020.
-    /// For all registered verification method types and associated verification material available for DIDs, please see the <see href="https://www.w3.org/TR/did-spec-registries">>DID Specification Registries</<see>.
-    /// <see href="https://www.w3.org/TR/did-core/#verification-methods">Verification methods</see>.
+    /// Represents a verification method in a DID document. Verification methods are used to verify 
+    /// digital signatures and other cryptographic material. Each method specifies a cryptographic key 
+    /// or other process to perform the verification.    
     /// </summary>
-    [DebuggerDisplay("VerificationMethod(Id = {Id}, Type = {Type}, KeyFormat = {KeyFormat})")]
+    /// <remarks>See more at <see href="Reference: https://www.w3.org/TR/did-core/#verification-methods">
+    /// DID Core specification: Verification methods</see>.</remarks>
+    [DebuggerDisplay("VerificationMethod(Id = {Id}, Type = {Type}, Controller = {Controller})")]
     public class VerificationMethod
     {
+        /// <summary>
+        /// A unique identifier for the verification method that conforms to the rules in Section 3.2 DID URL Syntax of the DID specification.
+        /// </summary>
         public string? Id { get; set; }
 
-        public CryptoSuite? Type { get; set; }
-
+        /// <summary>
+        /// The DID of the entity that controls the verification method.
+        /// </summary>
         public string? Controller { get; set; }
 
+        /// <summary>
+        /// A string that indicates the type of verification method (e.g., <see cref="PublicKeyMultibase"/>, <see cref="PublicKeyJwk"/>).
+        /// </summary>
+        public string? Type { get; set; }
+
+        /// <summary>
+        /// A key format object representing the public key material used for verification. Depending on the type, 
+        /// this could be a publicKeyJwk or publicKeyMultibase as defined in the DID specification registries.
+        /// </summary>
         public KeyFormat? KeyFormat { get; set; }
     }
 }
