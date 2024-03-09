@@ -4,7 +4,7 @@ using Verifiable.Core.Did;
 using Verifiable.Core.Did.Methods;
 using Xunit;
 
-namespace Verifiable.Core
+namespace Verifiable.Tests
 {
     public class DidIdTests
     {

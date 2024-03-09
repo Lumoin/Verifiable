@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Verifiable.Assessment;
@@ -42,22 +43,21 @@ namespace Verifiable.Tests.Builders
         {
             IList<Claim> resultClaims = new List<Claim>();
             if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyJwk keyFormat)
-            {
-                //TODO: If success should be wrapped to ClaimOutcome.Success? Yes, since there is
-                //expecte result of "ClaimId.WebDidKeyFormat". These other claims ought to be inspected
-                //and then either appropriate ClaimContext set with these as sub-claims OR the Claim
-                //refactored so it can accept sub-claims as parameters directly.
+            {                
                 var headers = keyFormat.Header;
-                resultClaims = JwtKeyTypeHeaderValidationUtilities.ValidateHeader(headers);
+                var sublaims = JwtKeyTypeHeaderValidationUtilities.ValidateHeader(headers);
+                var claimOutCome = sublaims.All(c => c.Outcome == ClaimOutcome.Success) ? ClaimOutcome.Success : ClaimOutcome.Failure;
+
+                resultClaims.Add(new Claim(ClaimId.WebDidKeyFormat, claimOutCome, ClaimContext.None, sublaims));
             }
             else if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyMultibase multiKeyFormat)
             {
                 //TODO: This here will be refactored, since this does not validate the multibase format yet.
-                resultClaims.Add(new Claim(ClaimId.WebDidKeyFormat, ClaimOutcome.Success, ClaimContext.None));
+                resultClaims.Add(new Claim(ClaimId.WebDidKeyFormat, ClaimOutcome.Success));
             }
             else
             {                
-                resultClaims.Add(new Claim(ClaimId.WebDidKeyFormat, ClaimOutcome.Failure, ClaimContext.None));
+                resultClaims.Add(new Claim(ClaimId.WebDidKeyFormat, ClaimOutcome.Failure));
             }
 
             return ValueTask.FromResult(resultClaims);

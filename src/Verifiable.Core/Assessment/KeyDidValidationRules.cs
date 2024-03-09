@@ -54,17 +54,17 @@ namespace Verifiable.Assessment
                         || keyDidType.StartsWith(Base58BtcEncodedMulticodecHeaders.X25519PublicKey)
                         )
                     {
-                        claims.Add(new Claim(ClaimId.KeyDidIdEncoding, ClaimOutcome.Success, ClaimContext.None));                        
+                        claims.Add(new Claim(ClaimId.KeyDidIdEncoding, ClaimOutcome.Success));
                     }
                     else
                     {
-                        claims.Add(new Claim(ClaimId.KeyDidIdEncoding, ClaimOutcome.Failure, ClaimContext.None));                        
+                        claims.Add(new Claim(ClaimId.KeyDidIdEncoding, ClaimOutcome.Failure));
                     }                    
                 }
             }
             else
             {
-                claims.Add(new Claim(ClaimId.KeyDidIdEncoding, ClaimOutcome.Failure, ClaimContext.None));
+                claims.Add(new Claim(ClaimId.KeyDidIdEncoding, ClaimOutcome.Failure));
             }
             
             return ValueTask.FromResult(claims);
@@ -86,7 +86,7 @@ namespace Verifiable.Assessment
                 isFormatValid = regex.IsMatch(document.Id.Id) == true ? ClaimOutcome.Success : ClaimOutcome.Failure;
             }
 
-            claims.Add(new(ClaimId.KeyDidIdFormat, isFormatValid, ClaimContext.None));
+            claims.Add(new(ClaimId.KeyDidIdFormat, isFormatValid));
 
             return ValueTask.FromResult(claims);
         }
@@ -101,7 +101,7 @@ namespace Verifiable.Assessment
         {
             IList<Claim> claims = new List<Claim>(1);
             bool isSuccess = document.VerificationMethod?.Length == 1;
-            claims.Add(new Claim(ClaimId.KeyDidSingleVerificationMethod, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure, ClaimContext.None));
+            claims.Add(new Claim(ClaimId.KeyDidSingleVerificationMethod, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure));
 
             return ValueTask.FromResult(claims);
         }
@@ -116,7 +116,7 @@ namespace Verifiable.Assessment
         {
             IList<Claim> claims = new List<Claim>(1);
             bool isSuccess = document.VerificationMethod?[0].Id?.StartsWith(document?.Id?.Id ?? string.Empty) ?? false;
-            claims.Add(new Claim(ClaimId.KeyDidIdPrefixMatch, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure, ClaimContext.None));
+            claims.Add(new Claim(ClaimId.KeyDidIdPrefixMatch, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure));
 
             return ValueTask.FromResult(claims);
         }
@@ -150,7 +150,7 @@ namespace Verifiable.Assessment
                 }
             }
 
-            claims.Add(new Claim(ClaimId.KeyDidFragmentIdentifierRepetition, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure, ClaimContext.None));
+            claims.Add(new Claim(ClaimId.KeyDidFragmentIdentifierRepetition, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure));
 
             return ValueTask.FromResult(claims);
         }
@@ -173,7 +173,7 @@ namespace Verifiable.Assessment
             else if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyMultibase multiKeyFormat)
             {
                 //TODO: This here will be refactored, since this does not validate the multibase format yet.
-                resultClaims.Add(new Claim(ClaimId.KeyDidKeyFormat, ClaimOutcome.Success, ClaimContext.None));
+                resultClaims.Add(new Claim(ClaimId.KeyDidKeyFormat, ClaimOutcome.Success));
             }
 
             return ValueTask.FromResult(resultClaims);

@@ -80,9 +80,9 @@ namespace Verifiable.Assessment
         public static ClaimId EcAlgOptionalAndNotPresentOrEmpty { get; } = new ClaimId(6, "EcAlgOptionalAndNotPresentOrEmpty");
 
         /// <summary>
-        /// Represents a claim for a non-existing algorithm.
+        /// Represents a claim that an algorithm exists in JOSE related operations.
         /// </summary>
-        public static ClaimId AlgNotExist { get; } = new ClaimId(7, "AlgNotExist");
+        public static ClaimId AlgExists { get; } = new ClaimId(7, "AlgExists");
 
         /// <summary>
         /// Represents a claim for an algorithm that is None.

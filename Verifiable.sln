@@ -38,9 +38,6 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{5E61E0DC-3195-4CE2-B9BD-A06D38FBE2BB}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{942BE00F-D1A2-405C-80F3-D854D373E1FF}"
-	ProjectSection(SolutionItems) = preProject
-		src\Verifiable.Core\Did\DidIdTests.cs = src\Verifiable.Core\Did\DidIdTests.cs
-	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Verifiable.DecentralizedWebNode", "src\Verifiable.DecentralizedWebNode\Verifiable.DecentralizedWebNode.csproj", "{4256AF88-B47D-44E3-AEC7-D9F227749468}"
 EndProject
