@@ -22,7 +22,7 @@ namespace Verifiable.Assessment
             var checks = new List<Claim>();
             if(!jwtHeaders.TryGetValue("alg", out object? value))
             {
-                checks.Add(new Claim(ClaimId.AlgNotExist, ClaimOutcome.Failure, ClaimContext.None));
+                checks.Add(new Claim(ClaimId.AlgExists, ClaimOutcome.Failure));
                 return checks;
             }
 

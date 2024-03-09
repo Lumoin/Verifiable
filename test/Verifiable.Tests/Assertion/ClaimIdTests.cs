@@ -64,7 +64,7 @@ namespace Verifiable.Tests.Assertion
                 { nameof(ClaimId.EcMissingYCoordinate), (3, "EcMissingYCoordinate") },
                 { nameof(ClaimId.EcValidAlgAndCrvCombination), (4, "EcValidAlgAndCrvCombination") },                
                 { nameof(ClaimId.EcAlgOptionalAndNotPresentOrEmpty), (6, "EcAlgOptionalAndNotPresentOrEmpty") },
-                { nameof(ClaimId.AlgNotExist), (7, "AlgNotExist") },
+                { nameof(ClaimId.AlgExists), (7, "AlgExists") },
                 { nameof(ClaimId.AlgIsNone), (8, "AlgIsNone") },
                 { nameof(ClaimId.AlgIsValid), (9, "AlgIsValid") },
                 { nameof(ClaimId.KtyMissingOrEmpty), (10, "KtyMissingOrEmpty") },

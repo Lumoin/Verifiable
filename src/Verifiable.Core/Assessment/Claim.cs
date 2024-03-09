@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace Verifiable.Assessment
 {
@@ -153,6 +154,12 @@ namespace Verifiable.Assessment
     public record Claim
     {
         /// <summary>
+        /// This is a default instance for no sub-claims.
+        /// </summary>
+        public static IReadOnlyList<Claim> NoSubClaims { get; } = Array.Empty<Claim>();
+
+
+        /// <summary>
         /// The identifier for this claim.
         /// </summary>
         public ClaimId Id { get; }
@@ -171,19 +178,27 @@ namespace Verifiable.Assessment
 
 
         /// <summary>
+        /// Sub-claims if there are any.
+        /// </summary>
+        public IReadOnlyList<Claim> SubClaims { get; }
+
+
+        /// <summary>
         /// <see cref="Claim"/> constructor.
         /// </summary>
         /// <param name="id">The identifier for this claim.</param>
         /// <param name="outcome">The outcome of the claim check.</param>
         /// <param name="context">Metadata, or context information, associated with the claim.</param>
-        public Claim(ClaimId id, ClaimOutcome outcome, ClaimContext context)
+        public Claim(ClaimId id, ClaimOutcome outcome, ClaimContext context, IReadOnlyList<Claim> subClaims)
         {
-            ArgumentNullException.ThrowIfNull(id, nameof(id));
-            ArgumentNullException.ThrowIfNull(context, nameof(context));
+            ArgumentNullException.ThrowIfNull(id);
+            ArgumentNullException.ThrowIfNull(context);
+            ArgumentNullException.ThrowIfNull(subClaims);
 
             Id = id;
             Outcome = outcome;
             Context = context;
+            SubClaims = subClaims;
         }
 
 
@@ -192,7 +207,7 @@ namespace Verifiable.Assessment
         /// </summary>
         /// <param name="id">The identifier for this claim.</param>
         /// <param name="outcome">The outcome of the claim check.</param>
-        public Claim(ClaimId id, ClaimOutcome outcome): this(id, outcome, ClaimContext.None) { }
+        public Claim(ClaimId id, ClaimOutcome outcome): this(id, outcome, ClaimContext.None, NoSubClaims) { }
     }
 
 
@@ -217,7 +232,8 @@ namespace Verifiable.Assessment
         public FailedClaim(string failedRuleIdentifier, string failureContext): base(
             ClaimId.FailedClaim,
             ClaimOutcome.Failure,
-            new FailedClaimContext { FailedRuleIdentifier = failedRuleIdentifier, FailureMessage = failureContext })
+            new FailedClaimContext { FailedRuleIdentifier = failedRuleIdentifier, FailureMessage = failureContext },
+            NoSubClaims)
         { }
     }
 }
