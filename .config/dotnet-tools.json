@@ -31,7 +31,7 @@
       "commands": [
         "sharpfuzz"
       ]
-    },    
+    }
     "dotnet-reportgenerator-globaltool": {
       "version": "5.2.2",
       "commands": [
@@ -39,7 +39,7 @@
       ]
     },
     "microsoft.sbom.dotnettool": {
-      "version": "2.2.3",
+      "version": "2.2.4",
       "commands": [
         "sbom-tool"
       ]
