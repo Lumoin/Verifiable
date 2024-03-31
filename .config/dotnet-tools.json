@@ -9,7 +9,7 @@
       ]
     },
     "dotnet-stryker": {
-      "version": "4.0.2",
+      "version": "4.0.3",
       "commands": [
         "dotnet-stryker"
       ]
@@ -31,7 +31,7 @@
       "commands": [
         "sharpfuzz"
       ]
-    },    
+    }
     "dotnet-reportgenerator-globaltool": {
       "version": "5.2.4",
       "commands": [
