@@ -106,7 +106,11 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
       with:
-        fetch-depth: 2
+        fetch-depth: 0
+        fetch-tags: true
+        
+    - name: Get Git tags without whole history
+      run: git fetch --tags origin
 
     - name: Cache Nuget packages '${{ matrix.os }}'
       uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9
@@ -138,7 +142,7 @@ jobs:
     - name: Set NuGet packages and suffix version
       run: |
         # Bash script to determine the version and version suffix for CI/CD
-        # Use git to find the latest tag; if none are found, default to "0.0.1".
+        # Use git to find the latest tag; if none are found, default to "0.0.1".        
         latestTag=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.1)
         
         # Case 1: A release is being created.
