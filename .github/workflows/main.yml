@@ -116,7 +116,7 @@ jobs:
         fetch-depth: 2
 
     - name: Cache Nuget packages '${{ matrix.os }}'
-      uses: actions/cache@ab5e6d0c87105b4c9c2047343972218f562e4319
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9
       with:
         path: ${{ env.NUGET_PACKAGES }}
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
@@ -192,7 +192,7 @@ jobs:
         
     - name: Build
       # At the moment Verifiable.Tests cannot be built with -isolate alone due to Coverlet.
-      run: dotnet build --binaryLogger --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true /p:Version=${{ env.VERSION }}
+      run: dotnet build --tl --binaryLogger --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true /p:Version=${{ env.VERSION }}
       timeout-minutes: 5
 
     # - name: Set PR markdown title name
