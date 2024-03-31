@@ -39,12 +39,13 @@
     <RepositoryUrl>https://github.com/lumoin/Verifiable</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
 
-    <!-- These should be distributed to packages as appropriate when packages diverge. -->
-    <PackageVersion>0.0.0.1-alpha</PackageVersion>
-    <AssemblyVersion>0.0.0.1</AssemblyVersion>
-    <FileVersion>0.0.0.1</FileVersion>
+    <!-- These are set by the continous integration build. -->    
+    <PackageVersion>0.0.0</PackageVersion>
+    <AssemblyVersion>0.0.0</AssemblyVersion>
+    <FileVersion>0.0.0</FileVersion>    
+    <Version>0.0.0</Version>
+    <AssemblyInformationalVersion>0.0.0</AssemblyInformationalVersion>
     <NeutralLanguage>en-US</NeutralLanguage>
-    <Version>0.0.1</Version>
 
     <AppendToReleaseNotesProperty>
       <![CDATA[

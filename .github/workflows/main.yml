@@ -57,7 +57,7 @@ jobs:
     
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142
+      uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895
       with:
         disable-sudo: true
         egress-policy: block
@@ -68,14 +68,7 @@ jobs:
           dashboard.stryker-mutator.io:443
           dotnetcli.azureedge.net:443
           github.com:443
-          nuget.pkg.github.com:443
           api.clearlydefined.io:443
-          cacerts.digicert.com:80
-          ts-crl.ws.symantec.com:80
-          crl3.digicert.com:80
-          crl4.digicert.com:80
-          s.symcb.com:80
-          ocsp.digicert.com:80
     
     # Windows builds may have insufficient resource limits, so they're increased.
     - name: Configure Windows Pagefile
@@ -139,15 +132,7 @@ jobs:
 
     # - name: Run dotnet format
     #  run: dotnet format --check
-
-    # The sbom-tool does not generate the output directory and fails if it is not present.
-    - name: Create directory for SBOM
-      run: mkdir -p "${{ github.workspace }}/${{ matrix.os }}/sbom/"
-
-    # There may a difference in libraries between platforms, so the tool is being run on all platforms.
-    - name: Run BOM analysis
-      run: dotnet tool run sbom-tool generate -DeleteManifestDirIfPresent true -BuildDropPath "${{ github.workspace }}/${{ matrix.os }}/sbom/" -FetchLicenseInformation true -EnablePackageMetadataParsing true -BuildComponentPath . -PackageName "Verifiable" -PackageSupplier "Lumoin" -NamespaceUriBase "https://lumoin.com/verifiable" -PackageVersion 1.0.0 -Verbosity Verbose  
-      
+          
     # The version numbers are determined and set here so it can be set appropriately to code and NuGet packages.
     # See explanation at https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
     - name: Set NuGet packages and suffix version
@@ -165,15 +150,16 @@ jobs:
           VERSION="${VERSION//v}"
           # Set PACKAGE_VERSION and VERSION, and add a VERSION_SUFFIX for clarity in identifying the release and commit.
           echo "PACKAGE_VERSION=${VERSION}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          echo "VERSION=${VERSION}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${VERSION}" >> "$GITHUB_ENV"
         
         # Case 2: The 'develop' branch.
         # Use the latestTag as the base version and add a suffix with "develop", the run_id, and the short SHA.
         elif [[ $GITHUB_REF == 'refs/heads/develop' ]]; then
           # Set PACKAGE_VERSION and PACKAGE, and add a VERSION_SUFFIX for clarity in identifying the development build, run, and commit.
-          echo "PACKAGE_VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          echo "PACKAGE=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "PACKAGE_VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"          
           echo "VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
         
         # Case 3: Any other build (e.g., feature branches).
         # Use the latestTag as the base version and add a suffix with "build", the run_id, and the short SHA.
@@ -181,19 +167,22 @@ jobs:
           # Set PACKAGE_VERSION and VERSION, and add a VERSION_SUFFIX for clarity in identifying the build, run, and commit.
           echo "PACKAGE_VERSION=${latestTag//v}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           echo "VERSION=${latestTag//v}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
         fi      
       shell: bash
-
-    - name: Print NuGet packages version
-      run: |
-          echo "PACKAGE_VERSION: ${{ env.PACKAGE_VERSION }}"
-          echo "VERSION:  ${{ env.VERSION }}"
-      shell: bash
-        
+            
     - name: Build
       # At the moment Verifiable.Tests cannot be built with -isolate alone due to Coverlet.
-      run: dotnet build --tl --binaryLogger --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true /p:Version=${{ env.VERSION }}
+      run: dotnet build --binaryLogger --tl --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true /p:Version=${{ env.VERSION }} /p:InformationalVersion=${{ env.PACKAGE_VERSION }} /p:AssemblyVersion=${{ env.TAG_VERSION }} /p:FileVersion=${{ env.TAG_VERSION }}
       timeout-minutes: 5
+
+    # - name: The sbom-tool does not generate the output directory and fails if it not present.
+    - name: Create SBOM output directory
+      run: mkdir -p "${{ github.workspace }}/${{ matrix.os }}/sbom/"
+
+    # There may a difference in libraries between platforms, so the tool is being run on all platforms.
+    - name: Run BOM analysis
+      run: dotnet tool run sbom-tool generate -DeleteManifestDirIfPresent true -BuildDropPath "${{ github.workspace }}/${{ matrix.os }}/sbom/" -FetchLicenseInformation true -EnablePackageMetadataParsing true -BuildComponentPath . -PackageName "Verifiable" -PackageSupplier "Lumoin" -NamespaceUriBase "https://lumoin.com/verifiable" -PackageVersion ${{ env.PACKAGE_VERSION }} -Verbosity Verbose
 
     # - name: Set PR markdown title name
     #  run: |
@@ -324,13 +313,6 @@ jobs:
           ./src/${{ env.VERIFIABLE_MICROSOFT }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
           ./src/${{ env.VERIFIABLE_SIDETREE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
           ./src/${{ env.VERIFIABLE_TPM }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
-    
-    - name: Upload SBOM Artifacts
-      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3
-      with:
-        name: sbom-${{ matrix.os }}
-        path: ${{ github.workspace }}/${{ matrix.os }}/sbom/
-
 
   # The release idea is inspired by https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
   prerelease:
@@ -342,7 +324,7 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - name: Harden Runner
-          uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142
+          uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895
           with:
             disable-sudo: true
             egress-policy: block
@@ -355,15 +337,9 @@ jobs:
               github.com:443
               nuget.pkg.github.com:443
               api.clearlydefined.io:443
-              cacerts.digicert.com:80
-              ts-crl.ws.symantec.com:80
-              crl3.digicert.com:80
-              crl4.digicert.com:80
-              s.symcb.com:80
-              ocsp.digicert.com:80
 
         - name: Download NuGet artifacts
-          uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427
+          uses: actions/download-artifact@eaceaf801fd36c7dee90939fad912460b18a1ffe
           with:
             name: nupkg
 
@@ -379,7 +355,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142
+        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895
         with:
           disable-sudo: true
           egress-policy: audit
@@ -391,16 +367,9 @@ jobs:
             dotnetcli.azureedge.net:443
             github.com:443
             nuget.pkg.github.com:443
-            api.clearlydefined.io:443
-            cacerts.digicert.com:80
-            ts-crl.ws.symantec.com:80
-            crl3.digicert.com:80
-            crl4.digicert.com:80
-            s.symcb.com:80
-            ocsp.digicert.com:80
 
       - name: Download NuGet artifacts
-        uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427
+        uses: actions/download-artifact@eaceaf801fd36c7dee90939fad912460b18a1ffe
         with:
           name: nupkg
 
