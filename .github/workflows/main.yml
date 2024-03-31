@@ -108,10 +108,7 @@ jobs:
       with:
         fetch-depth: 0
         fetch-tags: true
-        
-    - name: Get Git tags without whole history
-      run: git fetch --tags origin
-
+            
     - name: Cache Nuget packages '${{ matrix.os }}'
       uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9
       with:
