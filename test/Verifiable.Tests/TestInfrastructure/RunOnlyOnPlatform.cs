@@ -26,7 +26,7 @@ namespace Verifiable.Tests.TestInfrastructure
         {
             if(!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
             {
-                throw new SkipException("Test can only be run on Windows or Linux.");
+                throw new PlatformNotSupportedException("Test can only be run on Windows or Linux.");
             }
         }
 

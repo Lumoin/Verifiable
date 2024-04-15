@@ -49,7 +49,7 @@
           "SimpleBase": "[4.0.0, )",
           "System.Collections.Immutable": "[8.0.0, )",
           "System.Text.Json": "[8.0.3, )",
-          "Verifiable.Jwt": "[0.0.0.1-alpha, )"
+          "Verifiable.Jwt": "[0.0.0, )"
         }
       },
       "verifiable.jwt": {

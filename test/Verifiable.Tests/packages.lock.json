@@ -147,16 +147,6 @@
         "resolved": "2.5.7",
         "contentHash": "31Rl7dBJriX0DNwZfDp8gqFOPsiM0c9kqpcH/HvNi9vDp+K7Ydf42H7mVIvYT918Ywzn1ymLg1c4DDC6iU754w=="
       },
-      "Xunit.SkippableFact": {
-        "type": "Direct",
-        "requested": "[1.4.13, )",
-        "resolved": "1.4.13",
-        "contentHash": "IyzZNvJEtXGlXrzxDiSbtH5Lyxf4iJdRQADuyjGdDf00LjXRLJwIoezQNFhFGKTMtvk8IIgaSHxW4mAV4O7b8A==",
-        "dependencies": {
-          "Validation": "2.4.18",
-          "xunit.extensibility.execution": "2.4.0"
-        }
-      },
       "AngleSharp": {
         "type": "Transitive",
         "resolved": "1.0.4",
@@ -1362,11 +1352,6 @@
           "System.Drawing.Common": "7.0.0"
         }
       },
-      "Validation": {
-        "type": "Transitive",
-        "resolved": "2.4.18",
-        "contentHash": "NfvWJ1QeuZ1FQCkqgXTu1cOkRkbNCfxs4Tat+abXLwom6OXbULVhRGp34BTvVB4XPxj6VIAl7KfLfStXMt/Ehw=="
-      },
       "VDS.Common": {
         "type": "Transitive",
         "resolved": "2.0.0",
@@ -1409,14 +1394,14 @@
         "dependencies": {
           "Spectre.Console": "[0.48.0, )",
           "Spectre.Console.Cli": "[0.48.0, )",
-          "Verifiable.Tpm": "[0.0.0.1-alpha, )"
+          "Verifiable.Tpm": "[0.0.0, )"
         }
       },
       "verifiable.bouncycastle": {
         "type": "Project",
         "dependencies": {
           "Portable.BouncyCastle": "[1.9.0, )",
-          "Verifiable.Core": "[0.0.0.1-alpha, )"
+          "Verifiable.Core": "[0.0.0, )"
         }
       },
       "verifiable.core": {
@@ -1426,7 +1411,7 @@
           "SimpleBase": "[4.0.0, )",
           "System.Collections.Immutable": "[8.0.0, )",
           "System.Text.Json": "[8.0.3, )",
-          "Verifiable.Jwt": "[0.0.0.1-alpha, )"
+          "Verifiable.Jwt": "[0.0.0, )"
         }
       },
       "verifiable.decentralizedwebnode": {
@@ -1439,20 +1424,20 @@
         "type": "Project",
         "dependencies": {
           "System.Security.Cryptography.ProtectedData": "[8.0.0, )",
-          "Verifiable.Core": "[0.0.0.1-alpha, )"
+          "Verifiable.Core": "[0.0.0, )"
         }
       },
       "verifiable.nsec": {
         "type": "Project",
         "dependencies": {
           "NSec.Cryptography": "[22.4.0, )",
-          "Verifiable.Core": "[0.0.0.1-alpha, )"
+          "Verifiable.Core": "[0.0.0, )"
         }
       },
       "verifiable.sidetree": {
         "type": "Project",
         "dependencies": {
-          "Verifiable.Core": "[0.0.0.1-alpha, )"
+          "Verifiable.Core": "[0.0.0, )"
         }
       },
       "verifiable.tpm": {

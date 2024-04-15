@@ -69,6 +69,7 @@ jobs:
           dotnetcli.azureedge.net:443
           github.com:443
           api.clearlydefined.io:443
+          ocsp.digicert.com:443
     
     # Windows builds may have insufficient resource limits, so they're increased.
     - name: Configure Windows Pagefile
