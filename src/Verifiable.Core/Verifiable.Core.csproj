@@ -7,7 +7,7 @@
   <PropertyGroup>
     <Title>Core data types and algorithms for DIDs and VCs</Title>
     <Description>Includes and implements core data types and algorithms for decentralized identifiers and verifiable credentials.</Description>
-    <PackageTags>DID VC decentralized-identifier verifiable credential, signing, encryption</PackageTags>	
+    <PackageTags>DID VC decentralized-identifier verifiable credential signing encryption</PackageTags>	
   </PropertyGroup>
 
   <ItemGroup>
