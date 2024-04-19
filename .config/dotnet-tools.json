@@ -39,7 +39,7 @@
       ]
     },
     "microsoft.sbom.dotnettool": {
-      "version": "2.2.4",
+      "version": "2.2.5",
       "commands": [
         "sbom-tool"
       ]
