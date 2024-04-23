@@ -211,7 +211,7 @@ jobs:
 
     #- name: Upload Stryker output artefacts
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3
+    #  uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
     #  with:
     #    name: 'Stryker output artefacts'
     #    path: ${{ github.workspace }}/StrykerOutput/
@@ -220,7 +220,7 @@ jobs:
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
 
     # - name: Archive publish results
-    #  uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v3.1.3
+    #  uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v3.1.3
     #  with:
     #    name: Verifiable.Benchmarks
     #    path: ./publish/*
@@ -229,7 +229,7 @@ jobs:
     #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
 
     # - name: Upload benchmark results
-    #  uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v3.1.3
+    #  uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v3.1.3
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
@@ -274,7 +274,7 @@ jobs:
 
     # - name: Upload PR build information artefact
     #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v3.1.3
+    #  uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v3.1.3
     #  with:
     #    name: 'Test Run'
     #    path: ${{ github.workspace }}/${{ env.file_name }}
@@ -302,7 +302,7 @@ jobs:
 
     - name: Upload Verifiable Nuget packages
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3
+      uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: nupkg
         path: |
