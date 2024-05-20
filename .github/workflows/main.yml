@@ -68,8 +68,14 @@ jobs:
           dashboard.stryker-mutator.io:443
           dotnetcli.azureedge.net:443
           github.com:443
+          nuget.pkg.github.com:443            
           api.clearlydefined.io:443
-          ocsp.digicert.com:443
+          cacerts.digicert.com:80
+          ts-crl.ws.symantec.com:80          
+          crl3.digicert.com:80
+          crl4.digicert.com:80
+          s.symcb.com:80
+          ocsp.digicert.com:80          
     
     # Windows builds may have insufficient resource limits, so they're increased.
     - name: Configure Windows Pagefile
