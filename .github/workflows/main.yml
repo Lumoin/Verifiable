@@ -57,7 +57,7 @@ jobs:
     
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: step-security/harden-runner@a4aa98b93cab29d9b1101a6143fb8bce00e2eac4
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10
       with:
         disable-sudo: true
         egress-policy: block
@@ -65,6 +65,7 @@ jobs:
           aka.ms:443
           api.github.com:443
           api.nuget.org:443
+          pkgs.dev.azure.com:443
           dashboard.stryker-mutator.io:443
           dotnetcli.azureedge.net:443
           github.com:443
@@ -332,7 +333,7 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - name: Harden Runner
-          uses: step-security/harden-runner@a4aa98b93cab29d9b1101a6143fb8bce00e2eac4
+          uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10
           with:
             disable-sudo: true
             egress-policy: block
@@ -363,7 +364,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@a4aa98b93cab29d9b1101a6143fb8bce00e2eac4
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10
         with:
           disable-sudo: true
           egress-policy: audit
