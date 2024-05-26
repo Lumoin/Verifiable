@@ -56,14 +56,17 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{
 		.github\workflows\main.yml = .github\workflows\main.yml
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".config", ".config", "{737B175F-5A06-480C-B93F-42B31EF4EFA7}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".config", ".config", "{CD06BE0E-287F-4A01-B500-CD92465F1E2D}"
 	ProjectSection(SolutionItems) = preProject
 		.config\dotnet-tools.json = .config\dotnet-tools.json
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".vscode", ".vscode", "{737B175F-5A06-480C-B93F-42B31EF4EFA7}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".vscode", ".vscode", "{BE64721C-A756-4078-B683-34AC9B639E28}"
 	ProjectSection(SolutionItems) = preProject
-		..vscode\dotnet-tools.json = .vscode\dotnet-tools.json
+		.vscode\extensions.json = .vscode\extensions.json
+		.vscode\launch.json = .vscode\launch.json
+		.vscode\settings.json = .vscode\settings.json
+		.vscode\tasks.json = .vscode\tasks.json
 	EndProjectSection
 EndProject
 Global
@@ -134,6 +137,8 @@ Global
 		{FF947DEC-29E7-4700-94A4-0E84B2917BF5} = {5E61E0DC-3195-4CE2-B9BD-A06D38FBE2BB}
 		{737B175F-5A06-480C-B93F-42B31EF4EFA7} = {35CAB8A9-7332-4D46-BBD3-83A37A747F5E}
 		{1B79A5A8-0754-4F72-AD32-E791F9A8ED23} = {737B175F-5A06-480C-B93F-42B31EF4EFA7}
+		{CD06BE0E-287F-4A01-B500-CD92465F1E2D} = {35CAB8A9-7332-4D46-BBD3-83A37A747F5E}
+		{BE64721C-A756-4078-B683-34AC9B639E28} = {35CAB8A9-7332-4D46-BBD3-83A37A747F5E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {B3AC63DE-C110-4924-B7DB-FFAC4704246F}
