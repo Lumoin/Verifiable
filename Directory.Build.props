@@ -2,18 +2,16 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <LangVersion>12.0</LangVersion>
-    <SourceRoot>$(MSBuildThisFileDirectory)</SourceRoot>    
+    <LangVersion>12.0</LangVersion>    
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>
-    <EnablePackageVulnerabilityAnalysis>true</EnablePackageVulnerabilityAnalysis>
+    <RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>    
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditLevel>low</NuGetAuditLevel>
-    <NoWarn>$(NoWarn);1591;2003;RCS1036</NoWarn>
+    <NugetAuditMode>all</NugetAuditMode>
+    <NoWarn>$(NoWarn);1591</NoWarn>
     <IncludeSymbols>true</IncludeSymbols>
-    <EmbedUntrackedSources>true</EmbedUntrackedSources>    
-    <IncludePackageReferencesDuringMarkupCompilation>true</IncludePackageReferencesDuringMarkupCompilation>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>        
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 
@@ -23,7 +21,7 @@
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     -->
   </PropertyGroup>
-
+    
   <!-- Common nuget package parameters and resources. -->
   <PropertyGroup>
     <PackageId>$(AssemblyName)</PackageId>
