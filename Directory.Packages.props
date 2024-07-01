@@ -6,7 +6,7 @@
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.13.12" />
     <PackageVersion Include="coverlet.collector" Version="6.0.2" />
-    <PackageVersion Include="dotNetRdf" Version="3.1.1" />
+    <PackageVersion Include="dotNetRdf" Version="3.2.0" />
     <PackageVersion Include="FsCheck.Xunit" Version="2.16.6" />
     <PackageVersion Include="JunitXml.TestLogger" Version="3.1.12" />
     <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
@@ -26,9 +26,9 @@
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageVersion Include="System.Text.Json" Version="8.0.3" />
     <PackageVersion Include="WinSharpFuzz" Version="1.0.0" />
-    <PackageVersion Include="xunit" Version="2.8.0" />
-    <PackageVersion Include="xunit.analyzers" Version="1.13.0" />
-    <PackageVersion Include="xunit.extensibility.execution" Version="2.8.0" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.0" />
+    <PackageVersion Include="xunit" Version="2.8.1" />
+    <PackageVersion Include="xunit.analyzers" Version="1.14.0" />
+    <PackageVersion Include="xunit.extensibility.execution" Version="2.8.1" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.1" />    
   </ItemGroup>
 </Project>
