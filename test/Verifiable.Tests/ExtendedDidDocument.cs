@@ -20,13 +20,13 @@ namespace Verifiable.Core
     /// The core library provide a type for W3C defined DID type. It may
     /// be possible in production extra data needs to serialized or
     /// deserialized. This data can be unknown or the system not updated
-    /// to the latest expected data. Serializing or deserealizing unknown
+    /// to the latest expected data. Serializing or deserializing unknown
     /// data is a potential security or information disclosure risk so
     /// is not provided in the model by default.
     /// </summary>
     public class TestExtendedDidDocument: DidDocument
     {
-        new public ExtendedService[]? Service { get; set; }
+        public new ExtendedService[]? Service { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, object>? AdditionalData { get; set; }
