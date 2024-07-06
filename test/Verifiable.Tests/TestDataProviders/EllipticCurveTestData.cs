@@ -36,7 +36,7 @@ namespace Verifiable.Tests.DataProviders
     /// </summary>
     public class EllipticCurveTheoryData: TheoryData<EllipticCurveTestData>
     {
-        private static readonly IList<EllipticCurveTestData> ellipticCurveTestData = new List<EllipticCurveTestData>();
+        private static List<EllipticCurveTestData> EllipticCurveTestData { get; } = [];
 
         public const string EllipticP256 = "P-256";
         public const string EllipticP384 = "P-384";
@@ -95,9 +95,9 @@ namespace Verifiable.Tests.DataProviders
         /// <exception cref="NotSupportedException"></exception>
         public static (byte[] PublicKeyHeader, byte[] PrivateKeyHeader) FromCurveNameToMultiCodecHeader(string humanReadable) => humanReadable switch
         {
-            EllipticP256 => (MulticodecHeaders.P256PublicKey.ToArray(), Array.Empty<byte>()),
-            EllipticP384 =>  (MulticodecHeaders.P384PublicKey.ToArray(), Array.Empty<byte>()),
-            EllipticP521 =>  (MulticodecHeaders.P521PublicKey.ToArray(), Array.Empty<byte>()),
+            EllipticP256 => (MulticodecHeaders.P256PublicKey.ToArray(), []),
+            EllipticP384 =>  (MulticodecHeaders.P384PublicKey.ToArray(), []),
+            EllipticP521 =>  (MulticodecHeaders.P521PublicKey.ToArray(), []),
             EllipticSecP256k1 =>  (MulticodecHeaders.Secp256k1PublicKey.ToArray(), MulticodecHeaders.Secp256k1PrivateKey.ToArray()),
             _ => throw new NotSupportedException()
         };
@@ -108,14 +108,14 @@ namespace Verifiable.Tests.DataProviders
             foreach(string humanReadableEllipticCurveConstant in HumanReadableEllipticCurveConstants)
             {
                 (EllipticCurveTestData EvenKey, EllipticCurveTestData OddKey) = GenerateEllipticTestKeyMaterial(humanReadableEllipticCurveConstant);                
-                ellipticCurveTestData.Add(EvenKey);
-                ellipticCurveTestData.Add(OddKey);
+                EllipticCurveTestData.Add(EvenKey);
+                EllipticCurveTestData.Add(OddKey);
             }
         }
 
         public EllipticCurveTheoryData()
         {
-            foreach(var td in ellipticCurveTestData)
+            foreach(EllipticCurveTestData td in EllipticCurveTestData)
             {
                 Add(td);
             }
@@ -128,8 +128,8 @@ namespace Verifiable.Tests.DataProviders
             while(evenKey == null || oddKey == null)
             {
                 var loopKey = ECDsa.Create(FromHumanReadableEllipticPrimeCurve(humanReadableCurveName));
-                var loopParams = loopKey.ExportParameters(includePrivateParameters: false);
-                var loopSignByte = EllipticCurveUtilities.CompressionSignByte(loopParams.Q.Y);
+                ECParameters loopParams = loopKey.ExportParameters(includePrivateParameters: false);
+                byte loopSignByte = EllipticCurveUtilities.CompressionSignByte(loopParams.Q.Y);
                 if(loopSignByte == EllipticCurveUtilities.EvenYCoordinate)
                 {
                     evenKey = loopKey;
@@ -149,8 +149,8 @@ namespace Verifiable.Tests.DataProviders
                 _ => throw new NotSupportedException()
             };
 
-            var btc58Headers = FromCurveNameToBtc58EncodedHeader(humanReadableCurveName);
-            var multiCodecHeaders = FromCurveNameToMultiCodecHeader(humanReadableCurveName);
+            (string PublicKey, string PrivateKey) btc58Headers = FromCurveNameToBtc58EncodedHeader(humanReadableCurveName);
+            (byte[] PublicKeyHeader, byte[] PrivateKeyHeader) = FromCurveNameToMultiCodecHeader(humanReadableCurveName);
             
             ECParameters evenKeyParameters = evenKey.ExportParameters(includePrivateParameters: true);
             byte[] evenPublicKeyX = evenKeyParameters.Q.X!;
@@ -158,8 +158,8 @@ namespace Verifiable.Tests.DataProviders
             byte[] evenPrivateKey = evenKeyParameters.D!;
             var evenTestKeyMaterial = new EllipticCurveTestData(
                 true,
-                multiCodecHeaders.PublicKeyHeader,
-                multiCodecHeaders.PrivateKeyHeader,
+                PublicKeyHeader,
+                PrivateKeyHeader,
                 btc58Headers.PublicKey,
                 btc58Headers.PrivateKey,                
                 humanReadableCurveName,
@@ -174,8 +174,8 @@ namespace Verifiable.Tests.DataProviders
             byte[] oddPrivateKey = oddKeyParameters.D!;
             var oddTestKeyMaterial = new EllipticCurveTestData(
                 true,
-                multiCodecHeaders.PublicKeyHeader,
-                multiCodecHeaders.PrivateKeyHeader,
+                PublicKeyHeader,
+                PrivateKeyHeader,
                 btc58Headers.PublicKey,
                 btc58Headers.PrivateKey,                
                 humanReadableCurveName,
