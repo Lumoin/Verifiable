@@ -127,7 +127,7 @@ jobs:
           ${{runner.os}}-nuget-
 
     - name: Setup .NET SDK
-      uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3
+      uses: actions/setup-dotnet@6bd8b7f7774af54e05809fcc5431931b3eb1ddee
       with:
         global-json-file: global.json
 
@@ -219,7 +219,7 @@ jobs:
 
     #- name: Upload Stryker output artefacts
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+    #  uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b
     #  with:
     #    name: 'Stryker output artefacts'
     #    path: ${{ github.workspace }}/StrykerOutput/
@@ -228,7 +228,7 @@ jobs:
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
 
     # - name: Archive publish results
-    #  uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+    #  uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b
     #  with:
     #    name: Verifiable.Benchmarks
     #    path: ./publish/*
@@ -237,7 +237,7 @@ jobs:
     #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
 
     # - name: Upload benchmark results
-    #  uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+    #  uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
@@ -282,7 +282,7 @@ jobs:
 
     # - name: Upload PR build information artefact
     #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+    #  uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b
     #  with:
     #    name: 'Test Run'
     #    path: ${{ github.workspace }}/${{ env.file_name }}
@@ -310,7 +310,7 @@ jobs:
 
     - name: Upload Verifiable Nuget packages
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+      uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b
       with:
         name: nupkg
         path: |
