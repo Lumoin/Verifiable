@@ -49,8 +49,6 @@ namespace Verifiable.Core.Builders
 
         public virtual TResult Build<TSeedParam>(Func<TSeedParam, TResult> seedGenerator, TSeedParam seedGeneratorParameter, Func<TSeedParam, TBuilder, TState> preBuildAction)
         {
-            ArgumentNullException.ThrowIfNull(nameof(seedGenerator));
-
             TState buildInvariant = preBuildAction(seedGeneratorParameter, (TBuilder)this);
 
             TResult seed = seedGenerator(seedGeneratorParameter);

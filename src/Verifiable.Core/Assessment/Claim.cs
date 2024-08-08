@@ -191,7 +191,6 @@ namespace Verifiable.Assessment
         /// <param name="context">Metadata, or context information, associated with the claim.</param>
         public Claim(ClaimId id, ClaimOutcome outcome, ClaimContext context, IReadOnlyList<Claim> subClaims)
         {
-            ArgumentNullException.ThrowIfNull(id);
             ArgumentNullException.ThrowIfNull(context);
             ArgumentNullException.ThrowIfNull(subClaims);
 

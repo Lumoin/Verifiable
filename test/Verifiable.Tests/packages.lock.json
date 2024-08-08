@@ -1,7 +1,7 @@
 {
   "version": 2,
   "dependencies": {
-    "net8.0": {
+    "net9.0": {
       "coverlet.collector": {
         "type": "Direct",
         "requested": "[6.0.2, )",
@@ -10,22 +10,22 @@
       },
       "dotNetRdf": {
         "type": "Direct",
-        "requested": "[3.2.0, )",
-        "resolved": "3.2.0",
-        "contentHash": "TbaniuT08ZIqRon+vjlFG6+f1Lta1pTftErFR6BrpKetfTg9bI4wwDNcernYswp9q06P2Q58R9HcvDLJxIlUKQ==",
+        "requested": "[3.2.1, )",
+        "resolved": "3.2.1",
+        "contentHash": "WE6sbQtXz5w12V2OpO9BwaVrcIKkSetrFNpl8IcrezluNgZapZAc6MlPLvOvK0YEsGyx1L6ZQnUA7BzJU+Wh0w==",
         "dependencies": {
-          "dotNetRdf.Client": "3.2.0",
-          "dotNetRdf.Core": "3.2.0",
-          "dotNetRdf.Data.DataTables": "3.2.0",
-          "dotNetRdf.Dynamic": "3.2.0",
-          "dotNetRdf.Inferencing": "3.2.0",
-          "dotNetRdf.Ldf": "3.2.0",
-          "dotNetRdf.Ontology": "3.2.0",
-          "dotNetRdf.Query.FullText": "3.2.0",
-          "dotNetRdf.Query.Spin": "3.2.0",
-          "dotNetRdf.Shacl": "3.2.0",
-          "dotNetRdf.Skos": "3.2.0",
-          "dotNetRdf.Writing.HtmlSchema": "3.2.0"
+          "dotNetRdf.Client": "3.2.1",
+          "dotNetRdf.Core": "3.2.1",
+          "dotNetRdf.Data.DataTables": "3.2.1",
+          "dotNetRdf.Dynamic": "3.2.1",
+          "dotNetRdf.Inferencing": "3.2.1",
+          "dotNetRdf.Ldf": "3.2.1",
+          "dotNetRdf.Ontology": "3.2.1",
+          "dotNetRdf.Query.FullText": "3.2.1",
+          "dotNetRdf.Query.Spin": "3.2.1",
+          "dotNetRdf.Shacl": "3.2.1",
+          "dotNetRdf.Skos": "3.2.1",
+          "dotNetRdf.Writing.HtmlSchema": "3.2.1"
         }
       },
       "FsCheck.Xunit": {
@@ -40,9 +40,9 @@
       },
       "JunitXml.TestLogger": {
         "type": "Direct",
-        "requested": "[3.1.12, )",
-        "resolved": "3.1.12",
-        "contentHash": "XHeSTfBj6/kLNcfbOoaoVogamaOcKXOENQ3epo616EjnnGJHFNzuNFI6TGXgL+lYwtX4E8cpCGu6UfhYrOtHGQ=="
+        "requested": "[4.0.254, )",
+        "resolved": "4.0.254",
+        "contentHash": "vsLyzXbjfZf+bGsL7FYhdWy+F0VgKT7vchkgR8bcTSdGwNhJs8sImF10niy78xZDZ43i22WPgmxSS2+FQ/V6PA=="
       },
       "LiquidTestReports.Markdown": {
         "type": "Direct",
@@ -172,16 +172,16 @@
       },
       "dotNetRdf.Client": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "Co2VTMjv/HpLC/onQbzyxGYGFCxx/Z/Nz0stWXPjjKolZVPQaZbYXrareql78PuYAuaHk5LoaIC2DbW+eUexTQ==",
+        "resolved": "3.2.1",
+        "contentHash": "oBK2u4AY80iLAviAZsJBM4VSOvwxnAWYlBKX/qnieb2K9mjFqGbVx/hquvNJvV28yDwONImhFVA6Je17ypJisA==",
         "dependencies": {
-          "dotNetRdf.Core": "3.2.0"
+          "dotNetRdf.Core": "3.2.1"
         }
       },
       "dotNetRdf.Core": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "RnIzoYZ7YhsyLJn8F6fDhY9QxIaLkdcN+uAc3NmvFnOOwsxHkZnbXGAnEIkCcZAVvciM5eybshKJenizYlQvnw==",
+        "resolved": "3.2.1",
+        "contentHash": "xDcDDIny+W5Fx2g8PcLAOvzqNWEov7L5TcEraq6bxIZKae2Rh0eEieLDQP/B6aSFUnmHWaimDJ89DP2wJIKAQw==",
         "dependencies": {
           "AngleSharp": "1.1.2",
           "HtmlAgilityPack": "1.11.61",
@@ -199,88 +199,88 @@
       },
       "dotNetRdf.Data.DataTables": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "V/73t33KldmGmwIC8ECTtbPQp9SrIL9UkxdMlqyGb6HR9HJ4D4DbDgQAy76pMr3cnNB/jNljc3FMMuu7E3TQiQ==",
+        "resolved": "3.2.1",
+        "contentHash": "swIpOAfcwU3/IpadCkLerVFFuik3irI3QpWC3FBxKIfuGrd6CJTTQwtQg0mEWpzXhVUTMocldpxmf5oC7UG5tA==",
         "dependencies": {
-          "dotNetRdf.Core": "3.2.0"
+          "dotNetRdf.Core": "3.2.1"
         }
       },
       "dotNetRdf.Dynamic": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "kaz2D71o+T5RxdlHk8GVvs1UjilQ/JF/F7uSBeOOTWOUZOM3ePLJXJgMrIWAy6R/FI+HCG4VC+oHSlMr2mEakQ==",
+        "resolved": "3.2.1",
+        "contentHash": "4OpKBG29ILjqUK0T5FvN6FI483DdDKXZ//Xqj0qnRY6Qf2iseLB/cNGTUm5vNIQ9tQTX91RPfPKjRJmwhRGx1w==",
         "dependencies": {
-          "dotNetRdf.Core": "3.2.0"
+          "dotNetRdf.Core": "3.2.1"
         }
       },
       "dotNetRdf.Inferencing": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "Ac+qgnUQKupm51w3AwnLNkgCDRNwqK7lOR9JhYUdRFkHGzSwZmEEyvmMLvBh2VtUL1O7HmLDSUIkWUPmtRsNUA==",
+        "resolved": "3.2.1",
+        "contentHash": "J0y2qxS66gHa8GDQiSpJXLKQ+VMGLdWwmGsi108Ie5C43oKo70VVVkEiuTDXShY2G/xVaoX7eorx53Kt5OknIg==",
         "dependencies": {
-          "dotNetRdf.Ontology": "3.2.0"
+          "dotNetRdf.Ontology": "3.2.1"
         }
       },
       "dotNetRdf.Ldf": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "WtCInkHP06KevnBOBFFhEkUMlPMXTEQlF6pqD0GOVaH8soOHYqDWZ/DvimaUng1LZy8Tqm9RPojZr8KguN/JNw==",
+        "resolved": "3.2.1",
+        "contentHash": "CWyDUQFm7o7t8CEPMYJNw1Xu9X5hDaSgTIeIrP/VAyROQ0XnW+J00ODn3omvtUr2NdHPy+Fdtedmh2Hg3GctEw==",
         "dependencies": {
           "Resta.UriTemplates": "1.4.0",
-          "dotNetRdf.Core": "3.2.0"
+          "dotNetRdf.Core": "3.2.1"
         }
       },
       "dotNetRdf.Ontology": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "E2R2f/lDeqHWbZ3HbrT/RcyrqHmA/cj6paXzxxfIkZoDNrWWaXKZ2dm0KK0zUga9k6jSVOLjQkoDp+f6RXC/0g==",
+        "resolved": "3.2.1",
+        "contentHash": "jYF76TzEMASXrBuYCpuLc/j607UpZdpFlyget7eofvnyLQzKaxm60NNTTdGmLVz0vYVU2szAYZJktgKr/O6xHQ==",
         "dependencies": {
-          "dotNetRdf.Core": "3.2.0"
+          "dotNetRdf.Core": "3.2.1"
         }
       },
       "dotNetRdf.Query.FullText": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "CZ/mbdxskg2kNTfD8WOiMyDLFGMM/26U3C/W703bT8ffstH6k7yQ9dE25l0Hb78kfcgWzTrJ6rp3CW8Bkcf+fg==",
+        "resolved": "3.2.1",
+        "contentHash": "22EGhShzYZhxjvIYe46IeP9i+ssBmR34UlGP7eM5FbS6R2yvCRXceTlwmhrbHv9ZNjf449aGVJFPJVwo9I9gEQ==",
         "dependencies": {
           "Lucene.Net": "4.8.0-beta00016",
           "Lucene.Net.QueryParser": "4.8.0-beta00016",
           "SharpZipLib": "1.4.2",
-          "dotNetRdf.Core": "3.2.0"
+          "dotNetRdf.Core": "3.2.1"
         }
       },
       "dotNetRdf.Query.Spin": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "sqEo6BR8WwNm81bckMTqHyDoF5oT88UN+nvkadBrvz7ZbOq6kdUKx2WSl22n24h/WLLMuJEDzwJ/kCEVrO5A9g==",
+        "resolved": "3.2.1",
+        "contentHash": "udOjJH0sNs2bAgx2S8ObecsilqsWS7cU8R0DjxnzFjxWYRHCLt5Pnh2/UzDe6Q6GiYdKXUVjC1kYdp6EfXx3DA==",
         "dependencies": {
           "System.Runtime": "4.3.1",
-          "dotNetRdf.Core": "3.2.0",
-          "dotNetRdf.Inferencing": "3.2.0"
+          "dotNetRdf.Core": "3.2.1",
+          "dotNetRdf.Inferencing": "3.2.1"
         }
       },
       "dotNetRdf.Shacl": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "IAbwY7TPAC0rXosuCX4jGhqndcoW+nBj12X0zUZs3tTY0jl22sH69g4dNMqfXKn1H5hWHEf0BncrS6EOSe3Geg==",
+        "resolved": "3.2.1",
+        "contentHash": "9Tlm5oJjzEDNbrS+5lOad+DODh1noYoaTLh0aKNiosD55xurbctWpvTcqR1skmeFuQm/ihYUcpq3WUCSZbc8Kw==",
         "dependencies": {
-          "dotNetRdf.Core": "3.2.0"
+          "dotNetRdf.Core": "3.2.1"
         }
       },
       "dotNetRdf.Skos": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "ImN4cBEe85Iffl1QW50HQ0epphpOV7WTCaedMvc/TWgUigQtBVxtI9Qnn9MKU4Xwr9yRWrrLGZdrhXVgEA+p9g==",
+        "resolved": "3.2.1",
+        "contentHash": "8lqiIjLToMJUHtEx0CiLZwqG/UFmYgUPh0KTlohX3pDU1GaUdaNLU7LRheDdaZUb9UzN5dnWHL/E8NWIaEZ4xw==",
         "dependencies": {
-          "dotNetRdf.Core": "3.2.0"
+          "dotNetRdf.Core": "3.2.1"
         }
       },
       "dotNetRdf.Writing.HtmlSchema": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "4zWbNnRw6SpDzkWM/8gKO5jcKW6UQWcJ+riscZxUDeowZuJCdAzy5AFBAqbaP+UC2EKcE5OB0t83GiIC/E/acw==",
+        "resolved": "3.2.1",
+        "contentHash": "hJr0qwrkiXiLhL/86gR8QF9N4QT03eUyXoIomD5M0nT1CxaQzVOHyRRq1Mew8WVFw03iYdIU/aiHOBLme89k7g==",
         "dependencies": {
-          "dotNetRdf.Core": "3.2.0"
+          "dotNetRdf.Core": "3.2.1"
         }
       },
       "FsCheck": {

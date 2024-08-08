@@ -1,7 +1,7 @@
 {
   "version": 2,
   "dependencies": {
-    "net8.0": {
+    "net9.0": {
       "Portable.BouncyCastle": {
         "type": "Direct",
         "requested": "[1.9.0, )",

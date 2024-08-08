@@ -16,7 +16,7 @@ namespace Verifiable.Core
         /// <summary>
         /// Test array that is wrong length for RSA encoding.
         /// </summary>
-        private static byte[] WrongSizeArray1 => Array.Empty<byte>();
+        private static byte[] WrongSizeArray1 => [];
 
         /// <summary>
         /// Test array that is wrong length for RSA encoding.
@@ -28,16 +28,17 @@ namespace Verifiable.Core
         /// </summary>
         public static IEnumerable<object[]> RsaKeySizesInBits => new object[][]
         {
-            new object[] { 2048 },
-            new object[] { 4096 }            
+            [2048],
+            [4096]            
         };
 
 
         [Fact]
         public void EncodeThrowsWithCorrectMessageIfModulusNull()
         {
+            //Since the argument is ReadOnlySpan<byte>, it will be converted to ReadOnlySpan<byte>.Empty automatically.
             const string ParameterName = "rsaModulusBytes";
-            var exception1 = Assert.Throws<ArgumentNullException>(() => RsaUtilities.Encode(null));
+            var exception1 = Assert.Throws<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(null));
             Assert.Equal(ParameterName, exception1.ParamName);
         }
 
