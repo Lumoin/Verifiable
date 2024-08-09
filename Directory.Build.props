@@ -1,8 +1,8 @@
 <Project>
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <LangVersion>12.0</LangVersion>    
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>preview</LangVersion>    
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>    

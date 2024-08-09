@@ -60,11 +60,6 @@ namespace Verifiable.Core.Cryptography
         /// <exception cref="ArgumentOutOfRangeException">The key length mush be either 256 or 512 bytes</exception>.
         public static byte[] Encode(ReadOnlySpan<byte> rsaModulusBytes)
         {
-            if(rsaModulusBytes == null)
-            {
-                throw new ArgumentNullException(nameof(rsaModulusBytes));
-            }
-
             //DID method specifications support only these RSA key lengths at the moment.            
             if(!(rsaModulusBytes.Length == Rsa2048ModulusLength || rsaModulusBytes.Length == Rsa4096ModulusLength))
             {

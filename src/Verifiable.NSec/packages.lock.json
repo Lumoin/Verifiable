@@ -1,7 +1,7 @@
 {
   "version": 2,
   "dependencies": {
-    "net8.0": {
+    "net9.0": {
       "NSec.Cryptography": {
         "type": "Direct",
         "requested": "[24.4.0, )",

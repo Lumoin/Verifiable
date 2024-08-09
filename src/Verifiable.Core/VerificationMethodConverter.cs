@@ -73,9 +73,6 @@ namespace Verifiable.Core.Did
         /// <param name="typeMap">A runtime map of <see cref="Service"/> and sub-types.</param>
         public VerificationMethodConverter(CryptoSuiteFactoryDelegate cryptoSuiteFactory, ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> typeMap)
         {
-            ArgumentNullException.ThrowIfNull(nameof(typeMap));
-            ArgumentNullException.ThrowIfNull(nameof(cryptoSuiteFactory));
-
             TypeMap = typeMap;
             CryptoSuiteFactory = cryptoSuiteFactory;
         }

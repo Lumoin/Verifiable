@@ -128,7 +128,6 @@ namespace Verifiable.Core.Cryptography
 
         private void Return(ArraySegment<T> segment, Slab<T> slab)
         {
-            ArgumentNullException.ThrowIfNull(segment);
             ArgumentNullException.ThrowIfNull(slab);
 
             lock(lockObject)
