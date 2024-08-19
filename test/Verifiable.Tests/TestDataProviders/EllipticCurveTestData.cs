@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.FSharp.Core;
+using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using Verifiable.Core;
@@ -19,6 +20,7 @@ namespace Verifiable.Tests.DataProviders
     /// <param name="PublicKeyMaterialY">The public key point Y key material.</param>
     /// <param name="PrivateKeyMaterial">The private key material.</param>
     /// <param name="PrimeBytes">The prime bytes for the curve.</param>
+    [Serializable]
     public record EllipticCurveTestData(
         bool IsEven,
         byte[] PublicKeyMulticodecHeader,
