@@ -9,11 +9,13 @@
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditLevel>low</NuGetAuditLevel>
     <NugetAuditMode>all</NugetAuditMode>
-    <NoWarn>$(NoWarn);1591</NoWarn>
-    <IncludeSymbols>true</IncludeSymbols>
-    <EmbedUntrackedSources>true</EmbedUntrackedSources>        
-    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>    
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>   
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>    
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <!-- This should be the published baseline version to validate against.
+    <PackageValidationBaselineVersion>0.0.1</PackageValidationBaselineVersion>
+    -->
 
     <!--
     TODO: https://docs.microsoft.com/en-us/dotnet/core/deploying/trimming/prepare-libraries-for-trimming
@@ -36,8 +38,10 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <RepositoryUrl>https://github.com/lumoin/Verifiable</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <IncludeSymbols>true</IncludeSymbols>    
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
-    <!-- These are set by the continous integration build. -->    
+    <!-- These are set by the continous integration build (see main.yml). -->    
     <PackageVersion>0.0.0</PackageVersion>
     <AssemblyVersion>0.0.0</AssemblyVersion>
     <FileVersion>0.0.0</FileVersion>    
@@ -52,8 +56,7 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
     <ChangelogFile>../../CHANGELOG.md</ChangelogFile>
   </PropertyGroup>
 
-  <ItemGroup>
-    
+  <ItemGroup>    
     <PackageReference Include="SIL.ReleaseTasks" PrivateAssets="all" />    
   </ItemGroup>
 
@@ -98,12 +101,5 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
       <PackagePath>/resources</PackagePath>
     </None>
   </ItemGroup>
-
-  <!-- This is set in main.yml build script. -->
-  <!--
-  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
-    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
-  </PropertyGroup>
-  -->
-
+  
 </Project>

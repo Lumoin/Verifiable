@@ -183,16 +183,8 @@ jobs:
             
     - name: Build
       # At the moment Verifiable.Tests cannot be built with -isolate alone due to Coverlet.
-      run: dotnet build --binaryLogger --tl --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore -property:ContinuousIntegrationBuild=true /p:Version=${{ env.VERSION }} /p:InformationalVersion=${{ env.PACKAGE_VERSION }} /p:AssemblyVersion=${{ env.TAG_VERSION }} /p:FileVersion=${{ env.TAG_VERSION }}
-      timeout-minutes: 5
-
-    # - name: The sbom-tool does not generate the output directory and fails if it not present.
-    - name: Create SBOM output directory
-      run: mkdir -p "${{ github.workspace }}/${{ matrix.os }}/sbom/"
-
-    # There may a difference in libraries between platforms, so the tool is being run on all platforms.
-    - name: Run BOM analysis
-      run: dotnet tool run sbom-tool generate -DeleteManifestDirIfPresent true -BuildDropPath "${{ github.workspace }}/${{ matrix.os }}/sbom/" -FetchLicenseInformation true -EnablePackageMetadataParsing true -BuildComponentPath . -PackageName "Verifiable" -PackageSupplier "Lumoin" -NamespaceUriBase "https://lumoin.com/verifiable" -PackageVersion ${{ env.PACKAGE_VERSION }} -Verbosity Verbose
+      run: dotnet build --binaryLogger --tl --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore --property:ContinuousIntegrationBuild=true --property:Version=${{ env.VERSION }} --property:InformationalVersion=${{ env.PACKAGE_VERSION }} --property:AssemblyVersion=${{ env.TAG_VERSION }} --property:FileVersion=${{ env.TAG_VERSION }}
+      timeout-minutes: 5    
 
     # - name: Set PR markdown title name
     #  run: |
@@ -206,7 +198,7 @@ jobs:
       if: runner.os != 'macOS'
       # See the difference on drivers and paths at https://github.com/microsoft/vstest/issues/2378 and further
       # here on generating the reports.
-      # run: dotnet test --verbosity normal --no-restore --no-build --configuration ${{ env.BUILD_CONFIGURATION }} -property:CollectCoverage=true -property:CoverletOutputFormat=cobertura -property:DeterministicSourcePaths=true -property:IncludeTestAssembly=true -property:CoverletOutput='${{ github.workspace }}/reports/coverage/'
+      # run: dotnet test --verbosity normal --no-restore --no-build --configuration ${{ env.BUILD_CONFIGURATION }} --property:CollectCoverage=true --property:CoverletOutputFormat=cobertura --property:DeterministicSourcePaths=true --property:IncludeTestAssembly=true --property:CoverletOutput='${{ github.workspace }}/reports/coverage/'
       run: dotnet test --collect:"XPlat Code Coverage" --verbosity normal --no-restore --no-build --configuration ${{ env.BUILD_CONFIGURATION }} --logger JUnit -property:DeterministicSourcePaths=true -property:IncludeTestAssembly=true --results-directory '${{ github.workspace }}/reports/coverage/'
       timeout-minutes: 5
 
@@ -295,34 +287,41 @@ jobs:
     #  with:
     #    path: ${{ env.file_name }}
 
-    - name: Pack Nuget files
+    # - name: The sbom-tool does not generate the output directory and fails if it not present.
+    - name: Create SBOM output directory
+      run: mkdir -p "${{ github.workspace }}/${{ matrix.os }}/sbom/"
+
+    # There may a difference in libraries between platforms, so the tool is being run on all platforms.
+    - name: Run BOM analysis
+      run: dotnet tool run sbom-tool generate -DeleteManifestDirIfPresent true -BuildDropPath "${{ github.workspace }}/${{ matrix.os }}/sbom/" -FetchLicenseInformation true -EnablePackageMetadataParsing true -BuildComponentPath . -PackageName "Verifiable" -PackageSupplier "Lumoin" -NamespaceUriBase "https://lumoin.com/verifiable" -PackageVersion ${{ env.PACKAGE_VERSION }} -Verbosity Verbose
+
+    - name: Pack NuGet files
       if: ${{ matrix.os == 'ubuntu-latest' }}
       run: |
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE/$VERIFIABLE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_BOUNCYCASTLE/$VERIFIABLE_BOUNCYCASTLE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:NoWarn=NU5104 -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_CORE/$VERIFIABLE_CORE.csproj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_DECENTRALIZEDWEBNODE/$VERIFIABLE_DECENTRALIZEDWEBNODE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_JWT/$VERIFIABLE_JWT.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:NoWarn=NU5104 -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_NSEC/$VERIFIABLE_NSEC.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_MICROSOFT/$VERIFIABLE_MICROSOFT.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_SIDETREE/$VERIFIABLE_SIDETREE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --include-symbols --include-source -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_TPM/$VERIFIABLE_TPM.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE/$VERIFIABLE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_BOUNCYCASTLE/$VERIFIABLE_BOUNCYCASTLE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:NoWarn=NU5104 -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_CORE/$VERIFIABLE_CORE.csproj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_DECENTRALIZEDWEBNODE/$VERIFIABLE_DECENTRALIZEDWEBNODE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_JWT/$VERIFIABLE_JWT.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:NoWarn=NU5104 -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_NSEC/$VERIFIABLE_NSEC.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_MICROSOFT/$VERIFIABLE_MICROSOFT.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_SIDETREE/$VERIFIABLE_SIDETREE.*proj
+        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_TPM/$VERIFIABLE_TPM.*proj
 
-    - name: Upload Verifiable Nuget packages
+    # Note that on Windows this would be simply  "dotnet dotnet-validate package local ./snupkgs/*.nupkg", the handling of an array of paths works directly.
+    - name: Validate generated NuGet files
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: |
+        for file in ./nupkgs/*.nupkg; do
+          dotnet dotnet-validate package local "$file"
+        done
+
+    - name: Upload Verifiable NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' }}
       uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a
       with:
         name: nupkg
-        path: |
-          ./src/${{ env.VERIFIABLE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
-          ./src/${{ env.VERIFIABLE_BOUNCYCASTLE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
-          ./src/${{ env.VERIFIABLE_CORE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
-          ./src/${{ env.VERIFIABLE_DECENTRALIZEDWEBNODE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
-          ./src/${{ env.VERIFIABLE_JWT }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
-          ./src/${{ env.VERIFIABLE_NSEC }}//bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
-          ./src/${{ env.VERIFIABLE_MICROSOFT }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
-          ./src/${{ env.VERIFIABLE_SIDETREE }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
-          ./src/${{ env.VERIFIABLE_TPM }}/bin/${{ env.BUILD_CONFIGURATION }}/*.nupkg
+        path: ./nupkgs/*.*          
 
   # The release idea is inspired by https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
   prerelease:
