@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CsCheck;
+using System;
 using System.Linq;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
@@ -115,7 +116,7 @@ namespace Verifiable.Core
             var curveType = td.CurveIdentifier.Equals(EllipticCurveTheoryData.EllipticSecP256k1, StringComparison.OrdinalIgnoreCase) ? EllipticCurveTypes.Secp256k1 : EllipticCurveTypes.NistCurves;
             CheckPointOnCurveForEvenAndOdd(td.PublicKeyMaterialX, td.PublicKeyMaterialY, curveType, primeBytes, isEven: td.IsEven);            
         }
-
+        
 
         private static void CheckPointOnCurveForEvenAndOdd(ReadOnlySpan<byte> publicKeyX, ReadOnlySpan<byte> publicKeyY, EllipticCurveTypes curveType, ReadOnlySpan<byte> primeBytes, bool isEven)
         {
