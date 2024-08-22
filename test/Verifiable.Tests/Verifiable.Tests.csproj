@@ -16,7 +16,7 @@
     <PackageReference Include="JunitXml.TestLogger" />    
     <PackageReference Include="SharpFuzz" />    
     <PackageReference Include="WinSharpFuzz" />
-    <PackageReference Include="FsCheck.Xunit" />
+    <PackageReference Include="CsCheck" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.extensibility.execution" />
     <PackageReference Include="xunit.analyzers">
