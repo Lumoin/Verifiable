@@ -66,17 +66,6 @@
           "Microsoft.TestPlatform.TestHost": "17.10.0"
         }
       },
-      "SharpFuzz": {
-        "type": "Direct",
-        "requested": "[2.1.1, )",
-        "resolved": "2.1.1",
-        "contentHash": "Xw5nP8CSxa6eK0gTaI2xbKhfP7VyQDdLYsfFBV6QeT9xyOzJ0a1Z3rJrmu3FTMl4DaRoMpBjFHppH+75QccddA==",
-        "dependencies": {
-          "SharpFuzz.Common": "2.2.0",
-          "System.Memory": "4.5.5",
-          "dnlib": "3.6.0"
-        }
-      },
       "SIL.ReleaseTasks": {
         "type": "Direct",
         "requested": "[2.6.0-beta0030, )",
@@ -100,17 +89,6 @@
         "requested": "[8.0.0, )",
         "resolved": "8.0.0",
         "contentHash": "+TUFINV2q2ifyXauQXRwy4CiBhqvDEDZeVJU7qfxya4aRYOKzVBpN+4acx25VcPB9ywUN6C0n8drWl110PhZEg=="
-      },
-      "WinSharpFuzz": {
-        "type": "Direct",
-        "requested": "[1.0.0, )",
-        "resolved": "1.0.0",
-        "contentHash": "cOmFMLha3eH8j5CLWu+n/1UkhydAMBg/4O01XqQGNUQe1L5Jy+uNz1D3Lh62UhEb3HUWhV4sl1B4vyihqkuTtA==",
-        "dependencies": {
-          "System.Memory": "4.5.4",
-          "WinSharpFuzz.Common": "1.0.0",
-          "dnlib": "3.3.1"
-        }
       },
       "xunit": {
         "type": "Direct",
@@ -150,15 +128,6 @@
         "contentHash": "aRFpAqixbuj1Vmqy2hsWPF0PJygo1SfjvmpBvVWZv6i+/u+C/L4wDdwFIzyCGUbjqr61NsZdPNPqDE8wlmG2qA==",
         "dependencies": {
           "System.Text.Encoding.CodePages": "8.0.0"
-        }
-      },
-      "dnlib": {
-        "type": "Transitive",
-        "resolved": "3.6.0",
-        "contentHash": "kFegKA+GR8a2mEzYH02TueIF1nNQ5lULAd9hgNwt6VBY2qNNZDYSwr63tMpKN0Lg+goDaZnaZczmP0/pDz2gaA==",
-        "dependencies": {
-          "System.Reflection.Emit": "4.7.0",
-          "System.Reflection.Emit.Lightweight": "4.7.0"
         }
       },
       "DotLiquid": {
@@ -511,11 +480,6 @@
         "resolved": "4.3.2",
         "contentHash": "leXiwfiIkW7Gmn7cgnNcdtNAU70SjmKW3jxGj1iKHOvdn0zRWsgv/l2OJUO5zdGdiv2VRFnAsxxhDgMzofPdWg=="
       },
-      "SharpFuzz.Common": {
-        "type": "Transitive",
-        "resolved": "2.2.0",
-        "contentHash": "biITWpwnMR7HUp43lAGU97DWq/4LfyXqqhuOK0Z4IuRP97KjQMOe/GKq3wE1KY21gNrc7OPO9HbAtQUvMKTImA=="
-      },
       "SharpZipLib": {
         "type": "Transitive",
         "resolved": "1.4.2",
@@ -807,16 +771,6 @@
           "System.Reflection.Primitives": "4.3.0",
           "System.Runtime": "4.3.0"
         }
-      },
-      "System.Reflection.Emit": {
-        "type": "Transitive",
-        "resolved": "4.7.0",
-        "contentHash": "VR4kk8XLKebQ4MZuKuIni/7oh+QGFmZW3qORd1GvBq/8026OpW501SzT/oypwiQl4TvT8ErnReh/NzY9u+C6wQ=="
-      },
-      "System.Reflection.Emit.Lightweight": {
-        "type": "Transitive",
-        "resolved": "4.7.0",
-        "contentHash": "a4OLB4IITxAXJeV74MDx49Oq2+PsF6Sml54XAFv+2RyWwtDBcabzoxiiJRhdhx+gaohLh4hEGCLQyBozXoQPqA=="
       },
       "System.Reflection.Extensions": {
         "type": "Transitive",
@@ -1128,11 +1082,6 @@
         "type": "Transitive",
         "resolved": "2.0.0",
         "contentHash": "ogBkGWAZl4We1zBivoHcE41BM0ovlJ8OKwUhBDi+4aKoxWeUTtihdt9RZh4N2Y532e364vt4YgWiyq9Ne4KCZA=="
-      },
-      "WinSharpFuzz.Common": {
-        "type": "Transitive",
-        "resolved": "1.0.0",
-        "contentHash": "kTjAotNbHbI1c7Y18GHIzWnWF7j5EFTVaKieT3sGeTzfyoSvx0egKMMfwRFqxGCySD1r/Quv2zJ+YdXzT72O6g=="
       },
       "xunit.abstractions": {
         "type": "Transitive",

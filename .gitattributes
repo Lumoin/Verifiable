@@ -29,6 +29,8 @@
 *.docx binary
 *.pptx binary
 *.bin binary
+*.exe binary
+test/Verifiable.FuzzTests/libfuzzer-dotnet-ubuntu binary
 *.gz filter=lfs diff=lfs merge=lfs -text
 *.jffs2 filter=lfs diff=lfs merge=lfs -text
 *.zip filter=lfs diff=lfs merge=lfs -text
@@ -47,3 +49,6 @@
 *.wav filter=lfs diff=lfs merge=lfs -text
 *.myo filter=lfs diff=lfs merge=lfs -text
 *.vsmdi filter=lfs diff=lfs merge=lfs -text
+*.vsmdi filter=lfs diff=lfs merge=lfs -text
+
+

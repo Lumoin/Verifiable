@@ -1,0 +1,1 @@
+.\fuzz.ps1 -libFuzzer ".\libfuzzer-dotnet-windows.exe" -project ".\Verifiable.FuzzTests.csproj" -corpus .\testcases\test-1.json -dict .\dictionaries\json.dict -timeout 10
