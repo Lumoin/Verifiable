@@ -70,6 +70,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".vscode", ".vscode", "{BE64
 		.vscode\tasks.json = .vscode\tasks.json
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Verifiable.FuzzTests", "test\Verifiable.FuzzTests\Verifiable.FuzzTests.csproj", "{A50E91E9-51A8-490D-B92B-97C547B98539}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -120,6 +122,10 @@ Global
 		{FF947DEC-29E7-4700-94A4-0E84B2917BF5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FF947DEC-29E7-4700-94A4-0E84B2917BF5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FF947DEC-29E7-4700-94A4-0E84B2917BF5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A50E91E9-51A8-490D-B92B-97C547B98539}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A50E91E9-51A8-490D-B92B-97C547B98539}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A50E91E9-51A8-490D-B92B-97C547B98539}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A50E91E9-51A8-490D-B92B-97C547B98539}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -140,6 +146,7 @@ Global
 		{1B79A5A8-0754-4F72-AD32-E791F9A8ED23} = {737B175F-5A06-480C-B93F-42B31EF4EFA7}
 		{CD06BE0E-287F-4A01-B500-CD92465F1E2D} = {35CAB8A9-7332-4D46-BBD3-83A37A747F5E}
 		{BE64721C-A756-4078-B683-34AC9B639E28} = {35CAB8A9-7332-4D46-BBD3-83A37A747F5E}
+		{A50E91E9-51A8-490D-B92B-97C547B98539} = {942BE00F-D1A2-405C-80F3-D854D373E1FF}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {B3AC63DE-C110-4924-B7DB-FFAC4704246F}

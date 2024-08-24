@@ -13,9 +13,7 @@
     
   <ItemGroup>
     <PackageReference Include="dotNetRdf" />
-    <PackageReference Include="JunitXml.TestLogger" />    
-    <PackageReference Include="SharpFuzz" />    
-    <PackageReference Include="WinSharpFuzz" />
+    <PackageReference Include="JunitXml.TestLogger" />        
     <PackageReference Include="CsCheck" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.extensibility.execution" />

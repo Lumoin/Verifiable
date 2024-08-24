@@ -1,0 +1,1 @@
+./libfuzzer-dotnet-windows.exe --target_path=bin/release/net9.0/Verifiable.FuzzTests.exe ./crash-<something> -timeout=10 -minimize_crash=1
