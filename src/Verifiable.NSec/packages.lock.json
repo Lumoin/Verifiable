@@ -43,7 +43,7 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "SimpleBase": "[4.0.0, )",
+          "SimpleBase": "[4.0.1, )",
           "System.Collections.Immutable": "[8.0.0, )",
           "System.Text.Json": "[8.0.4, )",
           "Verifiable.Jwt": "[0.0.0, )"
@@ -54,9 +54,9 @@
       },
       "SimpleBase": {
         "type": "CentralTransitive",
-        "requested": "[4.0.0, )",
-        "resolved": "4.0.0",
-        "contentHash": "X9VdQGnMwRZ7ve1eGgzoRxV/srWCQfMWRaFzK8KsnA9P2N0LKUcELAdSW8noAY0JPKkDXNDtpH65CeVQwDDf+w==",
+        "requested": "[4.0.1, )",
+        "resolved": "4.0.1",
+        "contentHash": "5QNJMyyHMMPMnSWlRNOR+p1R7KtS1CFaHeCy+uDLnPdJLeqHmnYMnrpJuT1jVcJxenWPfIfrJ1xU/9r1NE9aHw==",
         "dependencies": {
           "System.Memory": "4.5.5"
         }

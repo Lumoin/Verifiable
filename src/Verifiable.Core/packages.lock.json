@@ -13,9 +13,9 @@
       },
       "SimpleBase": {
         "type": "Direct",
-        "requested": "[4.0.0, )",
-        "resolved": "4.0.0",
-        "contentHash": "X9VdQGnMwRZ7ve1eGgzoRxV/srWCQfMWRaFzK8KsnA9P2N0LKUcELAdSW8noAY0JPKkDXNDtpH65CeVQwDDf+w==",
+        "requested": "[4.0.1, )",
+        "resolved": "4.0.1",
+        "contentHash": "5QNJMyyHMMPMnSWlRNOR+p1R7KtS1CFaHeCy+uDLnPdJLeqHmnYMnrpJuT1jVcJxenWPfIfrJ1xU/9r1NE9aHw==",
         "dependencies": {
           "System.Memory": "4.5.5"
         }
