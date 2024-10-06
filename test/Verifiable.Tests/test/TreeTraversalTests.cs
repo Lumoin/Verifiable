@@ -1,9 +1,4 @@
-﻿using System.Collections.Generic;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
-using Verifiable.Assessment;
-using Xunit;
+﻿using Verifiable.Assessment;
 using Verifiable.Core.Asssesment;
 
 
@@ -11,6 +6,8 @@ namespace Verifiable.Tests.test
 {
     public record TestClaimContext: ClaimContext { }
 
+
+    [TestClass]
     public class TreeTraversalTests
     {
         private static ClaimContext TestClaimContext { get; } = new TestClaimContext();
@@ -22,7 +19,7 @@ namespace Verifiable.Tests.test
         }
 
 
-        [Fact]
+        [TestMethod]
         public async Task ClaimTreeTraversalSucceeds()
         {
             var subClaims = new[] { new Claim(ClaimId.AlgExists, ClaimOutcome.Success), new Claim(ClaimId.KtyMissingOrEmpty, ClaimOutcome.Failure) };
@@ -43,15 +40,15 @@ namespace Verifiable.Tests.test
             TraverseAndOutput(mainClaim, (root) => root.SubClaims.AsEnumerable(), nullFormatter, testSink);
             await TraverseAndOutputAsync(mainClaim, (root) => Task.FromResult(root.SubClaims.AsEnumerable()), nullFormatter, asyncTestSink);
 
-            Assert.NotNull(outputList);
-            Assert.NotNull(asyncOutputList);
+            Assert.IsNotNull(outputList);
+            Assert.IsNotNull(asyncOutputList);
 
-            Assert.Equal(3, outputList.Count);
-            Assert.Equal(3, asyncOutputList.Count);
+            Assert.AreEqual(3, outputList.Count);
+            Assert.AreEqual(3, asyncOutputList.Count);
             
             var expectedOrder = new List<Claim> { mainClaim }.Concat(subClaims).ToList();
-            Assert.Equal(expectedOrder, outputList);            
-            Assert.Equal(expectedOrder, asyncOutputList);
+            CollectionAssert.AreEqual(expectedOrder, outputList);            
+            CollectionAssert.AreEqual(expectedOrder, asyncOutputList);
         }
 
         

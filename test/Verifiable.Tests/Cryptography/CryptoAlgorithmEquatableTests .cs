@@ -1,12 +1,12 @@
 using Verifiable.Core.Cryptography.Context;
-using Xunit;
 
 namespace Verifiable.Tests.Cryptography
 {
     /// <summary>
     /// Tests for <see cref="CryptoAlgorithm" /> <see cref="System.IEquatable{T}" /> implementation.
     /// </summary>
-    public class CryptoAlgorithmEquatableTests
+    [TestClass]
+    public sealed class CryptoAlgorithmEquatableTests
     {
         /// <summary>
         /// A first instance for testing comparisons.
@@ -19,82 +19,82 @@ namespace Verifiable.Tests.Cryptography
         private static CryptoAlgorithm CryptoAlgorithm2 { get; } = CryptoAlgorithm.Rsa4096;
                 
 
-        [Fact]
+        [TestMethod]
         public void InstancesWithDifferentCodesAreNotEqual()
         {
-            Assert.False(CryptoAlgorithm1.Equals(CryptoAlgorithm2));
-            Assert.False(CryptoAlgorithm1 == CryptoAlgorithm2);
-            Assert.True(CryptoAlgorithm1 != CryptoAlgorithm2);
+            Assert.IsFalse(CryptoAlgorithm1.Equals(CryptoAlgorithm2));
+            Assert.IsFalse(CryptoAlgorithm1 == CryptoAlgorithm2);
+            Assert.IsTrue(CryptoAlgorithm1 != CryptoAlgorithm2);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void InstancesWithSameCodesAreEqual()
         {
             var cryptoAlgorithm1 = CryptoAlgorithm.P256;
-            Assert.True(CryptoAlgorithm1.Equals(cryptoAlgorithm1));
-            Assert.True(CryptoAlgorithm1 == cryptoAlgorithm1);
-            Assert.False(CryptoAlgorithm1 != cryptoAlgorithm1);
+            Assert.IsTrue(CryptoAlgorithm1.Equals(cryptoAlgorithm1));
+            Assert.IsTrue(CryptoAlgorithm1 == cryptoAlgorithm1);
+            Assert.IsFalse(CryptoAlgorithm1 != cryptoAlgorithm1);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void ComparisonWithTypeAndObjectSucceeds()
         {
             object cryptoAlgorithmAsObject = CryptoAlgorithm1;
-            Assert.True(CryptoAlgorithm1.Equals(cryptoAlgorithmAsObject));
+            Assert.IsTrue(CryptoAlgorithm1.Equals(cryptoAlgorithmAsObject));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void CryptoAlgorithmAndObjectEqualityComparisonSucceeds()
         {
             object cryptoAlgorithmAsObject = CryptoAlgorithm1;
             bool result1 = CryptoAlgorithm1 == cryptoAlgorithmAsObject;
-            Assert.True(result1);
+            Assert.IsTrue(result1);
 
             bool result2 = cryptoAlgorithmAsObject == CryptoAlgorithm1;
-            Assert.True(result2);
+            Assert.IsTrue(result2);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void CryptoAlgorithmAndObjectInequalityComparisonSucceeds()
         {
             object cryptoAlgorithmAsObject = CryptoAlgorithm1;
             bool result1 = CryptoAlgorithm1 != cryptoAlgorithmAsObject;
-            Assert.False(result1);
+            Assert.IsFalse(result1);
 
             bool result2 = cryptoAlgorithmAsObject != CryptoAlgorithm1;
-            Assert.False(result2);
+            Assert.IsFalse(result2);
         }
 
                 
-        [Fact]
+        [TestMethod]
         public void CryptoAlgorithmAndObjectEqualityComparisonWithDifferentValuesSucceeds()
         {
             object cryptoAlgorithmAsObject = CryptoAlgorithm2;
             bool result1 = CryptoAlgorithm1 == cryptoAlgorithmAsObject;
-            Assert.False(result1);
+            Assert.IsFalse(result1);
 
             bool result2 = CryptoAlgorithm1 != cryptoAlgorithmAsObject;
-            Assert.True(result2);
+            Assert.IsTrue(result2);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void EqualsWithDifferentTypesReturnsFalse()
         {
             object differentType = new();
-            Assert.False(CryptoAlgorithm1.Equals(differentType));
+            Assert.IsFalse(CryptoAlgorithm1.Equals(differentType));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void EqualsWithNullObjectReturnsFalse()
         {
             object? nullObject = null;
-            Assert.False(CryptoAlgorithm1.Equals(nullObject));
+            Assert.IsFalse(CryptoAlgorithm1.Equals(nullObject));
         }
     }
 }

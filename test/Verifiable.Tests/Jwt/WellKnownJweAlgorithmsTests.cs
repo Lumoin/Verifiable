@@ -1,14 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using Verifiable.Jwt;
+﻿using Verifiable.Jwt;
 using Verifiable.Tests.TestInfrastructure;
-using Xunit;
 
 namespace Verifiable.Tests.Jwt
 {
     /// <summary>
     /// Tests that canonicalization of JWE algorithms works correctly.
     /// </summary>
+    [TestClass]
     public class WellKnownJweAlgorithmsTests
     {
         /// <summary>
@@ -41,8 +39,13 @@ namespace Verifiable.Tests.Jwt
         }
 
 
-        [Theory]
-        [MemberData(nameof(GetJweAlgorithms))]
+        /// <summary>
+        /// Tests that all well-known JWE algorithm values are recognized correctly.
+        /// </summary>
+        /// <param name="correctAlgorithm">The correct to be used in test.</param>
+        /// <param name="isCorrectAlgorithm">The function that checks if the algorithm is recognized.</param>
+        [TestMethod]
+        [DynamicData(nameof(GetJweAlgorithms), DynamicDataSourceType.Method)]
         public void JweAlgorithmComparesCorrectly(string correctAlgorithm, Func<string, bool> isCorrectAlgorithm)
         {
             //A newly created instance should not reference the canonicalized version.
@@ -51,21 +54,21 @@ namespace Verifiable.Tests.Jwt
             //WellKnownJweAlgorithms.GetCanonicalizedValue that relies on this optimization
             //to avoid comparing the actual strings if the references are the same.
             string instanceAlgorithm = new(correctAlgorithm);
-            Assert.False(object.ReferenceEquals(correctAlgorithm, instanceAlgorithm), "Instance created from canonical should not reference equal to it.");
+            Assert.IsFalse(object.ReferenceEquals(correctAlgorithm, instanceAlgorithm), "Instance created from canonical should not reference equal to it.");
 
             //The correct algorithm should be correctly identified even if it's not the canonicalized version.
             //This is a premise check for the WellKnownJweAlgorithms.GetCanonicalizedValue, now the
             //comparison is done with the actual strings.
-            Assert.True(isCorrectAlgorithm(instanceAlgorithm), "Is<SomeAlgorithm> should compare correctly to canonicalized version even if instance.");
+            Assert.IsTrue(isCorrectAlgorithm(instanceAlgorithm), "Is<SomeAlgorithm> should compare correctly to canonicalized version even if instance.");
 
             //The canonicalized version should be the same as the original.
             string canonicalizedVersion = WellKnownJweAlgorithms.GetCanonicalizedValue(instanceAlgorithm);
-            Assert.True(object.ReferenceEquals(correctAlgorithm, canonicalizedVersion), "Canonicalized version should be the same as original.");
+            Assert.IsTrue(object.ReferenceEquals(correctAlgorithm, canonicalizedVersion), "Canonicalized version should be the same as original.");
 
             //A case with a toggled letter should not be the same since it's both a different string
             //and a different reference.
             string incorrectAlgorithm = instanceAlgorithm.ToggleCaseForLetterAt(0);
-            Assert.False(isCorrectAlgorithm(incorrectAlgorithm), "Comparison should fail when casing is changed.");
+            Assert.IsFalse(isCorrectAlgorithm(incorrectAlgorithm), "Comparison should fail when casing is changed.");
         }   
     }
 }

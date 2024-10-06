@@ -1,13 +1,13 @@
 using Verifiable.Jwt;
-using Xunit;
 
 namespace Verifiable.Tests.Jwt
 {
-    public class JwtUtilitiesTests
+    [TestClass]
+    public sealed class JwtUtilitiesTests
     {
         /* ReadOnlySpan<byte> RsaExponent65537 = new byte[] { 0x01, 0x00, 0x01 };
            var e = Base64Url.Encode(RsaExponent65537);
-           Assert.Equal("AQAB", e);
+           Assert.AreEqual("AQAB", e);
         */
 
         //As per definition the exponent used by did:key RSA keys is 65537.
@@ -30,7 +30,7 @@ namespace Verifiable.Tests.Jwt
 
         private static string RsaExponent65537 => "AQAB";
 
-        [Fact]
+        [TestMethod]
         public void RfcRsaTestVector()
         {
             //This is the RSA test case from https://datatracker.ietf.org/doc/html/rfc7638#section-3.1.
@@ -40,14 +40,14 @@ namespace Verifiable.Tests.Jwt
             var thumbPrintBytes = JoseUtilities.ComputeRsaThumbprint(e, kty, n);
             
             var thumbprint = Base64Url.Encode(thumbPrintBytes);
-            Assert.Equal("NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs", thumbprint);
+            Assert.AreEqual("NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs", thumbprint);
         }
 
         //The following are the cases from https://w3c-ccg.github.io/lds-jws2020/#example-2-example-in-did-document.
         //Because the implementation is the same, it reassures the tests and code are correct
         //according to the W3C specification and RFC, which the W3C specification is based on.
 
-        [Fact]
+        [TestMethod]
         public void Ed25519LdsJws2020OkpCryptoSuiteExample()
         {
             //This is the RSA test case from https://datatracker.ietf.org/doc/html/rfc7638#section-3.1.
@@ -57,11 +57,11 @@ namespace Verifiable.Tests.Jwt
             var thumbPrintBytes = JoseUtilities.ComputeEcdhThumbprint(crv, kty, x);
 
             var thumbprint = Base64Url.Encode(thumbPrintBytes);
-            Assert.Equal("_Qq0UL2Fq651Q0Fjd6TvnYE-faHiOpRlPVQcY_-tA4A", thumbprint);
+            Assert.AreEqual("_Qq0UL2Fq651Q0Fjd6TvnYE-faHiOpRlPVQcY_-tA4A", thumbprint);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void Secp256k1EcLdsJws2020CryptoSuiteExample()
         {
             var kty = "EC";
@@ -71,11 +71,11 @@ namespace Verifiable.Tests.Jwt
             var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
 
             var thumbprint = Base64Url.Encode(thumbPrintBytes);
-            Assert.Equal("4SZ-StXrp5Yd4_4rxHVTCYTHyt4zyPfN1fIuYsm6k3A", thumbprint);
+            Assert.AreEqual("4SZ-StXrp5Yd4_4rxHVTCYTHyt4zyPfN1fIuYsm6k3A", thumbprint);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void RsaLdsJws2020CryptoSuiteExample()
         {
             //This is the RSA test case from https://datatracker.ietf.org/doc/html/rfc7638#section-3.1.
@@ -85,11 +85,11 @@ namespace Verifiable.Tests.Jwt
             var thumbPrintBytes = JoseUtilities.ComputeRsaThumbprint(e, kty, n);
 
             var thumbprint = Base64Url.Encode(thumbPrintBytes);
-            Assert.Equal("n4cQ-I_WkHMcwXBJa7IHkYu8CMfdNcZKnKsOrnHLpFs", thumbprint);
+            Assert.AreEqual("n4cQ-I_WkHMcwXBJa7IHkYu8CMfdNcZKnKsOrnHLpFs", thumbprint);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void NistP256LdsJws2020CryptoSuiteExample()
         {
             var kty = "EC";
@@ -99,11 +99,11 @@ namespace Verifiable.Tests.Jwt
             var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
 
             var thumbprint = Base64Url.Encode(thumbPrintBytes);
-            Assert.Equal("_TKzHv2jFIyvdTGF1Dsgwngfdg3SH6TpDv0Ta1aOEkw", thumbprint);
+            Assert.AreEqual("_TKzHv2jFIyvdTGF1Dsgwngfdg3SH6TpDv0Ta1aOEkw", thumbprint);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void NistP384LdsJws2020CryptoSuiteExample()
         {
             var kty = "EC";
@@ -113,11 +113,11 @@ namespace Verifiable.Tests.Jwt
             var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
 
             var thumbprint = Base64Url.Encode(thumbPrintBytes);
-            Assert.Equal("8wgRfY3sWmzoeAL-78-oALNvNj67ZlQxd1ss_NX1hZY", thumbprint);
+            Assert.AreEqual("8wgRfY3sWmzoeAL-78-oALNvNj67ZlQxd1ss_NX1hZY", thumbprint);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void NistP521LdsJws2020CryptoSuiteExample()
         {
             var kty = "EC";
@@ -127,7 +127,7 @@ namespace Verifiable.Tests.Jwt
             var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
 
             var thumbprint = Base64Url.Encode(thumbPrintBytes);
-            Assert.Equal("NjQ6Y_ZMj6IUK_XkgCDwtKHlNTUTVjEYOWZtxhp1n-E", thumbprint);
+            Assert.AreEqual("NjQ6Y_ZMj6IUK_XkgCDwtKHlNTUTVjEYOWZtxhp1n-E", thumbprint);
         }
     }
 }

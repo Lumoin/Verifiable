@@ -31,7 +31,7 @@ namespace Verifiable.Tests.TestInfrastructure
             });
         }
 
-        
+
         /// <summary>
         /// Toggles the case of the character at the given index.
         /// </summary>

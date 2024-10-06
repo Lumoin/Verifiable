@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Assessment;
 using Verifiable.Core.Did;
-using Xunit;
 
 
-namespace Verifiable.Core
+namespace Verifiable.Tests.Core
 {
     public static class DidCoreValidation
     {
@@ -22,21 +19,22 @@ namespace Verifiable.Core
     /// <summary>
     /// Validation tests.
     /// </summary>
-    public class DidCoreValidationTests
+    [TestClass]
+    public sealed class DidCoreValidationTests
     {
         /// <summary>
         /// Validates the validator for context first URI checking as defined by <a href="https://www.w3.org/TR/did-core/#json-ld"/>.
         /// </summary>
-        [Fact]
+        [TestMethod]
         public void ContextFirstUriIsValidatedCorrectly()
         {
             var faultyContext = new Context();            
             var faultyValidationResult = DidCoreValidation.ValidateJsonLdUriAsFirst(faultyContext);
-            Assert.False(faultyValidationResult.Outcome == ClaimOutcome.Success, "Faulty context validation should fail.");                        
+            Assert.IsFalse(faultyValidationResult.Outcome == ClaimOutcome.Success, "Faulty context validation should fail.");                        
             
             var correctContext = new Context() { Contexes = new List<object>(new string[] { DidCoreConstants.JsonLdContextFirstUri }) };            
             var correctValidationResult = DidCoreValidation.ValidateJsonLdUriAsFirst(correctContext);
-            Assert.True(correctValidationResult.Outcome == ClaimOutcome.Success, "Correct context validation should not fail.");            
+            Assert.IsTrue(correctValidationResult.Outcome == ClaimOutcome.Success, "Correct context validation should not fail.");            
         }
     }
 }

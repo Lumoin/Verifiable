@@ -1,12 +1,12 @@
 using Verifiable.Core.Cryptography.Context;
-using Xunit;
 
 namespace Verifiable.Tests.Cryptography
 {
     /// <summary>
     /// Tests for <see cref="Purpose" /> <see cref="System.IEquatable{T}" /> implementation.
     /// </summary>
-    public class PurposeEquatableTests
+    [TestClass]
+    public sealed class PurposeEquatableTests
     {
         /// <summary>
         /// A first instance for testing comparisons.
@@ -19,82 +19,82 @@ namespace Verifiable.Tests.Cryptography
         private static Purpose Purpose2 { get; } = Purpose.Private;
 
         
-        [Fact]
+        [TestMethod]
         public void InstancesWithDifferentCodesAreNotEqual()
         {
-            Assert.False(Purpose1.Equals(Purpose2));
-            Assert.False(Purpose1 == Purpose2);
-            Assert.True(Purpose1 != Purpose2);
+            Assert.IsFalse(Purpose1.Equals(Purpose2));
+            Assert.IsFalse(Purpose1 == Purpose2);
+            Assert.IsTrue(Purpose1 != Purpose2);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void InstancesWithSameCodesAreEqual()
         {
             var purposeDuplicatePublic = Purpose1;
-            Assert.True(Purpose1.Equals(purposeDuplicatePublic));
-            Assert.True(Purpose1 == purposeDuplicatePublic);
-            Assert.False(Purpose1 != purposeDuplicatePublic);
+            Assert.IsTrue(Purpose1.Equals(purposeDuplicatePublic));
+            Assert.IsTrue(Purpose1 == purposeDuplicatePublic);
+            Assert.IsFalse(Purpose1 != purposeDuplicatePublic);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void ComparisonWithTypeAndObjectSucceeds()
         {
             object purposeAsObject = Purpose1;
-            Assert.True(Purpose1.Equals(purposeAsObject));
+            Assert.IsTrue(Purpose1.Equals(purposeAsObject));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void PurposeAndObjectEqualityComparisonSucceeds()
         {
             object purposeAsObject = Purpose1;
             bool result1 = Purpose1 == purposeAsObject;
-            Assert.True(result1);
+            Assert.IsTrue(result1);
 
             bool result2 = purposeAsObject == Purpose1;
-            Assert.True(result2);
+            Assert.IsTrue(result2);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void PurposeAndObjectInequalityComparisonSucceeds()
         {
             object purposeAsObject = Purpose1;
             bool result1 = Purpose1 != purposeAsObject;
-            Assert.False(result1);
+            Assert.IsFalse(result1);
 
             bool result2 = purposeAsObject != Purpose1;
-            Assert.False(result2);
+            Assert.IsFalse(result2);
         }
 
                 
-        [Fact]
+        [TestMethod]
         public void PurposeAndObjectEqualityComparisonWithDifferentValuesSucceeds()
         {
             object purposeAsObject = Purpose2;
             bool result1 = Purpose1 == purposeAsObject;
-            Assert.False(result1);
+            Assert.IsFalse(result1);
 
             bool result2 = Purpose1 != purposeAsObject;
-            Assert.True(result2);
+            Assert.IsTrue(result2);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void EqualsWithDifferentTypesReturnsFalse()
         {
             object differentType = new();
-            Assert.False(Purpose1.Equals(differentType));
+            Assert.IsFalse(Purpose1.Equals(differentType));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void EqualsWithNullObjectReturnsFalse()
         {
             object? nullObject = null;
-            Assert.False(Purpose1.Equals(nullObject));
+            Assert.IsFalse(Purpose1.Equals(nullObject));
         }
     }
 }

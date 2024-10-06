@@ -1,13 +1,12 @@
-﻿using Xunit;
-
-namespace Verifiable.Tests.Credential
+﻿namespace Verifiable.Tests.Credential
 {
-    public class CredentialTests
+    [TestClass]
+    public sealed class CredentialTests
     {
-        [Fact]
+        [TestMethod]
         public void CredentialTest1()
         {
-            Assert.True(true);
+            Assert.IsTrue(true);
         }
     }
 }

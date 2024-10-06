@@ -1,6 +1,4 @@
-﻿using System;
-using System.Text.Json;
-using System.Threading.Tasks;
+﻿using System.Text.Json;
 using Verifiable.Assessment;
 using Verifiable.Core.Builders;
 using Verifiable.Core.Cryptography.Context;
@@ -8,7 +6,6 @@ using Verifiable.Core.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Xunit;
 
 
 namespace Verifiable.Tests.Builders
@@ -16,7 +13,8 @@ namespace Verifiable.Tests.Builders
     /// <summary>
     /// Tests for <see cref="KeyDidBuilder"/>.
     /// </summary>
-    public class KeyDidBuilderTests
+    [TestClass]
+    public sealed class KeyDidBuilderTests
     {
         /// <summary>
         /// The one and only (stateless) builder for KeyDID used in the tests.
@@ -37,8 +35,8 @@ namespace Verifiable.Tests.Builders
 
 
 
-        [Theory]
-        [ClassData(typeof(DidKeyTheoryData))]
+        [TestMethod]
+        [DynamicData(nameof(DidKeyTheoryData.GetDidTheoryTestData), typeof(DidKeyTheoryData), DynamicDataSourceType.Method)]     
         public async Task CanBuildKeyDidFromRandomKeys(DidKeyTestData testData)
         {
             //This builds the did:key document with the given public key and crypto suite.
@@ -46,10 +44,11 @@ namespace Verifiable.Tests.Builders
 
             //Assert that the KeyFormat exists and is of the expected type
             var actualKeyFormat = keyDidDocument.VerificationMethod![0].KeyFormat;
-            Assert.IsType(testData.ExpectedKeyFormat, actualKeyFormat);
+            Assert.IsNotNull(actualKeyFormat);
+            Assert.AreEqual(testData.ExpectedKeyFormat, actualKeyFormat.GetType());
 
             //The builder produced DID identifier type should match KeyDidId, as the type of the document is key DID.                                               
-            Assert.IsType<KeyDidMethod>(keyDidDocument.Id);
+            Assert.IsInstanceOfType<KeyDidMethod>(keyDidDocument.Id);
 
             //This catches if there is a mismatch in generated tag for the key format
             //AND if the identifier does not match the used crypto algorithm. In
@@ -58,62 +57,63 @@ namespace Verifiable.Tests.Builders
             var keyFormatValidator = new KeyFormatValidator();
             var alg = (CryptoAlgorithm)testData.KeyPair.PublicKey.Tag[typeof(CryptoAlgorithm)];
             keyFormatValidator.AddValidator(typeof(PublicKeyJwk), TestOnlyKeyFormatValidators.KeyDidJwkValidator);
-            keyFormatValidator.AddValidator(typeof(PublicKeyMultibase), TestOnlyKeyFormatValidators.KeyDidMultibaseValidator);                        
+            keyFormatValidator.AddValidator(typeof(PublicKeyMultibase), TestOnlyKeyFormatValidators.KeyDidMultibaseValidator);
             bool res = keyFormatValidator.Validate(actualKeyFormat, alg);
-            Assert.True(res, $"Key format validation failed for {actualKeyFormat.GetType()} for algorithm {alg.Algorithm}.");
+            Assert.IsTrue(res, $"Key format validation failed for {actualKeyFormat.GetType()} for algorithm {alg.Algorithm}.");
 
             //This part runs the whole suite if did:key validation rules Verifiable library defines against the document.
             var assessmentResult = await KeyDidAssessor.AssessAsync(keyDidDocument, "some-test-supplied-correlationId");
-            Assert.True(assessmentResult.IsSuccess);
+            Assert.IsTrue(assessmentResult.IsSuccess);
 
             string serializedDidDocument = JsonSerializer.Serialize(keyDidDocument, TestSetup.DefaultSerializationOptions);
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(serializedDidDocument, TestSetup.DefaultSerializationOptions);            
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(serializedDidDocument, TestSetup.DefaultSerializationOptions);
             bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(serializedDidDocument, reserializedDidDocument);
-            Assert.True(areJsonElementsEqual, $"JSON string \"{serializedDidDocument}\" did not pass roundtrip test.");                       
-            Assert.Equal(typeof(KeyDidMethod), deserializedDidDocument?.Id?.GetType());            
-        }        
+            Assert.IsTrue(areJsonElementsEqual, $"JSON string \"{serializedDidDocument}\" did not pass roundtrip test.");
+            Assert.AreEqual(typeof(KeyDidMethod), deserializedDidDocument?.Id?.GetType());
+        }
     }
-}
-
-public class Version1
-{
-
-}
-
-public class Version2
-{
-    
-}
 
 
-public static class Transformer
-{
-    public static TTransformed Transform<TTransformed, TOriginal>(TOriginal toBeTransformed, Func<TOriginal, TTransformed> transformer)
+    public class Version1
     {
-        return transformer(toBeTransformed);
+
     }
-}
 
-public static class GrainTransformer
-{
-    public static Func<object, TTransformed> GetTransformer<TTransformed>(string grainId, string grainType, string siloId)
-    {        
-        return grainState =>
-        {            
-            return (TTransformed)grainState;
-        };
-    }
-}
-
-
-public class Test
-{
-    public void TestMethod()
+    public class Version2
     {
-        Version1 v1 = new();
-        Version2 v2 = Transformer.Transform(v1, (v1) => new Version2());
-        
-        var transformer = GrainTransformer.GetTransformer<Version2>("grain1", "typeA", "siloX");
-        Version2 transformedState = transformer(v1);
+
+    }
+
+
+    public static class Transformer
+    {
+        public static TTransformed Transform<TTransformed, TOriginal>(TOriginal toBeTransformed, Func<TOriginal, TTransformed> transformer)
+        {
+            return transformer(toBeTransformed);
+        }
+    }
+
+    public static class GrainTransformer
+    {
+        public static Func<object, TTransformed> GetTransformer<TTransformed>(string grainId, string grainType, string siloId)
+        {
+            return grainState =>
+            {
+                return (TTransformed)grainState;
+            };
+        }
+    }
+
+
+    public class Test
+    {
+        public void TestMethod()
+        {
+            Version1 v1 = new();
+            Version2 v2 = Transformer.Transform(v1, (v1) => new Version2());
+
+            var transformer = GrainTransformer.GetTransformer<Version2>("grain1", "typeA", "siloX");
+            Version2 transformedState = transformer(v1);
+        }
     }
 }

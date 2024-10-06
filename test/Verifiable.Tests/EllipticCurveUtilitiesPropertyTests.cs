@@ -1,15 +1,15 @@
 ﻿using CsCheck;
 using Verifiable.Core.Cryptography;
-using Xunit;
 
 namespace Verifiable.Tests.Cryptography
 {
     /// <summary>
     /// Property based tests on elliptic curve utilities.
     /// </summary>
-    public class EllipticCurveUtilitiesPropertyTests
+    [TestClass]
+    public sealed class EllipticCurveUtilitiesPropertyTests
     {
-        [Fact]
+        [TestMethod]
         public void CompressionDecompressionShouldBeInverseIfOnTheCurve()
         {            
             var curveTypeGen = Gen.Enum<EllipticCurveTypes>().Where(curve => curve != EllipticCurveTypes.None && curve != EllipticCurveTypes.Curve25519);
@@ -40,7 +40,7 @@ namespace Verifiable.Tests.Cryptography
                     byte[] decompressedY = EllipticCurveUtilities.Decompress(compressedPoint, curveType);
 
                     //Ensure the decompressed Y matches the original Y.
-                    Assert.Equal(publicKeyY, decompressedY);
+                    Assert.AreEqual(publicKeyY, decompressedY);
                 }
             });
         }

@@ -1,13 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using Verifiable.Assessment;
+﻿using Verifiable.Assessment;
 using Verifiable.Jwt;
-using Xunit;
 
 namespace Verifiable.Tests.Jwt
 {
-    public class JwtKeyHeaderValidatorTests
+    [TestClass]
+    public sealed class JwtKeyHeaderValidatorTests
     {
         //TODO: Put these to JsonWebKey2020?
         private static readonly List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> ValidAlgCrvPairs = new()
@@ -18,7 +15,7 @@ namespace Verifiable.Tests.Jwt
         };
 
         
-        [Fact]
+        [TestMethod]
         public void ValidKeyHeaderWithAlgRequired()
         {
             var testHeaders1 = new Dictionary<string, object>
@@ -31,12 +28,12 @@ namespace Verifiable.Tests.Jwt
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: true);
-            Assert.NotNull(result);
-            Assert.True(result.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsNotNull(result);
+            Assert.IsTrue(result.All(c => c.Outcome == ClaimOutcome.Success));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void ValidKeyHeaderWithAlgNotRequired()
         {
             var testHeaders1 = new Dictionary<string, object>
@@ -49,12 +46,12 @@ namespace Verifiable.Tests.Jwt
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: false);
-            Assert.NotNull(result);
-            Assert.True(result.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsNotNull(result);
+            Assert.IsTrue(result.All(c => c.Outcome == ClaimOutcome.Success));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void ValidKeyHeaderWithYMissing()
         {
             var testHeaders1 = new Dictionary<string, object>
@@ -66,12 +63,12 @@ namespace Verifiable.Tests.Jwt
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: false);
-            Assert.NotNull(result);
-            Assert.False(result.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsNotNull(result);
+            Assert.IsFalse(result.All(c => c.Outcome == ClaimOutcome.Success));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void ValidKeyHeaderWithXMissing()
         {
             var testHeaders1 = new Dictionary<string, object>
@@ -83,12 +80,12 @@ namespace Verifiable.Tests.Jwt
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: false);
-            Assert.NotNull(result);
-            Assert.False(result.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsNotNull(result);
+            Assert.IsFalse(result.All(c => c.Outcome == ClaimOutcome.Success));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void ValidKeyHeaderWithAlgPresentNotMatchingCrv()
         {
             var testHeaders1 = new Dictionary<string, object>
@@ -100,12 +97,12 @@ namespace Verifiable.Tests.Jwt
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: false);
-            Assert.NotNull(result);
-            Assert.False(result.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsNotNull(result);
+            Assert.IsFalse(result.All(c => c.Outcome == ClaimOutcome.Success));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void ValidKeyHeaderWithInvalidCurve()
         {
             var testHeaders1 = new Dictionary<string, object>
@@ -117,8 +114,8 @@ namespace Verifiable.Tests.Jwt
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: false);
-            Assert.NotNull(result);
-            Assert.False(result.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsNotNull(result);
+            Assert.IsFalse(result.All(c => c.Outcome == ClaimOutcome.Success));
         }
     }
 }

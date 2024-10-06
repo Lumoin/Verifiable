@@ -1,7 +1,4 @@
 ﻿using SimpleBase;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Verifiable.BouncyCastle;
@@ -10,15 +7,15 @@ using Verifiable.Core.Cryptography;
 using Verifiable.Core.Did;
 using Verifiable.Jwt;
 using Verifiable.Tests.TestDataProviders;
-using Xunit;
 
 namespace Verifiable.Tests
 {
-    public class SigningTests
+    [TestClass]
+    public sealed class SigningTests
     {
         //System.Buffers.Text.Base64: https://source.dot.net/#System.Private.CoreLib/src/libraries/System.Private.CoreLib/src/System/Buffers/Text/Base64Decoder.cs,72                
 
-        [Fact]
+        [TestMethod]
         public void CanSignDidWeb()
         {
             var keys = TestKeyMaterialProvider.Ed25519KeyMaterial;
@@ -53,14 +50,14 @@ namespace Verifiable.Tests
             var ownSignature = privateKeyMemory.Sign(canonocalizedDataWithoutProofHashedData, BouncyCastleAlgorithms.SignEd25519, MemoryPool<byte>.Shared);
             string ownProof = 'z' + Base58.Bitcoin.Encode(ownSignature.AsReadOnlySpan());
             string reEncodedTestVector = 'z' + Base58.Bitcoin.Encode(proofValueBytes);
-            Assert.Equal(Vc0ProofValue, reEncodedTestVector);*/
+            Assert.AreEqual(Vc0ProofValue, reEncodedTestVector);*/
 
             //bool ownIsVerified = publicKeyMemory.Verify(canonocalizedDataWithoutProofHashedData, ownSignature, BouncyCastleAlgorithms.VerifyEd25519);
 
             var hex = BitConverter.ToString(combinedHashToVerify).Replace("-", "", StringComparison.InvariantCulture);
             bool isVerified = publicKeyMemory.Verify(combinedHashToVerify, proofSignature, BouncyCastleAlgorithms.VerifyEd25519);
             
-            Assert.True(isVerified);
+            Assert.IsTrue(isVerified);
         }
 
 

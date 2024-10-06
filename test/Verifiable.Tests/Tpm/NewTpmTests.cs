@@ -1,70 +1,74 @@
-﻿using System;
-using System.Runtime.Versioning;
+﻿using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
-using Xunit;
 
 namespace Verifiable.Tests.Tpm
 {
-    public class NewTpmTests
-    {                
+    [TestClass]
+    public sealed class NewTpmTests
+    {        
         [SupportedOSPlatform(Platforms.Windows)]
-        [RunOnlyOnPlatformFact(Platforms.Windows)]
+        [RunOnlyOnPlatformTestMethod(Platforms.Windows)]
         public void TpmWindowsSupportsWindows()
         {            
-            Assert.True(TpmWindows.IsSupported);
+            Assert.IsTrue(TpmWindows.IsSupported);
         }
 
-
+        
         [SupportedOSPlatform(Platforms.Linux)]
-        [RunOnlyOnPlatformFact(Platforms.Linux)]
+        [RunOnlyOnPlatformTestMethod(Platforms.Linux)]        
         public void TpmLinuxSupportsLinux()
-        {            
-            Assert.True(TpmLinux.IsSupported);
+        {
+            Assert.IsTrue(TpmLinux.IsSupported);
         }
 
-        [SkipTpmTestOnCiFact]
+        
+        [SkipOnCiTestMethod]
         public void TpmVirtualSupportsAllPlatforms()
         {
-            Assert.True(TpmVirtual.IsSupported);
+            Assert.IsTrue(TpmVirtual.IsSupported);
         }
 
-
-        [SkipTpmTestOnCiFact]
+        
+        [SkipOnCiTestMethod]
         public void GetVersionSucceeds()
         {
             var version = Verifiable.Tpm.Tpm.GetTpmFirmwareVersion();
-            Assert.True(version != null);
+            Assert.IsTrue(version != null);
         }
 
 
-        [Fact(Skip = "Sketch. Does not work.")]
+        [TestMethod]
+        [Ignore("Sketch. Does not work.")]
         public void SelfTestSucceeds()
         {
             bool isSelfTestSuccess = Verifiable.Tpm.Tpm.SelfTest(fullTest: true);
-            Assert.True(isSelfTestSuccess);
+            Assert.IsTrue(isSelfTestSuccess);
         }
 
-        [SkipTpmTestOnCiFact]
+        
+        [SkipOnCiTestMethod]
         public void IsFipsSucceeds()
         {
             var isFips = Verifiable.Tpm.Tpm.IsFips();
-            Assert.True(isFips);
+            Assert.IsTrue(isFips);
         }
 
 
-        [Fact(Skip = "Sketch. Does not call a working version.")]
+        [TestMethod]
+        [Ignore("Sketch. Does not call a working version.")]
         public void GetSupportedAlgorithms()
         {
             var supportedAlgorithms = Verifiable.Tpm.Tpm.GetSupportedAlgorithms();
 
-            Assert.NotEmpty(supportedAlgorithms);
+            Assert.IsNotNull(supportedAlgorithms, "The collection is null.");
+            Assert.IsTrue(supportedAlgorithms.Count > 0, "The collection is empty.");
         }
 
-
-        [SkipTpmTestOnCiFact]
+        
+        [SkipOnCiTestMethod]
         public void CalculateShortSha256()
         {
             const string TestStringToBeHashed = "Hello, SHA-256 world!";
@@ -73,11 +77,12 @@ namespace Verifiable.Tests.Tpm
 
             byte[]? tpmSha256 = Verifiable.Tpm.Tpm.CalculateSha256(TestStringToBeHashed);
 
-            Assert.Equal(controlValueHash, tpmSha256);
+            CollectionAssert.AreEqual(controlValueHash, tpmSha256);
         }
 
 
-        [Fact(Skip = "Sketch. Does not work.")]
+        [TestMethod]
+        [Ignore("Sketch. Does not work.")]
         public void CalculateLongSha256()
         {
             //TODO: The array to be hashed is of constant value while developing
@@ -87,7 +92,7 @@ namespace Verifiable.Tests.Tpm
             byte[] longControlValueHash = SHA256.HashData(longByteArray);
             byte[]? longTpmSha256 = Verifiable.Tpm.Tpm.CalculateLongSha256(longByteArray);
 
-            Assert.Equal(longControlValueHash, longTpmSha256);
+            Assert.AreEqual(longControlValueHash, longTpmSha256);
         }
     }
 }

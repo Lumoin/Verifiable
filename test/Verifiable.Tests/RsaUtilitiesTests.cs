@@ -1,17 +1,15 @@
-using System;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Numerics;
 using System.Security.Cryptography;
 using Verifiable.Core.Cryptography;
-using Xunit;
 
-namespace Verifiable.Core
+namespace Verifiable.Tests.Core
 {
     /// <summary>
     /// Tests for RSA utilities.
     /// </summary>
-    public class RsaUtilitiesTests
+    [TestClass]
+    public sealed class RsaUtilitiesTests
     {
         /// <summary>
         /// Test array that is wrong length for RSA encoding.
@@ -33,48 +31,48 @@ namespace Verifiable.Core
         };
 
 
-        [Fact]
+        [TestMethod]
         public void EncodeThrowsWithCorrectMessageIfModulusNull()
         {
             //Since the argument is ReadOnlySpan<byte>, it will be converted to ReadOnlySpan<byte>.Empty automatically.
             const string ParameterName = "rsaModulusBytes";
-            var exception1 = Assert.Throws<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(null));
-            Assert.Equal(ParameterName, exception1.ParamName);
+            var exception1 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(null));
+            Assert.AreEqual(ParameterName, exception1.ParamName);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void EncodeThrowsWithCorrectMessageIfModulusNotCorrectLength()
         {
             const string ParameterName = "rsaModulusBytes";
-            var exception1 = Assert.Throws<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(WrongSizeArray1));
-            Assert.Equal(ParameterName, exception1.ParamName);
-            Assert.Equal($"Length must be {RsaUtilities.Rsa2048ModulusLength} (RSA 2048) or {RsaUtilities.Rsa4096ModulusLength} (RSA 4096). (Parameter '{ParameterName}')", exception1.Message);
+            var exception1 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(WrongSizeArray1));
+            Assert.AreEqual(ParameterName, exception1.ParamName);
+            Assert.AreEqual($"Length must be {RsaUtilities.Rsa2048ModulusLength} (RSA 2048) or {RsaUtilities.Rsa4096ModulusLength} (RSA 4096). (Parameter '{ParameterName}')", exception1.Message);
 
-            var exception2 = Assert.Throws<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(WrongSizeArray2));
-            Assert.Equal(ParameterName, exception2.ParamName);
-            Assert.Equal($"Length must be {RsaUtilities.Rsa2048ModulusLength} (RSA 2048) or {RsaUtilities.Rsa4096ModulusLength} (RSA 4096). (Parameter '{ParameterName}')", exception2.Message);
+            var exception2 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(WrongSizeArray2));
+            Assert.AreEqual(ParameterName, exception2.ParamName);
+            Assert.AreEqual($"Length must be {RsaUtilities.Rsa2048ModulusLength} (RSA 2048) or {RsaUtilities.Rsa4096ModulusLength} (RSA 4096). (Parameter '{ParameterName}')", exception2.Message);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void DecodeThrowsWithCorrectMessageIfModulusNotCorrectLength()
         {
             const string ParameterName = "encodedRsaModulusBytes";
             const int Rsa2048DerEncodedBytesLength = 270;
             const int Rsa4096DerEncodedBytesLength = 526;
-            var exception1 = Assert.Throws<ArgumentOutOfRangeException>(() => RsaUtilities.Decode(WrongSizeArray1));
-            Assert.Equal(ParameterName, exception1.ParamName);
-            Assert.Equal($"Length must be {Rsa2048DerEncodedBytesLength} (RSA 2048) or {Rsa4096DerEncodedBytesLength} (RSA 4096). (Parameter '{ParameterName}')", exception1.Message);
+            var exception1 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => RsaUtilities.Decode(WrongSizeArray1));
+            Assert.AreEqual(ParameterName, exception1.ParamName);
+            Assert.AreEqual($"Length must be {Rsa2048DerEncodedBytesLength} (RSA 2048) or {Rsa4096DerEncodedBytesLength} (RSA 4096). (Parameter '{ParameterName}')", exception1.Message);
 
-            var exception2 = Assert.Throws<ArgumentOutOfRangeException>(() => RsaUtilities.Decode(WrongSizeArray2));
-            Assert.Equal(ParameterName, exception2.ParamName);
-            Assert.Equal($"Length must be {Rsa2048DerEncodedBytesLength} (RSA 2048) or {Rsa4096DerEncodedBytesLength} (RSA 4096). (Parameter '{ParameterName}')", exception2.Message);
+            var exception2 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => RsaUtilities.Decode(WrongSizeArray2));
+            Assert.AreEqual(ParameterName, exception2.ParamName);
+            Assert.AreEqual($"Length must be {Rsa2048DerEncodedBytesLength} (RSA 2048) or {Rsa4096DerEncodedBytesLength} (RSA 4096). (Parameter '{ParameterName}')", exception2.Message);
         }
 
 
-        [Theory]
-        [MemberData(nameof(RsaKeySizesInBits))]
+        [DataTestMethod]
+        [DynamicData(nameof(RsaKeySizesInBits), DynamicDataSourceType.Property)]
         public void RsaDecodeThrowsIfNoDerPaddingByte(int keySizeInBits)
         {
             const string CatastrophicExceptionMessage = "Catastrophic error while decoding RSA modulus bytes.";
@@ -88,14 +86,14 @@ namespace Verifiable.Core
                 var encodedModulus = RsaUtilities.Encode(rsaModulus);
                 encodedModulus[PaddingByteIndex] = 0x1;
 
-                var exception = Assert.Throws<ArgumentException>(() => RsaUtilities.Decode(RsaUtilities.Decode(encodedModulus)));
-                Assert.Equal(CatastrophicExceptionMessage, exception.Message);
+                var exception = Assert.ThrowsException<ArgumentException>(() => RsaUtilities.Decode(RsaUtilities.Decode(encodedModulus)));
+                Assert.AreEqual(CatastrophicExceptionMessage, exception.Message);
             }
         }
 
 
-        [Theory]
-        [MemberData(nameof(RsaKeySizesInBits))]
+        [DataTestMethod]
+        [DynamicData(nameof(RsaKeySizesInBits), DynamicDataSourceType.Property)]
         public void RsaDecodeThrowsIfNoMsbSet(int keySizeInBits)
         {
             const string CatastrophicExceptionMessage = "Catastrophic error while decoding RSA modulus bytes.";
@@ -109,14 +107,14 @@ namespace Verifiable.Core
                 var encodedModulus = RsaUtilities.Encode(rsaModulus);
                 encodedModulus[MsbByteIndex] = 0x1;
 
-                var exception = Assert.Throws<ArgumentException>(() => RsaUtilities.Decode(RsaUtilities.Decode(encodedModulus)));
-                Assert.Equal(CatastrophicExceptionMessage, exception.Message);
+                var exception = Assert.ThrowsException<ArgumentException>(() => RsaUtilities.Decode(RsaUtilities.Decode(encodedModulus)));
+                Assert.AreEqual(CatastrophicExceptionMessage, exception.Message);
             }
         }
 
-        
-        [Theory]
-        [MemberData(nameof(RsaKeySizesInBits))]
+
+        [DataTestMethod]
+        [DynamicData(nameof(RsaKeySizesInBits), DynamicDataSourceType.Property)]
         public void RsaEncodingAndDecodingSucceeds(int keySizeInBits)
         {
             using(var rsaKey = RSA.Create(keySizeInBits))
@@ -126,14 +124,14 @@ namespace Verifiable.Core
 
                 var encodedModulus = RsaUtilities.Encode(rsaModulus);                
                 var decodedModulus = RsaUtilities.Decode(encodedModulus);                              
-                Assert.Equal(rsaModulus, decodedModulus);
+                CollectionAssert.AreEqual(rsaModulus, decodedModulus);
 
                 //This is a bit of extra to show how to get the DER encoded public key from the platform.
                 var dotNetEncoded = ExportPublicKeyAsDerEncoded(rsaKey);
                 var dotNetDecoded = DecodeDerPublicKey(dotNetEncoded);
-                Assert.Equal(encodedModulus, dotNetEncoded);
-                Assert.Equal(rsaParameters.Modulus, dotNetDecoded.Modulus);
-                Assert.Equal(rsaParameters.Exponent, dotNetDecoded.Exponent);
+                CollectionAssert.AreEqual(encodedModulus, dotNetEncoded);
+                CollectionAssert.AreEqual(rsaParameters.Modulus, dotNetDecoded.Modulus);
+                CollectionAssert.AreEqual(rsaParameters.Exponent, dotNetDecoded.Exponent);
             }
         }
 

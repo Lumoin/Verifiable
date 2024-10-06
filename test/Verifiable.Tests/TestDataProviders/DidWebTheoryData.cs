@@ -1,8 +1,6 @@
-﻿using System;
-using Verifiable.Core.Cryptography;
+﻿using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
 using Verifiable.Core.Did;
-using Xunit;
 
 namespace Verifiable.Tests.TestDataProviders
 {
@@ -18,17 +16,23 @@ namespace Verifiable.Tests.TestDataProviders
         }
     }
 
-    public class DidWebTheoryData: TheoryData<DidWebTestData>
+    public sealed class DidWebTheoryData
     {
-        public DidWebTheoryData()
+        public static IEnumerable<object[]> GetDidTheoryTestData()
         {
-            void AddTestData(PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair)
+            static IEnumerable<object[]> AddTestData(PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair)
             {
-                Add(new DidWebTestData(keyPair, JsonWebKey2020.DefaultInstance, typeof(PublicKeyJwk)));
-                Add(new DidWebTestData(keyPair, Ed25519VerificationKey2020.DefaultInstance, typeof(PublicKeyMultibase)));
+                return new List<object[]>
+                {
+                    new object[] { new DidWebTestData(keyPair, JsonWebKey2020.DefaultInstance, typeof(PublicKeyJwk)) },
+                    new object[] { new DidWebTestData(keyPair, Ed25519VerificationKey2020.DefaultInstance, typeof(PublicKeyMultibase)) }
+                };
             }
-            
-            AddTestData(TestKeyMaterialProvider.Ed25519KeyMaterial);            
+
+            var allData = new List<object[]>();
+            allData.AddRange(AddTestData(TestKeyMaterialProvider.Ed25519KeyMaterial));
+
+            return allData;
         }
-    }
+    };
 }

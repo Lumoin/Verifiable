@@ -1,14 +1,14 @@
 using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Core.Cryptography;
-using Xunit;
 
 namespace Verifiable.Tests.Cryptography
 {
     /// <summary>
     /// Tests for <see cref="PublicKeyMemory" /> <see cref="System.IEquatable{T}" /> implementation.
     /// </summary>
-    public class PublicKeyMemoryEquatableTests
+    [TestClass]
+    public sealed class PublicKeyMemoryEquatableTests
     {
         /// <summary>
         /// First instance of a buffer for memory in multiple comparisons.
@@ -36,28 +36,28 @@ namespace Verifiable.Tests.Cryptography
         private static PublicKeyMemory PublicKeyMemory3 => new(Buffer1, Tag.Empty);
 
 
-        [Fact]
+        [TestMethod]
         public void InstancesFromDifferentSizedBuffersAreNotEqual()
         {
-            Assert.False(PublicKeyMemory1.Equals(PublicKeyMemory2));
-            Assert.False(PublicKeyMemory1 == PublicKeyMemory2);
-            Assert.True(PublicKeyMemory1 != PublicKeyMemory2);
+            Assert.IsFalse(PublicKeyMemory1.Equals(PublicKeyMemory2));
+            Assert.IsFalse(PublicKeyMemory1 == PublicKeyMemory2);
+            Assert.IsTrue(PublicKeyMemory1 != PublicKeyMemory2);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void InstancesFromSameMemoryAreEqual()
         {
             var publicKeyMemory1 = new PublicKeyMemory(Buffer1, Tag.Empty);
             var publicKeyMemory2 = new PublicKeyMemory(Buffer1, Tag.Empty);
 
-            Assert.True(publicKeyMemory1.Equals(publicKeyMemory2));
-            Assert.True(publicKeyMemory1 == publicKeyMemory2);
-            Assert.False(publicKeyMemory1 != publicKeyMemory2);
+            Assert.IsTrue(publicKeyMemory1.Equals(publicKeyMemory2));
+            Assert.IsTrue(publicKeyMemory1 == publicKeyMemory2);
+            Assert.IsFalse(publicKeyMemory1 != publicKeyMemory2);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void SameLengthInstancesWithDifferentDataAreNotEqual()
         {
             var buffer1 = SensitiveMemoryPool<byte>.Shared.Rent(1);
@@ -67,51 +67,51 @@ namespace Verifiable.Tests.Cryptography
             var publicKeyMemory1 = new PublicKeyMemory(buffer1, Tag.Empty);
             var publicKeyMemory2 = new PublicKeyMemory(buffer2, Tag.Empty);
 
-            Assert.False(publicKeyMemory1.Equals(publicKeyMemory2));
-            Assert.True(publicKeyMemory1 != publicKeyMemory2);
-            Assert.False(publicKeyMemory1 == publicKeyMemory2);
+            Assert.IsFalse(publicKeyMemory1.Equals(publicKeyMemory2));
+            Assert.IsTrue(publicKeyMemory1 != publicKeyMemory2);
+            Assert.IsFalse(publicKeyMemory1 == publicKeyMemory2);
 
             publicKeyMemory1.Dispose();
             publicKeyMemory2.Dispose();
         }
 
 
-        [Fact]
+        [TestMethod]
         public void ComparisonWithTypeAndObjectSucceeds()
         {
-            Assert.True((object)PublicKeyMemory1 == PublicKeyMemory3);
-            Assert.True(PublicKeyMemory1 == (object)PublicKeyMemory3);
-            Assert.False((object)PublicKeyMemory1 != PublicKeyMemory3);
-            Assert.False(PublicKeyMemory1 != (object)PublicKeyMemory3);
+            Assert.IsTrue((object)PublicKeyMemory1 == PublicKeyMemory3);
+            Assert.IsTrue(PublicKeyMemory1 == (object)PublicKeyMemory3);
+            Assert.IsFalse((object)PublicKeyMemory1 != PublicKeyMemory3);
+            Assert.IsFalse(PublicKeyMemory1 != (object)PublicKeyMemory3);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void EqualsWithTypeAndObjectSucceeds()
         {
-            Assert.True(((object)PublicKeyMemory1).Equals(PublicKeyMemory3));
-            Assert.True(PublicKeyMemory1.Equals((object)PublicKeyMemory3));
+            Assert.IsTrue(((object)PublicKeyMemory1).Equals(PublicKeyMemory3));
+            Assert.IsTrue(PublicKeyMemory1.Equals((object)PublicKeyMemory3));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void ComparisonWithObjectAndObjectFails()
         {
             //The reasons for this is that == operator is searched
             //at compile time. Compiler does not find the overloads
             //and so the test fails. This is included here for the sake
             //of completeness. See EqualsWithObjectAndObjectSucceeds.            
-            Assert.False((object)PublicKeyMemory1 == (object)PublicKeyMemory3);
+            Assert.IsFalse((object)PublicKeyMemory1 == (object)PublicKeyMemory3);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void EqualsWithObjectAndObjectSucceeds()
         {
             //As opposed to ComparisonWithObjectAndObjectFails,
             //.Equals is a runtime construct and it does find
             //the overloads and so this comparison succeeds.
-            Assert.True(((object)PublicKeyMemory1).Equals(PublicKeyMemory3));
+            Assert.IsTrue(((object)PublicKeyMemory1).Equals(PublicKeyMemory3));
         }
     }
 }

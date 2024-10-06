@@ -1,5 +1,5 @@
 
-namespace Verifiable.Core
+namespace Verifiable.Tests.Core
 {
     /// <summary>
     /// These are general purpose cryptography tests that rely on DID Core specific
@@ -11,7 +11,7 @@ namespace Verifiable.Core
         /// <summary>
         /// A test for loading and rountripping a signing and verifying event.
         /// </summary>
-        /*[Fact]
+        /*[TestMethod]
         public void DidCoreCanLoadAllCryptoProvidersByReflectionSignAndVerify()
         {
             var cryptoProviders = CryptoProviderLoader.LoadCryptoProviders();
@@ -26,27 +26,27 @@ namespace Verifiable.Core
             publicJwk.D = null;
             privateJwk.X = null;
 
-            Assert.True(didCryptoProvider.IsSupportedAlgorithm(Algorithm, publicJwk), "Unsupported algorithm was tried for public crypto provider.");
-            Assert.True(didCryptoProvider.IsSupportedAlgorithm(Algorithm, privateJwk), "Unsupported algorithm was tried for private crypto provider.");
+            Assert.IsTrue(didCryptoProvider.IsSupportedAlgorithm(Algorithm, publicJwk), "Unsupported algorithm was tried for public crypto provider.");
+            Assert.IsTrue(didCryptoProvider.IsSupportedAlgorithm(Algorithm, privateJwk), "Unsupported algorithm was tried for private crypto provider.");
 
             var publicKeyWrapper = didCryptoProvider.Create(Algorithm, publicJwk);
-            Assert.NotNull(publicKeyWrapper);
-            Assert.True(publicKeyWrapper is AsymmetricKeyWrapper);
+            Assert.IsNotNull(publicKeyWrapper);
+            Assert.IsTrue(publicKeyWrapper is AsymmetricKeyWrapper);
 
             var privateKeyWrapper = didCryptoProvider.Create(Algorithm, privateJwk);
-            Assert.NotNull(privateKeyWrapper);
-            Assert.True(privateKeyWrapper is AsymmetricKeyWrapper);
+            Assert.IsNotNull(privateKeyWrapper);
+            Assert.IsTrue(privateKeyWrapper is AsymmetricKeyWrapper);
 
             //This string is signed by the privat key owner somewhere else...
             var testBytes = Encoding.UTF8.GetBytes("This string is the soure of some test bytes for general DID core types.");
             var signer = (AsymmetricKeyWrapper)privateKeyWrapper;
-            Assert.True(signer.SignatureProvider.WillCreateSignatures, "This provider should be able to create signatures.");
+            Assert.IsTrue(signer.SignatureProvider.WillCreateSignatures, "This provider should be able to create signatures.");
             var signedTestBytes = signer.SignatureProvider.Sign(testBytes);
 
             //While this verifier uses the public key found in the DID document.
             var verifier = (AsymmetricKeyWrapper)publicKeyWrapper;
-            Assert.False(verifier.SignatureProvider.WillCreateSignatures, "This provider should not be able to create signatures.");
-            Assert.True(verifier.SignatureProvider.Verify(testBytes, signedTestBytes));
+            Assert.IsFalse(verifier.SignatureProvider.WillCreateSignatures, "This provider should not be able to create signatures.");
+            Assert.IsTrue(verifier.SignatureProvider.Verify(testBytes, signedTestBytes));
         }*/
     }
 }

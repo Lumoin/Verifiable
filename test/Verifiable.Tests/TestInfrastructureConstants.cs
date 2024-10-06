@@ -1,6 +1,4 @@
-using System;
-
-namespace Verifiable.Core
+namespace Verifiable.Tests.Core
 {
     /// <summary>
     /// Some constants and utilities used in tests.

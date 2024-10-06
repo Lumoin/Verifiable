@@ -2,5 +2,8 @@
     "sdk": {
         "allowPrerelease": true,
         "version": "9.0.100-rc.1.24452.12"
+    },
+    "msbuild-sdks": {
+        "MSTest.Sdk": "3.6.1"        
     }
 }

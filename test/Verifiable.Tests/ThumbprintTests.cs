@@ -1,14 +1,15 @@
 ﻿using Verifiable.Jwt;
-using Xunit;
+using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Core
+namespace Verifiable.Tests.Core
 {
     /// <summary>
     /// Tests for JoseUtilities.*Thumbprint calculations.
     /// </summary>
-    public class ThumbprintTests
+    [TestClass]
+    public sealed class ThumbprintTests
     {
-        [Fact(Skip = "Work in progress.")]
+        [Ignore("Work in progress.")]
         public void ECNistP256()
         {
             var crv = "P-256";
@@ -18,7 +19,7 @@ namespace Verifiable.Core
             var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
             var thumbprint = Base64Url.Encode(thumbPrintBytes);
             var expected = "expected";
-            Assert.Equal(expected, thumbprint);
+            Assert.AreEqual(expected, thumbprint);
         }
     }
 }

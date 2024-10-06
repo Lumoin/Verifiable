@@ -1,25 +1,25 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Verifiable.Core;
 using Verifiable.Core.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Tests.TestInfrastructure;
-using Xunit;
 
-namespace Verifiable.Core
+namespace Verifiable.Tests.Core
 {
     /// <summary>
     /// EBSI specific tests. The source is at <a href="https://api.ebsi.xyz/docs/?urls.primaryName=DID%20API#/DID/get-did-v1-identifier">EBSI DID API Swagger</a>.
     /// </summary>
-    public class EbsiDidTests
+    [TestClass]
+    public sealed class EbsiDidTests
     {
         /// <summary>
         /// The reader should be able to deserialize all these test files correctly.
         /// </summary>
         /// <param name="didDocumentFilename">The DID document data file under test.</param>
         /// <param name="didDocumentFileContents">The DID document data file contents.</param>
-        [Theory]
+        [TestMethod]
         [FilesData(TestInfrastructureConstants.RelativeTestPathToDeprecated, "ebsi-did-1.json")]
         public void CanRoundtripLegacyEbsiDid(string didDocumentFilename, string didDocumentFileContents)
         {
@@ -50,9 +50,9 @@ namespace Verifiable.Core
             string reserializedDidDocument = JsonSerializer.Serialize(deseserializedDidDocument, options);
 
             //All the DID documents need to have an ID and a context.
-            Assert.NotNull(deseserializedDidDocument?.Id);
-            Assert.NotNull(deseserializedDidDocument?.Context);
-            Assert.NotNull(reserializedDidDocument);
+            Assert.IsNotNull(deseserializedDidDocument?.Id);
+            Assert.IsNotNull(deseserializedDidDocument?.Context);
+            Assert.IsNotNull(reserializedDidDocument);
 
             //Currently EBSI DIDs have public key embedded in the main document.
             //This is not valid, but this is handled as "extra" that goes into
@@ -67,12 +67,12 @@ namespace Verifiable.Core
             //
             //OBS! And test for testing extra registry types that are not part of the core specification
             //but that can nevertheless be part of core Nuget library.
-            Assert.Single(deseserializedDidDocument?.AdditionalData!);
-            Assert.IsType<JsonElement>(deseserializedDidDocument!.AdditionalData!["publicKey"]);
+            Assert.AreEqual(1, deseserializedDidDocument?.AdditionalData?.Count);
+            Assert.IsInstanceOfType<JsonElement>(deseserializedDidDocument!.AdditionalData!["publicKey"]);
             
             var originalDIDDocument = JsonNode.Parse(didDocumentFileContents);
             var parsedReserializedDIDDocument = JsonNode.Parse(reserializedDidDocument);            
-            Assert.True(JsonNode.DeepEquals(originalDIDDocument, parsedReserializedDIDDocument), $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
+            Assert.IsTrue(JsonNode.DeepEquals(originalDIDDocument, parsedReserializedDIDDocument), $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
         }
     }
 }
