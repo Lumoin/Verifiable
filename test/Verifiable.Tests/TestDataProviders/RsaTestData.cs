@@ -1,9 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using Verifiable.Core;
 using Verifiable.Core.Cryptography;
-using Xunit;
 
 namespace Verifiable.Tests.DataProviders
 {
@@ -19,12 +16,10 @@ namespace Verifiable.Tests.DataProviders
         byte[] Modulus);
 
     /// <summary>
-    ///  
+    /// RSA theory data generator for MSTest DynamicData.
     /// </summary>
-    public class RsaTheoryData: TheoryData<RsaTestData>
+    public static class RsaTheoryData
     {
-        private static readonly IList<RsaTestData> rsaKeyData = new List<RsaTestData>();
-
         public const int Rsa2048KeyLength = 2048;
         public const int Rsa4096KeyLength = 4096;
 
@@ -33,16 +28,15 @@ namespace Verifiable.Tests.DataProviders
         /// </summary>
         public static IList<int> RsaKeyLengthConstants => new List<int>(new[]
         {
-            Rsa2048KeyLength,
-            Rsa4096KeyLength,
-        });
-
+        Rsa2048KeyLength,
+        Rsa4096KeyLength,
+    });
 
         /// <summary>
-        /// Turns the human readable curve name into <see cref="Base58BtcEncodedMulticodecHeaders"/>.
+        /// Turns the RSA key length into <see cref="Base58BtcEncodedMulticodecHeaders"/>.
         /// </summary>
-        /// <param name="humanReadable">Human readable elliptic curve name.</param>
-        /// <returns><see cref="Base58BtcEncodedMulticodecHeaders">public and private Base58 BTC encode multicodec value</see>.</returns>
+        /// <param name="keyLength">The RSA key length.</param>
+        /// <returns><see cref="Base58BtcEncodedMulticodecHeaders">Public and private Base58 BTC encoded multicodec values</see>.</returns>
         /// <exception cref="NotSupportedException"></exception>
         public static (string PublicKey, string PrivateKey) FromKeyLengthToBtc58EncodedHeader(int keyLength) => keyLength switch
         {
@@ -51,12 +45,11 @@ namespace Verifiable.Tests.DataProviders
             _ => throw new NotSupportedException()
         };
 
-
         /// <summary>
-        /// Turns the human readable curve name into <see cref="Base58BtcEncodedMulticodecHeaders"/>.
+        /// Turns the RSA key length into <see cref="Base58BtcEncodedMulticodecHeaders"/>.
         /// </summary>
-        /// <param name="humanReadable">Human readable elliptic curve name.</param>
-        /// <returns><see cref="Base58BtcEncodedMulticodecHeaders">public and private Base58 BTC encode multicodec value</see>.</returns>
+        /// <param name="keyLength">The RSA key length.</param>
+        /// <returns><see cref="Base58BtcEncodedMulticodecHeaders">Public and private Base58 BTC encoded multicodec headers</see>.</returns>
         /// <exception cref="NotSupportedException"></exception>
         public static (byte[] PublicKeyHeader, byte[] PrivateKeyHeader) FromKeyLengthToMultiCodecHeader(int keyLength) => keyLength switch
         {
@@ -65,26 +58,26 @@ namespace Verifiable.Tests.DataProviders
             _ => throw new NotSupportedException()
         };
 
-
-        static RsaTheoryData()
+        /// <summary>
+        /// Provides the RSA test data for MSTest DynamicData.
+        /// </summary>
+        /// <returns>An IEnumerable of object arrays containing RSA test data.</returns>
+        public static IEnumerable<object[]> GetRsaTestData()
         {
             foreach(int keyLength in RsaKeyLengthConstants)
             {
                 var rsaKey = GenerateRsaTestKeyMaterial(keyLength);
-                rsaKeyData.Add(rsaKey);
+                yield return new object[] { rsaKey };
             }
         }
 
-        public RsaTheoryData()
-        {
-            foreach(var td in rsaKeyData)
-            {
-                Add(td);
-            }
-        }
-
+        /// <summary>
+        /// Generates RSA test key material based on key length.
+        /// </summary>
+        /// <param name="keyLength">The key length.</param>
+        /// <returns>An <see cref="RsaTestData"/> instance.</returns>
         private static RsaTestData GenerateRsaTestKeyMaterial(int keyLength)
-        {            
+        {
             using(var key = RSA.Create(keyLength))
             {
                 var parameters = key.ExportParameters(includePrivateParameters: true);

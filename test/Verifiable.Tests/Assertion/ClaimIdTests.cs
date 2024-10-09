@@ -1,13 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
+﻿using System.Reflection;
 using Verifiable.Assessment;
-using Xunit;
+
 
 namespace Verifiable.Tests.Assertion
 {
-    public class ClaimIdTests
+    [TestClass]
+    public sealed class ClaimIdTests
     {
         //TODO: 
         /// <summary>
@@ -22,7 +20,7 @@ namespace Verifiable.Tests.Assertion
         /// Ensures that each ClaimId static instance has a unique non-empty description.
         /// This test helps guard against potential copy-paste errors or inadvertent duplications
         /// which could arise during library development.
-        [Fact]
+        [TestMethod]
         public void AllStaticInstancesHaveUniqueNonEmptyDescriptions()
         {
             //This hold the descriptions to detect duplicates in case there are any.
@@ -37,8 +35,8 @@ namespace Verifiable.Tests.Assertion
                 var description = claimId2Instance.ToString();
 
                 //3. Check if the description is unique.
-                Assert.NotNull(description);
-                Assert.False(descriptions.ContainsKey(description), $"Duplicate description found: {description} for {staticProperty.Name} and {claimId2Instance}");
+                Assert.IsNotNull(description);
+                Assert.IsFalse(descriptions.ContainsKey(description), $"Duplicate description found: {description} for {staticProperty.Name} and {claimId2Instance}");
 
                 //Add the description to the dictionary indexed by the description so that
                 //potential duplicates can be detected.
@@ -53,7 +51,7 @@ namespace Verifiable.Tests.Assertion
         /// This test acts as a guard against accidental change, removal or addition of ClaimId instances,
         /// ensuring that the library's ClaimId definitions remain aligned with expectations.
         /// </summary>
-        [Fact]
+        [TestMethod]
         public void AllStaticInstancesCountMatchesExpectedCount()
         {
             var expectedIds = new Dictionary<string, (int Code, string Description)>
@@ -106,59 +104,62 @@ namespace Verifiable.Tests.Assertion
                 )
             );
 
-            Assert.Equal(expectedIds.Count, reflectedIds.Count);
+            Assert.AreEqual(expectedIds.Count, reflectedIds.Count);
             foreach(var expectedId in expectedIds)
             {
-                Assert.True(reflectedIds.ContainsKey(expectedId.Key), $"Missing predefined ID: {expectedId.Key}");
-                Assert.Equal(expectedId.Value.Code, reflectedIds[expectedId.Key].ReflectedCode);
-                Assert.Equal(expectedId.Value.Description, reflectedIds[expectedId.Key].ReflectedDescription);
+                Assert.IsTrue(reflectedIds.ContainsKey(expectedId.Key), $"Missing predefined ID: {expectedId.Key}");
+                Assert.AreEqual(expectedId.Value.Code, reflectedIds[expectedId.Key].ReflectedCode);
+                Assert.AreEqual(expectedId.Value.Description, reflectedIds[expectedId.Key].ReflectedDescription);
             }
         }
 
 
-        [Fact]
+        [TestMethod]
         public void NotPossibleToSaveDuplicateId()
         {
             const int TestClaimCode = 100_001;
             const string TestDescription = "TestDescription";
             var customCode1 = ClaimId.Create(TestClaimCode, TestDescription);
 
-            var exception = Assert.Throws<ArgumentException>(() => ClaimId.Create(TestClaimCode, TestDescription));
+            var exception = Assert.ThrowsException<ArgumentException>(() => ClaimId.Create(TestClaimCode, TestDescription));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void NotPossibleToUseDefaultConstructor()
         {
-            var exception = Assert.Throws<InvalidOperationException>(() => new ClaimId());
-            Assert.Equal("Use Create.", exception.Message);
+            var exception = Assert.ThrowsException<InvalidOperationException>(() => new ClaimId());
+            Assert.AreEqual("Use Create.", exception.Message);
         }
 
 
-        [Theory]
-        [InlineData(0)]
-        [InlineData(-1)]
-        [InlineData(-100)]
+        [DataTestMethod]
+        [DataRow(0)]
+        [DataRow(-1)]
+        [DataRow(-100)]
         public void CreateThrowsArgumentOutOfRangeExceptionForNonPositiveCode(int code)
         {
-            var exception = Assert.Throws<ArgumentOutOfRangeException>(() => ClaimId.Create(code, "Description"));
-            Assert.Equal(nameof(code), exception.ParamName);
-            Assert.Equal(code, exception.ActualValue);
-            Assert.Contains("Value must be greater than zero.", exception.Message, StringComparison.InvariantCulture);
+            var exception = Assert.ThrowsException<ArgumentOutOfRangeException>(() => ClaimId.Create(code, "Description"));
+            Assert.AreEqual(nameof(code), exception.ParamName);
+            Assert.AreEqual(code, exception.ActualValue);
+            Assert.IsTrue(
+                exception.Message.Contains("Value must be greater than zero.", StringComparison.InvariantCulture),
+                $"Expected message to contain 'Value must be greater than zero.' but got: '{exception.Message}'");            
         }
 
 
-        [Fact]
+        [TestMethod]
         public void CreateThrowsArgumentExceptionForEmptyDescription()
         {
-            var exception = Assert.Throws<ArgumentException>(() => ClaimId.Create(1, string.Empty));
-
-            Assert.Equal("description", exception.ParamName);
-            Assert.Contains("The value cannot be an empty string. (Parameter 'description')", exception.Message, StringComparison.InvariantCulture);
+            var exception = Assert.ThrowsException<ArgumentException>(() => ClaimId.Create(1, string.Empty));
+            Assert.AreEqual("description", exception.ParamName);            
+            Assert.IsTrue(
+                exception.Message.Contains("The value cannot be an empty string. (Parameter 'description')", StringComparison.InvariantCulture),
+                $"Expected message to contain 'Value must be greater than zero.' but got: '{exception.Message}'");
         }
 
 
-        [Fact]
+        [TestMethod]
         public void CreateReturnsClaimIdForValidInput()
         {
             //This genereates a unique claim ID for testing purposes. The values are held in a static dictionary
@@ -176,8 +177,8 @@ namespace Verifiable.Tests.Assertion
                     //Tries to create a ClaimId to validate code and description.
                     //If it succeeds, the values are valid and unique.
                     var claimId = ClaimId.Create(code, description);
-                    Assert.Equal(code, claimId.Code);
-                    Assert.Equal(description, claimId.ToString());
+                    Assert.AreEqual(code, claimId.Code);
+                    Assert.AreEqual(description, claimId.ToString());
                 }
                 catch(ArgumentOutOfRangeException) { }
                 catch(ArgumentException) { }
@@ -185,13 +186,13 @@ namespace Verifiable.Tests.Assertion
         }
 
 
-        [Fact]
+        [TestMethod]
         public void CanRetrieveLibraryDefinedClaimId()
         {
             //This is just some claim identifier that is
             //picked for testing.
             var claimId = ClaimId.OctKeyType;
-            Assert.Equal(13, claimId.Code);
+            Assert.AreEqual(13, claimId.Code);
         }
     }    
 }

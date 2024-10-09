@@ -1,17 +1,13 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.IO.Enumeration;
-using System.Linq;
 using System.Reflection;
-using Xunit.Sdk;
+
 
 namespace Verifiable.Tests.TestInfrastructure
 {
     /// <summary>
     /// An attribute to retrieve files with the given glob pattern.
     /// </summary>
-    public sealed class FilesDataAttribute: DataAttribute
+    public sealed class FilesDataAttribute: Attribute, ITestDataSource
     {
         /// <summary>
         /// The directory to search for files.
@@ -68,8 +64,20 @@ namespace Verifiable.Tests.TestInfrastructure
         }
 
 
+        public string? GetDisplayName(MethodInfo methodInfo, object?[]? data)
+        {
+            if(data == null || data.Length == 0)
+            {
+                return null;
+            }
+
+            //Return a display name based on the file name.
+            return $"{methodInfo.Name}({data[0]})";
+        }
+
+
         /// <inheritDoc />
-        public override IEnumerable<object[]> GetData(MethodInfo testMethod)
+        public IEnumerable<object[]> GetData(MethodInfo testMethod)
         {
             ArgumentNullException.ThrowIfNull(testMethod);
 

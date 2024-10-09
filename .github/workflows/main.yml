@@ -22,7 +22,7 @@ env:
   # Tests check that platform TPM tests must be run on Windows or Linux,
   # MacOS tests are skipped.
   USE_PLATFORM_TPM: true
-
+  
   DOTNET_ENVIRONMENT: CI
   BUILD_CONFIGURATION: Release
   DOTNET_CLI_TELEMETRY_OPTOUT: true
@@ -45,6 +45,9 @@ env:
   VERIFIABLE_SIDETREE: Verifiable.Sidetree
   VERIFIABLE_TPM: Verifiable.Tpm
 
+  # These are the test projects that will be reported.
+  VERIFIABLE_TESTS: Verifiable.Tests
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -57,7 +60,7 @@ jobs:
     
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde
+      uses: step-security/harden-runner@91182cccc01eb5e619899d80e4e971d6181294a7
       with:
         disable-sudo: true
         egress-policy: block
@@ -119,7 +122,7 @@ jobs:
         fetch-tags: true
             
     - name: Cache Nuget packages '${{ matrix.os }}'
-      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9
+      uses: actions/cache@3624ceb22c1c5a301c8db4169662070a689d9ea8
       with:
         path: ${{ env.NUGET_PACKAGES }}
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
@@ -184,7 +187,7 @@ jobs:
     - name: Build
       # At the moment Verifiable.Tests cannot be built with -isolate alone due to Coverlet.
       run: dotnet build --binaryLogger --tl --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore --property:ContinuousIntegrationBuild=true --property:Version=${{ env.VERSION }} --property:InformationalVersion=${{ env.PACKAGE_VERSION }} --property:AssemblyVersion=${{ env.TAG_VERSION }} --property:FileVersion=${{ env.TAG_VERSION }}
-      timeout-minutes: 5    
+      timeout-minutes: 5
 
     # - name: Set PR markdown title name
     #  run: |
@@ -193,13 +196,10 @@ jobs:
     #  shell: bash
 
     # MacOS is skipped at the moment due to issues with some .NET crypto libraries.
-    # Until tests are a fixed a bit.
+    # Until tests are a fixed a bit. The coverage from the executable does not have a file suffix in Linux.
     - name: Test
-      if: runner.os != 'macOS'
-      # See the difference on drivers and paths at https://github.com/microsoft/vstest/issues/2378 and further
-      # here on generating the reports.
-      # run: dotnet test --verbosity normal --no-restore --no-build --configuration ${{ env.BUILD_CONFIGURATION }} --property:CollectCoverage=true --property:CoverletOutputFormat=cobertura --property:DeterministicSourcePaths=true --property:IncludeTestAssembly=true --property:CoverletOutput='${{ github.workspace }}/reports/coverage/'
-      run: dotnet test --collect:"XPlat Code Coverage" --verbosity normal --no-restore --no-build --configuration ${{ env.BUILD_CONFIGURATION }} --logger JUnit -property:DeterministicSourcePaths=true -property:IncludeTestAssembly=true --results-directory '${{ github.workspace }}/reports/coverage/'
+      if: runner.os != 'macOS'      
+      run: dotnet tool run dotnet-coverage collect --output '${{ github.workspace }}/reports/coverage.cobertura.xml' --output-format cobertura '${{ github.workspace }}/test/${{ env.VERIFIABLE_TESTS }}/bin/${{ env.BUILD_CONFIGURATION }}/net9.0/${{ env.VERIFIABLE_TESTS }}' --report-trx --report-trx-filename testresults.trx --results-directory '${{ github.workspace }}/reports'
       timeout-minutes: 5
 
     # Mutation tests skipped for now due to CI limits and temporarily reduced test coverage...
@@ -211,7 +211,7 @@ jobs:
 
     #- name: Upload Stryker output artefacts
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a
+    #  uses: actions/upload-artifact@84480863f228bb9747b473957fcc9e309aa96097
     #  with:
     #    name: 'Stryker output artefacts'
     #    path: ${{ github.workspace }}/StrykerOutput/
@@ -220,7 +220,7 @@ jobs:
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
 
     # - name: Archive publish results
-    #  uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a
+    #  uses: actions/upload-artifact@84480863f228bb9747b473957fcc9e309aa96097
     #  with:
     #    name: Verifiable.Benchmarks
     #    path: ./publish/*
@@ -229,20 +229,16 @@ jobs:
     #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
 
     # - name: Upload benchmark results
-    #  uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a
+    #  uses: actions/upload-artifact@84480863f228bb9747b473957fcc9e309aa96097
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
 
     # This step is run always (e.g. also for non-PRs) so the results can be inspected on the command line too.
     - name: ReportGenerator
-      if: ${{ matrix.os == 'ubuntu-latest' }}
-
-      # If not using MSBuild driver but the VSTest one, the files need to be explicitly found due to randomized path segmenets.
-      # See more at https://github.com/microsoft/vstest/issues/2378.
-      # run: dotnet reportgenerator -assemblyfilters:'-xunit*' -reports:'${{ github.workspace }}/reports/coverage/coverage.cobertura.xml' -targetdir:'${{ github.workspace }}/reports/coverage/' -reporttypes:'HtmlInline;Cobertura;MarkdownSummary'
-      run: dotnet reportgenerator -assemblyfilters:'-xunit*' -reports:`find ${{ github.workspace }}/reports/coverage/ -name coverage.cobertura.xml` -targetdir:'${{ github.workspace }}/reports/coverage/' -reporttypes:'HtmlInline;Cobertura;MarkdownSummary'
-
+      if: ${{ matrix.os == 'ubuntu-latest' }}      
+      run: dotnet reportgenerator -filefilters:'-**/obj/**;-**/*.g.cs' -assemblyfilters:'+Verifiable*' -reports:'${{ github.workspace }}/reports/coverage.cobertura.xml' -targetdir:'${{ github.workspace }}/reports/coverage/' -reporttypes:'HtmlInline;Cobertura;MarkdownSummary'
+           
     # - name: Publish coverage report
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
     #  uses: 5monkeys/cobertura-action@master
@@ -251,20 +247,19 @@ jobs:
     #    repo_token: ${{ secrets.GITHUB_TOKEN }}
     #    minimum_coverage: 75
 
+    - name: Create test summary
+      if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
+      uses: EnricoMi/publish-unit-test-result-action@v2.16.1      
+      with:
+        trx_files: '${{ github.workspace }}/reports/**/*.trx'
+
     - name: Publish coverage summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
       uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
       with:
         header: Report
         path: '${{ github.workspace }}/reports/coverage/Summary.md'
-        recreate: true
-
-    - name: Create test summary
-      if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86
-      with:
-        paths: '${{ github.workspace }}/reports/coverage/TestResults.xml'
-        # output: '${{ github.workspace }}/${{ env.file_name }}'
+        recreate: true     
 
     # - name: Comment PR with the generated test Markdown
     #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
@@ -274,7 +269,7 @@ jobs:
 
     # - name: Upload PR build information artefact
     #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a
+    #  uses: actions/upload-artifact@84480863f228bb9747b473957fcc9e309aa96097
     #  with:
     #    name: 'Test Run'
     #    path: ${{ github.workspace }}/${{ env.file_name }}
@@ -318,7 +313,7 @@ jobs:
 
     - name: Upload Verifiable NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a
+      uses: actions/upload-artifact@84480863f228bb9747b473957fcc9e309aa96097
       with:
         name: nupkg
         path: ./nupkgs/*.*          
@@ -333,7 +328,7 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - name: Harden Runner
-          uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde
+          uses: step-security/harden-runner@91182cccc01eb5e619899d80e4e971d6181294a7
           with:
             disable-sudo: true
             egress-policy: block
@@ -364,7 +359,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde
+        uses: step-security/harden-runner@91182cccc01eb5e619899d80e4e971d6181294a7
         with:
           disable-sudo: true
           egress-policy: audit

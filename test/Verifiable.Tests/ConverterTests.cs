@@ -1,49 +1,47 @@
-using Verifiable.Core.Did;
-using System.Text.Json;
-using Xunit;
-using Verifiable.Core;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.IO;
-using System.Linq;
+using Verifiable.Core;
+using Verifiable.Core.Did;
 
-namespace Verifiable.Core
+namespace Verifiable.Tests.Core
 {
     /// <summary>
     /// Tests for individual converters. The fragments are objects that contain the property under test.
     /// </summary>
     /// <remarks>
-    public class ConverterTests
+    [TestClass]
+    public sealed class ConverterTests
     {
-        [Fact]
+        [TestMethod]
         public void RoundtripControllerSingle()
         {
             //A fragment for a single controller instance. Either a single or multiple controller case is possible in one document.
             const string OriginalInputJson = @"""did:test:0x06048B83FAdaCdCB20198ABc45562Df1A3e289aF""";
             var converter = new SingleOrArrayControllerConverter();
             var controllers = GetConverted(OriginalInputJson, converter);
-            Assert.True(controllers?.Length == 1);
+            Assert.IsTrue(controllers?.Length == 1);
 
             var backConvertedJson = GetConverted(controllers, converter!);
-            Assert.Equal(OriginalInputJson, backConvertedJson);
+            Assert.AreEqual(OriginalInputJson, backConvertedJson);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void RoundtripControllerArray()
         {
             //A fragment for an array of controller instance. Either a single or multiple controller case is possible in one document.
             const string OriginalInputJson = @"[""did:test:0x16048B83FAdaCdCB20198ABc45562Df1A3e289aF"",""did:test:0x26048B83FAdaCdCB20198ABc45562Df1A3e289aF""]";
             var converter = new SingleOrArrayControllerConverter();
             var controllers = GetConverted(OriginalInputJson, converter);
-            Assert.True(controllers?.Length == 2);
+            Assert.IsTrue(controllers?.Length == 2);
 
             var backConvertedJson = GetConverted(controllers, converter!);
-            Assert.Equal(OriginalInputJson, backConvertedJson);
+            Assert.AreEqual(OriginalInputJson, backConvertedJson);
         }
 
-        
-        [Fact]
+
+        [TestMethod]
         public void RoundtripService()
         {
             //A sample test service copied from https://www.w3.org/TR/did-core/.
@@ -53,14 +51,14 @@ namespace Verifiable.Core
             var converter = (JsonConverter<Service>)factory.CreateConverter(typeof(Service), new JsonSerializerOptions());
             
             var service = GetConverted(OriginalInputJson, converter);
-            Assert.NotNull(service);
+            Assert.IsNotNull(service);
 
             var backConvertedJson = GetConverted(service, converter!);
-            Assert.Equal(OriginalInputJson, backConvertedJson);
+            Assert.AreEqual(OriginalInputJson, backConvertedJson);
         }
 
         
-        [Fact]
+        [TestMethod]
         public void RoundtripOneUriContext()
         {
             //The DID Uri from https://www.w3.org/TR/did-core/.
@@ -68,14 +66,14 @@ namespace Verifiable.Core
             var converter = new JsonLdContextConverter();
 
             var context = GetConverted(OriginalInputJson, converter);
-            Assert.NotNull(context);
+            Assert.IsNotNull(context);
 
             var backConvertedJson = GetConverted(context, converter!);
-            Assert.Equal(OriginalInputJson, backConvertedJson);
+            Assert.AreEqual(OriginalInputJson, backConvertedJson);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void RoundtripCollectionUriContext()
         {
             //The DID Uri from https://www.w3.org/TR/did-core/.
@@ -83,14 +81,14 @@ namespace Verifiable.Core
             var converter = new JsonLdContextConverter();
 
             var service = GetConverted(OriginalInputJson, converter);
-            Assert.NotNull(service);
+            Assert.IsNotNull(service);
 
             var backConvertedJson = GetConverted(service, converter!);
-            Assert.Equal(OriginalInputJson, backConvertedJson);
+            Assert.AreEqual(OriginalInputJson, backConvertedJson);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void RountripComplexContext1()
         {
             /// <summary>
@@ -127,14 +125,14 @@ namespace Verifiable.Core
             var converter = new JsonLdContextConverter();
 
             var service = GetConverted(OriginalInputJson, converter);
-            Assert.NotNull(service);
+            Assert.IsNotNull(service);
 
             var backConvertedJson = GetConverted(service, converter!);
-            Assert.Equal(OriginalInputJson, backConvertedJson);
+            Assert.AreEqual(OriginalInputJson, backConvertedJson);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void RountripSidetreeIonContest1()
         {
             /// <summary>
@@ -148,10 +146,10 @@ namespace Verifiable.Core
             var converter = new JsonLdContextConverter();
 
             var service = GetConverted(OriginalInputJson, converter);
-            Assert.NotNull(service);
+            Assert.IsNotNull(service);
 
             var backConvertedJson = GetConverted(service, converter!);
-            Assert.Equal(OriginalInputJson, backConvertedJson);
+            Assert.AreEqual(OriginalInputJson, backConvertedJson);
         }
 
 
@@ -178,7 +176,7 @@ namespace Verifiable.Core
             var utf8JsonReader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json));
             var options = new JsonSerializerOptions();
 
-            Assert.True(utf8JsonReader.TokenType == JsonTokenType.None);
+            Assert.IsTrue(utf8JsonReader.TokenType == JsonTokenType.None);
             _ = utf8JsonReader.Read();
 
             return converter.Read(ref utf8JsonReader, typeof(TConversionTarget), options);

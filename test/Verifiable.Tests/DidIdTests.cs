@@ -1,12 +1,11 @@
-﻿using System.Linq;
-using Verifiable.Assessment;
+﻿using Verifiable.Assessment;
 using Verifiable.Core.Did;
 using Verifiable.Core.Did.Methods;
-using Xunit;
 
 namespace Verifiable.Tests
 {
-    public class DidIdTests
+    [TestClass]
+    public sealed class DidIdTests
     {
         /// <summary>
         /// All the known DID methods.
@@ -25,14 +24,14 @@ namespace Verifiable.Tests
         };
 
 
-        [Fact]
+        [TestMethod]
         public void DidIdTest()
         {
             const string DidUrl = "did:example:123456/path?versionId=1#public-key-0";
             var didDocument = new DidDocument { Id = new GenericDidMethod(DidUrl) };
 
             var resultClaims = DidDocumentValidationRules.ValidatePrefix(didDocument);
-            Assert.True(resultClaims.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsTrue(resultClaims.All(c => c.Outcome == ClaimOutcome.Success));
         }        
     }
 }

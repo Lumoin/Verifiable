@@ -12,6 +12,10 @@ spelling_error_severity = information
 spelling_exclusion_path = ./spellcheckerexclusion.dic
 spelling_use_default_exclusion_dictionary = true
 
+MSTest
+
+# MSTEST0030: Type containing '[TestMethod]' should be marked with '[TestClass]'
+dotnet_diagnostic.MSTEST0030.severity = error
 
 #### Core EditorConfig Options ####
 
@@ -177,7 +181,7 @@ csharp_indent_block_contents = true
 csharp_indent_braces = false
 csharp_indent_case_contents = true
 csharp_indent_case_contents_when_block = false
-csharp_indent_labels = flush_left
+csharp_indent_labels = one_less_than_current
 csharp_indent_switch_labels = true
 
 # Space preferences
@@ -253,6 +257,7 @@ dotnet_naming_style.begins_with_i.required_suffix =
 dotnet_naming_style.begins_with_i.word_separator = 
 dotnet_naming_style.begins_with_i.capitalization = pascal_case
 csharp_style_prefer_primary_constructors = true:suggestion
+csharp_prefer_system_threading_lock = true:suggestion
 
 # C++ Files
 [*.{cpp,h,in}]

@@ -1,49 +1,47 @@
-﻿using System.Linq;
-using System.Threading.Tasks;
-using Verifiable.Assessment;
+﻿using Verifiable.Assessment;
 using Verifiable.Core.Did;
 using Verifiable.Core.Did.Methods;
-using Xunit;
 
 namespace Verifiable.Tests.ValidationRules
 {
     /// <summary>
     /// Tests for <see cref="KeyDidValidationRules"/>.
     /// </summary>
-    public class KeyDidValidationTests
+    [TestClass]
+    public sealed class KeyDidValidationTests
     {
-        [Fact]
+        [TestMethod]
         public async Task KeyDidCanStartOnlyWithDidKey()
         {
             //These are test vectors from https://w3c-ccg.github.io/did-method-key/#test-vectors.
             var keyDid = new DidDocument();
             keyDid.Id = new KeyDidMethod("did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp");            
             var successfulValidationResult = await KeyDidValidationRules.ValidateIdFormatAsync(keyDid);
-            Assert.True(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsTrue(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
             
             keyDid.Id = new KeyDidMethod("did:key:zInvalidMkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp");
             successfulValidationResult = await KeyDidValidationRules.ValidateIdFormatAsync(keyDid);
-            Assert.False(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsFalse(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
 
             keyDid.Id = new KeyDidMethod("did:key: zInvalidMkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp");
             successfulValidationResult = await KeyDidValidationRules.ValidateIdFormatAsync(keyDid);
-            Assert.False(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsFalse(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
 
             keyDid.Id = new KeyDidMethod("did:key:zInvalidMkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp ");
             successfulValidationResult = await KeyDidValidationRules.ValidateIdFormatAsync(keyDid);
-            Assert.False(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsFalse(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
 
             keyDid.Id = new KeyDidMethod("did:key:zInvalid6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp#z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp");
             successfulValidationResult = await KeyDidValidationRules.ValidateIdFormatAsync(keyDid);
-            Assert.False(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsFalse(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
 
             keyDid.Id = new KeyDidMethod("did:key:6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp#z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp");
             successfulValidationResult = await KeyDidValidationRules.ValidateIdFormatAsync(keyDid);
-            Assert.False(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
+            Assert.IsFalse(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void KeyDidVerificationMethodMustContainHashtag()
         {
 

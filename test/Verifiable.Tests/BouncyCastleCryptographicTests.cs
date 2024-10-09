@@ -1,16 +1,15 @@
-using Verifiable.BouncyCastle;
-using Verifiable.Core.Cryptography;
-using System;
 using System.Buffers;
 using System.Text;
-using Xunit;
+using Verifiable.BouncyCastle;
+using Verifiable.Core.Cryptography;
 
 namespace Verifiable.Tests
 {
     /// <summary>
     /// These test specifically BouncyCastle as the cryptographic provider.
     /// </summary>
-    public class BouncyCastleCryptographicTests
+    [TestClass]
+    public sealed class BouncyCastleCryptographicTests
     {
         /// <summary>
         /// Used in tests as test data.
@@ -18,16 +17,16 @@ namespace Verifiable.Tests
         private byte[] TestData { get; } = Encoding.UTF8.GetBytes("This is a test string.");
 
 
-        [Fact]
+        [TestMethod]
         public void CanGenerateKeyPairEd255019()
         {
             var keys = BouncyCastleKeyCreator.CreateEd25519Keys(MemoryPool<byte>.Shared);
-            Assert.NotNull(keys.PublicKey);
-            Assert.NotNull(keys.PrivateKey);
+            Assert.IsNotNull(keys.PublicKey);
+            Assert.IsNotNull(keys.PrivateKey);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void CanSignAndVerifyEd255019()
         {
             var keys = BouncyCastleKeyCreator.CreateEd25519Keys(MemoryPool<byte>.Shared);
@@ -36,11 +35,11 @@ namespace Verifiable.Tests
             
             var data = (ReadOnlySpan<byte>)TestData;
             using var signature = privateKey.Sign(data, BouncyCastleAlgorithms.SignEd25519, MemoryPool<byte>.Shared);
-            Assert.True(publicKey.Verify(data, signature, BouncyCastleAlgorithms.VerifyEd25519));
+            Assert.IsTrue(publicKey.Verify(data, signature, BouncyCastleAlgorithms.VerifyEd25519));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void CanCreateIdentifiedKeyAndVerify()
         {
             var keys = BouncyCastleKeyCreator.CreateEd25519Keys(MemoryPool<byte>.Shared);
@@ -50,7 +49,7 @@ namespace Verifiable.Tests
 
             var data = (ReadOnlySpan<byte>)TestData;
             using var signature = privateKey.Sign(data, MemoryPool<byte>.Shared);
-            Assert.True(publicKey.Verify(data, signature));
+            Assert.IsTrue(publicKey.Verify(data, signature));
         }
     }
 }

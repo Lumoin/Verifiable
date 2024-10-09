@@ -1,21 +1,19 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Verifiable.Core;
 using Verifiable.Core.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Jwt;
 using Verifiable.Tests.TestInfrastructure;
-using Xunit;
 
-namespace Verifiable.Core
+namespace Verifiable.Tests.Core
 {
     /// <summary>
     /// General DID tests.
     /// </summary>
-    public class DidDocumentTests
+    [TestClass]
+    public sealed class DidDocumentTests
     {
         /// <summary>
         /// An example combining https://www.w3.org/TR/did-core/#example-19-various-service-endpoints and other pieces.
@@ -97,7 +95,7 @@ namespace Verifiable.Core
         /// <summary>
         /// Getting a hash of an empty document. This should not throw.
         /// </summary>
-        [Fact]
+        [TestMethod]
         public void EmptyDocumentHash()
         {
             _ = new DidDocument().GetHashCode();
@@ -107,7 +105,7 @@ namespace Verifiable.Core
         /// <summary>
         /// Tests a complicated DID document.
         /// </summary>
-        [Fact]
+        [TestMethod]
         public void FullDidDocumentTest()
         {
             var serviceTypeMap = new Dictionary<string, Type>(ServiceConverterFactory.DefaultTypeMap)
@@ -150,17 +148,17 @@ namespace Verifiable.Core
             };
 
             var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(MultiServiceTestDocument, options);            
-            Assert.NotNull(deserializedDidDocument?.Id);
-            Assert.NotNull(deserializedDidDocument?.Context);
-            Assert.NotNull(deserializedDidDocument?.Service);
-            Assert.NotNull(reserializedDidDocument);
-            Assert.IsType<OpenIdConnectVersion1>(deserializedDidDocument!.Service![0]);
-            Assert.IsType<VerifiableCredentialService>(deserializedDidDocument!.Service![5]);
-            Assert.IsType<SocialWebInboxService>(deserializedDidDocument!.Service![6]);
-            Assert.IsType<Service>(deserializedDidDocument!.Service![7]);
+            Assert.IsNotNull(deserializedDidDocument?.Id);
+            Assert.IsNotNull(deserializedDidDocument?.Context);
+            Assert.IsNotNull(deserializedDidDocument?.Service);
+            Assert.IsNotNull(reserializedDidDocument);
+            Assert.IsInstanceOfType<OpenIdConnectVersion1>(deserializedDidDocument!.Service![0]);
+            Assert.IsInstanceOfType<VerifiableCredentialService>(deserializedDidDocument!.Service![5]);
+            Assert.IsInstanceOfType<SocialWebInboxService>(deserializedDidDocument!.Service![6]);
+            Assert.IsInstanceOfType<Service>(deserializedDidDocument!.Service![7]);
 
             bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(MultiServiceTestDocument, reserializedDidDocument);
-            Assert.True(areJsonElementsEqual, $"JSON string \"{MultiServiceTestDocument}\" did not pass roundtrip test.");
+            Assert.IsTrue(areJsonElementsEqual, $"JSON string \"{MultiServiceTestDocument}\" did not pass roundtrip test.");
         }
 
 
@@ -172,7 +170,7 @@ namespace Verifiable.Core
         /// <param name="didDocumentFileContents">The DID document data file contents.</param>
         /// <remarks>Compared to <see cref="CanRoundtripDidDocumentWithoutStronglyTypedService(string, string)"/>
         /// this tests provides strong type to see if <see cref="VerifiableCredentialService"/> in particular is serialized.</remarks>
-        [Theory]
+        [TestMethod]
         [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrent, "did-verifiablecredentialservice-1.json")]
         public void CanRoundtripDidDocumentWithStronglyTypedService(string didDocumentFilename, string didDocumentFileContents)
         {
@@ -182,6 +180,7 @@ namespace Verifiable.Core
             {
                 { "VerifiableCredentialService", typeof(VerifiableCredentialService) }
             };
+
             var options = new JsonSerializerOptions
             {
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -206,14 +205,14 @@ namespace Verifiable.Core
             };
 
             var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);            
-            Assert.NotNull(deserializedDidDocument?.Id);
-            Assert.NotNull(deserializedDidDocument?.Context);
-            Assert.NotNull(deserializedDidDocument?.Service);
-            Assert.NotNull(reserializedDidDocument);
-            Assert.IsType<VerifiableCredentialService>(deserializedDidDocument!.Service![0]);
+            Assert.IsNotNull(deserializedDidDocument?.Id);
+            Assert.IsNotNull(deserializedDidDocument?.Context);
+            Assert.IsNotNull(deserializedDidDocument?.Service);
+            Assert.IsNotNull(reserializedDidDocument);
+            Assert.IsInstanceOfType<VerifiableCredentialService>(deserializedDidDocument!.Service![0]);
 
             bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(didDocumentFileContents, reserializedDidDocument);
-            Assert.True(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
+            Assert.IsTrue(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
         }
 
 
@@ -224,7 +223,7 @@ namespace Verifiable.Core
         /// <param name="didDocumentFileContents">The DID document data file contents.</param>
         /// <remarks>Compared to <see cref="CanRoundtripDidDocumentWithStronglyTypedService(string, string)"/>
         /// this tests without a provided strong type to see if <see cref="Service"/> is serialized.</remarks>
-        [Theory]
+        [TestMethod]
         [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrent, "did-verifiablecredentialservice-1.json")]
         public void CanRoundtripDidDocumentWithoutStronglyTypedService(string didDocumentFilename, string didDocumentFileContents)
         {
@@ -248,7 +247,7 @@ namespace Verifiable.Core
                         {
                             "JsonWebKey2020" => new JsonWebKey2020(),
                             "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
-                            _ => new Core.Did.CryptoSuite(cryptoSuite, new List<string>())
+                            _ => new CryptoSuite(cryptoSuite, new List<string>())
                         };
                     },verificationMethodTypeMap.ToImmutableDictionary()),
                     new ServiceConverterFactory(),
@@ -266,14 +265,14 @@ namespace Verifiable.Core
             };
 
             var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);            
-            Assert.NotNull(deserializedDidDocument?.Id);
-            Assert.NotNull(deserializedDidDocument?.Context);
-            Assert.NotNull(deserializedDidDocument?.Service);
-            Assert.NotNull(reserializedDidDocument);
-            Assert.IsType<Service>(deserializedDidDocument!.Service![0]);
+            Assert.IsNotNull(deserializedDidDocument?.Id);
+            Assert.IsNotNull(deserializedDidDocument?.Context);
+            Assert.IsNotNull(deserializedDidDocument?.Service);
+            Assert.IsNotNull(reserializedDidDocument);
+            Assert.IsInstanceOfType<Service>(deserializedDidDocument!.Service![0]);
 
             bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(didDocumentFileContents, reserializedDidDocument);
-            Assert.True(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
+            Assert.IsTrue(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
         }
 
 
@@ -284,7 +283,7 @@ namespace Verifiable.Core
         /// <param name="didDocumentFilename">The DID document data file under test.</param>
         /// <param name="didDocumentFileContents">The DID document data file contents.</param>
         /// <remarks>By default reading is disallowed due to security and information leak concerns.</remarks>
-        [Theory]
+        [TestMethod]
         [FilesData(TestInfrastructureConstants.RelativeTestPathToExtended, "did-w3c-extended-1.json")]
         public void CanRoundtripExtendedDidOnlyWithExtendedType(string didDocumentFilename, string didDocumentFileContents)
         {
@@ -317,18 +316,18 @@ namespace Verifiable.Core
                 JsonTestingUtilities.PerformExtendedSerializationCycle<DidDocument, TestExtendedDidDocument>(didDocumentFileContents, options);
 
             //Assertions for DidDocument...
-            Assert.NotNull(deserializedDidDocumentNonExtended?.Id);
-            Assert.NotNull(deserializedDidDocumentNonExtended?.Context);
-            Assert.NotNull(reserializedDidDocumentNonExtended);
+            Assert.IsNotNull(deserializedDidDocumentNonExtended?.Id);
+            Assert.IsNotNull(deserializedDidDocumentNonExtended?.Context);
+            Assert.IsNotNull(reserializedDidDocumentNonExtended);
 
             //Assertions for TestExtendedDidDocument...
-            Assert.NotNull(deserializedDidDocumentExtended?.Id);
-            Assert.NotNull(deserializedDidDocumentExtended?.Context);
-            Assert.NotNull(deserializedDidDocumentExtended?.AdditionalData);
-            Assert.NotNull(reserializedDidDocumentExtended);
+            Assert.IsNotNull(deserializedDidDocumentExtended?.Id);
+            Assert.IsNotNull(deserializedDidDocumentExtended?.Context);
+            Assert.IsNotNull(deserializedDidDocumentExtended?.AdditionalData);
+            Assert.IsNotNull(reserializedDidDocumentExtended);
 
             bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(didDocumentFileContents, reserializedDidDocumentExtended);
-            Assert.True(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
+            Assert.IsTrue(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
         }
 
 
@@ -338,7 +337,7 @@ namespace Verifiable.Core
         /// </summary>
         /// <param name="didDocumentFilename">The DID document data file under test.</param>
         /// <param name="didDocumentFileContents">The DID document data file contents.</param>
-        [Theory]
+        [TestMethod]
         [FilesData(TestInfrastructureConstants.RelativeTestPathToCurrent, ".json", SearchOption.AllDirectories)]
         public void AllTestDIDsAsPlainDocumentsRountrip(string didDocumentFilename, string didDocumentFileContents)
         {
@@ -363,7 +362,7 @@ namespace Verifiable.Core
                         {
                             "JsonWebKey2020" => new JsonWebKey2020(),
                             "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
-                            _ => new Core.Did.CryptoSuite(cryptoSuite, new List<string>())
+                            _ => new CryptoSuite(cryptoSuite, new List<string>())
                         };
                     },verificationMethodTypeMap.ToImmutableDictionary()),
                     new ServiceConverterFactory(),
@@ -384,11 +383,11 @@ namespace Verifiable.Core
             var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
 
             //All the DID documents need to have an ID.
-            Assert.NotNull(deserializedDidDocument?.Id);
-            Assert.NotNull(reserializedDidDocument);
+            Assert.IsNotNull(deserializedDidDocument?.Id);
+            Assert.IsNotNull(reserializedDidDocument);
 
             bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(didDocumentFileContents, reserializedDidDocument);
-            Assert.True(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
+            Assert.IsTrue(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
         }
     }
 }

@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+    <!--
+        For instance platform specific tests are asserted as inconclusive when they
+        cannot be run on a given platform.
+    -->
+    <MapInconclusiveToFailed>False</MapInconclusiveToFailed>
+    <Parallelize>
+        <Workers>0</Workers>
+        <Scope>MethodLevel</Scope>
+    </Parallelize>
+</RunSettings>

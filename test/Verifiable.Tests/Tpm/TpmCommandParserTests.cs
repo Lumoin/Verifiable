@@ -3,13 +3,13 @@ using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Commands;
 using Verifiable.Tpm.Structures;
-using Xunit;
 
 namespace Verifiable.Tests.Tpm
 {
-    public class TpmCommandParserTests
+    [TestClass]
+    public sealed class TpmCommandParserTests
     {
-        [Fact]
+        [TestMethod]
         public void ParsingIsFipsCommandSucceeds()
         {
             /*
@@ -25,15 +25,16 @@ namespace Verifiable.Tests.Tpm
             var parser = new TpmCommandParser();
             var isFipsCommandBreakDown = parser.Parse(isFipsCommand);
 
-            Assert.Equal(TpmConstants2Temp.TPM_ST_NO_SESSIONS, BinaryPrimitives.ReadUInt16BigEndian(isFipsCommandBreakDown[0].TpmInstruction));
-            Assert.Equal(22u, BinaryPrimitives.ReadUInt32BigEndian(isFipsCommandBreakDown[1].TpmInstruction));
-            Assert.Equal(Tpm2Cc.GetCapability, (Tpm2Cc)BinaryPrimitives.ReadUInt32BigEndian(isFipsCommandBreakDown[2].TpmInstruction));
-            Assert.Equal(TPM2_CAP.TPM_PROPERTIES, (TPM2_CAP)BinaryPrimitives.ReadUInt32BigEndian(isFipsCommandBreakDown[3].TpmInstruction));
-            Assert.Equal(Tpm2PtConstants.TPM2_PT_MODES, BinaryPrimitives.ReadUInt32BigEndian(isFipsCommandBreakDown[4].TpmInstruction));
-            Assert.Equal(1u, BinaryPrimitives.ReadUInt32BigEndian(isFipsCommandBreakDown[5].TpmInstruction));
+            Assert.AreEqual(TpmConstants2Temp.TPM_ST_NO_SESSIONS, BinaryPrimitives.ReadUInt16BigEndian(isFipsCommandBreakDown[0].TpmInstruction));
+            Assert.AreEqual(22u, BinaryPrimitives.ReadUInt32BigEndian(isFipsCommandBreakDown[1].TpmInstruction));
+            Assert.AreEqual(Tpm2Cc.GetCapability, (Tpm2Cc)BinaryPrimitives.ReadUInt32BigEndian(isFipsCommandBreakDown[2].TpmInstruction));
+            Assert.AreEqual(TPM2_CAP.TPM_PROPERTIES, (TPM2_CAP)BinaryPrimitives.ReadUInt32BigEndian(isFipsCommandBreakDown[3].TpmInstruction));
+            Assert.AreEqual(Tpm2PtConstants.TPM2_PT_MODES, BinaryPrimitives.ReadUInt32BigEndian(isFipsCommandBreakDown[4].TpmInstruction));
+            Assert.AreEqual(1u, BinaryPrimitives.ReadUInt32BigEndian(isFipsCommandBreakDown[5].TpmInstruction));
         }
 
-        [SkipTpmTestOnCiFact]
+        
+        [SkipOnCiTestMethod]
         public void GetSupportedAlgorithmsCommandSucceeds()
         {
             var command = new GetCapabilityCommand();

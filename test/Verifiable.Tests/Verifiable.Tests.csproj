@@ -1,59 +1,37 @@
-<Project Sdk="Microsoft.NET.Sdk">
-
-  <PropertyGroup>		
-    <IsPackable>false</IsPackable>
-    <ServerGarbageCollection>true</ServerGarbageCollection>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>	
-  </PropertyGroup>
+<Project Sdk="MSTest.Sdk">
 
   <PropertyGroup>
-    <WarningLevel>7</WarningLevel>
-    <LangVersion>preview</LangVersion>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!--
+      Displays error on console in addition to the log file. Note that this feature comes with a performance impact.
+      For more information, visit https://learn.microsoft.com/dotnet/core/testing/unit-testing-platform-integration-dotnet-test#show-failure-per-test
+      -->
+    <TestingPlatformShowTestsFailure>true</TestingPlatformShowTestsFailure>
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\config.runsettings</RunSettingsFilePath>    
   </PropertyGroup>
-    
-  <ItemGroup>
-    <PackageReference Include="dotNetRdf" />
-    <PackageReference Include="JunitXml.TestLogger" />    
-    <PackageReference Include="SharpFuzz" />    
+  
+  <ItemGroup>    
+    <PackageReference Include="dotNetRdf" />    
+    <PackageReference Include="SharpFuzz" />
     <PackageReference Include="WinSharpFuzz" />
-    <PackageReference Include="CsCheck" />
-    <PackageReference Include="xunit" />
-    <PackageReference Include="xunit.extensibility.execution" />
-    <PackageReference Include="xunit.analyzers">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>    
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="Microsoft.CodeCoverage" />
-    <PackageReference Include="LiquidTestReports.Markdown" />    
+    <PackageReference Include="CsCheck" />    
+    <PackageReference Include="LiquidTestReports.Markdown" />
     <PackageReference Include="System.Net.Http.Json" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
-    <PackageReference Include="xunit.runner.visualstudio">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>    
-    <PackageReference Include="coverlet.collector">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>                
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />    
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verifiable.BouncyCastle\Verifiable.BouncyCastle.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable.DecentralizedWebNode\Verifiable.DecentralizedWebNode.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Core\Verifiable.Core.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Jwt\Verifiable.Jwt.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable.Core\Verifiable.Core.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.NSec\Verifiable.NSec.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Sidetree\Verifiable.Sidetree.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable\Verifiable.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Update="xunit.runner.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-   
 </Project>

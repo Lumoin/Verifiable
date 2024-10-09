@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Jwt;
 using Verifiable.Tests.DataProviders;
-using Xunit;
 
 namespace Verifiable.Tests.Jwt
 {
@@ -16,10 +12,11 @@ namespace Verifiable.Tests.Jwt
     /// The purpose of these tests is to cross-check this JWT implementation for
     /// compatibility with other implementations.
     /// </summary>
-    public class JwtTestsWithPrefinedData
+    [TestClass]
+    public sealed class JwtTestsWithPrefinedData
     {
-        [Theory]
-        [ClassData(typeof(HsJwtTestTheory))]
+        [DataTestMethod]
+        [DynamicData(nameof(JwtTestDataProvider.GetHsTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
         public async Task HsJwtTokenEncodingSigningAndVerifyingSucceeds(HsTestData testData)
         {
             string signedJwt = JwtExtensions.SignJwt(
@@ -95,16 +92,16 @@ namespace Verifiable.Tests.Jwt
 
             //There is no random components, so all values should match
             //with the given test values.
-            Assert.True(isSignatureValid);
-            Assert.Equal(testData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
-            Assert.Equal(testData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
-            Assert.Equal(testData.CrossCheckJwt.Split('.')[2], signedJwt.Split('.')[2]);
-            Assert.Equal(testData.CrossCheckJwt, signedJwt);
+            Assert.IsTrue(isSignatureValid);
+            Assert.AreEqual(testData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
+            Assert.AreEqual(testData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
+            Assert.AreEqual(testData.CrossCheckJwt.Split('.')[2], signedJwt.Split('.')[2]);
+            Assert.AreEqual(testData.CrossCheckJwt, signedJwt);
         }
 
 
-        [Theory]
-        [ClassData(typeof(ESJwtTestTheory))]
+        [DataTestMethod]
+        [DynamicData(nameof(JwtTestDataProvider.GetESTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
         public async Task ESJwtTokenEncodingSigningAndVerifyingSucceeds(ESTestData jwtTestData)
         {
             string signedJwt = JwtExtensions.SignJwt(
@@ -176,16 +173,16 @@ namespace Verifiable.Tests.Jwt
                     return ValueTask.FromResult(verifier(dataToVerify, signature, context.Key));
                 });
 
-            Assert.True(isSignatureValid);
+            Assert.IsTrue(isSignatureValid);
 
             //The signature varies since it has a random component.
-            Assert.Equal(jwtTestData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
-            Assert.Equal(jwtTestData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
+            Assert.AreEqual(jwtTestData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
+            Assert.AreEqual(jwtTestData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
         }
 
 
-        [Theory]
-        [ClassData(typeof(RsaRsJwtTestTheory))]
+        [DataTestMethod]
+        [DynamicData(nameof(JwtTestDataProvider.GetRsaRsTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
         public async Task RsaRsJwtTokenEncodingSigningAndVerifyingSucceeds(RsaRSTestData testData)
         {
             string signedJwt = JwtExtensions.SignJwt(
@@ -272,16 +269,16 @@ namespace Verifiable.Tests.Jwt
                     }
                 });
 
-            Assert.True(isSignatureValid);
-            Assert.Equal(testData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
-            Assert.Equal(testData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
-            Assert.Equal(testData.CrossCheckJwt.Split('.')[2], signedJwt.Split('.')[2]);
-            Assert.Equal(testData.CrossCheckJwt, signedJwt);
+            Assert.IsTrue(isSignatureValid);
+            Assert.AreEqual(testData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
+            Assert.AreEqual(testData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
+            Assert.AreEqual(testData.CrossCheckJwt.Split('.')[2], signedJwt.Split('.')[2]);
+            Assert.AreEqual(testData.CrossCheckJwt, signedJwt);
         }
 
 
-        [Theory]
-        [ClassData(typeof(RsaPSJwtTestTheory))]
+        [DataTestMethod]
+        [DynamicData(nameof(JwtTestDataProvider.GetRsaPsTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
         public async Task RsaPSJwtTokenEncodingSigningAndVerifyingSucceeds(RsaPSTestData testData)
         {
             string signedJwt = JwtExtensions.SignJwt(
@@ -374,14 +371,14 @@ namespace Verifiable.Tests.Jwt
 
             //The signature varies since it has a random component. Consequently
             //the signature value cannot be compared byte-by-byte.
-            Assert.True(isSignatureValid);
-            Assert.Equal(testData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
-            Assert.Equal(testData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
+            Assert.IsTrue(isSignatureValid);
+            Assert.AreEqual(testData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0]);
+            Assert.AreEqual(testData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1]);
         }
 
 
-        [Theory]
-        [ClassData(typeof(MixedJwtTestTheory))]
+        [DataTestMethod]
+        [DynamicData(nameof(JwtTestDataProvider.GetMixedJwtTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
         public void MixedJwtTokenEncodingSigningAndVerifyingSucceeds(BaseJwtTestData testData)
         {
             string signedJwt = JwtExtensions.SignJwt(
@@ -400,7 +397,7 @@ namespace Verifiable.Tests.Jwt
                },
                signingFunctionMatcher: DefaultVerifierSelector.JwtDefaultSigner);
 
-            Assert.Equal(testData.CrossCheckJwt, signedJwt);
+            Assert.AreEqual(testData.CrossCheckJwt, signedJwt);
         }        
     }
 

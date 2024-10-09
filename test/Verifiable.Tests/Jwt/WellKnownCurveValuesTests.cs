@@ -1,15 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using Verifiable.Jwt;
+﻿using Verifiable.Jwt;
 using Verifiable.Tests.TestInfrastructure;
-using Xunit;
 
 namespace Verifiable.Tests.Jwt
 {
     /// <summary>
     /// Tests that canonicalization of kty values works correctly.
     /// </summary>
-    public class WellKnownCurveValuesTests
+    [TestClass]
+    public sealed class WellKnownCurveValuesTests
     {
         /// <summary>
         /// All of the well-known curve values and their comparison functions..
@@ -28,31 +26,36 @@ namespace Verifiable.Tests.Jwt
         }
 
 
-        [Theory]
-        [MemberData(nameof(GetCurveValues))]
-        public void CurveValuesComparesCorrectly(string correctAlgorithm, Func<string, bool> isCorrectAlgorithm)
+        /// <summary>
+        /// Tests that all well-known JWT curve values are recognized correctly.
+        /// </summary>
+        /// <param name="curve">The curve to test.</param>
+        /// <param name="isCorrectCurve">The function that checks if the algorithm is recognized.</param>
+        [TestMethod]
+        [DynamicData(nameof(GetCurveValues), DynamicDataSourceType.Method)]
+        public void CurveValuesComparesCorrectly(string curve, Func<string, bool> isCorrectCurve)
         {
             //A newly created instance should not reference the canonicalized version.
             //This means a different version even with the same case will not reference
             //the same object. This is a a premise check for the implementation of the
             //WellKnownCurveValues.GetCanonicalizedValue that relies on this optimization
             //to avoid comparing the actual strings if the references are the same.
-            string instanceAlgorithm = new(correctAlgorithm);
-            Assert.False(object.ReferenceEquals(correctAlgorithm, instanceAlgorithm), "Instance created from canonical should not reference equal to it.");
+            string instanceAlgorithm = new(curve);
+            Assert.IsFalse(object.ReferenceEquals(curve, instanceAlgorithm), "Instance created from canonical should not reference equal to it.");
 
             //The correct algorithm should be correctly identified even if it's not the canonicalized version.
             //This is a premise check for the WellKnownCurveValues.GetCanonicalizedValue, now the
             //comparison is done with the actual strings.
-            Assert.True(isCorrectAlgorithm(instanceAlgorithm), "Is<SomeAlgorithm> should compare correctly to canonicalized version even if instance.");
+            Assert.IsTrue(isCorrectCurve(instanceAlgorithm), "Is<SomeAlgorithm> should compare correctly to canonicalized version even if instance.");
 
             //The canonicalized version should be the same as the original.
             string canonicalizedVersion = WellKnownCurveValues.GetCanonicalizedValue(instanceAlgorithm);
-            Assert.True(object.ReferenceEquals(correctAlgorithm, canonicalizedVersion), "Canonicalized version should be the same as original.");
+            Assert.IsTrue(object.ReferenceEquals(curve, canonicalizedVersion), "Canonicalized version should be the same as original.");
 
             //A case with a toggled letter should not be the same since it's both a different string
             //and a different reference.
             string incorrectAlgorithm = instanceAlgorithm.ToggleCaseForLetterAt(0);
-            Assert.False(isCorrectAlgorithm(incorrectAlgorithm), "Comparison should fail when casing is changed.");
+            Assert.IsFalse(isCorrectCurve(incorrectAlgorithm), "Comparison should fail when casing is changed.");
         }
     }
 }

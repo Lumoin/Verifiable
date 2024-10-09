@@ -1,12 +1,10 @@
-﻿using System;
-using Verifiable.Core;
+﻿using Verifiable.Core;
 using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
 using Verifiable.Core.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Tests.Builders;
 using Verifiable.Tests.TestDataProviders;
-using Xunit;
 
 namespace Verifiable.Tests
 {
@@ -32,24 +30,27 @@ namespace Verifiable.Tests
     /// <summary>
     /// Theory data for verification method creation tests.
     /// </summary>
-    public class VerificationMethodTheoryData: TheoryData<VerificationMethodTestData>
+    public static class VerificationMethodTheoryData
     {
-        public VerificationMethodTheoryData()
+        public static IEnumerable<object[]> GetVerificationMethodTestData()
         {
-            void AddTestData(PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair)
+            static void AddTestData(PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair, List<object[]> data)
             {
-                Add(new VerificationMethodTestData(keyPair, JsonWebKey2020.DefaultInstance, typeof(PublicKeyJwk)));
-                Add(new VerificationMethodTestData(keyPair, Multikey.DefaultInstance, typeof(PublicKeyMultibase)));
+                data.Add([new VerificationMethodTestData(keyPair, JsonWebKey2020.DefaultInstance, typeof(PublicKeyJwk))]);
+                data.Add([new VerificationMethodTestData(keyPair, Multikey.DefaultInstance, typeof(PublicKeyMultibase))]);
             }
 
-            AddTestData(TestKeyMaterialProvider.P256KeyMaterial);
-            AddTestData(TestKeyMaterialProvider.P384KeyMaterial);
-            AddTestData(TestKeyMaterialProvider.P521KeyMaterial);
-            AddTestData(TestKeyMaterialProvider.Secp256k1KeyMaterial);
-            AddTestData(TestKeyMaterialProvider.Rsa2048KeyMaterial);
-            AddTestData(TestKeyMaterialProvider.Rsa4096KeyMaterial);
-            AddTestData(TestKeyMaterialProvider.Ed25519KeyMaterial);
-            AddTestData(TestKeyMaterialProvider.X25519KeyMaterial);
+            List<object[]> data = [];
+            AddTestData(TestKeyMaterialProvider.P256KeyMaterial, data);
+            AddTestData(TestKeyMaterialProvider.P384KeyMaterial, data);
+            AddTestData(TestKeyMaterialProvider.P521KeyMaterial, data);
+            AddTestData(TestKeyMaterialProvider.Secp256k1KeyMaterial, data);
+            AddTestData(TestKeyMaterialProvider.Rsa2048KeyMaterial, data);
+            AddTestData(TestKeyMaterialProvider.Rsa4096KeyMaterial, data);
+            AddTestData(TestKeyMaterialProvider.Ed25519KeyMaterial, data);
+            AddTestData(TestKeyMaterialProvider.X25519KeyMaterial, data);
+
+            return data;
         }
     }
 
@@ -57,10 +58,11 @@ namespace Verifiable.Tests
     /// <summary>
     /// Tests creating verification methods.
     /// </summary>
+    [TestClass]
     public class VerificationMethodCreationTests
     {
-        [Theory]
-        [ClassData(typeof(VerificationMethodTheoryData))]
+        [TestMethod]
+        [DynamicData(nameof(VerificationMethodTheoryData.GetVerificationMethodTestData), typeof(VerificationMethodTheoryData), DynamicDataSourceType.Method)]
         public void CreatesCorrectVerificationMethodWithLibraryDefaults(VerificationMethodTestData testData)
         {
             const string Id = "TestId";
@@ -72,11 +74,11 @@ namespace Verifiable.Tests
                 Controller);
 
             var actualKeyFormat = verificationMethod.KeyFormat;
-            Assert.IsType(testData.ExpectedKeyFormat, actualKeyFormat);
+            Assert.IsInstanceOfType(actualKeyFormat, testData.ExpectedKeyFormat);
 
-            Assert.Equal(Id, verificationMethod.Id);
-            Assert.Equal(Controller, verificationMethod.Controller);
-            Assert.Equal(testData.CryptoSuite.CryptoSuiteId, verificationMethod.Type);
+            Assert.AreEqual(Id, verificationMethod.Id);
+            Assert.AreEqual(Controller, verificationMethod.Controller);
+            Assert.AreEqual(testData.CryptoSuite.CryptoSuiteId, verificationMethod.Type);
         }
 
 
@@ -84,7 +86,7 @@ namespace Verifiable.Tests
         /// Tests explicitly creation of a verification method in <see cref="PublicKeyMultibase"/> using <see cref="Ed25519VerificationKey2020"/>
         /// that is deprecated.
         /// </summary>
-        [Fact]
+        [TestMethod]
         public void CanCreateEd25519VerificationKey2020InMultibase()
         {            
             const string Id = "Ed25519VerificationKey2020TestId";
@@ -99,10 +101,10 @@ namespace Verifiable.Tests
                 SsiKeyFormatSelector.DefaultKeyFormatCreator);
 
             var actualMultibaseKeyFormat = verificationMethodInMultibase.KeyFormat;
-            Assert.IsType(WellKnownKeyFormats.PublicKeyMultibase, actualMultibaseKeyFormat);
-            Assert.Equal(Id, verificationMethodInMultibase.Id);
-            Assert.Equal(Controller, verificationMethodInMultibase.Controller);
-            Assert.Equal(Ed25519VerificationKey2020.DefaultInstance.CryptoSuiteId, verificationMethodInMultibase.Type);                       
+            Assert.IsInstanceOfType(actualMultibaseKeyFormat, WellKnownKeyFormats.PublicKeyMultibase);
+            Assert.AreEqual(Id, verificationMethodInMultibase.Id);
+            Assert.AreEqual(Controller, verificationMethodInMultibase.Controller);
+            Assert.AreEqual(Ed25519VerificationKey2020.DefaultInstance.CryptoSuiteId, verificationMethodInMultibase.Type);                       
         }
 
 
@@ -110,7 +112,7 @@ namespace Verifiable.Tests
         /// Tests explicitly creation of a verification method <see cref="PublicKeyJwk"/> using <see cref="Ed25519VerificationKey2020"/>
         /// that is deprecated.
         /// </summary>
-        [Fact]
+        [TestMethod]
         public void CanCreateEd25519VerificationKey2020InJwk()
         {
             const string Id = "Ed25519VerificationKey2020TestId";
@@ -125,10 +127,10 @@ namespace Verifiable.Tests
                 SsiKeyFormatSelector.DefaultKeyFormatCreator);
 
             var actualJwkKeyFormat = verificationMethodInJwk.KeyFormat;
-            Assert.IsType(WellKnownKeyFormats.PublicKeyJwk, actualJwkKeyFormat);
-            Assert.Equal(Id, verificationMethodInJwk.Id);
-            Assert.Equal(Controller, verificationMethodInJwk.Controller);
-            Assert.Equal(Ed25519VerificationKey2020.DefaultInstance.CryptoSuiteId, verificationMethodInJwk.Type);
+            Assert.IsInstanceOfType(actualJwkKeyFormat, WellKnownKeyFormats.PublicKeyJwk);
+            Assert.AreEqual(Id, verificationMethodInJwk.Id);
+            Assert.AreEqual(Controller, verificationMethodInJwk.Controller);
+            Assert.AreEqual(Ed25519VerificationKey2020.DefaultInstance.CryptoSuiteId, verificationMethodInJwk.Type);
         }
     }
 }

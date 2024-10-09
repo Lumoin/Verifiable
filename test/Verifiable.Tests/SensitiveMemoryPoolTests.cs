@@ -1,22 +1,22 @@
-using System;
-using Xunit;
+using Verifiable.Core;
 
-namespace Verifiable.Core
+namespace Verifiable.Tests.Core
 {
     /// <summary>
     /// The the <see cref="SensitiveMemoryPool{T}"/> that is included with Verifiable library.
     /// </summary>
-    public class SensitiveMemoryPoolTests
+    [TestClass]
+    public sealed class SensitiveMemoryPoolTests
     {
-        [Fact]
+        [TestMethod]
         public void ZeroLengthRentSucceeds()
         {
             var buffer = SensitiveMemoryPool<byte>.Shared.Rent(0);
-            Assert.Equal(0, buffer.Memory.Length);
+            Assert.AreEqual(0, buffer.Memory.Length);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void SharedInstanceRentsAreExactlyRequestedLength()
         {
             //This is not an exhaustive search nor proof-by-construction, but nevertheless
@@ -24,18 +24,18 @@ namespace Verifiable.Core
             for(int bufferLengthRequest = 1; bufferLengthRequest < 10; bufferLengthRequest++)
             {
                 var buffer = SensitiveMemoryPool<byte>.Shared.Rent(bufferLengthRequest);
-                Assert.Equal(bufferLengthRequest, buffer.Memory.Length);
+                Assert.AreEqual(bufferLengthRequest, buffer.Memory.Length);
             }
         }
 
 
-        [Fact]
+        [TestMethod]
         public void NegativeLengthRentFailsWithTheCorrectMessage()
         {
             const string ParameterName = "exactBufferSize";
-            var exception1 = Assert.Throws<ArgumentOutOfRangeException>(() => SensitiveMemoryPool<byte>.Shared.Rent(-1));
+            var exception1 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => SensitiveMemoryPool<byte>.Shared.Rent(-1));
 
-            Assert.Equal(ParameterName, exception1.ParamName);
+            Assert.AreEqual(ParameterName, exception1.ParamName);
         }
     }
 }

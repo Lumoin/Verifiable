@@ -1,12 +1,12 @@
 using Verifiable.Core.Cryptography.Context;
-using Xunit;
 
 namespace Verifiable.Tests.Cryptography
 {
     /// <summary>
     /// Tests for <see cref="EncodingScheme" /> <see cref="System.IEquatable{T}" /> implementation.
     /// </summary>
-    public class EncodingSchemeEquatableTests
+    [TestClass]
+    public sealed class EncodingSchemeEquatableTests
     {
         /// <summary>
         /// A first instance for testing comparisons.
@@ -20,82 +20,82 @@ namespace Verifiable.Tests.Cryptography
 
         
 
-        [Fact]
+        [TestMethod]
         public void InstancesWithDifferentCodesAreNotEqual()
         {
-            Assert.False(EncodingScheme1.Equals(EncodingScheme2));
-            Assert.False(EncodingScheme1 == EncodingScheme2);
-            Assert.True(EncodingScheme1 != EncodingScheme2);
+            Assert.IsFalse(EncodingScheme1.Equals(EncodingScheme2));
+            Assert.IsFalse(EncodingScheme1 == EncodingScheme2);
+            Assert.IsTrue(EncodingScheme1 != EncodingScheme2);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void InstancesWithSameCodesAreEqual()
         {
             var encodingScheme1 = EncodingScheme.Pkcs8;
-            Assert.True(EncodingScheme1.Equals(encodingScheme1));
-            Assert.True(EncodingScheme1 == encodingScheme1);
-            Assert.False(EncodingScheme1 != encodingScheme1);
+            Assert.IsTrue(EncodingScheme1.Equals(encodingScheme1));
+            Assert.IsTrue(EncodingScheme1 == encodingScheme1);
+            Assert.IsFalse(EncodingScheme1 != encodingScheme1);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void ComparisonWithTypeAndObjectSucceeds()
         {
             object encodingSchemeAsObject = EncodingScheme1;
-            Assert.True(EncodingScheme1.Equals(encodingSchemeAsObject));
+            Assert.IsTrue(EncodingScheme1.Equals(encodingSchemeAsObject));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void PurposeAndObjectEqualityComparisonSucceeds()
         {
             object encodingSchemeAsObject = EncodingScheme1;
             bool result1 = EncodingScheme1 == encodingSchemeAsObject;
-            Assert.True(result1);
+            Assert.IsTrue(result1);
 
             bool result2 = encodingSchemeAsObject == EncodingScheme1;
-            Assert.True(result2);
+            Assert.IsTrue(result2);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void PurposeAndObjectInequalityComparisonSucceeds()
         {
             object encodingSchemeAsObject = EncodingScheme1;
             bool result1 = EncodingScheme1 != encodingSchemeAsObject;
-            Assert.False(result1);
+            Assert.IsFalse(result1);
 
             bool result2 = encodingSchemeAsObject != EncodingScheme1;
-            Assert.False(result2);
+            Assert.IsFalse(result2);
         }
 
                 
-        [Fact]
+        [TestMethod]
         public void PurposeAndObjectEqualityComparisonWithDifferentValuesSucceeds()
         {
             object encodingSchemeAsObject = EncodingScheme2;
             bool result1 = EncodingScheme1 == encodingSchemeAsObject;
-            Assert.False(result1);
+            Assert.IsFalse(result1);
 
             bool result2 = EncodingScheme1 != encodingSchemeAsObject;
-            Assert.True(result2);
+            Assert.IsTrue(result2);
         }
 
 
-        [Fact]
+        [TestMethod]
         public void EqualsWithDifferentTypesReturnsFalse()
         {
             object differentType = new();
-            Assert.False(EncodingScheme1.Equals(differentType));
+            Assert.IsFalse(EncodingScheme1.Equals(differentType));
         }
 
 
-        [Fact]
+        [TestMethod]
         public void EqualsWithNullObjectReturnsFalse()
         {
             object? nullObject = null;
-            Assert.False(EncodingScheme1.Equals(nullObject));
+            Assert.IsFalse(EncodingScheme1.Equals(nullObject));
         }
     }
 }

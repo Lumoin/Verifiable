@@ -1,13 +1,8 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Diagnostics.Tracing;
-using System.Linq;
-using System.Threading.Tasks;
 using Verifiable.Core.Cryptography;
-using Xunit;
 
 namespace Verifiable.Core.SensitiveMemoryPool
 {
@@ -41,9 +36,10 @@ namespace Verifiable.Core.SensitiveMemoryPool
     }
 
 
-    public class ExactSizeMemoryPoolTestsWitByte
+    [TestClass]
+    public sealed class ExactSizeMemoryPoolTestsWitByte
     {
-        [Fact]
+        [TestMethod]
         public void BuffersAreExactlyRequestedSize()
         {            
             var pool = new ExactSizeMemoryPool<byte>();
@@ -52,14 +48,14 @@ namespace Verifiable.Core.SensitiveMemoryPool
                 for(int i = 1; i <= 256; ++i)
                 {
                     var buffer = pool.Rent(i);
-                    Assert.Equal(i, buffer.Memory.Length);
+                    Assert.AreEqual(i, buffer.Memory.Length);
                     buffer.Dispose();
                 }
             }
         }
 
 
-        [Fact]
+        [TestMethod]
         public async Task MetricsAreReportedCorrectly()
         {
             var meter = new Meter("ExactSizeMemoryPool", "1.0.0");
@@ -106,11 +102,11 @@ namespace Verifiable.Core.SensitiveMemoryPool
 
                     // Check that the metrics have the correct values
                     bool found = reportedMetrics.TryGetValue("TotalSlabs", out long totalSlabs);
-                    Assert.True(found);
-                    Assert.Equal(2, totalSlabs);
+                    Assert.IsTrue(found);
+                    Assert.AreEqual(2, totalSlabs);
 
-                    Assert.True(reportedMetrics.TryGetValue("TotalMemoryUsed", out long totalMemoryUsed));
-                    Assert.Equal(100 * ExactSizeMemoryPool<byte>.InitialSlabCapacity + 200 * ExactSizeMemoryPool<byte>.InitialSlabCapacity, totalMemoryUsed);
+                    Assert.IsTrue(reportedMetrics.TryGetValue("TotalMemoryUsed", out long totalMemoryUsed));
+                    Assert.AreEqual(100 * ExactSizeMemoryPool<byte>.InitialSlabCapacity + 200 * ExactSizeMemoryPool<byte>.InitialSlabCapacity, totalMemoryUsed);
                 }
             }
 
@@ -118,7 +114,8 @@ namespace Verifiable.Core.SensitiveMemoryPool
         }
 
 
-        [Fact(Skip = "Work in progress.")]
+        [Ignore("Work in progress.")]
+        [TestMethod]        
         public void TracingTest()
         {
             var activityListener = new ActivityListener
@@ -153,22 +150,20 @@ namespace Verifiable.Core.SensitiveMemoryPool
 
             //ActivitySource.RemoveActivityListener(activityListener);
 
-            Assert.Equal(4, activities.Count);
-            Assert.Collection(activities,
-                activity => Assert.Equal("Rent", activity.OperationName),
-                activity => Assert.Equal("Dispose", activity.OperationName),
-                activity => Assert.Equal("Rent", activity.OperationName),
-                activity => Assert.Equal("Dispose", activity.OperationName)
-            );
+            Assert.AreEqual(4, activities.Count);
 
-            Assert.Equal("100", activities[0].Tags.FirstOrDefault(tag => tag.Key == "bufferSize").Value);
-            Assert.Equal("100", activities[1].Tags.FirstOrDefault(tag => tag.Key == "bufferSize").Value);
-            Assert.Equal("200", activities[2].Tags.FirstOrDefault(tag => tag.Key == "bufferSize").Value);
-            Assert.Equal("200", activities[3].Tags.FirstOrDefault(tag => tag.Key == "bufferSize").Value);
+            var expectedOperations = new[] { "Rent", "Dispose", "Rent", "Dispose" };
+            CollectionAssert.AreEqual(expectedOperations, activities.Select(a => a.OperationName).ToArray());
+            
+            Assert.AreEqual("100", activities[0].Tags.FirstOrDefault(tag => tag.Key == "bufferSize").Value);
+            Assert.AreEqual("100", activities[1].Tags.FirstOrDefault(tag => tag.Key == "bufferSize").Value);
+            Assert.AreEqual("200", activities[2].Tags.FirstOrDefault(tag => tag.Key == "bufferSize").Value);
+            Assert.AreEqual("200", activities[3].Tags.FirstOrDefault(tag => tag.Key == "bufferSize").Value);
         }
 
 
-        [Fact(Skip = "Work in progress.")]
+        [Ignore("Work in progress.")]
+        [TestMethod]        
         public async Task TracingTest2()
         {
             List<Activity> capturedActivities = new List<Activity>();
@@ -193,21 +188,21 @@ namespace Verifiable.Core.SensitiveMemoryPool
                 }
             }
 
-            Assert.Equal(3, capturedActivities.Count);
+            Assert.AreEqual(3, capturedActivities.Count);
 
             var rentActivity = capturedActivities.FirstOrDefault(a => a.OperationName == "Rent");
             var disposeActivity = capturedActivities.FirstOrDefault(a => a.OperationName == "Dispose");
             var parentActivity2 = capturedActivities.FirstOrDefault(a => a.OperationName == "ParentActivity");
 
-            Assert.NotNull(rentActivity);
-            Assert.NotNull(disposeActivity);
-            Assert.NotNull(parentActivity2);
+            Assert.IsNotNull(rentActivity);
+            Assert.IsNotNull(disposeActivity);
+            Assert.IsNotNull(parentActivity2);
 
-            Assert.Equal(parentActivity2.TraceId, rentActivity.TraceId);
-            Assert.Equal(parentActivity2.TraceId, disposeActivity.TraceId);
+            Assert.AreEqual(parentActivity2.TraceId, rentActivity.TraceId);
+            Assert.AreEqual(parentActivity2.TraceId, disposeActivity.TraceId);
 
-            Assert.Equal(parentActivity2.SpanId, rentActivity.ParentSpanId);
-            Assert.Equal(rentActivity.SpanId, disposeActivity.ParentSpanId);
+            Assert.AreEqual(parentActivity2.SpanId, rentActivity.ParentSpanId);
+            Assert.AreEqual(rentActivity.SpanId, disposeActivity.ParentSpanId);
         }
     }
 }
