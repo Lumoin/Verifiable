@@ -249,7 +249,7 @@ jobs:
 
     - name: Create test summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: EnricoMi/publish-unit-test-result-action@v2.16.1      
+      uses: EnricoMi/publish-unit-test-result-action@v2.18.0      
       with:
         trx_files: '${{ github.workspace }}/reports/**/*.trx'
 
