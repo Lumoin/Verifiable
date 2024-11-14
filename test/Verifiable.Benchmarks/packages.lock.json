@@ -22,11 +22,11 @@
       },
       "SIL.ReleaseTasks": {
         "type": "Direct",
-        "requested": "[2.6.0-beta0030, )",
-        "resolved": "2.6.0-beta0030",
-        "contentHash": "iytkRVZ7tEBY00kzB55Qs0/TyfYBJ0GyvRnDPKw2AfakBWrBBTkTCdBSAGmCFoL4Wf6asRFOrenRJ6VGGhCuUQ==",
+        "requested": "[3.0.0, )",
+        "resolved": "3.0.0",
+        "contentHash": "DR0X2IORUVD2gFQCrokzqR0UEaGkVwsuqPOFKdI0BcJN7I1IJxdh6yB2WTMhGIfGg1la5PQDxe7gVotgWyB2jQ==",
         "dependencies": {
-          "Markdig.Signed": "0.30.2"
+          "Markdig.Signed": "0.37.0"
         }
       },
       "BenchmarkDotNet.Annotations": {
@@ -51,8 +51,8 @@
       },
       "Markdig.Signed": {
         "type": "Transitive",
-        "resolved": "0.30.2",
-        "contentHash": "nQlUtPbp9pQFoArFSp/CZb699W6pqBG/DSpnWHgKbIuQjAu3KNjTZHaIir2vSCPJZuSMGii7tbI6K+nalh4X7w=="
+        "resolved": "0.37.0",
+        "contentHash": "J7Mt1QjKijE7aAK81u5nt4SYPYEvt1odfr4ddMvyOscyNT3PoGfHKKTBB5VBSXJrWZWhfJlcG7hHBLiqawg+nw=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -261,9 +261,9 @@
       },
       "System.Collections.Immutable": {
         "type": "CentralTransitive",
-        "requested": "[9.0.0-rc.2.24473.5, )",
-        "resolved": "9.0.0-rc.2.24473.5",
-        "contentHash": "03KbZJuPX2uYx03Ui0d6Tdk2dBw8Kt+BeaK/p8jbKundqAt/XKuORf7zTuAIolcLV+OZrTalYEOhMTLAX3QL2g=="
+        "requested": "[9.0.0, )",
+        "resolved": "9.0.0",
+        "contentHash": "QhkXUl2gNrQtvPmtBTQHb0YsUrDiDQ2QS09YbtTTiSjGcf7NBqtYbrG/BE06zcBPCKEwQGzIv13IVdXNOSub2w=="
       }
     }
   }

@@ -10,17 +10,17 @@
       },
       "SIL.ReleaseTasks": {
         "type": "Direct",
-        "requested": "[2.6.0-beta0030, )",
-        "resolved": "2.6.0-beta0030",
-        "contentHash": "iytkRVZ7tEBY00kzB55Qs0/TyfYBJ0GyvRnDPKw2AfakBWrBBTkTCdBSAGmCFoL4Wf6asRFOrenRJ6VGGhCuUQ==",
+        "requested": "[3.0.0, )",
+        "resolved": "3.0.0",
+        "contentHash": "DR0X2IORUVD2gFQCrokzqR0UEaGkVwsuqPOFKdI0BcJN7I1IJxdh6yB2WTMhGIfGg1la5PQDxe7gVotgWyB2jQ==",
         "dependencies": {
-          "Markdig.Signed": "0.30.2"
+          "Markdig.Signed": "0.37.0"
         }
       },
       "Markdig.Signed": {
         "type": "Transitive",
-        "resolved": "0.30.2",
-        "contentHash": "nQlUtPbp9pQFoArFSp/CZb699W6pqBG/DSpnWHgKbIuQjAu3KNjTZHaIir2vSCPJZuSMGii7tbI6K+nalh4X7w=="
+        "resolved": "0.37.0",
+        "contentHash": "J7Mt1QjKijE7aAK81u5nt4SYPYEvt1odfr4ddMvyOscyNT3PoGfHKKTBB5VBSXJrWZWhfJlcG7hHBLiqawg+nw=="
       }
     }
   }
