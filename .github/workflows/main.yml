@@ -195,16 +195,10 @@ jobs:
     #        echo "file_name=TestReport.${{ github.run_number }}.md" >> $GITHUB_ENV
     #  shell: bash
 
-    # 1. Always runs on non-macOS. MacOS is skipped at the moment due to issues with some .NET crypto libraries.
-    # 2. Always runs on feature branches (github.ref != 'refs/heads/main' is true)
-    # 3. Always runs on PR events
-    # 4. Skips only when merging to main if it came from a PR
+    # MacOS is skipped at the moment due to issues with some .NET crypto libraries.
+    # Until tests are a fixed a bit. The coverage from the executable does not have a file suffix in Linux.
     - name: Test
-      if: |
-         runner.os != 'macOS' &&
-          (github.ref != 'refs/heads/main' ||
-          (github.event_name == 'pull_request') ||
-          (!github.event.pull_request && !contains(github.event.before, github.event.after)))
+      if: runner.os != 'macOS'
       run: dotnet tool run dotnet-coverage collect --output '${{ github.workspace }}/reports/coverage.cobertura.xml' --output-format cobertura '${{ github.workspace }}/test/${{ env.VERIFIABLE_TESTS }}/bin/${{ env.BUILD_CONFIGURATION }}/net9.0/${{ env.VERIFIABLE_TESTS }}' --report-trx --report-trx-filename testresults.trx --results-directory '${{ github.workspace }}/reports'
       timeout-minutes: 5
 
