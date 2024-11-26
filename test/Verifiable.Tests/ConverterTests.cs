@@ -17,6 +17,7 @@ namespace Verifiable.Tests.Core
         public void RoundtripControllerSingle()
         {
             //A fragment for a single controller instance. Either a single or multiple controller case is possible in one document.
+            // lang=json, strict
             const string OriginalInputJson = @"""did:test:0x06048B83FAdaCdCB20198ABc45562Df1A3e289aF""";
             var converter = new SingleOrArrayControllerConverter();
             var controllers = GetConverted(OriginalInputJson, converter);
@@ -62,6 +63,7 @@ namespace Verifiable.Tests.Core
         public void RoundtripOneUriContext()
         {
             //The DID Uri from https://www.w3.org/TR/did-core/.
+            // lang=json, strict
             const string OriginalInputJson = @"""https://www.w3.org/ns/did/v1""";
             var converter = new JsonLdContextConverter();
 
