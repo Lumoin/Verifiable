@@ -62,6 +62,7 @@ namespace Verifiable.Tests
 
 
         //https://www.w3.org/community/reports/credentials/CG-FINAL-di-eddsa-2020-20220724/.
+        // lang=json, strict
         public static string Vc0 = """
                       {
               "@context": [
