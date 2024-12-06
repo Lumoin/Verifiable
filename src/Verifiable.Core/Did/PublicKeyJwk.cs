@@ -36,7 +36,7 @@ namespace Verifiable.Core.Did
     [DebuggerDisplay("PublicKeyJwk()")]
     public class PublicKeyJwk: KeyFormat
     {
-        public Dictionary<string, object> Header { get; set; } = new Dictionary<string, object>();
+        public Dictionary<string, object> Header { get; set; } = [];
 
         public Dictionary<string, object>? Payload { get; set; }        
     }

@@ -13,7 +13,7 @@ namespace Verifiable.Tests.Jwt
     /// compatibility with other implementations.
     /// </summary>
     [TestClass]
-    public sealed class JwtTestsWithPrefinedData
+    public sealed class JwtTestsWithPredefinedData
     {
         [DataTestMethod]
         [DynamicData(nameof(JwtTestDataProvider.GetHsTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
@@ -72,15 +72,15 @@ namespace Verifiable.Tests.Jwt
                     bool result = false;
                     if(WellKnownJwaValues.IsHs256(alg))
                     {
-                        result = MicrosofCryptographicFunctions.VerifyHs256(context.Key, dataToVerify, signature);
+                        result = MicrosoftCryptographicFunctions.VerifyHs256(context.Key, dataToVerify, signature);
                     }
                     else if(WellKnownJwaValues.IsHs384(alg))
                     {
-                        result = MicrosofCryptographicFunctions.VerifyHs384(context.Key, dataToVerify, signature);
+                        result = MicrosoftCryptographicFunctions.VerifyHs384(context.Key, dataToVerify, signature);
                     }
                     else if(WellKnownJwaValues.IsHs512(alg))
                     {
-                        result = MicrosofCryptographicFunctions.VerifyHs512(context.Key, dataToVerify, signature);
+                        result = MicrosoftCryptographicFunctions.VerifyHs512(context.Key, dataToVerify, signature);
                     }
                     else
                     {
@@ -430,9 +430,9 @@ namespace Verifiable.Tests.Jwt
             string alg = (string)context.Parameters["alg"];
             VerifyImplementation<byte> operation = (kty, alg) switch
             {
-                (null, "ES256") or ("", "ES256") or ("EC", "ES256") => MicrosofCryptographicFunctions.VerifyP256,
-                (null, "ES384") or ("", "ES384") or ("EC", "ES384") => MicrosofCryptographicFunctions.VerifyP384,
-                (null, "ES512") or ("", "ES512") or ("EC", "ES512") => MicrosofCryptographicFunctions.VerifyP521,
+                (null, "ES256") or ("", "ES256") or ("EC", "ES256") => MicrosoftCryptographicFunctions.VerifyP256,
+                (null, "ES384") or ("", "ES384") or ("EC", "ES384") => MicrosoftCryptographicFunctions.VerifyP384,
+                (null, "ES512") or ("", "ES512") or ("EC", "ES512") => MicrosoftCryptographicFunctions.VerifyP521,
                 (null, "ES256K") or ("", "ES256K") or ("EC", "ES256K") => BouncyCastleCryptographicFunctions.VerifySeckpk1,
                 (null, "EdDSA") or ("", "EdDSA") or ("OKP", "EdDSA") => BouncyCastleCryptographicFunctions.VerifyEd25519,
 
@@ -449,18 +449,18 @@ namespace Verifiable.Tests.Jwt
             string alg = (string)context.Parameters[JwkProperties.Alg];
             SignImplementation<byte> operation = alg switch
             {
-                "HS256" => MicrosofCryptographicFunctions.SignHs256,
-                "HS384" => MicrosofCryptographicFunctions.SignHs384,
-                "HS512" => MicrosofCryptographicFunctions.SignHs512,
-                "RS256" => MicrosofCryptographicFunctions.SignRs256,
-                "RS384" => MicrosofCryptographicFunctions.SignRs384,
-                "RS512" => MicrosofCryptographicFunctions.SignRs512,
-                "ES256" => MicrosofCryptographicFunctions.SignP256,
-                "ES384" => MicrosofCryptographicFunctions.SignP384,
-                "ES512" => MicrosofCryptographicFunctions.SignP521,
-                "PS256" => MicrosofCryptographicFunctions.SignPs256,
-                "PS384" => MicrosofCryptographicFunctions.SignPs384,
-                "PS512" => MicrosofCryptographicFunctions.SignPs512,
+                "HS256" => MicrosoftCryptographicFunctions.SignHs256,
+                "HS384" => MicrosoftCryptographicFunctions.SignHs384,
+                "HS512" => MicrosoftCryptographicFunctions.SignHs512,
+                "RS256" => MicrosoftCryptographicFunctions.SignRs256,
+                "RS384" => MicrosoftCryptographicFunctions.SignRs384,
+                "RS512" => MicrosoftCryptographicFunctions.SignRs512,
+                "ES256" => MicrosoftCryptographicFunctions.SignP256,
+                "ES384" => MicrosoftCryptographicFunctions.SignP384,
+                "ES512" => MicrosoftCryptographicFunctions.SignP521,
+                "PS256" => MicrosoftCryptographicFunctions.SignPs256,
+                "PS384" => MicrosoftCryptographicFunctions.SignPs384,
+                "PS512" => MicrosoftCryptographicFunctions.SignPs512,
                 _ => throw new NotSupportedException("Unsupported algorithm: " + alg)
             };
 
@@ -469,7 +469,7 @@ namespace Verifiable.Tests.Jwt
     }
 
 
-    public static class MicrosofCryptographicFunctions
+    public static class MicrosoftCryptographicFunctions
     {
         public static bool VerifyP256(ReadOnlySpan<byte> dataToVerify, ReadOnlySpan<byte> signature, ReadOnlySpan<byte> publicKeyMaterial)
         {

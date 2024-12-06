@@ -72,6 +72,13 @@ namespace Verifiable.Core
         /// <see href="https://github.com/multiformats/multibase">More info</see>
         /// </summary>
         public static Type PublicKeyMultibase { get; } = typeof(PublicKeyMultibase);
+
+        /// <summary>
+        /// JsonWebKey2020: A format for encoding binary data as strings, along with an indicator of the encoding used.
+        /// Designed for use in systems where multiple binary-to-text encoding schemes may be used.
+        /// <see href="https://github.com/multiformats/multibase">More info</see>
+        /// </summary>
+        public static Type JsonWebKey2020 { get; } = typeof(JsonWebKey2020);
     }
 
 
@@ -94,11 +101,14 @@ namespace Verifiable.Core
     public delegate KeyFormat KeyFormatCreator(Type format, PublicKeyMemory keyMaterial);
 
 
+    /// <summary>
+    /// 
+    /// </summary>
     public static class SsiKeyFormatSelector
     {
         public static KeyFormatSelector DefaultKeyFormatSelector { get; set; } = (Type didMethod, CryptoSuite cryptoSuite, Type? preferredFormat) =>
         {
-            //TOOD: If a preferred format is provided and it matches one of the well-known formats, return it. No other reason at the moment...
+            //TODO: If a preferred format is provided and it matches one of the well-known formats, return it. No other reason at the moment...
             //Should there be a parameter "application" or something to that effect, as it probably can't be covered with "preferred format".
             return (didMethod, cryptoSuite, preferredFormat) switch
             {
@@ -127,12 +137,12 @@ namespace Verifiable.Core
             //Select the appropriate encoder based on the format that was selected based on choice in
             //SsiKeyFormatSelector.DefaultKeyFormatSelector.
             //TODO: The Base64Url is hardcoded at the moment, so it does not have a parameter. It should have one.
-            BufferAllocationEncodeDelegate? encoder = DefaultEncoderSelector.Select(format);
+            BufferAllocationEncodeDelegate? encoder = DefaultCoderSelector.SelectEncoder(format);
 
             return format switch
             {
-                var pfa when format == WellKnownKeyFormats.PublicKeyJwk => new PublicKeyJwk { Header = KeyHeaderConversion.DefaultAlgorithmToJwkConverter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan()) },
-                var pfa when format == WellKnownKeyFormats.PublicKeyMultibase => new PublicKeyMultibase(KeyHeaderConversion.DefaultAlgorithmToBase58Converter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan(), encoder)),                
+                var pfa when format == WellKnownKeyFormats.PublicKeyJwk => new PublicKeyJwk { Header = VerifiableCryptoFormatConversions.DefaultAlgorithmToJwkConverter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan()) },
+                var pfa when format == WellKnownKeyFormats.PublicKeyMultibase => new PublicKeyMultibase(VerifiableCryptoFormatConversions.DefaultAlgorithmToBase58Converter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan(), encoder)),                
                 _ => throw new ArgumentException($"Unsupported format: \"{format}\".")
             };
         };

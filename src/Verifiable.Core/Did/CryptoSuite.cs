@@ -116,7 +116,7 @@ namespace Verifiable.Core.Did
         public static new Ed25519VerificationKey2020 DefaultInstance => new();
 
 
-        public Ed25519VerificationKey2020(): base("Ed25519VerificationKey2020", new List<string> { "EdDSA" }) { }
+        public Ed25519VerificationKey2020(): base(CryptoSuiteConstants.Ed25519VerificationKey2020, new List<string> { "EdDSA" }) { }
 
 
         /// <summary>
@@ -136,7 +136,7 @@ namespace Verifiable.Core.Did
 
     public record Secp256k1VerificationKey2018: CryptoSuite
     {
-        public Secp256k1VerificationKey2018() : base("Secp256k1VerificationKey2018", new List<string> { "Secp256k1" }) { }
+        public Secp256k1VerificationKey2018() : base("Secp256k1VerificationKey2018", ["Secp256k1"]) { }
 
 
         /// <summary>
@@ -152,6 +152,7 @@ namespace Verifiable.Core.Did
         /// <param name="didId"></param>
         public static explicit operator Secp256k1VerificationKey2018(string cryptoSuiteId) => new();
     }
+
 
     public record X25519KeyAgreementKey2020: CryptoSuite
     {
@@ -193,6 +194,29 @@ namespace Verifiable.Core.Did
         /// </summary>
         /// <param name="didId"></param>
         public static explicit operator Multikey(string cryptoSuiteId) => new();
+    }
+
+
+    public record JsonWebKey: CryptoSuite
+    {
+        public static new JsonWebKey DefaultInstance => new JsonWebKey();
+
+
+        public JsonWebKey(): base(" JsonWebKey", new List<string> { }) { }
+
+
+        /// <summary>
+        /// Implicit conversion from <see cref="JsonWebKey"/> or derived crypto suites to <see langword="string"/>.
+        /// </summary>
+        /// <param name="cryptoSuiteId"></param>
+        public static implicit operator string(JsonWebKey cryptoSuiteId) => cryptoSuiteId.CryptoSuiteId;
+
+
+        /// <summary>
+        /// Explicit conversion from <see langword="string"/> to <see cref="Multikey"/> or derived crypto suites.
+        /// </summary>
+        /// <param name="didId"></param>
+        public static explicit operator JsonWebKey(string cryptoSuiteId) => new();
     }
 
 

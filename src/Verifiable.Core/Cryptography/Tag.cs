@@ -22,101 +22,153 @@ namespace Verifiable.Core.Cryptography
         /// </summary>
         public static Tag Empty { get; } = new(new Dictionary<Type, object>());
 
+
+        /// <summary>
+        /// Retrieves a value from the tag, inferring the key from the generic type.
+        /// </summary>
+        /// <typeparam name="T">The type of the value to retrieve.</typeparam>
+        /// <returns>The value associated with the type key, cast to the specified type.</returns>
+        /// <exception cref="InvalidCastException">Thrown if the value cannot be cast to the specified type.</exception>
+        /// <exception cref="KeyNotFoundException">Thrown if the key is not found in the dictionary.</exception>
+        public T Get<T>()
+        {
+            Type key = typeof(T);
+            if(!Data.TryGetValue(key, out object? value))
+            {
+                throw new KeyNotFoundException($"Key '{key}' was not found in the tag's data.");
+            }
+
+            if(value is not T typedValue)
+            {
+                throw new InvalidCastException($"Value for key '{key}' is not of type '{typeof(T)}'.");
+            }
+
+            return typedValue;
+        }
+
         public static Tag P256PublicKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P256,
-            [typeof(Purpose)] = Purpose.Public,
+            [typeof(Purpose)] = Purpose.Verification,
             [typeof(EncodingScheme)] = EncodingScheme.EcCompressed
         });
 
         public static Tag P256PrivateKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P256,
-            [typeof(Purpose)] = Purpose.Private,
+            [typeof(Purpose)] = Purpose.Signing,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag P256Signature { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P256,
+            [typeof(Purpose)] = Purpose.Signature,
             [typeof(EncodingScheme)] = EncodingScheme.Raw
         });
 
         public static Tag P384PublicKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P384,
-            [typeof(Purpose)] = Purpose.Public,
+            [typeof(Purpose)] = Purpose.Verification,
             [typeof(EncodingScheme)] = EncodingScheme.EcCompressed
         });
 
         public static Tag P384PrivateKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P384,
-            [typeof(Purpose)] = Purpose.Private,
+            [typeof(Purpose)] = Purpose.Signing,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag P384Signature { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P384,
+            [typeof(Purpose)] = Purpose.Signature,
             [typeof(EncodingScheme)] = EncodingScheme.Raw
         });
 
         public static Tag P521PublicKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P521,
-            [typeof(Purpose)] = Purpose.Public,
+            [typeof(Purpose)] = Purpose.Verification,
             [typeof(EncodingScheme)] = EncodingScheme.EcCompressed
         });
 
         public static Tag P521PrivateKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P521,
-            [typeof(Purpose)] = Purpose.Private,
+            [typeof(Purpose)] = Purpose.Signing,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag P521Signature { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P521,
+            [typeof(Purpose)] = Purpose.Signature,
             [typeof(EncodingScheme)] = EncodingScheme.Raw
         });
 
         public static Tag Secp256k1PublicKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Secp256k1,
-            [typeof(Purpose)] = Purpose.Public,
+            [typeof(Purpose)] = Purpose.Verification,
             [typeof(EncodingScheme)] = EncodingScheme.EcCompressed
         });
 
         public static Tag Secp256k1PrivateKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Secp256k1,
-            [typeof(Purpose)] = Purpose.Private,
+            [typeof(Purpose)] = Purpose.Signing,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw
+        });
+
+        public static Tag Secp256k1Signature { get; } = new(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Secp256k1,
+            [typeof(Purpose)] = Purpose.Signature,
             [typeof(EncodingScheme)] = EncodingScheme.Raw
         });
 
         public static Tag Rsa2048PublicKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Rsa2048,
-            [typeof(Purpose)] = Purpose.Public,
+            [typeof(Purpose)] = Purpose.Verification,
             [typeof(EncodingScheme)] = EncodingScheme.Der
         });
 
         public static Tag Rsa2048PrivateKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Rsa2048,
-            [typeof(Purpose)] = Purpose.Private,
+            [typeof(Purpose)] = Purpose.Signing,
             [typeof(EncodingScheme)] = EncodingScheme.Der
         });
 
         public static Tag Rsa4096PublicKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Rsa4096,
-            [typeof(Purpose)] = Purpose.Public,
+            [typeof(Purpose)] = Purpose.Verification,
             [typeof(EncodingScheme)] = EncodingScheme.Der
         });
 
         public static Tag Rsa4096PrivateKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Rsa4096,
-            [typeof(Purpose)] = Purpose.Private,
+            [typeof(Purpose)] = Purpose.Signing,
             [typeof(EncodingScheme)] = EncodingScheme.Der
         });
 
         public static Tag Ed25519PublicKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Ed25519,
-            [typeof(Purpose)] = Purpose.Public,
+            [typeof(Purpose)] = Purpose.Verification,
             [typeof(EncodingScheme)] = EncodingScheme.Raw
         });
 
         public static Tag Ed25519PrivateKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Ed25519,
-            [typeof(Purpose)] = Purpose.Private,
+            [typeof(Purpose)] = Purpose.Signing,
             [typeof(EncodingScheme)] = EncodingScheme.Raw
         });
 
@@ -138,7 +190,7 @@ namespace Verifiable.Core.Cryptography
         public static Tag X25519PrivateKey { get; } = new(new Dictionary<Type, object>
         {
             [typeof(CryptoAlgorithm)] = CryptoAlgorithm.X25519,
-            [typeof(Purpose)] = Purpose.Private,
+            [typeof(Purpose)] = Purpose.Signing,
             [typeof(EncodingScheme)] = EncodingScheme.Raw
         });
 

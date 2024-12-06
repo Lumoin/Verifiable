@@ -167,9 +167,9 @@
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Direct",
-        "requested": "[9.0.0, )",
-        "resolved": "9.0.0",
-        "contentHash": "CJW+x/F6fmRQ7N6K8paasTw9PDZp4t7G76UjGNlSDgoHPF0h08vTzLYbLZpOLEJSg35d5wy2jCXGo84EN05DpQ=="
+        "requested": "[9.0.1, )",
+        "resolved": "9.0.1",
+        "contentHash": "u+4PH6GyDjEsWgcpKp1S/DiyxtGvazNPdaPFR6p6/qZr3TW+oZWvwfHO2H2CSpS4KGl2z2CBfU6eB38PsmoxtA=="
       },
       "WinSharpFuzz": {
         "type": "Direct",
@@ -689,7 +689,7 @@
       "System.Collections.NonGeneric": {
         "type": "Transitive",
         "resolved": "4.3.0",
-        "contentHash": "prtjIEMhGUnQq6RnPEYLpFt8AtLbp9yq2zxOSrY7KJJZrw25Fi97IzBqY7iqssbM61Ek5b8f3MG/sG1N2sN5KA==",
+        "contentHash": "LE/oChpRvkSi3U25u0KnJcI44JeDZ1QJCyN4qFDx2uusEypdqR24w7lKYw21eYe5esuCBuc862wRmpF63Yy1KQ==",
         "dependencies": {
           "System.Diagnostics.Debug": "4.3.0",
           "System.Globalization": "4.3.0",
@@ -739,7 +739,7 @@
       "System.ComponentModel.TypeConverter": {
         "type": "Transitive",
         "resolved": "4.3.0",
-        "contentHash": "16pQ6P+EdhcXzPiEK4kbA953Fu0MNG2ovxTZU81/qsCd1zPRsKc3uif5NgvllCY598k6bI0KUyKW8fanlfaDQg==",
+        "contentHash": "HZiP0DwTHJ+C+rdFqP47nBYUh5283kcwXIGY2zOVVhsJmVI/2tYiX2zNRdjRQRHsTox58Ydkec6h0pWSh8wAsw==",
         "dependencies": {
           "System.Collections": "4.3.0",
           "System.Collections.NonGeneric": "4.3.0",
@@ -1306,8 +1306,8 @@
         "type": "Project",
         "dependencies": {
           "SimpleBase": "[4.0.2, )",
-          "System.Collections.Immutable": "[9.0.0, )",
-          "System.Text.Json": "[9.0.0, )",
+          "System.Collections.Immutable": "[9.0.1, )",
+          "System.Text.Json": "[9.0.1, )",
           "Verifiable.Jwt": "[0.0.0, )"
         }
       },
@@ -1317,7 +1317,7 @@
       "verifiable.microsoft": {
         "type": "Project",
         "dependencies": {
-          "System.Security.Cryptography.ProtectedData": "[9.0.0, )",
+          "System.Security.Cryptography.ProtectedData": "[9.0.1, )",
           "Verifiable.Core": "[0.0.0, )"
         }
       },
@@ -1378,15 +1378,15 @@
       },
       "System.Collections.Immutable": {
         "type": "CentralTransitive",
-        "requested": "[9.0.0, )",
-        "resolved": "9.0.0",
-        "contentHash": "QhkXUl2gNrQtvPmtBTQHb0YsUrDiDQ2QS09YbtTTiSjGcf7NBqtYbrG/BE06zcBPCKEwQGzIv13IVdXNOSub2w=="
+        "requested": "[9.0.1, )",
+        "resolved": "9.0.1",
+        "contentHash": "qt4+ClsZYKzar/Rw1zbt0t9iuBUCLVNsjXicEuVQyKL7143CwhWzI2gTwzz8AhSaFYVHnpcb8SBGA+zaY4weUg=="
       },
       "System.Text.Json": {
         "type": "CentralTransitive",
-        "requested": "[9.0.0, )",
-        "resolved": "9.0.0",
-        "contentHash": "js7+qAu/9mQvnhA4EfGMZNEzXtJCDxgkgj8ohuxq/Qxv+R56G+ljefhiJHOxTNiw54q8vmABCWUwkMulNdlZ4A=="
+        "requested": "[9.0.1, )",
+        "resolved": "9.0.1",
+        "contentHash": "eqWHDZqYPv1PvuvoIIx5pF74plL3iEOZOl/0kQP+Y0TEbtgNnM2W6k8h8EPYs+LTJZsXuWa92n5W5sHTWvE3VA=="
       }
     }
   }

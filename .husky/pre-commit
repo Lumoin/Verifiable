@@ -1,5 +1,5 @@
 #!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
+# . "$(dirname "$0")/_/husky.sh"
 
 ## husky task runner examples -------------------
 ## Note : for local installation use 'dotnet' prefix. e.g. 'dotnet husky'

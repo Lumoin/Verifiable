@@ -261,9 +261,9 @@
       },
       "System.Collections.Immutable": {
         "type": "CentralTransitive",
-        "requested": "[9.0.0, )",
-        "resolved": "9.0.0",
-        "contentHash": "QhkXUl2gNrQtvPmtBTQHb0YsUrDiDQ2QS09YbtTTiSjGcf7NBqtYbrG/BE06zcBPCKEwQGzIv13IVdXNOSub2w=="
+        "requested": "[9.0.1, )",
+        "resolved": "9.0.1",
+        "contentHash": "qt4+ClsZYKzar/Rw1zbt0t9iuBUCLVNsjXicEuVQyKL7143CwhWzI2gTwzz8AhSaFYVHnpcb8SBGA+zaY4weUg=="
       }
     }
   }

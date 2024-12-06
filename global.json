@@ -1,7 +1,7 @@
 {
     "sdk": {
         "allowPrerelease": false,
-        "version": "9.0.101"
+        "version": "9.0.102"
     },
     "msbuild-sdks": {
         "MSTest.Sdk": "3.7.0"        
