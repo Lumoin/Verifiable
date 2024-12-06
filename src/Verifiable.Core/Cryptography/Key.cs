@@ -8,7 +8,7 @@ namespace Verifiable.Core.Cryptography
     public abstract class Key: IDisposable
     {
         /// <summary>
-        /// Detects and prevents redudant dispose calls.
+        /// Detects and prevents redundant dispose calls.
         /// </summary>
         private bool disposed;
 

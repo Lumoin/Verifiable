@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using Verifiable.Core.Cryptography;
+using Verifiable.Core.Did;
 
 namespace Verifiable.Core
 {
@@ -13,43 +14,18 @@ namespace Verifiable.Core
     //TODO: There should be a version for BaseUrl.Encoding as well.
     public delegate string BufferAllocationEncodeDelegate(ReadOnlySpan<byte> data, ReadOnlySpan<byte> codecHeader, MemoryPool<char> pool);
 
-    public delegate IMemoryOwner<TResult> MultibaseMatcherDelegate<T, TResult>(ReadOnlySpan<T> inputParam, MemoryPool<byte> resultMemoryPool, DecodeDelegate<char, byte> decoder);
-
-
+    
     public static class MultibaseSerializer
-    {
-        public static MultibaseMatcherDelegate<char, byte> DefaultDecoderMatcher { get; set; } = (inputToDecode, memoryPool, decoder) =>
-        {
-            //TODO: There should probably be a second parameter, that being the corresponding MulticodecHeaders
-            //for the string. This way the decoder function can do further logic, such as check the array length.
-            IMemoryOwner<byte> result = null!;
-            result = inputToDecode switch
-            {
-                var span when span.StartsWith(Base58BtcEncodedMulticodecHeaders.P256PublicKey) => decoder(span, memoryPool),
-                var span when span.StartsWith(Base58BtcEncodedMulticodecHeaders.P384PublicKey) => decoder(span, memoryPool),
-                var span when span.StartsWith(Base58BtcEncodedMulticodecHeaders.P521PublicKey) => decoder(span, memoryPool),
-                var span when span.StartsWith(Base58BtcEncodedMulticodecHeaders.RsaPublicKey2048) => decoder(span, memoryPool),
-                var span when span.StartsWith(Base58BtcEncodedMulticodecHeaders.RsaPublicKey4096) => decoder(span, memoryPool),
-                var span when span.StartsWith(Base58BtcEncodedMulticodecHeaders.Secp256k1PublicKey) => decoder(span, memoryPool),
-                var span when span.StartsWith(Base58BtcEncodedMulticodecHeaders.X25519PublicKey) => decoder(span, memoryPool),
-                var span when span.StartsWith(Base58BtcEncodedMulticodecHeaders.Ed25519PublicKey) => decoder(span, memoryPool),
-                var span when span.StartsWith(Base58BtcEncodedMulticodecHeaders.Bls12381G2PublicKey) => decoder(span, memoryPool),
-                _ => null!//CustomMatcher(inputParam)
-            };
-
-            return result;
-        };
-
-
+    {       
         public static IMemoryOwner<byte> Decode(ReadOnlySpan<char> data, MemoryPool<byte> resultMemoryPool, ArrayDecodeDelegate<char, byte> arrayDecoder)
         {
             //This just forwards the call to buffer delegate call.
-            IMemoryOwner<byte> bufferAllocatorDecoder(ReadOnlySpan<char> inputData, int codecHeaderLength, MemoryPool<byte> memoryPool)
+            IMemoryOwner<byte> bufferAllocatorDecoder(ReadOnlySpan<char> inputData, int startIndex, MemoryPool<byte> memoryPool)
             {
                 byte[] decodedArray = arrayDecoder(inputData);
-                var actualBufferLength = decodedArray.Length - codecHeaderLength;
+                var actualBufferLength = decodedArray.Length - startIndex;
                 var output = memoryPool.Rent(actualBufferLength);
-                decodedArray.AsSpan(codecHeaderLength, actualBufferLength).CopyTo(output.Memory.Span);
+                decodedArray.AsSpan(startIndex, actualBufferLength).CopyTo(output.Memory.Span);
 
                 return output;
             }
@@ -61,11 +37,49 @@ namespace Verifiable.Core
 
         public static IMemoryOwner<byte> Decode(ReadOnlySpan<char> data, MemoryPool<byte> resultMemoryPool, BufferAllocationDecodeDelegate decoder)
         {
-            //All acceptable codecs have a header length of 2 bytes in the Multicodec format.
+            if(data.Length == 0)
+            {
+                throw new ArgumentException("Encoded input cannot be empty.");
+            }
+
+            if(!data[0].Equals(MultibaseAlgorithms.Base58Btc))
+            {
+                throw new ArgumentException("Encoded input does not start with 'z', which is required for multibase 'z' encoding.");
+            }
+
+            //All acceptable codecs have a header length of 2 bytes in the Multicodec format. Here it is assumed there is 'z'
+            //in front to denote multicodec encoding and that is stripped of.
             const int CodecHeaderLength = 2;
             var decodedBytes = decoder(data.Slice(1), CodecHeaderLength, resultMemoryPool);
 
             return decodedBytes;
+        }
+
+
+        public static IMemoryOwner<byte> Decode(ReadOnlySpan<char> data, MemoryPool<byte> resultMemoryPool, BufferAllocationDecodeDelegate decoder, int codecHeaderLength = 2)
+        {
+            if(data.Length == 0)
+            {
+                throw new ArgumentException("Encoded input cannot be empty.");
+            }
+
+            if(!data[0].Equals(MultibaseAlgorithms.Base58Btc))
+            {
+                throw new ArgumentException("Encoded input does not start with 'z', which is required for multibase 'z' encoding.");
+            }
+
+            //Here the 'z' is removed before doing further decoding.
+            var decodedBytes = decoder(data.Slice(1), codecHeaderLength, resultMemoryPool);
+
+            return decodedBytes;
+        }
+
+
+        public static IMemoryOwner<byte> DecodeWithMultibaseHeader(ReadOnlySpan<char> data, MemoryPool<byte> resultMemoryPool, BufferAllocationDecodeDelegate decoder)
+        {
+            //Having codeHeaderLength at 0 basically does not remove it and so consequently
+            //it will be available for the caller.
+            return Decode(data, resultMemoryPool, decoder, codecHeaderLength: 0);
         }
 
 

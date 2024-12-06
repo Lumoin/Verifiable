@@ -41,10 +41,10 @@ namespace Verifiable.Tests
             proofValueBytes.CopyTo(pooledProofSignatureBytes.Memory.Span);
             var proofSignature = new Signature(pooledProofSignatureBytes, Tag.Ed25519Signature);
 
-            string canonocalizedDataWithoutProof = CanonicalVc0Document;
-            var canonocalizedDataWithoutProofHashedData = SHA256.HashData(Encoding.UTF8.GetBytes(canonocalizedDataWithoutProof));
+            string canonicalizeDataWithoutProof = CanonicalVc0Document;
+            var canonicalizedDataWithoutProofHashedData = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalizeDataWithoutProof));
             var proofValueHash = SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalVc0ProofDocument));
-            var combinedHashToVerify = proofValueHash.Concat(canonocalizedDataWithoutProofHashedData).ToArray();
+            var combinedHashToVerify = proofValueHash.Concat(canonicalizedDataWithoutProofHashedData).ToArray();
 
             /*
             var ownSignature = privateKeyMemory.Sign(canonocalizedDataWithoutProofHashedData, BouncyCastleAlgorithms.SignEd25519, MemoryPool<byte>.Shared);

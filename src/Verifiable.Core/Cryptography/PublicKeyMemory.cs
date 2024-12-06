@@ -2,7 +2,6 @@ using System;
 using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
 
 namespace Verifiable.Core.Cryptography
 {

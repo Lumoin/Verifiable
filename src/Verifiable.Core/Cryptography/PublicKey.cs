@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.CompilerServices;
 
 namespace Verifiable.Core.Cryptography
 {
@@ -22,7 +21,7 @@ namespace Verifiable.Core.Cryptography
         /// Public key constructor.
         /// </summary>
         /// <param name="sensitiveMemory">The public key bytes of this key.</param>
-        /// <param name="id">The key identity.</param>
+        /// <param name="id">The key identifier.</param>
         /// <param name="verificationFunction">The function that verifies the signature against data using this key.</param>
         public PublicKey(PublicKeyMemory sensitiveMemory, string id, VerificationFunction<byte, byte, Signature, bool> verificationFunction): base(sensitiveMemory, id)
         {
