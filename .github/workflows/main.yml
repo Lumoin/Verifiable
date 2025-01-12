@@ -60,27 +60,31 @@ jobs:
     
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: step-security/harden-runner@0080882f6c36860b6ba35c610c98ce87d4e2f26f
+      uses: step-security/harden-runner@c95a14d0e5bab51a9f56296a4eb0e416910cd350
       with:
         disable-sudo: true
         egress-policy: block
         allowed-endpoints: >
+          # These are needed at least in Linux, see https://github.com/dotnet/core/issues/9671. Safe to remove 2025-04-01?
+          dotnetcli.azureedge.net:443
           dotnetbuilds.azureedge.net:443
+
+          api.clearlydefined.io:443
           aka.ms:443
           api.github.com:443
           api.nuget.org:443
+          builds.dotnet.microsoft.com:443
+          ci.dot.net:443
           pkgs.dev.azure.com:443
           dashboard.stryker-mutator.io:443
-          dotnetcli.azureedge.net:443
           github.com:443
-          nuget.pkg.github.com:443            
-          api.clearlydefined.io:443
+          nuget.pkg.github.com:443
           cacerts.digicert.com:80
-          ts-crl.ws.symantec.com:80          
+          ts-crl.ws.symantec.com:80
           crl3.digicert.com:80
           crl4.digicert.com:80
           s.symcb.com:80
-          ocsp.digicert.com:80          
+          ocsp.digicert.com:80
     
     # Windows builds may have insufficient resource limits, so they're increased.
     - name: Configure Windows Pagefile
@@ -122,7 +126,7 @@ jobs:
         fetch-tags: true
             
     - name: Cache Nuget packages '${{ matrix.os }}'
-      uses: actions/cache@6849a6489940f00c2f30c0fb92c6274307ccb58a
+      uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57
       with:
         path: ${{ env.NUGET_PACKAGES }}
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
@@ -130,9 +134,14 @@ jobs:
           ${{runner.os}}-nuget-
 
     - name: Setup .NET SDK
-      uses: actions/setup-dotnet@3e891b0cb619bf60e2c25674b222b8940e2c1c25
+      uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852
       with:
         global-json-file: global.json
+
+    - name: Setup .NET SDK 6 (temporary until Validate generated NuGet files can use latest .NET)
+      uses: actions/setup-dotnet@3e891b0cb619bf60e2c25674b222b8940e2c1c25
+      with:
+        dotnet-version: 6.x
 
     - name: Install dependencies
       run: dotnet restore --locked-mode
@@ -211,7 +220,7 @@ jobs:
 
     #- name: Upload Stryker output artefacts
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+    #  uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
     #  with:
     #    name: 'Stryker output artefacts'
     #    path: ${{ github.workspace }}/StrykerOutput/
@@ -220,7 +229,7 @@ jobs:
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
 
     # - name: Archive publish results
-    #  uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+    #  uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
     #  with:
     #    name: Verifiable.Benchmarks
     #    path: ./publish/*
@@ -229,7 +238,7 @@ jobs:
     #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
 
     # - name: Upload benchmark results
-    #  uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+    #  uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
@@ -269,7 +278,7 @@ jobs:
 
     # - name: Upload PR build information artefact
     #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+    #  uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
     #  with:
     #    name: 'Test Run'
     #    path: ${{ github.workspace }}/${{ env.file_name }}
@@ -313,7 +322,7 @@ jobs:
 
     - name: Upload Verifiable NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+      uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
       with:
         name: nupkg
         path: ./nupkgs/*.*          
@@ -328,23 +337,27 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - name: Harden Runner
-          uses: step-security/harden-runner@0080882f6c36860b6ba35c610c98ce87d4e2f26f
+          uses: step-security/harden-runner@c95a14d0e5bab51a9f56296a4eb0e416910cd350
           with:
             disable-sudo: true
             egress-policy: block
             allowed-endpoints: >
+              # These are needed at least in Linux, see https://github.com/dotnet/core/issues/9671. Safe to remove 2025-04-01?
+              dotnetcli.azureedge.net:443
               dotnetbuilds.azureedge.net:443
+
+              api.clearlydefined.io:443
               aka.ms:443
               api.github.com:443
               api.nuget.org:443
+              builds.dotnet.microsoft.com:443
+              ci.dot.net:443
               pkgs.dev.azure.com:443
               dashboard.stryker-mutator.io:443
-              dotnetcli.azureedge.net:443
               github.com:443
               nuget.pkg.github.com:443
-              api.clearlydefined.io:443
               cacerts.digicert.com:80
-              ts-crl.ws.symantec.com:80          
+              ts-crl.ws.symantec.com:80
               crl3.digicert.com:80
               crl4.digicert.com:80
               s.symcb.com:80
@@ -367,23 +380,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@0080882f6c36860b6ba35c610c98ce87d4e2f26f
+        uses: step-security/harden-runner@c95a14d0e5bab51a9f56296a4eb0e416910cd350
         with:
           disable-sudo: true
           egress-policy: audit
-          allowed-endpoints: >
+          allowed-endpoints: >            
+            # These are needed at least in Linux, see https://github.com/dotnet/core/issues/9671. Safe to remove 2025-04-01?
+            dotnetcli.azureedge.net:443
             dotnetbuilds.azureedge.net:443
+
+            api.clearlydefined.io:443
             aka.ms:443
             api.github.com:443
             api.nuget.org:443
+            builds.dotnet.microsoft.com:443
+            ci.dot.net:443
             pkgs.dev.azure.com:443
             dashboard.stryker-mutator.io:443
-            dotnetcli.azureedge.net:443
             github.com:443
-            nuget.pkg.github.com:443            
-            api.clearlydefined.io:443
+            nuget.pkg.github.com:443
             cacerts.digicert.com:80
-            ts-crl.ws.symantec.com:80          
+            ts-crl.ws.symantec.com:80
             crl3.digicert.com:80
             crl4.digicert.com:80
             s.symcb.com:80
