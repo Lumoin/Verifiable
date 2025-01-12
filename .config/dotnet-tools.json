@@ -10,7 +10,7 @@
       "rollForward": false
     },
     "dotnet-stryker": {
-      "version": "4.0.6",
+      "version": "4.4.1",
       "commands": [
         "dotnet-stryker"
       ],
@@ -38,23 +38,30 @@
       "rollForward": false
     },
     "dotnet-reportgenerator-globaltool": {
-      "version": "5.3.7",
+      "version": "5.4.2",
       "commands": [
         "reportgenerator"
       ],
       "rollForward": false
     },
     "microsoft.sbom.dotnettool": {
-      "version": "2.2.6",
+      "version": "3.0.0",
       "commands": [
         "sbom-tool"
       ],
       "rollForward": false
     },
     "husky": {
-      "version": "0.7.0",
+      "version": "0.7.2",
       "commands": [
         "husky"
+      ],
+      "rollForward": false
+    },
+    "dotnet-coverage": {
+      "version": "17.13.1",
+      "commands": [
+        "dotnet-coverage"
       ],
       "rollForward": false
     },
@@ -62,13 +69,6 @@
       "version": "0.0.1-preview.304",
       "commands": [
         "dotnet-validate"
-      ],
-      "rollForward": false
-    },
-    "dotnet-coverage": {
-      "version": "17.12.5",
-      "commands": [
-        "dotnet-coverage"
       ],
       "rollForward": false
     }
