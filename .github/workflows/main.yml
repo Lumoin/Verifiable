@@ -139,7 +139,7 @@ jobs:
         global-json-file: global.json
 
     - name: Setup .NET SDK 6 (temporary until Validate generated NuGet files can use latest .NET)
-      uses: actions/setup-dotnet@3e891b0cb619bf60e2c25674b222b8940e2c1c25
+      uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852
       with:
         dotnet-version: 6.x
 
