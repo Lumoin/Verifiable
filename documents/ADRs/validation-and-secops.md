@@ -6,11 +6,11 @@ The Verifiable library establishes a framework for various socio-economic and te
 
 The integration of AI into the Verifiable library addresses complex data scenarios and decision-making processes. AI's ability to efficiently parse and analyze large datasets, identify patterns, and provide data-driven insights is crucial in decentralized environments characterized by diverse and abundant data. This AI integration aims to automate and improve the accuracy of validation processes, which are essential for establishing the trustworthiness of transactions and decisions.
 
-Artificial intelligence can significantly reduce transaction costs, demystify complex concepts, and facilitate easier collaboration. However, this potential is fully realized only when AI operates on valid data and when there's a verifiable mechanism to trust and, importantly, retrospectively review or appeal automated decisions. This need underscores our library's commitment to recording inputs, outputs, data models, platform details, and versioning—elements critical for post-process evaluation and modification of AI decisions.
+Artificial intelligence can significantly reduce transaction costs, demystify complex concepts, and facilitate easier collaboration. However, this potential is fully realized only when AI operates on valid data and when there's a verifiable mechanism to trust and, importantly, retrospectively review or appeal automated decisions. This need underscores our library's commitment to recording inputs, outputs, data models, platform details, and versioning—elements critical for post-process evaluation and modification of AI decisions. This means also AI risk management, so the system needs to mitigate risks associated with unintended outcomes, adversarial inputs, and biases, with the goal to build robust and reliable decision-making in decentralized systems or at least allow finding cases when that has not happened.
 
 This decision document centers around structuring the validation, monitoring, and secure operations logic. Our primary objectives are:
 
-1. Facilitate ease of understanding, maintenance, and operation, anticipating the construction of larger, software intensive systems. Users of Verifiable should have the capability to monitor and refactor its functioning reliably.
+1. Facilitate ease of understanding, maintenance, and operation, anticipating the construction of larger, software-intensive systems. Users of Verifiable should have the capability to monitor and refactor its functioning reliably.
 
 2. Accommodate future extensions and evolving sets of claims, such as through refactoring and obsoleting processes.
 
@@ -28,7 +28,7 @@ This decision document centers around structuring the validation, monitoring, an
 
 a. There are plans to introduce remote claim generation and assessments potentially and other system behaviors. This will be subject to a separate ADR and will involve extensive threat modeling.
 
-b. Point `a.` is partially driven by consideration for cross-sector, secure data operations as part of the circular and regenerative economy, and data structures. It appears such dependent data systems are governed in distributed fashion and include socio-economic, system external factors that may influence some operations. There may be need to blend them in to operational system seamlessly.
+b. Point `a.` is partially driven by consideration for cross-sector, secure data operations as part of the circular and regenerative economy, and data structures. It appears such dependent data systems are governed in distributed fashion and include socio-economic, system external factors that may influence some operations. There may be need to blend them into operational systems seamlessly.
 
 ## Decision
 
@@ -50,7 +50,9 @@ We will introduce a `Claim`, `Assessor`, and `Archiving` model for validation.
 
 4. **Demonstrable duty of care**: By capturing and preserving the context and outcome of each validation operation in Claims, the system demonstrates a duty of care, ensuring that actions and decisions are transparent, verifiable, and auditable, fulfilling both immediate and future verification and auditability requirements.
 
-5. **Risk management and trust creation:** The structure facilitates risk management and trust creation in software-intensive data architectures, enabling collaboration and decision support while complying with regulatory frameworks like SSI, eIDAS and others. This approach supports creating real trust among stakeholders and managing inherent unknowns in dynamic environments.
+5. **Risk management and trust creation**: The structure facilitates risk management and trust creation in software-intensive data architectures, enabling collaboration and decision support while complying with regulatory frameworks like SSI, eIDAS, and others. This approach supports creating real trust among stakeholders and managing inherent unknowns in dynamic environments.
+
+6. **AI Risk Management**: The Claim and Assessor models are designed to support risk management by recording and contextualizing decisions, enabling the identification and mitigation of unintended outcomes, adversarial influences, and systemic biases in AI-driven processes. This approach aligns with Verifiable's commitment to building trustworthy and reliable decentralized systems.
 
 ## Alternatives Considered
 
@@ -62,7 +64,7 @@ We will introduce a `Claim`, `Assessor`, and `Archiving` model for validation.
 
 1. Maintenance and extensibility will be more straightforward for Verifiable developers also operating it.
 
-2. Security and compliance will be improved for Verifiable developers and allows for domain-bound discussion even between different domains.
+2. Security and compliance will be improved for Verifiable developers and allow for domain-bound discussion even between different domains.
 
 3. Initial development may require more time to set up the Claim, Assessor, and Archiving model.
 
