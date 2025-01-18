@@ -1,0 +1,26 @@
+{
+    "@context": [
+        "https://www.w3.org/ns/did/v1",
+        "https://w3id.org/security/multikey/v1",
+        "https://w3id.org/security/suites/secp256k1-2019/v1"
+    ],
+    "alsoKnownAs": [
+        "at://lumoin.com"
+    ],
+    "id": "did:plc:nwinkjz63hexs52j7t7ydeau",
+    "service": [
+        {
+            "id": "#atproto_pds",
+            "serviceEndpoint": "https://conocybe.us-west.host.bsky.network",
+            "type": "AtprotoPersonalDataServer"
+        }
+    ],
+    "verificationMethod": [
+        {
+            "controller": "did:plc:nwinkjz63hexs52j7t7ydeau",
+            "id": "did:plc:nwinkjz63hexs52j7t7ydeau#atproto",
+            "publicKeyMultibase": "zQ3shfiPNKyhbayN6ZcDu8QaRYdcF8jCxJ3oaDsox1JRyBpfD",
+            "type": "Multikey"
+        }
+    ]
+}

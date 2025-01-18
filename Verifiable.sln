@@ -1,5 +1,4 @@
-﻿
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.3.32519.111
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -37,7 +36,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Verifiable.Tests", "test\Ve
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Verifiable.Sidetree", "src\Verifiable.Sidetree\Verifiable.Sidetree.csproj", "{5BDA0E33-003F-4500-8AFD-D51A8643E8CA}"
 EndProject
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Verifiable.DecentralizedWebNode", "src\Verifiable.DecentralizedWebNode\Verifiable.DecentralizedWebNode.csproj", "{4256AF88-B47D-44E3-AEC7-D9F227749468}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Verifiable.Jwt", "src\Verifiable.Jwt\Verifiable.Jwt.csproj", "{FF947DEC-29E7-4700-94A4-0E84B2917BF5}"
@@ -61,6 +59,15 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".config", ".config", "{CD06BE0E-287F-4A01-B500-CD92465F1E2D}"
 	ProjectSection(SolutionItems) = preProject
 		.config\dotnet-tools.json = .config\dotnet-tools.json
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "documents", "documents", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ADRs", "ADRs", "{FABFA17B-1ABB-4E9D-B4F7-D017ECAC9D1B}"
+	ProjectSection(SolutionItems) = preProject
+		documents\ADRs\cryptographic-drivers.md = documents\ADRs\cryptographic-drivers.md
+		documents\ADRs\tpm-and-hardware-security.md = documents\ADRs\tpm-and-hardware-security.md
+		documents\ADRs\validation-and-secops.md = documents\ADRs\validation-and-secops.md
 	EndProjectSection
 EndProject
 Global
@@ -131,7 +138,9 @@ Global
 		{FF947DEC-29E7-4700-94A4-0E84B2917BF5} = {5E61E0DC-3195-4CE2-B9BD-A06D38FBE2BB}
 		{737B175F-5A06-480C-B93F-42B31EF4EFA7} = {35CAB8A9-7332-4D46-BBD3-83A37A747F5E}
 		{1B79A5A8-0754-4F72-AD32-E791F9A8ED23} = {737B175F-5A06-480C-B93F-42B31EF4EFA7}
-		{CD06BE0E-287F-4A01-B500-CD92465F1E2D} = {35CAB8A9-7332-4D46-BBD3-83A37A747F5E}				
+		{CD06BE0E-287F-4A01-B500-CD92465F1E2D} = {35CAB8A9-7332-4D46-BBD3-83A37A747F5E}
+		{02EA681E-C7D8-13C7-8484-4AC65E1B71E8} = {35CAB8A9-7332-4D46-BBD3-83A37A747F5E}
+		{FABFA17B-1ABB-4E9D-B4F7-D017ECAC9D1B} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {B3AC63DE-C110-4924-B7DB-FFAC4704246F}
