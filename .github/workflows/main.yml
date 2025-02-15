@@ -60,7 +60,7 @@ jobs:
     
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: step-security/harden-runner@c95a14d0e5bab51a9f56296a4eb0e416910cd350
+      uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e
       with:
         disable-sudo: true
         egress-policy: block
@@ -134,12 +134,12 @@ jobs:
           ${{runner.os}}-nuget-
 
     - name: Setup .NET SDK
-      uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852
+      uses: actions/setup-dotnet@3951f0dfe7a07e2313ec93c75700083e2005cbab
       with:
         global-json-file: global.json
 
     - name: Setup .NET SDK 6 (temporary until Validate generated NuGet files can use latest .NET)
-      uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852
+      uses: actions/setup-dotnet@3951f0dfe7a07e2313ec93c75700083e2005cbab
       with:
         dotnet-version: 6.x
 
@@ -264,7 +264,7 @@ jobs:
 
     - name: Publish coverage summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
+      uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728
       with:
         header: Report
         path: '${{ github.workspace }}/reports/coverage/Summary.md'
@@ -272,7 +272,7 @@ jobs:
 
     # - name: Comment PR with the generated test Markdown
     #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
+    #  uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728
     #  with:
     #    path: ${{ env.file_name }}
 
@@ -337,7 +337,7 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - name: Harden Runner
-          uses: step-security/harden-runner@c95a14d0e5bab51a9f56296a4eb0e416910cd350
+          uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e
           with:
             disable-sudo: true
             egress-policy: block
@@ -380,7 +380,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@c95a14d0e5bab51a9f56296a4eb0e416910cd350
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e
         with:
           disable-sudo: true
           egress-policy: audit
