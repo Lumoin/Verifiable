@@ -11,9 +11,9 @@
       For more information, visit https://learn.microsoft.com/dotnet/core/testing/unit-testing-platform-integration-dotnet-test#show-failure-per-test
       -->
     <TestingPlatformShowTestsFailure>true</TestingPlatformShowTestsFailure>
-    <RunSettingsFilePath>$(MSBuildProjectDirectory)\config.runsettings</RunSettingsFilePath>
-    
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\config.runsettings</RunSettingsFilePath>   
     <TestingExtensionsProfile>AllMicrosoft</TestingExtensionsProfile>
+    <IsTestApplication>true</IsTestApplication>
   </PropertyGroup>
   
   <ItemGroup>    
@@ -30,17 +30,11 @@
     <ProjectReference Include="..\..\src\Verifiable.BouncyCastle\Verifiable.BouncyCastle.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Core\Verifiable.Core.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Jwt\Verifiable.Jwt.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />    
     <ProjectReference Include="..\..\src\Verifiable.NSec\Verifiable.NSec.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Sidetree\Verifiable.Sidetree.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Update="MSTest.Analyzers">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
-
+  
 </Project>
