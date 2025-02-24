@@ -2,31 +2,10 @@
   "version": 1,
   "isRoot": true,
   "tools": {
-    "dotnet-format": {
-      "version": "5.1.250801",
-      "commands": [
-        "dotnet-format"
-      ],
-      "rollForward": false
-    },
     "dotnet-stryker": {
       "version": "4.4.1",
       "commands": [
         "dotnet-stryker"
-      ],
-      "rollForward": false
-    },
-    "winsharpfuzz.commandline": {
-      "version": "1.0.0",
-      "commands": [
-        "winsharpfuzz"
-      ],
-      "rollForward": false
-    },
-    "winsharpfuzz.instrument": {
-      "version": "1.0.0",
-      "commands": [
-        "winsharpfuzz-instrument"
       ],
       "rollForward": false
     },
@@ -69,6 +48,20 @@
       "version": "0.0.1-preview.304",
       "commands": [
         "dotnet-validate"
+      ],
+      "rollForward": false
+    },
+    "nallixion.winsharpfuzz.instrument": {
+      "version": "0.1.0-alpha.1",
+      "commands": [
+        "winsharpfuzz-instrument"
+      ],
+      "rollForward": false
+    },
+    "nallixion.winsharpfuzz.commandline": {
+      "version": "0.1.0-alpha.1",
+      "commands": [
+        "winsharpfuzz"
       ],
       "rollForward": false
     }
