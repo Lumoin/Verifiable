@@ -6,8 +6,9 @@
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.14.0" />
     <PackageVersion Include="dotNetRdf" Version="3.3.2" />
-    <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />       
-    <PackageVersion Include="Microsoft.TSS" Version="2.1.1" />    
+    <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="17.14.1" />
+    <PackageVersion Include="Microsoft.TSS" Version="2.1.1" />
     <PackageVersion Include="NSec.Cryptography" Version="24.4.0" />
     <PackageVersion Include="Portable.BouncyCastle" Version="1.9.0" />
     <PackageVersion Include="SharpFuzz" Version="2.2.0" />
