@@ -1,69 +1,62 @@
 {
-  "version": 1,
-  "isRoot": true,
-  "tools": {
-    "dotnet-stryker": {
-      "version": "4.4.1",
-      "commands": [
-        "dotnet-stryker"
-      ],
-      "rollForward": false
-    },
-    "sharpfuzz.commandline": {
-      "version": "2.1.1",
-      "commands": [
-        "sharpfuzz"
-      ],
-      "rollForward": false
-    },
-    "dotnet-reportgenerator-globaltool": {
-      "version": "5.4.2",
-      "commands": [
-        "reportgenerator"
-      ],
-      "rollForward": false
-    },
-    "microsoft.sbom.dotnettool": {
-      "version": "3.0.0",
-      "commands": [
-        "sbom-tool"
-      ],
-      "rollForward": false
-    },
-    "husky": {
-      "version": "0.7.2",
-      "commands": [
-        "husky"
-      ],
-      "rollForward": false
-    },
-    "dotnet-coverage": {
-      "version": "17.13.1",
-      "commands": [
-        "dotnet-coverage"
-      ],
-      "rollForward": false
-    },
-    "dotnet-validate": {
-      "version": "0.0.1-preview.304",
-      "commands": [
-        "dotnet-validate"
-      ],
-      "rollForward": false
-    },
-    "nallixion.winsharpfuzz.instrument": {
-      "version": "0.1.0-alpha.1",
-      "commands": [
-        "winsharpfuzz-instrument"
-      ],
-      "rollForward": false
-    },
-    "nallixion.winsharpfuzz.commandline": {
-      "version": "0.1.0-alpha.1",
-      "commands": [
-        "winsharpfuzz"
-      ],
-      "rollForward": false
+    "version": 1,
+    "isRoot": true,
+    "tools": {
+        "dotnet-stryker": {
+            "version": "4.5.1",
+            "commands": [
+                "dotnet-stryker"
+            ],
+            "rollForward": false
+        },
+        "sharpfuzz.commandline": {
+            "version": "2.2.0",
+            "commands": [
+                "sharpfuzz"
+            ],
+            "rollForward": false
+        },
+        "dotnet-reportgenerator-globaltool": {
+            "version": "5.4.4",
+            "commands": [
+                "reportgenerator"
+            ],
+            "rollForward": false
+        },
+        "microsoft.sbom.dotnettool": {
+            "version": "3.1.0",
+            "commands": [
+                "sbom-tool"
+            ],
+            "rollForward": false
+        },
+        "husky": {
+            "version": "0.7.2",
+            "commands": [
+                "husky"
+            ],
+            "rollForward": false
+        },
+        "dotnet-coverage": {
+            "version": "17.14.2",
+            "commands": [
+                "dotnet-coverage"
+            ],
+            "rollForward": false
+        },
+        "nallixion.winSharpFuzz.instrument": {
+            "version": "0.1.0-alpha.1",
+            "commands": [
+                "winsharpfuzz-instrument"
+            ],
+            "rollForward": false
+        },
+        "nallixion.winsharpfuzz.commandline": {
+            "version": "0.1.0-alpha.1",
+            "commands": [
+                "winsharpfuzz"
+            ],
+            "rollForward": false
+        }
     }
-  }
 }
