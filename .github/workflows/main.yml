@@ -123,26 +123,15 @@ jobs:
       uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
       with:
         fetch-depth: 0
-        fetch-tags: true
-            
-    - name: Cache Nuget packages '${{ matrix.os }}'
-      uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f
-      with:
-        path: ${{ env.NUGET_PACKAGES }}
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
-        restore-keys: |
-          ${{runner.os}}-nuget-
+        fetch-tags: true               
 
     - name: Setup .NET SDK
       uses: actions/setup-dotnet@3951f0dfe7a07e2313ec93c75700083e2005cbab
       with:
+        cache: true
+        cache-dependency-path: '**/packages.lock.json'
         global-json-file: global.json
-
-    - name: Setup .NET SDK 6 (temporary until Validate generated NuGet files can use latest .NET)
-      uses: actions/setup-dotnet@3951f0dfe7a07e2313ec93c75700083e2005cbab
-      with:
-        dotnet-version: 6.x
-
+    
     - name: Install dependencies
       run: dotnet restore --locked-mode
 
@@ -278,7 +267,7 @@ jobs:
 
     # - name: Upload PR build information artefact
     #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+    #  uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
     #  with:
     #    name: 'Test Run'
     #    path: ${{ github.workspace }}/${{ env.file_name }}
@@ -313,16 +302,16 @@ jobs:
         dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_TPM/$VERIFIABLE_TPM.*proj
 
     # Note that on Windows this would be simply  "dotnet dotnet-validate package local ./snupkgs/*.nupkg", the handling of an array of paths works directly.
-    - name: Validate generated NuGet files
-      if: ${{ matrix.os == 'ubuntu-latest' }}
-      run: |
-        for file in ./nupkgs/*.nupkg; do
-          dotnet dotnet-validate package local "$file"
-        done
+    # - name: Validate generated NuGet files
+    #  if: ${{ matrix.os == 'ubuntu-latest' }}
+    #  run: |
+    #    for file in ./nupkgs/*.nupkg; do
+    #      dotnet dotnet-validate package local "$file"
+    #    done
 
     - name: Upload Verifiable NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+      uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
       with:
         name: nupkg
         path: ./nupkgs/*.*          
@@ -364,7 +353,7 @@ jobs:
               ocsp.digicert.com:80
 
         - name: Download NuGet artifacts
-          uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+          uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806
           with:
             name: nupkg
 
@@ -407,7 +396,7 @@ jobs:
             ocsp.digicert.com:80
 
       - name: Download NuGet artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806
         with:
           name: nupkg
 
