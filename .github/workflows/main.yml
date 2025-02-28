@@ -131,6 +131,11 @@ jobs:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
         global-json-file: global.json
+
+    - name: Setup .NET SDK 9 (for dotnet-coverage)
+      uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852
+      with:
+        dotnet-version: '9.x'
     
     - name: Install dependencies
       run: dotnet restore --locked-mode
