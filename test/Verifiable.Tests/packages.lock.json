@@ -1,7 +1,7 @@
 {
   "version": 2,
   "dependencies": {
-    "net9.0": {
+    "net10.0": {
       "CsCheck": {
         "type": "Direct",
         "requested": "[4.2.0, )",
@@ -156,15 +156,6 @@
           "Markdig.Signed": "0.37.0"
         }
       },
-      "System.Net.Http.Json": {
-        "type": "Direct",
-        "requested": "[10.0.0-preview.1.25080.5, )",
-        "resolved": "10.0.0-preview.1.25080.5",
-        "contentHash": "FEjAN+xrsrVW+0hbgLIpWkUox3NeQkV3MDkJNEpepDwuSckCRIOkpyJfDSmgnc7EwSZt3aVh9gqJl+LPM5Gr9A==",
-        "dependencies": {
-          "System.Text.Json": "10.0.0-preview.1.25080.5"
-        }
-      },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Direct",
         "requested": "[10.0.0-preview.1.25080.5, )",
@@ -214,6 +205,7 @@
           "Microsoft.Extensions.Configuration": "8.0.0",
           "Newtonsoft.Json": "13.0.3",
           "System.Configuration.ConfigurationManager": "8.0.1",
+          "System.Reflection.TypeExtensions": "4.7.0",
           "VDS.Common": "2.0.0"
         }
       },
@@ -323,7 +315,8 @@
         "contentHash": "zUiLpqoyNemwSRqUgE/7mtlYFuVxmiaLte6dFi9miShAqGVDfU08wAQpks1ovlGr7o1uKUTJCCsiTo82Gg65iQ==",
         "dependencies": {
           "DotLiquid": "2.1.405",
-          "Microsoft.TestPlatform.ObjectModel": "16.9.1"
+          "Microsoft.TestPlatform.ObjectModel": "16.9.1",
+          "System.ComponentModel.Annotations": "5.0.0"
         }
       },
       "Lucene.Net": {
@@ -522,6 +515,11 @@
         "resolved": "1.4.2",
         "contentHash": "yjj+3zgz8zgXpiiC3ZdF/iyTBbz2fFvMxZFEBPUcwZjIvXOf37Ylm+K58hqMfIBt5JgU/Z2uoUS67JmTLe973A=="
       },
+      "System.ComponentModel.Annotations": {
+        "type": "Transitive",
+        "resolved": "5.0.0",
+        "contentHash": "dMkqfy2el8A8/I76n2Hi1oBFEbG1SfxD2l5nhwXV3XjlnOmwxJlQbYpJH4W51odnU9sARCSAgv7S3CyAFMkpYg=="
+      },
       "System.Configuration.ConfigurationManager": {
         "type": "Transitive",
         "resolved": "8.0.1",
@@ -544,10 +542,10 @@
           "Microsoft.Win32.SystemEvents": "7.0.0"
         }
       },
-      "System.IO.Pipelines": {
+      "System.Reflection.TypeExtensions": {
         "type": "Transitive",
-        "resolved": "10.0.0-preview.1.25080.5",
-        "contentHash": "nks5yfev/2sY3ARiirjmKxsJEwRJU1DbRoaDzaUY1s3qlwbtMYxtvURHL412Cc4/yS/LLXkJDDFhlf/8ez9hiQ=="
+        "resolved": "4.7.0",
+        "contentHash": "VybpaOQQhqE6siHppMktjfGBw1GCwvCqiufqmP8F1nj7fTUNtW35LOEt3UZTEsECfo+ELAl/9o9nJx3U91i7vA=="
       },
       "System.Security.Permissions": {
         "type": "Transitive",
@@ -556,11 +554,6 @@
         "dependencies": {
           "System.Windows.Extensions": "7.0.0"
         }
-      },
-      "System.Text.Encodings.Web": {
-        "type": "Transitive",
-        "resolved": "10.0.0-preview.1.25080.5",
-        "contentHash": "/LR6KfqoKcSnQoy23ksnvuGPakvc+YFRRkF1QZGDWbmqV4faVqYfA+C+uEgKCg1xGerdz9/IECorP8qCU7wlDA=="
       },
       "System.Windows.Extensions": {
         "type": "Transitive",
@@ -591,8 +584,6 @@
         "type": "Project",
         "dependencies": {
           "SimpleBase": "[4.0.2, )",
-          "System.Collections.Immutable": "[10.0.0-preview.1.25080.5, )",
-          "System.Text.Json": "[10.0.0-preview.1.25080.5, )",
           "Verifiable.Jwt": "[0.0.0, )"
         }
       },
@@ -651,22 +642,6 @@
         "requested": "[4.0.2, )",
         "resolved": "4.0.2",
         "contentHash": "sNKHP2Qzy4DafamgH44UGg1YeyHFT08AMgHPraxYt4CVBoHHYD5f0MjbBfdmtGca69xikPU5aV8H+MMP7ZnfIg=="
-      },
-      "System.Collections.Immutable": {
-        "type": "CentralTransitive",
-        "requested": "[10.0.0-preview.1.25080.5, )",
-        "resolved": "10.0.0-preview.1.25080.5",
-        "contentHash": "3FQAjtxoXNSvkxTfOzIaXbA32Q9h/J6Llw0PNPJ4CQhYsRB//4XKkNaD4w/ez0qpGh/TLUMMHQwT7p6RsRjIAQ=="
-      },
-      "System.Text.Json": {
-        "type": "CentralTransitive",
-        "requested": "[10.0.0-preview.1.25080.5, )",
-        "resolved": "10.0.0-preview.1.25080.5",
-        "contentHash": "XVbVg2JanV9rnxiTxm11g2OKbZXPB0zOoX0ATtHdhLqC7x/DQJC6FDlg1amjYaEvKz4sIV3veBlo/lCShwzK7A==",
-        "dependencies": {
-          "System.IO.Pipelines": "10.0.0-preview.1.25080.5",
-          "System.Text.Encodings.Web": "10.0.0-preview.1.25080.5"
-        }
       }
     }
   }
