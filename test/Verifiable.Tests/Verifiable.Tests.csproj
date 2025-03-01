@@ -1,6 +1,6 @@
 ﻿<Project Sdk="MSTest.Sdk">
 
-  <PropertyGroup>        
+  <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
