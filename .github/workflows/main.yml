@@ -48,6 +48,29 @@ env:
   # These are the test projects that will be reported.
   VERIFIABLE_TESTS: Verifiable.Tests
 
+  # These are allowed endpoints these actions can contact.
+  COMMON_ALLOWED_ENDPOINTS: >
+    # These are needed at least in Linux, see https://github.com/dotnet/core/issues/9671. Safe to remove 2025-04-01?
+    dotnetcli.azureedge.net:443
+    dotnetbuilds.azureedge.net:443
+
+    api.clearlydefined.io:443
+    aka.ms:443
+    api.github.com:443
+    api.nuget.org:443
+    builds.dotnet.microsoft.com:443
+    ci.dot.net:443
+    pkgs.dev.azure.com:443
+    dashboard.stryker-mutator.io:443
+    github.com:443
+    nuget.pkg.github.com:443
+    cacerts.digicert.com:80
+    ts-crl.ws.symantec.com:80
+    crl3.digicert.com:80
+    crl4.digicert.com:80
+    s.symcb.com:80
+    ocsp.digicert.com:80
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -64,27 +87,8 @@ jobs:
       with:
         disable-sudo: true
         egress-policy: block
-        allowed-endpoints: >
-          # These are needed at least in Linux, see https://github.com/dotnet/core/issues/9671. Safe to remove 2025-04-01?
-          dotnetcli.azureedge.net:443
-          dotnetbuilds.azureedge.net:443
-
-          api.clearlydefined.io:443
-          aka.ms:443
-          api.github.com:443
-          api.nuget.org:443
-          builds.dotnet.microsoft.com:443
-          ci.dot.net:443
-          pkgs.dev.azure.com:443
-          dashboard.stryker-mutator.io:443
-          github.com:443
-          nuget.pkg.github.com:443
-          cacerts.digicert.com:80
-          ts-crl.ws.symantec.com:80
-          crl3.digicert.com:80
-          crl4.digicert.com:80
-          s.symcb.com:80
-          ocsp.digicert.com:80
+        allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
+         
     
     # Windows builds may have insufficient resource limits, so they're increased.
     - name: Configure Windows Pagefile
@@ -131,11 +135,6 @@ jobs:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
         global-json-file: global.json
-
-    - name: Setup .NET SDK 9 (for dotnet-coverage)
-      uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852
-      with:
-        dotnet-version: '9.x'
     
     - name: Install dependencies
       run: dotnet restore --locked-mode
@@ -202,7 +201,7 @@ jobs:
     # Until tests are a fixed a bit. The coverage from the executable does not have a file suffix in Linux.
     - name: Test
       if: runner.os != 'macOS'
-      run: dotnet tool run dotnet-coverage collect --output '${{ github.workspace }}/reports/coverage.cobertura.xml' --output-format cobertura '${{ github.workspace }}/test/${{ env.VERIFIABLE_TESTS }}/bin/${{ env.BUILD_CONFIGURATION }}/net9.0/${{ env.VERIFIABLE_TESTS }}' --report-trx --report-trx-filename testresults.trx --results-directory '${{ github.workspace }}/reports'
+      run: dotnet tool run dotnet-coverage collect --output '${{ github.workspace }}/reports/coverage.cobertura.xml' --output-format cobertura '${{ github.workspace }}/test/${{ env.VERIFIABLE_TESTS }}/bin/${{ env.BUILD_CONFIGURATION }}/net10.0/${{ env.VERIFIABLE_TESTS }}' --report-trx --report-trx-filename testresults.trx --results-directory '${{ github.workspace }}/reports'
       timeout-minutes: 5
 
     # Mutation tests skipped for now due to CI limits and temporarily reduced test coverage...
@@ -335,27 +334,7 @@ jobs:
           with:
             disable-sudo: true
             egress-policy: block
-            allowed-endpoints: >
-              # These are needed at least in Linux, see https://github.com/dotnet/core/issues/9671. Safe to remove 2025-04-01?
-              dotnetcli.azureedge.net:443
-              dotnetbuilds.azureedge.net:443
-
-              api.clearlydefined.io:443
-              aka.ms:443
-              api.github.com:443
-              api.nuget.org:443
-              builds.dotnet.microsoft.com:443
-              ci.dot.net:443
-              pkgs.dev.azure.com:443
-              dashboard.stryker-mutator.io:443
-              github.com:443
-              nuget.pkg.github.com:443
-              cacerts.digicert.com:80
-              ts-crl.ws.symantec.com:80
-              crl3.digicert.com:80
-              crl4.digicert.com:80
-              s.symcb.com:80
-              ocsp.digicert.com:80
+            allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
         - name: Download NuGet artifacts
           uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806
@@ -378,27 +357,7 @@ jobs:
         with:
           disable-sudo: true
           egress-policy: audit
-          allowed-endpoints: >            
-            # These are needed at least in Linux, see https://github.com/dotnet/core/issues/9671. Safe to remove 2025-04-01?
-            dotnetcli.azureedge.net:443
-            dotnetbuilds.azureedge.net:443
-
-            api.clearlydefined.io:443
-            aka.ms:443
-            api.github.com:443
-            api.nuget.org:443
-            builds.dotnet.microsoft.com:443
-            ci.dot.net:443
-            pkgs.dev.azure.com:443
-            dashboard.stryker-mutator.io:443
-            github.com:443
-            nuget.pkg.github.com:443
-            cacerts.digicert.com:80
-            ts-crl.ws.symantec.com:80
-            crl3.digicert.com:80
-            crl4.digicert.com:80
-            s.symcb.com:80
-            ocsp.digicert.com:80
+          allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
       - name: Download NuGet artifacts
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806

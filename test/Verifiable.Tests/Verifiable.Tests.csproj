@@ -1,7 +1,6 @@
 ﻿<Project Sdk="MSTest.Sdk">
 
-  <PropertyGroup>    
-    <LangVersion>latest</LangVersion>
+  <PropertyGroup>        
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -20,8 +19,7 @@
     <PackageReference Include="SharpFuzz" />
     <PackageReference Include="WinSharpFuzz" />
     <PackageReference Include="CsCheck" />    
-    <PackageReference Include="LiquidTestReports.Markdown" />
-    <PackageReference Include="System.Net.Http.Json" />
+    <PackageReference Include="LiquidTestReports.Markdown" />    
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />    
   </ItemGroup>
 
