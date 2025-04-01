@@ -101,7 +101,9 @@ namespace Verifiable.Tests.Cryptography
             //at compile time. Compiler does not find the overloads
             //and so the test fails. This is included here for the sake
             //of completeness. See EqualsWithObjectAndObjectSucceeds.            
+#pragma warning disable MSTEST0037 // Use proper 'Assert' methods
             Assert.IsFalse((object)PublicKeyMemory1 == (object)PublicKeyMemory3);
+#pragma warning restore MSTEST0037 // Use proper 'Assert' methods
         }
 
 

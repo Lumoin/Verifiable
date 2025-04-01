@@ -23,8 +23,8 @@ namespace Verifiable.Tests.Core
         {
             var keys = NSecKeyCreator.CreateEd25519Keys(ExactSizeMemoryPool<byte>.Shared);
             
-            Assert.IsNotNull(keys.PublicKey);
-            Assert.IsNotNull(keys.PrivateKey);
+            Assert.IsTrue(keys.PublicKey.AsReadOnlySpan().Length > 0);
+            Assert.IsTrue(keys.PrivateKey.AsReadOnlySpan().Length > 0);
         }
 
 

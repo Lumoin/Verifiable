@@ -33,7 +33,7 @@ namespace Verifiable.Tests.Core
         public void NegativeLengthRentFailsWithTheCorrectMessage()
         {
             const string ParameterName = "exactBufferSize";
-            var exception1 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => SensitiveMemoryPool<byte>.Shared.Rent(-1));
+            var exception1 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SensitiveMemoryPool<byte>.Shared.Rent(-1));
 
             Assert.AreEqual(ParameterName, exception1.ParamName);
         }

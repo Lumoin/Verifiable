@@ -19,6 +19,7 @@ namespace Verifiable.Tests.Core
         /// </summary>
         /// <param name="didDocumentFileName">The DID document data file under test.</param>
         /// <param name="didDocumentFileContents">The DID document data file contents.</param>
+        [TestMethod]
         [Ignore("Needs a change in DidCore.Service implementation. See comments there.")]
         [FilesData(TestInfrastructureConstants.RelativeTestPathToSidetree, "ion-1.json")]
         public void CanRoundtripIonDid(string didDocumentFilename, string didDocumentFileContents)
@@ -44,7 +45,7 @@ namespace Verifiable.Tests.Core
             //All the DID documents need to have an ID and a context.
             Assert.IsNotNull(deseserializedDidDocument?.Context);
             Assert.IsNotNull(deseserializedDidDocument?.DidDocument);
-            Assert.IsNotNull(reserializedDidDocument);
+            Assert.IsFalse(string.IsNullOrWhiteSpace(reserializedDidDocument));
             
             var originalDIDDocument = JsonNode.Parse(didDocumentFileContents);
             var parsedReserializedDIDDocument = JsonNode.Parse(reserializedDidDocument);

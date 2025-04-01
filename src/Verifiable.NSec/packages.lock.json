@@ -13,9 +13,9 @@
       },
       "SIL.ReleaseTasks": {
         "type": "Direct",
-        "requested": "[3.0.0, )",
-        "resolved": "3.0.0",
-        "contentHash": "DR0X2IORUVD2gFQCrokzqR0UEaGkVwsuqPOFKdI0BcJN7I1IJxdh6yB2WTMhGIfGg1la5PQDxe7gVotgWyB2jQ==",
+        "requested": "[3.1.1, )",
+        "resolved": "3.1.1",
+        "contentHash": "BWULTEG3k1wMABRXYEBT7UfhrjJwgBLEkcYjNTa3CnmpUE+QCtoeW8WytbvIQNJHkvg0uggl1goWFXe6w6jcAA==",
         "dependencies": {
           "Markdig.Signed": "0.37.0"
         }
@@ -29,11 +29,6 @@
         "type": "Transitive",
         "resolved": "0.37.0",
         "contentHash": "J7Mt1QjKijE7aAK81u5nt4SYPYEvt1odfr4ddMvyOscyNT3PoGfHKKTBB5VBSXJrWZWhfJlcG7hHBLiqawg+nw=="
-      },
-      "System.Memory": {
-        "type": "Transitive",
-        "resolved": "4.5.5",
-        "contentHash": "XIWiDvKPXaTveaB7HVganDlOCRoj03l+jrwNvcge/t8vhGYKvqV+dMv6G4SAX2NoNmN0wZfVPTAlFwZcZvVOUw=="
       },
       "verifiable.core": {
         "type": "Project",
@@ -49,10 +44,7 @@
         "type": "CentralTransitive",
         "requested": "[4.0.2, )",
         "resolved": "4.0.2",
-        "contentHash": "sNKHP2Qzy4DafamgH44UGg1YeyHFT08AMgHPraxYt4CVBoHHYD5f0MjbBfdmtGca69xikPU5aV8H+MMP7ZnfIg==",
-        "dependencies": {
-          "System.Memory": "4.5.5"
-        }
+        "contentHash": "sNKHP2Qzy4DafamgH44UGg1YeyHFT08AMgHPraxYt4CVBoHHYD5f0MjbBfdmtGca69xikPU5aV8H+MMP7ZnfIg=="
       }
     }
   }

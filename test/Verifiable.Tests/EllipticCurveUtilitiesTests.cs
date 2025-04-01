@@ -32,13 +32,13 @@ namespace Verifiable.Tests.Core
             {
                 var keyParams = key.ExportParameters(includePrivateParameters: false);
 
-                var exception1 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(null, keyParams.Q.Y));
+                var exception1 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(null, keyParams.Q.Y));
                 Assert.AreEqual(XParameterNameInExceptionMessage, exception1.ParamName);
 
-                var exception2 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(keyParams.Q.X, null));
+                var exception2 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(keyParams.Q.X, null));
                 Assert.AreEqual(YParameterNameInExceptionMessage, exception2.ParamName);
 
-                var exception3 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(null, null));
+                var exception3 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(null, null));
                 Assert.AreEqual(XParameterNameInExceptionMessage, exception3.ParamName);
             }
         }
@@ -56,7 +56,7 @@ namespace Verifiable.Tests.Core
                     var keyParams2 = key2.ExportParameters(includePrivateParameters: false);
 
                     const string ExceptionMessage = $"Parameters '{XParameterNameInExceptionMessage}' and '{YParameterNameInExceptionMessage}' need to be of the same length.";
-                    var exception = Assert.ThrowsException<ArgumentException>(() => EllipticCurveUtilities.Compress(keyParams1.Q.X!, keyParams2.Q.Y));
+                    var exception = Assert.ThrowsExactly<ArgumentException>(() => EllipticCurveUtilities.Compress(keyParams1.Q.X!, keyParams2.Q.Y));
                     Assert.AreEqual(ExceptionMessage, exception.Message);
                 }
             }
@@ -72,12 +72,12 @@ namespace Verifiable.Tests.Core
                 var keyParams1 = key1.ExportParameters(includePrivateParameters: false);
 
                 string xPointExceptionMessage = $"Length must be '{EllipticCurveConstants.P256.PointArrayLength}', '{EllipticCurveConstants.P384.PointArrayLength}' or '{EllipticCurveConstants.P521.PointArrayLength}'. (Parameter 'xPoint')";
-                var xException = Assert.ThrowsException<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(keyParams1.Q.X!.Concat(new byte[] { 0x00 }).ToArray(), keyParams1.Q.Y));
+                var xException = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(keyParams1.Q.X!.Concat(new byte[] { 0x00 }).ToArray(), keyParams1.Q.Y));
                 Assert.AreEqual(XParameterNameInExceptionMessage, xException.ParamName);
                 Assert.AreEqual(xPointExceptionMessage, xException.Message);
 
                 string yPointExceptionMessage = $"Length must be '{EllipticCurveConstants.P256.PointArrayLength}', '{EllipticCurveConstants.P384.PointArrayLength}' or '{EllipticCurveConstants.P521.PointArrayLength}'. (Parameter 'yPoint')";
-                var yException = Assert.ThrowsException<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(keyParams1.Q.X!, keyParams1.Q.Y!.Concat(new byte[] { 0x00 }).ToArray()));
+                var yException = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(keyParams1.Q.X!, keyParams1.Q.Y!.Concat(new byte[] { 0x00 }).ToArray()));
                 Assert.AreEqual(YParameterNameInExceptionMessage, yException.ParamName);
                 Assert.AreEqual(yPointExceptionMessage, yException.Message);
             }

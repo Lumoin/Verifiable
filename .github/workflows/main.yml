@@ -83,7 +83,7 @@ jobs:
     
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: step-security/harden-runner@4d991eb9b905ef189e4c376166672c3f2f230481
+      uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf
       with:
         disable-sudo: true
         egress-policy: block
@@ -130,7 +130,7 @@ jobs:
         fetch-tags: true               
 
     - name: Setup .NET SDK
-      uses: actions/setup-dotnet@3951f0dfe7a07e2313ec93c75700083e2005cbab
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
@@ -213,7 +213,7 @@ jobs:
 
     #- name: Upload Stryker output artefacts
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+    #  uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
     #  with:
     #    name: 'Stryker output artefacts'
     #    path: ${{ github.workspace }}/StrykerOutput/
@@ -222,7 +222,7 @@ jobs:
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
 
     # - name: Archive publish results
-    #  uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+    #  uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
     #  with:
     #    name: Verifiable.Benchmarks
     #    path: ./publish/*
@@ -231,7 +231,7 @@ jobs:
     #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
 
     # - name: Upload benchmark results
-    #  uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+    #  uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
@@ -251,7 +251,7 @@ jobs:
 
     - name: Create test summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b      
+      uses: EnricoMi/publish-unit-test-result-action@afb2984f4d89672b2f9d9c13ae23d53779671984      
       with:
         trx_files: '${{ github.workspace }}/reports/**/*.trx'
 
@@ -271,7 +271,7 @@ jobs:
 
     # - name: Upload PR build information artefact
     #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+    #  uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
     #  with:
     #    name: 'Test Run'
     #    path: ${{ github.workspace }}/${{ env.file_name }}
@@ -315,7 +315,7 @@ jobs:
 
     - name: Upload Verifiable NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
         name: nupkg
         path: ./nupkgs/*.*          
@@ -330,14 +330,14 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - name: Harden Runner
-          uses: step-security/harden-runner@4d991eb9b905ef189e4c376166672c3f2f230481
+          uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf
           with:
             disable-sudo: true
             egress-policy: block
             allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
         - name: Download NuGet artifacts
-          uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806
+          uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
           with:
             name: nupkg
 
@@ -353,14 +353,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@4d991eb9b905ef189e4c376166672c3f2f230481
+        uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf
         with:
           disable-sudo: true
           egress-policy: audit
           allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
       - name: Download NuGet artifacts
-        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         with:
           name: nupkg
 

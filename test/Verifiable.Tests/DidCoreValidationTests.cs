@@ -30,11 +30,11 @@ namespace Verifiable.Tests.Core
         {
             var faultyContext = new Context();            
             var faultyValidationResult = DidCoreValidation.ValidateJsonLdUriAsFirst(faultyContext);
-            Assert.IsFalse(faultyValidationResult.Outcome == ClaimOutcome.Success, "Faulty context validation should fail.");                        
+            Assert.AreNotEqual(ClaimOutcome.Success, faultyValidationResult.Outcome, "Faulty context validation should fail.");                        
             
             var correctContext = new Context() { Contexes = new List<object>(new string[] { DidCoreConstants.JsonLdContextFirstUri }) };            
             var correctValidationResult = DidCoreValidation.ValidateJsonLdUriAsFirst(correctContext);
-            Assert.IsTrue(correctValidationResult.Outcome == ClaimOutcome.Success, "Correct context validation should not fail.");            
+            Assert.AreEqual(ClaimOutcome.Success, correctValidationResult.Outcome, "Correct context validation should not fail.");            
         }
     }
 }
