@@ -9,6 +9,7 @@ namespace Verifiable.Tests.Core
     [TestClass]
     public sealed class ThumbprintTests
     {
+        [TestMethod]
         [Ignore("Work in progress.")]
         public void ECNistP256()
         {

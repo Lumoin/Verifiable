@@ -21,7 +21,7 @@ namespace Verifiable.Tests.Core
             const string OriginalInputJson = @"""did:test:0x06048B83FAdaCdCB20198ABc45562Df1A3e289aF""";
             var converter = new SingleOrArrayControllerConverter();
             var controllers = GetConverted(OriginalInputJson, converter);
-            Assert.IsTrue(controllers?.Length == 1);
+            Assert.AreEqual(1, controllers?.Length);
 
             var backConvertedJson = GetConverted(controllers, converter!);
             Assert.AreEqual(OriginalInputJson, backConvertedJson);
@@ -35,7 +35,7 @@ namespace Verifiable.Tests.Core
             const string OriginalInputJson = @"[""did:test:0x16048B83FAdaCdCB20198ABc45562Df1A3e289aF"",""did:test:0x26048B83FAdaCdCB20198ABc45562Df1A3e289aF""]";
             var converter = new SingleOrArrayControllerConverter();
             var controllers = GetConverted(OriginalInputJson, converter);
-            Assert.IsTrue(controllers?.Length == 2);
+            Assert.AreEqual(2, controllers?.Length);
 
             var backConvertedJson = GetConverted(controllers, converter!);
             Assert.AreEqual(OriginalInputJson, backConvertedJson);
@@ -46,7 +46,7 @@ namespace Verifiable.Tests.Core
         public void RoundtripService()
         {
             //A sample test service copied from https://www.w3.org/TR/did-core/.
-            const string OriginalInputJson = @"{""id"":""did:example:123456789abcdefghi#oidc"",""type"":""OpenIdConnectVersion1.0Service"",""serviceEndpoint"":""https://openid.example.com/""}";
+            const string OriginalInputJson = /*lang=json,strict*/ @"{""id"":""did:example:123456789abcdefghi#oidc"",""type"":""OpenIdConnectVersion1.0Service"",""serviceEndpoint"":""https://openid.example.com/""}";
 
             var factory = new ServiceConverterFactory();
             var converter = (JsonConverter<Service>)factory.CreateConverter(typeof(Service), new JsonSerializerOptions());
@@ -96,7 +96,7 @@ namespace Verifiable.Tests.Core
             /// <summary>
             /// A sample complex @context copied from https://json-ld.org/playground/ JSON-LD 1.1 compacted Place sample.
             /// </summary>
-            string OriginalInputJson = RemoveWhiteSpace(@"{
+            string OriginalInputJson = RemoveWhiteSpace(/*lang=json,strict*/ @"{
                 ""@context"": {
                 ""name"": ""http://schema.org/name"",
                 ""description"": ""http://schema.org/description"",
@@ -140,7 +140,7 @@ namespace Verifiable.Tests.Core
             /// <summary>
             /// A sample complex @context copied from https://json-ld.org/playground/ JSON-LD 1.1 compacted Place sample.
             /// </summary>
-            string OriginalInputJson = RemoveWhiteSpace(@"[ ""https://www.w3.org/ns/did/v1"",
+            string OriginalInputJson = RemoveWhiteSpace(/*lang=json,strict*/ @"[ ""https://www.w3.org/ns/did/v1"",
             {
                 ""@base"": ""did:ion:EiAnKD8-jfdd0MDcZUjAbRgaThBrMxPTFOxcnfJhI7Ukaw:eyJkZWx0YSI6eyJwYXRjaGVzIjpbeyJhY3Rpb24iOiJyZXBsYWNlIiwiZG9jdW1lbnQiOnsicHVibGljS2V5cyI6W3siaWQiOiJzaWdfNzJiZDE2ZDYiLCJwdWJsaWNLZXlKd2siOnsiY3J2Ijoic2VjcDI1NmsxIiwia3R5IjoiRUMiLCJ4IjoiS2JfMnVOR3Nyd1VOdkh2YUNOckRGdW14VXlQTWZZd3kxNEpZZmphQUhmayIsInkiOiJhSFNDZDVEOFh0RUxvSXBpN1A5eDV1cXBpeEVxNmJDenQ0QldvUVk1UUFRIn0sInB1cnBvc2VzIjpbImF1dGhlbnRpY2F0aW9uIiwiYXNzZXJ0aW9uTWV0aG9kIl0sInR5cGUiOiJFY2RzYVNlY3AyNTZrMVZlcmlmaWNhdGlvbktleTIwMTkifV0sInNlcnZpY2VzIjpbeyJpZCI6ImxpbmtlZGRvbWFpbnMiLCJzZXJ2aWNlRW5kcG9pbnQiOnsib3JpZ2lucyI6WyJodHRwczovL3d3dy52Y3NhdG9zaGkuY29tLyJdfSwidHlwZSI6IkxpbmtlZERvbWFpbnMifV19fV0sInVwZGF0ZUNvbW1pdG1lbnQiOiJFaUR4SWxJak9xQk5NTGZjdzZndWpHNEdFVDM3UjBIRWM2Z20xclNZTjlMOF9RIn0sInN1ZmZpeERhdGEiOnsiZGVsdGFIYXNoIjoiRWlBLXV3TWo3RVFheURmWTRJS3pfSE9LdmJZQ05td19Tb1lhUmhOcWhFSWhudyIsInJlY292ZXJ5Q29tbWl0bWVudCI6IkVpQ0czQ1M5RFJpeU1JRVoxRl9sSjZnRVRMZWVHREwzZnpuQUViMVRGdFZXNEEifX0""
             }]");
@@ -178,7 +178,7 @@ namespace Verifiable.Tests.Core
             var utf8JsonReader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json));
             var options = new JsonSerializerOptions();
 
-            Assert.IsTrue(utf8JsonReader.TokenType == JsonTokenType.None);
+            Assert.AreEqual(JsonTokenType.None, utf8JsonReader.TokenType);
             _ = utf8JsonReader.Read();
 
             return converter.Read(ref utf8JsonReader, typeof(TConversionTarget), options);

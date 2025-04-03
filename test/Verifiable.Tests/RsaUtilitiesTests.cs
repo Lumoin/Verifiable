@@ -36,7 +36,7 @@ namespace Verifiable.Tests.Core
         {
             //Since the argument is ReadOnlySpan<byte>, it will be converted to ReadOnlySpan<byte>.Empty automatically.
             const string ParameterName = "rsaModulusBytes";
-            var exception1 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(null));
+            var exception1 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(null));
             Assert.AreEqual(ParameterName, exception1.ParamName);
         }
 
@@ -45,11 +45,11 @@ namespace Verifiable.Tests.Core
         public void EncodeThrowsWithCorrectMessageIfModulusNotCorrectLength()
         {
             const string ParameterName = "rsaModulusBytes";
-            var exception1 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(WrongSizeArray1));
+            var exception1 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(WrongSizeArray1));
             Assert.AreEqual(ParameterName, exception1.ParamName);
             Assert.AreEqual($"Length must be {RsaUtilities.Rsa2048ModulusLength} (RSA 2048) or {RsaUtilities.Rsa4096ModulusLength} (RSA 4096). (Parameter '{ParameterName}')", exception1.Message);
 
-            var exception2 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(WrongSizeArray2));
+            var exception2 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RsaUtilities.Encode(WrongSizeArray2));
             Assert.AreEqual(ParameterName, exception2.ParamName);
             Assert.AreEqual($"Length must be {RsaUtilities.Rsa2048ModulusLength} (RSA 2048) or {RsaUtilities.Rsa4096ModulusLength} (RSA 4096). (Parameter '{ParameterName}')", exception2.Message);
         }
@@ -61,11 +61,11 @@ namespace Verifiable.Tests.Core
             const string ParameterName = "encodedRsaModulusBytes";
             const int Rsa2048DerEncodedBytesLength = 270;
             const int Rsa4096DerEncodedBytesLength = 526;
-            var exception1 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => RsaUtilities.Decode(WrongSizeArray1));
+            var exception1 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RsaUtilities.Decode(WrongSizeArray1));
             Assert.AreEqual(ParameterName, exception1.ParamName);
             Assert.AreEqual($"Length must be {Rsa2048DerEncodedBytesLength} (RSA 2048) or {Rsa4096DerEncodedBytesLength} (RSA 4096). (Parameter '{ParameterName}')", exception1.Message);
 
-            var exception2 = Assert.ThrowsException<ArgumentOutOfRangeException>(() => RsaUtilities.Decode(WrongSizeArray2));
+            var exception2 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RsaUtilities.Decode(WrongSizeArray2));
             Assert.AreEqual(ParameterName, exception2.ParamName);
             Assert.AreEqual($"Length must be {Rsa2048DerEncodedBytesLength} (RSA 2048) or {Rsa4096DerEncodedBytesLength} (RSA 4096). (Parameter '{ParameterName}')", exception2.Message);
         }
@@ -86,7 +86,7 @@ namespace Verifiable.Tests.Core
                 var encodedModulus = RsaUtilities.Encode(rsaModulus);
                 encodedModulus[PaddingByteIndex] = 0x1;
 
-                var exception = Assert.ThrowsException<ArgumentException>(() => RsaUtilities.Decode(RsaUtilities.Decode(encodedModulus)));
+                var exception = Assert.ThrowsExactly<ArgumentException>(() => RsaUtilities.Decode(RsaUtilities.Decode(encodedModulus)));
                 Assert.AreEqual(CatastrophicExceptionMessage, exception.Message);
             }
         }
@@ -107,7 +107,7 @@ namespace Verifiable.Tests.Core
                 var encodedModulus = RsaUtilities.Encode(rsaModulus);
                 encodedModulus[MsbByteIndex] = 0x1;
 
-                var exception = Assert.ThrowsException<ArgumentException>(() => RsaUtilities.Decode(RsaUtilities.Decode(encodedModulus)));
+                var exception = Assert.ThrowsExactly<ArgumentException>(() => RsaUtilities.Decode(RsaUtilities.Decode(encodedModulus)));
                 Assert.AreEqual(CatastrophicExceptionMessage, exception.Message);
             }
         }

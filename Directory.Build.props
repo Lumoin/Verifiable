@@ -12,7 +12,7 @@
     <NoWarn>$(NoWarn);1591</NoWarn>    
     <EmbedUntrackedSources>true</EmbedUntrackedSources>   
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>    
-    <EnablePackageValidation>true</EnablePackageValidation>
+    <EnablePackageValidation>true</EnablePackageValidation>    
     <!-- This should be the published baseline version to validate against.
     <PackageValidationBaselineVersion>0.0.1</PackageValidationBaselineVersion>
     -->
@@ -22,6 +22,12 @@
     <IsTrimmable>true</IsTrimmable>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     -->
+  </PropertyGroup>
+
+  <!-- Settings for all tests projects specifically. -->
+  <PropertyGroup>
+    <EnableMSTestRunner>true</EnableMSTestRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
   </PropertyGroup>
     
   <!-- Common nuget package parameters and resources. -->

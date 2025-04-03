@@ -121,14 +121,14 @@ namespace Verifiable.Tests.Assertion
             const string TestDescription = "TestDescription";
             var customCode1 = ClaimId.Create(TestClaimCode, TestDescription);
 
-            var exception = Assert.ThrowsException<ArgumentException>(() => ClaimId.Create(TestClaimCode, TestDescription));
+            var exception = Assert.ThrowsExactly<ArgumentException>(() => ClaimId.Create(TestClaimCode, TestDescription));
         }
 
 
         [TestMethod]
         public void NotPossibleToUseDefaultConstructor()
         {
-            var exception = Assert.ThrowsException<InvalidOperationException>(() => new ClaimId());
+            var exception = Assert.ThrowsExactly<InvalidOperationException>(() => new ClaimId());
             Assert.AreEqual("Use Create.", exception.Message);
         }
 
@@ -139,7 +139,7 @@ namespace Verifiable.Tests.Assertion
         [DataRow(-100)]
         public void CreateThrowsArgumentOutOfRangeExceptionForNonPositiveCode(int code)
         {
-            var exception = Assert.ThrowsException<ArgumentOutOfRangeException>(() => ClaimId.Create(code, "Description"));
+            var exception = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ClaimId.Create(code, "Description"));
             Assert.AreEqual(nameof(code), exception.ParamName);
             Assert.AreEqual(code, exception.ActualValue);
             Assert.IsTrue(
@@ -151,7 +151,7 @@ namespace Verifiable.Tests.Assertion
         [TestMethod]
         public void CreateThrowsArgumentExceptionForEmptyDescription()
         {
-            var exception = Assert.ThrowsException<ArgumentException>(() => ClaimId.Create(1, string.Empty));
+            var exception = Assert.ThrowsExactly<ArgumentException>(() => ClaimId.Create(1, string.Empty));
             Assert.AreEqual("description", exception.ParamName);            
             Assert.IsTrue(
                 exception.Message.Contains("The value cannot be an empty string. (Parameter 'description')", StringComparison.InvariantCulture),

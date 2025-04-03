@@ -37,8 +37,8 @@ namespace Verifiable.Tests.Tpm
             var tpmInfo = TpmWrapper.Tpm.GetAllTpmInfo();
 
             //A sampling of properties are checked here against known values.
-            Assert.IsTrue(!string.IsNullOrWhiteSpace(tpmInfo.Properties.VendorString));
-            Assert.IsTrue(!string.IsNullOrWhiteSpace(tpmInfo.Properties.ManufacturerName));
+            Assert.IsFalse(string.IsNullOrWhiteSpace(tpmInfo.Properties.VendorString));
+            Assert.IsFalse(string.IsNullOrWhiteSpace(tpmInfo.Properties.ManufacturerName));
             Assert.IsTrue(tpmInfo.Properties.IsFips1402);
             Assert.IsTrue(tpmInfo.PrcBanks.Count > 0);
         }

@@ -21,8 +21,8 @@ namespace Verifiable.Tests
         public void CanGenerateKeyPairEd255019()
         {
             var keys = BouncyCastleKeyCreator.CreateEd25519Keys(MemoryPool<byte>.Shared);
-            Assert.IsNotNull(keys.PublicKey);
-            Assert.IsNotNull(keys.PrivateKey);
+            Assert.IsTrue(keys.PublicKey.AsReadOnlySpan().Length > 0);
+            Assert.IsTrue(keys.PrivateKey.AsReadOnlySpan().Length > 0);
         }
 
 

@@ -52,7 +52,7 @@ namespace Verifiable.Tests.Core
             //All the DID documents need to have an ID and a context.
             Assert.IsNotNull(deseserializedDidDocument?.Id);
             Assert.IsNotNull(deseserializedDidDocument?.Context);
-            Assert.IsNotNull(reserializedDidDocument);
+            Assert.IsFalse(string.IsNullOrWhiteSpace(reserializedDidDocument));
 
             //Currently EBSI DIDs have public key embedded in the main document.
             //This is not valid, but this is handled as "extra" that goes into

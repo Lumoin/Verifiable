@@ -7,13 +7,11 @@
     <PackageVersion Include="BenchmarkDotNet" Version="0.14.0" />
     <PackageVersion Include="dotNetRdf" Version="3.3.2" />
     <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.0-preview-25107-01" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="17.14.2" />
     <PackageVersion Include="Microsoft.TSS" Version="2.1.1" />
     <PackageVersion Include="NSec.Cryptography" Version="24.4.0" />
     <PackageVersion Include="Portable.BouncyCastle" Version="1.9.0" />
     <PackageVersion Include="SharpFuzz" Version="2.2.0" />
-    <PackageVersion Include="SIL.ReleaseTasks" Version="3.0.0" />
+    <PackageVersion Include="SIL.ReleaseTasks" Version="3.1.1" />
     <PackageVersion Include="SimpleBase" Version="4.0.2" />
     <PackageVersion Include="Spectre.Console" Version="0.49.1" />
     <PackageVersion Include="Spectre.Console.Cli" Version="0.49.1" />
@@ -23,5 +21,6 @@
     <PackageVersion Include="System.Text.Json" Version="10.0.0-preview.1.25080.5" />
     <PackageVersion Include="WinSharpFuzz" Version="1.0.0" />
     <PackageVersion Include="CsCheck" Version="4.2.0" />
+    <PackageVersion Include="MSTest" Version="3.8.3" />
   </ItemGroup>
 </Project>

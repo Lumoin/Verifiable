@@ -4,9 +4,9 @@
     "net10.0": {
       "SIL.ReleaseTasks": {
         "type": "Direct",
-        "requested": "[3.0.0, )",
-        "resolved": "3.0.0",
-        "contentHash": "DR0X2IORUVD2gFQCrokzqR0UEaGkVwsuqPOFKdI0BcJN7I1IJxdh6yB2WTMhGIfGg1la5PQDxe7gVotgWyB2jQ==",
+        "requested": "[3.1.1, )",
+        "resolved": "3.1.1",
+        "contentHash": "BWULTEG3k1wMABRXYEBT7UfhrjJwgBLEkcYjNTa3CnmpUE+QCtoeW8WytbvIQNJHkvg0uggl1goWFXe6w6jcAA==",
         "dependencies": {
           "Markdig.Signed": "0.37.0"
         }

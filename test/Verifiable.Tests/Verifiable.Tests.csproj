@@ -1,5 +1,5 @@
-﻿<Project Sdk="MSTest.Sdk">
-
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="MSTest.Sdk">
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -11,16 +11,15 @@
     <TestingPlatformShowTestsFailure>true</TestingPlatformShowTestsFailure>
     <RunSettingsFilePath>$(MSBuildProjectDirectory)\config.runsettings</RunSettingsFilePath>   
     <TestingExtensionsProfile>AllMicrosoft</TestingExtensionsProfile>
-    <IsTestApplication>true</IsTestApplication>
+    <IsTestApplication>true</IsTestApplication>    
+    <MSTestAnalysisMode>Recommended</MSTestAnalysisMode>
   </PropertyGroup>
   
-  <ItemGroup>    
-    <PackageReference Include="dotNetRdf" />    
-    <PackageReference Include="SharpFuzz" />
-    <PackageReference Include="WinSharpFuzz" />
+  <ItemGroup>
+    <PackageReference Include="dotNetRdf" />
     <PackageReference Include="CsCheck" />    
     <PackageReference Include="LiquidTestReports.Markdown" />    
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" />    
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
 
   <ItemGroup>
@@ -32,6 +31,4 @@
     <ProjectReference Include="..\..\src\Verifiable.Sidetree\Verifiable.Sidetree.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
   </ItemGroup>
-
-  
 </Project>
