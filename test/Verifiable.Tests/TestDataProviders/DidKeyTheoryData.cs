@@ -1,5 +1,4 @@
-﻿using System;
-using Verifiable.Core.Cryptography;
+﻿using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
 using Verifiable.Core.Did;
 

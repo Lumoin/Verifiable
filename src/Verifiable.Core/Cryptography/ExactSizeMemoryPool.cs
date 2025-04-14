@@ -3,16 +3,17 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Threading;
 
 namespace Verifiable.Core.Cryptography
 {
     /// <summary>
-    /// 
+    /// A memory pool that returns memory of exactly the size as requested.
     /// </summary>
-    /// <typeparam name="T"></typeparam>
-    public class ExactSizeMemoryPool<T>: MemoryPool<T>
+    /// <typeparam name="TMemory">The type of memory to be reserved, e.g. <see cref="byte"/>.</typeparam>
+    public class ExactSizeMemoryPool<TMemory>: MemoryPool<TMemory>
     {
-        private readonly Dictionary<int, List<Slab<T>>> slabs;
+        private readonly Dictionary<int, List<Slab<TMemory>>> slabs;
         private bool isDisposed;
 
         private readonly Meter poolMeter;
@@ -21,20 +22,21 @@ namespace Verifiable.Core.Cryptography
 
         private int totalSlabs = 0;
         private long totalMemoryUsed = 0;
-        private readonly object lockObject = new object();
+               
+        private readonly Lock lockObject = new();
 
         private static readonly ActivitySource activitySource = new("ExactSizeMemoryPool");
         private static readonly DiagnosticSource diagnosticSource = new DiagnosticListener("ExactSizeMemoryPool");
 
         public const int InitialSlabCapacity = 4;
 
-        public ExactSizeMemoryPool() : this(new Meter("ExactSizeMemoryPool", "1.0.0")) { }
+        public ExactSizeMemoryPool(): this(new Meter("ExactSizeMemoryPool", "1.0.0")) { }
 
         /// <summary>
         /// Gets a singleton instance of a memory pool based on arrays.
         /// </summary>
         /// <remarks>A singleton instance of memory pool for cryptographic material.</remarks>
-        public static new ExactSizeMemoryPool<T> Shared => new();
+        public static new ExactSizeMemoryPool<TMemory> Shared => new();
 
 
         public ExactSizeMemoryPool(Meter meter)
@@ -45,16 +47,16 @@ namespace Verifiable.Core.Cryptography
             totalSlabsCounter = meter.CreateObservableUpDownCounter("TotalSlabs", () => totalSlabs, "slabs");
             totalMemoryUsedCounter = meter.CreateObservableUpDownCounter("TotalMemoryUsed", () => totalMemoryUsed, "bytes");
 
-            slabs = new Dictionary<int, List<Slab<T>>>();
+            slabs = new Dictionary<int, List<Slab<TMemory>>>();
             isDisposed = false;
         }
 
 
-        public override IMemoryOwner<T> Rent(int bufferSize)
+        public override IMemoryOwner<TMemory> Rent(int bufferSize)
         {
             if(isDisposed)
             {
-                throw new ObjectDisposedException(nameof(ExactSizeMemoryPool<T>));
+                throw new ObjectDisposedException(nameof(ExactSizeMemoryPool<TMemory>));
             }
 
             if(bufferSize <= 0)
@@ -70,14 +72,14 @@ namespace Verifiable.Core.Cryptography
 
             lock(lockObject)
             {
-                if(!slabs.TryGetValue(bufferSize, out List<Slab<T>>? slabList))
+                if(!slabs.TryGetValue(bufferSize, out List<Slab<TMemory>>? slabList))
                 {
-                    slabList = new List<Slab<T>>();
+                    slabList = new List<Slab<TMemory>>();
                     slabs.Add(bufferSize, slabList);
                 }
 
-                Slab<T>? slab = null;
-                ArraySegment<T> rentedSegment = default;
+                Slab<TMemory>? slab = null;
+                ArraySegment<TMemory> rentedSegment = default;
                 foreach(var s in slabList)
                 {
                     if(s.TryRent(out rentedSegment))
@@ -89,7 +91,7 @@ namespace Verifiable.Core.Cryptography
 
                 if(slab == null)
                 {
-                    slab = new Slab<T>(bufferSize, InitialSlabCapacity);
+                    slab = new Slab<TMemory>(bufferSize, InitialSlabCapacity);
                     slabList.Add(slab);
                     totalSlabs++;
                     totalMemoryUsed += bufferSize * InitialSlabCapacity;
@@ -97,7 +99,7 @@ namespace Verifiable.Core.Cryptography
                     slab.TryRent(out rentedSegment); // Rent the segment from the newly created slab
                 }
 
-                var memoryOwner = new ExactSizeMemoryOwner<T>(rentedSegment, slab);
+                var memoryOwner = new ExactSizeMemoryOwner<TMemory>(rentedSegment, slab);
                 diagnosticSource.Write("Rent.Stop", new { bufferSize });
                 
                 return memoryOwner;
@@ -126,7 +128,7 @@ namespace Verifiable.Core.Cryptography
         public override int MaxBufferSize => int.MaxValue;
 
 
-        private void Return(ArraySegment<T> segment, Slab<T> slab)
+        private void Return(ArraySegment<TMemory> segment, Slab<TMemory> slab)
         {
             ArgumentNullException.ThrowIfNull(slab);
 

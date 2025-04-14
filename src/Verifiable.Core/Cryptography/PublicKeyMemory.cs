@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 
 namespace Verifiable.Core.Cryptography
 {
@@ -89,9 +89,9 @@ namespace Verifiable.Core.Cryptography
         /// <param name="arg0">An argument given to <paramref name="sensitiveFunc"/>.</param>
         /// <param name="arg1">An argument given to <paramref name="sensitiveFunc"/>.</param>
         /// <returns>The result of calling An argument given to <paramref name="sensitiveFunc"/>.</returns>        
-        public TResult WithKeyBytes<TArg0, TArg1, TResult>(VerificationFunction<byte, TArg0, TArg1, TResult> sensitiveFunc, ReadOnlySpan<TArg0> arg0, TArg1 arg1)
+        public ValueTask<TResult> WithKeyBytesAsync<TArg0, TArg1, TResult>(VerificationFunction<byte, TArg0, TArg1, ValueTask<TResult>> sensitiveFunc, ReadOnlyMemory<TArg0> arg0, TArg1 arg1)
         {
-            return sensitiveFunc(AsReadOnlySpan(), arg0, arg1);
+            return sensitiveFunc(MemoryOwner.Memory, arg0, arg1);
         }
     }
 }
