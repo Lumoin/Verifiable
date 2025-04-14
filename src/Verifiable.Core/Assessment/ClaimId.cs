@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace Verifiable.Assessment
 {
@@ -305,7 +306,7 @@ namespace Verifiable.Assessment
         /// </summary>
         private static class CodeDescriptions
         {
-            private static readonly object descriptionsLock = new();
+            private static readonly Lock descriptionsLock = new();
 
             /// <summary>
             /// Descriptions of dynamically created claim identifiers.

@@ -11,12 +11,12 @@ namespace Verifiable.Tests.Cryptography
         /// <summary>
         /// A first instance for testing comparisons.
         /// </summary>
-        private static Purpose Purpose1 { get; } = Purpose.Public;
+        private static Purpose Purpose1 { get; } = Purpose.Verification;
 
         /// <summary>
         /// A second instance for testing comparisons.
         /// </summary>
-        private static Purpose Purpose2 { get; } = Purpose.Private;
+        private static Purpose Purpose2 { get; } = Purpose.Signing;
 
         
         [TestMethod]

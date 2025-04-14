@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace Verifiable.Tests.TestInfrastructure
+﻿namespace Verifiable.Tests.TestInfrastructure
 {
     /// <summary>
     /// Extension methods for <see cref="string"/> to help with testing.

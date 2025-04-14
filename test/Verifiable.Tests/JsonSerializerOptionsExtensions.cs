@@ -29,7 +29,7 @@ namespace Verifiable.Tests
         public static JsonSerializerOptions ApplyVerifiableDefaults(this JsonSerializerOptions options)
         {            
             options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-            options.PropertyNamingPolicy = new DefaultNamingNamingPolicy(Array.AsReadOnly(new JsonNamingPolicy[] { JsonNamingPolicy.CamelCase }));
+            options.PropertyNamingPolicy = new DefaultNamingNamingPolicy(Array.AsReadOnly([JsonNamingPolicy.CamelCase]));
             options.PropertyNameCaseInsensitive = true;
 
             options.Converters.Add(new DictionaryStringObjectJsonConverter());

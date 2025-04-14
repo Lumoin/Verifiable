@@ -1,5 +1,4 @@
-﻿using System;
-using Verifiable.Core.Cryptography;
+﻿using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
 using Verifiable.Core.Did;
 
@@ -21,7 +20,7 @@ namespace Verifiable.Tests.TestDataProviders
     public sealed class DidKeyTheoryData
     {
         public static IEnumerable<object[]> GetDidTheoryTestData()
-        {            
+        {
             static IEnumerable<object[]> AddTestData(PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair)
             {
                 return new List<object[]>
@@ -30,7 +29,7 @@ namespace Verifiable.Tests.TestDataProviders
                     new object[] { new DidKeyTestData(keyPair, Multikey.DefaultInstance, typeof(PublicKeyMultibase)) }
                 };
             }
-            
+
             var allData = new List<object[]>();
             allData.AddRange(AddTestData(TestKeyMaterialProvider.P256KeyMaterial));
             allData.AddRange(AddTestData(TestKeyMaterialProvider.P384KeyMaterial));
@@ -43,5 +42,5 @@ namespace Verifiable.Tests.TestDataProviders
 
             return allData;
         }
-    }    
+    }
 }

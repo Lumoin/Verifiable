@@ -19,8 +19,12 @@ namespace Verifiable.Core.Builders
 
 
     /// <summary>
-    /// ...
+    /// Builds <em>did:key</em> with default choices.
     /// </summary>
+    /// <remarks>
+    /// Verifiable library provides preconfigured builders for various objects. These builders are designed to be extensible or
+    /// library user can define a builder of their own.
+    /// </remarks>
     public sealed class KeyDidBuilder: Builder<DidDocument, BuildState, KeyDidBuilder>
     {
         public KeyDidBuilder()
@@ -37,7 +41,7 @@ namespace Verifiable.Core.Builders
                 [
                     new VerificationMethod
                     {
-                        //TODO: Add a method to create 
+                        //TODO: Add a method to create
                         Id = $"did:key:{encodedPublicKey}#{encodedPublicKey}",
                         Type = cryptoSuiteChosen,
                         Controller = $"did:key:{encodedPublicKey}",
@@ -72,11 +76,11 @@ namespace Verifiable.Core.Builders
         public DidDocument Build(PublicKeyMemory publicKey, CryptoSuite cryptoSuite, bool includeDefaultContext = false)
         {
             CryptoAlgorithm alg = (CryptoAlgorithm)publicKey.Tag[typeof(CryptoAlgorithm)];
-            Purpose purp = (Purpose)publicKey.Tag[typeof(Purpose)];
+            Purpose purpose = (Purpose)publicKey.Tag[typeof(Purpose)];
 
-            string encodedPublicKey = KeyHeaderConversion.DefaultAlgorithmToBase58Converter(alg, purp, publicKey.AsReadOnlySpan(), DefaultEncoderSelector.Select(WellKnownKeyFormats.PublicKeyMultibase));
+            string encodedPublicKey = VerifiableCryptoFormatConversions.DefaultAlgorithmToBase58Converter(alg, purpose, publicKey.AsReadOnlySpan(), DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyMultibase));
 
-            BuildState buildState = new BuildState { EncodedKey = encodedPublicKey, PublicKey = publicKey, Suite = cryptoSuite };
+            BuildState buildState = new() { EncodedKey = encodedPublicKey, PublicKey = publicKey, Suite = cryptoSuite };
 
             if(includeDefaultContext)
             {

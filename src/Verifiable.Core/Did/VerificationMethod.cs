@@ -18,12 +18,15 @@ namespace Verifiable.Core.Did
         public string? Id { get; set; }
 
         /// <summary>
-        /// The DID of the entity that controls the verification method.
+        /// The <c>DID</c> of the entity that controls the verification method.
         /// </summary>
         public string? Controller { get; set; }
 
         /// <summary>
-        /// A string that indicates the type of verification method (e.g., <see cref="PublicKeyMultibase"/>, <see cref="PublicKeyJwk"/>).
+        /// A string that indicates the cryptographic algorithm and key type for the verification method
+        /// (e.g. <see cref="JsonWebKey"/>, <see cref="Multikey" />).
+        /// This value defines the expected properties and behavior of the verification method as specified
+        /// in the DID specification registries.
         /// </summary>
         public string? Type { get; set; }
 

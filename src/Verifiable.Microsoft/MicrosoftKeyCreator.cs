@@ -136,13 +136,14 @@ namespace Verifiable.Microsoft
             {
                 RSAParameters parameters = key.ExportParameters(includePrivateParameters: true);
                 byte[] derEncodedPublicKey = RsaUtilities.Encode(parameters.Modulus!);
-
+                byte[] privateKeyPkcs1 = key.ExportRSAPrivateKey();
                 var (publicKeyTag, privateKeyTag) = GetTags(keySizeInBits);
                 var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(derEncodedPublicKey, memoryPool), publicKeyTag);
-                var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(parameters.D!, memoryPool), privateKeyTag);
+                var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyPkcs1, memoryPool), privateKeyTag);
                 Array.Clear(derEncodedPublicKey, 0, derEncodedPublicKey.Length);
                 Array.Clear(parameters.Modulus!, 0, parameters.Modulus!.Length);
                 Array.Clear(parameters.D!, 0, parameters.D!.Length);
+                Array.Clear(privateKeyPkcs1, 0, privateKeyPkcs1.Length);
 
                 return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
             }
