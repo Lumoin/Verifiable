@@ -28,9 +28,9 @@ namespace Verifiable.Core.Cryptography.Context
         public int Code { get; }
 
 
-        public static Purpose Public { get; } = new Purpose(0);
+        public static Purpose Verification { get; } = new Purpose(0);
 
-        public static Purpose Private { get; } = new Purpose(1);
+        public static Purpose Signing { get; } = new Purpose(1);
 
         public static Purpose Exchange { get; } = new Purpose(2);
 
@@ -41,7 +41,7 @@ namespace Verifiable.Core.Cryptography.Context
         public static Purpose Encryption { get; } = new Purpose(5);
 
 
-        private static List<Purpose> _purposeCodes = new([Public, Private, Exchange, Wrapped, Signature, Encryption]);
+        private static List<Purpose> _purposeCodes = new([Verification, Signing, Exchange, Wrapped, Signature, Encryption]);
 
         public static IReadOnlyList<Purpose> PurposeCodes => _purposeCodes.AsReadOnly();
 

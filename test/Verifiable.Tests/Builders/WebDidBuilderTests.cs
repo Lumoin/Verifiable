@@ -17,8 +17,8 @@ namespace Verifiable.Tests.Builders
     public static class WebDidValidationRules
     {
         /// <summary>
-        /// A collection of all the assessment rules that are applied to <c>did:key</c> DID documents.
-        /// </summary>        
+        /// A collection of all the assessment rules that are applied to <c>did:web</c> DID documents.
+        /// </summary>
         public static IList<ClaimDelegate<DidDocument>> AllRules { get; } =
         [
             //new(ValidateIdEncodingAsync, [ClaimId.KeyDidIdEncoding]),
@@ -37,9 +37,9 @@ namespace Verifiable.Tests.Builders
         /// <returns>Claims indicating the validation outcome.</returns>
         public static ValueTask<IList<Claim>> ValidateKeyFormatAsync(DidDocument document)
         {
-            IList<Claim> resultClaims = new List<Claim>();
+            IList<Claim> resultClaims = [];
             if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyJwk keyFormat)
-            {                
+            {
                 var headers = keyFormat.Header;
                 var sublaims = JwtKeyTypeHeaderValidationUtilities.ValidateHeader(headers);
                 var claimOutCome = sublaims.All(c => c.Outcome == ClaimOutcome.Success) ? ClaimOutcome.Success : ClaimOutcome.Failure;
@@ -52,7 +52,7 @@ namespace Verifiable.Tests.Builders
                 resultClaims.Add(new Claim(ClaimId.WebDidKeyFormat, ClaimOutcome.Success));
             }
             else
-            {                
+            {
                 resultClaims.Add(new Claim(ClaimId.WebDidKeyFormat, ClaimOutcome.Failure));
             }
 
@@ -86,22 +86,22 @@ namespace Verifiable.Tests.Builders
 
 
         [TestMethod]
-        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData), DynamicDataSourceType.Method)]                
+        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData), DynamicDataSourceType.Method)]
         public async Task CanBuildWebDidFromRandomKeysAsync(DidWebTestData testData)
         {
-            //This builds the did:web document with the given public key and crypto suite.            
+            //This builds the did:web document with the given public key and crypto suite.
 
             /*_ =WebDidBuilder.WithService((doc, service) =>
             {
-                service.Id = new System.Uri("did:web:example.com:wall#product");
-                service.Type = "ProductPassport";
+                service.Id = new System.Uri("did:web:example.com:thing#service");
+                service.Type = "service";
                 service.ServiceEndpoint = "https://example.com/";
             });*/
 
             /*WebDidBuilder.WithVerificationMethod((doc, state, verificationMethod) =>
             {
-                verificationMethod.Id = new System.Uri("did:web:example.com:wall#product");
-                verificationMethod.Type = "ProductPassport";
+                verificationMethod.Id = new System.Uri("did:web:example.com:thing#service");
+                verificationMethod.Type = "service";
                 verificationMethod.ServiceEndpoint = "https://example.com/";
             });*/
 
@@ -117,13 +117,13 @@ namespace Verifiable.Tests.Builders
             //var builder = WebDidBuilder.WithVerificationMethod(verificationMethodId, cryptoSuite, controller, publicKey);
 
             var webDidDocument = WebDidBuilder.Build(testData.KeyPair.PublicKey, testData.CryptoSuite, testDomain);
-            
+
             //Assert that the KeyFormat exists and is of the expected type
             var actualKeyFormat = webDidDocument.VerificationMethod![0].KeyFormat;
             Assert.IsNotNull(actualKeyFormat);
             Assert.AreEqual(testData.ExpectedKeyFormat, actualKeyFormat.GetType());
 
-            //The builder produced DID identifier type should match KeyDidId, as the type of the document is key DID.                                               
+            //The builder produced DID identifier type should match KeyDidId, as the type of the document is key DID.
             Assert.AreEqual(typeof(WebDidMethod), webDidDocument?.Id?.GetType());
 
             //This catches if there is a mismatch in generated tag for the key format
@@ -137,7 +137,7 @@ namespace Verifiable.Tests.Builders
             bool res = keyFormatValidator.Validate(actualKeyFormat, alg);
             Assert.IsTrue(res, $"Key format validation failed for {actualKeyFormat.GetType()} for algorithm {alg.Algorithm}.");
 
-            //This part runs the whole suite if did:key validation rules Verifiable library defines against the document.
+            //This part runs the whole suite if did:web validation rules Verifiable library defines against the document.
             Assert.IsNotNull(webDidDocument);
             var assessmentResult = await WebDidAssessor.AssessAsync(webDidDocument, "some-test-supplied-correlationId");
             Assert.IsTrue(assessmentResult.IsSuccess);
@@ -148,5 +148,5 @@ namespace Verifiable.Tests.Builders
             Assert.IsTrue(areJsonElementsEqual, $"JSON string \"{serializedDidDocument}\" did not pass roundtrip test.");
             Assert.AreEqual(typeof(WebDidMethod), deserializedDidDocument?.Id?.GetType());
         }
-    }    
+    }
 }

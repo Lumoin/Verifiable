@@ -13,10 +13,10 @@ namespace Verifiable.Tests
     [TestClass]
     public sealed class SigningTests
     {
-        //System.Buffers.Text.Base64: https://source.dot.net/#System.Private.CoreLib/src/libraries/System.Private.CoreLib/src/System/Buffers/Text/Base64Decoder.cs,72                
+        //System.Buffers.Text.Base64: https://source.dot.net/#System.Private.CoreLib/src/libraries/System.Private.CoreLib/src/System/Buffers/Text/Base64Decoder.cs,72
 
         [TestMethod]
-        public void CanSignDidWeb()
+        public async ValueTask CanSignDidWeb()
         {
             var keys = TestKeyMaterialProvider.Ed25519KeyMaterial;
             var multibaseEncodedPublicKey = MultibaseSerializer.Encode(keys.PublicKey.AsReadOnlySpan(), MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
@@ -30,7 +30,7 @@ namespace Verifiable.Tests
             var publicKey = keys.PublicKey;
             var privateKey = keys.PrivateKey;*/
 
-            //TODO: Check this before committing. <-- Check also this exact phrase in other test and fix it.            
+            //TODO: Check this before committing. <-- Check also this exact phrase in other test and fix it.
             var multibaseDecodedPublicKey = MultibaseSerializer.Decode(Vc0PublicKey, ExactSizeMemoryPool<byte>.Shared, Base58.Bitcoin.Decode);
             var multibaseDecodedPrivateKey = MultibaseSerializer.Decode(Vc0PrivateKey, ExactSizeMemoryPool<byte>.Shared, Base58.Bitcoin.Decode);
             PublicKeyMemory publicKeyMemory = new(multibaseDecodedPublicKey, Tag.Ed25519PublicKey);
@@ -41,10 +41,10 @@ namespace Verifiable.Tests
             proofValueBytes.CopyTo(pooledProofSignatureBytes.Memory.Span);
             var proofSignature = new Signature(pooledProofSignatureBytes, Tag.Ed25519Signature);
 
-            string canonocalizedDataWithoutProof = CanonicalVc0Document;
-            var canonocalizedDataWithoutProofHashedData = SHA256.HashData(Encoding.UTF8.GetBytes(canonocalizedDataWithoutProof));
+            string canonicalizeDataWithoutProof = CanonicalVc0Document;
+            var canonicalizedDataWithoutProofHashedData = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalizeDataWithoutProof));
             var proofValueHash = SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalVc0ProofDocument));
-            var combinedHashToVerify = proofValueHash.Concat(canonocalizedDataWithoutProofHashedData).ToArray();
+            var combinedHashToVerify = proofValueHash.Concat(canonicalizedDataWithoutProofHashedData).ToArray();
 
             /*
             var ownSignature = privateKeyMemory.Sign(canonocalizedDataWithoutProofHashedData, BouncyCastleAlgorithms.SignEd25519, MemoryPool<byte>.Shared);
@@ -54,9 +54,9 @@ namespace Verifiable.Tests
 
             //bool ownIsVerified = publicKeyMemory.Verify(canonocalizedDataWithoutProofHashedData, ownSignature, BouncyCastleAlgorithms.VerifyEd25519);
 
-            var hex = BitConverter.ToString(combinedHashToVerify).Replace("-", "", StringComparison.InvariantCulture);
-            bool isVerified = publicKeyMemory.Verify(combinedHashToVerify, proofSignature, BouncyCastleAlgorithms.VerifyEd25519);
-            
+            var hex = Convert.ToHexString(combinedHashToVerify);
+            bool isVerified = await publicKeyMemory.VerifyAsync(combinedHashToVerify, proofSignature, BouncyCastleAlgorithms.VerifyEd25519Async);
+
             Assert.IsTrue(isVerified);
         }
 

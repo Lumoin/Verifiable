@@ -1,6 +1,6 @@
 using System;
 using System.Buffers;
-using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 
 namespace Verifiable.Core.Cryptography
 {
@@ -29,9 +29,9 @@ namespace Verifiable.Core.Cryptography
         /// <param name="sensitiveFunc">The function that uses this memory. Example caller: <see cref="PrivateKey"/>.</param>
         /// <param name="arg">An argument given to <paramref name="sensitiveFunc"/>.</param>
         /// <returns>The result of calling of <paramref name="sensitiveFunc"/>. Likely a <see cref="Signature"/>.</returns>        
-        public TResult WithKeyBytes<TDataToSign, TResult>(SigningFunction<byte, TDataToSign, TResult> sensitiveFunc, ReadOnlySpan<TDataToSign> arg, MemoryPool<byte> signaturePool) where TResult: Signature
+        public ValueTask<TResult> WithKeyBytesAsync<TDataToSign, TResult>(SigningFunction<byte, TDataToSign, ValueTask<TResult>> sensitiveFunc, ReadOnlyMemory<TDataToSign> arg, MemoryPool<byte> signaturePool) where TResult: Signature
         {
-            return sensitiveFunc(AsReadOnlySpan(), arg, signaturePool);
+            return sensitiveFunc(MemoryOwner.Memory, arg, signaturePool);
         }
     }
 }

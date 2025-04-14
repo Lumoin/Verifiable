@@ -18,7 +18,7 @@ namespace Verifiable.Tests.Core
         /// <summary>
         /// An example combining https://www.w3.org/TR/did-core/#example-19-various-service-endpoints and other pieces.
         /// </summary>
-        private string MultiServiceTestDocument { get; } = @"{
+        private string MultiServiceTestDocument { get; } = /*lang=json,strict*/ @"{
             ""@context"": ""https://www.w3.org/ns/did/v1"",
               ""id"": ""did:example:123456789abcdefghi"",
               ""verificationMethod"": [{
@@ -139,15 +139,15 @@ namespace Verifiable.Tests.Core
                     {
                         return did switch
                         {
-                            "did:key:" => new KeyDidMethod(did),                            
-                            "did:ebsi:" => new EbsiDidMethod(did),                            
+                            "did:key:" => new KeyDidMethod(did),
+                            "did:ebsi:" => new EbsiDidMethod(did),
                             _ => new GenericDidMethod(did)
                         };
                     })
                 }
             };
 
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(MultiServiceTestDocument, options);            
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(MultiServiceTestDocument, options);
             Assert.IsNotNull(deserializedDidDocument?.Id);
             Assert.IsNotNull(deserializedDidDocument?.Context);
             Assert.IsNotNull(deserializedDidDocument?.Service);
@@ -204,7 +204,7 @@ namespace Verifiable.Tests.Core
                 }
             };
 
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);            
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
             Assert.IsNotNull(deserializedDidDocument?.Id);
             Assert.IsNotNull(deserializedDidDocument?.Context);
             Assert.IsNotNull(deserializedDidDocument?.Service);
@@ -264,7 +264,7 @@ namespace Verifiable.Tests.Core
                 }
             };
 
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);            
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
             Assert.IsNotNull(deserializedDidDocument?.Id);
             Assert.IsNotNull(deserializedDidDocument?.Context);
             Assert.IsNotNull(deserializedDidDocument?.Service);
