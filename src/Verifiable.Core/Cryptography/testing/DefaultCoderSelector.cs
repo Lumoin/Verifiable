@@ -6,21 +6,24 @@ namespace Verifiable.Cryptography
 {
     public delegate BufferAllocationEncodeDelegate EncoderSelector(Type keyFormatType);
 
+    public delegate BufferAllocationDecodeDelegate DecoderSelector(Type keyFormatType);
+
+
     /// <summary>
     /// <para>Provides a way to select the correct encoder for a given key format type in the context of 
     /// decentralized identifiers (DIDs) and verifiable credentials.</para>
     /// 
     /// <para>Key formats often require specific encoding strategies to correctly transform cryptographic 
     /// key material into a suitable format for use in DID and verifiable credentials systems. The 
-    /// <see cref="DefaultEncoderSelector"/> allows developers to specify a function that selects the 
-    /// appropriate encoder based on the key format type.</para>
+    /// <see cref="DefaultCoderSelector"/> allows developers to specify a function that selects the 
+    /// appropriate encoder or decoder based on the key format type.</para>
     /// 
     /// <para>This class must be initialized before use by using the <see cref="CryptoLibrary.InitializeProviders"/>.</para>
     /// 
     /// <para>Not all key formats will require an encoder. The encoder selector function should return null 
     /// for key formats that do not require encoding.</para>
     /// </summary>
-    public static class DefaultEncoderSelector
+    public static class DefaultCoderSelector
     {
         /// <summary>
         /// <para>Gets or sets a delegate that selects an encoder based on a given key format type.
@@ -34,9 +37,15 @@ namespace Verifiable.Cryptography
         /// <para>This property must be set to a valid delegate before it is used. If it is not set, 
         /// an <see cref="InvalidOperationException"/> will be thrown when it is accessed.</para>
         /// </summary>
-        public static EncoderSelector Select { get; set; } = (Type keyFormatType) =>
+        public static EncoderSelector SelectEncoder { get; set; } = (Type keyFormatType) =>
         {
-            throw new InvalidOperationException($"The {nameof(Select)} delegate has not been initialized. Please initialize it by using the {nameof(CryptoLibrary.InitializeProviders)} method before using it.");
+            throw new InvalidOperationException($"The {nameof(SelectEncoder)} delegate has not been initialized. Please initialize it by using the {nameof(CryptoLibrary.InitializeProviders)} method before using it.");
+        };
+
+        
+        public static DecoderSelector SelectDecoder { get; set; } = (Type keyFormatType) =>
+        {
+            throw new InvalidOperationException($"The {nameof(SelectDecoder)} delegate has not been initialized. Please initialize it by using the {nameof(CryptoLibrary.InitializeProviders)} method before using it.");
         };
     }
 
@@ -63,7 +72,7 @@ namespace Verifiable.Cryptography
 
     public static class CryptoLibrary
     {
-        public static void InitializeProviders(BufferAllocationEncodeDelegate base58BtcEncoder, HashFunction sha256Implementation)
+        public static void InitializeProviders(BufferAllocationEncodeDelegate base58BtcEncoder, BufferAllocationDecodeDelegate base58BtcDecoder, HashFunction sha256Implementation)
         {
             InitializerProviders(keyFormatType =>
             {
@@ -74,6 +83,18 @@ namespace Verifiable.Cryptography
                     var kt when keyFormatType == WellKnownKeyFormats.PublicKeyMultibase => base58BtcEncoder,
                     var kt when keyFormatType == WellKnownKeyFormats.PublicKeyBase58 => base58BtcEncoder,
                     var kt when keyFormatType == WellKnownKeyFormats.PublicKeyJwk => base58BtcEncoder,
+                    _ => throw new ArgumentException($"No encoder available for key format: {keyFormatType}")
+                };
+            },
+            keyFormatType =>
+            {
+                //TODO: Here base58BtcEncoder for PublicKeyJwk works because it's not actually used. It's just a placeholder when
+                //MultibaseSerializer.DefaultKeyFormatCreator is used to create default key format.
+                return keyFormatType switch
+                {
+                    var kt when keyFormatType == WellKnownKeyFormats.PublicKeyMultibase => base58BtcDecoder,
+                    var kt when keyFormatType == WellKnownKeyFormats.PublicKeyBase58 => base58BtcDecoder,
+                    var kt when keyFormatType == WellKnownKeyFormats.PublicKeyJwk => base58BtcDecoder,
                     _ => throw new ArgumentException($"No encoder available for key format: {keyFormatType}")
                 };
             },
@@ -91,9 +112,10 @@ namespace Verifiable.Cryptography
         }
 
 
-        public static void InitializerProviders(EncoderSelector encoderSelector, HashFunctionSelector hashFunctionSelector)
+        public static void InitializerProviders(EncoderSelector encoderSelector, DecoderSelector decoderSelector, HashFunctionSelector hashFunctionSelector)
         {
-            DefaultEncoderSelector.Select = encoderSelector;
+            DefaultCoderSelector.SelectEncoder = encoderSelector;
+            DefaultCoderSelector.SelectDecoder = decoderSelector;
             DefaultHashFunctionSelector.Select = hashFunctionSelector;
         }
     }

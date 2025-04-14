@@ -6,7 +6,6 @@ using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Security;
 using System;
 using System.IO;
-using System.Runtime.CompilerServices;
 
 namespace Verifiable.BouncyCastle
 {
@@ -85,7 +84,7 @@ namespace Verifiable.BouncyCastle
                     return (fieldSizeInBits + 7) / 8 * 2;
                 }
 
-                //BouncyCasle expects the key parameter to be in ASN.1 format for SHA algorithms.
+                //BouncyCastle expects the key parameter to be in ASN.1 format for SHA algorithms.
                 //TODO: Be explicit regarding they key format instead of "knowing" it's in raw format and specifically
                 //SubjectKeyPublicKeyInfo.
                 if(signatureAlgorithm.StartsWith("SHA") && signature.Length == GetSignatureLength(publicKeyPoint.Curve.FieldSize))

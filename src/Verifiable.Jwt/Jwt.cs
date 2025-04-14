@@ -80,7 +80,7 @@ namespace Verifiable.Jwt
     public delegate TKeyIdentifier KeyIdentifierSelector<TJwtPart, TKeyIdentifier>(TJwtPart part);
 
     /// <summary>
-    /// Provides the cryptographc context based on the JWT header and key identifier to handle key material.
+    /// Provides the cryptographic context based on the JWT header and key identifier to handle key material.
     /// </summary>
     /// <typeparam name="TJwtPart">The JWT part type.</typeparam>
     /// <typeparam name="TKeyIdentifier">The key identifier type.</typeparam>
@@ -106,7 +106,7 @@ namespace Verifiable.Jwt
     /// <typeparam name="TCryptoContext">The cryptographic context type.</typeparam>
     /// <typeparam name="TSignature">The signature type of the cryptographic operation.</typeparam>
     /// <param name="cryptoContext">The crypto context.</param>
-    /// <returns>A function that matches parameters to a concrete cryptographic implementation to verifiy the signature.</returns>
+    /// <returns>A function that matches parameters to a concrete cryptographic implementation to verify the signature.</returns>
     public delegate VerifyImplementation<TSignature> VerifyImplementationMatcher<TCryptoContext, TSignature>(TCryptoContext cryptoContext) where TCryptoContext: CryptoContext;
 
     /// <summary>
@@ -160,7 +160,7 @@ namespace Verifiable.Jwt
     /// <typeparam name="TJwtPartPayload">The JWT payload type.</typeparam>
     /// <typeparam name="TResult">The result type.</typeparam>
     /// <param name="keyIdentifierSelector">Selects key identifier from a JWT part.</param>
-    /// <param name="cryptoContextLoader">Provides the cryptographc context based on the JWT header and key identifier to handle key material.</param>
+    /// <param name="cryptoContextLoader">Provides the cryptographic context based on the JWT header and key identifier to handle key material.</param>
     /// <param name="matcherDelegate">Matches a concrete implementation of cryptographic functions to given set of parameters returned by <paramref name="cryptoContextLoader"/>.</param>
     /// <param name="dataToVerify">The data to verify.</param>
     /// <param name="signatureBytes">The signature of the <paramref name="dataToVerify"/>.</param>
@@ -188,7 +188,7 @@ namespace Verifiable.Jwt
     /// <typeparam name="TResult"></typeparam>
     /// <param name="keyIdentifierSelector"></param>
     /// <param name="cryptoContextLoader"></param>
-    /// <param name="cryptoContextLoader">Provides the cryptographc context based on the JWT header and key identifier to handle key material.</param>
+    /// <param name="cryptoContextLoader">Provides the cryptographic context based on the JWT header and key identifier to handle key material.</param>
     /// <param name="matcherDelegate">Matches a concrete implementation of cryptographic functions to given set of parameters returned by <paramref name="cryptoContextLoader"/>.</param>
     /// <param name="dataToVerify">The data to verify.</param>
     /// <param name="signatureBytes">The signature of the <paramref name="dataToVerify"/>.</param>
@@ -237,7 +237,7 @@ namespace Verifiable.Jwt
 
         public string Algorithm { get; set; } = string.Empty;
 
-        public byte[] Key { get; set; } = Array.Empty<byte>();
+        public byte[] Key { get; set; } = [];
 
         public IDictionary<string, object> Parameters { get; set; } = new Dictionary<string, object>();
         
@@ -351,13 +351,13 @@ namespace Verifiable.Jwt
 
             //TODO: This can't work like this. The signer cannot expect private key bytes as input.
             //That's because the private key bytes may be inside the TPM and the signer just receives
-            //a handle it uses with the TPM to signe the bytes.
+            //a handle it uses with the TPM to signer the bytes.
             //See more at https://opensecuritytraining.info/IntroToTrustedComputing_files/Day1-7-tpm-keys.pdf.
             //
-            //SO! The signer needs to use the idea of ".WithKeyBytes" and the actualy type how to
+            //SO! The signer needs to use the idea of ".WithKeyBytes" and the actually type how to
             //key bytes will be delivered (e.g. the SensitiveMemoryHierarchy).
             //SO! If signingFunctionSelector RETURNS a delegate that takes further a delegate that
-            //prepares the key bytes either to the TPM for the actual signer OR can retrieeve
+            //prepares the key bytes either to the TPM for the actual signer OR can retrieve
             //them to be used in-memory, thi would work.
             //So, the first step is to have the delegate to take another delegate as input.
             //How does the signer know which way to access the bytes if it doesn't know which to

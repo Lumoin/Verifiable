@@ -21,7 +21,7 @@ namespace Verifiable.Core.Builders
             CryptoAlgorithm alg = (CryptoAlgorithm)publicKey.Tag[typeof(CryptoAlgorithm)];
             Purpose purp = (Purpose)publicKey.Tag[typeof(Purpose)];
 
-            return KeyHeaderConversion.DefaultAlgorithmToBase58Converter(alg, purp, publicKey.AsReadOnlySpan(), DefaultEncoderSelector.Select(WellKnownKeyFormats.PublicKeyMultibase));
+            return VerifiableCryptoFormatConversions.DefaultAlgorithmToBase58Converter(alg, purp, publicKey.AsReadOnlySpan(), DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyMultibase));
         }
     }
 
