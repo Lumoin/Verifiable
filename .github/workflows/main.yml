@@ -35,15 +35,16 @@ env:
   GITHUB_FEED: https://nuget.pkg.github.com/lumoin/
 
   # These are the Nuget packages that will be packed and uploaded.
-  VERIFIABLE: Verifiable
-  VERIFIABLE_BOUNCYCASTLE: Verifiable.BouncyCastle
-  VERIFIABLE_CORE: Verifiable.Core
-  VERIFIABLE_DECENTRALIZEDWEBNODE: Verifiable.DecentralizedWebNode
-  VERIFIABLE_JWT: Verifiable.Jwt
-  VERIFIABLE_NSEC: Verifiable.NSec
-  VERIFIABLE_MICROSOFT: Verifiable.Microsoft
-  VERIFIABLE_SIDETREE: Verifiable.Sidetree
-  VERIFIABLE_TPM: Verifiable.Tpm
+  PROJECTS: >
+    Verifiable
+    Verifiable.BouncyCastle
+    Verifiable.Core
+    Verifiable.DecentralizedWebNode
+    Verifiable.Jwt
+    Verifiable.NSec
+    Verifiable.Microsoft
+    Verifiable.Sidetree
+    Verifiable.Tpm
 
   # These are the test projects that will be reported.
   VERIFIABLE_TESTS: Verifiable.Tests
@@ -73,14 +74,20 @@ env:
 
 jobs:
   build:
+    name: Build Verifiable packages
+    permissions:
+      checks: write
+      pull-requests: write
+      id-token: write
+      attestations: write
+      contents: read
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
-
-    steps:
     
+    steps:
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
       uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf
@@ -88,40 +95,6 @@ jobs:
         disable-sudo: true
         egress-policy: block
         allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
-         
-    
-    # Windows builds may have insufficient resource limits, so they're increased.
-    - name: Configure Windows Pagefile
-      if: ${{ matrix.os == 'windows-latest' }}
-      uses: al-cheb/configure-pagefile-action@a3b6ebd6b634da88790d9c58d4b37a7f4a7b8708
-      with:
-          minimum-size: 8GB
-          maximum-size: 32GB
-          disk-root: "D:"
-
-    # This needs to run always. Only when there is a problem that could
-    # be because of system changes.
-    # - name: Windows system information
-    #  if: ${{ matrix.os == 'windows-latest' }}
-    #  run: Get-ComputerInfo
-
-    # - name: Get Windows TPM information
-    #  if: ${{ matrix.os == 'windows-latest' }}
-    #  run: Get-Tpm
-
-    # This follows instructions at https://wiki.ubuntu.com/TPM/Testing.
-    # - name: Install Linux TPM 2.0 module (tpm2-abrmd)
-    #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  run: |
-    #    sudo apt-get update
-    #    sudo apt-get install tpm2-abrmd
-    #    sudo apt-get install libtss2-tcti-tabrmd-dev
-
-    #- name: Check Linux TPM 2.0 module functionality
-    #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  run: |
-    #    sudo service tpm2-abrmd start
-    #    sudo tpm2-abrmd --tcti=mssim --allow-root --logger=stdout
 
     - name: Checkout code
       uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
@@ -129,12 +102,17 @@ jobs:
         fetch-depth: 0
         fetch-tags: true               
 
-    - name: Setup .NET SDK
+    - name: Set up .NET SDK
       uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
         global-json-file: global.json
+
+    - name: Set up .NET 9 for NuGet package validation
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+      with:
+        dotnet-version: 9.0.x        
     
     - name: Install dependencies
       run: dotnet restore --locked-mode
@@ -144,10 +122,7 @@ jobs:
 
     - name: Add Problem Matcher for dotnet-format
       uses: xt0rted/dotnet-format-problem-matcher@b90c4f18e3daa4f8fd266e41eba4f351b2e00b75
-
-    # - name: Run dotnet format
-    #  run: dotnet format --check
-          
+              
     # The version numbers are determined and set here so it can be set appropriately to code and NuGet packages.
     # See explanation at https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
     - name: Set NuGet packages and suffix version
@@ -186,16 +161,10 @@ jobs:
         fi      
       shell: bash
             
+    # Note that code coverage requires 'MessageUponIsolationViolation'.
     - name: Build
-      # At the moment Verifiable.Tests cannot be built with -isolate alone due to Coverlet.
       run: dotnet build --binaryLogger --tl --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore --property:ContinuousIntegrationBuild=true --property:Version=${{ env.VERSION }} --property:InformationalVersion=${{ env.PACKAGE_VERSION }} --property:AssemblyVersion=${{ env.TAG_VERSION }} --property:FileVersion=${{ env.TAG_VERSION }}
       timeout-minutes: 5
-
-    # - name: Set PR markdown title name
-    #  run: |
-    #        echo "title=Test Run (${{ github.run_number }})" >> $GITHUB_ENV
-    #        echo "file_name=TestReport.${{ github.run_number }}.md" >> $GITHUB_ENV
-    #  shell: bash
 
     # MacOS is skipped at the moment due to issues with some .NET crypto libraries.
     # Until tests are a fixed a bit. The coverage from the executable does not have a file suffix in Linux.
@@ -240,15 +209,7 @@ jobs:
     - name: ReportGenerator
       if: ${{ matrix.os == 'ubuntu-latest' }}      
       run: dotnet reportgenerator -filefilters:'-**/obj/**;-**/*.g.cs' -assemblyfilters:'+Verifiable*' -reports:'${{ github.workspace }}/reports/coverage.cobertura.xml' -targetdir:'${{ github.workspace }}/reports/coverage/' -reporttypes:'HtmlInline;Cobertura;MarkdownSummary'
-           
-    # - name: Publish coverage report
-    #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: 5monkeys/cobertura-action@master
-    #  with:
-    #    path: '${{ github.workspace }}/reports/coverage/Cobertura.xml'
-    #    repo_token: ${{ secrets.GITHUB_TOKEN }}
-    #    minimum_coverage: 75
-
+    
     - name: Create test summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
       uses: EnricoMi/publish-unit-test-result-action@afb2984f4d89672b2f9d9c13ae23d53779671984      
@@ -263,65 +224,45 @@ jobs:
         path: '${{ github.workspace }}/reports/coverage/Summary.md'
         recreate: true     
 
-    # - name: Comment PR with the generated test Markdown
-    #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db
-    #  with:
-    #    path: ${{ env.file_name }}
-
-    # - name: Upload PR build information artefact
-    #  if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-    #  uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-    #  with:
-    #    name: 'Test Run'
-    #    path: ${{ github.workspace }}/${{ env.file_name }}
-
-    # - name: Comment PR with the generated test Markdown
-    #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: machine-learning-apps/pr-comment@78e77cd435e0f9706512ea294d846058ae46f7ff
-    #  env:
-    #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    #  with:
-    #    path: ${{ env.file_name }}
-
-    # - name: The sbom-tool does not generate the output directory and fails if it not present.
-    - name: Create SBOM output directory
-      run: mkdir -p "${{ github.workspace }}/${{ matrix.os }}/sbom/"
-
-    # There may a difference in libraries between platforms, so the tool is being run on all platforms.
-    - name: Run BOM analysis
-      run: dotnet tool run sbom-tool generate -DeleteManifestDirIfPresent true -BuildDropPath "${{ github.workspace }}/${{ matrix.os }}/sbom/" -FetchLicenseInformation true -EnablePackageMetadataParsing true -BuildComponentPath . -PackageName "Verifiable" -PackageSupplier "Lumoin" -NamespaceUriBase "https://lumoin.com/verifiable" -PackageVersion ${{ env.PACKAGE_VERSION }} -Verbosity Verbose
-
-    - name: Pack NuGet files
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+    - name: Pack NuGet packages
+      if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' }}
       run: |
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE/$VERIFIABLE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_BOUNCYCASTLE/$VERIFIABLE_BOUNCYCASTLE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:NoWarn=NU5104 -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_CORE/$VERIFIABLE_CORE.csproj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_DECENTRALIZEDWEBNODE/$VERIFIABLE_DECENTRALIZEDWEBNODE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_JWT/$VERIFIABLE_JWT.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:NoWarn=NU5104 -property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_NSEC/$VERIFIABLE_NSEC.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_MICROSOFT/$VERIFIABLE_MICROSOFT.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_SIDETREE/$VERIFIABLE_SIDETREE.*proj
-        dotnet pack --verbosity normal --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --output nupkgs --property:PackageVersion=$PACKAGE_VERSION src/$VERIFIABLE_TPM/$VERIFIABLE_TPM.*proj
+        for project in $PROJECTS; do
+          path="src/$project/$project.csproj"
+          echo "Packing $path"
+          dotnet pack --verbosity normal \
+            --configuration "$BUILD_CONFIGURATION" \
+            --no-build \
+            --output nupkgs \
+            --property:PackageVersion="${PACKAGE_VERSION%%+*}" \
+            "$path"
+        done
 
-    # Note that on Windows this would be simply  "dotnet dotnet-validate package local ./snupkgs/*.nupkg", the handling of an array of paths works directly.
-    # - name: Validate generated NuGet files
-    #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  run: |
-    #    for file in ./nupkgs/*.nupkg; do
-    #      dotnet dotnet-validate package local "$file"
-    #    done
+    # Note that on Windows this would be simply "dotnet dotnet-validate package local ./snupkgs/*.nupkg", the handling of an array of paths works directly.
+    - name: Validate generated NuGet files
+      if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
+      run: |
+        for file in ./nupkgs/*.nupkg; do
+          dotnet dotnet-validate package local "$file"
+        done
 
+    # Do SLSA Level 3: https://github.blog/enterprise-software/devsecops/enhance-build-security-and-reach-slsa-level-3-with-github-artifact-attestations/.
+    - name: Generate artifact attestation
+      if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
+      uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2
+      with:
+        subject-path: './nupkgs/*.nupkg'
+    
     - name: Upload Verifiable NuGet packages
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
         name: nupkg
-        path: ./nupkgs/*.*          
+        path: ./nupkgs/*.*
 
   # The release idea is inspired by https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
   prerelease:
+      name: Create and upload Verifiable pre-release packages to GitHub
       permissions:
          # For setup-dotnet to create package.
         packages: write
@@ -345,6 +286,7 @@ jobs:
           run: dotnet nuget push "**/*.nupkg" --source $GITHUB_FEED --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
 
   deploy:
+    name: Create and upload Verifiable pre-release packages to NuGet.org
     permissions:
         # For setup-dotnet to create package.
       packages: write

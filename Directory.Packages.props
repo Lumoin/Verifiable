@@ -24,5 +24,6 @@
     <PackageVersion Include="WinSharpFuzz" Version="1.0.0" />
     <PackageVersion Include="CsCheck" Version="4.2.0" />
     <PackageVersion Include="MSTest" Version="3.8.3" />
+    <PackageVersion Include="Microsoft.Sbom.Targets" Version="3.1.0" />
   </ItemGroup>
 </Project>
