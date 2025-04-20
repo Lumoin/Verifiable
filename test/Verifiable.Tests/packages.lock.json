@@ -48,6 +48,12 @@
           "Microsoft.TestPlatform.TestHost": "17.13.0"
         }
       },
+      "Microsoft.Sbom.Targets": {
+        "type": "Direct",
+        "requested": "[3.1.0, )",
+        "resolved": "3.1.0",
+        "contentHash": "DIQsbVmWlIls255FP+20Lm5dhXiMXM/i4dWh+7Gnt0qnrTBNjR1nh1Ulm7JJVB2tTOI7DjIiDFBF2xn6FR9MJQ=="
+      },
       "Microsoft.Testing.Extensions.CodeCoverage": {
         "type": "Direct",
         "requested": "[17.13.1, )",

@@ -2,6 +2,12 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
+      "Microsoft.Sbom.Targets": {
+        "type": "Direct",
+        "requested": "[3.1.0, )",
+        "resolved": "3.1.0",
+        "contentHash": "DIQsbVmWlIls255FP+20Lm5dhXiMXM/i4dWh+7Gnt0qnrTBNjR1nh1Ulm7JJVB2tTOI7DjIiDFBF2xn6FR9MJQ=="
+      },
       "NSec.Cryptography": {
         "type": "Direct",
         "requested": "[24.4.0, )",

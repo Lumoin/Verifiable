@@ -57,6 +57,13 @@
                 "winsharpfuzz"
             ],
             "rollForward": false
+        },
+        "dotnet-validate": {
+            "version": "0.0.1-preview.537",
+            "commands": [
+                "dotnet-validate"
+            ],
+            "rollForward": false
         }
     }
 }
