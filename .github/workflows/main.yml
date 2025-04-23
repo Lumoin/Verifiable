@@ -50,11 +50,7 @@ env:
   VERIFIABLE_TESTS: Verifiable.Tests
 
   # These are allowed endpoints these actions can contact.
-  COMMON_ALLOWED_ENDPOINTS: >
-    # These are needed at least in Linux, see https://github.com/dotnet/core/issues/9671. Safe to remove 2025-04-01?
-    dotnetcli.azureedge.net:443
-    dotnetbuilds.azureedge.net:443
-
+  COMMON_ALLOWED_ENDPOINTS: >    
     api.clearlydefined.io:443
     aka.ms:443
     api.github.com:443
@@ -65,6 +61,8 @@ env:
     dashboard.stryker-mutator.io:443
     github.com:443
     nuget.pkg.github.com:443
+    fulcio.sigstore.dev:443
+    rekor.sigstore.dev:443
     cacerts.digicert.com:80
     ts-crl.ws.symantec.com:80
     crl3.digicert.com:80
@@ -246,10 +244,9 @@ jobs:
           dotnet dotnet-validate package local "$file"
         done
 
-    # Do SLSA Level 3: https://github.blog/enterprise-software/devsecops/enhance-build-security-and-reach-slsa-level-3-with-github-artifact-attestations/.
     - name: Generate artifact attestation
       if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
-      uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2
+      uses: lumoin/trusted-devsecops/.github/actions/sign-artifact@bd2b7f91e73d758f3126562d6a569fc0f31814ee
       with:
         subject-path: './nupkgs/*.nupkg'
     
@@ -258,7 +255,7 @@ jobs:
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
         name: nupkg
-        path: ./nupkgs/*.*
+        path: ./nupkgs/*.* 
 
   # The release idea is inspired by https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
   prerelease:
