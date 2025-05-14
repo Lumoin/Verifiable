@@ -4,9 +4,9 @@
     "net10.0": {
       "Microsoft.Sbom.Targets": {
         "type": "Direct",
-        "requested": "[3.1.0, )",
-        "resolved": "3.1.0",
-        "contentHash": "DIQsbVmWlIls255FP+20Lm5dhXiMXM/i4dWh+7Gnt0qnrTBNjR1nh1Ulm7JJVB2tTOI7DjIiDFBF2xn6FR9MJQ=="
+        "requested": "[4.0.2, )",
+        "resolved": "4.0.2",
+        "contentHash": "D5k0ewojfhIeqKVSU2kRQYvYBiSFkmipAyDxrZcfRDiYgDLjxbgQMUTyTDmycJRaDxsUiSyLmDxVJVbW9lq9Cw=="
       },
       "Portable.BouncyCastle": {
         "type": "Direct",
@@ -31,7 +31,7 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "SimpleBase": "[4.0.2, )",
+          "SimpleBase": "[5.2.0, )",
           "Verifiable.Jwt": "[0.0.0, )"
         }
       },
@@ -40,9 +40,9 @@
       },
       "SimpleBase": {
         "type": "CentralTransitive",
-        "requested": "[4.0.2, )",
-        "resolved": "4.0.2",
-        "contentHash": "sNKHP2Qzy4DafamgH44UGg1YeyHFT08AMgHPraxYt4CVBoHHYD5f0MjbBfdmtGca69xikPU5aV8H+MMP7ZnfIg=="
+        "requested": "[5.2.0, )",
+        "resolved": "5.2.0",
+        "contentHash": "HCl6mP82dSqcPTafc03p8h8I9ORo9uYi0PIBte5NmaX4qru9rJoV/iyUZnI+863DNtzCnXEgA8Opx8Z3kF47PA=="
       }
     }
   }

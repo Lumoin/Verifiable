@@ -4,17 +4,17 @@
     "net10.0": {
       "Microsoft.Sbom.Targets": {
         "type": "Direct",
-        "requested": "[3.1.0, )",
-        "resolved": "3.1.0",
-        "contentHash": "DIQsbVmWlIls255FP+20Lm5dhXiMXM/i4dWh+7Gnt0qnrTBNjR1nh1Ulm7JJVB2tTOI7DjIiDFBF2xn6FR9MJQ=="
+        "requested": "[4.0.2, )",
+        "resolved": "4.0.2",
+        "contentHash": "D5k0ewojfhIeqKVSU2kRQYvYBiSFkmipAyDxrZcfRDiYgDLjxbgQMUTyTDmycJRaDxsUiSyLmDxVJVbW9lq9Cw=="
       },
       "NSec.Cryptography": {
         "type": "Direct",
-        "requested": "[24.4.0, )",
-        "resolved": "24.4.0",
-        "contentHash": "R89OF0T5OY9QnPRoTsMCaPKMqtXcWKZSWAO4zyUaFHI+ZRMgXU7WaIwg/rPP3vOfdaLl8HdUHWkDB+2B9FOO7g==",
+        "requested": "[25.4.0, )",
+        "resolved": "25.4.0",
+        "contentHash": "Z3wPpG0xefMLmhn9T+Ka/EzAmMQPT0THL/5E4lf9cXI/N9rbGH0G23ZFpRcPnD0ast2k7ieG6QSVNIjmfPCXBQ==",
         "dependencies": {
-          "libsodium": "[1.0.19, 1.0.20)"
+          "libsodium": "[1.0.20.1, 1.0.21)"
         }
       },
       "SIL.ReleaseTasks": {
@@ -28,8 +28,8 @@
       },
       "libsodium": {
         "type": "Transitive",
-        "resolved": "1.0.19",
-        "contentHash": "tupm/HViwBN6Knd/gckR+cLaJGR39GLmiU4iDMM5hp/1BoczMr8fwJhSU+3/C2V4hi9nBK/4FICRKtTLU30TCA=="
+        "resolved": "1.0.20.1",
+        "contentHash": "pkiceEqJDQFHjbga3k/oPfTVX9g+GKJZ1VrkuiLhaymt9YNw1Dr7cX9hNuZuNaWcr9WD0moW55k4pMwzQ7JaZQ=="
       },
       "Markdig.Signed": {
         "type": "Transitive",
@@ -39,7 +39,7 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "SimpleBase": "[4.0.2, )",
+          "SimpleBase": "[5.2.0, )",
           "Verifiable.Jwt": "[0.0.0, )"
         }
       },
@@ -48,9 +48,9 @@
       },
       "SimpleBase": {
         "type": "CentralTransitive",
-        "requested": "[4.0.2, )",
-        "resolved": "4.0.2",
-        "contentHash": "sNKHP2Qzy4DafamgH44UGg1YeyHFT08AMgHPraxYt4CVBoHHYD5f0MjbBfdmtGca69xikPU5aV8H+MMP7ZnfIg=="
+        "requested": "[5.2.0, )",
+        "resolved": "5.2.0",
+        "contentHash": "HCl6mP82dSqcPTafc03p8h8I9ORo9uYi0PIBte5NmaX4qru9rJoV/iyUZnI+863DNtzCnXEgA8Opx8Z3kF47PA=="
       }
     }
   }
