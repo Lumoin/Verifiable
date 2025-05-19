@@ -4,9 +4,9 @@
     "net10.0": {
       "Microsoft.Sbom.Targets": {
         "type": "Direct",
-        "requested": "[4.0.2, )",
-        "resolved": "4.0.2",
-        "contentHash": "D5k0ewojfhIeqKVSU2kRQYvYBiSFkmipAyDxrZcfRDiYgDLjxbgQMUTyTDmycJRaDxsUiSyLmDxVJVbW9lq9Cw=="
+        "requested": "[4.0.3, )",
+        "resolved": "4.0.3",
+        "contentHash": "xwHbbj9gLj1HZzLVEM2UpQM7ZY7FkiEs/nRkt6G1H7mR/14aNhjsskRoI7K7CezHJA4cASsGxTvqorbUXTI1TQ=="
       },
       "SIL.ReleaseTasks": {
         "type": "Direct",
@@ -19,9 +19,9 @@
       },
       "SimpleBase": {
         "type": "Direct",
-        "requested": "[5.2.0, )",
-        "resolved": "5.2.0",
-        "contentHash": "HCl6mP82dSqcPTafc03p8h8I9ORo9uYi0PIBte5NmaX4qru9rJoV/iyUZnI+863DNtzCnXEgA8Opx8Z3kF47PA=="
+        "requested": "[5.3.0, )",
+        "resolved": "5.3.0",
+        "contentHash": "HQvJNyrBl6u5W9Bi2JQg0pEB1JHJ+dOiRBwxqWMkG/FYBJ351JHzLOexcxS/jzb9UGUVg1ni46kAxzerWwNtUQ=="
       },
       "Markdig.Signed": {
         "type": "Transitive",

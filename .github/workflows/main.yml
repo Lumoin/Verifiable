@@ -22,7 +22,7 @@ env:
   # Tests check that platform TPM tests must be run on Windows or Linux,
   # MacOS tests are skipped.
   USE_PLATFORM_TPM: true
-  
+
   DOTNET_ENVIRONMENT: CI
   BUILD_CONFIGURATION: Release
   DOTNET_CLI_TELEMETRY_OPTOUT: true
@@ -50,7 +50,7 @@ env:
   VERIFIABLE_TESTS: Verifiable.Tests
 
   # These are allowed endpoints these actions can contact.
-  COMMON_ALLOWED_ENDPOINTS: >    
+  COMMON_ALLOWED_ENDPOINTS: >
     api.clearlydefined.io:443
     aka.ms:443
     api.github.com:443
@@ -84,7 +84,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
-    
+
     steps:
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -98,7 +98,7 @@ jobs:
       uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
       with:
         fetch-depth: 0
-        fetch-tags: true               
+        fetch-tags: true
 
     - name: Set up .NET SDK
       uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
@@ -110,25 +110,33 @@ jobs:
     - name: Set up .NET 9 for NuGet package validation
       uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
       with:
-        dotnet-version: 9.0.x        
-    
+        dotnet-version: 9.0.x
+
     - name: Install dependencies
       run: dotnet restore --locked-mode
+
+    - name: Cache local .NET tools
+      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+      with:
+        path: ~/.dotnet/tools
+        key: dotnet-tools-${{ runner.os }}-${{ hashFiles('.config/dotnet-tools.json') }}
+        restore-keys: |
+          dotnet-tools-${{ runner.os }}-
 
     - name: Restore local .NET tools
       run: dotnet tool restore
 
     - name: Add Problem Matcher for dotnet-format
       uses: xt0rted/dotnet-format-problem-matcher@b90c4f18e3daa4f8fd266e41eba4f351b2e00b75
-              
+
     # The version numbers are determined and set here so it can be set appropriately to code and NuGet packages.
     # See explanation at https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
     - name: Set NuGet packages and suffix version
       run: |
         # Bash script to determine the version and version suffix for CI/CD
-        # Use git to find the latest tag; if none are found, default to "0.0.1".        
+        # Use git to find the latest tag; if none are found, default to "0.0.1".
         latestTag=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.1)
-        
+
         # Case 1: A release is being created.
         # Extract the version from the tag and add a suffix with the short SHA.
         if [[ $GITHUB_EVENT_NAME == 'release' ]]; then
@@ -140,15 +148,15 @@ jobs:
           echo "PACKAGE_VERSION=${VERSION}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "TAG_VERSION=${VERSION}" >> "$GITHUB_ENV"
-        
+
         # Case 2: The 'develop' branch.
         # Use the latestTag as the base version and add a suffix with "develop", the run_id, and the short SHA.
         elif [[ $GITHUB_REF == 'refs/heads/develop' ]]; then
           # Set PACKAGE_VERSION and PACKAGE, and add a VERSION_SUFFIX for clarity in identifying the development build, run, and commit.
-          echo "PACKAGE_VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"          
+          echo "PACKAGE_VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           echo "VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           echo "TAG_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
-        
+
         # Case 3: Any other build (e.g., feature branches).
         # Use the latestTag as the base version and add a suffix with "build", the run_id, and the short SHA.
         else
@@ -156,9 +164,9 @@ jobs:
           echo "PACKAGE_VERSION=${latestTag//v}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           echo "VERSION=${latestTag//v}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           echo "TAG_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
-        fi      
+        fi
       shell: bash
-            
+
     # Note that code coverage requires 'MessageUponIsolationViolation'.
     - name: Build
       run: dotnet build --binaryLogger --tl --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore --property:ContinuousIntegrationBuild=true --property:Version=${{ env.VERSION }} --property:InformationalVersion=${{ env.PACKAGE_VERSION }} --property:AssemblyVersion=${{ env.TAG_VERSION }} --property:FileVersion=${{ env.TAG_VERSION }}
@@ -205,12 +213,12 @@ jobs:
 
     # This step is run always (e.g. also for non-PRs) so the results can be inspected on the command line too.
     - name: ReportGenerator
-      if: ${{ matrix.os == 'ubuntu-latest' }}      
+      if: ${{ matrix.os == 'ubuntu-latest' }}
       run: dotnet reportgenerator -filefilters:'-**/obj/**;-**/*.g.cs' -assemblyfilters:'+Verifiable*' -reports:'${{ github.workspace }}/reports/coverage.cobertura.xml' -targetdir:'${{ github.workspace }}/reports/coverage/' -reporttypes:'HtmlInline;Cobertura;MarkdownSummary'
-    
+
     - name: Create test summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: EnricoMi/publish-unit-test-result-action@afb2984f4d89672b2f9d9c13ae23d53779671984      
+      uses: EnricoMi/publish-unit-test-result-action@afb2984f4d89672b2f9d9c13ae23d53779671984
       with:
         trx_files: '${{ github.workspace }}/reports/**/*.trx'
 
@@ -220,7 +228,7 @@ jobs:
       with:
         header: Report
         path: '${{ github.workspace }}/reports/coverage/Summary.md'
-        recreate: true     
+        recreate: true
 
     - name: Pack NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' }}
@@ -249,13 +257,13 @@ jobs:
       uses: lumoin/trusted-devsecops/.github/actions/sign-artifact@bd2b7f91e73d758f3126562d6a569fc0f31814ee
       with:
         subject-path: './nupkgs/*.nupkg'
-    
+
     - name: Upload Verifiable NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
         name: nupkg
-        path: ./nupkgs/*.* 
+        path: ./nupkgs/*.*
 
   # The release idea is inspired by https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
   prerelease:

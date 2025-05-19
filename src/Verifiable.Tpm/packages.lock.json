@@ -4,9 +4,9 @@
     "net10.0": {
       "Microsoft.Sbom.Targets": {
         "type": "Direct",
-        "requested": "[4.0.2, )",
-        "resolved": "4.0.2",
-        "contentHash": "D5k0ewojfhIeqKVSU2kRQYvYBiSFkmipAyDxrZcfRDiYgDLjxbgQMUTyTDmycJRaDxsUiSyLmDxVJVbW9lq9Cw=="
+        "requested": "[4.0.3, )",
+        "resolved": "4.0.3",
+        "contentHash": "xwHbbj9gLj1HZzLVEM2UpQM7ZY7FkiEs/nRkt6G1H7mR/14aNhjsskRoI7K7CezHJA4cASsGxTvqorbUXTI1TQ=="
       },
       "Microsoft.TSS": {
         "type": "Direct",
