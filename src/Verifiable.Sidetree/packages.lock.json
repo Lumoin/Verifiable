@@ -25,7 +25,7 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "SimpleBase": "[5.3.0, )",
+          "SimpleBase": "[5.4.1, )",
           "Verifiable.Jwt": "[0.0.0, )"
         }
       },
@@ -34,9 +34,9 @@
       },
       "SimpleBase": {
         "type": "CentralTransitive",
-        "requested": "[5.3.0, )",
-        "resolved": "5.3.0",
-        "contentHash": "HQvJNyrBl6u5W9Bi2JQg0pEB1JHJ+dOiRBwxqWMkG/FYBJ351JHzLOexcxS/jzb9UGUVg1ni46kAxzerWwNtUQ=="
+        "requested": "[5.4.1, )",
+        "resolved": "5.4.1",
+        "contentHash": "I3a7S1SMFzML3rnhuQ/b0RSgOlcfQPfvgSuvhjzSfBywQbHgnYYg3hb7qI+U18bwzYp1o5eufaNvj91yyNYGbQ=="
       }
     }
   }
