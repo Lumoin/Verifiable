@@ -70,6 +70,9 @@ env:
     s.symcb.com:80
     ocsp.digicert.com:80
 
+    # Dotnet tools download CRL list from here.
+    www.microsoft.com:80
+
 jobs:
   build:
     name: Build Verifiable packages
