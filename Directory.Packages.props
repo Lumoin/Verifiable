@@ -4,10 +4,18 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="BenchmarkDotNet" Version="0.15.1" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.2" />
     <PackageVersion Include="dotNetRdf" Version="3.3.2" />
     <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CrashDump" Version="1.7.3" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="1.7.3" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.HotReload" Version="1.7.3" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.Retry" Version="1.7.3" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="1.7.3" />
     <PackageVersion Include="Microsoft.TSS" Version="2.1.1" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="3.9.3" />
+    <PackageVersion Include="MSTest.TestFramework" Version="3.9.3" />
     <PackageVersion Include="NSec.Cryptography" Version="25.4.0" />
     <PackageVersion Include="Portable.BouncyCastle" Version="1.9.0" />
     <PackageVersion Include="SharpFuzz" Version="2.2.0" />
