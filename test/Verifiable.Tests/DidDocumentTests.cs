@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core;
 using Verifiable.Core.Did;
+using Verifiable.Core.Did.CryptographicSuites;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Jwt;
 using Verifiable.Tests.TestInfrastructure;
@@ -18,7 +19,7 @@ namespace Verifiable.Tests.Core
         /// <summary>
         /// An example combining https://www.w3.org/TR/did-core/#example-19-various-service-endpoints and other pieces.
         /// </summary>
-        private string MultiServiceTestDocument { get; } = @"{
+        private string MultiServiceTestDocument { get; } = /*lang=json,strict*/ @"{
             ""@context"": ""https://www.w3.org/ns/did/v1"",
               ""id"": ""did:example:123456789abcdefghi"",
               ""verificationMethod"": [{
@@ -131,7 +132,20 @@ namespace Verifiable.Tests.Core
                     new SingleOrArrayControllerConverter(),
                     new SingleOrArrayVerificationMethodConverter(),
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(),
+                    new VerificationMethodConverter(
+                        cryptoSuite => cryptoSuite switch
+                        {
+                            "JsonWebKey2020" => JsonWebKey2020.Instance,
+                            "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
+                            "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
+                            "Multikey" => Multikey.Instance,
+                            "RsaVerificationKey2018" => RsaVerificationKey2018.Instance,
+                            "JwsVerificationKey2020" => JwsVerificationKey2020.Instance,
+                            "Ed25519VerificationKey2018"  => Ed25519VerificationKey2018.Instance,
+                            _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
+                        },
+                        VerificationMethodConverter.DefaultTypeMap
+                    ),
                     new ServiceConverterFactory(serviceTypeMap.ToImmutableDictionary()),
                     new JsonLdContextConverter(),
                     new DictionaryStringObjectJsonConverter(),
@@ -139,15 +153,15 @@ namespace Verifiable.Tests.Core
                     {
                         return did switch
                         {
-                            "did:key:" => new KeyDidMethod(did),                            
-                            "did:ebsi:" => new EbsiDidMethod(did),                            
+                            "did:key:" => new KeyDidMethod(did),
+                            "did:ebsi:" => new EbsiDidMethod(did),
                             _ => new GenericDidMethod(did)
                         };
                     })
                 }
             };
 
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(MultiServiceTestDocument, options);            
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(MultiServiceTestDocument, options);
             Assert.IsNotNull(deserializedDidDocument?.Id);
             Assert.IsNotNull(deserializedDidDocument?.Context);
             Assert.IsNotNull(deserializedDidDocument?.Service);
@@ -188,7 +202,20 @@ namespace Verifiable.Tests.Core
                 Converters =
                 {
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(),
+                    new VerificationMethodConverter(
+                        cryptoSuite => cryptoSuite switch
+                        {
+                            "JsonWebKey2020" => JsonWebKey2020.Instance,
+                            "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
+                            "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
+                            "Multikey" => Multikey.Instance,
+                            "RsaVerificationKey2018" => RsaVerificationKey2018.Instance,
+                            "JwsVerificationKey2020" => JwsVerificationKey2020.Instance,
+                            "Ed25519VerificationKey2018"  => Ed25519VerificationKey2018.Instance,
+                            _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
+                        },
+                        VerificationMethodConverter.DefaultTypeMap
+                    ),
                     new ServiceConverterFactory(serviceTypeMap.ToImmutableDictionary()),
                     new JsonLdContextConverter(),
                     new DictionaryStringObjectJsonConverter(),
@@ -204,7 +231,7 @@ namespace Verifiable.Tests.Core
                 }
             };
 
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);            
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
             Assert.IsNotNull(deserializedDidDocument?.Id);
             Assert.IsNotNull(deserializedDidDocument?.Context);
             Assert.IsNotNull(deserializedDidDocument?.Service);
@@ -241,15 +268,20 @@ namespace Verifiable.Tests.Core
                 Converters =
                 {
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(cryptoSuite =>
-                    {
-                        return cryptoSuite switch
+                    new VerificationMethodConverter(
+                        cryptoSuite => cryptoSuite switch
                         {
-                            "JsonWebKey2020" => new JsonWebKey2020(),
-                            "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
-                            _ => new CryptoSuite(cryptoSuite, new List<string>())
-                        };
-                    },verificationMethodTypeMap.ToImmutableDictionary()),
+                            "JsonWebKey2020" => JsonWebKey2020.Instance,
+                            "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
+                            "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
+                            "Multikey" => Multikey.Instance,
+                            "RsaVerificationKey2018" => RsaVerificationKey2018.Instance,
+                            "JwsVerificationKey2020" => JwsVerificationKey2020.Instance,
+                            "Ed25519VerificationKey2018"  => Ed25519VerificationKey2018.Instance,
+                            _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
+                        },
+                        verificationMethodTypeMap.ToImmutableDictionary()
+                    ),
                     new ServiceConverterFactory(),
                     new JsonLdContextConverter(),
                     new DidIdConverter(did =>
@@ -264,7 +296,7 @@ namespace Verifiable.Tests.Core
                 }
             };
 
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);            
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
             Assert.IsNotNull(deserializedDidDocument?.Id);
             Assert.IsNotNull(deserializedDidDocument?.Context);
             Assert.IsNotNull(deserializedDidDocument?.Service);
@@ -296,7 +328,20 @@ namespace Verifiable.Tests.Core
                 Converters =
                 {
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(),
+                    new VerificationMethodConverter(
+                        cryptoSuite => cryptoSuite switch
+                        {
+                            "JsonWebKey2020" => JsonWebKey2020.Instance,
+                            "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
+                            "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
+                            "Multikey" => Multikey.Instance,
+                            "RsaVerificationKey2018" => RsaVerificationKey2018.Instance,
+                            "JwsVerificationKey2020" => JwsVerificationKey2020.Instance,
+                            "Ed25519VerificationKey2018"  => Ed25519VerificationKey2018.Instance,
+                            _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
+                        },
+                        VerificationMethodConverter.DefaultTypeMap
+                    ),
                     new ServiceConverterFactory(),
                     new JsonLdContextConverter(),
                     new DictionaryStringObjectJsonConverter(),
@@ -356,15 +401,22 @@ namespace Verifiable.Tests.Core
                 {
                     new SingleOrArrayControllerConverter(),
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(cryptoSuite =>
-                    {
-                        return cryptoSuite switch
+                    new VerificationMethodConverter
+                    (
+                        cryptoSuite => cryptoSuite switch
                         {
-                            "JsonWebKey2020" => new JsonWebKey2020(),
-                            "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
-                            _ => new CryptoSuite(cryptoSuite, new List<string>())
-                        };
-                    },verificationMethodTypeMap.ToImmutableDictionary()),
+                            "JsonWebKey2020" => JsonWebKey2020.Instance,
+                            "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
+                            "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
+                            "Multikey" => Multikey.Instance,
+                            "RsaVerificationKey2018" => RsaVerificationKey2018.Instance,
+                            "JwsVerificationKey2020" => JwsVerificationKey2020.Instance,
+                            "Ed25519VerificationKey2018"  => Ed25519VerificationKey2018.Instance,
+                            "X25519KeyAgreementKey2019"  => X25519KeyAgreementKey2019.Instance,
+                            _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
+                        },
+                        verificationMethodTypeMap.ToImmutableDictionary()
+                    ),
                     new ServiceConverterFactory(),
                     new JsonLdContextConverter(),
                     new DictionaryStringObjectJsonConverter(),

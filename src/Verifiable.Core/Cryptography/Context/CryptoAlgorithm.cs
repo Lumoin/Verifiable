@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 
@@ -21,15 +22,16 @@ namespace Verifiable.Core.Cryptography.Context
     /// define cryptographic contexts without relying on OIDs, JWT values, or other
     /// identifiers that could be ambiguous over time or need extensive parsing. This works in
     /// conjunction with <see cref="EncodingScheme"/> and <see cref="Purpose"/>
-    /// to provide a comprehensive framework for representing and manipulating 
+    /// to provide a comprehensive framework for representing and manipulating
     /// cryptographic material.
     /// </remarks>
+    [DebuggerDisplay("{CryptoAlgorithmNames.GetName(this),nq}")]
     public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     {
         /// <summary>
         /// Secp256k1.
         /// Corresponds to <see cref="MulticodecHeaders.Secp256k1PublicKey"/> when used
-        /// with <see cref="Purpose.Public"/>, and <see cref="WellKnownJwaValues.Es256k1"/>.
+        /// with <see cref="Purpose.Verification"/>, and <see cref="WellKnownJwaValues.Es256k1"/>.
         /// </summary>
         /// <remarks>
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/>.
@@ -41,7 +43,7 @@ namespace Verifiable.Core.Cryptography.Context
         /// <summary>
         /// BLS12-381 in the G1 field.
         /// Corresponds to <see cref="MulticodecHeaders.Bls12381G1PublicKey"/>  when used
-        /// with <see cref="Purpose.Public"/>.
+        /// with <see cref="Purpose.Verification"/>.
         /// </summary>
         /// <remarks>
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/>.
@@ -52,7 +54,7 @@ namespace Verifiable.Core.Cryptography.Context
         /// <summary>
         /// BLS12-381 in the G2 field.
         /// Corresponds to <see cref="MulticodecHeaders.Bls12381G2PublicKey"/>  when used
-        /// with <see cref="Purpose.Public"/>.
+        /// with <see cref="Purpose.Verification"/>.
         /// </summary>
         /// <remarks>
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/>.
@@ -63,7 +65,7 @@ namespace Verifiable.Core.Cryptography.Context
         /// <summary>
         /// Curve25519.
         /// Corresponds to <see cref="MulticodecHeaders.X25519PublicKey"/>  when used
-        /// with <see cref="Purpose.Public"/>.
+        /// with <see cref="Purpose.Verification"/>.
         /// </summary>
         /// <remarks>
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/>.
@@ -74,7 +76,7 @@ namespace Verifiable.Core.Cryptography.Context
         /// <summary>
         /// Ed25519.
         /// Corresponds to <see cref="MulticodecHeaders.Ed25519PublicKey"/> and <see cref="WellKnownJwaValues.EdDsa"/>  when used
-        /// with <see cref="Purpose.Public"/>.
+        /// with <see cref="Purpose.Verification"/>.
         /// </summary>
         /// <remarks>
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/>.
@@ -85,7 +87,7 @@ namespace Verifiable.Core.Cryptography.Context
         /// <summary>
         /// BLS12-381 in the G1 and G2 fields.
         /// Corresponds to <see cref="MulticodecHeaders.Bls12381G1G2PublicKey"/>  when used
-        /// with <see cref="Purpose.Public"/>.
+        /// with <see cref="Purpose.Verification"/>.
         /// </summary>
         /// <remarks>
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/>.
@@ -99,7 +101,7 @@ namespace Verifiable.Core.Cryptography.Context
         /// </summary>
         /// <remarks>
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/> when used
-        /// with <see cref="Purpose.Public"/>.
+        /// with <see cref="Purpose.Verification"/>.
         /// Encoding method is defined in <see cref="EncodingScheme"/>.
         /// </remarks>
         public static CryptoAlgorithm P256 { get; } = new CryptoAlgorithm(6);
@@ -107,7 +109,7 @@ namespace Verifiable.Core.Cryptography.Context
         /// <summary>
         /// P-384.
         /// Corresponds to <see cref="MulticodecHeaders.P384PublicKey"/>  when used
-        /// with <see cref="Purpose.Public"/>.
+        /// with <see cref="Purpose.Verification"/>.
         /// </summary>
         /// <remarks>
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/>.
@@ -118,7 +120,7 @@ namespace Verifiable.Core.Cryptography.Context
         /// <summary>
         /// P-512.
         /// Corresponds to <see cref="MulticodecHeaders.P521PublicKey"/>  when used
-        /// with <see cref="Purpose.Public"/>.
+        /// with <see cref="Purpose.Verification"/>.
         /// </summary>
         /// <remarks>
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/>.
@@ -129,7 +131,7 @@ namespace Verifiable.Core.Cryptography.Context
         /// <summary>
         /// RSA 2048.
         /// Corresponds to <see cref="MulticodecHeaders.RsaPublicKey"/>  when used
-        /// with <see cref="Purpose.Public"/>.
+        /// with <see cref="Purpose.Verification"/>.
         /// </summary>
         /// <remarks>
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/>.
@@ -140,7 +142,7 @@ namespace Verifiable.Core.Cryptography.Context
         /// <summary>
         /// RSA 4096.
         /// Corresponds to <see cref="MulticodecHeaders.RsaPublicKey"/>  when used
-        /// with <see cref="Purpose.Public"/>.
+        /// with <see cref="Purpose.Verification"/>.
         /// </summary>
         /// <remarks>
         /// Purpose (e.g. public or private key) is defined in <see cref="Purpose"/>.
@@ -151,7 +153,7 @@ namespace Verifiable.Core.Cryptography.Context
 
         /// <summary>
         /// Windows Platform encryption provider.
-        /// </summary>        
+        /// </summary>
         /// </remarks>
         public static CryptoAlgorithm WindowsPlatformEncrypted { get; } = new CryptoAlgorithm(11);
 
@@ -160,7 +162,6 @@ namespace Verifiable.Core.Cryptography.Context
         public static IReadOnlyList<CryptoAlgorithm> Algorithms => algorithms.AsReadOnly();
 
         public int Algorithm { get; }
-
 
         public static CryptoAlgorithm Create(int algorithm)
         {
@@ -179,10 +180,14 @@ namespace Verifiable.Core.Cryptography.Context
         }
 
 
+        /// <ihertidoc />
+        public override string ToString() => CryptoAlgorithmNames.GetName(this);
+
+
         /// <inheritdoc />
         [EditorBrowsable(EditorBrowsableState.Never)]
         public bool Equals(CryptoAlgorithm other)
-        {            
+        {
             return Algorithm == other.Algorithm;
         }
 
@@ -227,12 +232,36 @@ namespace Verifiable.Core.Cryptography.Context
         public override int GetHashCode()
         {
             return base.GetHashCode();
-        }
 
+        }
 
         private CryptoAlgorithm(int algorithm)
         {
             Algorithm = algorithm;
         }
+    }
+
+
+    public static class CryptoAlgorithmNames
+    {
+        public static string GetName(CryptoAlgorithm algorithm) => GetName(algorithm.Algorithm);
+
+
+        public static string GetName(int algorithm) => algorithm switch
+        {
+            var a when a == CryptoAlgorithm.Secp256k1.Algorithm => nameof(CryptoAlgorithm.Secp256k1),
+            var a when a == CryptoAlgorithm.Bls12381G1.Algorithm => nameof(CryptoAlgorithm.Bls12381G1),
+            var a when a == CryptoAlgorithm.Bls12381G2.Algorithm => nameof(CryptoAlgorithm.Bls12381G2),
+            var a when a == CryptoAlgorithm.X25519.Algorithm => nameof(CryptoAlgorithm.X25519),
+            var a when a == CryptoAlgorithm.Ed25519.Algorithm => nameof(CryptoAlgorithm.Ed25519),
+            var a when a == CryptoAlgorithm.Bls12381G1G2.Algorithm => nameof(CryptoAlgorithm.Bls12381G1G2),
+            var a when a == CryptoAlgorithm.P256.Algorithm => nameof(CryptoAlgorithm.P256),
+            var a when a == CryptoAlgorithm.P384.Algorithm => nameof(CryptoAlgorithm.P384),
+            var a when a == CryptoAlgorithm.P521.Algorithm => nameof(CryptoAlgorithm.P521),
+            var a when a  == CryptoAlgorithm.Rsa2048.Algorithm => nameof(CryptoAlgorithm.Rsa2048),
+            var a when a  == CryptoAlgorithm.Rsa4096.Algorithm => nameof(CryptoAlgorithm.Rsa4096),
+            var a when a  == CryptoAlgorithm.WindowsPlatformEncrypted.Algorithm => nameof(CryptoAlgorithm.WindowsPlatformEncrypted),
+            _ => $"Unknown ({algorithm})"
+        };
     }
 }

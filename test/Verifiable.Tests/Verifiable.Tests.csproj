@@ -31,4 +31,8 @@
     <ProjectReference Include="..\..\src\Verifiable.Sidetree\Verifiable.Sidetree.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="test\VerificationResultResolution\" />
+  </ItemGroup>
 </Project>

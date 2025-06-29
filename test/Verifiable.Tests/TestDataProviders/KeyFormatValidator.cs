@@ -1,13 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using Verifiable.Core.Cryptography.Context;
+﻿using Verifiable.Core.Cryptography.Context;
 using Verifiable.Core.Did;
 
 namespace Verifiable.Tests.TestDataProviders
 {
     public delegate bool KeyFormatValidatorDelegate(KeyFormat keyFormat, CryptoAlgorithm alg);
 
-    
+
     public class KeyFormatValidator
     {
         private List<(Type Type, KeyFormatValidatorDelegate Validator)> Validators { get; } = [];

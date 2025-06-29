@@ -16,8 +16,8 @@ namespace Verifiable.Core.Cryptography
 
 
     public record class PublicPrivateKeyMaterial<TPublicKeyMemory, TPrivateKeyMemory>(TPublicKeyMemory PublicKey, TPrivateKeyMemory PrivateKey)
-        where TPublicKeyMemory : PublicKeyMemory
-        where TPrivateKeyMemory : PrivateKeyMemory
+        where TPublicKeyMemory: PublicKeyMemory
+        where TPrivateKeyMemory: PrivateKeyMemory
     {
     }
 

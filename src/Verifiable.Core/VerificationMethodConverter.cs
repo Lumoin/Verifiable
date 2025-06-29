@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Verifiable.Core.Did.CryptographicSuites;
 
 namespace Verifiable.Core.Did
 {
@@ -26,11 +27,13 @@ namespace Verifiable.Core.Did
         /// verification types and key formats see at
         /// https://w3c.github.io/did-core/#key-types-and-formats.
         /// </summary>
+#pragma warning disable CS0618 // Type or member is obsolete
         public static ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> DefaultTypeMap =>
             new Dictionary<string, Func<string, JsonSerializerOptions, KeyFormat>>(StringComparer.OrdinalIgnoreCase)
         {
+
             { "publicKeyMultibase", new Func<string, JsonSerializerOptions, PublicKeyMultibase>((json, _) => new PublicKeyMultibase(json)) },
-            { "publicKeyBase58", new Func<string, JsonSerializerOptions, PublicKeyBase58>((json, _) => new PublicKeyBase58(json)) },            
+            { "publicKeyBase58", new Func<string, JsonSerializerOptions, PublicKeyBase58>((json, _) => new PublicKeyBase58(json)) },
             { "publicKeyPem", new Func<string, JsonSerializerOptions, PublicKeyPem>((json, _) => new PublicKeyPem(json)) },
             { "publicKeyHex", new Func<string, JsonSerializerOptions, PublicKeyHex>((json, _) => new PublicKeyHex(json)) },
             { "publicKeyJwk", new Func<string, JsonSerializerOptions, PublicKeyJwk>((json, options) =>
@@ -39,17 +42,18 @@ namespace Verifiable.Core.Did
                 return new PublicKeyJwk { Header = headers };
             })}
         }.ToImmutableDictionary();
+#pragma warning restore CS0618 // Type or member is obsolete
 
 
         private static CryptoSuiteFactoryDelegate DefaultCryptoSuiteFactory { get; } = cryptoSuite =>
         {
             return cryptoSuite switch
             {
-                "JsonWebKey2020" => new JsonWebKey2020(),
-                "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
-                "Secp256k1VerificationKey2018" => new Secp256k1VerificationKey2018(),
-                "multikey" => new Multikey(),
-                _ => new CryptoSuite(cryptoSuite, [])
+                "JsonWebKey2020" => JsonWebKey2020.Instance,
+                "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
+                "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
+                "Multikey" => Multikey.Instance,
+                _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
             };
         };
 
@@ -99,7 +103,7 @@ namespace Verifiable.Core.Did
                 //First the values are filled to the object.
                 verificationMethod.Id = element.GetProperty("id").GetString()!;
                 verificationMethod.Controller = element.GetProperty("controller").GetString();
-                verificationMethod.Type = CryptoSuiteFactory(element.GetProperty("type").GetString()!);
+                verificationMethod.Type = CryptoSuiteFactory(element.GetProperty("type").GetString()!).VerificationMethodType;
 
                 //Then the known key format tags are tested and its corresponding transformation
                 //function is used. This is done like this because JSON can contain any format tags
@@ -133,19 +137,26 @@ namespace Verifiable.Core.Did
             writer.WriteString("controller", value?.Controller);
             writer.WriteString("type", value?.Type!);
 
+#pragma warning disable CS0618 // Type or member is obsolete
             if(value?.KeyFormat is PublicKeyHex hex)
             {
                 writer.WriteString("publicKeyHex", hex?.Key);
             }
 
-            if(value?.KeyFormat is PublicKeyMultibase multibase)
-            {
-                writer.WriteString("publicKeyMultibase", multibase?.Key);
-            }
-
             if(value?.KeyFormat is PublicKeyBase58 base58)
             {
                 writer.WriteString("publicKeyBase58", base58?.Key);
+            }
+
+            if(value?.KeyFormat is PublicKeyPem pem)
+            {
+                writer.WriteString("publicKeyPem", pem?.Key);
+            }
+#pragma warning restore CS0618 // Type or member is obsolete
+
+            if(value?.KeyFormat is PublicKeyMultibase multibase)
+            {
+                writer.WriteString("publicKeyMultibase", multibase?.Key);
             }
 
             if(value?.KeyFormat is PublicKeyJwk jwk)
@@ -160,10 +171,7 @@ namespace Verifiable.Core.Did
                 writer.WriteEndObject();
             }
 
-            if(value?.KeyFormat is PublicKeyPem pem)
-            {
-                writer.WriteString("publicKeyPem", pem?.Key);
-            }
+
 
             writer.WriteEndObject();
         }
