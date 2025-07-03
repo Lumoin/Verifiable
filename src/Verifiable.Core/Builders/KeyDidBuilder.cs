@@ -74,11 +74,13 @@ namespace Verifiable.Core.Builders
             {
                 string encodedPublicKey = buildState.EncodedKey;
                 PublicKeyMemory publicKey = buildState.PublicKey;
-                CryptographicSuite cryptoSuiteChosen = buildState.Suite;
+                VerificationMethodTypeInfo chosenVerificationMethodType = buildState.VerificationMethodTypeInfo;
 
                 //Determine the appropriate key format based on the DID method and crypto suite.
-                var keyFormatSelected = SsiKeyFormatSelector.DefaultKeyFormatSelector(typeof(KeyDidMethod), cryptoSuiteChosen);
-                var keyFormat = SsiKeyFormatSelector.DefaultKeyFormatCreator(keyFormatSelected, publicKey);
+                var keyFormatSelected = chosenVerificationMethodType.DefaultKeyFormatType;
+                var keyFormat = chosenVerificationMethodType.DefaultKeyFormatType;
+                //var keyFormatSelected = SsiKeyFormatSelector.DefaultKeyFormatSelector(typeof(KeyDidMethod), chosenVerificationMethodType);
+                //var keyFormat = SsiKeyFormatSelector.DefaultKeyFormatCreator(keyFormatSelected, publicKey);
 
                 //Create the verification method following did:key conventions.
                 didDocument.VerificationMethod =
@@ -86,9 +88,9 @@ namespace Verifiable.Core.Builders
                     new VerificationMethod
                     {
                         Id = CreateVerificationMethodId(encodedPublicKey),
-                        Type = cryptoSuiteChosen.VerificationMethodType,
+                        Type = chosenVerificationMethodType.TypeName,
                         Controller = CreateDidId(encodedPublicKey),
-                        KeyFormat = keyFormat
+                        KeyFormat =  SsiKeyFormatSelector.DefaultKeyFormatCreator(keyFormatSelected, publicKey)
                     }
                 ];
 
@@ -128,7 +130,7 @@ namespace Verifiable.Core.Builders
         /// The public key material to use for creating the DID document.
         /// Must contain valid cryptographic material with appropriate algorithm and purpose metadata.
         /// </param>
-        /// <param name="cryptoSuite">
+        /// <param name="verificationMethodTypeInfo">
         /// The cryptographic suite that determines how the public key is represented in the verification method.
         /// Common options include <see cref="JsonWebKey2020"/> and <see cref="Multikey"/>.
         /// </param>
@@ -138,7 +140,7 @@ namespace Verifiable.Core.Builders
         /// </param>
         /// <returns>A fully constructed <c>did:key</c> DID document.</returns>
         /// <exception cref="ArgumentNullException">
-        /// Thrown when <paramref name="publicKey"/> or <paramref name="cryptoSuite"/> is null.
+        /// Thrown when <paramref name="publicKey"/> or <paramref name="verificationMethodTypeInfo"/> is null.
         /// </exception>
         /// <exception cref="ArgumentException">
         /// Thrown when the public key material is invalid or missing required metadata.
@@ -170,10 +172,10 @@ namespace Verifiable.Core.Builders
         /// var didDocWithContext = builder.Build(publicKey, Multikey.DefaultInstance, includeDefaultContext: true);
         /// </code>
         /// </example>
-        public DidDocument Build(PublicKeyMemory publicKey, CryptographicSuite cryptoSuite, bool includeDefaultContext = false)
+        public DidDocument Build(PublicKeyMemory publicKey, VerificationMethodTypeInfo verificationMethodTypeInfo, bool includeDefaultContext = false)
         {
             ArgumentNullException.ThrowIfNull(publicKey, nameof(publicKey));
-            ArgumentNullException.ThrowIfNull(cryptoSuite, nameof(cryptoSuite));
+            ArgumentNullException.ThrowIfNull(verificationMethodTypeInfo, nameof(verificationMethodTypeInfo));
 
             //Extract algorithm and purpose from the public key metadata.
             var algorithm = publicKey.Tag.Get<CryptoAlgorithm>();
@@ -191,7 +193,7 @@ namespace Verifiable.Core.Builders
             {
                 EncodedKey = encodedPublicKey,
                 PublicKey = publicKey,
-                Suite = cryptoSuite
+                VerificationMethodTypeInfo = verificationMethodTypeInfo
             };
 
             if(includeDefaultContext)
@@ -200,13 +202,13 @@ namespace Verifiable.Core.Builders
                 //See https://w3c-ccg.github.io/did-method-key/#document-creation-algorithm for context requirements.
                 return Build(
                     seedGenerator: _ => CreateDidDocumentWithDefaultContext(),
-                    seedGeneratorParameter: (publicKey, cryptoSuite),
+                    seedGeneratorParameter: (publicKey, verificationMethodTypeInfo),
                     preBuildAction: (_, _) => buildState);
             }
 
             //Build with default-constructed DID document.
             return Build(
-                param: (publicKey, cryptoSuite),
+                param: (publicKey, verificationMethodTypeInfo),
                 preBuildAction: (_, _) => buildState);
         }
 

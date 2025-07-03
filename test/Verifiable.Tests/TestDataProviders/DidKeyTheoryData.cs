@@ -7,13 +7,13 @@ namespace Verifiable.Tests.TestDataProviders
 {
     public record DidKeyTestData(
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> KeyPair,
-        CryptographicSuite CryptoSuite,
+        VerificationMethodTypeInfo VerificationMethodTypeInfo,
         Type ExpectedKeyFormat)
     {
 
         public override string ToString()
         {
-            return $"Algorithm: {((CryptoAlgorithm)KeyPair.PublicKey.Tag[typeof(CryptoAlgorithm)])} CryptographicSuite: {CryptoSuite.VerificationMethodType}, ExpectedKeyFormat: {ExpectedKeyFormat.Name}";
+            return $"Algorithm: {((CryptoAlgorithm)KeyPair.PublicKey.Tag[typeof(CryptoAlgorithm)])} CryptographicSuite: {VerificationMethodTypeInfo.TypeName}, ExpectedKeyFormat: {ExpectedKeyFormat.Name}";
         }
     }
 
@@ -26,8 +26,8 @@ namespace Verifiable.Tests.TestDataProviders
             {
                 return new List<object[]>
                 {
-                    new object[] { new DidKeyTestData(keyPair, JsonWebKey2020.Instance, typeof(PublicKeyJwk)) },
-                    new object[] { new DidKeyTestData(keyPair, Multikey.Instance, typeof(PublicKeyMultibase)) }
+                    new object[] { new DidKeyTestData(keyPair, VerificationMethodTypeInfo.JsonWebKey2020, typeof(PublicKeyJwk)) },
+                    new object[] { new DidKeyTestData(keyPair, VerificationMethodTypeInfo.Multikey, typeof(PublicKeyMultibase)) }
                 };
             }
 

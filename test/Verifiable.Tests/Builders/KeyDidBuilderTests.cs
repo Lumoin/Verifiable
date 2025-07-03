@@ -42,7 +42,7 @@ namespace Verifiable.Tests.Builders
         public async Task CanBuildKeyDidFromRandomKeys(DidKeyTestData testData)
         {
             //This builds the did:key document with the given public key and crypto suite.
-            var keyDidDocument = KeyDidBuilder.Build(testData.KeyPair.PublicKey, testData.CryptoSuite);
+            var keyDidDocument = KeyDidBuilder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo);
 
             //Assert that the KeyFormat exists and is of the expected type
             var actualKeyFormat = keyDidDocument.VerificationMethod![0].KeyFormat;
@@ -84,7 +84,7 @@ namespace Verifiable.Tests.Builders
         public async ValueTask CreateAndVerifySignatureUsingDidKey(DidKeyTestData testData)
         {
             //Create DID document
-            var didDocument = KeyDidBuilder.Build(testData.KeyPair.PublicKey, testData.CryptoSuite);
+            var didDocument = KeyDidBuilder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo);
 
             //Sign data.
             var contentToSign = Encoding.UTF8.GetBytes("Hello, DID!");

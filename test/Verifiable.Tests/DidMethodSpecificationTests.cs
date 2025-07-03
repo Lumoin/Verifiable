@@ -17,7 +17,7 @@ namespace Verifiable.Tests
         [DynamicData(nameof(DidKeyTheoryData.GetDidTheoryTestData), typeof(DidKeyTheoryData))]
         public void KeyDidVerificationMethodFunctionalCycle(DidKeyTestData testData)
         {
-            var didDocument = KeyDidBuilder.Build(testData.KeyPair.PublicKey, testData.CryptoSuite);
+            var didDocument = KeyDidBuilder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo);
 
             // Test DID Key specific functionality:
             // - Single verification method

@@ -74,7 +74,7 @@ namespace Verifiable.Core.Builders
         /// <item><description><see cref="Ed25519VerificationKey2020"/> - Ed25519-specific representation</description></item>
         /// </list>
         /// </remarks>
-        public CryptographicSuite Suite { get; init; }
+        public VerificationMethodTypeInfo VerificationMethodTypeInfo { get; init; }
 
 
         /// <summary>
@@ -93,7 +93,7 @@ namespace Verifiable.Core.Builders
         {
             return EncodedKey == other.EncodedKey
                 && PublicKey.Equals(other.PublicKey)
-                && Equals(Suite, other.Suite);
+                && Equals(VerificationMethodTypeInfo, other.VerificationMethodTypeInfo);
         }
 
 
@@ -118,7 +118,7 @@ namespace Verifiable.Core.Builders
         /// </remarks>
         public override int GetHashCode()
         {
-            return HashCode.Combine(EncodedKey, PublicKey, Suite);
+            return HashCode.Combine(EncodedKey, PublicKey, VerificationMethodTypeInfo);
         }
 
 

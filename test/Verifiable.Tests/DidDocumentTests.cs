@@ -132,20 +132,7 @@ namespace Verifiable.Tests.Core
                     new SingleOrArrayControllerConverter(),
                     new SingleOrArrayVerificationMethodConverter(),
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(
-                        cryptoSuite => cryptoSuite switch
-                        {
-                            "JsonWebKey2020" => JsonWebKey2020.Instance,
-                            "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
-                            "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
-                            "Multikey" => Multikey.Instance,
-                            "RsaVerificationKey2018" => RsaVerificationKey2018.Instance,
-                            "JwsVerificationKey2020" => JwsVerificationKey2020.Instance,
-                            "Ed25519VerificationKey2018"  => Ed25519VerificationKey2018.Instance,
-                            _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
-                        },
-                        VerificationMethodConverter.DefaultTypeMap
-                    ),
+                    new VerificationMethodConverter(),
                     new ServiceConverterFactory(serviceTypeMap.ToImmutableDictionary()),
                     new JsonLdContextConverter(),
                     new DictionaryStringObjectJsonConverter(),
@@ -202,20 +189,7 @@ namespace Verifiable.Tests.Core
                 Converters =
                 {
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(
-                        cryptoSuite => cryptoSuite switch
-                        {
-                            "JsonWebKey2020" => JsonWebKey2020.Instance,
-                            "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
-                            "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
-                            "Multikey" => Multikey.Instance,
-                            "RsaVerificationKey2018" => RsaVerificationKey2018.Instance,
-                            "JwsVerificationKey2020" => JwsVerificationKey2020.Instance,
-                            "Ed25519VerificationKey2018"  => Ed25519VerificationKey2018.Instance,
-                            _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
-                        },
-                        VerificationMethodConverter.DefaultTypeMap
-                    ),
+                    new VerificationMethodConverter(),
                     new ServiceConverterFactory(serviceTypeMap.ToImmutableDictionary()),
                     new JsonLdContextConverter(),
                     new DictionaryStringObjectJsonConverter(),
@@ -268,20 +242,7 @@ namespace Verifiable.Tests.Core
                 Converters =
                 {
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(
-                        cryptoSuite => cryptoSuite switch
-                        {
-                            "JsonWebKey2020" => JsonWebKey2020.Instance,
-                            "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
-                            "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
-                            "Multikey" => Multikey.Instance,
-                            "RsaVerificationKey2018" => RsaVerificationKey2018.Instance,
-                            "JwsVerificationKey2020" => JwsVerificationKey2020.Instance,
-                            "Ed25519VerificationKey2018"  => Ed25519VerificationKey2018.Instance,
-                            _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
-                        },
-                        verificationMethodTypeMap.ToImmutableDictionary()
-                    ),
+                    new VerificationMethodConverter(),
                     new ServiceConverterFactory(),
                     new JsonLdContextConverter(),
                     new DidIdConverter(did =>
@@ -328,20 +289,7 @@ namespace Verifiable.Tests.Core
                 Converters =
                 {
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(
-                        cryptoSuite => cryptoSuite switch
-                        {
-                            "JsonWebKey2020" => JsonWebKey2020.Instance,
-                            "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
-                            "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
-                            "Multikey" => Multikey.Instance,
-                            "RsaVerificationKey2018" => RsaVerificationKey2018.Instance,
-                            "JwsVerificationKey2020" => JwsVerificationKey2020.Instance,
-                            "Ed25519VerificationKey2018"  => Ed25519VerificationKey2018.Instance,
-                            _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
-                        },
-                        VerificationMethodConverter.DefaultTypeMap
-                    ),
+                    new VerificationMethodConverter(),
                     new ServiceConverterFactory(),
                     new JsonLdContextConverter(),
                     new DictionaryStringObjectJsonConverter(),
@@ -401,22 +349,7 @@ namespace Verifiable.Tests.Core
                 {
                     new SingleOrArrayControllerConverter(),
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter
-                    (
-                        cryptoSuite => cryptoSuite switch
-                        {
-                            "JsonWebKey2020" => JsonWebKey2020.Instance,
-                            "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
-                            "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
-                            "Multikey" => Multikey.Instance,
-                            "RsaVerificationKey2018" => RsaVerificationKey2018.Instance,
-                            "JwsVerificationKey2020" => JwsVerificationKey2020.Instance,
-                            "Ed25519VerificationKey2018"  => Ed25519VerificationKey2018.Instance,
-                            "X25519KeyAgreementKey2019"  => X25519KeyAgreementKey2019.Instance,
-                            _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
-                        },
-                        verificationMethodTypeMap.ToImmutableDictionary()
-                    ),
+                    new VerificationMethodConverter(),
                     new ServiceConverterFactory(),
                     new JsonLdContextConverter(),
                     new DictionaryStringObjectJsonConverter(),

@@ -45,15 +45,21 @@ namespace Verifiable.Core.Did
 #pragma warning restore CS0618 // Type or member is obsolete
 
 
-        private static CryptoSuiteFactoryDelegate DefaultCryptoSuiteFactory { get; } = cryptoSuite =>
+        private static VerificationMethodTypeInfoFactoryDelegate DefaultVerificationMethodTypeInfoFactory { get; } = typeName =>
         {
-            return cryptoSuite switch
+            return typeName switch
             {
-                "JsonWebKey2020" => JsonWebKey2020.Instance,
-                "Ed25519VerificationKey2020" => Ed25519VerificationKey2020.Instance,
-                "Secp256k1VerificationKey2018" => Secp256k1VerificationKey2018.Instance,
-                "Multikey" => Multikey.Instance,
-                _ => throw new ArgumentException($"Unknown crypto suite: {cryptoSuite}")
+                "JsonWebKey2020" => VerificationMethodTypeInfo.JsonWebKey2020,
+                "Ed25519VerificationKey2020" => VerificationMethodTypeInfo.Ed25519,
+                "Secp256k1VerificationKey2018" => VerificationMethodTypeInfo.Secp256k1,
+                "Multikey" => VerificationMethodTypeInfo.Multikey,
+                "RsaVerificationKey2018" => VerificationMethodTypeInfo.Rsa,
+                "JwsVerificationKey2020" => VerificationMethodTypeInfo.Jws,
+                "Ed25519VerificationKey2018" => VerificationMethodTypeInfo.Ed25519_2018,
+                "X25519KeyAgreementKey2020" => VerificationMethodTypeInfo.X25519,
+                "X25519KeyAgreementKey2019" => VerificationMethodTypeInfo.X25519_2019,
+
+                _ => throw new ArgumentException($"Unknown verification method type: '{typeName}'.")
             };
         };
 
@@ -62,23 +68,23 @@ namespace Verifiable.Core.Did
         /// </summary>
         private ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> TypeMap { get; }
 
-        private CryptoSuiteFactoryDelegate CryptoSuiteFactory { get; }
+        private VerificationMethodTypeInfoFactoryDelegate VerificationMethodTypeInfoFactory { get; }
 
 
         /// <summary>
         /// A default constructor that maps <see cref="DefaultTypeMap"/> to be used.
         /// </summary>
-        public VerificationMethodConverter() : this(DefaultCryptoSuiteFactory, DefaultTypeMap) { }
+        public VerificationMethodConverter() : this(DefaultVerificationMethodTypeInfoFactory, DefaultTypeMap) { }
 
 
         /// <summary>
         /// A default constructor for <see cref="VerificationMethod"/> and sub-type conversions.
         /// </summary>
         /// <param name="typeMap">A runtime map of <see cref="Service"/> and sub-types.</param>
-        public VerificationMethodConverter(CryptoSuiteFactoryDelegate cryptoSuiteFactory, ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> typeMap)
+        public VerificationMethodConverter(VerificationMethodTypeInfoFactoryDelegate cryptoSuiteFactory, ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> typeMap)
         {
             TypeMap = typeMap;
-            CryptoSuiteFactory = cryptoSuiteFactory;
+            VerificationMethodTypeInfoFactory = cryptoSuiteFactory;
         }
 
 
@@ -103,7 +109,7 @@ namespace Verifiable.Core.Did
                 //First the values are filled to the object.
                 verificationMethod.Id = element.GetProperty("id").GetString()!;
                 verificationMethod.Controller = element.GetProperty("controller").GetString();
-                verificationMethod.Type = CryptoSuiteFactory(element.GetProperty("type").GetString()!).VerificationMethodType;
+                verificationMethod.Type = VerificationMethodTypeInfoFactory(element.GetProperty("type").GetString()!).TypeName;
 
                 //Then the known key format tags are tested and its corresponding transformation
                 //function is used. This is done like this because JSON can contain any format tags

@@ -5,20 +5,20 @@ using Verifiable.Core.Did.CryptographicSuites;
 
 namespace Verifiable.Core.Did
 {
-    public delegate CryptographicSuite CryptoSuiteFactoryDelegate(string suiteIdentifier);
+    public delegate VerificationMethodTypeInfo VerificationMethodTypeInfoFactoryDelegate(string verificationMethodTypeName);
 
-    public class CryptographicSuiteJsonConverter: JsonConverter<CryptographicSuite>
+    public class CryptographicSuiteJsonConverter: JsonConverter<VerificationMethodTypeInfo>
     {
-        private CryptoSuiteFactoryDelegate FactoryDelegate { get; }
+        private VerificationMethodTypeInfoFactoryDelegate FactoryDelegate { get; }
 
         public override bool CanConvert(Type objectType) => typeof(CryptographicSuite).IsAssignableFrom(objectType);
 
-        public CryptographicSuiteJsonConverter(CryptoSuiteFactoryDelegate factoryDelegate)
+        public CryptographicSuiteJsonConverter(VerificationMethodTypeInfoFactoryDelegate factoryDelegate)
         {
             FactoryDelegate = factoryDelegate;
         }
 
-        public override CryptographicSuite Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        public override VerificationMethodTypeInfo Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             string? suite = reader.GetString();
             if(suite == null)
@@ -29,9 +29,9 @@ namespace Verifiable.Core.Did
             return FactoryDelegate(suite);
         }
 
-        public override void Write(Utf8JsonWriter writer, CryptographicSuite value, JsonSerializerOptions options)
+        public override void Write(Utf8JsonWriter writer, VerificationMethodTypeInfo value, JsonSerializerOptions options)
         {
-            writer.WriteStringValue(value.VerificationMethodType);
+            writer.WriteStringValue(value.TypeName);
         }
     }
 }

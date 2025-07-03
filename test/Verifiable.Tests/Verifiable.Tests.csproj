@@ -14,6 +14,11 @@
     <IsTestApplication>true</IsTestApplication>
     <MSTestAnalysisMode>Recommended</MSTestAnalysisMode>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="test\VerificationResultResolution\**" />
+    <EmbeddedResource Remove="test\VerificationResultResolution\**" />
+    <None Remove="test\VerificationResultResolution\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="dotNetRdf" />
@@ -30,9 +35,5 @@
     <ProjectReference Include="..\..\src\Verifiable.NSec\Verifiable.NSec.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Sidetree\Verifiable.Sidetree.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="test\VerificationResultResolution\" />
   </ItemGroup>
 </Project>
