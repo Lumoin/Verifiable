@@ -1,18 +1,19 @@
 ﻿using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
 using Verifiable.Core.Did;
+using Verifiable.Core.Did.CryptographicSuites;
 
 namespace Verifiable.Tests.TestDataProviders
 {
     public record DidWebTestData(
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> KeyPair,
-        CryptoSuite CryptoSuite,
+        VerificationMethodTypeInfo VerificationMethodTypeInfo,
         Type ExpectedKeyFormat)
     {
 
         public override string ToString()
         {
-            return $"Algorithm: {((CryptoAlgorithm)KeyPair.PublicKey.Tag[typeof(CryptoAlgorithm)]).Algorithm} CryptoSuite: {CryptoSuite.CryptoSuiteId}, ExpectedKeyFormat: {ExpectedKeyFormat.Name}";
+            return $"Algorithm: {((CryptoAlgorithm)KeyPair.PublicKey.Tag[typeof(CryptoAlgorithm)]).Algorithm} verification method: {VerificationMethodTypeInfo}, ExpectedKeyFormat: {ExpectedKeyFormat.Name}";
         }
     }
 
@@ -24,8 +25,8 @@ namespace Verifiable.Tests.TestDataProviders
             {
                 return new List<object[]>
                 {
-                    new object[] { new DidWebTestData(keyPair, JsonWebKey2020.DefaultInstance, typeof(PublicKeyJwk)) },
-                    new object[] { new DidWebTestData(keyPair, Ed25519VerificationKey2020.DefaultInstance, typeof(PublicKeyMultibase)) }
+                    new object[] { new DidWebTestData(keyPair, VerificationMethodTypeInfo.JsonWebKey2020, typeof(PublicKeyJwk)) },
+                    new object[] { new DidWebTestData(keyPair, VerificationMethodTypeInfo.Ed25519VerificationKey2020, typeof(PublicKeyMultibase)) }
                 };
             }
 

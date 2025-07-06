@@ -1,6 +1,6 @@
 using System;
 using System.Buffers;
-using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 
 namespace Verifiable.Core.Cryptography
 {
@@ -11,16 +11,13 @@ namespace Verifiable.Core.Cryptography
     /// <remarks>If counters, statistics or other statistics or functionality
     /// is needed this class can be inherited. Potential need: key rotation initiated
     /// by some statistics.</remarks>
-    public class PrivateKeyMemory: SensitiveMemory
+    /// <remarks>
+    /// KeyMemory constructor.
+    /// </remarks>
+    /// <param name="keyMemory">The piece of sensitive data.</param>
+    /// <param name="tag">Tags the memory with out-of-band information such as key material information.</param>
+    public class PrivateKeyMemory(IMemoryOwner<byte> keyMemory, Tag tag): SensitiveMemory(keyMemory, tag)
     {
-        /// <summary>
-        /// KeyMemory constructor.
-        /// </summary>
-        /// <param name="keyMemory">The piece of sensitive data.</param>
-        /// <param name="tag">Tags the memory with out-of-band information such as key material information.</param>
-        public PrivateKeyMemory(IMemoryOwner<byte> keyMemory, Tag tag): base(keyMemory, tag) { }
-
-
         /// <summary>
         /// An unwrap function for this memory.
         /// </summary>
@@ -28,10 +25,10 @@ namespace Verifiable.Core.Cryptography
         /// <typeparam name="TResult">The result of verification type.</typeparam>
         /// <param name="sensitiveFunc">The function that uses this memory. Example caller: <see cref="PrivateKey"/>.</param>
         /// <param name="arg">An argument given to <paramref name="sensitiveFunc"/>.</param>
-        /// <returns>The result of calling of <paramref name="sensitiveFunc"/>. Likely a <see cref="Signature"/>.</returns>        
-        public TResult WithKeyBytes<TDataToSign, TResult>(SigningFunction<byte, TDataToSign, TResult> sensitiveFunc, ReadOnlySpan<TDataToSign> arg, MemoryPool<byte> signaturePool) where TResult: Signature
+        /// <returns>The result of calling of <paramref name="sensitiveFunc"/>. Likely a <see cref="Signature"/>.</returns>
+        public ValueTask<TResult> WithKeyBytesAsync<TDataToSign, TResult>(SigningFunction<byte, TDataToSign, ValueTask<TResult>> sensitiveFunc, ReadOnlyMemory<TDataToSign> arg, MemoryPool<byte> signaturePool) where TResult: Signature
         {
-            return sensitiveFunc(AsReadOnlySpan(), arg, signaturePool);
+            return sensitiveFunc(MemoryOwner.Memory, arg, signaturePool);
         }
     }
 }

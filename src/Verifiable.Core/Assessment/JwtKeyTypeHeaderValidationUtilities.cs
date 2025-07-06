@@ -11,8 +11,8 @@ namespace Verifiable.Assessment
         /// </summary>
         /// <remarks>
         /// This validation rule is based on the security best practices outlined in JWT RFC 7519.
-        /// The 'none' algorithm is a security vulnerability when misused since it indicates that no digital signature 
-        /// or Message Authentication Code (MAC) is required. Without a signature or MAC, the integrity of the token 
+        /// The 'none' algorithm is a security vulnerability when misused since it indicates that no digital signature
+        /// or Message Authentication Code (MAC) is required. Without a signature or MAC, the integrity of the token
         /// cannot be verified. This rule ensures that the algorithm specified in the JWT header is not 'none'.
         /// </remarks>
         /// <param name="jwtHeaders">JWT headers as a dictionary of key-value pairs.</param>
@@ -26,7 +26,7 @@ namespace Verifiable.Assessment
                 return checks;
             }
 
-            string algValue = value as string ?? string.Empty;            
+            string algValue = value as string ?? string.Empty;
             if(WellKnownJwaValues.IsNone(algValue))
             {
                 checks.Add(new Claim(ClaimId.AlgIsNone, ClaimOutcome.Failure));
@@ -48,6 +48,7 @@ namespace Verifiable.Assessment
             (WellKnownJwaValues.IsEs512, WellKnownCurveValues.IsP521),
             (WellKnownJwaValues.IsEs256k1, WellKnownCurveValues.IsSecp256k1)
         };
+
 
         /// <summary>
         /// Validates the JWT header key parameters.
@@ -191,10 +192,12 @@ namespace Verifiable.Assessment
 
             //TODO: Constants for RSA key lengths...
             // Expected lengths for DER-encoded, Base64Url-encoded RSA keys
-            const int Rsa2048DerEncodedBase64UrlEncodedLength = 360;
-            const int Rsa4096DerEncodedBase64UrlEncodedLength = 702;
+            //const int Rsa2048DerEncodedBase64UrlEncodedLength = 360;
+            //const int Rsa4096DerEncodedBase64UrlEncodedLength = 702;
+            const int Rsa2048RawModulusBase64UrlEncodedLength = 342; //256 bytes * 4/3 ≈ 342 chars.
+            const int Rsa4096RawModulusBase64UrlEncodedLength = 683; //512 bytes * 4/3 ≈ 683 chars.
 
-            if(nStr.Length == Rsa2048DerEncodedBase64UrlEncodedLength || nStr.Length == Rsa4096DerEncodedBase64UrlEncodedLength)
+            if(nStr.Length == Rsa2048RawModulusBase64UrlEncodedLength || nStr.Length == Rsa4096RawModulusBase64UrlEncodedLength)
             {
                 claims.Add(new Claim(ClaimId.RsaKeyValid, ClaimOutcome.Success));
                 return claims;

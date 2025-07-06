@@ -14,7 +14,7 @@ namespace Verifiable.Tests.test
 
 
         public static TNodeType NullFormatter<TNodeType>(TreeTraversalNode<TNodeType> node)
-        {           
+        {
             return node.Node;
         }
 
@@ -27,7 +27,7 @@ namespace Verifiable.Tests.test
 
             var outputList = new List<Claim>();
             var asyncOutputList = new List<Claim>();
-            
+
             void testSink(Claim output) => outputList.Add(output);
             async Task asyncTestSink(Claim output)
             {
@@ -45,13 +45,13 @@ namespace Verifiable.Tests.test
 
             Assert.AreEqual(3, outputList.Count);
             Assert.AreEqual(3, asyncOutputList.Count);
-            
+
             var expectedOrder = new List<Claim> { mainClaim }.Concat(subClaims).ToList();
-            CollectionAssert.AreEqual(expectedOrder, outputList);            
+            CollectionAssert.AreEqual(expectedOrder, outputList);
             CollectionAssert.AreEqual(expectedOrder, asyncOutputList);
         }
 
-        
+
         private static void TraverseAndOutput<TNodeType, TFormat>(TNodeType root, Func<TNodeType, IEnumerable<TNodeType>> descendantsSelector, NodeFormatter<TNodeType, TFormat> formatter, OutputSink<TFormat> sink)
         {
             foreach(TreeTraversalNode<TNodeType> node in TreeTraversalExtensions.DepthFirstTreeTraversal(root, descendantsSelector))

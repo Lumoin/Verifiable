@@ -8,9 +8,9 @@ namespace Verifiable.Jwt
     /// Xyz.
     /// </summary>
     public static class JoseUtilities
-    {                
+    {
         //The rules are from https://datatracker.ietf.org/doc/html/rfc7638#section-3.1.
-        
+
         private static string ECTThumbprintTemplate => $@"{{{{""{JwkProperties.Crv}"":""{{0}}"",""{JwkProperties.Kty}"":""{{1}}"",""{JwkProperties.X}"":""{{2}}"",""{JwkProperties.Y}"":""{{3}}""}}}}";
 
         //https://datatracker.ietf.org/doc/html/rfc8037#appendix-A.3
@@ -21,7 +21,7 @@ namespace Verifiable.Jwt
         private static string RsaThumbprintTemplate => $@"{{{{""{JwkProperties.E}"":""{{0}}"",""{JwkProperties.Kty}"":""{{1}}"",""{JwkProperties.N}"":""{{2}}""}}}}";
 
         private static string OctThumbprintTemplate => $@"{{{{""{JwkProperties.K}"":""{{0}}"",""{JwkProperties.Kty}"":"" {{1}}""}}}}";
-        
+
 
         public static byte[] ComputeECThumbprint(string crv, string kty, string x, string y)
         {
@@ -57,10 +57,10 @@ namespace Verifiable.Jwt
             var canonicalJwk = string.Format(OctThumbprintTemplate, k, kty);
             return GenerateSha256Hash(Encoding.UTF8.GetBytes(canonicalJwk));
         }
-        
-                
+
+
         private static byte[] GenerateSha256Hash(ReadOnlySpan<byte> input)
-        {            
+        {
             return SHA256.HashData(input);
         }
     }

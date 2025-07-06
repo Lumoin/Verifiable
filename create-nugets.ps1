@@ -1,8 +1,6 @@
-dotnet pack --verbosity normal --configuration Release --output './generated-nugets' --include-symbols --include-source -property:PackageVersion=0.0.1 './src/Verifiable.VERIFIABLE/$VERIFIABLE.csproj'
 dotnet pack --verbosity normal --configuration Release --output './generated-nugets' --include-symbols --include-source -property:PackageVersion=0.0.1 './src/Verifiable.BouncyCastle/Verifiable.BouncyCastle.csproj'
 dotnet pack --verbosity normal --configuration Release --output './generated-nugets' --include-symbols --include-source -property:NoWarn=NU5104 -property:PackageVersion=0.0.01 './src/Verifiable.Core/Verifiable.Core.csproj'
 dotnet pack --verbosity normal --configuration Release --output './generated-nugets' --include-symbols --include-source -property:PackageVersion=0.0.1 './src/Verifiable.DecentralizedWebNode/Verifiable.DecentralizedWebNode.csproj'
 dotnet pack --verbosity normal --configuration Release --output './generated-nugets' --include-symbols --include-source -property:NoWarn=NU5104 -property:PackageVersion=0.0.01 'src/Verifiable.NSec/Verifiable.NSec.csproj'
-dotnet pack --verbosity normal --configuration Release --output './generated-nugets' --include-symbols --include-source -property:PackageVersion=0.0.1 './src/Verifiable.Security.Windows/Verifiable.Security.Windows.csproj'
 dotnet pack --verbosity normal --configuration Release --output './generated-nugets' --include-symbols --include-source -property:PackageVersion=0.0.1 './src/Verifiable.Sidetree/Verifiable.Sidetree.csproj'
 dotnet pack --verbosity normal --configuration Release --output './generated-nugets' --include-symbols --include-source -property:PackageVersion=0.0.1 './src/Verifiable.Tpm/Verifiable.Tpm.csproj'

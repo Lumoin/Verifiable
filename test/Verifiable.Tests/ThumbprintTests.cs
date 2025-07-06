@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Core
             var crv = "P-256";
             var kty = "EC";
             var x = "x";
-            var y = "y";            
+            var y = "y";
             var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
             var thumbprint = Base64Url.Encode(thumbPrintBytes);
             var expected = "expected";

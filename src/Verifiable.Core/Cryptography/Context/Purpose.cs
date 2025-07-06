@@ -15,7 +15,7 @@ namespace Verifiable.Core.Cryptography.Context
     /// define cryptographic contexts without relying on OIDs, JWT values, or other
     /// identifiers that could be ambiguous over time or need extensive parsing. This works in
     /// conjunction with <see cref="EncodingScheme"/> and <see cref="CryptoAlgorithm"/>
-    /// to provide a comprehensive framework for representing and manipulating 
+    /// to provide a comprehensive framework for representing and manipulating
     /// cryptographic material.
     /// </remarks>
     public readonly struct Purpose: IEquatable<Purpose>
@@ -27,21 +27,22 @@ namespace Verifiable.Core.Cryptography.Context
 
         public int Code { get; }
 
+        public static Purpose None { get; } = new Purpose(0);
 
-        public static Purpose Public { get; } = new Purpose(0);
+        public static Purpose Verification { get; } = new Purpose(1);
 
-        public static Purpose Private { get; } = new Purpose(1);
+        public static Purpose Signing { get; } = new Purpose(2);
 
-        public static Purpose Exchange { get; } = new Purpose(2);
+        public static Purpose Exchange { get; } = new Purpose(3);
 
-        public static Purpose Wrapped { get; } = new Purpose(3);
+        public static Purpose Wrapped { get; } = new Purpose(4);
 
-        public static Purpose Signature { get; } = new Purpose(4);
+        public static Purpose Signature { get; } = new Purpose(5);
 
-        public static Purpose Encryption { get; } = new Purpose(5);
+        public static Purpose Encryption { get; } = new Purpose(6);
 
 
-        private static List<Purpose> _purposeCodes = new([Public, Private, Exchange, Wrapped, Signature, Encryption]);
+        private static List<Purpose> _purposeCodes = new([Verification, Signing, Exchange, Wrapped, Signature, Encryption]);
 
         public static IReadOnlyList<Purpose> PurposeCodes => _purposeCodes.AsReadOnly();
 
@@ -69,7 +70,7 @@ namespace Verifiable.Core.Cryptography.Context
             return Code == other.Code;
         }
 
-        
+
         /// <inheritdoc />
         [EditorBrowsable(EditorBrowsableState.Never)]
         public override bool Equals([NotNullWhen(true)] object? o) => o is Purpose Purpose && Equals(Purpose);
@@ -110,6 +111,6 @@ namespace Verifiable.Core.Cryptography.Context
         public override int GetHashCode()
         {
             return Code;
-        }        
+        }
     }
 }

@@ -81,7 +81,7 @@ namespace Verifiable.BouncyCastle
             return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
         }
 
-        
+
         private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEcKeys(string namedCurve, MemoryPool<byte> memoryPool)
         {
             static (Tag PublicKeyTag, Tag PrivateKeyTag) GetTags(string namedCurve)
@@ -103,17 +103,17 @@ namespace Verifiable.BouncyCastle
             var keyGenParam = new ECKeyGenerationParameters(domainParams, random);
 
             generator.Init(keyGenParam);
-            AsymmetricCipherKeyPair keyPair = generator.GenerateKeyPair();            
+            AsymmetricCipherKeyPair keyPair = generator.GenerateKeyPair();
             var publicKeyParam = (ECPublicKeyParameters)keyPair.Public;
             var privateKeyParam = (ECPrivateKeyParameters)keyPair.Private;
-            
-            byte[] compressedPublicKey = publicKeyParam.Q.GetEncoded(compressed: true);            
+
+            byte[] compressedPublicKey = publicKeyParam.Q.GetEncoded(compressed: true);
             byte[] privateKeyBytes = privateKeyParam.D.ToByteArray();
             var (publicKeyTag, privateKeyTag) = GetTags(namedCurve);
             var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(compressedPublicKey, memoryPool), publicKeyTag);
             var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool), privateKeyTag);
             Array.Clear(compressedPublicKey, 0, compressedPublicKey.Length);
-            Array.Clear(privateKeyBytes, 0, privateKeyBytes.Length);                      
+            Array.Clear(privateKeyBytes, 0, privateKeyBytes.Length);
 
             return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
         }

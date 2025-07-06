@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core;
 using Verifiable.Core.Did;
+using Verifiable.Core.Did.CryptographicSuites;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Jwt;
 using Verifiable.Tests.TestInfrastructure;
@@ -18,7 +19,7 @@ namespace Verifiable.Tests.Core
         /// <summary>
         /// An example combining https://www.w3.org/TR/did-core/#example-19-various-service-endpoints and other pieces.
         /// </summary>
-        private string MultiServiceTestDocument { get; } = @"{
+        private string MultiServiceTestDocument { get; } = /*lang=json,strict*/ @"{
             ""@context"": ""https://www.w3.org/ns/did/v1"",
               ""id"": ""did:example:123456789abcdefghi"",
               ""verificationMethod"": [{
@@ -36,7 +37,7 @@ namespace Verifiable.Tests.Core
                   ""type"": ""JwsVerificationKey2020"",
                   ""controller"": ""did:example:123"",
                   ""publicKeyJwk"": {
-                  ""crv"": ""Ed25519"",
+                  ""crv"": ""Ed25519VerificationKey2020"",
                   ""x"": ""VCpo2LMLhn6iWku8MKvSLg2ZAoC-nlOyPVQaO3FxVeQ"",
                   ""kty"": ""OKP"",
                   ""kid"": ""_Qq0UL2Fq651Q0Fjd6TvnYE-faHiOpRlPVQcY_-tA4A""
@@ -139,15 +140,15 @@ namespace Verifiable.Tests.Core
                     {
                         return did switch
                         {
-                            "did:key:" => new KeyDidMethod(did),                            
-                            "did:ebsi:" => new EbsiDidMethod(did),                            
+                            "did:key:" => new KeyDidMethod(did),
+                            "did:ebsi:" => new EbsiDidMethod(did),
                             _ => new GenericDidMethod(did)
                         };
                     })
                 }
             };
 
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(MultiServiceTestDocument, options);            
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(MultiServiceTestDocument, options);
             Assert.IsNotNull(deserializedDidDocument?.Id);
             Assert.IsNotNull(deserializedDidDocument?.Context);
             Assert.IsNotNull(deserializedDidDocument?.Service);
@@ -204,7 +205,7 @@ namespace Verifiable.Tests.Core
                 }
             };
 
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);            
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
             Assert.IsNotNull(deserializedDidDocument?.Id);
             Assert.IsNotNull(deserializedDidDocument?.Context);
             Assert.IsNotNull(deserializedDidDocument?.Service);
@@ -241,15 +242,7 @@ namespace Verifiable.Tests.Core
                 Converters =
                 {
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(cryptoSuite =>
-                    {
-                        return cryptoSuite switch
-                        {
-                            "JsonWebKey2020" => new JsonWebKey2020(),
-                            "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
-                            _ => new CryptoSuite(cryptoSuite, new List<string>())
-                        };
-                    },verificationMethodTypeMap.ToImmutableDictionary()),
+                    new VerificationMethodConverter(),
                     new ServiceConverterFactory(),
                     new JsonLdContextConverter(),
                     new DidIdConverter(did =>
@@ -264,7 +257,7 @@ namespace Verifiable.Tests.Core
                 }
             };
 
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);            
+            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
             Assert.IsNotNull(deserializedDidDocument?.Id);
             Assert.IsNotNull(deserializedDidDocument?.Context);
             Assert.IsNotNull(deserializedDidDocument?.Service);
@@ -356,15 +349,7 @@ namespace Verifiable.Tests.Core
                 {
                     new SingleOrArrayControllerConverter(),
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(cryptoSuite =>
-                    {
-                        return cryptoSuite switch
-                        {
-                            "JsonWebKey2020" => new JsonWebKey2020(),
-                            "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
-                            _ => new CryptoSuite(cryptoSuite, new List<string>())
-                        };
-                    },verificationMethodTypeMap.ToImmutableDictionary()),
+                    new VerificationMethodConverter(),
                     new ServiceConverterFactory(),
                     new JsonLdContextConverter(),
                     new DictionaryStringObjectJsonConverter(),
