@@ -1,14 +1,13 @@
-using System;
 using System.Buffers;
 
 namespace Verifiable.Core
 {
     /// <summary>
     /// A <see cref="MemoryPool{T}"/> implementation that separates and tracks
-    /// memory for cryptographic operations separately from other memory.    
+    /// memory for cryptographic operations separately from other memory.
     /// </summary>
     /// <typeparam name="T">The cryptographic data type.</typeparam>
-    /// <remarks>The rented memory is cleared when returned but it will not be garbage collected.</remarks>    
+    /// <remarks>The rented memory is cleared when returned but it will not be garbage collected.</remarks>
     public abstract class SensitiveMemoryPool<T>: MemoryPool<T>
     {
         /// <summary>
@@ -34,11 +33,11 @@ namespace Verifiable.Core
         /// Returns a memory block capable of holding exactly <paramref name="exactBufferSize"/> elements of <typeparamref name="T"/>.
         /// </summary>
         /// <param name="exactBufferSize">The exact buffer size to rent.</param>
-        /// <returns>Returns a memory block capable of holding exactly <paramref name="exactBufferSize"/> elements of <typeparamref name="T"/></returns>        
+        /// <returns>Returns a memory block capable of holding exactly <paramref name="exactBufferSize"/> elements of <typeparamref name="T"/></returns>
         public override IMemoryOwner<T> Rent(int exactBufferSize) => SensitiveMemoryPool<T>.RentCore(SensitiveMemoryPool<T>.ArrayPool, exactBufferSize);
 
 
-        /// <inheritdoc />        
+        /// <inheritdoc />
         protected override void Dispose(bool disposing) { }
 
 

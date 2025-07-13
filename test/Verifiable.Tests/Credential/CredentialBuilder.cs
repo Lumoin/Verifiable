@@ -1,8 +1,7 @@
-﻿using System;
-using Verifiable.Core.Builders;
+﻿using Verifiable.Core.Builders;
 using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
-using Verifiable.Core.Did;
+using Verifiable.Core.Did.CryptographicSuites;
 using Verifiable.Core.Did.Methods;
 
 namespace Verifiable.Core.Credential
@@ -13,7 +12,7 @@ namespace Verifiable.Core.Credential
     {
         public PublicKeyMemory PublicKey { get; init; }
 
-        public CryptoSuite Suite { get; init; }
+        public VerificationMethodTypeInfo Suite { get; init; }
 
         public string WebDomain { get; init; }
     }
@@ -30,7 +29,7 @@ namespace Verifiable.Core.Credential
             {
                 verifiableCredential.Proof = new Proof
                 {
-                    Type = buildInvariant.Suite.CryptoSuiteId,
+                    Type = "",
                     ProofPurpose = "",
                     ProofValue = "",
                     VerificationMethod = "",
@@ -42,12 +41,12 @@ namespace Verifiable.Core.Credential
         }
 
 
-        public VerifiableCredential Build(PublicKeyMemory publicKey, CryptoSuite cryptoSuite, string webDomain)
+        public VerifiableCredential Build(PublicKeyMemory publicKey, VerificationMethodTypeInfo verificationMethodTypeInfo, string webDomain)
         {
             CryptoAlgorithm alg = (CryptoAlgorithm)publicKey.Tag[typeof(CryptoAlgorithm)];
             Purpose purp = (Purpose)publicKey.Tag[typeof(Purpose)];
 
-            VerifiableCredentialBuildState buildState = new() { PublicKey = publicKey, Suite = cryptoSuite, WebDomain = webDomain };
+            VerifiableCredentialBuildState buildState = new() { PublicKey = publicKey, Suite = verificationMethodTypeInfo, WebDomain = webDomain };
 
             VerifiableCredential finalDocument;
             /*if(includeDefaultContext)
@@ -57,7 +56,7 @@ namespace Verifiable.Core.Credential
                 finalDocument = Build(doc => initialDidDoc, (publicKey, cryptoSuite), (param, builder) => buildState);
             }*/
 
-            finalDocument = Build((publicKey, cryptoSuite), (param, builder) => buildState);
+            finalDocument = Build((publicKey, verificationMethodTypeInfo), (param, builder) => buildState);
 
             finalDocument.Id = new WebDidMethod($"{WebDidMethod.Prefix}:{webDomain}");
             return finalDocument;

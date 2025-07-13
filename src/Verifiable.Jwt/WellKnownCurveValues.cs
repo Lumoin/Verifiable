@@ -1,6 +1,6 @@
 ﻿namespace Verifiable.Jwt
 {
-    /// <summary>    
+    /// <summary>
     /// Well-known names of JSON Web Key (JWK) Elliptic Curve "crv" (Curve) parameter values
     /// as defined in <see href="https://www.rfc-editor.org/rfc/rfc7518">RFC 7518</see>.
     /// Additional curve names are defined in other specifications.
@@ -135,7 +135,7 @@
             string _ when IsP384(crv) => P384,
             string _ when IsP521(crv) => P521,
             string _ when IsSecp256k1(crv) => Secp256k1,
-            string _ when IsX25519(crv) => X25519,      
+            string _ when IsX25519(crv) => X25519,
             string _ when IsX448(crv) => X448,
             string _ => crv
         };
