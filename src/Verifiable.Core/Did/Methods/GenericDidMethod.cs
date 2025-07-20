@@ -4,7 +4,7 @@ namespace Verifiable.Core.Did.Methods
 {
     /// <summary>
     /// This is used when the DID method is either not recognized or it is treated as a generic DID method.
-    /// The ethod URN still need to conform with what is expected from a DID method and a URN.
+    /// The method URN still need to conform with what is expected from a DID method and a URN.
     /// </summary>
     /// <remarks>The DID method specific identifiers should inherit from this. They may provide more granular constructors
     /// with DID method specific parameters and functionality.</remarks>
@@ -23,7 +23,7 @@ namespace Verifiable.Core.Did.Methods
 
 
         /// <summary>
-        /// Creates a new instance of <see cref="GenericDidMethod"/>. 
+        /// Creates a new instance of <see cref="GenericDidMethod"/>.
         /// </summary>
         /// <param name="id">The full DID identifier string.</param>
         public GenericDidMethod(string id)

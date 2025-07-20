@@ -24,12 +24,12 @@ namespace Verifiable.Jwt
     /// Delegate to decode a Base64 URL encoded string.
     /// </summary>
     /// <param name="input">The Base64 encoded string to decode.</param>
-    /// <returns>The value that Base64 encoded.</returns>    
+    /// <returns>The value that Base64 encoded.</returns>
     public delegate ReadOnlySpan<byte> Base64UrlDecoder(string input);
 
     /// <summary>
     /// Delegate to decode a Base64 URL encoded string.
-    /// </summary>        
+    /// </summary>
     /// <typeparam name="TSignature">A specific signature type to decode from the input.</typeparam>
     /// <param name="input">The Base64 encoded string to decode.</param>
     /// <returns>The value that Base64 encoded.</returns>
@@ -69,7 +69,7 @@ namespace Verifiable.Jwt
     /// <param name="part">The actual JWT part to encode.</param>
     /// <returns>Base64 encoded representation of <paramref name="part"/>.</returns>
     public delegate string JwtPartBase64Encoder<TJwtPart>(JwtPartByteEncoder<TJwtPart> byteEncoder, Base64UrlEncoder base64UrlEncoder, TJwtPart part);
-    
+
     /// <summary>
     /// Selects key identifier from a JWT part.
     /// </summary>
@@ -80,7 +80,7 @@ namespace Verifiable.Jwt
     public delegate TKeyIdentifier KeyIdentifierSelector<TJwtPart, TKeyIdentifier>(TJwtPart part);
 
     /// <summary>
-    /// Provides the cryptographc context based on the JWT header and key identifier to handle key material.
+    /// Provides the cryptographic context based on the JWT header and key identifier to handle key material.
     /// </summary>
     /// <typeparam name="TJwtPart">The JWT part type.</typeparam>
     /// <typeparam name="TKeyIdentifier">The key identifier type.</typeparam>
@@ -106,7 +106,7 @@ namespace Verifiable.Jwt
     /// <typeparam name="TCryptoContext">The cryptographic context type.</typeparam>
     /// <typeparam name="TSignature">The signature type of the cryptographic operation.</typeparam>
     /// <param name="cryptoContext">The crypto context.</param>
-    /// <returns>A function that matches parameters to a concrete cryptographic implementation to verifiy the signature.</returns>
+    /// <returns>A function that matches parameters to a concrete cryptographic implementation to verify the signature.</returns>
     public delegate VerifyImplementation<TSignature> VerifyImplementationMatcher<TCryptoContext, TSignature>(TCryptoContext cryptoContext) where TCryptoContext: CryptoContext;
 
     /// <summary>
@@ -160,7 +160,7 @@ namespace Verifiable.Jwt
     /// <typeparam name="TJwtPartPayload">The JWT payload type.</typeparam>
     /// <typeparam name="TResult">The result type.</typeparam>
     /// <param name="keyIdentifierSelector">Selects key identifier from a JWT part.</param>
-    /// <param name="cryptoContextLoader">Provides the cryptographc context based on the JWT header and key identifier to handle key material.</param>
+    /// <param name="cryptoContextLoader">Provides the cryptographic context based on the JWT header and key identifier to handle key material.</param>
     /// <param name="matcherDelegate">Matches a concrete implementation of cryptographic functions to given set of parameters returned by <paramref name="cryptoContextLoader"/>.</param>
     /// <param name="dataToVerify">The data to verify.</param>
     /// <param name="signatureBytes">The signature of the <paramref name="dataToVerify"/>.</param>
@@ -182,13 +182,13 @@ namespace Verifiable.Jwt
     /// <typeparam name="TJwtPart">The JWT part type.</typeparam>
     /// <typeparam name="TCryptoContext">The cryptographic context type.</typeparam>
     /// <typeparam name="TKeyIdentifier">The key identifier type.</typeparam>
-    /// <typeparam name="TDataToVerify">The type of data to verify.</typeparam>    
+    /// <typeparam name="TDataToVerify">The type of data to verify.</typeparam>
     /// <typeparam name="TJwtPartHeader">The JWT header type.</typeparam>
     /// <typeparam name="TJwtPartPayload">The JWT payload type.</typeparam>
     /// <typeparam name="TResult"></typeparam>
     /// <param name="keyIdentifierSelector"></param>
     /// <param name="cryptoContextLoader"></param>
-    /// <param name="cryptoContextLoader">Provides the cryptographc context based on the JWT header and key identifier to handle key material.</param>
+    /// <param name="cryptoContextLoader">Provides the cryptographic context based on the JWT header and key identifier to handle key material.</param>
     /// <param name="matcherDelegate">Matches a concrete implementation of cryptographic functions to given set of parameters returned by <paramref name="cryptoContextLoader"/>.</param>
     /// <param name="dataToVerify">The data to verify.</param>
     /// <param name="signatureBytes">The signature of the <paramref name="dataToVerify"/>.</param>
@@ -203,9 +203,9 @@ namespace Verifiable.Jwt
         ReadOnlySpan<byte> signatureBytes,
         TJwtPartHeader header,
         TJwtPartPayload payload) where TCryptoContext: CryptoContext;
-    
+
     /// <summary>
-    /// 
+    ///
     /// </summary>
     /// <typeparam name="TPrivateKeyBytes">The type of the objects in the read-only span. Likely <see cref="byte"/>.</typeparam>
     /// <typeparam name="TDataToSign">The data type from which to calculate signature. Likely <see cref="byte"/>.</typeparam>
@@ -217,7 +217,7 @@ namespace Verifiable.Jwt
     public delegate ReadOnlySpan<TResult> Sign<TPrivateKeyBytes, TDataToSign, TResult>(ReadOnlySpan<TPrivateKeyBytes> privateKeyTypes, ReadOnlySpan<TDataToSign> dataToSign);
 
     /// <summary>
-    /// 
+    ///
     /// </summary>
     /// <typeparam name="TJwtPart"></typeparam>
     /// <typeparam name="TPrivateKeyBytes"></typeparam>
@@ -226,7 +226,7 @@ namespace Verifiable.Jwt
     /// <param name="jwtHeader"></param>
     /// <returns></returns>
     public delegate Sign<TPrivateKeyBytes, TDataToSign, TResult> SigningSelector<TJwtPart, TPrivateKeyBytes, TDataToSign, TResult>(TJwtPart jwtHeader);
-       
+
 
     public delegate ReadOnlySpan<TPrivateKey> LoadPrivateKey<TPrivateKey>();
 
@@ -237,10 +237,10 @@ namespace Verifiable.Jwt
 
         public string Algorithm { get; set; } = string.Empty;
 
-        public byte[] Key { get; set; } = Array.Empty<byte>();
+        public byte[] Key { get; set; } = [];
 
         public IDictionary<string, object> Parameters { get; set; } = new Dictionary<string, object>();
-        
+
 
         //Here '0' means raw format, 'R' and 'S' values concatenated as in JWT.
         //Not applicable to other algorithms than ECDSA.
@@ -269,7 +269,7 @@ namespace Verifiable.Jwt
 
         public Jwt() : this(EmptyDictionary, EmptyDictionary) { }
 
-        
+
         public Jwt(IDictionary<string, object> headerClaims, IDictionary<string, object> payloadClaims)
         {
             ArgumentNullException.ThrowIfNull(headerClaims, nameof(headerClaims));
@@ -286,9 +286,9 @@ namespace Verifiable.Jwt
             return this;
         }
     }
-   
 
-       
+
+
 
     //https://www.scottbrady91.com/oauth/client-authentication
     //In this model one can create things like "JAR" token by just creating a function that
@@ -298,7 +298,7 @@ namespace Verifiable.Jwt
     //So "to be be certain" more delegates would be needed as parameters.
     //See https://www.scottbrady91.com/jose/json-web-encryption.
 
-    //This could be a convenience class offered by Verifiable.Jwt? Should work with any other system too? E.g. with 
+    //This could be a convenience class offered by Verifiable.Jwt? Should work with any other system too? E.g. with
     //third party library Jwt types and so on. Continues to serialization also. Abstract
     public static class JwtExtensions
     {
@@ -346,18 +346,18 @@ namespace Verifiable.Jwt
             //CryptoContext based on the header and key identifier.
             TCryptoContext cryptoContext = contextLoader(header, keyId);
 
-            //Signing function using the matcher delegate.                                  
+            //Signing function using the matcher delegate.
             SignImplementation<byte> signer = signingFunctionMatcher(cryptoContext);
 
             //TODO: This can't work like this. The signer cannot expect private key bytes as input.
             //That's because the private key bytes may be inside the TPM and the signer just receives
-            //a handle it uses with the TPM to signe the bytes.
+            //a handle it uses with the TPM to signer the bytes.
             //See more at https://opensecuritytraining.info/IntroToTrustedComputing_files/Day1-7-tpm-keys.pdf.
             //
-            //SO! The signer needs to use the idea of ".WithKeyBytes" and the actualy type how to
+            //SO! The signer needs to use the idea of ".WithKeyBytes" and the actually type how to
             //key bytes will be delivered (e.g. the SensitiveMemoryHierarchy).
             //SO! If signingFunctionSelector RETURNS a delegate that takes further a delegate that
-            //prepares the key bytes either to the TPM for the actual signer OR can retrieeve
+            //prepares the key bytes either to the TPM for the actual signer OR can retrieve
             //them to be used in-memory, thi would work.
             //So, the first step is to have the delegate to take another delegate as input.
             //How does the signer know which way to access the bytes if it doesn't know which to
@@ -369,7 +369,7 @@ namespace Verifiable.Jwt
             return $"{stringToSign}.{encodedSignature}";
         }
 
-       
+
         /// <summary>
         /// Verifies compact JSON signature.
         /// </summary>
@@ -381,7 +381,7 @@ namespace Verifiable.Jwt
         /// <param name="partDecoder">A function that decodes the <typeparamref name="TJwtPart"/> parts.</param>
         /// <param name="keyIdentifierSelector">The function that is used to identify the key information from decoded
         /// JWT data. The result is used in <paramref name="keyIdentifierSelector"/> to load the actual key material and
-        /// associated metadata.</param>        
+        /// associated metadata.</param>
         /// <param name="keyIdentifierSelector">The function that does the actual key loading.</param>
         /// <param name="verificationFunction">The function that does the actual verification that the signature
         /// part in <paramref name="jwtDataWithSignature"/> is valid.
@@ -397,7 +397,7 @@ namespace Verifiable.Jwt
             Verify<TJwtPart, TCryptoContext, TKeyIdentifier, byte, TSignature, TJwtPart, TJwtPart, bool> verificationFunction)
             where TCryptoContext: CryptoContext
 
-        {            
+        {
             //This assumes compact representation and consequently that the signature is in the third segment.
             string[] tokenParts = jwtDataWithSignature.Split('.');
             if(tokenParts.Length != 3)
@@ -411,7 +411,7 @@ namespace Verifiable.Jwt
 
             TJwtPart header = partDecoder(base64UrlDecoder(tokenParts[0]));
             TJwtPart payload = partDecoder(base64UrlDecoder(tokenParts[1]));
-            
+
             return verificationFunction(keyIdentifierSelector, contextLoader, matcherDelegate, dataToVerify, signature, header, payload);
         }
 

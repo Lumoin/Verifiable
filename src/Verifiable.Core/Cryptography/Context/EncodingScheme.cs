@@ -14,7 +14,7 @@ namespace Verifiable.Core.Cryptography.Context
     /// define cryptographic contexts without relying on OIDs, JWT values, or other
     /// identifiers that could be ambiguous over time or need extensive parsing. This works in
     /// conjunction with <see cref="CryptoAlgorithm"/> and <see cref="Purpose"/>
-    /// to provide a comprehensive framework for representing and manipulating 
+    /// to provide a comprehensive framework for representing and manipulating
     /// cryptographic material.
     /// </remarks>
     public readonly struct EncodingScheme: IEquatable<EncodingScheme>
@@ -41,11 +41,13 @@ namespace Verifiable.Core.Cryptography.Context
 
         public static EncodingScheme EcUncompressed { get; } = new EncodingScheme(3);
 
-        public static EncodingScheme Pkcs8 { get; } = new EncodingScheme(4);
+        public static EncodingScheme Pkcs1 { get; } = new EncodingScheme(4);
 
-        public static EncodingScheme Raw { get; } = new EncodingScheme(5);
+        public static EncodingScheme Pkcs8 { get; } = new EncodingScheme(5);
 
-        private static readonly List<EncodingScheme> schemes = new(collection: [Der, Pem, EcCompressed, EcUncompressed, Pkcs8, Raw]);
+        public static EncodingScheme Raw { get; } = new EncodingScheme(6);
+
+        private static readonly List<EncodingScheme> schemes = new(collection: [Der, Pem, EcCompressed, EcUncompressed, Pkcs1, Pkcs8, Raw]);
         public static IReadOnlyList<EncodingScheme> Schemes => schemes.AsReadOnly();
 
         public static EncodingScheme Create(int scheme)

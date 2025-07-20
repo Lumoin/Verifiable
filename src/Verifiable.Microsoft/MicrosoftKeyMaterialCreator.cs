@@ -6,7 +6,7 @@ using Verifiable.Core.Cryptography;
 
 namespace Verifiable.Microsoft
 {
-    public static class MicrosoftKeyCreator
+    public static class MicrosoftKeyMaterialCreator
     {
         public static PublicPrivateKeyMaterial<PublicKeyMemoryDerived, PrivateKeyMemoryDerived> CreateP256KeyDerived(MemoryPool<byte> memoryPool)
         {
@@ -139,7 +139,7 @@ namespace Verifiable.Microsoft
 
                 var (publicKeyTag, privateKeyTag) = GetTags(keySizeInBits);
                 var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(derEncodedPublicKey, memoryPool), publicKeyTag);
-                var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(parameters.D!, memoryPool), privateKeyTag);
+                var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(key.ExportRSAPrivateKey(), memoryPool), privateKeyTag);
                 Array.Clear(derEncodedPublicKey, 0, derEncodedPublicKey.Length);
                 Array.Clear(parameters.Modulus!, 0, parameters.Modulus!.Length);
                 Array.Clear(parameters.D!, 0, parameters.D!.Length);

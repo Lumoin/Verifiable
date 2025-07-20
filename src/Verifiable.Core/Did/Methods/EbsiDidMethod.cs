@@ -11,7 +11,7 @@ namespace Verifiable.Core.Did.Methods
         public static new string Prefix => "did:ebsi:";
 
 
-        public EbsiDidMethod(string didString) : base(didString)
+        public EbsiDidMethod(string didString): base(didString)
         {
             if(!didString.StartsWith(Prefix))
             {
