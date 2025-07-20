@@ -17,7 +17,7 @@ namespace Verifiable.Tests.Cryptography
         /// A second instance for testing comparisons.
         /// </summary>
         private static CryptoAlgorithm CryptoAlgorithm2 { get; } = CryptoAlgorithm.Rsa4096;
-                
+
 
         [TestMethod]
         public void InstancesWithDifferentCodesAreNotEqual()
@@ -69,7 +69,7 @@ namespace Verifiable.Tests.Cryptography
             Assert.IsFalse(result2);
         }
 
-                
+
         [TestMethod]
         public void CryptoAlgorithmAndObjectEqualityComparisonWithDifferentValuesSucceeds()
         {

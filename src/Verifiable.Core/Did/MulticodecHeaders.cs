@@ -109,5 +109,136 @@ namespace Verifiable.Core
         /// </summary>
         /// <remarks>Status: draft.</remarks>
         public static ReadOnlySpan<byte> X25519PrivateKey => [0x82, 0x26];
+
+
+        /// <summary>
+        /// Returns a value that indicates if the provided material is Secp256k1 public key.
+        /// </summary>
+        /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <returns>
+        /// <see langword="true" /> if the material matches the Secp256k1 public key header; otherwise, <see langword="false" />.
+        /// </returns>
+        public static bool IsSecp256k1PublicKey(ReadOnlySpan<byte> multicodecMaterial) => IsMulticodecHeader(multicodecMaterial, Secp256k1PublicKey);
+
+        /// <summary>
+        /// Returns a value that indicates if the provided material is BLS12-381 G1 public key.
+        /// </summary>
+        /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <returns>
+        /// <see langword="true" /> if the material matches the BLS12-381 G1 public key header; otherwise, <see langword="false" />.
+        /// </returns>
+        public static bool IsBls12381G1PublicKey(ReadOnlySpan<byte> multicodecMaterial) => IsMulticodecHeader(multicodecMaterial, Bls12381G1PublicKey);
+
+        /// <summary>
+        /// Returns a value that indicates if the provided material is BLS12-381 G2 public key.
+        /// </summary>
+        /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <returns>
+        /// <see langword="true" /> if the material matches the BLS12-381 G2 public key header; otherwise, <see langword="false" />.
+        /// </returns>
+        public static bool IsBls12381G2PublicKey(ReadOnlySpan<byte> multicodecMaterial) => IsMulticodecHeader(multicodecMaterial, Bls12381G2PublicKey);
+
+        /// <summary>
+        /// Returns a value that indicates if the provided material is X25519 public key.
+        /// </summary>
+        /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <returns>
+        /// <see langword="true" /> if the material matches the X25519 public key header; otherwise, <see langword="false" />.
+        /// </returns>
+        public static bool IsX25519PublicKey(ReadOnlySpan<byte> multicodecMaterial) => IsMulticodecHeader(multicodecMaterial, X25519PublicKey);
+
+        /// <summary>
+        /// Returns a value that indicates if the provided material is Ed25519 public key.
+        /// </summary>
+        /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <returns>
+        /// <see langword="true" /> if the material matches the Ed25519 public key header; otherwise, <see langword="false" />.
+        /// </returns>
+        public static bool IsEd25519PublicKey(ReadOnlySpan<byte> multicodecMaterial) => IsMulticodecHeader(multicodecMaterial, Ed25519PublicKey);
+
+        /// <summary>
+        /// Returns a value that indicates if the provided material is P256 public key.
+        /// </summary>
+        /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <returns>
+        /// <see langword="true" /> if the material matches the P256 public key header; otherwise, <see langword="false" />.
+        /// </returns>
+        public static bool IsP256PublicKey(ReadOnlySpan<byte> multicodecMaterial) => IsMulticodecHeader(multicodecMaterial, P256PublicKey);
+
+        /// <summary>
+        /// Returns a value that indicates if the provided material is P384 public key.
+        /// </summary>
+        /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <returns>
+        /// <see langword="true" /> if the material matches the P384 public key header; otherwise, <see langword="false" />.
+        /// </returns>
+        public static bool IsP384PublicKey(ReadOnlySpan<byte> multicodecMaterial) => IsMulticodecHeader(multicodecMaterial, P384PublicKey);
+
+        /// <summary>
+        /// Returns a value that indicates if the provided material is P521 public key.
+        /// </summary>
+        /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <returns>
+        /// <see langword="true" /> if the material matches the P521 public key header; otherwise, <see langword="false" />.
+        /// </returns>
+        public static bool IsP521PublicKey(ReadOnlySpan<byte> multicodecMaterial) => IsMulticodecHeader(multicodecMaterial, P521PublicKey);
+
+        /// <summary>
+        /// Returns a value that indicates if the provided material is RSA public key.
+        /// </summary>
+        /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <returns>
+        /// <see langword="true" /> if the material matches the RSA public key header; otherwise, <see langword="false" />.
+        /// </returns>
+        public static bool IsRsaPublicKey(ReadOnlySpan<byte> multicodecMaterial) => IsMulticodecHeader(multicodecMaterial, RsaPublicKey);
+
+
+
+        /// <summary>
+        /// Returns the equivalent static instance of the provided multicodec material, or the original if none match.
+        /// This conversion is optional but allows for performance optimizations.
+        /// </summary>
+        /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <returns>The equivalent static instance if one matches; otherwise, the original.</returns>
+        public static ReadOnlySpan<byte> GetCanonicalizedHeader(ReadOnlySpan<byte> multicodecMaterial) => multicodecMaterial switch
+        {
+            _ when IsMulticodecHeader(multicodecMaterial, Identity) => Identity,
+            _ when IsMulticodecHeader(multicodecMaterial, Cidv1) => Cidv1,
+            _ when IsMulticodecHeader(multicodecMaterial, Secp256k1PublicKey) => Secp256k1PublicKey,
+            _ when IsMulticodecHeader(multicodecMaterial, Bls12381G1PublicKey) => Bls12381G1PublicKey,
+            _ when IsMulticodecHeader(multicodecMaterial, Bls12381G2PublicKey) => Bls12381G2PublicKey,
+            _ when IsMulticodecHeader(multicodecMaterial, X25519PublicKey) => X25519PublicKey,
+            _ when IsMulticodecHeader(multicodecMaterial, Ed25519PublicKey) => Ed25519PublicKey,
+            _ when IsMulticodecHeader(multicodecMaterial, Bls12381G1G2PublicKey) => Bls12381G1G2PublicKey,
+            _ when IsMulticodecHeader(multicodecMaterial, P256PublicKey) => P256PublicKey,
+            _ when IsMulticodecHeader(multicodecMaterial, P384PublicKey) => P384PublicKey,
+            _ when IsMulticodecHeader(multicodecMaterial, P521PublicKey) => P521PublicKey,
+            _ when IsMulticodecHeader(multicodecMaterial, RsaPublicKey) => RsaPublicKey,
+            _ when IsMulticodecHeader(multicodecMaterial, Ed25519PrivateKey) => Ed25519PrivateKey,
+            _ when IsMulticodecHeader(multicodecMaterial, Secp256k1PrivateKey) => Secp256k1PrivateKey,
+            _ when IsMulticodecHeader(multicodecMaterial, X25519PrivateKey) => X25519PrivateKey,
+            _ => multicodecMaterial
+        };
+
+
+        /// <summary>
+        /// Returns a value that indicates if two multicodec headers are equal.
+        /// </summary>
+        /// <param name="headerA">The first multicodec header to compare.</param>
+        /// <param name="headerB">The second multicodec header to compare.</param>
+        /// <returns>
+        /// <see langword="true" /> if the headers are the same; otherwise, <see langword="false" />.
+        /// </returns>
+        public static bool Equals(ReadOnlySpan<byte> headerA, ReadOnlySpan<byte> headerB) => headerA.SequenceEqual(headerB);
+
+
+        /// <summary>
+        /// Returns a value that indicates if the provided material is the specified multicodec header.
+        /// </summary>
+        /// <param name="multicodecMaterial">The multicodec material to evaluate.</param>
+        /// <returns>
+        /// <see langword="true" /> if the material matches the specified header; otherwise, <see langword="false" />.
+        /// </returns>
+        public static bool IsMulticodecHeader(ReadOnlySpan<byte> multicodecMaterial, ReadOnlySpan<byte> header) => multicodecMaterial.SequenceEqual(header);
     }
 }

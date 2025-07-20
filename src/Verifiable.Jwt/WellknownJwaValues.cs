@@ -1,6 +1,6 @@
 ﻿namespace Verifiable.Jwt
 {
-    /// <summary>    
+    /// <summary>
     /// JSON Web Algorithms (JWA) as defined in <see href="https://www.rfc-editor.org/rfc/rfc7518">RFC 7518</see>.
     /// </summary>
     /// <remarks>As per definition parameters are case-sensitive.</remarks>
@@ -102,6 +102,12 @@
         /// </remarks>
 
         public static readonly string EdDsa = "EdDSA";
+
+
+        /// <summary>
+        ///
+        /// </summary>
+        public static readonly string Ecdha = "ECDH-ES";
 
 
         /// <summary>
@@ -261,10 +267,21 @@
         /// If <paramref name="alg"/> is <see cref="EdDsa"/> or not.
         /// </summary>
         /// <param name="alg">The algorithm</param>.
-        /// <returns><see langword="true" /> if <paramref name="alg"/> is <see cref="Rs512"/>; otherwise, <see langword="false" /></returns>.
+        /// <returns><see langword="true" /> if <paramref name="alg"/> is <see cref="EdDsa"/>; otherwise, <see langword="false" /></returns>.
         public static bool IsEdDsa(string alg)
         {
             return Equals(EdDsa, alg);
+        }
+
+
+        /// <summary>
+        /// If <paramref name="alg"/> is <see cref="Ecdha"/> or not.
+        /// </summary>
+        /// <param name="alg">The algorithm</param>.
+        /// <returns><see langword="true" /> if <paramref name="alg"/> is <see cref="Ecdha"/>; otherwise, <see langword="false" /></returns>.
+        public static bool IsEcdha(string alg)
+        {
+            return Equals(Ecdha, alg);
         }
 
 

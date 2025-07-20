@@ -2,16 +2,16 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>preview</LangVersion>    
+    <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>    
+    <RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditLevel>low</NuGetAuditLevel>
     <NugetAuditMode>all</NugetAuditMode>
-    <NoWarn>$(NoWarn);1591</NoWarn>    
-    <EmbedUntrackedSources>true</EmbedUntrackedSources>   
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>    
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <EnablePackageValidation>true</EnablePackageValidation>
     <GenerateSBOM>true</GenerateSBOM>
     <!-- This should be the published baseline version to validate against.
@@ -30,7 +30,7 @@
     <EnableMSTestRunner>true</EnableMSTestRunner>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
   </PropertyGroup>
-    
+
   <!-- Common nuget package parameters and resources. -->
   <PropertyGroup>
     <PackageId>$(AssemblyName)</PackageId>
@@ -45,13 +45,13 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <RepositoryUrl>https://github.com/lumoin/Verifiable</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <IncludeSymbols>true</IncludeSymbols>    
+    <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
-    <!-- These are set by the continous integration build (see main.yml). -->    
+    <!-- These are set by the continous integration build (see main.yml). -->
     <PackageVersion>0.0.0</PackageVersion>
     <AssemblyVersion>0.0.0</AssemblyVersion>
-    <FileVersion>0.0.0</FileVersion>    
+    <FileVersion>0.0.0</FileVersion>
     <Version>0.0.0</Version>
     <AssemblyInformationalVersion>0.0.0</AssemblyInformationalVersion>
     <NeutralLanguage>en-US</NeutralLanguage>
@@ -63,8 +63,8 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
     <ChangelogFile>../../CHANGELOG.md</ChangelogFile>
   </PropertyGroup>
 
-  <ItemGroup>    
-    <PackageReference Include="SIL.ReleaseTasks" PrivateAssets="all" />    
+  <ItemGroup>
+    <PackageReference Include="SIL.ReleaseTasks" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
@@ -109,5 +109,5 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
     </None>
     <PackageReference Include="Microsoft.Sbom.Targets" PrivateAssets="All" />
   </ItemGroup>
-  
+
 </Project>

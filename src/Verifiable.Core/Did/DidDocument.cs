@@ -4,7 +4,7 @@ using System.Linq;
 using Verifiable.Core.Did.Methods;
 
 namespace Verifiable.Core.Did
-{    
+{
     //These at https://www.w3.org/TR/did-core/#did-parameters could be extension methods
     //and something like HasService(), GetService() so the core type remains open to extension
     //and simple. These are extensible, although official DID registries are recommended.
@@ -129,7 +129,7 @@ namespace Verifiable.Core.Did
             }
 
             return Id == other?.Id
-                && Context == other?.Context                
+                && Context == other?.Context
                 && (AlsoKnownAs?.SequenceEqual(other!.AlsoKnownAs!)).GetValueOrDefault()
                 && (Controller?.SequenceEqual(other!.Controller!)).GetValueOrDefault()
                 && (VerificationMethod?.SequenceEqual(other!.VerificationMethod!)).GetValueOrDefault()
@@ -147,7 +147,7 @@ namespace Verifiable.Core.Did
             var hash = new HashCode();
             hash.Add(Context);
             hash.Add(Id);
-                        
+
             for(int i = 0; i < AlsoKnownAs?.Length; ++i)
             {
                 hash.Add(AlsoKnownAs[i]);

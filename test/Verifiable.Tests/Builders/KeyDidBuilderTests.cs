@@ -1,8 +1,13 @@
-﻿using System.Text.Json;
+﻿using System.Buffers;
+using System.Text;
+using System.Text.Json;
 using Verifiable.Assessment;
+using Verifiable.BouncyCastle;
 using Verifiable.Core.Builders;
+using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
 using Verifiable.Core.Did;
+using Verifiable.Core.Did.CryptographicSuites;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -36,84 +41,144 @@ namespace Verifiable.Tests.Builders
 
 
         [TestMethod]
-        [DynamicData(nameof(DidKeyTheoryData.GetDidTheoryTestData), typeof(DidKeyTheoryData), DynamicDataSourceType.Method)]     
+        [DynamicData(nameof(DidKeyTheoryData.GetDidTheoryTestData), typeof(DidKeyTheoryData))]
         public async Task CanBuildKeyDidFromRandomKeys(DidKeyTestData testData)
         {
             //This builds the did:key document with the given public key and crypto suite.
-            var keyDidDocument = KeyDidBuilder.Build(testData.KeyPair.PublicKey, testData.CryptoSuite);
+            var keyDidDocument = KeyDidBuilder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo);
 
             //Assert that the KeyFormat exists and is of the expected type
             var actualKeyFormat = keyDidDocument.VerificationMethod![0].KeyFormat;
             Assert.IsNotNull(actualKeyFormat);
             Assert.AreEqual(testData.ExpectedKeyFormat, actualKeyFormat.GetType());
 
-            //The builder produced DID identifier type should match KeyDidId, as the type of the document is key DID.                                               
+            //The builder produced DID identifier type should match KeyDidId, as the type of the document is key DID.
             Assert.IsInstanceOfType<KeyDidMethod>(keyDidDocument.Id);
-
+            string serializedDidDocumentx = JsonSerializer.Serialize(keyDidDocument, TestSetup.DefaultSerializationOptions);
             //This catches if there is a mismatch in generated tag for the key format
             //AND if the identifier does not match the used crypto algorithm. In
-            //did:key it is specificed how the identifier is generated from the key
+            //did:key it is specified how the identifier is generated from the key
             //material and how it affects the key encoding to its string representation.
             var keyFormatValidator = new KeyFormatValidator();
-            var alg = (CryptoAlgorithm)testData.KeyPair.PublicKey.Tag[typeof(CryptoAlgorithm)];
+            var alg = testData.KeyPair.PublicKey.Tag.Get<CryptoAlgorithm>();
             keyFormatValidator.AddValidator(typeof(PublicKeyJwk), TestOnlyKeyFormatValidators.KeyDidJwkValidator);
             keyFormatValidator.AddValidator(typeof(PublicKeyMultibase), TestOnlyKeyFormatValidators.KeyDidMultibaseValidator);
             bool res = keyFormatValidator.Validate(actualKeyFormat, alg);
-            Assert.IsTrue(res, $"Key format validation failed for {actualKeyFormat.GetType()} for algorithm {alg.Algorithm}.");
+            Assert.IsTrue(res, $"Key format validation failed for '{actualKeyFormat.GetType()}' for algorithm '{alg}'.");
 
             //This part runs the whole suite if did:key validation rules Verifiable library defines against the document.
             var assessmentResult = await KeyDidAssessor.AssessAsync(keyDidDocument, "some-test-supplied-correlationId");
-            Assert.IsTrue(assessmentResult.IsSuccess);
+            Assert.IsTrue(assessmentResult.IsSuccess, assessmentResult.ClaimsResult
+                .Claims.Where(c => c.Outcome == ClaimOutcome.Failure)
+                .Aggregate("Assessment failed. Failed claims: ", (acc, claim) => $"{acc}{claim.Id}, ").TrimEnd(',', '.'));
 
             string serializedDidDocument = JsonSerializer.Serialize(keyDidDocument, TestSetup.DefaultSerializationOptions);
             var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(serializedDidDocument, TestSetup.DefaultSerializationOptions);
             bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(serializedDidDocument, reserializedDidDocument);
-            Assert.IsTrue(areJsonElementsEqual, $"JSON string \"{serializedDidDocument}\" did not pass roundtrip test.");
-            Assert.AreEqual(typeof(KeyDidMethod), deserializedDidDocument?.Id?.GetType());
+            Assert.IsTrue(areJsonElementsEqual, $"JSON string '{serializedDidDocument}' did not pass roundtrip test.");
+            Assert.IsNotNull(deserializedDidDocument);
+            Assert.IsNotNull(deserializedDidDocument.Id);
+            Assert.AreEqual(typeof(KeyDidMethod), deserializedDidDocument.Id.GetType());
         }
-    }
 
 
-    public class Version1
-    {
-
-    }
-
-    public class Version2
-    {
-
-    }
-
-
-    public static class Transformer
-    {
-        public static TTransformed Transform<TTransformed, TOriginal>(TOriginal toBeTransformed, Func<TOriginal, TTransformed> transformer)
+        [TestMethod]
+        [DynamicData(nameof(DidKeyTheoryData.GetDidTheoryTestData), typeof(DidKeyTheoryData))]
+        public async ValueTask CreateAndVerifySignatureUsingDidKey(DidKeyTestData testData)
         {
-            return transformer(toBeTransformed);
-        }
-    }
-
-    public static class GrainTransformer
-    {
-        public static Func<object, TTransformed> GetTransformer<TTransformed>(string grainId, string grainType, string siloId)
-        {
-            return grainState =>
+            if(testData.KeyPair.PublicKey.SupportsSigning())
             {
-                return (TTransformed)grainState;
-            };
+                Assert.Inconclusive($"Key pair {testData.KeyPair.PublicKey.Tag.Get<CryptoAlgorithm>()} does not support signing.");
+
+                //Create DID document
+                var didDocument = KeyDidBuilder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo);
+
+                //Sign data.
+                var contentToSign = Encoding.UTF8.GetBytes("Hello, DID!");
+                using var signature = await testData.KeyPair.PrivateKey.SignAsync(contentToSign, SensitiveMemoryPool<byte>.Shared);
+
+                //Verify signature using the verification method by ID.
+                var verificationMethodId = didDocument.VerificationMethod![0].Id!;
+                var verificationMethod = didDocument.ResolveVerificationMethodReference(verificationMethodId);
+                Assert.IsNotNull(verificationMethod, "Verification method should be found by ID.");
+
+                bool verified = await verificationMethod.VerifySignatureAsync(contentToSign, signature, SensitiveMemoryPool<byte>.Shared);
+                Assert.IsTrue(verified);
+            }
         }
-    }
 
 
-    public class Test
-    {
-        public void TestMethod()
+        [TestMethod]
+        public async ValueTask CreateAndPerformKeyExchangeUsingDidKey()
         {
-            Version1 v1 = new();
-            Version2 v2 = Transformer.Transform(v1, (v1) => new Version2());
+            //Generate X25519 key pair for key agreement.
+            var keyPair = BouncyCastleKeyCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared);
 
-            var transformer = GrainTransformer.GetTransformer<Version2>("grain1", "typeA", "siloX");
-            Version2 transformedState = transformer(v1);
+            //Create DID document with the key agreement key.
+            var didDocument = KeyDidBuilder.Build(keyPair.PublicKey, X25519KeyAgreementKey2020VerificationMethodTypeInfo.Instance);
+
+            //Find the key agreement verification method.
+            var keyAgreementMethodId = didDocument.KeyAgreement![0].Id!;
+            var keyAgreementMethod = didDocument.ResolveVerificationMethodReference(keyAgreementMethodId);
+            Assert.IsNotNull(keyAgreementMethod, "Key agreement method should be found by ID.");
+
+            //Generate another X25519 key pair for the "other party".
+            var otherPartyKeyPair = BouncyCastleKeyCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared);
+
+            //Perform key agreement from both sides.
+            using var sharedSecret1 = await BouncyCastleCryptographicFunctions.DeriveX25519SharedSecretAsync(
+                keyPair.PrivateKey.AsReadOnlySpan(),
+                otherPartyKeyPair.PublicKey.AsReadOnlySpan(),
+                SensitiveMemoryPool<byte>.Shared);
+
+            using var sharedSecret2 = await BouncyCastleCryptographicFunctions.DeriveX25519SharedSecretAsync(
+                otherPartyKeyPair.PrivateKey.AsReadOnlySpan(),
+                keyPair.PublicKey.AsReadOnlySpan(),
+                SensitiveMemoryPool<byte>.Shared);
+
+            //Verify both parties derived the same shared secret.
+            Assert.IsTrue(sharedSecret1.Memory.Span.SequenceEqual(sharedSecret2.Memory.Span),
+                "Both parties should derive the same shared secret.");
+
+            //Also test key agreement using the verification method from the DID document.
+            //This validates that the DID document's verification method contains the correct public key
+            //and that our key format conversion pipeline works correctly. The verification method
+            //stores the public key in a specific format (JWK or multibase), and we need to extract
+            //it back to raw bytes to perform ECDH. This tests the round-trip conversion:
+            //Raw bytes → KeyFormat → VerificationMethod → Raw bytes → ECDH
+            using var sharedSecret3 = await DeriveSharedSecretAsync(
+                keyAgreementMethod, otherPartyKeyPair.PrivateKey, SensitiveMemoryPool<byte>.Shared);
+
+            Assert.IsTrue(sharedSecret1.Memory.Span.SequenceEqual(sharedSecret3.Memory.Span),
+                "Shared secret from DID verification method should match direct key agreement. This proves the key format conversion pipeline preserves key material correctly.");
+
+            //Clean up
+            keyPair.PublicKey.Dispose();
+            keyPair.PrivateKey.Dispose();
+            otherPartyKeyPair.PublicKey.Dispose();
+            otherPartyKeyPair.PrivateKey.Dispose();
+        }
+
+
+        private static async ValueTask<IMemoryOwner<byte>> DeriveSharedSecretAsync(
+            VerificationMethod verificationMethod,
+            PrivateKeyMemory otherPartyPrivateKey,
+            MemoryPool<byte> memoryPool)
+        {
+            //Extract public key from verification method...
+            var (algorithm, purpose, scheme, publicKeyOwner) = VerifiableCryptoFormatConversions.DefaultVerificationMethodToAlgorithmConverter(verificationMethod, memoryPool);
+            using(publicKeyOwner)
+            {
+                if(algorithm.Equals(CryptoAlgorithm.X25519))
+                {
+                    return await BouncyCastleCryptographicFunctions.DeriveX25519SharedSecretAsync(
+                        otherPartyPrivateKey.AsReadOnlySpan(),
+                        publicKeyOwner.Memory.Span,
+                        memoryPool);
+                }
+
+                throw new NotSupportedException($"Key agreement not supported for algorithm '{algorithm}'.");
+            }
         }
     }
 }

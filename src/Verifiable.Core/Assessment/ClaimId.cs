@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace Verifiable.Assessment
 {
@@ -30,7 +31,7 @@ namespace Verifiable.Assessment
     /// <description>Mapping claim identifiers to monitoring and SecDevOps tools, aligning with Forrester-recommended practices for a comprehensive view of system security and reliability.</description>
     /// </item>
     /// </list>
-    /// This struct is lightweight and optimized for performance, minimizing overhead in collections or other data structures. 
+    /// This struct is lightweight and optimized for performance, minimizing overhead in collections or other data structures.
     /// <see cref="ClaimId"/> supports dynamic extension of claim identifiers, adapting to evolving system requirements.
     /// </remarks>
     /// <example>
@@ -38,12 +39,12 @@ namespace Verifiable.Assessment
     /// <code>
     /// var newClaimId = ClaimId2.Create(509);
     /// </code>
-    /// </example>    
+    /// </example>
     [DebuggerDisplay("{DebuggerDisplay,nq}")]
 #pragma warning disable CA1815 // Override equals and operator equals on value types
     public readonly struct ClaimId
 #pragma warning restore CA1815 // Override equals and operator equals on value types
-    {                
+    {
         /// <summary>
         /// Gets the code representing the claim identifier.
         /// </summary>
@@ -73,7 +74,7 @@ namespace Verifiable.Assessment
         /// Represents a claim for a valid algorithm and curve combination for elliptic curve.
         /// </summary>
         public static ClaimId EcValidAlgAndCrvCombination { get; } = new ClaimId(4, "EcValidAlgAndCrvCombination");
-        
+
         /// <summary>
         /// Represents a claim for an algorithm that is optional and not present or empty for elliptic curve.
         /// </summary>
@@ -161,7 +162,7 @@ namespace Verifiable.Assessment
         /// Represents a claim for a valid algorithm and curve combination.
         /// </summary>
         public static ClaimId OkpValidAlgAndCrvCombination { get; } = new ClaimId(202, "OkpValidAlgAndCrvCombination");
-        
+
         /// <summary>
         /// Represents a claim indicating that algorithm is optional or not present.
         /// </summary>
@@ -192,7 +193,7 @@ namespace Verifiable.Assessment
 
         /// <summary>
         /// Represents a claim for Key DID ID format.
-        /// </summary>        
+        /// </summary>
         public static ClaimId KeyDidIdFormat { get; } = new ClaimId(502, "KeyDidIdFormat");
 
         /// <summary>
@@ -212,7 +213,7 @@ namespace Verifiable.Assessment
 
         /// <summary>
         /// Represents a claim for Key DID ID prefix mismatch.
-        /// </summary>        
+        /// </summary>
         public static ClaimId KeyDidIdPrefixMismatch { get; } = new ClaimId(506, "KeyDidIdPrefixMismatch");
 
         /// <summary>
@@ -233,7 +234,7 @@ namespace Verifiable.Assessment
 
         /// <summary>
         /// Represents a claim for <c>did:web</c> ID encoding ID format.
-        /// </summary>        
+        /// </summary>
         public static ClaimId WebDidIdFormat { get; } = new ClaimId(601, "WebDidIdFormat");
 
         /// <summary>
@@ -305,7 +306,7 @@ namespace Verifiable.Assessment
         /// </summary>
         private static class CodeDescriptions
         {
-            private static readonly object descriptionsLock = new();
+            private static readonly Lock descriptionsLock = new();
 
             /// <summary>
             /// Descriptions of dynamically created claim identifiers.

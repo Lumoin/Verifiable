@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Verifiable.Core.Did.CryptographicSuites;
 
 namespace Verifiable.Core.Did
 {
@@ -26,11 +27,13 @@ namespace Verifiable.Core.Did
         /// verification types and key formats see at
         /// https://w3c.github.io/did-core/#key-types-and-formats.
         /// </summary>
+#pragma warning disable CS0618 // Type or member is obsolete
         public static ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> DefaultTypeMap =>
             new Dictionary<string, Func<string, JsonSerializerOptions, KeyFormat>>(StringComparer.OrdinalIgnoreCase)
         {
+
             { "publicKeyMultibase", new Func<string, JsonSerializerOptions, PublicKeyMultibase>((json, _) => new PublicKeyMultibase(json)) },
-            { "publicKeyBase58", new Func<string, JsonSerializerOptions, PublicKeyBase58>((json, _) => new PublicKeyBase58(json)) },            
+            { "publicKeyBase58", new Func<string, JsonSerializerOptions, PublicKeyBase58>((json, _) => new PublicKeyBase58(json)) },
             { "publicKeyPem", new Func<string, JsonSerializerOptions, PublicKeyPem>((json, _) => new PublicKeyPem(json)) },
             { "publicKeyHex", new Func<string, JsonSerializerOptions, PublicKeyHex>((json, _) => new PublicKeyHex(json)) },
             { "publicKeyJwk", new Func<string, JsonSerializerOptions, PublicKeyJwk>((json, options) =>
@@ -39,17 +42,24 @@ namespace Verifiable.Core.Did
                 return new PublicKeyJwk { Header = headers };
             })}
         }.ToImmutableDictionary();
+#pragma warning restore CS0618 // Type or member is obsolete
 
 
-        private static CryptoSuiteFactoryDelegate DefaultCryptoSuiteFactory { get; } = cryptoSuite =>
+        private static VerificationMethodTypeInfoFactoryDelegate DefaultVerificationMethodTypeInfoFactory { get; } = typeName =>
         {
-            return cryptoSuite switch
+            return typeName switch
             {
-                "JsonWebKey2020" => new JsonWebKey2020(),
-                "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
-                "Secp256k1VerificationKey2018" => new Secp256k1VerificationKey2018(),
-                "multikey" => new Multikey(),
-                _ => new CryptoSuite(cryptoSuite, [])
+                "JsonWebKey2020" => VerificationMethodTypeInfo.JsonWebKey2020,
+                "Ed25519VerificationKey2020" => VerificationMethodTypeInfo.Ed25519VerificationKey2020,
+                "Secp256k1VerificationKey2018" => VerificationMethodTypeInfo.Secp256k1VerificationKey2018,
+                "Multikey" => VerificationMethodTypeInfo.Multikey,
+                "RsaVerificationKey2018" => VerificationMethodTypeInfo.RsaVerificationKey2018,
+                "JwsVerificationKey2020" => VerificationMethodTypeInfo.JwsVerificationKey2020,
+                "Ed25519VerificationKey2018" => VerificationMethodTypeInfo.Ed25519VerificationKey2018,
+                "X25519KeyAgreementKey2020" => VerificationMethodTypeInfo.X25519KeyAgreementKey2020,
+                "X25519KeyAgreementKey2019" => VerificationMethodTypeInfo.X25519KeyAgreementKey2019,
+
+                _ => throw new ArgumentException($"Unknown verification method type: '{typeName}'.")
             };
         };
 
@@ -58,23 +68,23 @@ namespace Verifiable.Core.Did
         /// </summary>
         private ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> TypeMap { get; }
 
-        private CryptoSuiteFactoryDelegate CryptoSuiteFactory { get; }
+        private VerificationMethodTypeInfoFactoryDelegate VerificationMethodTypeInfoFactory { get; }
 
 
         /// <summary>
         /// A default constructor that maps <see cref="DefaultTypeMap"/> to be used.
         /// </summary>
-        public VerificationMethodConverter() : this(DefaultCryptoSuiteFactory, DefaultTypeMap) { }
+        public VerificationMethodConverter() : this(DefaultVerificationMethodTypeInfoFactory, DefaultTypeMap) { }
 
 
         /// <summary>
         /// A default constructor for <see cref="VerificationMethod"/> and sub-type conversions.
         /// </summary>
         /// <param name="typeMap">A runtime map of <see cref="Service"/> and sub-types.</param>
-        public VerificationMethodConverter(CryptoSuiteFactoryDelegate cryptoSuiteFactory, ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> typeMap)
+        public VerificationMethodConverter(VerificationMethodTypeInfoFactoryDelegate cryptoSuiteFactory, ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> typeMap)
         {
             TypeMap = typeMap;
-            CryptoSuiteFactory = cryptoSuiteFactory;
+            VerificationMethodTypeInfoFactory = cryptoSuiteFactory;
         }
 
 
@@ -99,7 +109,7 @@ namespace Verifiable.Core.Did
                 //First the values are filled to the object.
                 verificationMethod.Id = element.GetProperty("id").GetString()!;
                 verificationMethod.Controller = element.GetProperty("controller").GetString();
-                verificationMethod.Type = CryptoSuiteFactory(element.GetProperty("type").GetString()!);
+                verificationMethod.Type = VerificationMethodTypeInfoFactory(element.GetProperty("type").GetString()!).TypeName;
 
                 //Then the known key format tags are tested and its corresponding transformation
                 //function is used. This is done like this because JSON can contain any format tags
@@ -133,19 +143,26 @@ namespace Verifiable.Core.Did
             writer.WriteString("controller", value?.Controller);
             writer.WriteString("type", value?.Type!);
 
+#pragma warning disable CS0618 // Type or member is obsolete
             if(value?.KeyFormat is PublicKeyHex hex)
             {
                 writer.WriteString("publicKeyHex", hex?.Key);
             }
 
-            if(value?.KeyFormat is PublicKeyMultibase multibase)
-            {
-                writer.WriteString("publicKeyMultibase", multibase?.Key);
-            }
-
             if(value?.KeyFormat is PublicKeyBase58 base58)
             {
                 writer.WriteString("publicKeyBase58", base58?.Key);
+            }
+
+            if(value?.KeyFormat is PublicKeyPem pem)
+            {
+                writer.WriteString("publicKeyPem", pem?.Key);
+            }
+#pragma warning restore CS0618 // Type or member is obsolete
+
+            if(value?.KeyFormat is PublicKeyMultibase multibase)
+            {
+                writer.WriteString("publicKeyMultibase", multibase?.Key);
             }
 
             if(value?.KeyFormat is PublicKeyJwk jwk)
@@ -160,10 +177,7 @@ namespace Verifiable.Core.Did
                 writer.WriteEndObject();
             }
 
-            if(value?.KeyFormat is PublicKeyPem pem)
-            {
-                writer.WriteString("publicKeyPem", pem?.Key);
-            }
+
 
             writer.WriteEndObject();
         }

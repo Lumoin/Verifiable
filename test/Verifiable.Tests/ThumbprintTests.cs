@@ -1,5 +1,5 @@
-﻿using Verifiable.Jwt;
-using Verifiable.Tests.TestInfrastructure;
+﻿using Verifiable.Core.Cryptography;
+using Verifiable.Jwt;
 
 namespace Verifiable.Tests.Core
 {
@@ -16,9 +16,9 @@ namespace Verifiable.Tests.Core
             var crv = "P-256";
             var kty = "EC";
             var x = "x";
-            var y = "y";            
+            var y = "y";
             var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
-            var thumbprint = Base64Url.Encode(thumbPrintBytes);
+            var thumbprint = Base64Url.Encode(thumbPrintBytes.Memory.ToArray());
             var expected = "expected";
             Assert.AreEqual(expected, thumbprint);
         }
