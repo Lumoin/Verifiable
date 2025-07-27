@@ -33,6 +33,7 @@ namespace Verifiable.Core
         public static Type PublicKeyMultibase { get; } = typeof(PublicKeyMultibase);
     }
 
+
     /// <summary>
     /// Creates a <see cref="KeyFormat"/> based on the provided <paramref name="format"/> and <paramref name="keyMaterial"/>
     /// </summary>
@@ -84,10 +85,11 @@ namespace Verifiable.Core
 
             //Select the appropriate encoder based on the format that was selected based on choice in
             //SsiKeyFormatSelector.DefaultKeyFormatSelector.
-            BufferAllocationEncodeDelegate encoder = DefaultCoderSelector.SelectEncoder(format);
+            BufferAllocationEncodeDelegate2 encoder = DefaultCoderSelector.SelectEncoder(format);
 
             return format switch
             {
+                //TODO: Here .DefaultAlgorithmToJwkConverter blindly assumes the key material is COMPRESSED.
                 Type pfa when format == WellKnownKeyFormats.PublicKeyJwk => new PublicKeyJwk { Header = VerifiableCryptoFormatConversions.DefaultAlgorithmToJwkConverter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan(), encoder) },
                 Type pfa when format == WellKnownKeyFormats.PublicKeyMultibase => new PublicKeyMultibase(VerifiableCryptoFormatConversions.DefaultAlgorithmToBase58Converter(cryptoAlgorithm, purpose, keyMaterial.AsReadOnlySpan(), encoder)),
                 _ => throw new ArgumentException($"Unsupported format: \"{format}\".")

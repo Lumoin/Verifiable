@@ -25,6 +25,148 @@ namespace Verifiable.Tests.TestInfrastructure
         /// </summary>
         public static ReadOnlySpanFunc<byte, string> TestBase58ArrayEncoder { get; } = Base58.Bitcoin.Encode;
 
+
+
+
+
+
+        /// <summary>
+        /// Base58 encoder that supports optional prefix space reservation.
+        /// </summary>
+        /// <remarks>
+        /// This encoder demonstrates the key insight: strings in C# are immutable, so any prefix
+        /// must be written to the character buffer BEFORE the string is created. The prefixWriter
+        /// callback allows the caller to write the prefix character at the correct position.
+        /// </remarks>
+        public static BufferAllocationEncodeDelegate2 StackBase58EncoderV2 { get; } =  (data, codecHeader, reservePrefixSpace, pool, prefixWriter) =>
+        {
+            //Combine codec header and data.
+            int bufferLengthForDataToBeEncoded = codecHeader.Length + data.Length;
+            Span<byte> dataWithEncodingHeaders = stackalloc byte[bufferLengthForDataToBeEncoded];
+
+            codecHeader.CopyTo(dataWithEncodingHeaders);
+            data.CopyTo(dataWithEncodingHeaders.Slice(codecHeader.Length));
+
+            //Calculate the size needed for base58 encoding.
+            int base58Size = Base58.Bitcoin.GetSafeCharCountForEncoding(dataWithEncodingHeaders);
+
+            //Allocate buffer with optional extra space for prefix.
+            int prefixOffset = reservePrefixSpace ? 1 : 0;
+            int totalBufferSize = base58Size + prefixOffset;
+            Span<char> buffer = totalBufferSize <= 512 ? stackalloc char[totalBufferSize] : pool.Rent(totalBufferSize).Memory.Span;
+
+            //Encode the data, starting after the prefix position if space was reserved.
+            if(!Base58.Bitcoin.TryEncode(dataWithEncodingHeaders, buffer.Slice(prefixOffset), out int bytesWritten))
+            {
+                throw new Exception("Encoding failed.");
+            }
+
+            //If prefix space was reserved, let the caller write the prefix.
+            //This MUST happen before string creation due to string immutability.
+            if(reservePrefixSpace && prefixWriter != null)
+            {
+                prefixWriter(buffer);
+            }
+
+            //Create and return the final immutable string.
+            return new string(buffer.Slice(0, bytesWritten + prefixOffset));
+        };
+
+
+        /// <summary>
+        /// Base64Url encoder that supports optional prefix space reservation.
+        /// </summary>
+        public static BufferAllocationEncodeDelegate2 Base64UrlEncoderV2 { get; } = (data, codecHeader, reservePrefixSpace, pool, prefixWriter) =>
+        {
+            //Combine codec header and data if needed.
+            if(codecHeader.Length == 0)
+            {
+                //No header, encode data directly.
+                //Calculate the exact length for base64 encoding.
+                int base64Length = ((data.Length + 2) / 3) * 4;
+
+                //Allocate buffer with optional extra space for prefix.
+                int prefixOffset = reservePrefixSpace ? 1 : 0;
+                int totalBufferSize = base64Length + prefixOffset;
+                Span<char> buffer = totalBufferSize <= 512 ? stackalloc char[totalBufferSize] : pool.Rent(totalBufferSize).Memory.Span;
+
+                //Base64Url encodes to bytes first, then we need to convert to chars.
+                //Allocate temporary byte buffer for the base64 encoded data.
+                Span<byte> byteBuffer = base64Length <= 512 ? stackalloc byte[base64Length] : new byte[base64Length];
+
+                bool success = Base64Url.TryEncodeToUtf8(data, byteBuffer, out int bytesWritten);
+                if(!success)
+                {
+                    throw new InvalidOperationException("Base64Url encoding failed.");
+                }
+
+                //Convert the base64 bytes to chars in our char buffer.
+                for(int i = 0; i < bytesWritten; i++)
+                {
+                    buffer[prefixOffset + i] = (char)byteBuffer[i];
+                }
+                int written = bytesWritten;
+
+                //If prefix space was reserved, let the caller write the prefix.
+                //This MUST happen before string creation due to string immutability.
+                if(reservePrefixSpace && prefixWriter != null)
+                {
+                    prefixWriter(buffer);
+                }
+
+                //Create and return the final immutable string.
+                return new string(buffer.Slice(0, written + prefixOffset));
+            }
+            else
+            {
+                //Need to combine header and data.
+                int totalLength = codecHeader.Length + data.Length;
+
+                //Calculate the exact length for base64 encoding.
+                int base64Length = ((totalLength + 2) / 3) * 4;
+
+                //Allocate buffer with optional extra space for prefix.
+                int prefixOffset = reservePrefixSpace ? 1 : 0;
+                int totalBufferSize = base64Length + prefixOffset;
+                Span<char> buffer = totalBufferSize <= 512 ? stackalloc char[totalBufferSize] : pool.Rent(totalBufferSize).Memory.Span;
+
+                //We need to handle the combined data encoding inline due to stackalloc scope.
+                Span<byte> combined = totalLength <= 512 ? stackalloc byte[totalLength] : new byte[totalLength];
+                codecHeader.CopyTo(combined);
+                data.CopyTo(combined.Slice(codecHeader.Length));
+
+                //Base64Url encodes to bytes first, then we need to convert to chars.
+                //Allocate temporary byte buffer for the base64 encoded data.
+                Span<byte> byteBuffer = base64Length <= 512 ? stackalloc byte[base64Length] : new byte[base64Length];
+
+                bool success = Base64Url.TryEncodeToUtf8(combined, byteBuffer, out int bytesWritten);
+                if(!success)
+                {
+                    throw new InvalidOperationException("Base64Url encoding failed.");
+                }
+
+                //Convert the base64 bytes to chars in our char buffer.
+                for(int i = 0; i < bytesWritten; i++)
+                {
+                    buffer[prefixOffset + i] = (char)byteBuffer[i];
+                }
+                int written = bytesWritten;
+
+                //If prefix space was reserved, let the caller write the prefix.
+                //This MUST happen before string creation due to string immutability.
+                if(reservePrefixSpace && prefixWriter != null)
+                {
+                    prefixWriter(buffer);
+                }
+
+                //Create and return the final immutable string.
+                return new string(buffer.Slice(0, written + prefixOffset));
+            }
+        };
+
+
+
+
         public static BufferAllocationDecodeDelegate StackBase58Decoder { get; } = (dataWithoutMultibasePrefix, startIndex, resultMemoryPool) =>
         {
             int safeEncodingBufferCount = Base58.Bitcoin.GetSafeByteCountForDecoding(dataWithoutMultibasePrefix);
@@ -143,15 +285,15 @@ namespace Verifiable.Tests.TestInfrastructure
         public static void Setup()
         {
             //Use the old 3-parameter initialization method.
-            CryptoLibrary.InitializeProviders(StackBase58Encoder, StackBase58Decoder, SHA256.HashData);
+            CryptoLibrary.InitializeProviders(StackBase58EncoderV2, StackBase58Decoder, SHA256.HashData);
 
             //Manually configure the DefaultCoderSelector to handle both Base58 and Base64Url.
             DefaultCoderSelector.SelectEncoder = keyFormatType =>
             {
                 return keyFormatType switch
                 {
-                    Type kt when kt == WellKnownKeyFormats.PublicKeyMultibase => StackBase58Encoder,
-                    Type kt when kt == WellKnownKeyFormats.PublicKeyJwk => Base64UrlEncoder,
+                    Type kt when kt == WellKnownKeyFormats.PublicKeyMultibase => StackBase58EncoderV2,
+                    Type kt when kt == WellKnownKeyFormats.PublicKeyJwk => Base64UrlEncoderV2,
                     _ => throw new ArgumentException($"No encoder available for key format: {keyFormatType}")
                 };
             };

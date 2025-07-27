@@ -1,14 +1,37 @@
-﻿using System;
+﻿using SimpleBase;
+using System;
 using System.Buffers;
 using Verifiable.Core.Cryptography;
 using Verifiable.Core.Did;
 
 namespace Verifiable.Core
 {
+    /// <summary>
+    /// Delegate for encoding data with support for multibase prefix allocation.
+    /// This improved version allows the encoder to allocate space for a prefix character
+    /// that will be written by the caller before the string is created.
+    /// </summary>
+    /// <param name="data">The data to encode.</param>
+    /// <param name="prefixHeader">The codec header to prepend to the data before encoding.</param>
+    /// <param name="reservePrefixSpace">If true, reserves one character at the beginning for a multibase prefix.</param>
+    /// <param name="allocationPool">The memory pool for temporary allocations.</param>
+    /// <param name="prefixWriter">Action to write the prefix character at position 0 of the buffer before string creation.</param>
+    /// <returns>The encoded string, potentially with a reserved prefix character written by prefixWriter.</returns>
+    public delegate string BufferAllocationEncodeDelegate2(
+        ReadOnlySpan<byte> data,
+        ReadOnlySpan<byte> prefixHeader,
+        bool reservePrefixSpace,
+        MemoryPool<char> allocationPool,
+        Action<Span<char>> prefixWriter);
+
+
+
     public delegate TResult[] ArrayDecodeDelegate<T, TResult>(ReadOnlySpan<char> data);
 
     public delegate IMemoryOwner<TResult> DecodeDelegate<T, TResult>(ReadOnlySpan<T> data, MemoryPool<TResult> memoryPool);
     public delegate IMemoryOwner<byte> BufferAllocationDecodeDelegate(ReadOnlySpan<char> data, int codecHeaderLength, MemoryPool<byte> resultMemoryPool);
+
+
 
 
     //TODO: There should be a version for BaseUrl.Encoding as well.
@@ -17,6 +40,49 @@ namespace Verifiable.Core
 
     public static class MultibaseSerializer
     {
+        /// <summary>
+        /// Base58 encoder that supports optional prefix space reservation.
+        /// </summary>
+        /// <remarks>
+        /// This encoder demonstrates the key insight: strings in C# are immutable, so any prefix
+        /// must be written to the character buffer BEFORE the string is created. The prefixWriter
+        /// callback allows the caller to write the prefix character at the correct position.
+        /// </remarks>
+        public static BufferAllocationEncodeDelegate2 StackBase58EncoderV2 { get; } = (data, codecHeader, reservePrefixSpace, pool, prefixWriter) =>
+        {
+            //Combine codec header and data.
+            int bufferLengthForDataToBeEncoded = codecHeader.Length + data.Length;
+            Span<byte> dataWithEncodingHeaders = stackalloc byte[bufferLengthForDataToBeEncoded];
+
+            codecHeader.CopyTo(dataWithEncodingHeaders);
+            data.CopyTo(dataWithEncodingHeaders.Slice(codecHeader.Length));
+
+            //Calculate the size needed for base58 encoding.
+            int base58Size = Base58.Bitcoin.GetSafeCharCountForEncoding(dataWithEncodingHeaders);
+
+            //Allocate buffer with optional extra space for prefix.
+            int prefixOffset = reservePrefixSpace ? 1 : 0;
+            int totalBufferSize = base58Size + prefixOffset;
+            Span<char> buffer = totalBufferSize <= 512 ? stackalloc char[totalBufferSize] : pool.Rent(totalBufferSize).Memory.Span;
+
+            //Encode the data, starting after the prefix position if space was reserved.
+            if(!Base58.Bitcoin.TryEncode(dataWithEncodingHeaders, buffer.Slice(prefixOffset), out int bytesWritten))
+            {
+                throw new Exception("Encoding failed.");
+            }
+
+            //If prefix space was reserved, let the caller write the prefix.
+            //This MUST happen before string creation due to string immutability.
+            if(reservePrefixSpace && prefixWriter != null)
+            {
+                prefixWriter(buffer);
+            }
+
+            //Create and return the final immutable string.
+            return new string(buffer.Slice(0, bytesWritten + prefixOffset));
+        };
+
+
         public static IMemoryOwner<byte> Decode(ReadOnlySpan<char> data, MemoryPool<byte> resultMemoryPool, ArrayDecodeDelegate<char, byte> arrayDecoder)
         {
             //This just forwards the call to buffer delegate call.
@@ -99,6 +165,12 @@ namespace Verifiable.Core
             }
 
             return Encode(dataWithEncodingHeaders, codecHeader, codecId, pool, bufferAllocatorEncoder);
+        }
+
+
+        public static string Encode(ReadOnlySpan<byte> data, ReadOnlySpan<byte> codecHeader, char multibasePrefix, MemoryPool<char> pool, BufferAllocationEncodeDelegate2 encoder)
+        {
+            return encoder(data, codecHeader, reservePrefixSpace: true, pool, prefixWriter: buffer => buffer[0] = multibasePrefix);
         }
 
 

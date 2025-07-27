@@ -4,7 +4,7 @@ using Verifiable.Core;
 
 namespace Verifiable.Cryptography
 {
-    public delegate BufferAllocationEncodeDelegate EncoderSelector(Type keyFormatType);
+    public delegate BufferAllocationEncodeDelegate2 EncoderSelector(Type keyFormatType);
 
     public delegate BufferAllocationDecodeDelegate DecoderSelector(Type keyFormatType);
 
@@ -72,7 +72,7 @@ namespace Verifiable.Cryptography
 
     public static class CryptoLibrary
     {
-        public static void InitializeProviders(BufferAllocationEncodeDelegate base58BtcEncoder, BufferAllocationDecodeDelegate base58BtcDecoder, HashFunction sha256Implementation)
+        public static void InitializeProviders(BufferAllocationEncodeDelegate2 base58BtcEncoder, BufferAllocationDecodeDelegate base58BtcDecoder, HashFunction sha256Implementation)
         {
             InitializerProviders(keyFormatType =>
             {

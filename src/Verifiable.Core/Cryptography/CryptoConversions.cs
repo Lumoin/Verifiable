@@ -8,13 +8,14 @@ using Verifiable.Jwt;
 
 namespace Verifiable.Core.Cryptography
 {
-    public delegate Dictionary<string, object> AlgorithmToJwkDelegate(CryptoAlgorithm algorithm, Purpose purpose, ReadOnlySpan<byte> keyMaterial, BufferAllocationEncodeDelegate base64UrlEncoder);
-    public delegate string AlgorithmToBase58Delegate(CryptoAlgorithm algorithm, Purpose purpose, ReadOnlySpan<byte> keyMaterial, BufferAllocationEncodeDelegate base58Encoder);
+    public delegate Dictionary<string, object> AlgorithmToJwkDelegate(CryptoAlgorithm algorithm, Purpose purpose, ReadOnlySpan<byte> keyMaterial, BufferAllocationEncodeDelegate2 base64UrlEncoder);
+    public delegate string AlgorithmToBase58Delegate(CryptoAlgorithm algorithm, Purpose purpose, ReadOnlySpan<byte> keyMaterial, BufferAllocationEncodeDelegate2 base58Encoder);
 
     public delegate (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte>) JwkToAlgorithmDelegate(Dictionary<string, object> jwk, MemoryPool<byte> memoryPool, BufferAllocationDecodeDelegate base64UrlDecoder);
     public delegate (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte> keyMaterial) Base58ToAlgorithmDelegate(string base58Key, MemoryPool<byte> memoryPool, BufferAllocationDecodeDelegate base58Decoder);
 
     public delegate (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte> keyMaterial) VerificationMethodToAlgorithmConverterDelegate(VerificationMethod method, MemoryPool<byte> memoryPool);
+
 
     /// <summary>
     /// This class defines default conversions from <em>Verifiable</em> internal representation to others
@@ -24,13 +25,12 @@ namespace Verifiable.Core.Cryptography
     {
         public static AlgorithmToJwkDelegate DefaultAlgorithmToJwkConverter => (algorithm, purpose, keyMaterial, base64UrlEncoder) =>
         {
-            static Dictionary<string, object> AddEcHeaders(string alg, string crv, ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, EllipticCurveTypes curveType, BufferAllocationEncodeDelegate encoder)
+            static Dictionary<string, object> AddEcHeaders(string alg, string crv, ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, EllipticCurveTypes curveType, BufferAllocationEncodeDelegate2 encoder)
             {
                 ReadOnlySpan<byte> compressedXAndY = keyMaterial;
                 byte[] uncompressedY = EllipticCurveUtilities.Decompress(compressedXAndY, curveType);
                 ReadOnlySpan<byte> uncompressedX = compressedXAndY.Slice(1);
 
-                //Use the provided encoder instead of fixed Base64Url.Encode.
                 var jwtX = EncodeForJwk(uncompressedX, encoder);
                 var jwtY = EncodeForJwk(uncompressedY, encoder);
 
@@ -43,7 +43,7 @@ namespace Verifiable.Core.Cryptography
                 return headers;
             }
 
-            static Dictionary<string, object> AddRsaHeaders(string alg, ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, Tag keyTag, BufferAllocationEncodeDelegate encoder)
+            static Dictionary<string, object> AddRsaHeaders(string alg, ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, Tag keyTag, BufferAllocationEncodeDelegate2 encoder)
             {
                 var encodingScheme = keyTag.Get<EncodingScheme>();
                 byte[] rawModulus = encodingScheme switch
@@ -64,7 +64,7 @@ namespace Verifiable.Core.Cryptography
                 return headers;
             }
 
-            static Dictionary<string, object> AddEd25519Headers(ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, BufferAllocationEncodeDelegate encoder)
+            static Dictionary<string, object> AddEd25519Headers(ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, BufferAllocationEncodeDelegate2 encoder)
             {
                 var base64UrlencodedKeyBytes = EncodeForJwk(keyMaterial, encoder);
 
@@ -76,7 +76,7 @@ namespace Verifiable.Core.Cryptography
                 return headers;
             }
 
-            static Dictionary<string, object> AddX25519Headers(ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, BufferAllocationEncodeDelegate encoder)
+            static Dictionary<string, object> AddX25519Headers(ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, BufferAllocationEncodeDelegate2 encoder)
             {
                 var base64UrlencodedKeyBytes = EncodeForJwk(keyMaterial, encoder);
 
@@ -88,11 +88,12 @@ namespace Verifiable.Core.Cryptography
             }
 
             //Helper method to encode data for JWK using the provided encoder.
-            static string EncodeForJwk(ReadOnlySpan<byte> data, BufferAllocationEncodeDelegate encoder)
+            static string EncodeForJwk(ReadOnlySpan<byte> data, BufferAllocationEncodeDelegate2 encoder)
             {
                 //For JWK, we don't use codec headers, so pass empty span.
                 ReadOnlySpan<byte> emptyCodecHeader = [];
-                return encoder(data, emptyCodecHeader, SensitiveMemoryPool<char>.Shared);
+                static void NoOpPrefixWriter(Span<char> _) { }
+                return encoder(data, emptyCodecHeader, reservePrefixSpace: false, SensitiveMemoryPool<char>.Shared, prefixWriter: NoOpPrefixWriter);
             }
 
             var jwkHeaders = new Dictionary<string, object>();
@@ -112,9 +113,10 @@ namespace Verifiable.Core.Cryptography
 
         public static AlgorithmToBase58Delegate DefaultAlgorithmToBase58Converter => (algorithm, purpose, keyMaterial, base58Encoder) =>
         {
-            static string EncodeKey(ReadOnlySpan<byte> keyMaterial, ReadOnlySpan<byte> multicodecHeader, BufferAllocationEncodeDelegate encoder)
+            static string EncodeKey(ReadOnlySpan<byte> keyMaterial, ReadOnlySpan<byte> multicodecHeader, BufferAllocationEncodeDelegate2 encoder)
             {
                 return MultibaseSerializer.Encode(keyMaterial, multicodecHeader, MultibaseAlgorithms.Base58Btc, SensitiveMemoryPool<char>.Shared, encoder);
+                //return MultibaseSerializer.Encode(keyMaterial, multicodecHeader, MultibaseAlgorithms.Base58Btc, SensitiveMemoryPool<char>.Shared, encoder);
             }
 
             return (algorithm, purpose) switch

@@ -31,6 +31,46 @@ namespace Verifiable.Tests
 
 
         [TestMethod]
+        public void CompareOldAndNewEncoders()
+        {
+            //Test data - using the same key from the original test.
+            var encodedKey = "zQ3shtxV1FrJfhqE1dvxYRcCknWNjHc3c5X1y3ZSoPDi2aur2";
+            var bytes = MultibaseSerializer.Decode(encodedKey, SensitiveMemoryPool<byte>.Shared, TestSetup.Base58ArrayDecoder).Memory.Span;
+
+            //Encode using the old method with the old encoder.
+            var oldEncoderResult = MultibaseSerializer.Encode(
+                bytes,
+                MulticodecHeaders.Secp256k1PublicKey,
+                MultibaseAlgorithms.Base58Btc,
+                SensitiveMemoryPool<char>.Shared,
+                TestSetup.StackBase58Encoder);
+
+            //Encode using the new method with the V2 encoder.
+            var newEncoderResult = MultibaseSerializer.Encode(
+                bytes,
+                MulticodecHeaders.Secp256k1PublicKey,
+                MultibaseAlgorithms.Base58Btc,
+                SensitiveMemoryPool<char>.Shared,
+                TestSetup.StackBase58EncoderV2);
+
+            //Both should produce the same result.
+            Assert.AreEqual(oldEncoderResult, newEncoderResult,
+                "Old encoder and new V2 encoder should produce identical results");
+
+            //Both should start with the expected prefix.
+            StringAssert.StartsWith(oldEncoderResult, "zQ3s", StringComparison.InvariantCulture);
+            StringAssert.StartsWith(newEncoderResult, "zQ3s", StringComparison.InvariantCulture);
+
+            //Should be able to decode both results and get the original bytes back.
+            var decodedOld = MultibaseSerializer.Decode(oldEncoderResult, SensitiveMemoryPool<byte>.Shared, TestSetup.Base58ArrayDecoder).Memory.Span;
+            var decodedNew = MultibaseSerializer.Decode(newEncoderResult, SensitiveMemoryPool<byte>.Shared, TestSetup.Base58ArrayDecoder).Memory.Span;
+
+            Assert.IsTrue(decodedOld.SequenceEqual(bytes), "Old encoder result should decode to original bytes");
+            Assert.IsTrue(decodedNew.SequenceEqual(bytes), "New encoder result should decode to original bytes");
+        }
+
+
+        [TestMethod]
         public void Bls12381WithMultibaseBtc58Succeeds()
         {
             //https://w3c-ccg.github.io/did-method-key/#bls-12381
