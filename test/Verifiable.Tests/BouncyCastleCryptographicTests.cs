@@ -21,8 +21,8 @@ namespace Verifiable.Tests
         public void CanGenerateKeyPairEd255019()
         {
             var keys = BouncyCastleKeyCreator.CreateEd25519Keys(MemoryPool<byte>.Shared);
-            Assert.IsTrue(keys.PublicKey.AsReadOnlySpan().Length > 0);
-            Assert.IsTrue(keys.PrivateKey.AsReadOnlySpan().Length > 0);
+            Assert.IsGreaterThan(0, keys.PublicKey.AsReadOnlySpan().Length);
+            Assert.IsGreaterThan(0, keys.PrivateKey.AsReadOnlySpan().Length);
         }
 
 
@@ -32,7 +32,7 @@ namespace Verifiable.Tests
             var keys = BouncyCastleKeyCreator.CreateEd25519Keys(MemoryPool<byte>.Shared);
             var publicKey = keys.PublicKey;
             var privateKey = keys.PrivateKey;
-            
+
             var data = (ReadOnlySpan<byte>)TestData;
             using var signature = privateKey.Sign(data, BouncyCastleAlgorithms.SignEd25519, MemoryPool<byte>.Shared);
             Assert.IsTrue(publicKey.Verify(data, signature, BouncyCastleAlgorithms.VerifyEd25519));

@@ -15,7 +15,7 @@ namespace Verifiable.Tests.Jwt
     [TestClass]
     public sealed class JwtTestsWithPrefinedData
     {
-        [DataTestMethod]
+        [TestMethod]
         [DynamicData(nameof(JwtTestDataProvider.GetHsTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
         public async Task HsJwtTokenEncodingSigningAndVerifyingSucceeds(HsTestData testData)
         {
@@ -53,7 +53,7 @@ namespace Verifiable.Tests.Jwt
                 {
                     //Uses the previously decoded header and payload to load the right key material.
                     //SO! Not from the jwtTestData like here. In fact, this test should use a facility
-                    //where the key data is used!                    
+                    //where the key data is used!
                     string thisISReallyAKidOrSomethingToChooseTheKeyToLoad = (string)header[JwkProperties.Alg];
                     return thisISReallyAKidOrSomethingToChooseTheKeyToLoad;
                 },
@@ -100,7 +100,7 @@ namespace Verifiable.Tests.Jwt
         }
 
 
-        [DataTestMethod]
+        [TestMethod]
         [DynamicData(nameof(JwtTestDataProvider.GetESTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
         public async Task ESJwtTokenEncodingSigningAndVerifyingSucceeds(ESTestData jwtTestData)
         {
@@ -181,7 +181,7 @@ namespace Verifiable.Tests.Jwt
         }
 
 
-        [DataTestMethod]
+        [TestMethod]
         [DynamicData(nameof(JwtTestDataProvider.GetRsaRsTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
         public async Task RsaRsJwtTokenEncodingSigningAndVerifyingSucceeds(RsaRSTestData testData)
         {
@@ -277,7 +277,7 @@ namespace Verifiable.Tests.Jwt
         }
 
 
-        [DataTestMethod]
+        [TestMethod]
         [DynamicData(nameof(JwtTestDataProvider.GetRsaPsTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
         public async Task RsaPSJwtTokenEncodingSigningAndVerifyingSucceeds(RsaPSTestData testData)
         {
@@ -377,7 +377,7 @@ namespace Verifiable.Tests.Jwt
         }
 
 
-        [DataTestMethod]
+        [TestMethod]
         [DynamicData(nameof(JwtTestDataProvider.GetMixedJwtTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
         public void MixedJwtTokenEncodingSigningAndVerifyingSucceeds(BaseJwtTestData testData)
         {
@@ -398,7 +398,7 @@ namespace Verifiable.Tests.Jwt
                signingFunctionMatcher: DefaultVerifierSelector.JwtDefaultSigner);
 
             Assert.AreEqual(testData.CrossCheckJwt, signedJwt);
-        }        
+        }
     }
 
 

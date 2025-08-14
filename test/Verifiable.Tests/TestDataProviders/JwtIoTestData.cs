@@ -292,7 +292,7 @@ namespace Verifiable.Tests.DataProviders
     [TestClass]
     public class RsaRsJwtTests
     {
-        [DataTestMethod]
+        [TestMethod]
         [DynamicData(nameof(JwtTestDataProvider.GetRsaRsTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
         public void TestRsaRsJwt(RsaRSTestData testData)
         {
@@ -300,4 +300,4 @@ namespace Verifiable.Tests.DataProviders
             Assert.IsFalse(string.IsNullOrEmpty(testData.CrossCheckJwt));
         }
     }
-}    
+}

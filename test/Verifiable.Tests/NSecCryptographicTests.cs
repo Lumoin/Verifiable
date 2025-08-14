@@ -17,14 +17,14 @@ namespace Verifiable.Tests.Core
         /// </summary>
         private byte[] TestData { get; } = Encoding.UTF8.GetBytes("This is a test string.");
 
-        
+
         [TestMethod]
         public void CanGenerateKeyPairEd255019()
         {
             var keys = NSecKeyCreator.CreateEd25519Keys(ExactSizeMemoryPool<byte>.Shared);
-            
-            Assert.IsTrue(keys.PublicKey.AsReadOnlySpan().Length > 0);
-            Assert.IsTrue(keys.PrivateKey.AsReadOnlySpan().Length > 0);
+
+            Assert.IsGreaterThan(0, keys.PublicKey.AsReadOnlySpan().Length);
+            Assert.IsGreaterThan(0, keys.PrivateKey.AsReadOnlySpan().Length);
         }
 
 

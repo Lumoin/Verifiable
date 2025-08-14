@@ -38,7 +38,7 @@ namespace Verifiable.Core.Jwt
         /// </summary>
         /// <param name="algorithm">The algorithm to test.</param>
         /// <param name="algorithmCheck">The function that checks if the algorithm is recognized.</param>
-        [DataTestMethod]
+        [TestMethod]
         [DynamicData(nameof(GetJwaAlgorithms), DynamicDataSourceType.Method)]
         public void JwaAlgorithmComparesCorrectly(string correctAlgorithm, Func<string, bool> isCorrectAlgorithm)
         {
