@@ -8,30 +8,30 @@ namespace Verifiable.Tests.Tpm
 {
     [TestClass]
     public sealed class NewTpmTests
-    {        
+    {
         [SupportedOSPlatform(Platforms.Windows)]
         [RunOnlyOnPlatformTestMethod(Platforms.Windows)]
         public void TpmWindowsSupportsWindows()
-        {            
+        {
             Assert.IsTrue(TpmWindows.IsSupported);
         }
 
-        
+
         [SupportedOSPlatform(Platforms.Linux)]
-        [RunOnlyOnPlatformTestMethod(Platforms.Linux)]        
+        [RunOnlyOnPlatformTestMethod(Platforms.Linux)]
         public void TpmLinuxSupportsLinux()
         {
             Assert.IsTrue(TpmLinux.IsSupported);
         }
 
-        
+
         [SkipOnCiTestMethod]
         public void TpmVirtualSupportsAllPlatforms()
         {
             Assert.IsTrue(TpmVirtual.IsSupported);
         }
 
-        
+
         [SkipOnCiTestMethod]
         public void GetVersionSucceeds()
         {
@@ -48,7 +48,7 @@ namespace Verifiable.Tests.Tpm
             Assert.IsTrue(isSelfTestSuccess);
         }
 
-        
+
         [SkipOnCiTestMethod]
         public void IsFipsSucceeds()
         {
@@ -64,10 +64,10 @@ namespace Verifiable.Tests.Tpm
             var supportedAlgorithms = Verifiable.Tpm.Tpm.GetSupportedAlgorithms();
 
             Assert.IsNotNull(supportedAlgorithms, "The collection is null.");
-            Assert.IsTrue(supportedAlgorithms.Count > 0, "The collection is empty.");
+            Assert.IsGreaterThan(0, supportedAlgorithms.Count, "The collection is empty.");
         }
 
-        
+
         [SkipOnCiTestMethod]
         public void CalculateShortSha256()
         {
@@ -88,7 +88,7 @@ namespace Verifiable.Tests.Tpm
             //TODO: The array to be hashed is of constant value while developing
             //on purpose.
             byte[] longByteArray = new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 4, 5};
-                                    
+
             byte[] longControlValueHash = SHA256.HashData(longByteArray);
             byte[]? longTpmSha256 = Verifiable.Tpm.Tpm.CalculateLongSha256(longByteArray);
 

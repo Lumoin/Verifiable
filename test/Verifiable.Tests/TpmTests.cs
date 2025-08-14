@@ -15,7 +15,7 @@ namespace Verifiable.Tests.Tpm
 
 
         public TpmTests()
-        {          
+        {
             //The CI pipeline installs TPM libraries on Linux...
             TpmWrapper = new TpmWrapper();
         }
@@ -23,14 +23,14 @@ namespace Verifiable.Tests.Tpm
 
         /// <summary>
         /// Checks that calling supported TPM platforms does not throw.
-        /// </summary>        
+        /// </summary>
         [SkipOnCiTestMethod]
         public void TpmIsPlatformSupported()
         {
             _ = TpmExtensions.IsTpmPlatformSupported();
         }
 
-        
+
         [SkipOnCiTestMethod]
         public void TpmGetPropertiesSucceeds()
         {
@@ -40,22 +40,22 @@ namespace Verifiable.Tests.Tpm
             Assert.IsFalse(string.IsNullOrWhiteSpace(tpmInfo.Properties.VendorString));
             Assert.IsFalse(string.IsNullOrWhiteSpace(tpmInfo.Properties.ManufacturerName));
             Assert.IsTrue(tpmInfo.Properties.IsFips1402);
-            Assert.IsTrue(tpmInfo.PrcBanks.Count > 0);
+            Assert.IsGreaterThan(0, tpmInfo.PrcBanks.Count);
         }
 
-        
+
         [SkipOnCiTestMethod]
         public void TpmGetPcrBanksSucceeds()
         {
             var pcrBanks = TpmWrapper.Tpm.GetPcrBanks();
 
-            Assert.IsTrue(pcrBanks.Count > 0, "There should be one or more banks after querying the TPM.");
+            Assert.IsGreaterThan(0, pcrBanks.Count, "There should be one or more banks after querying the TPM.");
             foreach(var pcrBank in pcrBanks)
             {
                 Assert.IsTrue(TpmValidator.IsValidBank(pcrBank), "One or more of the buffer lengths in the PCR bank length did not match the bank algorithm.");
             }
         }
-        
+
         [SkipOnCiTestMethod]
         public void HashCheck()
         {

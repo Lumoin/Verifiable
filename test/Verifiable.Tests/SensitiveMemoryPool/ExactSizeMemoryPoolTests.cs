@@ -41,7 +41,7 @@ namespace Verifiable.Core.SensitiveMemoryPool
     {
         [TestMethod]
         public void BuffersAreExactlyRequestedSize()
-        {            
+        {
             var pool = new ExactSizeMemoryPool<byte>();
             for(int round = 0; round < 2; ++round)
             {
@@ -98,7 +98,7 @@ namespace Verifiable.Core.SensitiveMemoryPool
                 {
                     listener.RecordObservableInstruments();
                     // Allow some time for the metrics to be collected
-                    await Task.Delay(TimeSpan.FromSeconds(1));
+                    await Task.Delay(TimeSpan.FromSeconds(1), TestContext.CancellationTokenSource.Token);
 
                     // Check that the metrics have the correct values
                     bool found = reportedMetrics.TryGetValue("TotalSlabs", out long totalSlabs);
@@ -115,7 +115,7 @@ namespace Verifiable.Core.SensitiveMemoryPool
 
 
         [Ignore("Work in progress.")]
-        [TestMethod]        
+        [TestMethod]
         public void TracingTest()
         {
             var activityListener = new ActivityListener
@@ -150,11 +150,11 @@ namespace Verifiable.Core.SensitiveMemoryPool
 
             //ActivitySource.RemoveActivityListener(activityListener);
 
-            Assert.AreEqual(4, activities.Count);
+            Assert.HasCount(4, activities);
 
             var expectedOperations = new[] { "Rent", "Dispose", "Rent", "Dispose" };
             CollectionAssert.AreEqual(expectedOperations, activities.Select(a => a.OperationName).ToArray());
-            
+
             Assert.AreEqual("100", activities[0].Tags.FirstOrDefault(tag => tag.Key == "bufferSize").Value);
             Assert.AreEqual("100", activities[1].Tags.FirstOrDefault(tag => tag.Key == "bufferSize").Value);
             Assert.AreEqual("200", activities[2].Tags.FirstOrDefault(tag => tag.Key == "bufferSize").Value);
@@ -163,7 +163,7 @@ namespace Verifiable.Core.SensitiveMemoryPool
 
 
         [Ignore("Work in progress.")]
-        [TestMethod]        
+        [TestMethod]
         public async Task TracingTest2()
         {
             List<Activity> capturedActivities = new List<Activity>();
@@ -184,11 +184,11 @@ namespace Verifiable.Core.SensitiveMemoryPool
 
                 using(var rentedMemory = pool.Rent(100))
                 {
-                    await Task.Delay(100);
+                    await Task.Delay(100, TestContext.CancellationTokenSource.Token);
                 }
             }
 
-            Assert.AreEqual(3, capturedActivities.Count);
+            Assert.HasCount(3, capturedActivities);
 
             var rentActivity = capturedActivities.FirstOrDefault(a => a.OperationName == "Rent");
             var disposeActivity = capturedActivities.FirstOrDefault(a => a.OperationName == "Dispose");
@@ -204,5 +204,7 @@ namespace Verifiable.Core.SensitiveMemoryPool
             Assert.AreEqual(parentActivity2.SpanId, rentActivity.ParentSpanId);
             Assert.AreEqual(rentActivity.SpanId, disposeActivity.ParentSpanId);
         }
+
+        public TestContext TestContext { get; set; }
     }
 }

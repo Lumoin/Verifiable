@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Assertion
     [TestClass]
     public sealed class ClaimIdTests
     {
-        //TODO: 
+        //TODO:
         /// <summary>
         /// This collects the library defined, or pre-defined, static instances of <see cref="ClaimId"/>.
         /// </summary>
@@ -60,7 +60,7 @@ namespace Verifiable.Tests.Assertion
                 { nameof(ClaimId.EcMissingCurve), (1, "EcMissingCurve") },
                 { nameof(ClaimId.EcMissingXCoordinate), (2, "EcMissingXCoordinate") },
                 { nameof(ClaimId.EcMissingYCoordinate), (3, "EcMissingYCoordinate") },
-                { nameof(ClaimId.EcValidAlgAndCrvCombination), (4, "EcValidAlgAndCrvCombination") },                
+                { nameof(ClaimId.EcValidAlgAndCrvCombination), (4, "EcValidAlgAndCrvCombination") },
                 { nameof(ClaimId.EcAlgOptionalAndNotPresentOrEmpty), (6, "EcAlgOptionalAndNotPresentOrEmpty") },
                 { nameof(ClaimId.AlgExists), (7, "AlgExists") },
                 { nameof(ClaimId.AlgIsNone), (8, "AlgIsNone") },
@@ -77,7 +77,7 @@ namespace Verifiable.Tests.Assertion
                 { nameof(ClaimId.RsaKeyInvalid), (103, "RsaKeyInvalid") },
                 { nameof(ClaimId.OkpMissingCurve), (200, "OkpMissingCurve") },
                 { nameof(ClaimId.OkpAlgShouldNotBePresentForX25519), (201, "OkpAlgShouldNotBePresentForX25519") },
-                { nameof(ClaimId.OkpValidAlgAndCrvCombination), (202, "OkpValidAlgAndCrvCombination") },                
+                { nameof(ClaimId.OkpValidAlgAndCrvCombination), (202, "OkpValidAlgAndCrvCombination") },
                 { nameof(ClaimId.OkpAlgOptionalOrNotPresent), (204, "OkpAlgOptionalOrNotPresent") },
                 { nameof(ClaimId.DidCoreJsonLdUriAsFirst), (300, "DidCoreJsonLdUriAsFirst") },
                 { nameof(ClaimId.DidDocumentPrefix), (400, "DidDocumentPrefix") },
@@ -133,7 +133,7 @@ namespace Verifiable.Tests.Assertion
         }
 
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(0)]
         [DataRow(-1)]
         [DataRow(-100)]
@@ -144,7 +144,7 @@ namespace Verifiable.Tests.Assertion
             Assert.AreEqual(code, exception.ActualValue);
             Assert.IsTrue(
                 exception.Message.Contains("Value must be greater than zero.", StringComparison.InvariantCulture),
-                $"Expected message to contain 'Value must be greater than zero.' but got: '{exception.Message}'");            
+                $"Expected message to contain 'Value must be greater than zero.' but got: '{exception.Message}'");
         }
 
 
@@ -152,7 +152,7 @@ namespace Verifiable.Tests.Assertion
         public void CreateThrowsArgumentExceptionForEmptyDescription()
         {
             var exception = Assert.ThrowsExactly<ArgumentException>(() => ClaimId.Create(1, string.Empty));
-            Assert.AreEqual("description", exception.ParamName);            
+            Assert.AreEqual("description", exception.ParamName);
             Assert.IsTrue(
                 exception.Message.Contains("The value cannot be an empty string. (Parameter 'description')", StringComparison.InvariantCulture),
                 $"Expected message to contain 'Value must be greater than zero.' but got: '{exception.Message}'");
@@ -182,7 +182,7 @@ namespace Verifiable.Tests.Assertion
                 }
                 catch(ArgumentOutOfRangeException) { }
                 catch(ArgumentException) { }
-            }            
+            }
         }
 
 
@@ -194,5 +194,5 @@ namespace Verifiable.Tests.Assertion
             var claimId = ClaimId.OctKeyType;
             Assert.AreEqual(13, claimId.Code);
         }
-    }    
+    }
 }

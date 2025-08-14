@@ -27,7 +27,7 @@ namespace Verifiable.Tests.Core
         public static IEnumerable<object[]> RsaKeySizesInBits => new object[][]
         {
             [2048],
-            [4096]            
+            [4096]
         };
 
 
@@ -71,7 +71,7 @@ namespace Verifiable.Tests.Core
         }
 
 
-        [DataTestMethod]
+        [TestMethod]
         [DynamicData(nameof(RsaKeySizesInBits), DynamicDataSourceType.Property)]
         public void RsaDecodeThrowsIfNoDerPaddingByte(int keySizeInBits)
         {
@@ -92,7 +92,7 @@ namespace Verifiable.Tests.Core
         }
 
 
-        [DataTestMethod]
+        [TestMethod]
         [DynamicData(nameof(RsaKeySizesInBits), DynamicDataSourceType.Property)]
         public void RsaDecodeThrowsIfNoMsbSet(int keySizeInBits)
         {
@@ -113,17 +113,17 @@ namespace Verifiable.Tests.Core
         }
 
 
-        [DataTestMethod]
+        [TestMethod]
         [DynamicData(nameof(RsaKeySizesInBits), DynamicDataSourceType.Property)]
         public void RsaEncodingAndDecodingSucceeds(int keySizeInBits)
         {
             using(var rsaKey = RSA.Create(keySizeInBits))
             {
-                var rsaParameters = rsaKey.ExportParameters(includePrivateParameters: false);                
+                var rsaParameters = rsaKey.ExportParameters(includePrivateParameters: false);
                 var rsaModulus = rsaParameters.Modulus!;
 
-                var encodedModulus = RsaUtilities.Encode(rsaModulus);                
-                var decodedModulus = RsaUtilities.Decode(encodedModulus);                              
+                var encodedModulus = RsaUtilities.Encode(rsaModulus);
+                var decodedModulus = RsaUtilities.Decode(encodedModulus);
                 CollectionAssert.AreEqual(rsaModulus, decodedModulus);
 
                 //This is a bit of extra to show how to get the DER encoded public key from the platform.
@@ -144,9 +144,9 @@ namespace Verifiable.Tests.Core
         private static byte[] ExportPublicKeyAsDerEncoded(RSA rsa)
         {
             byte[] rsaPublicKey = rsa.ExportRSAPublicKey();
-            AsnWriter writer = new(AsnEncodingRules.DER);            
+            AsnWriter writer = new(AsnEncodingRules.DER);
             writer.WriteEncodedValue(rsaPublicKey);
-            
+
             return writer.Encode();
         }
 
@@ -159,7 +159,7 @@ namespace Verifiable.Tests.Core
         private static (byte[] Modulus, byte[] Exponent)  DecodeDerPublicKey(byte[] derEncodedKey)
         {
             AsnReader reader = new AsnReader(derEncodedKey, AsnEncodingRules.DER);
-            
+
             AsnReader publicKeyReader = reader.ReadSequence();
             BigInteger modulus = publicKeyReader.ReadInteger();
             BigInteger exponent = publicKeyReader.ReadInteger();
