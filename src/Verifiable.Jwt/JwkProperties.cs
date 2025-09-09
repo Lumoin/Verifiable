@@ -13,7 +13,7 @@
         /// use with the key. The values used should either be registered in the
         /// IANA "JSON Web Signature and Encryption Algorithms" registry
         /// established by <see href="https://www.rfc-editor.org/rfc/rfc7518">JSON Web Algorithms (JWA)</see>
-        /// or be a value that contains a Collision-Resistant Name. 
+        /// or be a value that contains a Collision-Resistant Name.
         /// The "alg" value is a case-sensitive ASCII string.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.4">"alg" (Algorithm) Parameter</see>.</remarks>
@@ -159,7 +159,7 @@
         /// The "key_ops" (key operations) parameter identifies the operation(s)
         /// for which the key is intended to be used. The "key_ops" parameter is
         /// intended for use cases in which public, private, or symmetric keys
-        /// may be present. The "use" value is a case-sensitive string.         
+        /// may be present. The "use" value is a case-sensitive string.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.3">"key_ops" (Key Operations) Parameter</see>.</remarks>
         public static readonly string KeyOps = "key_ops";
@@ -260,7 +260,7 @@
         /// <summary>
         ///  The "typ" (type) Header Parameter defined by <see href="https://www.rfc-editor.org/rfc/rfc7515">JWS</see>
         ///  and <see href="https://www.rfc-editor.org/rfc/rfc7516">JWS</see>
-        ///  is used by JWT applications to declare the media type 
+        ///  is used by JWT applications to declare the media type
         ///  <see href="https://www.iana.org/assignments/media-types/media-types.xhtml">IANA.MediaTypes</see> of
         ///  his complete JWT.  This is intended for use by the JWT application
         ///  when values that are not JWTs could also be present in an application
@@ -282,7 +282,7 @@
         /// The "use" (public key use) parameter identifies the intended use of
         /// the public key.The "use" parameter is employed to indicate whether
         /// a public key is used for encrypting data or verifying the signature
-        /// on data. The "use" value is a case-sensitive string.         
+        /// on data. The "use" value is a case-sensitive string.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.2">"use" (Public Key Use) Parameter</see>.</remarks>
         public static readonly string Use = "use";
@@ -306,7 +306,7 @@
         /// each subsequent certificate being the one used to certify the
         /// previous one.The key in the first certificate MUST match the public
         /// key represented by other members of the JWK.Use of this member is OPTIONAL.
-        /// 
+        ///
         /// As with the "x5u" member, optional JWK members providing key usage,
         /// algorithm, or other information MAY also be present when the "x5c"
         /// member is used.If other members are present, the contents of those
@@ -365,9 +365,9 @@
         /// the JWK.The protocol used to acquire the resource MUST provide
         /// integrity protection; an HTTP GET request to retrieve the certificate
         /// MUST use TLS <see href="https://www.rfc-editor.org/rfc/rfc2818">RFC2818</see> <see href="https://www.rfc-editor.org/rfc/rfc5246">RFC5246</see>;
-        /// the identity of the server MUST be validated, as per <see href="https://www.rfc-editor.org/rfc/rfc6125#section-6">Section 6 of RFC 6125</see> 
+        /// the identity of the server MUST be validated, as per <see href="https://www.rfc-editor.org/rfc/rfc6125#section-6">Section 6 of RFC 6125</see>
         /// <see href="https://www.rfc-editor.org/rfc/rfc6125#section-6">RFC6125</see>. Use of this member is OPTIONAL.
-        /// 
+        ///
         /// While there is no requirement that optional JWK members providing key
         /// usage, algorithm, or other information be present when the "x5u"
         /// member is used, doing so may improve interoperability for
@@ -784,7 +784,7 @@
             string _ when IsX5t(property) => X5t,
             string _ when IsX5tHashS256(property) => X5tHashS256,
             string _ when IsTyp(property) => Typ,
-            string _ when IsCty(property) => Cty,                      
+            string _ when IsCty(property) => Cty,
             string _ when IsN(property) => N,
             string _ when IsNbf(property) => Nbf,
             string _ when IsP(property) => P,

@@ -4,59 +4,68 @@ using System.Text;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Cryptography;
+using Verifiable.Core.Cryptography.testing;
 using Verifiable.Core.Did;
 using Verifiable.Jwt;
 using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests
 {
     [TestClass]
     public sealed class SigningTests
     {
-        //System.Buffers.Text.Base64: https://source.dot.net/#System.Private.CoreLib/src/libraries/System.Private.CoreLib/src/System/Buffers/Text/Base64Decoder.cs,72                
-
         [TestMethod]
-        public void CanSignDidWeb()
+        public async ValueTask CanSignDidWeb()
         {
             var keys = TestKeyMaterialProvider.Ed25519KeyMaterial;
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(keys.PublicKey.AsReadOnlySpan(), MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
-            var multibaseEncodedPrivateKey = MultibaseSerializer.Encode(keys.PrivateKey.AsReadOnlySpan(), MulticodecHeaders.Ed25519PrivateKey, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
+
+            // Encode using the new serializer with EncodeDelegate
+            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(
+                keys.PublicKey.AsReadOnlySpan(),
+                MulticodecHeaders.Ed25519PublicKey,
+                MultibaseAlgorithms.Base58Btc,
+                TestSetup.Base58Encoder,
+                SensitiveMemoryPool<byte>.Shared);
+
+            var multibaseEncodedPrivateKey = MultibaseSerializer.Encode(
+                keys.PrivateKey.AsReadOnlySpan(),
+                MulticodecHeaders.Ed25519PrivateKey,
+                MultibaseAlgorithms.Base58Btc,
+                TestSetup.Base58Encoder,
+                SensitiveMemoryPool<byte>.Shared);
 
             var btc58EncodedPublicKey = Base58.Bitcoin.Encode(keys.PublicKey.AsReadOnlySpan());
             var base64EncodedPublicKey = Base64Url.Encode(keys.PublicKey.AsReadOnlySpan());
 
-            /*
-            var keys = TestKeyMaterialProvider.Ed25519KeyMaterial;
-            var publicKey = keys.PublicKey;
-            var privateKey = keys.PrivateKey;*/
+            // Decode using the new serializer with DecodeDelegate
+            var multibaseDecodedPublicKey = MultibaseSerializer.Decode(
+                Vc0PublicKey,
+                MulticodecHeaders.Ed25519PublicKey.Length,
+                TestSetup.Base58Decoder,
+                SensitiveMemoryPool<byte>.Shared);
 
-            //TODO: Check this before committing. <-- Check also this exact phrase in other test and fix it.            
-            var multibaseDecodedPublicKey = MultibaseSerializer.Decode(Vc0PublicKey, ExactSizeMemoryPool<byte>.Shared, Base58.Bitcoin.Decode);
-            var multibaseDecodedPrivateKey = MultibaseSerializer.Decode(Vc0PrivateKey, ExactSizeMemoryPool<byte>.Shared, Base58.Bitcoin.Decode);
+            var multibaseDecodedPrivateKey = MultibaseSerializer.Decode(
+                Vc0PrivateKey,
+                MulticodecHeaders.Ed25519PrivateKey.Length,
+                TestSetup.Base58Decoder,
+                SensitiveMemoryPool<byte>.Shared);
+
             PublicKeyMemory publicKeyMemory = new(multibaseDecodedPublicKey, Tag.Ed25519PublicKey);
             PrivateKeyMemory privateKeyMemory = new(multibaseDecodedPrivateKey, Tag.Ed25519PrivateKey);
 
             var proofValueBytes = Base58.Bitcoin.Decode(Vc0ProofValue.AsSpan()[1..]);
-            var pooledProofSignatureBytes = ExactSizeMemoryPool<byte>.Shared.Rent(proofValueBytes.Length);
+            var pooledProofSignatureBytes = SensitiveMemoryPool<byte>.Shared.Rent(proofValueBytes.Length);
             proofValueBytes.CopyTo(pooledProofSignatureBytes.Memory.Span);
             var proofSignature = new Signature(pooledProofSignatureBytes, Tag.Ed25519Signature);
 
-            string canonocalizedDataWithoutProof = CanonicalVc0Document;
-            var canonocalizedDataWithoutProofHashedData = SHA256.HashData(Encoding.UTF8.GetBytes(canonocalizedDataWithoutProof));
+            string canonicalizeDataWithoutProof = CanonicalVc0Document;
+            var canonicalizedDataWithoutProofHashedData = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalizeDataWithoutProof));
             var proofValueHash = SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalVc0ProofDocument));
-            var combinedHashToVerify = proofValueHash.Concat(canonocalizedDataWithoutProofHashedData).ToArray();
+            var combinedHashToVerify = proofValueHash.Concat(canonicalizedDataWithoutProofHashedData).ToArray();
 
-            /*
-            var ownSignature = privateKeyMemory.Sign(canonocalizedDataWithoutProofHashedData, BouncyCastleAlgorithms.SignEd25519, MemoryPool<byte>.Shared);
-            string ownProof = 'z' + Base58.Bitcoin.Encode(ownSignature.AsReadOnlySpan());
-            string reEncodedTestVector = 'z' + Base58.Bitcoin.Encode(proofValueBytes);
-            Assert.AreEqual(Vc0ProofValue, reEncodedTestVector);*/
-
-            //bool ownIsVerified = publicKeyMemory.Verify(canonocalizedDataWithoutProofHashedData, ownSignature, BouncyCastleAlgorithms.VerifyEd25519);
-
-            var hex = BitConverter.ToString(combinedHashToVerify).Replace("-", "", StringComparison.InvariantCulture);
-            bool isVerified = publicKeyMemory.Verify(combinedHashToVerify, proofSignature, BouncyCastleAlgorithms.VerifyEd25519);
-            
+            var hex = Convert.ToHexString(combinedHashToVerify);
+            bool isVerified = await publicKeyMemory.VerifyAsync(combinedHashToVerify, proofSignature, BouncyCastleAlgorithms.VerifyEd25519Async);
             Assert.IsTrue(isVerified);
         }
 

@@ -8,7 +8,7 @@ namespace Verifiable.Core.Did.Methods
     /// <remarks>Authoritative definition at <see href="https://atproto.com/specs/did-plc">DID Placeholder (did:plc)</see>.</remarks>
     public record PlaceholderDidMethod: GenericDidMethod
     {
-        public PlaceholderDidMethod(string didString) : base(didString)
+        public PlaceholderDidMethod(string didString): base(didString)
         {
             if(!didString.StartsWith("did:plc:"))
             {

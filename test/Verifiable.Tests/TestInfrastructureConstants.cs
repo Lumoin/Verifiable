@@ -33,7 +33,7 @@ namespace Verifiable.Tests.Core
         public static void ThrowIfPreconditionFails(string didDocumentFilename, string didDocumentFileContents)
         {
             ArgumentNullException.ThrowIfNull(didDocumentFilename);
-            
+
             if(string.IsNullOrWhiteSpace(didDocumentFileContents))
             {
                 throw new ArgumentException($"The test file {didDocumentFilename} must not be empty or null.", nameof(didDocumentFileContents));

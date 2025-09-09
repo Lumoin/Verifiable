@@ -16,7 +16,7 @@ namespace Verifiable.Assessment
     {
         /// <summary>
         /// A collection of all the assessment rules that are applied to <c>did:key</c> DID documents.
-        /// </summary>        
+        /// </summary>
         public static IList<ClaimDelegate<DidDocument>> AllRules { get; } = new List<ClaimDelegate<DidDocument>>
         {
             new(ValidateIdEncodingAsync, [ClaimId.KeyDidIdEncoding]),
@@ -24,7 +24,7 @@ namespace Verifiable.Assessment
             new(ValidateIdFormatAsync, [ClaimId.KeyDidIdFormat]),
             new(ValidateSingleVerificationMethodAsync, [ClaimId.KeyDidSingleVerificationMethod]),
             new(ValidateIdPrefixMatchAsync, [ClaimId.KeyDidIdPrefixMatch]),
-            new(ValidateFragmentIdentifierRepetitionAsync, [ClaimId.KeyDidFragmentIdentifierRepetition]),            
+            new(ValidateFragmentIdentifierRepetitionAsync, [ClaimId.KeyDidFragmentIdentifierRepetition]),
         };
 
 
@@ -59,14 +59,14 @@ namespace Verifiable.Assessment
                     else
                     {
                         claims.Add(new Claim(ClaimId.KeyDidIdEncoding, ClaimOutcome.Failure));
-                    }                    
+                    }
                 }
             }
             else
             {
                 claims.Add(new Claim(ClaimId.KeyDidIdEncoding, ClaimOutcome.Failure));
             }
-            
+
             return ValueTask.FromResult(claims);
         }
 
@@ -143,7 +143,7 @@ namespace Verifiable.Assessment
                 if(hashIndex != -1)
                 {
                     ReadOnlySpan<char> fragmentSpan = vmIdSpan.Slice(hashIndex + 1);
-                    
+
                     //Remove the "did:key:" prefix from docIdSpan...
                     ReadOnlySpan<char> docIdSpanWithoutPrefix = docIdSpan.Slice(KeyDidMethod.Prefix.Length);
                     isSuccess = fragmentSpan.SequenceEqual(docIdSpanWithoutPrefix);
@@ -168,7 +168,7 @@ namespace Verifiable.Assessment
             if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyJwk keyFormat)
             {
                 var headers = keyFormat.Header;
-                resultClaims = JwtKeyTypeHeaderValidationUtilities.ValidateHeader(headers);                
+                resultClaims = JwtKeyTypeHeaderValidationUtilities.ValidateHeader(headers);
             }
             else if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyMultibase multiKeyFormat)
             {
@@ -198,7 +198,7 @@ namespace Verifiable.Assessment
         /// </summary>
         /// <remarks>
         /// The caret, <c>^</c>, is not in the specification but added here for pattern matching purposes.
-        /// <para>        
+        /// <para>
         [GeneratedRegex("^did:key:z[a-km-zA-HJ-NP-Z1-9]+\\#[a-km-zA-HJ-NP-Z1-9]+$")]
         public static partial Regex DidKeyIdentifierWithFragment();
     }

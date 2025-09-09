@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core;
 using Verifiable.Core.Did;
+using Verifiable.Core.Did.CryptographicSuites;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Jwt;
 using Verifiable.Tests.TestInfrastructure;
@@ -36,7 +37,7 @@ namespace Verifiable.Tests.Core
                   ""type"": ""JwsVerificationKey2020"",
                   ""controller"": ""did:example:123"",
                   ""publicKeyJwk"": {
-                  ""crv"": ""Ed25519"",
+                  ""crv"": ""Ed25519VerificationKey2020"",
                   ""x"": ""VCpo2LMLhn6iWku8MKvSLg2ZAoC-nlOyPVQaO3FxVeQ"",
                   ""kty"": ""OKP"",
                   ""kid"": ""_Qq0UL2Fq651Q0Fjd6TvnYE-faHiOpRlPVQcY_-tA4A""
@@ -241,15 +242,7 @@ namespace Verifiable.Tests.Core
                 Converters =
                 {
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(cryptoSuite =>
-                    {
-                        return cryptoSuite switch
-                        {
-                            "JsonWebKey2020" => new JsonWebKey2020(),
-                            "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
-                            _ => new CryptoSuite(cryptoSuite, new List<string>())
-                        };
-                    },verificationMethodTypeMap.ToImmutableDictionary()),
+                    new VerificationMethodConverter(),
                     new ServiceConverterFactory(),
                     new JsonLdContextConverter(),
                     new DidIdConverter(did =>
@@ -356,15 +349,7 @@ namespace Verifiable.Tests.Core
                 {
                     new SingleOrArrayControllerConverter(),
                     new VerificationRelationshipConverterFactory(),
-                    new VerificationMethodConverter(cryptoSuite =>
-                    {
-                        return cryptoSuite switch
-                        {
-                            "JsonWebKey2020" => new JsonWebKey2020(),
-                            "Ed25519VerificationKey2020" => new Ed25519VerificationKey2020(),
-                            _ => new CryptoSuite(cryptoSuite, new List<string>())
-                        };
-                    },verificationMethodTypeMap.ToImmutableDictionary()),
+                    new VerificationMethodConverter(),
                     new ServiceConverterFactory(),
                     new JsonLdContextConverter(),
                     new DictionaryStringObjectJsonConverter(),

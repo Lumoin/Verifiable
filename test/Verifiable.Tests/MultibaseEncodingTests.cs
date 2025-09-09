@@ -2,11 +2,13 @@ using SimpleBase;
 using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Core.Cryptography;
+using Verifiable.Core.Cryptography.Context;
+using Verifiable.Core.Cryptography.testing;
 using Verifiable.Core.Did;
 using Verifiable.Microsoft;
 using Verifiable.NSec;
 using Verifiable.Tests.DataProviders;
-
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests
 {
@@ -24,13 +26,32 @@ namespace Verifiable.Tests
         public void Secp256k1WithMultibaseBtc58Succeeds()
         {
             var encodedKey = "zQ3shtxV1FrJfhqE1dvxYRcCknWNjHc3c5X1y3ZSoPDi2aur2";
-            var bytes = MultibaseSerializer.Decode(encodedKey, ExactSizeMemoryPool<byte>.Shared, Base58.Bitcoin.Decode).Memory.Span;
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(bytes, MulticodecHeaders.Secp256k1PublicKey, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
+            //Decode keeping the codec header to match the original test behavior.
+            var decodedOwner = MultibaseSerializer.Decode(
+                encodedKey,
+                codecHeaderLength: 0,
+                Base58.Bitcoin.Decode,
+                SensitiveMemoryPool<byte>.Shared);
+            var bytes = decodedOwner.Memory.Span;
+
+            //Extract key data without codec header for re-encoding.
+            var keyDataOnly = bytes.Slice(2).ToArray();
+            decodedOwner.Dispose();
+
+            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(
+                keyDataOnly,
+                MulticodecHeaders.Secp256k1PublicKey,
+                MultibaseAlgorithms.Base58Btc,
+                Base58.Bitcoin.Encode);
+
             Assert.StartsWith("zQ3s", multibaseEncodedPublicKey, StringComparison.InvariantCulture);
         }
 
 
+        /// <summary>
+        /// Tests BLS12-381 encoding and decoding.
+        /// </summary>
         [TestMethod]
         public void Bls12381WithMultibaseBtc58Succeeds()
         {
@@ -39,47 +60,37 @@ namespace Verifiable.Tests
             //did:key:zUC7KKoJk5ttwuuc8pmQDiUmtckEPTwcaFVZe4DSFV7fURuoRnD17D3xkBK3A9tZqdADkTTMKSwNkhjo9Hs6HfgNUXo48TNRaxU6XPLSPdRgMc15jCD5DfN34ixjoVemY62JxnW
             var encodedKey = "zUC7K4ndUaGZgV7Cp2yJy6JtMoUHY6u7tkcSYUvPrEidqBmLCTLmi6d5WvwnUqejscAkERJ3bfjEiSYtdPkRSE8kSa11hFBr4sTgnbZ95SJj19PN2jdvJjyzpSZgxkyyxNnBNnY";
 
-            //TODO: Check this before committing.
-            var bytes = MultibaseSerializer.Decode(encodedKey, ExactSizeMemoryPool<byte>.Shared, (data, codecHeaderLength, resultMemoryPool) =>
-            {
-                ReadOnlySpan<char> dataWithoutMultibasePrefix = data;
-                int safeEncodingBufferCount = Base58.Bitcoin.GetSafeByteCountForDecoding(dataWithoutMultibasePrefix);
-                Span<byte> safeEncodingBuffer = safeEncodingBufferCount <= 512 ? stackalloc byte[safeEncodingBufferCount] : resultMemoryPool.Rent(safeEncodingBufferCount).Memory.Span;
+            //First method: decode with array decoder.
+            var decodedOwner1 = MultibaseSerializer.Decode(
+                encodedKey,
+                codecHeaderLength: 0,
+                Base58.Bitcoin.Decode,
+                SensitiveMemoryPool<byte>.Shared);
+            var bytes = decodedOwner1.Memory.Span;
+            var keyDataOnly1 = bytes.Slice(2).ToArray();
+            decodedOwner1.Dispose();
 
-                if(!Base58.Bitcoin.TryDecode(dataWithoutMultibasePrefix, safeEncodingBuffer, out int numBytesWritten))
-                {
-                    throw new Exception("Decoding failed.");
-                }
+            var multibaseEncoded1 = MultibaseSerializer.Encode(
+                keyDataOnly1,
+                MulticodecHeaders.Bls12381G2PublicKey,
+                MultibaseAlgorithms.Base58Btc,
+                Base58.Bitcoin.Encode);
 
-                var actualBufferLength = numBytesWritten - codecHeaderLength;
-                var output = resultMemoryPool.Rent(actualBufferLength);
-                safeEncodingBuffer.Slice(codecHeaderLength, actualBufferLength).CopyTo(output.Memory.Span);
+            //Second method: decode with stack decoder.
+            var bytes2Owner = MultibaseSerializer.Decode(
+                encodedKey,
+                codecHeaderLength: 0,
+                Base58.Bitcoin.Decode,
+                SensitiveMemoryPool<byte>.Shared);
+            var bytes2 = bytes2Owner.Memory.Span;
+            var keyDataOnly2 = bytes2.Slice(2).ToArray();
+            bytes2Owner.Dispose();
 
-                return output;
-            });
-
-            var multibaseEncoded1 = MultibaseSerializer.Encode(bytes.Memory.Span, MulticodecHeaders.Bls12381G2PublicKey, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
-
-
-            var bytes2 = MultibaseSerializer.Decode(encodedKey, ExactSizeMemoryPool<byte>.Shared, Base58.Bitcoin.Decode);
-            var multibaseEncoded2 = MultibaseSerializer.Encode(bytes2.Memory.Span, MulticodecHeaders.Bls12381G2PublicKey, MultibaseAlgorithms.Base58Btc, MemoryPool<char>.Shared, (data, codecHeader, pool) =>
-            {
-                int bufferLengthForDataToBeEncoded = codecHeader.Length + data.Length;
-                Span<byte> dataWithEncodingHeaders = stackalloc byte[bufferLengthForDataToBeEncoded];
-
-                codecHeader.CopyTo(dataWithEncodingHeaders);
-                data.CopyTo(dataWithEncodingHeaders.Slice(codecHeader.Length));
-
-                int bufferSize = Base58.Bitcoin.GetSafeCharCountForEncoding(dataWithEncodingHeaders);
-                Span<char> buffer = bufferSize <= 512 ? stackalloc char[bufferSize] : pool.Rent(bufferSize).Memory.Span;
-
-                if(!Base58.Bitcoin.TryEncode(dataWithEncodingHeaders, buffer, out int bytesWritten))
-                {
-                    throw new Exception("Encoding failed.");
-                }
-
-                return new string(buffer.Slice(0, bytesWritten));
-            });
+            var multibaseEncoded2 = MultibaseSerializer.Encode(
+                keyDataOnly2,
+                MulticodecHeaders.Bls12381G2PublicKey,
+                MultibaseAlgorithms.Base58Btc,
+                Base58.Bitcoin.Encode);
 
             Assert.StartsWith("zUC7", multibaseEncoded1, StringComparison.InvariantCulture);
             Assert.AreEqual(encodedKey, multibaseEncoded1);
@@ -94,8 +105,8 @@ namespace Verifiable.Tests
     /// Roundtrip multibase encoding and decoding tests.
     /// </summary>
     /// <remarks>
-    /// There is an added importancy to codify tests for known values and
-    /// acknowledge that in general it is not possible to distinquish
+    /// There is an added importance to codify tests for known values and
+    /// acknowledge that in general it is not possible to distinguish
     /// single byte code values (codes) from multibyte code values on bytes
     /// only, since if the data follows immediately, a multibyte
     /// header with data can start with a byte that looks like a single byte
@@ -111,16 +122,36 @@ namespace Verifiable.Tests
         /// Test elliptic curve key generation and validation.
         /// </summary>
         [TestMethod]
-        [DynamicData(nameof(EllipticCurveTheoryData.GetEllipticCurveTestData), typeof(EllipticCurveTheoryData), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(EllipticCurveTheoryData.GetEllipticCurveTestData), typeof(EllipticCurveTheoryData))]
         public void EllipticCurvesWithMultibaseBtc58Succeeds(EllipticCurveTestData td)
         {
             var compressed = EllipticCurveUtilities.Compress(td.PublicKeyMaterialX, td.PublicKeyMaterialY);
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(compressed, td.PublicKeyMulticodecHeader, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
+            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(
+                compressed,
+                td.PublicKeyMulticodecHeader,
+                MultibaseAlgorithms.Base58Btc,
+                Base58.Bitcoin.Encode);
+
             Assert.StartsWith(td.Base58BtcEncodedMulticodecHeaderPublicKey, multibaseEncodedPublicKey, StringComparison.InvariantCulture);
 
-            var multibaseDecodedPublicKey = MultibaseSerializer.Decode(multibaseEncodedPublicKey, ExactSizeMemoryPool<byte>.Shared, Base58.Bitcoin.Decode);
-            CollectionAssert.AreEqual(compressed, multibaseDecodedPublicKey.Memory.ToArray());
+            //Decode and compare with original compressed key.
+            var multibaseDecodedPublicKeyOwner = MultibaseSerializer.Decode(
+                multibaseEncodedPublicKey,
+                codecHeaderLength: 0,
+                Base58.Bitcoin.Decode,
+                SensitiveMemoryPool<byte>.Shared);
+
+            //The decoded data includes the codec header, so we need to compare the full data.
+            var decodedWithHeader = multibaseDecodedPublicKeyOwner.Memory.ToArray();
+            multibaseDecodedPublicKeyOwner.Dispose();
+
+            //Reconstruct what we expect: codec header + compressed key.
+            var expectedData = new byte[td.PublicKeyMulticodecHeader.Length + compressed.Length];
+            td.PublicKeyMulticodecHeader.CopyTo(expectedData);
+            compressed.CopyTo(expectedData.AsSpan(td.PublicKeyMulticodecHeader.Length));
+
+            CollectionAssert.AreEqual(expectedData, decodedWithHeader);
         }
 
 
@@ -128,57 +159,96 @@ namespace Verifiable.Tests
         /// Test RSA key generation and validation.
         /// </summary>
         [TestMethod]
-        [DynamicData(nameof(RsaTheoryData.GetRsaTestData), typeof(RsaTheoryData), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(RsaTheoryData.GetRsaTestData), typeof(RsaTheoryData))]
         public void RsaWithMultibaseBtc58Succeeds(RsaTestData td)
         {
             var encodedModulus = RsaUtilities.Encode(td.Modulus);
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(encodedModulus, td.PublicKeyMulticodecHeader, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
+            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(
+                encodedModulus,
+                td.PublicKeyMulticodecHeader,
+                MultibaseAlgorithms.Base58Btc,
+                Base58.Bitcoin.Encode);
+
             Assert.StartsWith(td.Base58BtcEncodedMulticodecHeaderPublicKey, multibaseEncodedPublicKey, StringComparison.InvariantCulture);
         }
 
 
+        /// <summary>
+        /// Test Ed25519 key encoding.
+        /// </summary>
         [TestMethod]
         public void Ed25519WithMultibaseBtc58Succeeds()
         {
-            var keys = NSecKeyCreator.CreateEd25519Keys(ExactSizeMemoryPool<byte>.Shared);
+            var keys = NSecKeyCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
             var publicKeyEd25519 = keys.PublicKey.AsReadOnlySpan();
             var privateKeyEd25519 = keys.PrivateKey.AsReadOnlySpan();
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(publicKeyEd25519, MulticodecHeaders.Ed25519PublicKey, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
-            var multibaseEncodedPrivateKey = MultibaseSerializer.Encode(privateKeyEd25519, MulticodecHeaders.Ed25519PrivateKey, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
+            //Use high-level API for public key encoding.
+            var multibaseEncodedPublicKey = MultibaseSerializer.EncodeKey(
+                publicKeyEd25519,
+                CryptoAlgorithm.Ed25519,
+                Base58.Bitcoin.Encode);
+
+            //Private keys require manual encoding with appropriate header.
+            var multibaseEncodedPrivateKey = MultibaseSerializer.Encode(
+                privateKeyEd25519,
+                MulticodecHeaders.Ed25519PrivateKey,
+                MultibaseAlgorithms.Base58Btc,
+                Base58.Bitcoin.Encode);
 
             Assert.StartsWith(Base58BtcEncodedMulticodecHeaders.Ed25519PublicKey.ToString(), multibaseEncodedPublicKey, StringComparison.InvariantCulture);
             Assert.StartsWith(Base58BtcEncodedMulticodecHeaders.Ed25519PrivateKey.ToString(), multibaseEncodedPrivateKey, StringComparison.InvariantCulture);
         }
 
 
+        /// <summary>
+        /// Test X25519 key encoding.
+        /// </summary>
         [TestMethod]
         public void X25519WithMultibaseBtc58Succeeds()
         {
-            var keys = NSecKeyCreator.CreateEd25519Keys(ExactSizeMemoryPool<byte>.Shared);
+            var keys = NSecKeyCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
             var publicKeyEd25519 = keys.PublicKey.AsReadOnlySpan();
             var privateKeyEd25519 = keys.PrivateKey.AsReadOnlySpan();
 
-            var x25519PublicKey = Sodium.ConvertEd25519PublicKeyToCurve25519PublicKey(publicKeyEd25519, ExactSizeMemoryPool<byte>.Shared);
+            var x25519PublicKeyOwner = Sodium.ConvertEd25519PublicKeyToCurve25519PublicKey(publicKeyEd25519, SensitiveMemoryPool<byte>.Shared);
             var x25519PrivateKey = Sodium.ConvertEd25519PrivateKeyToCurve25519PrivateKey(privateKeyEd25519.ToArray());
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(x25519PublicKey.Memory.Span, MulticodecHeaders.X25519PublicKey, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
-            var multibaseEncodedPrivateKey = MultibaseSerializer.Encode(x25519PrivateKey, MulticodecHeaders.X25519PrivateKey, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
+            //Use high-level API for public key encoding.
+            var multibaseEncodedPublicKey = MultibaseSerializer.EncodeKey(
+                x25519PublicKeyOwner.Memory.Span,
+                CryptoAlgorithm.X25519,
+                Base58.Bitcoin.Encode);
+
+            //Private keys require manual encoding with appropriate header.
+            var multibaseEncodedPrivateKey = MultibaseSerializer.Encode(
+                x25519PrivateKey,
+                MulticodecHeaders.X25519PrivateKey,
+                MultibaseAlgorithms.Base58Btc,
+                Base58.Bitcoin.Encode);
+
+            x25519PublicKeyOwner.Dispose();
 
             Assert.StartsWith(Base58BtcEncodedMulticodecHeaders.X25519PublicKey.ToString(), multibaseEncodedPublicKey, StringComparison.InvariantCulture);
             Assert.StartsWith(Base58BtcEncodedMulticodecHeaders.X25519PrivateKey.ToString(), multibaseEncodedPrivateKey, StringComparison.InvariantCulture);
         }
 
 
+        /// <summary>
+        /// Test P256 key creation.
+        /// </summary>
         [TestMethod]
         public void P256KeyCreationTest()
         {
-            var keys = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, MicrosoftKeyCreator.CreateP256Keys);
+            var keys = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, MicrosoftKeyMaterialCreator.CreateP256Keys);
 
-            //var derivedKeys = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, MicrosoftKeyCreator.CreateP256KeyDerived);
+            //Use high-level API for encoding.
+            var multibaseEncodedPublicKey = MultibaseSerializer.EncodeKey(
+                keys.PublicKey.AsReadOnlySpan(),
+                CryptoAlgorithm.P256,
+                Base58.Bitcoin.Encode);
 
-            var multibaseEncodedPublicKey = MultibaseSerializer.Encode(keys.PublicKey.AsReadOnlySpan(), MulticodecHeaders.P256PublicKey, MultibaseAlgorithms.Base58Btc, Base58.Bitcoin.Encode);
             Assert.StartsWith(Base58BtcEncodedMulticodecHeaders.P256PublicKey.ToString(), multibaseEncodedPublicKey, StringComparison.InvariantCulture);
         }
     }

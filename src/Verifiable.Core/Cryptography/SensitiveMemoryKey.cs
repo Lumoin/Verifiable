@@ -3,12 +3,12 @@ using System;
 namespace Verifiable.Core.Cryptography
 {
     /// <summary>
-    /// Represent a cryptographic key.
+    /// Represent a cryptographic key that is held in memory.
     /// </summary>
-    public abstract class Key: IDisposable
+    public abstract class SensitiveMemoryKey: IDisposable
     {
         /// <summary>
-        /// Detects and prevents redudant dispose calls.
+        /// Detects and prevents redundant dispose calls.
         /// </summary>
         private bool disposed;
 
@@ -27,7 +27,7 @@ namespace Verifiable.Core.Cryptography
         /// </summary>
         /// <param name="keyMaterial">The piece of memory representing this key.</param>
         /// <param name="id">The identity of this key.</param>
-        protected Key(SensitiveMemory keyMaterial, string id)
+        protected SensitiveMemoryKey(SensitiveMemory keyMaterial, string id)
         {
             KeyMaterial = keyMaterial ?? throw new ArgumentNullException(nameof(keyMaterial));
             Id = id ?? throw new ArgumentNullException(nameof(id));

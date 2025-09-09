@@ -1,3 +1,4 @@
+using Verifiable.Core.Cryptography;
 using Verifiable.Jwt;
 
 namespace Verifiable.Tests.Jwt
@@ -38,8 +39,8 @@ namespace Verifiable.Tests.Jwt
             var kty = "RSA";
             var n = "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw";
             var thumbPrintBytes = JoseUtilities.ComputeRsaThumbprint(e, kty, n);
-            
-            var thumbprint = Base64Url.Encode(thumbPrintBytes);
+
+            var thumbprint = Base64Url.Encode(thumbPrintBytes.Memory.ToArray());
             Assert.AreEqual("NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs", thumbprint);
         }
 
@@ -54,9 +55,9 @@ namespace Verifiable.Tests.Jwt
             var kty = "OKP";
             var crv = "Ed25519";
             var x = "VCpo2LMLhn6iWku8MKvSLg2ZAoC-nlOyPVQaO3FxVeQ";
-            var thumbPrintBytes = JoseUtilities.ComputeEcdhThumbprint(crv, kty, x);
+            var thumbPrintBytes = JoseUtilities.ComputeEdDsaThumbprint(crv, kty, x);
 
-            var thumbprint = Base64Url.Encode(thumbPrintBytes);
+            var thumbprint = Base64Url.Encode(thumbPrintBytes.Memory.ToArray());
             Assert.AreEqual("_Qq0UL2Fq651Q0Fjd6TvnYE-faHiOpRlPVQcY_-tA4A", thumbprint);
         }
 
@@ -70,7 +71,7 @@ namespace Verifiable.Tests.Jwt
             var y = "i5a2NtJoUKXkLm6q8nOEu9WOkso1Ag6FTUT6k_LMnGk";
             var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
 
-            var thumbprint = Base64Url.Encode(thumbPrintBytes);
+            var thumbprint = Base64Url.Encode(thumbPrintBytes.Memory.ToArray());
             Assert.AreEqual("4SZ-StXrp5Yd4_4rxHVTCYTHyt4zyPfN1fIuYsm6k3A", thumbprint);
         }
 
@@ -84,7 +85,7 @@ namespace Verifiable.Tests.Jwt
             var n = "omwsC1AqEk6whvxyOltCFWheSQvv1MExu5RLCMT4jVk9khJKv8JeMXWe3bWHatjPskdf2dlaGkW5QjtOnUKL742mvr4tCldKS3ULIaT1hJInMHHxj2gcubO6eEegACQ4QSu9LO0H-LM_L3DsRABB7Qja8HecpyuspW1Tu_DbqxcSnwendamwL52V17eKhlO4uXwv2HFlxufFHM0KmCJujIKyAxjD_m3q__IiHUVHD1tDIEvLPhG9Azsn3j95d-saIgZzPLhQFiKluGvsjrSkYU5pXVWIsV-B2jtLeeLC14XcYxWDUJ0qVopxkBvdlERcNtgF4dvW4X00EHj4vCljFw";
             var thumbPrintBytes = JoseUtilities.ComputeRsaThumbprint(e, kty, n);
 
-            var thumbprint = Base64Url.Encode(thumbPrintBytes);
+            var thumbprint = Base64Url.Encode(thumbPrintBytes.Memory.ToArray());
             Assert.AreEqual("n4cQ-I_WkHMcwXBJa7IHkYu8CMfdNcZKnKsOrnHLpFs", thumbprint);
         }
 
@@ -98,8 +99,10 @@ namespace Verifiable.Tests.Jwt
             var y = "nDQW6XZ7b_u2Sy9slofYLlG03sOEoug3I0aAPQ0exs4";
             var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
 
-            var thumbprint = Base64Url.Encode(thumbPrintBytes);
+            var thumbprint = Base64Url.Encode(thumbPrintBytes.Memory.ToArray());
+            var tbprint2 = System.Buffers.Text.Base64Url.EncodeToString(JoseUtilities.ComputeECThumbprint(crv, kty, x, y).Memory.Span);
             Assert.AreEqual("_TKzHv2jFIyvdTGF1Dsgwngfdg3SH6TpDv0Ta1aOEkw", thumbprint);
+            Assert.AreEqual(thumbprint, tbprint2);
         }
 
 
@@ -112,7 +115,7 @@ namespace Verifiable.Tests.Jwt
             var y = "jq4QoAHKiIzezDp88s_cxSPXtuXYFliuCGndgU4Qp8l91xzD1spCmFIzQgVjqvcP";
             var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
 
-            var thumbprint = Base64Url.Encode(thumbPrintBytes);
+            var thumbprint = Base64Url.Encode(thumbPrintBytes.Memory.ToArray());
             Assert.AreEqual("8wgRfY3sWmzoeAL-78-oALNvNj67ZlQxd1ss_NX1hZY", thumbprint);
         }
 
@@ -126,7 +129,7 @@ namespace Verifiable.Tests.Jwt
             var y = "ANIbFeRdPHf1WYMCUjcPz-ZhecZFybOqLIJjVOlLETH7uPlyG0gEoMWnIZXhQVypPy_HtUiUzdnSEPAylYhHBTX2";
             var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
 
-            var thumbprint = Base64Url.Encode(thumbPrintBytes);
+            var thumbprint = Base64Url.Encode(thumbPrintBytes.Memory.ToArray());
             Assert.AreEqual("NjQ6Y_ZMj6IUK_XkgCDwtKHlNTUTVjEYOWZtxhp1n-E", thumbprint);
         }
     }

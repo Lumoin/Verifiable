@@ -4,6 +4,6 @@
         "version": "10.0.100-preview.7.25380.108"
     },
     "msbuild-sdks": {
-        "MSTest.Sdk": "3.10.2"
+        "MSTest.Sdk": "3.10.4"
     }
 }

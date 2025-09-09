@@ -23,6 +23,7 @@ namespace Verifiable.Tests.TestInfrastructure
             return (deserializedObject, reserializedString);
         }
 
+
         /// <summary>
         /// Compares two JSON strings to determine if they represent the same JSON structure.
         /// </summary>
@@ -30,12 +31,13 @@ namespace Verifiable.Tests.TestInfrastructure
         /// <param name="reserializedJson">The re-serialized JSON string.</param>
         /// <returns>True if the two JSON strings represent the same JSON structure; otherwise, false.</returns>
         public static bool CompareJsonElements(string originalJson, string reserializedJson)
-        {            
+        {
             var originalDocument = JsonNode.Parse(originalJson);
             var reserializedDocument = JsonNode.Parse(reserializedJson);
 
             return JsonNode.DeepEquals(originalDocument, reserializedDocument);
         }
+
 
         /// <summary>
         /// Performs a serialization and deserialization cycle on the provided JSON string for two different document types.

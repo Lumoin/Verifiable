@@ -22,17 +22,17 @@ namespace Verifiable.Tests.Cryptography
 
         /// <summary>
         /// A first instance of public key memory used in multiple tests.
-        /// </summary>        
+        /// </summary>
         private static PublicKeyMemory PublicKeyMemory1 => new(Buffer1, Tag.Empty);
 
         /// <summary>
         /// A second instance of public key memory used in multiple tests.
-        /// </summary>        
+        /// </summary>
         private static PublicKeyMemory PublicKeyMemory2 => new(Buffer2, Tag.Empty);
 
         /// <summary>
         /// A third instance of public key memory used in multiple tests.
-        /// </summary>        
+        /// </summary>
         private static PublicKeyMemory PublicKeyMemory3 => new(Buffer1, Tag.Empty);
 
 
@@ -100,7 +100,7 @@ namespace Verifiable.Tests.Cryptography
             //The reasons for this is that == operator is searched
             //at compile time. Compiler does not find the overloads
             //and so the test fails. This is included here for the sake
-            //of completeness. See EqualsWithObjectAndObjectSucceeds.            
+            //of completeness. See EqualsWithObjectAndObjectSucceeds.
 #pragma warning disable MSTEST0037 // Use proper 'Assert' methods
             Assert.IsFalse((object)PublicKeyMemory1 == (object)PublicKeyMemory3);
 #pragma warning restore MSTEST0037 // Use proper 'Assert' methods

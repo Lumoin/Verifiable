@@ -25,7 +25,7 @@ namespace Verifiable.Assessment
 
     /// <summary>
     /// The context in which claims are assessed.
-    /// It may hold information such as assessment rules, external references, 
+    /// It may hold information such as assessment rules, external references,
     /// and other contextual data that guides the assessment process.
     /// </summary>
     public class AssessmentContext
@@ -35,7 +35,7 @@ namespace Verifiable.Assessment
 
     /// <summary>
     /// Represents the result of an assessment operation.
-    /// </summary>    
+    /// </summary>
     /// <param name="IsSuccess">Indicates if the assessment was successful.</param>
     /// <param name="AssessorId">Identifier for the assessor.</param>
     /// <param name="AssessmentId">Identifier for this particular assessment for the given claims.</param>

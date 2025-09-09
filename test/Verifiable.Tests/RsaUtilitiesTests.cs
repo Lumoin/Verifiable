@@ -158,7 +158,7 @@ namespace Verifiable.Tests.Core
         /// <returns>The RSA key in raw format.</returns>
         private static (byte[] Modulus, byte[] Exponent)  DecodeDerPublicKey(byte[] derEncodedKey)
         {
-            AsnReader reader = new AsnReader(derEncodedKey, AsnEncodingRules.DER);
+            AsnReader reader = new(derEncodedKey, AsnEncodingRules.DER);
 
             AsnReader publicKeyReader = reader.ReadSequence();
             BigInteger modulus = publicKeyReader.ReadInteger();

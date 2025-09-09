@@ -1,5 +1,4 @@
-﻿using System;
-using Verifiable.Core;
+﻿using Verifiable.Core;
 using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
 using Verifiable.Core.Did;
@@ -8,16 +7,16 @@ using Verifiable.Jwt;
 namespace Verifiable.Tests.TestDataProviders
 {
     /// <summary>
-    /// <para>These validators are primarily designed for testing scenarios where the expected key material is known a priori. 
-    /// They ensure that the key format and its internal attributes, such as the cryptographic algorithm, 
+    /// <para>These validators are primarily designed for testing scenarios where the expected key material is known a priori.
+    /// They ensure that the key format and its internal attributes, such as the cryptographic algorithm,
     /// are aligned with what was intended by the DID method builder.</para>
-    /// 
-    /// <para>In a production environment, it's common to only validate against available input, 
-    /// such as the 'publicKeyJwk' tag, to confirm its internal consistency (e.g., if it declares itself as EC P-256, 
-    /// then it should adhere to the EC P-256 specifications). However, without knowing the original parameters 
+    ///
+    /// <para>In a production environment, it's common to only validate against available input,
+    /// such as the 'publicKeyJwk' tag, to confirm its internal consistency (e.g., if it declares itself as EC P-256,
+    /// then it should adhere to the EC P-256 specifications). However, without knowing the original parameters
     /// provided to the builder, one cannot confirm that the key material was generated as intended.</para>
-    /// 
-    /// <para>These validators serve to bridge that gap in testing by double-checking that the generated key material 
+    ///
+    /// <para>These validators serve to bridge that gap in testing by double-checking that the generated key material
     /// conforms to the original builder parameters.</para>
     /// </summary>
     public static class TestOnlyKeyFormatValidators
@@ -33,14 +32,13 @@ namespace Verifiable.Tests.TestDataProviders
 
             static bool ValidateRsaKeyFormatContentsMatchesRequested(PublicKeyJwk actualKeyFormat, CryptoAlgorithm alg)
             {
-                //TODO: Constants for RSA key lengths...
-                const int Rsa2048DerEncodedBase64UrlEncodedLength = 360;
-                const int Rsa4096DerEncodedBase64UrlEncodedLength = 702;
-
+                //Raw modulus lengths for RSA keys (not DER-encoded)
+                const int Rsa2048RawModulusBase64UrlEncodedLength = 342; //256 bytes * 4/3 ≈ 342 chars.
+                const int Rsa4096RawModulusBase64UrlEncodedLength = 683; //512 bytes * 4/3 ≈ 683 chars.
                 return WellKnownKeyTypeValues.IsRsa((string)actualKeyFormat.Header[JwkProperties.Kty])
                     && ((string)actualKeyFormat.Header[JwkProperties.E]).Equals(RsaUtilities.DefaultExponent, StringComparison.OrdinalIgnoreCase)
-                    && (alg == CryptoAlgorithm.Rsa2048 && actualKeyFormat.Header[JwkProperties.N] is string { Length: Rsa2048DerEncodedBase64UrlEncodedLength }
-                        || alg == CryptoAlgorithm.Rsa4096 && actualKeyFormat.Header[JwkProperties.N] is string { Length: Rsa4096DerEncodedBase64UrlEncodedLength });
+                    && (alg == CryptoAlgorithm.Rsa2048 && actualKeyFormat.Header[JwkProperties.N] is string { Length: Rsa2048RawModulusBase64UrlEncodedLength }
+                        || alg == CryptoAlgorithm.Rsa4096 && actualKeyFormat.Header[JwkProperties.N] is string { Length: Rsa4096RawModulusBase64UrlEncodedLength });
             }
 
             static bool ValidateEd25519KeyFormatContentsMatchesRequested(PublicKeyJwk actualKeyFormat)

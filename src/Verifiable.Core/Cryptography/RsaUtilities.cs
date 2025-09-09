@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 
 namespace Verifiable.Core.Cryptography
 {
@@ -16,24 +15,24 @@ namespace Verifiable.Core.Cryptography
         /// The definitions are at <see href="https://w3c-ccg.github.io/did-method-key/#x2048-bit-modulus-public-exponent-65537">
         /// did:key 2048 bit modulus public exponent</see>. This the same as 0x10001 or 65537 or
         /// ReadOnlySpan<byte> RsaExponent65537 = new byte[] { 0x01, 0x00, 0x01 };
-        /// This translates to "AQAB" in Base64.        
-        /// </remarks>        
+        /// This translates to "AQAB" in Base64.
+        /// </remarks>
         public static readonly string DefaultExponent = "AQAB";
 
         /// <summary>
         /// The 2048 byte RSA ASN.1 DER encoded prefix as defined at <see href="https://w3c-ccg.github.io/did-method-key/#x2048-bit-modulus-public-exponent-65537"/>.
         /// </summary>
-        public static ReadOnlySpan<byte> Rsa2048Prefix => new byte[] { 0x30, 0x82, 0x01, 0xa, 0x02, 0x82, 0x01, 0x01 };
+        public static ReadOnlySpan<byte> Rsa2048Prefix => [0x30, 0x82, 0x01, 0xa, 0x02, 0x82, 0x01, 0x01];
 
-        /// <summary>        
+        /// <summary>
         /// The 2048 byte RSA ASN.1 DER encoded prefix as defined at <see href="https://w3c-ccg.github.io/did-method-key/#x4096-bit-modulus-public-exponent-65537"/>.
         /// </summary>
-        public static ReadOnlySpan<byte> Rsa4096Prefix => new byte[] { 0x30, 0x82, 0x02, 0xa, 0x02, 0x82, 0x02, 0x01 };
+        public static ReadOnlySpan<byte> Rsa4096Prefix => [0x30, 0x82, 0x02, 0xa, 0x02, 0x82, 0x02, 0x01];
 
         /// <summary>
         /// The suffix for both <see cref="Rsa2048Prefix"/> and <see cref="Rsa4096Prefix"/> ASN.1 DER encoding.
         /// </summary>
-        private static ReadOnlySpan<byte> RsaSuffix => new byte[] { 0x02, 0x03, 0x01, 0x00, 0x01 };
+        private static ReadOnlySpan<byte> RsaSuffix => [0x02, 0x03, 0x01, 0x00, 0x01];
 
         /// <summary>
         /// A constant for ASN.1 DER encoded integers (or bitstrings) to denote the high byte is set
@@ -60,7 +59,7 @@ namespace Verifiable.Core.Cryptography
         /// <exception cref="ArgumentOutOfRangeException">The key length mush be either 256 or 512 bytes</exception>.
         public static byte[] Encode(ReadOnlySpan<byte> rsaModulusBytes)
         {
-            //DID method specifications support only these RSA key lengths at the moment.            
+            //DID method specifications support only these RSA key lengths at the moment.
             if(!(rsaModulusBytes.Length == Rsa2048ModulusLength || rsaModulusBytes.Length == Rsa4096ModulusLength))
             {
                 throw new ArgumentOutOfRangeException(nameof(rsaModulusBytes), $"Length must be {Rsa2048ModulusLength} (RSA 2048) or {Rsa4096ModulusLength} (RSA 4096).");
@@ -80,7 +79,7 @@ namespace Verifiable.Core.Cryptography
             //TODO: IMemoryOwner<byte> from pool...
             var encodingBuffer = new byte[arrayLength];
 
-            //By specification first is the envelope header according to RSA material            
+            //By specification first is the envelope header according to RSA material
             prefix.CopyTo(encodingBuffer);
 
             //And then follows the other bytes. As this is a zero based index, not length,
@@ -131,7 +130,7 @@ namespace Verifiable.Core.Cryptography
             int envelopPrologIndex = Rsa2048Prefix.Length + 1;
 
             //If the byte following DER prolog is 0x00 (and the one following less than 128 DEC or 0x80),
-            //it means it's a padding byte according to DER encoding rules.            
+            //it means it's a padding byte according to DER encoding rules.
             //Since the modulus values are exponents of two, the MSB should be always set.
             //
             //By the ASN.1 DER encoding rules a 0x00 byte is inserted so that DER decoder does not misinterpret
@@ -178,7 +177,7 @@ namespace Verifiable.Core.Cryptography
         /// Checks if the most significant bit of the given RSA modulus is set.
         /// </summary>
         /// <param name="rsaModulusBytes">The modulus bytes to check.</param>
-        /// <returns><see langword="true" /> if MSB is set; otherwise, <see langword="false" /></returns>.        
+        /// <returns><see langword="true" /> if MSB is set; otherwise, <see langword="false" /></returns>.
         public static bool IsRsaModulusMsbBitSet(ReadOnlySpan<byte> rsaModulusBytes)
         {
             return (rsaModulusBytes[0] & 0x80) != 0;

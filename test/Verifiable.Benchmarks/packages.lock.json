@@ -22,9 +22,9 @@
       },
       "Microsoft.Sbom.Targets": {
         "type": "Direct",
-        "requested": "[4.1.0, )",
-        "resolved": "4.1.0",
-        "contentHash": "GidfeSVHFtNwZSbD2wmwWiUiGkVdND8QR1z21WpFa+/47Mi3YiDkAzsWF02wXrMx2Xd8j3QSfKOUY1JtnF+7uw=="
+        "requested": "[4.1.2, )",
+        "resolved": "4.1.2",
+        "contentHash": "AmGCBhWtWu1d1PCit6WTdmpq48nPmmnJz9zZFBsxoCjYZjjZ0Gjm+wuAzHzVMF8VmTo/NeDGi2C73969QXiryw=="
       },
       "SIL.ReleaseTasks": {
         "type": "Direct",
@@ -177,6 +177,22 @@
         "type": "Transitive",
         "resolved": "4.7.0",
         "contentHash": "VybpaOQQhqE6siHppMktjfGBw1GCwvCqiufqmP8F1nj7fTUNtW35LOEt3UZTEsECfo+ELAl/9o9nJx3U91i7vA=="
+      },
+      "verifiable.core": {
+        "type": "Project",
+        "dependencies": {
+          "SimpleBase": "[5.4.1, )",
+          "Verifiable.Jwt": "[0.0.0, )"
+        }
+      },
+      "verifiable.jwt": {
+        "type": "Project"
+      },
+      "SimpleBase": {
+        "type": "CentralTransitive",
+        "requested": "[5.4.1, )",
+        "resolved": "5.4.1",
+        "contentHash": "I3a7S1SMFzML3rnhuQ/b0RSgOlcfQPfvgSuvhjzSfBywQbHgnYYg3hb7qI+U18bwzYp1o5eufaNvj91yyNYGbQ=="
       }
     }
   }

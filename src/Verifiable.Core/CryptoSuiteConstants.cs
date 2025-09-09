@@ -27,7 +27,7 @@ namespace Verifiable.Core
         /// Some differences are that <see cref="Ed25519VerificationKey2020"/> uses <c>publicKeyMultibase</c> rather than
         /// detached JWT or <c>publicKeyBase58</c>. It is likely that with <see cref="Ed25519Signature2018"/>
         /// the type element in JSON is <see cref="https://www.w3.org/TR/did-spec-registries/#publickey">publicKey</see> is deprecated.
-        /// See more about reasoing at
+        /// See more about reasoning at
         /// <see href="https://lists.w3.org/Archives/Public/public-credentials/2020Sep/0008.html">Ed25519 Signature 2020 work item proposal.</see>
         /// </remarks>
         public static readonly string Ed25519VerificationKey2020 = "Ed25519VerificationKey2020";
@@ -65,7 +65,7 @@ namespace Verifiable.Core
         /// <summary>
         /// Returns a value that indicates if the cryptographic suite material is <paramref name="cryptoSuiteMaterial"/> is <see cref="Ed25519VerificationKey2020"/>.
         /// </summary>
-        /// <param name="cryptoSuiteMaterial">The cryptograhic suite material.</param>.
+        /// <param name="cryptoSuiteMaterial">The cryptographic suite material.</param>.
         /// <returns>
         /// <see langword="true" /> if the method is <see cref="Ed25519VerificationKey2020"/>; otherwise, <see langword="false" />.
         /// </returns>
@@ -78,7 +78,7 @@ namespace Verifiable.Core
         /// <summary>
         /// Returns a value that indicates if the cryptographic suite material is <paramref name="cryptoSuiteMaterial"/> is <see cref="X25519KeyAgreementKey2020"/>.
         /// </summary>
-        /// <param name="cryptoSuiteMaterial">The cryptograhic suite material.</param>.
+        /// <param name="cryptoSuiteMaterial">The cryptographic suite material.</param>.
         /// <returns>
         /// <see langword="true" /> if the method is <see cref="X25519KeyAgreementKey2020"/>; otherwise, <see langword="false" />.
         /// </returns>
@@ -91,7 +91,7 @@ namespace Verifiable.Core
         /// <summary>
         /// Returns a value that indicates if the cryptographic suite material is <paramref name="cryptoSuiteMaterial"/> is <see cref="X25519KeyAgreementKey2019"/>.
         /// </summary>
-        /// <param name="cryptoSuiteMaterial">The cryptograhic suite material</param>.
+        /// <param name="cryptoSuiteMaterial">The cryptographic suite material</param>.
         /// <returns>
         /// <see langword="true" /> if the method is <see cref="X25519KeyAgreementKey2019"/>; otherwise, <see langword="false" />.
         /// </returns>
@@ -104,7 +104,7 @@ namespace Verifiable.Core
         /// <summary>
         /// Returns a value that indicates if the cryptographic suite material is <paramref name="cryptoSuiteMaterial"/> is <see cref="JsonWebKey2020"/>.
         /// </summary>
-        /// <param name="cryptoSuiteMaterial">The cryptograhic suite material</param>.
+        /// <param name="cryptoSuiteMaterial">The cryptographic suite material</param>.
         /// <returns>
         /// <see langword="true" /> if the method is <see cref="JsonWebKey2020"/>; otherwise, <see langword="false" />.
         /// </returns>
@@ -117,7 +117,7 @@ namespace Verifiable.Core
         /// <summary>
         /// Returns a value that indicates if the cryptographic suite material is <paramref name="cryptoSuiteMaterial"/> is <see cref="Ed25519Signature2018"/>.
         /// </summary>
-        /// <param name="cryptoSuiteMaterial">The cryptograhic suite material</param>.
+        /// <param name="cryptoSuiteMaterial">The cryptographic suite material</param>.
         /// <returns>
         /// <see langword="true" /> if the method is <see cref="Ed25519Signature2018"/>; otherwise, <see langword="false" />.
         /// </returns>
@@ -130,7 +130,7 @@ namespace Verifiable.Core
         /// <summary>
         /// Returns a value that indicates if the cryptographic suite material is <paramref name="cryptoSuiteMaterial"/> is <see cref="Bls12381G1Key2020"/>.
         /// </summary>
-        /// <param name="cryptoSuiteMaterial">The cryptograhic suite material</param>.
+        /// <param name="cryptoSuiteMaterial">The cryptographic suite material</param>.
         /// <returns>
         /// <see langword="true" /> if the method is <see cref="Bls12381G1Key2020"/>; otherwise, <see langword="false" />.
         /// </returns>

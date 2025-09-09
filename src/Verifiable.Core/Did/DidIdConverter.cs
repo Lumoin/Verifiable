@@ -15,7 +15,7 @@ namespace Verifiable.Core.Did
 
         /// <summary>
         /// Determines whether the specified instance is or inherits from <see cref="GenericDidId"/> and so
-        /// can be converted to it. The specifi type instantiated is decided by the <see cref="DidMethodFactoryDelegate"/>
+        /// can be converted to it. The specific type instantiated is decided by the <see cref="DidMethodFactoryDelegate"/>
         /// supplied as parameter to the constructor.
         /// </summary>
         /// <remarks><see langword="true"/> if type derives from <see cref="GenericDidId"/>; <see langword="false"/> otherwise.</remarks>

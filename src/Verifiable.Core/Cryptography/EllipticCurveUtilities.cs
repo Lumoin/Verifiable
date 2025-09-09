@@ -89,7 +89,7 @@ namespace Verifiable.Core.Cryptography
         public static byte OddYCoordinate => 0x03;
 
         /// <summary>
-        /// Uncompressed format for elliptic curve points that are concated. Not supported.
+        /// Uncompressed format for elliptic curve points that are concatenated. Not supported.
         /// </summary>
         /// <remarks>Also see <see href="https://datatracker.ietf.org/doc/html/rfc5480">RFC 5480:
         /// Elliptic Curve Cryptography Subject Public Key Information</see>.</remarks>
@@ -128,7 +128,7 @@ namespace Verifiable.Core.Cryptography
 
             //These local methods are used to make the code easier to follow by naming
             //the key operations.            
-            static BigInteger CalcuateYPoint(BigInteger x, BigInteger coefficientB, BigInteger pIdentity, BigInteger prime, EllipticCurveTypes curveType)
+            static BigInteger CalculateYPoint(BigInteger x, BigInteger coefficientB, BigInteger pIdentity, BigInteger prime, EllipticCurveTypes curveType)
             {
                 //The difference between secp256k1 and NIST curves lies in the curve equation's form: y^2 = x^3 + Ax + B (mod p).
                 //For NIST curves, A = -3: y^2 = x^2 - 3x + B (mod p)
@@ -201,12 +201,12 @@ namespace Verifiable.Core.Cryptography
                 pointArrayLength = P521.PointArrayLength;
             }
 
-            var oneYPointCandinate = CalcuateYPoint(x, coefficientB, pIdent, prime, curveType);
-            var anotherYPointCandinate = prime - oneYPointCandinate;
-            bool isPositive = CalculateIsPositiveSign(compressedPoint, oneYPointCandinate);
+            var oneYPointCandidate = CalculateYPoint(x, coefficientB, pIdent, prime, curveType);
+            var anotherYPointCandidate = prime - oneYPointCandidate;
+            bool isPositive = CalculateIsPositiveSign(compressedPoint, oneYPointCandidate);
 
             var returnYPointBytes = new byte[pointArrayLength];
-            int returnYPointByteCount = isPositive ? oneYPointCandinate.GetByteCount(isUnsigned: true) : anotherYPointCandinate.GetByteCount(isUnsigned: true);
+            int returnYPointByteCount = isPositive ? oneYPointCandidate.GetByteCount(isUnsigned: true) : anotherYPointCandidate.GetByteCount(isUnsigned: true);
             int startIndexAfterPadding = pointArrayLength - returnYPointByteCount;
 
             //This is not 100 % constant time in all cases. In P-521 Y coordinate may have a leading zeroes which
@@ -214,8 +214,8 @@ namespace Verifiable.Core.Cryptography
             //initialized array, which it starts filling from that index onwards. There is no guarantee BigInteger
             //operations are constant time either.
             return isPositive ?
-                WriteYPointBytes(oneYPointCandinate, returnYPointBytes, startIndexAfterPadding) :
-                WriteYPointBytes(anotherYPointCandinate, returnYPointBytes, startIndexAfterPadding);
+                WriteYPointBytes(oneYPointCandidate, returnYPointBytes, startIndexAfterPadding) :
+                WriteYPointBytes(anotherYPointCandidate, returnYPointBytes, startIndexAfterPadding);
         }
 
         /// <summary>
@@ -294,39 +294,39 @@ namespace Verifiable.Core.Cryptography
         }
 
 
-        public static ReadOnlySpan<byte> SliceXCoordindate(ReadOnlySpan<byte> uncomporessedCoordinates)
+        public static ReadOnlySpan<byte> SliceXCoordinate(ReadOnlySpan<byte> uncompressedCoordinates)
         {
-            if(uncomporessedCoordinates[0] != UncompressedCoordinateFormat)
+            if(uncompressedCoordinates[0] != UncompressedCoordinateFormat)
             {
-                throw new ArgumentOutOfRangeException(nameof(uncomporessedCoordinates), "This method supports only uncompressed coordinates (must start with 0x04).");
+                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), "This method supports only uncompressed coordinates (must start with 0x04).");
             }
 
-            if(!(uncomporessedCoordinates.Length == P256CompressedByteCount
-                || uncomporessedCoordinates.Length == P384CompressedByteCount
-                || uncomporessedCoordinates.Length == P521CompressedByteCount))
+            if(!(uncompressedCoordinates.Length == P256CompressedByteCount
+                || uncompressedCoordinates.Length == P384CompressedByteCount
+                || uncompressedCoordinates.Length == P521CompressedByteCount))
             {
-                throw new ArgumentOutOfRangeException(nameof(uncomporessedCoordinates), $"Length must be {P256CompressedByteCount}, {P384CompressedByteCount} or {P521CompressedByteCount}.");
+                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256CompressedByteCount}, {P384CompressedByteCount} or {P521CompressedByteCount}.");
             }
 
-            return uncomporessedCoordinates.Slice(1, uncomporessedCoordinates.Length / 2);
+            return uncompressedCoordinates.Slice(1, uncompressedCoordinates.Length / 2);
         }
 
 
-        public static ReadOnlySpan<byte> SliceYCoordindate(ReadOnlySpan<byte> uncomporessedCoordinates)
+        public static ReadOnlySpan<byte> SliceYCoordinate(ReadOnlySpan<byte> uncompressedCoordinates)
         {
-            if(uncomporessedCoordinates[0] != UncompressedCoordinateFormat)
+            if(uncompressedCoordinates[0] != UncompressedCoordinateFormat)
             {
-                throw new ArgumentOutOfRangeException(nameof(uncomporessedCoordinates), "This method supports only uncompressed coordinates (must start with 0x04).");
+                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), "This method supports only uncompressed coordinates (must start with 0x04).");
             }
 
-            if(!(uncomporessedCoordinates.Length == P256CompressedByteCount
-                || uncomporessedCoordinates.Length == P384CompressedByteCount
-                || uncomporessedCoordinates.Length == P521CompressedByteCount))
+            if(!(uncompressedCoordinates.Length == P256CompressedByteCount
+                || uncompressedCoordinates.Length == P384CompressedByteCount
+                || uncompressedCoordinates.Length == P521CompressedByteCount))
             {
-                throw new ArgumentOutOfRangeException(nameof(uncomporessedCoordinates), $"Length must be {P256CompressedByteCount}, {P384CompressedByteCount} or {P521CompressedByteCount}.");
+                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256CompressedByteCount}, {P384CompressedByteCount} or {P521CompressedByteCount}.");
             }
 
-            return uncomporessedCoordinates.Slice(uncomporessedCoordinates.Length / 2, uncomporessedCoordinates.Length);
+            return uncompressedCoordinates.Slice(uncompressedCoordinates.Length / 2, uncompressedCoordinates.Length);
         }
 
 

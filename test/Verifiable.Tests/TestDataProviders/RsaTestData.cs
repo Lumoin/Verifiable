@@ -6,7 +6,7 @@ namespace Verifiable.Tests.DataProviders
 {
     /// <summary>
     /// Test data container for RSA tests.
-    /// </summary>    
+    /// </summary>
     public record RsaTestData(
         int KeyLength,
         byte[] PublicKeyMulticodecHeader,
@@ -26,11 +26,7 @@ namespace Verifiable.Tests.DataProviders
         /// <summary>
         /// The DID supported RSA key lengths. These are used to generate keys for testing.
         /// </summary>
-        public static IList<int> RsaKeyLengthConstants => new List<int>(new[]
-        {
-        Rsa2048KeyLength,
-        Rsa4096KeyLength,
-    });
+        public static int[] RsaKeyLengthConstants => [ Rsa2048KeyLength, Rsa4096KeyLength ];
 
         /// <summary>
         /// Turns the RSA key length into <see cref="Base58BtcEncodedMulticodecHeaders"/>.
@@ -53,8 +49,8 @@ namespace Verifiable.Tests.DataProviders
         /// <exception cref="NotSupportedException"></exception>
         public static (byte[] PublicKeyHeader, byte[] PrivateKeyHeader) FromKeyLengthToMultiCodecHeader(int keyLength) => keyLength switch
         {
-            Rsa2048KeyLength => (MulticodecHeaders.RsaPublicKey.ToArray(), Array.Empty<byte>()),
-            Rsa4096KeyLength => (MulticodecHeaders.RsaPublicKey.ToArray(), Array.Empty<byte>()),
+            Rsa2048KeyLength => (MulticodecHeaders.RsaPublicKey.ToArray(), []),
+            Rsa4096KeyLength => (MulticodecHeaders.RsaPublicKey.ToArray(), []),
             _ => throw new NotSupportedException()
         };
 

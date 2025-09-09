@@ -4,9 +4,9 @@
     "net10.0": {
       "Microsoft.Sbom.Targets": {
         "type": "Direct",
-        "requested": "[4.1.0, )",
-        "resolved": "4.1.0",
-        "contentHash": "GidfeSVHFtNwZSbD2wmwWiUiGkVdND8QR1z21WpFa+/47Mi3YiDkAzsWF02wXrMx2Xd8j3QSfKOUY1JtnF+7uw=="
+        "requested": "[4.1.2, )",
+        "resolved": "4.1.2",
+        "contentHash": "AmGCBhWtWu1d1PCit6WTdmpq48nPmmnJz9zZFBsxoCjYZjjZ0Gjm+wuAzHzVMF8VmTo/NeDGi2C73969QXiryw=="
       },
       "SIL.ReleaseTasks": {
         "type": "Direct",
@@ -19,17 +19,17 @@
       },
       "Spectre.Console": {
         "type": "Direct",
-        "requested": "[0.50.0, )",
-        "resolved": "0.50.0",
-        "contentHash": "gkwYncFqMjlPF6Yz8KeVsKWpdfv15sr6uKm+vXVa/8Q4tvx52LPzMQOO5m+bXwI3AGGFeY3cok3ZJbguYizswg=="
+        "requested": "[0.51.1, )",
+        "resolved": "0.51.1",
+        "contentHash": "84xNywgnaG8XgOypnZAL+EZUbhCGE0umj7fuMrSI6esdE74HYHRoeBioeMUJXPiCt7iBDKHLwiBcg0IliYIIxA=="
       },
       "Spectre.Console.Cli": {
         "type": "Direct",
-        "requested": "[0.50.0, )",
-        "resolved": "0.50.0",
-        "contentHash": "PrctsupqHEbyoP/iRL30awUWB0Z91i21myKl70qcPwoH6marEPkPyaPgzc37xFm9QSx+/jVBQGUH7tsn0mWGNQ==",
+        "requested": "[0.51.1, )",
+        "resolved": "0.51.1",
+        "contentHash": "LqJjjug5f8ipFFzhwBaQHMXt8+uuJAxu3dsyAxF+Jyva9yHW0P3iP6s1NpwVqt0Yk11n6/f9qipyiEn0zBKBiQ==",
         "dependencies": {
-          "Spectre.Console": "0.50.0"
+          "Spectre.Console": "0.51.1"
         }
       },
       "Markdig.Signed": {
