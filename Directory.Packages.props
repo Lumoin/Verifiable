@@ -8,27 +8,27 @@
     <PackageVersion Include="dotNetRdf" Version="3.4.0" />
     <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.CrashDump" Version="1.7.3" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="1.7.3" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.HotReload" Version="1.7.3" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.Retry" Version="1.7.3" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="1.7.3" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CrashDump" Version="1.8.4" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="1.8.4" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.HotReload" Version="1.8.4" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.Retry" Version="1.8.4" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="1.8.4" />
     <PackageVersion Include="Microsoft.TSS" Version="2.1.1" />
-    <PackageVersion Include="MSTest.TestAdapter" Version="3.9.3" />
-    <PackageVersion Include="MSTest.TestFramework" Version="3.9.3" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="3.10.4" />
+    <PackageVersion Include="MSTest.TestFramework" Version="3.10.4" />
     <PackageVersion Include="NSec.Cryptography" Version="25.4.0" />
     <PackageVersion Include="Portable.BouncyCastle" Version="1.9.0" />
     <PackageVersion Include="SharpFuzz" Version="2.2.0" />
     <PackageVersion Include="SIL.ReleaseTasks" Version="3.1.1" />
     <PackageVersion Include="SimpleBase" Version="5.4.1" />
-    <PackageVersion Include="Spectre.Console" Version="0.50.0" />
-    <PackageVersion Include="Spectre.Console.Cli" Version="0.50.0" />
+    <PackageVersion Include="Spectre.Console" Version="0.51.1" />
+    <PackageVersion Include="Spectre.Console.Cli" Version="0.51.1" />
     <PackageVersion Include="System.Collections.Immutable" Version="10.0.0-preview.1.25080.5" />
     <PackageVersion Include="System.Net.Http.Json" Version="10.0.0-preview.1.25080.5" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0-preview.3.25171.5" />
     <PackageVersion Include="System.Text.Json" Version="10.0.0-preview.1.25080.5" />
     <PackageVersion Include="WinSharpFuzz" Version="1.0.0" />
-    <PackageVersion Include="CsCheck" Version="4.3.0" />
-    <PackageVersion Include="Microsoft.Sbom.Targets" Version="4.1.0" />
+    <PackageVersion Include="CsCheck" Version="4.4.1" />
+    <PackageVersion Include="Microsoft.Sbom.Targets" Version="4.1.2" />
   </ItemGroup>
 </Project>
