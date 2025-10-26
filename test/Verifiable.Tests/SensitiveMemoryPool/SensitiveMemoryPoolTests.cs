@@ -155,7 +155,7 @@ namespace Verifiable.Tests.SensitiveMemoryPool
                 using(pool.Rent(200))
                 {
                     listener.RecordObservableInstruments();
-                    await Task.Delay(TimeSpan.FromMilliseconds(10), TestContext.CancellationTokenSource.Token);
+                    await Task.Delay(TimeSpan.FromMilliseconds(10), TestContext.CancellationToken);
 
                     //Verify that total slabs metric was reported.
                     bool foundSlabs = reportedMetrics.TryGetValue(VerifiableMetrics.SensitiveMemoryPoolTotalSlabs, out long totalSlabs);
@@ -273,12 +273,12 @@ namespace Verifiable.Tests.SensitiveMemoryPool
                 //Simulate async work to ensure activities flow correctly through async context.
                 //This verifies that the parent-child relationship is maintained even when
                 //the disposal happens after an async operation.
-                await Task.Delay(TimeSpan.FromMilliseconds(10), TestContext.CancellationTokenSource.Token);
+                await Task.Delay(TimeSpan.FromMilliseconds(10), TestContext.CancellationToken);
             }
 
             //Wait to ensure all activities are fully captured and stopped.
             //Without this delay, the Dispose activity might not be captured yet.
-            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.CancellationTokenSource.Token);
+            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.CancellationToken);
 
             //Filter to ONLY activities from this test run by TraceId.
             //This eliminates interference from other tests that may have run before.

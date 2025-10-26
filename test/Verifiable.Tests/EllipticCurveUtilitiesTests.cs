@@ -25,7 +25,7 @@ namespace Verifiable.Tests.Core
 
         
         [TestMethod]
-        [RunOnlyOnPlatformTestMethod(Platforms.Windows, Platforms.Linux)]
+        [RunOnlyOnPlatformTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void PrimeCurveCompressThrowsWithCorrectMessageIfEitherOrBothParametersNull()
         {
             using(var key = ECDsa.Create())
@@ -45,7 +45,7 @@ namespace Verifiable.Tests.Core
 
 
         [TestMethod]
-        [RunOnlyOnPlatformTestMethod(Platforms.Windows, Platforms.Linux)]
+        [RunOnlyOnPlatformTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void CompressThrowsWithCorrectMessageIfPointsDifferentLength()
         {
             using(var key1 = ECDsa.Create(ECCurve.NamedCurves.nistP256))
@@ -64,7 +64,7 @@ namespace Verifiable.Tests.Core
 
 
         [TestMethod]
-        [RunOnlyOnPlatformTestMethod(Platforms.Windows, Platforms.Linux)]
+        [RunOnlyOnPlatformTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void CompressThrowsWithCorrectMessageIfPointsWrongLength()
         {
             using(var key1 = ECDsa.Create(ECCurve.NamedCurves.nistP256))
@@ -85,8 +85,8 @@ namespace Verifiable.Tests.Core
 
         
         [TestMethod]
-        [DynamicData(nameof(EllipticCurveTheoryData.GetEllipticCurveTestData), typeof(EllipticCurveTheoryData), DynamicDataSourceType.Method)]
-        [RunOnlyOnPlatformTestMethod(Platforms.Windows, Platforms.Linux)]
+        [DynamicData(nameof(EllipticCurveTheoryData.GetEllipticCurveTestData), typeof(EllipticCurveTheoryData))]
+        [RunOnlyOnPlatformTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void PrimeCurvesRoundtripCompressAndDecompressSucceeds(EllipticCurveTestData td)
         {
             var curveType = td.CurveIdentifier.Equals(EllipticCurveTheoryData.EllipticSecP256k1, StringComparison.OrdinalIgnoreCase) ? EllipticCurveTypes.Secp256k1 : EllipticCurveTypes.NistCurves;
@@ -98,8 +98,8 @@ namespace Verifiable.Tests.Core
 
 
         [TestMethod]
-        [DynamicData(nameof(EllipticCurveTheoryData.GetEllipticCurveTestData), typeof(EllipticCurveTheoryData), DynamicDataSourceType.Method)]
-        [RunOnlyOnPlatformTestMethod(Platforms.Windows, Platforms.Linux)]
+        [DynamicData(nameof(EllipticCurveTheoryData.GetEllipticCurveTestData), typeof(EllipticCurveTheoryData))]
+        [RunOnlyOnPlatformTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void EllipticPointOnCurveCheckSucceeds(EllipticCurveTestData td)
         {
             ReadOnlySpan<byte> primeBytes = td.CurveIdentifier switch

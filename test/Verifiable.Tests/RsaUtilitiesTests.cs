@@ -72,7 +72,7 @@ namespace Verifiable.Tests.Core
 
 
         [TestMethod]
-        [DynamicData(nameof(RsaKeySizesInBits), DynamicDataSourceType.Property)]
+        [DynamicData(nameof(RsaKeySizesInBits))]
         public void RsaDecodeThrowsIfNoDerPaddingByte(int keySizeInBits)
         {
             const string CatastrophicExceptionMessage = "Catastrophic error while decoding RSA modulus bytes.";
@@ -93,7 +93,7 @@ namespace Verifiable.Tests.Core
 
 
         [TestMethod]
-        [DynamicData(nameof(RsaKeySizesInBits), DynamicDataSourceType.Property)]
+        [DynamicData(nameof(RsaKeySizesInBits))]
         public void RsaDecodeThrowsIfNoMsbSet(int keySizeInBits)
         {
             const string CatastrophicExceptionMessage = "Catastrophic error while decoding RSA modulus bytes.";
@@ -114,7 +114,7 @@ namespace Verifiable.Tests.Core
 
 
         [TestMethod]
-        [DynamicData(nameof(RsaKeySizesInBits), DynamicDataSourceType.Property)]
+        [DynamicData(nameof(RsaKeySizesInBits))]
         public void RsaEncodingAndDecodingSucceeds(int keySizeInBits)
         {
             using(var rsaKey = RSA.Create(keySizeInBits))

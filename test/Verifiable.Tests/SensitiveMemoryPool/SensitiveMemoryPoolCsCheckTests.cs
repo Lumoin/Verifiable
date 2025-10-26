@@ -85,10 +85,10 @@ namespace Verifiable.Tests.SensitiveMemoryPool
                         {
                             exceptions.Add(ex);
                         }
-                    }, TestContext.CancellationTokenSource.Token);
+                    }, TestContext.CancellationToken);
                 }
 
-                Task.WaitAll(tasks, TestContext.CancellationTokenSource.Token);
+                Task.WaitAll(tasks, TestContext.CancellationToken);
 
                 Assert.IsTrue(exceptions.IsEmpty, $"No exceptions should occur during concurrent operations. Found: {string.Join(", ", exceptions)}.");
             });

@@ -28,7 +28,7 @@ namespace Verifiable.Tests.Jwt
         /// <param name="correctKeyType">The correct key type to be used in test.</param>
         /// <param name="isCorrectKeyType">The function that checks if the key type is recognized.</param>
         [TestMethod]
-        [DynamicData(nameof(GetKeyTypeValues), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(GetKeyTypeValues))]
         public void KeyTypesComparesCorrectly(string correctKeyType, Func<string, bool> isCorrectKeyType)
         {
             //A newly created instance should not reference the canonicalized version.

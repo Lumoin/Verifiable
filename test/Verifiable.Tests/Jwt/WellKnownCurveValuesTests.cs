@@ -32,7 +32,7 @@ namespace Verifiable.Tests.Jwt
         /// <param name="curve">The curve to test.</param>
         /// <param name="isCorrectCurve">The function that checks if the algorithm is recognized.</param>
         [TestMethod]
-        [DynamicData(nameof(GetCurveValues), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(GetCurveValues))]
         public void CurveValuesComparesCorrectly(string curve, Func<string, bool> isCorrectCurve)
         {
             //A newly created instance should not reference the canonicalized version.
