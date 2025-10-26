@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Tpm
     public sealed class NewTpmTests
     {
         [SupportedOSPlatform(Platforms.Windows)]
-        [RunOnlyOnPlatformTestMethod(Platforms.Windows)]
+        [RunOnlyOnPlatformTestMethod(platforms: [Platforms.Windows])]
         public void TpmWindowsSupportsWindows()
         {
             Assert.IsTrue(TpmWindows.IsSupported);
@@ -18,7 +18,7 @@ namespace Verifiable.Tests.Tpm
 
 
         [SupportedOSPlatform(Platforms.Linux)]
-        [RunOnlyOnPlatformTestMethod(Platforms.Linux)]
+        [RunOnlyOnPlatformTestMethod(platforms: [Platforms.Linux])]
         public void TpmLinuxSupportsLinux()
         {
             Assert.IsTrue(TpmLinux.IsSupported);

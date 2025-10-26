@@ -87,7 +87,7 @@ namespace Verifiable.Tests.Builders
 
 
         [TestMethod]
-        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
         public async Task CanBuildWebDidFromRandomKeysAsync(DidWebTestData testData)
         {
             //This builds the did:web document with the given public key and crypto suite.
@@ -130,7 +130,7 @@ namespace Verifiable.Tests.Builders
 
 
         [TestMethod]
-        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
         public async ValueTask CreateAndVerifySignatureUsingWebDid(DidWebTestData testData)
         {
             //Create DID document.
@@ -152,7 +152,7 @@ namespace Verifiable.Tests.Builders
 
 
         [TestMethod]
-        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
         public async ValueTask CanBuildComplexWebDidWithServicesAndVerificationRelationships(DidWebTestData testData)
         {
             //Create DID document with path-based identifier using builder extensions.
@@ -206,11 +206,11 @@ namespace Verifiable.Tests.Builders
 
             //Verify verification relationships were added by builder.
             Assert.IsNotNull(webDidDocument.Authentication);
-            Assert.AreEqual(1, webDidDocument.Authentication.Length);
+            Assert.HasCount(1, webDidDocument.Authentication);
             Assert.AreEqual(verificationMethodId, webDidDocument.Authentication[0].Id);
 
             Assert.IsNotNull(webDidDocument.AssertionMethod);
-            Assert.AreEqual(1, webDidDocument.AssertionMethod.Length);
+            Assert.HasCount(1, webDidDocument.AssertionMethod);
             Assert.AreEqual(verificationMethodId, webDidDocument.AssertionMethod[0].Id);
 
             //Verify no key agreement was added (since we only added auth and assertion).
@@ -218,7 +218,7 @@ namespace Verifiable.Tests.Builders
 
             //Verify services were created with consistent domain.
             Assert.IsNotNull(webDidDocument.Service);
-            Assert.AreEqual(3, webDidDocument.Service.Length);
+            Assert.HasCount(3, webDidDocument.Service);
 
             var serviceA = webDidDocument.Service.First(s => s.Type == "ServiceTypeA");
             Assert.AreEqual($"did:web:placeholder.com:api:v1:entities:item-456#service-a", serviceA.Id!.ToString());
@@ -262,7 +262,7 @@ namespace Verifiable.Tests.Builders
 
 
         [TestMethod]
-        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
         public void CanBuildWebDidWithAllRepresentationTypes(DidWebTestData testData)
         {
             string webDomain = "example.com";

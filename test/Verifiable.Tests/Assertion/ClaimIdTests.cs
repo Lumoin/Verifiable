@@ -104,7 +104,7 @@ namespace Verifiable.Tests.Assertion
                 )
             );
 
-            Assert.AreEqual(expectedIds.Count, reflectedIds.Count);
+            Assert.HasCount(expectedIds.Count, reflectedIds);
             foreach(var expectedId in expectedIds)
             {
                 Assert.IsTrue(reflectedIds.ContainsKey(expectedId.Key), $"Missing predefined ID: {expectedId.Key}");

@@ -59,7 +59,7 @@ namespace Verifiable.Tests.Jwt
         /// <param name="correctAlgorithm">The correct to be used in test.</param>
         /// <param name="isCorrectAlgorithm">The function that checks if the algorithm is recognized.</param>
         [TestMethod]
-        [DynamicData(nameof(GetJwkProperties), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(GetJwkProperties))]
         public void JwaAlgorithmComparesCorrectly(string correctAlgorithm, Func<string, bool> isCorrectAlgorithm)
         {
             //A newly created instance should not reference the canonicalized version.

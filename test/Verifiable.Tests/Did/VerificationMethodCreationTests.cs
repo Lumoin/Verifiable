@@ -61,7 +61,7 @@ namespace Verifiable.Tests.Did
     public class VerificationMethodCreationTests
     {
         [TestMethod]
-        [DynamicData(nameof(VerificationMethodTheoryData.GetVerificationMethodTestData), typeof(VerificationMethodTheoryData), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(VerificationMethodTheoryData.GetVerificationMethodTestData), typeof(VerificationMethodTheoryData))]
         public void CreatesCorrectVerificationMethodWithLibraryDefaults(VerificationMethodTestData testData)
         {
             const string Id = "TestId";

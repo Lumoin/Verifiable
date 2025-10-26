@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Verifiable.Tests.TestInfrastructure
@@ -19,27 +20,27 @@ namespace Verifiable.Tests.TestInfrastructure
         private readonly string[] _platforms;
         private readonly string _reason;
 
-        public RunOnlyOnPlatformTestMethodAttribute(params string[] platforms)
+        public RunOnlyOnPlatformTestMethodAttribute(string[] platforms, [CallerFilePath] string? filePath = null, [CallerLineNumber] int lineNumber = 0)
         {
             _platforms = platforms;
             _reason = $"Test only runs on {string.Join(", ", _platforms)}.";
         }
 
-        public override TestResult[] Execute(ITestMethod testMethod)
+
+        public override Task<TestResult[]> ExecuteAsync(ITestMethod testMethod)
         {
             if(!IsRunningOnAnyPlatform(_platforms))
             {
-                return
-                [
+                return Task.FromResult<TestResult[]>([
                     new TestResult
                     {
                         Outcome = UnitTestOutcome.Inconclusive,
                         TestFailureException = new AssertInconclusiveException(_reason)
                     }
-                ];
+                ]);
             }
 
-            return base.Execute(testMethod);
+            return base.ExecuteAsync(testMethod);
         }
 
         private static bool IsRunningOnAnyPlatform(string[] platforms)

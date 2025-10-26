@@ -17,7 +17,7 @@ namespace Verifiable.Tests.Jwt
     public sealed class JwtTestsWithPredefinedData
     {
         [TestMethod]
-        [DynamicData(nameof(JwtTestDataProvider.GetHsTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(JwtTestDataProvider.GetHsTestData), typeof(JwtTestDataProvider))]
         public async Task HsJwtTokenEncodingSigningAndVerifyingSucceeds(HsTestData testData)
         {
             string signedJwt = JwtExtensions.SignJwt(
@@ -102,7 +102,7 @@ namespace Verifiable.Tests.Jwt
 
 
         [TestMethod]
-        [DynamicData(nameof(JwtTestDataProvider.GetESTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(JwtTestDataProvider.GetESTestData), typeof(JwtTestDataProvider))]
         public async Task ESJwtTokenEncodingSigningAndVerifyingSucceeds(ESTestData jwtTestData)
         {
             string signedJwt = JwtExtensions.SignJwt(
@@ -183,7 +183,7 @@ namespace Verifiable.Tests.Jwt
 
 
         [TestMethod]
-        [DynamicData(nameof(JwtTestDataProvider.GetRsaRsTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(JwtTestDataProvider.GetRsaRsTestData), typeof(JwtTestDataProvider))]
         public async Task RsaRsJwtTokenEncodingSigningAndVerifyingSucceeds(RsaRSTestData testData)
         {
             string signedJwt = JwtExtensions.SignJwt(
@@ -277,7 +277,7 @@ namespace Verifiable.Tests.Jwt
 
 
         [TestMethod]
-        [DynamicData(nameof(JwtTestDataProvider.GetRsaPsTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(JwtTestDataProvider.GetRsaPsTestData), typeof(JwtTestDataProvider))]
         public async Task RsaPSJwtTokenEncodingSigningAndVerifyingSucceeds(RsaPSTestData testData)
         {
             string signedJwt = JwtExtensions.SignJwt(
@@ -377,7 +377,7 @@ namespace Verifiable.Tests.Jwt
 
 
         [TestMethod]
-        [DynamicData(nameof(JwtTestDataProvider.GetMixedJwtTestData), typeof(JwtTestDataProvider), DynamicDataSourceType.Method)]
+        [DynamicData(nameof(JwtTestDataProvider.GetMixedJwtTestData), typeof(JwtTestDataProvider))]
         public void MixedJwtTokenEncodingSigningAndVerifyingSucceeds(BaseJwtTestData testData)
         {
             string signedJwt = JwtExtensions.SignJwt(
