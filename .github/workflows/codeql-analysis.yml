@@ -31,11 +31,11 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@71cf2267d89c5cb81562390fa70a37fa40b1305e
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@74c8748a6f2dada2c01b25ae170d7858ac90f4af
       with:
         languages: 'csharp'
         build-mode: none
@@ -47,9 +47,9 @@ jobs:
 
     - name: Autobuild
       if: ${{ github.actor != 'dependabot[bot]' }}
-      uses: github/codeql-action/autobuild@v3
+      uses: github/codeql-action/autobuild@7434149006143a4d75b82a2f411ef15b03ccc2d7
 
     - name: CodeQL Analysis
       if: ${{ github.actor != 'dependabot[bot]' }}
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@74c8748a6f2dada2c01b25ae170d7858ac90f4af
       timeout-minutes: 100

@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Tpm;
 
@@ -27,7 +28,7 @@ namespace Verifiable
             public string? ExtraParam { get; set; }
         }
 
-        public override Task<int> ExecuteAsync(CommandContext context, DidSettings settings)
+        public override Task<int> ExecuteAsync(CommandContext context, DidSettings settings, CancellationToken cancellationToken)
         {
             var extraParam = settings.ExtraParam ?? string.Empty;
             AnsiConsole.MarkupLine(
@@ -49,7 +50,7 @@ namespace Verifiable
             public int Id { get; set; }
         }
 
-        public override Task<int> ExecuteAsync(CommandContext context, Settings settings)
+        public override Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
         {
             AnsiConsole.MarkupLine($"[bold blue]Revoke DID document =>[/] DidDoc[[{settings.Id}]]");
             return Task.FromResult(0);
@@ -58,7 +59,7 @@ namespace Verifiable
 
     public class DidListCommand: AsyncCommand
     {
-        public override Task<int> ExecuteAsync(CommandContext context)
+        public override Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
         {
             AnsiConsole.MarkupLine("[bold blue]List all DID documents[/]");
             return Task.FromResult(0);
@@ -75,7 +76,7 @@ namespace Verifiable
             public int Id { get; set; }
         }
 
-        public override Task<int> ExecuteAsync(CommandContext context, Settings settings)
+        public override Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
         {
             AnsiConsole.MarkupLine($"[bold blue]View DID document =>[/] DidDoc[[{settings.Id}]]");
             return Task.FromResult(0);
@@ -85,7 +86,7 @@ namespace Verifiable
 
     public class InfoTpmCommand: AsyncCommand
     {
-        public override async Task<int> ExecuteAsync(CommandContext context)
+        public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
         {
             bool isTpmPlatformSupported = TpmExtensions.IsTpmPlatformSupported();
             if(!isTpmPlatformSupported)
