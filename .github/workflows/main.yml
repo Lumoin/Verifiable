@@ -98,7 +98,7 @@ jobs:
         allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
     - name: Checkout code
-      uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
+      uses: actions/checkout@71cf2267d89c5cb81562390fa70a37fa40b1305e
       with:
         fetch-depth: 0
         fetch-tags: true
