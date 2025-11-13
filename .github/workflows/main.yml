@@ -286,7 +286,7 @@ jobs:
             allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
         - name: Download NuGet artifacts
-          uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+          uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
           with:
             name: nupkg
 
@@ -310,7 +310,7 @@ jobs:
           allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
       - name: Download NuGet artifacts
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
           name: nupkg
 
