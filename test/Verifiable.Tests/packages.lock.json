@@ -40,9 +40,9 @@
       },
       "Microsoft.Sbom.Targets": {
         "type": "Direct",
-        "requested": "[4.1.3, )",
-        "resolved": "4.1.3",
-        "contentHash": "ItQp7LZ5irnDYoyYkxOxuik9mULFviFQOgGJ1j5A7a2EAJK9bidT1aT65xg48Opcjao/BKJWOtJUnik2g3grLg=="
+        "requested": "[4.1.4, )",
+        "resolved": "4.1.4",
+        "contentHash": "ZC3r/TTZ9BELNFYstmL8GRzHK+KuMxaCzF5Rd3wsvKFGNgiPoOdhzPCw5Vt9YKgNbcdqYT6eid96NxMUJfVteg=="
       },
       "Microsoft.Testing.Extensions.AzureDevOpsReport": {
         "type": "Direct",
@@ -529,7 +529,7 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "SimpleBase": "[5.5.0, )",
+          "SimpleBase": "[5.6.0, )",
           "Verifiable.Jwt": "[0.0.0, )"
         }
       },
@@ -585,9 +585,9 @@
       },
       "SimpleBase": {
         "type": "CentralTransitive",
-        "requested": "[5.5.0, )",
-        "resolved": "5.5.0",
-        "contentHash": "HV9e7WWMhf9tCnTTScw15Qgxlhm3feUynsJYv4wUvflMnGhorVqhKE4+NrZsi6ohwLIB1dJqP9FdTUmtifzTkg=="
+        "requested": "[5.6.0, )",
+        "resolved": "5.6.0",
+        "contentHash": "1nNr/DCvcxTrQzN1gUnYzFpLkbAKcFYhF/aMK34jVxrPUjMwL/J3KNEp89M0WaW2k9FUpacxRe4BmjFFjOv3zw=="
       }
     }
   }
