@@ -4,7 +4,7 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="BenchmarkDotNet" Version="0.15.6" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="dotNetRdf" Version="3.4.1" />
     <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
     <PackageVersion Include="Microsoft.TSS" Version="2.1.1" />
@@ -19,7 +19,7 @@
     <PackageVersion Include="Spectre.Console.Cli" Version="0.53.1" />
     <PackageVersion Include="System.Collections.Immutable" Version="10.0.0-preview.1.25080.5" />
     <PackageVersion Include="System.Net.Http.Json" Version="10.0.0-preview.1.25080.5" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.1" />
     <PackageVersion Include="System.Text.Json" Version="10.0.0-preview.1.25080.5" />
     <PackageVersion Include="WinSharpFuzz" Version="1.0.0" />
     <PackageVersion Include="CsCheck" Version="4.4.1" />

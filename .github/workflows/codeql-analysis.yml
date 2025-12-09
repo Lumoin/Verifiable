@@ -31,7 +31,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@71cf2267d89c5cb81562390fa70a37fa40b1305e
+      uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
@@ -41,7 +41,7 @@ jobs:
         build-mode: none
         queries: security-and-quality
 
-    - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+    - uses: actions/setup-dotnet@2016bd2012dba4e32de620c46fe006a3ac9f0602
       with:
         global-json-file: global.json
 
