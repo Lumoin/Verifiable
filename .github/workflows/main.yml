@@ -119,7 +119,7 @@ jobs:
       run: dotnet restore --locked-mode
 
     - name: Cache local .NET tools
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb
       with:
         path: ~/.dotnet/tools
         key: dotnet-tools-${{ runner.os }}-${{ hashFiles('.config/dotnet-tools.json') }}
