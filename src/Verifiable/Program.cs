@@ -1,179 +1,149 @@
-using Spectre.Console;
-using Spectre.Console.Cli;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System;
-using System.ComponentModel;
-using System.IO;
-using System.Runtime.InteropServices;
-using System.Text.Json;
-using System.Threading;
+using System.CommandLine;
 using System.Threading.Tasks;
-using Verifiable.Tpm;
 
-namespace Verifiable
+namespace Verifiable;
+
+/// <summary>
+/// A console program for DID and VC documents.
+/// </summary>
+public static class Program
 {
-    public class DidCreateCommand: AsyncCommand<DidCreateCommand.DidSettings>
+    /// <summary>
+    /// An entry point to a console program for DID and VC documents.
+    /// </summary>
+    /// <param name="args">The arguments to the program.</param>
+    /// <returns>The exit code from the program.</returns>
+    public static async Task<int> Main(string[] args)
     {
-        public class DidSettings: CommandSettings
+        if(args.Length == 1 && args[0] == "-mcp")
         {
-            [CommandArgument(0, "<ID>")]
-            [Description("Identifier for the new DID document.")]
-            public int Id { get; set; }
-
-            [CommandArgument(1, "<Param>")]
-            [Description("New DID document parameter.")]
-            public string? Param { get; set; }
-
-            [CommandOption("-e|--extraParam <Someparam>")]
-            [Description("Some extra parameter.")]
-            public string? ExtraParam { get; set; }
+            return await RunMcpServerAsync(args);
         }
 
-        public override Task<int> ExecuteAsync(CommandContext context, DidSettings settings, CancellationToken cancellationToken)
-        {
-            var extraParam = settings.ExtraParam ?? string.Empty;
-            AnsiConsole.MarkupLine(
-                $"[bold blue]Add DID document =>[/] DidDoc[[{settings.Id}]], " +
-                $"param[[{settings.Param}]] " +
-                $"extraParam[[{extraParam}]]");
-
-            return Task.FromResult(0);
-        }
+        return await RunCliAsync(args);
     }
 
-
-    public class DidRevokeCommand: AsyncCommand<DidRevokeCommand.Settings>
+    private static async Task<int> RunMcpServerAsync(string[] args)
     {
-        public class Settings: CommandSettings
-        {
-            [CommandArgument(0, "<ID>")]
-            [Description("Identifier to revoke a DID document.")]
-            public int Id { get; set; }
-        }
+        var builder = Host.CreateApplicationBuilder(args);
 
-        public override Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+        builder.Services.AddMcpServer()
+            .WithStdioServerTransport()            
+            .WithTools<VerifiableMcpServer>();
+
+        builder.Logging.AddConsole(options =>
         {
-            AnsiConsole.MarkupLine($"[bold blue]Revoke DID document =>[/] DidDoc[[{settings.Id}]]");
-            return Task.FromResult(0);
-        }
+            options.LogToStandardErrorThreshold = LogLevel.Trace;
+        });
+
+        await builder.Build().RunAsync();
+
+        return 0;
     }
 
-    public class DidListCommand: AsyncCommand
+    private static async Task<int> RunCliAsync(string[] args)
     {
-        public override Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+        RootCommand rootCommand = new("A command line tool for security elements, DIDs and VCs");
+
+        Command didCommand = new("did", "Create, revoke, list or view DIDs.");
+        rootCommand.Subcommands.Add(didCommand);
+
+        Argument<int> createIdArgument = new("id") { Description = "Identifier for the new DID document." };
+        Argument<string> createParamArgument = new("param") { Description = "New DID document parameter." };
+        Option<string?> extraParamOption = new("--extraParam", "-e") { Description = "Some extra parameter." };
+
+        Command didCreateCommand = new("create", "Create a new DID document.")
         {
-            AnsiConsole.MarkupLine("[bold blue]List all DID documents[/]");
-            return Task.FromResult(0);
-        }
-    }
+            createIdArgument,
+            createParamArgument,
+            extraParamOption
+        };
+        didCreateCommand.Aliases.Add("new");
+        didCommand.Subcommands.Add(didCreateCommand);
 
-
-    public class DidViewCommand: AsyncCommand<DidViewCommand.Settings>
-    {
-        public class Settings: CommandSettings
+        didCreateCommand.SetAction(parseResult =>
         {
-            [CommandArgument(0, "<ID>")]
-            [Description("DID identifier for a document to view.")]
-            public int Id { get; set; }
-        }
+            int id = parseResult.GetValue(createIdArgument);
+            string? param = parseResult.GetValue(createParamArgument);
+            string? extraParam = parseResult.GetValue(extraParamOption);
 
-        public override Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
+            var result = VerifiableOperations.CreateDid(id, param ?? string.Empty, extraParam);
+            Console.WriteLine(result.Value);
+
+            return 0;
+        });
+
+        Argument<int> revokeIdArgument = new("id") { Description = "Identifier to revoke a DID document." };
+
+        Command didRevokeCommand = new("revoke", "Revoke a DID document.")
         {
-            AnsiConsole.MarkupLine($"[bold blue]View DID document =>[/] DidDoc[[{settings.Id}]]");
-            return Task.FromResult(0);
-        }
-    }
+            revokeIdArgument
+        };
+        didCommand.Subcommands.Add(didRevokeCommand);
 
-
-    public class InfoTpmCommand: AsyncCommand
-    {
-        public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+        didRevokeCommand.SetAction(parseResult =>
         {
-            bool isTpmPlatformSupported = TpmExtensions.IsTpmPlatformSupported();
-            if(!isTpmPlatformSupported)
+            int id = parseResult.GetValue(revokeIdArgument);
+            var result = VerifiableOperations.RevokeDid(id);
+            Console.WriteLine(result.Value);
+
+            return 0;
+        });
+
+        Command didListCommand = new("list", "List all DID documents.");
+        didCommand.Subcommands.Add(didListCommand);
+
+        didListCommand.SetAction(_ =>
+        {
+            var result = VerifiableOperations.ListDids();
+            Console.WriteLine(result.Value);
+
+            return 0;
+        });
+
+        Argument<int> viewIdArgument = new("id") { Description = "DID identifier for a document to view." };
+
+        Command didViewCommand = new("view", "View DID document.")
+        {
+            viewIdArgument
+        };
+        didCommand.Subcommands.Add(didViewCommand);
+
+        didViewCommand.SetAction(parseResult =>
+        {
+            int id = parseResult.GetValue(viewIdArgument);
+            var result = VerifiableOperations.ViewDid(id);
+            Console.WriteLine(result.Value);
+
+            return 0;
+        });
+
+        Command infoCommand = new("info", "Print selected platform information (only tpm currently).");
+        rootCommand.Subcommands.Add(infoCommand);
+
+        Command infoTpmCommand = new("tpm", "Print trusted platform module (TPM) information.");
+        infoCommand.Subcommands.Add(infoTpmCommand);
+
+        infoTpmCommand.SetAction(async parseResult =>
+        {
+            var result = await VerifiableOperations.SaveTpmInfoToFileAsync();
+
+            if(result.IsSuccess)
             {
-                AnsiConsole.MarkupLine($"[bold red]Trusted platform module (TPM) information is not supported on {RuntimeInformation.OSDescription}.[/]");
-                return 1;
-            }
-
-            try
-            {
-                var tpm = new TpmWrapper();
-                var tpmInfo = TpmExtensions.GetAllTpmInfo(tpm.Tpm);
-
-                const string JsonFileName = "tpm_data.json";
-                string tpmInfoJson = JsonSerializer.Serialize(tpmInfo);
-                using(var createStream = new FileStream(JsonFileName, FileMode.Create, FileAccess.Write))
-                {
-                    await JsonSerializer.SerializeAsync(createStream, tpmInfo);
-                }
-
-                AnsiConsole.MarkupLine($"[bold blue]tpm_data.json created[/]");
+                Console.WriteLine($"TPM data saved to: {result.Value}");
 
                 return 0;
             }
-            catch(Exception ex)
-            {
-                //TODO: Fix this.
-                AnsiConsole.MarkupLine($"[bold red]Unknown error: {ex}.[/]");
-            }
+
+            Console.Error.WriteLine(result.Error);
 
             return 1;
+        });
 
-        }
-    }
-
-
-    /// <summary>
-    /// A console program for DID and VC documents.
-    /// </summary>
-    public static class Program
-    {
-        /// <summary>
-        /// An entry point to a console program for DID and VC documents.
-        /// </summary>
-        /// <param name="args">The arguments to the program.</param>
-        /// <returns>The exit code from the program.</returns>
-        public static async Task<int> Main(string[] args)
-        {
-            var app = new CommandApp();
-            app.Configure(config =>
-            {
-                config.CaseSensitivity(CaseSensitivity.None);
-                config.SetApplicationName("verifiable");
-                config.ValidateExamples();
-
-                config.AddBranch("did", did =>
-                {
-                    did.SetDescription("Create, revoke, list or view DIDs.");
-
-                    did.AddCommand<DidCreateCommand>("create")
-                        .WithAlias("new")
-                        .WithDescription("Create a new DID document.")
-                        .WithExample(new[] { "did", "create", "123", "--extraParam", "someExtra" });
-
-                    did.AddCommand<DidRevokeCommand>("revoke")
-                        .WithDescription("Revoke a DID document.")
-                        .WithExample(new[] { "did", "revoke", "123" });
-
-                    did.AddCommand<DidListCommand>("list")
-                        .WithDescription("List all DID documents.")
-                        .WithExample(new[] { "did", "list" });
-
-                    did.AddCommand<DidViewCommand>("view")
-                        .WithDescription("View DID document.")
-                        .WithExample(new[] { "did", "view", "123" });
-                });
-
-                config.AddBranch("info", info =>
-                {
-                    info.SetDescription("Print selected platform information (only tpm currently)");
-                    info.AddCommand<InfoTpmCommand>("tpm")
-                        .WithDescription("Print trusted platform module (TPM) information")
-                        .WithExample(new[] { "info", "tpm" });
-                });
-            });
-
-            return await app.RunAsync(args).ConfigureAwait(false);
-        }
+        return await rootCommand.Parse(args).InvokeAsync();
     }
 }

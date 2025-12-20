@@ -10,27 +10,34 @@
     <Description>A command line tool for system security elements, decentralized identifiers and verifiable credentials.</Description>
     <PackageTags>ssi wallet tpm2 trusted-platform-module eidas did self-sovereign-identity verifiable-credentials decentralized-identifiers</PackageTags>
     <ApplicationIcon>resources/verifiable-nuget-logo.ico</ApplicationIcon>
-  </PropertyGroup>
 
-  <!--
-  https://docs.microsoft.com/en-us/dotnet/core/deploying/trimming/prepare-libraries-for-trimming
-  <PropertyGroup>
     <PublishTrimmed>true</PublishTrimmed>
-    <TrimmerDefaultAction>link</TrimmerDefaultAction>
+    <TrimMode>full</TrimMode>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+
+    <!-- Allow build to succeed despite TSS.Net trim warnings. -->
+    <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
   </PropertyGroup>
-  -->
 
   <ItemGroup>
-    <PackageReference Include="Spectre.Console" />
-    <PackageReference Include="Spectre.Console.Cli" />
+    <None Include=".mcp\server.json" Pack="true" PackagePath=".mcp" />
+  </ItemGroup>
+
+  <!-- TSS.Net is not trim-compatible; exclude from trimming until replaced. -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="TSS.Net" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="System.CommandLine" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Verifiable.Tpm\Verifiable.Tpm.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
   </ItemGroup>
 
 </Project>
