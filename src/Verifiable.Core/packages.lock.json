@@ -28,8 +28,14 @@
         "resolved": "0.37.0",
         "contentHash": "J7Mt1QjKijE7aAK81u5nt4SYPYEvt1odfr4ddMvyOscyNT3PoGfHKKTBB5VBSXJrWZWhfJlcG7hHBLiqawg+nw=="
       },
-      "verifiable.jwt": {
+      "verifiable.cryptography": {
         "type": "Project"
+      },
+      "verifiable.jose": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Cryptography": "[0.0.0, )"
+        }
       }
     }
   }

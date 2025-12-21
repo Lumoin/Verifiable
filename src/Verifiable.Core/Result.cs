@@ -12,15 +12,15 @@ public static class Result
     /// <summary>
     /// Creates a successful result with the specified value.
     /// </summary>
-    public static Result<TValue, TError> Success<TValue, TError>(TValue value) =>
-        Result<TValue, TError>.Success(value);
+    public static Result<TValue, TError> Success<TValue, TError>(TValue value) => Result<TValue, TError>.Success(value);
+
 
     /// <summary>
     /// Creates a failed result with the specified error.
     /// </summary>
-    public static Result<TValue, TError> Failure<TValue, TError>(TError error) =>
-        Result<TValue, TError>.Failure(error);    
+    public static Result<TValue, TError> Failure<TValue, TError>(TError error) => Result<TValue, TError>.Failure(error);    
 }
+
 
 /// <summary>
 /// Represents the result of an operation that can succeed with a value or fail with an error.
@@ -137,9 +137,21 @@ public readonly struct Result<TValue, TError>: IEquatable<Result<TValue, TError>
     public override int GetHashCode() => HashCode.Combine(IsSuccess, _value, _error);
 
 
+    /// <summary>
+    /// Determines whether two <see cref="Result{TValue, TError}"/> instances are equal.
+    /// </summary>
+    /// <param name="left"></param>
+    /// <param name="right"></param>
+    /// <returns></returns>
     public static bool operator ==(Result<TValue, TError> left, Result<TValue, TError> right) => left.Equals(right);
 
 
+    /// <summary>
+    /// Determines whether two <see cref="Result{TValue, TError}"/> instances are not equal.
+    /// </summary>
+    /// <param name="left"></param>
+    /// <param name="right"></param>
+    /// <returns></returns>
     public static bool operator !=(Result<TValue, TError> left, Result<TValue, TError> right) => !left.Equals(right);
 
 

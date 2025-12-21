@@ -4,7 +4,7 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
-using Verifiable.Core.Cryptography;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Microsoft
 {

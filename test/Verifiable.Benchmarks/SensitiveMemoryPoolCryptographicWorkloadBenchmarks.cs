@@ -2,7 +2,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using Verifiable.Core.Cryptography;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Benchmarks
 {

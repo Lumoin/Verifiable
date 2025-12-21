@@ -4,7 +4,7 @@ using Org.BouncyCastle.Crypto.Signers;
 using System;
 using System.Buffers;
 using System.Threading.Tasks;
-using Verifiable.Core.Cryptography;
+using Verifiable.Cryptography;
 
 namespace Verifiable.BouncyCastle
 {

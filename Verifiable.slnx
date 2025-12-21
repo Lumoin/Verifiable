@@ -39,8 +39,9 @@
   <Folder Name="/src/">
     <Project Path="src/Verifiable.BouncyCastle/Verifiable.BouncyCastle.csproj" />
     <Project Path="src/Verifiable.Core/Verifiable.Core.csproj" />
+    <Project Path="src/Verifiable.Cryptography/Verifiable.Cryptography.csproj" Id="a968ac12-8957-4f2a-877a-8054e1de96fd" />
     <Project Path="src/Verifiable.DecentralizedWebNode/Verifiable.DecentralizedWebNode.csproj" />
-    <Project Path="src/Verifiable.Jwt/Verifiable.Jwt.csproj" />
+    <Project Path="src/Verifiable.Jose/Verifiable.Jose.csproj" />
     <Project Path="src/Verifiable.Microsoft/Verifiable.Microsoft.csproj" />
     <Project Path="src/Verifiable.NSec/Verifiable.NSec.csproj" />
     <Project Path="src/Verifiable.Sidetree/Verifiable.Sidetree.csproj" />

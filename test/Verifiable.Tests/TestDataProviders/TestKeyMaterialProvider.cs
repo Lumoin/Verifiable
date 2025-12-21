@@ -1,5 +1,5 @@
 ﻿using Verifiable.BouncyCastle;
-using Verifiable.Core.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.Microsoft;
 
 namespace Verifiable.Tests.TestDataProviders

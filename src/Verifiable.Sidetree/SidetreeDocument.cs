@@ -1,5 +1,6 @@
-using Verifiable.Core.Did;
 using System;
+using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Sidetree
 {

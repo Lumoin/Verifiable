@@ -1,11 +1,13 @@
 ﻿using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Verifiable.Assessment;
-using Verifiable.Core.Builders;
-using Verifiable.Core.Cryptography;
-using Verifiable.Core.Cryptography.Context;
-using Verifiable.Core.Did;
-using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Assessment;
+using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -92,7 +94,7 @@ namespace Verifiable.Tests.Builders
         {
             //This builds the did:web document with the given public key and crypto suite.
             string testDomain = "example.com";
-            var webDidDocument = WebDidBuilder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo, testDomain);
+            var webDidDocument = await WebDidBuilder.BuildAsync(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo, testDomain);
 
             //Assert that the KeyFormat exists and is of the expected type.
             var actualKeyFormat = webDidDocument.VerificationMethod![0].KeyFormat;
@@ -135,7 +137,7 @@ namespace Verifiable.Tests.Builders
         {
             //Create DID document.
             string testDomain = "example.com";
-            var webDidDocument = WebDidBuilder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo, testDomain);
+            var webDidDocument = await WebDidBuilder.BuildAsync(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo, testDomain);
 
             //Sign data.
             var contentToSign = Encoding.UTF8.GetBytes("Hello, Web DID!");
@@ -166,7 +168,8 @@ namespace Verifiable.Tests.Builders
                         var verificationMethodId = didDocument.VerificationMethod![0].Id!;
                         didDocument.WithAuthentication(verificationMethodId);
                     }
-                    return didDocument;
+
+                    return ValueTask.FromResult(didDocument);
                 })
                 .With((didDocument, builder, buildState) =>
                 {
@@ -176,7 +179,8 @@ namespace Verifiable.Tests.Builders
                         var verificationMethodId = didDocument.VerificationMethod![0].Id!;
                         didDocument.WithAssertionMethod(verificationMethodId);
                     }
-                    return didDocument;
+
+                    return ValueTask.FromResult(didDocument);
                 })
                 .AddServices<WebDidBuilder, WebDidBuildState>(buildState =>
                 [
@@ -185,7 +189,7 @@ namespace Verifiable.Tests.Builders
                     new Service { Id = new Uri($"did:web:{buildState.WebDomain}#service-c"), Type = "ServiceTypeC", ServiceEndpoint = $"https://{buildState.WebDomain.Replace(":", "/", StringComparison.Ordinal)}/service-c" }
                 ]);
 
-            var webDidDocument = builder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo, webDomain, DidRepresentationType.JsonLd);
+            var webDidDocument = await builder.BuildAsync(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo, webDomain, DidRepresentationType.JsonLd);
 
             //Verify the DID structure.
             Assert.AreEqual("did:web:placeholder.com:api:v1:entities:item-456", webDidDocument.Id!);
@@ -263,13 +267,13 @@ namespace Verifiable.Tests.Builders
 
         [TestMethod]
         [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
-        public void CanBuildWebDidWithAllRepresentationTypes(DidWebTestData testData)
+        public async Task CanBuildWebDidWithAllRepresentationTypes(DidWebTestData testData)
         {
             string webDomain = "example.com";
             var builder = new WebDidBuilder();
 
             //Test 1: JSON without context - minimal representation.
-            var docWithoutContext = builder.Build(
+            var docWithoutContext = await builder.BuildAsync(
                 testData.KeyPair.PublicKey,
                 testData.VerificationMethodTypeInfo,
                 webDomain,
@@ -279,7 +283,7 @@ namespace Verifiable.Tests.Builders
             Assert.AreEqual($"did:web:{webDomain}", docWithoutContext.Id!);
 
             //Test 2: JSON with context - dual compatibility.
-            var docWithContext = builder.Build(
+            var docWithContext = await builder.BuildAsync(
                 testData.KeyPair.PublicKey,
                 testData.VerificationMethodTypeInfo,
                 webDomain,
@@ -289,7 +293,7 @@ namespace Verifiable.Tests.Builders
             Assert.AreEqual(Context.DidCore10, docWithContext.Context.Contexes![0]);
 
             //Test 3: JSON-LD - full semantic representation.
-            var docJsonLd = builder.Build(
+            var docJsonLd = await builder.BuildAsync(
                 testData.KeyPair.PublicKey,
                 testData.VerificationMethodTypeInfo,
                 webDomain,

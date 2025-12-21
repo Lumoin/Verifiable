@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Verifiable.Jwt\Verifiable.Jwt.csproj" />
+    <ProjectReference Include="..\Verifiable.Jose\Verifiable.Jose.csproj" />
   </ItemGroup>
 
 </Project>

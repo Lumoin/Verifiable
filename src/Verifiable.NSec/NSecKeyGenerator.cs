@@ -1,7 +1,7 @@
 ﻿using NSec.Cryptography;
 using System;
 using System.Buffers;
-using Verifiable.Core.Cryptography;
+using Verifiable.Cryptography;
 using Key = NSec.Cryptography.Key;
 
 namespace Verifiable.NSec
