@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Title>CBOR serialization for Verifiable credentials and COSE types.</Title>
+    <Description>System.Formats.Cbor serialization support for Verifiable.JCose types. Provides CBOR serialization for COSE keys, ECDSA-SD proof values, and related cryptographic structures. Designed for AOT compatibility and trimming safety.</Description>
+    <PackageTags>CBOR Serialization COSE Converters AOT VerifiableCredentials DataIntegrity</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+    <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Formats.Cbor" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>    
+    <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
+  </ItemGroup>
+
+</Project>

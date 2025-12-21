@@ -1,2 +1,6 @@
-P:System.DateTime.Now;Use System.DateTime.UtcNow instead.
+P:System.DateTime.Now;Use TimeProvider.GetUtcNow() instead.
+P:System.DateTime.UtcNow;Use TimeProvider.GetUtcNow() instead.
+P:System.DateTimeOffset.Now;Use TimeProvider.GetUtcNow() instead.
+P:System.DateTimeOffset.UtcNow;Use TimeProvider.GetUtcNow() instead.
 M:System.IO.File.GetCreationTime(System.String);Use GetCreationTimeUtc instead.
+M:System.IO.File.GetLastWriteTime(System.String);Use GetLastWriteTimeUtc instead.

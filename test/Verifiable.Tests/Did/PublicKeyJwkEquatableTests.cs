@@ -1,5 +1,5 @@
-﻿using Verifiable.Core.Did;
-using Verifiable.Jwt;
+﻿using Verifiable.Core.Model.Did;
+using Verifiable.Jose;
 
 namespace Verifiable.Tests.Did
 {

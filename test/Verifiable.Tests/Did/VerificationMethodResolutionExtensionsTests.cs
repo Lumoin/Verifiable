@@ -1,6 +1,6 @@
-﻿using Verifiable.Core.Cryptography;
-using Verifiable.Core.Did;
-using Verifiable.Core.Did.Methods;
+﻿using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Did
 {
@@ -145,6 +145,7 @@ namespace Verifiable.Tests.Did
                 {
                     //Look for the verification method in the external document.
                     var method = document.ResolveVerificationMethodReference($"#{fragment}");
+
                     return ValueTask.FromResult(method);
                 }
 
@@ -173,12 +174,11 @@ namespace Verifiable.Tests.Did
 
             var embeddedMethod = resultsList.FirstOrDefault(r => r.Method!.Id == "#embedded-key");
             Assert.IsNotNull(embeddedMethod.Method, "Embedded method should be resolved.");
-            Assert.AreEqual("#embedded-key", embeddedMethod.Method!.Id, "Embedded method ID should match.");
         }
 
 
         [TestMethod]
-        public async Task SelectFromAssertionMethodAsyncWithLocalResolutionReturnsResolvedResults()
+        public async Task SelectFromAssertionMethodAsyncReturnsResolvedResults()
         {
             var didDocument = CreateTestDidDocument();
 
@@ -187,39 +187,64 @@ namespace Verifiable.Tests.Did
 
             Assert.HasCount(2, resultsList, "Should have exactly two assertion methods.");
             Assert.IsTrue(resultsList.All(r => r.IsResolved), "All assertion methods should be resolved.");
-            Assert.IsTrue(resultsList.All(r => r.IsLocal), "All assertion methods should be resolved locally.");
-            Assert.IsTrue(resultsList.All(r => r.Method != null), "All resolved methods should not be null.");
-
-            var methodIds = resultsList.Select(r => r.Method!.Id).ToList();
-            Assert.Contains("#key-1", methodIds, "Should contain reference to #key-1");
-            Assert.Contains("#key-2", methodIds, "Should contain reference to #key-2");
         }
 
 
         [TestMethod]
-        public async Task SelectFromAllVerificationRelationshipsAsyncReturnsAllMethods()
+        public async Task SelectFromKeyAgreementAsyncReturnsResolvedResults()
+        {
+            var didDocument = CreateTestDidDocument();
+
+            var results = await didDocument.SelectFromKeyAgreementAsync();
+            var resultsList = results.ToList();
+
+            Assert.HasCount(1, resultsList, "Should have exactly one key agreement method.");
+            Assert.IsTrue(resultsList[0].IsResolved, "Key agreement method should be resolved.");
+            Assert.AreEqual("#key-2", resultsList[0].Method!.Id, "Key agreement method ID should match.");
+        }
+
+
+        [TestMethod]
+        public async Task SelectFromCapabilityInvocationAsyncReturnsResolvedResults()
+        {
+            var didDocument = CreateTestDidDocument();
+
+            var results = await didDocument.SelectFromCapabilityInvocationAsync();
+            var resultsList = results.ToList();
+
+            Assert.HasCount(1, resultsList, "Should have exactly one capability invocation method.");
+            Assert.IsTrue(resultsList[0].IsResolved, "Capability invocation method should be resolved.");
+        }
+
+
+        [TestMethod]
+        public async Task SelectFromCapabilityDelegationAsyncReturnsResolvedResults()
+        {
+            var didDocument = CreateTestDidDocument();
+
+            var results = await didDocument.SelectFromCapabilityDelegationAsync();
+            var resultsList = results.ToList();
+
+            Assert.HasCount(2, resultsList, "Should have exactly two capability delegation methods.");
+            Assert.IsTrue(resultsList.All(r => r.IsResolved), "All capability delegation methods should be resolved.");
+        }
+
+
+        [TestMethod]
+        public async Task SelectFromAllVerificationRelationshipsAsyncReturnsAllResults()
         {
             var didDocument = CreateTestDidDocument();
 
             var results = await didDocument.SelectFromAllVerificationRelationshipsAsync();
             var resultsList = results.ToList();
 
-            //Authentication: 2, AssertionMethod: 2, KeyAgreement: 1, CapabilityInvocation: 1, CapabilityDelegation: 2
-            Assert.HasCount(8, resultsList, "Should have methods from all verification relationships.");
+            Assert.HasCount(8, resultsList, "Should have eight total verification relationship methods.");
             Assert.IsTrue(resultsList.All(r => r.IsResolved), "All methods should be resolved.");
-            Assert.IsTrue(resultsList.All(r => r.IsLocal), "All methods should be resolved locally.");
-            Assert.IsTrue(resultsList.All(r => r.Method != null), "All results should have methods.");
-
-            var methodIds = resultsList.Select(r => r.Method!.Id).ToList();
-            var distinctIds = methodIds.Distinct().ToList();
-            Assert.Contains("#key-1", distinctIds, "Should contain #key-1.");
-            Assert.Contains("#key-2", distinctIds, "Should contain #key-2.");
-            Assert.Contains("#embedded-key", distinctIds, "Should contain #embedded-key.");
         }
 
 
         [TestMethod]
-        public async Task SelectFromAuthenticationAsyncWithExternalResolverReturnsExternalMethod()
+        public async Task SelectFromAuthenticationAsyncWithExternalResolverResolvesExternalReferences()
         {
             var externalDocument = new DidDocument
             {

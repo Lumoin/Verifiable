@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <Title>JOSE and COSE cryptographic operations and data types.</Title>
+    <Description>Core data types and operations for JOSE (JSON Object Signing and Encryption) and COSE (CBOR Object Signing and Encryption) standards. Includes JWK key representations, JWS/JWE operations, SD-JWT selective disclosure, and signing infrastructure. Serialization-agnostic design enables use with JSON, CBOR, or other formats via separate serialization packages.</Description>
+    <PackageTags>JOSE COSE JWK JWS JWE JWT SD-JWT Cryptography Signing Encryption VerifiableCredentials DID</PackageTags>
+  </PropertyGroup>
+
+  <PropertyGroup>    
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
+  </ItemGroup>
+
+   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <AdditionalFiles Include="..\..\BannedSymbols.Serialization.txt" Visible="false" />
+    <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
+  </ItemGroup>
+  
+</Project>

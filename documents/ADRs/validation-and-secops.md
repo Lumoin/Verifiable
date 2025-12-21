@@ -70,13 +70,517 @@ We will introduce a `Claim`, `Assessor`, and `Archiving` model for validation.
 
 4. *(Potential negative consequences or trade-offs can be listed here)*
 
+## Extension
+
+## Extended Architecture: Remote Assessment, AI Integration, and Regulatory Compliance
+
+## Overview
+
+This document extends the Claim-Assessor-Archiving model to address:
+
+- Remote and AI-based assessors running in parallel
+- OpenTelemetry integration for distributed tracing
+- Regulatory retrieval and post-facto remediation
+- Software provenance and attestation
+
+## Assessment Architecture
+
+### Execution Model
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              ClaimIssuer                                    │
+│                                                                             │
+│   Input ──→ [Rule A] ──→ [Rule B] ──→ [Rule C] ──→ ClaimIssueResult         │
+│                                                                             │
+│   Properties:                                                               │
+│   - Sequential execution (rules may have dependencies).                     │
+│   - Partial results on cancellation.                                        │
+│   - Exception handling per rule (FailedClaim).                              │
+│   - TimeProvider injection for deterministic timestamps.                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         CompositeClaimAssessor                              │
+│                                                                             │
+│   ClaimIssueResult ──┬──→ [Local Rules Assessor]     ──→ Result A           │
+│                      │         (fast, in-memory)              │             │
+│                      │                                        │             │
+│                      ├──→ [ML Model Assessor]        ──→ Result B ──┐       │
+│                      │         (local inference)              │      │      │
+│                      │                                        │      │      │
+│                      ├──→ [Remote AI Service]        ──→ Result C    │      │
+│                      │         (LLM, specialized AI)          │      ▼      │
+│                      │                                        │   Aggregate │
+│                      └──→ [Compliance Service]       ──→ Result D ──┘       │
+│                               (external validation)           │             │
+│                                                               ▼             │
+│                                               AggregatedAssessmentResult    │
+│                                                                             │
+│   Properties:                                                               │
+│   - Parallel execution (Task.WhenAll).                                      │
+│   - Individual timeout per assessor.                                        │
+│   - Partial results when some assessors fail/timeout.                       │
+│   - Aggregation strategies: All, Any, Majority, Quorum.                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           AssessmentArchiver                                │
+│                                                                             │
+│   AssessmentResult(s) ──→ Archive Storage                                   │
+│                                                                             │
+│   Captured:                                                                 │
+│   - Full ClaimIssueResult with all claims.                                  │
+│   - Individual assessment results.                                          │
+│   - Timestamps (from TimeProvider).                                         │
+│   - OpenTelemetry correlation (TraceId, SpanId, Baggage).                   │
+│   - Provenance context (commit SHA, Docker SHA, SPIFFE ID).                 │
+│   - Aggregation metadata (strategy, quorum, completion status).             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Assessor Types
+
+| Type | Latency | Cancellation | Use Case |
+| ---- | ------- | ------------ | -------- |
+| Local Rules | ~1ms | Ignore | Schema validation, format checks |
+| Local ML Model | 10-100ms | Check periodically | Fraud detection, classification |
+| Remote AI Service | 100ms-10s | Pass to HTTP client | LLM analysis, complex reasoning |
+| Compliance Service | 100ms-5s | Pass to HTTP client | Regulatory validation, sanctions |
+
+### Aggregation Strategies
+
+```csharp
+enum AssessmentAggregationStrategy
+{
+    // All assessors must succeed. High assurance.
+    AllMustSucceed,
+    
+    // At least one must succeed. Redundant assessors.
+    AnyMustSucceed,
+    
+    // More than half must succeed. Voting/consensus.
+    MajorityMustSucceed,
+    
+    // Minimum N must complete and all completed must succeed.
+    // Tolerates unavailable assessors.
+    QuorumMustSucceed
+}
+```
+
+## OpenTelemetry Integration
+
+### Trace Structure
+
+```text
+Trace: abc123... (W3C Trace Context)
+│
+├── Span: CredentialIssuanceRequest
+│   │   service.name: vc-issuer
+│   │   correlation.id: user-request-xyz
+│   │
+│   ├── Span: ClaimIssuer.GenerateClaimsAsync
+│   │   │   issuer.id: default-key-did-issuer
+│   │   │   rules.total: 6
+│   │   │   rules.executed: 6
+│   │   │   completion.status: Complete
+│   │   │
+│   │   ├── Span: ValidateIdEncoding
+│   │   │       claim.id: KeyDidIdEncoding
+│   │   │       claim.outcome: Success
+│   │   │
+│   │   ├── Span: ValidateKeyFormat
+│   │   │       claim.id: KeyDidKeyFormat
+│   │   │       claim.outcome: Success
+│   │   │       subclaims.count: 4
+│   │   └── ...
+│   │
+│   ├── Span: CompositeAssessor.AssessAsync
+│   │   │   assessors.total: 4
+│   │   │   assessors.completed: 3
+│   │   │   assessors.faulted: 1
+│   │   │   aggregation.strategy: QuorumMustSucceed
+│   │   │   overall.success: true
+│   │   │
+│   │   ├── Span: LocalRulesAssessor
+│   │   │       assessor.id: local-rules-v1
+│   │   │       duration.ms: 2
+│   │   │       success: true
+│   │   │
+│   │   ├── Span: FraudMLAssessor
+│   │   │       assessor.id: fraud-ml-v2.1
+│   │   │       model.version: fraud-detector-2.1.0
+│   │   │       duration.ms: 45
+│   │   │       success: true
+│   │   │       confidence: 0.98
+│   │   │
+│   │   ├── Span: ComplianceService
+│   │   │       assessor.id: compliance-api
+│   │   │       duration.ms: 230
+│   │   │       success: true
+│   │   │       regulations.checked: [eIDAS, GDPR]
+│   │   │
+│   │   └── Span: RemoteAIAssessor
+│   │           assessor.id: llm-analyzer
+│   │           completion.status: Faulted
+│   │           error: "Service unavailable"
+│   │           duration.ms: 5002
+│   │
+│   └── Span: AssessmentArchiver.ArchiveAsync
+│           archiver.id: regulatory-archiver
+│           archive.id: arch-789
+│           storage.backend: postgresql
+│
+Baggage:
+  - correlation.id: user-request-xyz
+  - docker.sha: sha256:abc123...
+  - commit.sha: def456...
+  - spiffe.id: spiffe://example.com/vc-issuer
+  - model.versions: fraud-2.1,compliance-1.0
+```
+
+### Baggage Propagation
+
+Baggage flows through the entire pipeline, enabling correlation:
+
+```csharp
+Activity.Current?.AddBaggage("docker.sha", Environment.GetEnvironmentVariable("IMAGE_SHA"));
+Activity.Current?.AddBaggage("commit.sha", Environment.GetEnvironmentVariable("GIT_SHA"));
+Activity.Current?.AddBaggage("spiffe.id", GetSpiffeId());
+Activity.Current?.AddBaggage("model.versions", string.Join(",", GetLoadedModelVersions()));
+```
+
+## Regulatory Retrieval
+
+### Query Patterns
+
+The archive supports retrieval by multiple dimensions:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          Archive Query Interface                            │
+│                                                                             │
+│   By Identity:                                                              │
+│   ├── GetByCorrelationId("did:web:example.com:user:alice")                  │
+│   ├── GetBySubjectDid("did:key:z6Mk...")                                    │
+│   └── GetByIssuerDid("did:web:issuer.example.com")                          │
+│                                                                             │
+│   By Time:                                                                  │
+│   ├── GetByDateRange(2024-Q3-start, 2024-Q3-end)                            │
+│   └── GetByTimestamp(exact-moment)                                          │
+│                                                                             │
+│   By Trace:                                                                 │
+│   ├── GetByTraceId("abc123...")      → Full distributed trace               │
+│   └── GetBySpanId("def456...")       → Specific operation                   │
+│                                                                             │
+│   By Provenance:                                                            │
+│   ├── GetByCommitSha("abc123...")    → Code version                         │
+│   ├── GetByDockerSha("sha256:...")   → Container image                      │
+│   ├── GetBySpiffeId("spiffe://...")  → Workload identity                    │
+│   └── GetByModelVersion("v2.1")      → ML model version                     │
+│                                                                             │
+│   By Outcome:                                                               │
+│   ├── GetFailedAssessments()         → Remediation candidates               │
+│   ├── GetByAssessorId("fraud-ml")    → Specific assessor results            │
+│   └── GetIncompleteAssessments()     → Partial/cancelled results            │
+│                                                                             │
+│   By Regulation:                                                            │
+│   ├── GetByRegulatoryFramework("eIDAS")                                     │
+│   └── GetByComplianceStatus(failed)                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Remediation Workflow
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Remediation Scenario                              │
+│                                                                             │
+│   1. Discovery: Model version fraud-ml-v2.0 has bias issue                 │
+│                                                                             │
+│   2. Query: GetByModelVersion("fraud-ml-v2.0")                             │
+│             GetByDateRange(deployment-start, discovery-date)                │
+│                                                                             │
+│   3. Analysis: For each affected assessment:                                │
+│      ├── Retrieve full ClaimIssueResult (original claims)                  │
+│      ├── Retrieve AssessmentResult (decision made)                         │
+│      ├── Retrieve trace (full context)                                     │
+│      └── Retrieve baggage (deployment context)                             │
+│                                                                             │
+│   4. Re-assess: With corrected model (fraud-ml-v2.1)                       │
+│      ├── Load original ClaimIssueResult                                    │
+│      ├── Run new assessment                                                │
+│      ├── Compare results                                                   │
+│      └── Archive remediation assessment                                    │
+│                                                                             │
+│   5. Notification: Identify affected parties                               │
+│      ├── Query by SubjectDid                                               │
+│      ├── Generate remediation report                                       │
+│      └── Link to original and remediated assessments                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Provenance Context
+
+### What the Library Provides
+
+The library provides only the **mechanism** for provenance flow:
+
+```csharp
+//On ClaimIssueResult, AssessmentResult, ArchivingResult:
+IReadOnlyDictionary<string, string>? Baggage { get; }
+
+//TracingUtilities captures from Activity.Current:
+string? TraceId;
+string? SpanId;
+IReadOnlyDictionary<string, string>? Baggage;
+```
+
+The library does **not** define what keys go in baggage. Users define their own provenance structure based on their infrastructure.
+
+### Why Archive Trace Info Separately
+
+OTel backends (Jaeger, Tempo) may:
+
+- Have retention limits (e.g., 30 days)
+- Experience data loss
+- Be unavailable during audits
+
+Archiving `TraceId`, `SpanId`, and `Baggage` directly in assessment results provides:
+
+- Durable provenance that survives OTel backend issues
+- Self-contained audit trail
+- Correlation key to reconstruct full trace if OTel data exists
+
+### Example Usage Pattern (User Code)
+
+This is example code showing one way to capture provenance - not part of the library:
+
+```csharp
+//At startup - capture from assembly and environment.
+var buildInfo = new Dictionary<string, string>
+{
+    ["app.version"] = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "unknown",
+    ["git.sha"] = Environment.GetEnvironmentVariable("GIT_SHA") ?? "unknown",
+    ["image.digest"] = Environment.GetEnvironmentVariable("IMAGE_SHA") ?? "unknown"
+};
+
+//Per-request middleware - attach to Activity.
+app.Use(async (context, next) =>
+{
+    foreach (var (key, value) in buildInfo)
+    {
+        Activity.Current?.AddBaggage(key, value);
+    }
+    
+    //Model info if using AI.
+    Activity.Current?.AddBaggage("model.version", fraudModel.Version);
+    
+    await next();
+});
+
+//Baggage automatically flows through:
+//- ClaimIssuer -> ClaimIssueResult.Baggage.
+//- ClaimAssessor -> AssessmentResult.Baggage.
+//- AssessmentArchiver -> ArchivingResult.Baggage.
+```
+
+### CI/CD Environment Variables
+
+| Variable | Source | Example |
+| -------- | ------ | ------- |
+| `GIT_SHA` | GitHub Actions: `${{ github.sha }}` | `abc123def456...` |
+| `IMAGE_SHA` | Docker build output | `sha256:e3b0c44...` |
+| `BUILD_ID` | GitHub Actions: `${{ github.run_id }}` | `12345678` |
+| `BUILD_TIMESTAMP` | Pipeline generated | `2024-06-01T12:00:00Z` |
+| `SPIFFE_ID` | SPIRE agent | `spiffe://example.com/...` |
+
+### Baggage Key Conventions
+
+Provenance flows through `Activity.Baggage` as key-value pairs. Use these conventions:
+
+| Category | Key | Example Value |
+| -------- | --- | ------------- |
+| **Source Control** | `git.sha` | `abc123def456...` |
+| | `git.branch` | `main` |
+| | `git.repository` | `github.com/org/repo` |
+| **Container** | `image.digest` | `sha256:e3b0c44...` |
+| | `k8s.namespace` | `production` |
+| | `k8s.pod` | `vc-assessor-abc123` |
+| **Identity** | `spiffe.id` | `spiffe://example.com/ns/prod/sa/assessor` |
+| | `oidc.issuer` | `https://accounts.google.com` |
+| **Build** | `build.id` | `12345678` |
+| | `build.timestamp` | `2024-06-01T12:00:00Z` |
+| **ML Models** | `model.id` | `fraud-detector` |
+| | `model.version` | `v2.1.0` |
+| | `model.checksum` | `sha256:model123...` |
+| **Environment** | `deployment.environment` | `production` |
+| | `cloud.region` | `us-east-1` |
+
+Query archived assessments by any baggage key:
+
+```csharp
+//All assessments from a specific commit.
+var affected = archive.GetByBaggageKey("git.sha", "abc123def456");
+
+//All assessments using a specific model version.
+var modelV2 = archive.GetByBaggageKey("model.version", "v2.0");
+
+//All assessments from production.
+var prod = archive.GetByBaggageKey("deployment.environment", "production");
+```
+
+### Integration with Sigstore/SPIFFE
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     Complete Provenance Flow                                │
+│                                                                             │
+│   BUILD TIME (CI/CD Pipeline)                                               │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  1. Source: git commit abc123                                       │   │
+│   │  2. Build: dotnet publish → assembly with version metadata          │   │
+│   │  3. Sign: sigstore/cosign sign → signature + certificate            │   │
+│   │  4. Attest: SLSA provenance attestation                             │   │
+│   │  5. Push: container registry with signature                         │   │
+│   │  6. Export: GIT_SHA, IMAGE_SHA, BUILD_ID as env vars                │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                    ↓                                        │
+│   RUNTIME (Application Startup)                                             │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  var appVersion = Assembly.GetEntryAssembly().GetName().Version;    │   │
+│   │  var gitSha = Environment.GetEnvironmentVariable("GIT_SHA");        │   │
+│   │  var imageDigest = Environment.GetEnvironmentVariable("IMAGE_SHA"); │   │
+│   │  var spiffeId = Environment.GetEnvironmentVariable("SPIFFE_ID");    │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                    ↓                                        │
+│   REQUEST TIME (Per-Request Middleware)                                     │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  using var activity = activitySource.StartActivity("Assessment");   │   │
+│   │                                                                     │   │
+│   │  Activity.Current?.AddBaggage("app.version", appVersion);           │   │
+│   │  Activity.Current?.AddBaggage("git.sha", gitSha);                   │   │
+│   │  Activity.Current?.AddBaggage("image.digest", imageDigest);         │   │
+│   │  Activity.Current?.AddBaggage("model.version", model.Version);      │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                    ↓                                        │
+│   ASSESSMENT TIME                                                           │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  var result = await assessor.AssessAsync(input, correlationId);     │   │
+│   │                                                                     │   │
+│   │  // result.Baggage inherited from Activity.Current                  │   │
+│   │  // AI assessor adds: model inference time, confidence score        │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                    ↓                                        │
+│   ARCHIVE TIME                                                              │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  await archiver.ArchiveAsync(result);                               │   │
+│   │                                                                     │   │
+│   │  // Archived with full provenance:                                  │   │
+│   │  //   - Build info (version, commit, image)                         │   │
+│   │  //   - Runtime identity (SPIFFE ID)                                │   │
+│   │  //   - Model info (version, checksum, training date)               │   │
+│   │  //   - Trace correlation (TraceId, SpanId)                         │   │
+│   │  //   - Assessment result + all claims                              │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                    ↓                                        │
+│   AUDIT TIME (Days/Months/Years Later)                                      │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  // Query: "Find all assessments using model v2.0"                  │   │
+│   │  var affected = archive.GetByModelVersion("v2.0");                  │   │
+│   │                                                                     │   │
+│   │  // For each affected assessment:                                   │   │
+│   │  //   - Verify sigstore signature still valid                       │   │
+│   │  //   - Lookup trace in OTel backend (Jaeger/Tempo)                 │   │
+│   │  //   - Retrieve original claims for re-assessment                  │   │
+│   │  //   - Generate remediation report                                 │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Attestation Chain                                    │
+│                                                                             │
+│   Build Time:                                                               │
+│   ├── Source: GitHub commit abc123                                          │
+│   ├── Build: GitHub Actions workflow #456                                   │
+│   ├── Sign: Sigstore Fulcio (keyless signing)                               │
+│   ├── Attest: SLSA provenance                                               │
+│   └── Push: Container registry with cosign signature                        │
+│                                                                             │
+│   Runtime:                                                                  │
+│   ├── Identity: SPIFFE SVID from SPIRE                                      │
+│   │             spiffe://example.com/ns/prod/sa/vc-assessor                 │
+│   ├── Verify: Sigstore bundle validates container                           │
+│   └── Record: All IDs flow to archive via baggage                           │
+│                                                                             │
+│   Audit Time:                                                               │
+│   ├── Query: Archive by SPIFFE ID or Docker SHA                             │
+│   ├── Verify: Sigstore bundle still valid                                   │
+│   ├── Trace: OTel backend shows full request flow                           │
+│   └── Prove: Cryptographic chain from code to decision                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Time Handling
+
+All components use injected `TimeProvider`:
+
+```csharp
+//Production.
+var issuer = new ClaimIssuer<T>(id, rules, TimeProvider.System);
+
+//Testing.
+var fakeTime = new FakeTimeProvider(new DateTimeOffset(2024, 6, 15, 12, 0, 0, TimeSpan.Zero));
+var issuer = new ClaimIssuer<T>(id, rules, fakeTime);
+
+//Advancing time in tests.
+fakeTime.Advance(TimeSpan.FromDays(30));
+```
+
+The library never calls `DateTime.UtcNow` directly. This enables:
+
+- Deterministic testing.
+- Time travel in tests.
+- Consistent timestamps across distributed components.
+
+## Cancellation Semantics
+
+| Component | Cancellation Behavior |
+| --------- | -------------------- |
+| ClaimIssuer | Returns partial ClaimIssueResult |
+| Simple Assessor | Ignores (fast operation) |
+| AI Assessor | Propagates to HTTP client |
+| CompositeAssessor | Collects completed results |
+| Archiver | Propagates to storage backend |
+
+Partial results are **never discarded**. The system preserves work completed before cancellation.
+
+## Security Considerations
+
+1. **Archive Immutability**: Once archived, assessments should not be modified. Use append-only storage or blockchain anchoring for high-assurance scenarios.
+
+2. **Baggage Sanitization**: Baggage can contain sensitive data. Implement filtering before archiving.
+
+3. **Access Control**: Archive queries should be authorized based on regulatory role and data classification.
+
+4. **Retention**: Implement retention policies per regulatory framework (e.g., 7 years for financial, per GDPR for personal data).
+
 ## Status
 
 Accepted.
 
 ## References
 
-[Explainable Artificial Intelligence (XAI) 2.0: A Manifesto of Open Challenges and Interdisciplinary Research Directions](https://arxiv.org/abs/2310.19775).
+- [Explainable Artificial Intelligence (XAI) 2.0: A Manifesto of Open Challenges and Interdisciplinary Research Directions](https://arxiv.org/abs/2310.19775).
+- [OpenTelemetry Specification](https://opentelemetry.io/docs/specs/)
+- [W3C Trace Context](https://www.w3.org/TR/trace-context/)
+- [SPIFFE/SPIRE](https://spiffe.io/)
+- [Sigstore](https://www.sigstore.dev/)
+- [SLSA Framework](https://slsa.dev/)
 
 ## Revision History
 

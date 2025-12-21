@@ -1,14 +1,12 @@
 ﻿using System.Buffers;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Assessment;
 using Verifiable.BouncyCastle;
-using Verifiable.Core.Builders;
-using Verifiable.Core.Cryptography;
-using Verifiable.Core.Cryptography.Context;
-using Verifiable.Core.Did;
-using Verifiable.Core.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Assessment;
+using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -26,6 +24,11 @@ namespace Verifiable.Tests.Builders
         /// </summary>
         private static KeyDidBuilder KeyDidBuilder { get; } = new KeyDidBuilder();
 
+        /// <summary>
+        /// The test context.
+        /// </summary>
+        public TestContext TestContext { get; set; } = null!;
+
 
         /// <summary>
         /// The one and only (stateless) assessor for KeyDID for the builder tests.
@@ -34,9 +37,9 @@ namespace Verifiable.Tests.Builders
             new ClaimIssuer<DidDocument>(
                 issuerId: "DefaultKeyDidIssuer",
                 validationRules: KeyDidValidationRules.AllRules,
-                claimIdGenerator: () => ValueTask.FromResult(string.Empty)),
-                assessor: DefaultAssessors.DefaultKeyDidAssessorAsync,
-                assessorId: "DefaultKeyDidAssessorId");
+                claimIdGenerator: (ct) => ValueTask.FromResult(string.Empty)),
+            assessor: DefaultAssessors.DefaultKeyDidAssessorAsync,
+            assessorId: "DefaultKeyDidAssessorId");
 
 
 
@@ -45,7 +48,10 @@ namespace Verifiable.Tests.Builders
         public async Task CanBuildKeyDidFromRandomKeys(DidKeyTestData testData)
         {
             //This builds the did:key document with the given public key and crypto suite.
-            var keyDidDocument = KeyDidBuilder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo);
+            var keyDidDocument = await KeyDidBuilder.BuildAsync(
+                testData.KeyPair.PublicKey,
+                testData.VerificationMethodTypeInfo,
+                cancellationToken: TestContext.CancellationToken);
 
             //Assert that the KeyFormat exists and is of the expected type
             var actualKeyFormat = keyDidDocument.VerificationMethod![0].KeyFormat;
@@ -67,7 +73,7 @@ namespace Verifiable.Tests.Builders
             Assert.IsTrue(res, $"Key format validation failed for '{actualKeyFormat.GetType()}' for algorithm '{alg}'.");
 
             //This part runs the whole suite if did:key validation rules Verifiable library defines against the document.
-            var assessmentResult = await KeyDidAssessor.AssessAsync(keyDidDocument, "some-test-supplied-correlationId");
+            var assessmentResult = await KeyDidAssessor.AssessAsync(keyDidDocument, "some-test-supplied-correlationId", TestContext.CancellationToken);
             Assert.IsTrue(assessmentResult.IsSuccess, assessmentResult.ClaimsResult
                 .Claims.Where(c => c.Outcome == ClaimOutcome.Failure)
                 .Aggregate("Assessment failed. Failed claims: ", (acc, claim) => $"{acc}{claim.Id}, ").TrimEnd(',', '.'));
@@ -90,8 +96,11 @@ namespace Verifiable.Tests.Builders
             {
                 Assert.Inconclusive($"Key pair {testData.KeyPair.PublicKey.Tag.Get<CryptoAlgorithm>()} does not support signing.");
 
-                //Create DID document
-                var didDocument = KeyDidBuilder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo);
+                //Create DID document.
+                var didDocument = await KeyDidBuilder.BuildAsync(
+                    testData.KeyPair.PublicKey,
+                    testData.VerificationMethodTypeInfo,
+                    cancellationToken: TestContext.CancellationToken);
 
                 //Sign data.
                 var contentToSign = Encoding.UTF8.GetBytes("Hello, DID!");
@@ -115,7 +124,10 @@ namespace Verifiable.Tests.Builders
             var keyPair = BouncyCastleKeyCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared);
 
             //Create DID document with the key agreement key.
-            var didDocument = KeyDidBuilder.Build(keyPair.PublicKey, X25519KeyAgreementKey2020VerificationMethodTypeInfo.Instance);
+            var didDocument = await KeyDidBuilder.BuildAsync(
+                keyPair.PublicKey,
+                X25519KeyAgreementKey2020VerificationMethodTypeInfo.Instance,
+                cancellationToken: TestContext.CancellationToken);
 
             //Find the key agreement verification method.
             var keyAgreementMethodId = didDocument.KeyAgreement![0].Id!;
@@ -152,7 +164,7 @@ namespace Verifiable.Tests.Builders
             Assert.IsTrue(sharedSecret1.Memory.Span.SequenceEqual(sharedSecret3.Memory.Span),
                 "Shared secret from DID verification method should match direct key agreement. This proves the key format conversion pipeline preserves key material correctly.");
 
-            //Clean up
+            //Clean up.
             keyPair.PublicKey.Dispose();
             keyPair.PrivateKey.Dispose();
             otherPartyKeyPair.PublicKey.Dispose();
@@ -165,8 +177,8 @@ namespace Verifiable.Tests.Builders
             PrivateKeyMemory otherPartyPrivateKey,
             MemoryPool<byte> memoryPool)
         {
-            //Extract public key from verification method...
-            var (algorithm, purpose, scheme, publicKeyOwner) = VerifiableCryptoFormatConversions.DefaultVerificationMethodToAlgorithmConverter(verificationMethod, memoryPool);
+            //Extract public key from verification method.
+            var (algorithm, purpose, scheme, publicKeyOwner) = VerificationMethodCryptoConversions.DefaultConverter(verificationMethod, memoryPool);
             using(publicKeyOwner)
             {
                 if(algorithm.Equals(CryptoAlgorithm.X25519))

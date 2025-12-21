@@ -1,6 +1,7 @@
 ﻿using CsCheck;
 using System.Text;
 using Verifiable.Core.Did;
+using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Tests.Did
 {

@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Title>OAuth and OpenID protocols for Verifiable credentials.</Title>
+    <Description>Implementation of OAuth 2.0 extensions and OpenID protocols for verifiable credential ecosystems. Includes OpenID4VCI (credential issuance), OpenID4VP (verifiable presentations), JAR, PAR, dynamic client registration, token exchange and federation support.</Description>
+    <PackageTags>OAuth OpenID OpenID4VCI OpenID4VP JAR PAR DPoP VerifiableCredentials Wallet Federation</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+    <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <AdditionalFiles Include="..\..\BannedSymbols.Serialization.txt" Visible="false" />
+    <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
+  </ItemGroup>
+
+</Project>

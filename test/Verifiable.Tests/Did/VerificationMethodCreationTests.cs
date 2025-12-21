@@ -1,9 +1,6 @@
-﻿using Verifiable.Core;
-using Verifiable.Core.Builders;
-using Verifiable.Core.Cryptography;
-using Verifiable.Core.Cryptography.Context;
-using Verifiable.Core.Did;
-using Verifiable.Core.Did.CryptographicSuites;
+﻿using Verifiable.Core.Model.Did;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestDataProviders;
 
 
@@ -110,7 +107,12 @@ namespace Verifiable.Tests.Did
         /// Tests explicitly creation of a verification method <see cref="PublicKeyJwk"/> using <see cref="Ed25519VerificationKey2020VerificationMethodTypeInfo"/>.
         /// This tests overriding the default format selection to use JWK instead of the default multibase.
         /// </summary>
+        /// <remarks>
+        /// This test temporarily modifies <see cref="VerificatioMethodTypeInfoKeyFormatSelector.Default"/>,
+        /// which is global state. Parallel execution is disabled to prevent interference with other tests.
+        /// </remarks>
         [TestMethod]
+        [DoNotParallelize]
         public void CanCreateEd25519VerificationKey2020InJwk()
         {
             const string Id = "Ed25519VerificationKey2020TestId";

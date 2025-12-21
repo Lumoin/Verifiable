@@ -1,5 +1,5 @@
 ﻿using System.Reflection;
-using Verifiable.Assessment;
+using Verifiable.Core.Assessment;
 
 
 namespace Verifiable.Tests.Assertion

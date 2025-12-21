@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
-
+  
   <ItemGroup>
     <SupportedPlatform Include="browser" />
   </ItemGroup>
@@ -10,13 +10,18 @@
     <Description>Includes and implements core data types and algorithms for decentralized identifiers and verifiable credentials.</Description>
     <PackageTags>DID VC decentralized-identifier verifiable credential signing encryption</PackageTags>
   </PropertyGroup>
-
+  
   <ItemGroup>
-    <PackageReference Include="SimpleBase" />
+    <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />    
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Verifiable.Jwt\Verifiable.Jwt.csproj" />
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <AdditionalFiles Include="..\..\BannedSymbols.Serialization.txt" Visible="false" />
+    <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
   </ItemGroup>
-
+  
 </Project>

@@ -1,0 +1,2 @@
+N:System.Text.Json;Don't use JSON serialization in this project.
+N:System.Formats.Cbor;Don't use CBOR serialization in this project.

@@ -27,16 +27,30 @@
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="SimpleBase" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verifiable.BouncyCastle\Verifiable.BouncyCastle.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Cbor\Verifiable.Cbor.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Core\Verifiable.Core.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable.Jwt\Verifiable.Jwt.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.JCose\Verifiable.JCose.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Json\Verifiable.Json.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.NSec\Verifiable.NSec.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.OAuth\Verifiable.OAuth.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Sidetree\Verifiable.Sidetree.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable\Verifiable.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable\Verifiable.csproj" />    
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>    
+    <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
   </ItemGroup>
 </Project>
