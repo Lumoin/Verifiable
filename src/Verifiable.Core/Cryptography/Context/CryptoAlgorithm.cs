@@ -29,6 +29,11 @@ namespace Verifiable.Core.Cryptography.Context
     public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     {
         /// <summary>
+        /// The algorithm is unknown.
+        /// </summary>         
+        public static CryptoAlgorithm Unknown { get; } = new CryptoAlgorithm(-1);
+
+        /// <summary>
         /// Secp256k1.
         /// Corresponds to <see cref="MulticodecHeaders.Secp256k1PublicKey"/> when used
         /// with <see cref="Purpose.Verification"/>, and <see cref="WellKnownJwaValues.Es256k1"/>.
@@ -249,6 +254,7 @@ namespace Verifiable.Core.Cryptography.Context
 
         public static string GetName(int algorithm) => algorithm switch
         {
+            var a when a == CryptoAlgorithm.Unknown.Algorithm => nameof(CryptoAlgorithm.Unknown),
             var a when a == CryptoAlgorithm.Secp256k1.Algorithm => nameof(CryptoAlgorithm.Secp256k1),
             var a when a == CryptoAlgorithm.Bls12381G1.Algorithm => nameof(CryptoAlgorithm.Bls12381G1),
             var a when a == CryptoAlgorithm.Bls12381G2.Algorithm => nameof(CryptoAlgorithm.Bls12381G2),

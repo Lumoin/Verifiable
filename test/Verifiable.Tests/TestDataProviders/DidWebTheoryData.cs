@@ -1,7 +1,6 @@
 ﻿using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
-using Verifiable.Core.Did;
-using Verifiable.Core.Did.CryptographicSuites;
+using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Tests.TestDataProviders
 {

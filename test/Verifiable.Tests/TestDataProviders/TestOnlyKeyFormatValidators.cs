@@ -1,7 +1,6 @@
-﻿using Verifiable.Core;
-using Verifiable.Core.Cryptography;
+﻿using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
-using Verifiable.Core.Did;
+using Verifiable.Core.Model.Did;
 using Verifiable.Jwt;
 
 namespace Verifiable.Tests.TestDataProviders

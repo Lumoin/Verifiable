@@ -1,5 +1,6 @@
 ﻿using System.Text.RegularExpressions;
 using Verifiable.Assessment;
+using Verifiable.Core.Model.Did;
 
 
 namespace Verifiable.Core.Did

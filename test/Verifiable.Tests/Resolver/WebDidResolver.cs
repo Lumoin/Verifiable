@@ -1,5 +1,5 @@
 ﻿using System;
-using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did.Methods;
 
 namespace Verifiable.Tests.Resolver
 {
@@ -14,7 +14,7 @@ namespace Verifiable.Tests.Resolver
                 throw new ArgumentException($"The given DID identifier '{didWebIdentifier}' is not a valid DID Web identifier.");
             }
 
-            var parts = didWebIdentifier.Substring(WebDidMethod.Prefix.Length).Split(Separator);
+            var parts = didWebIdentifier[WebDidMethod.Prefix.Length..].Split(Separator);
             var domainAndPath = string.Join('/', parts);
             domainAndPath = Uri.UnescapeDataString(domainAndPath);
 

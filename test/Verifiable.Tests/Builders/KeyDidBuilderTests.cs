@@ -3,12 +3,10 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Assessment;
 using Verifiable.BouncyCastle;
-using Verifiable.Core.Builders;
 using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
-using Verifiable.Core.Did;
-using Verifiable.Core.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -166,7 +164,7 @@ namespace Verifiable.Tests.Builders
             MemoryPool<byte> memoryPool)
         {
             //Extract public key from verification method...
-            var (algorithm, purpose, scheme, publicKeyOwner) = VerifiableCryptoFormatConversions.DefaultVerificationMethodToAlgorithmConverter(verificationMethod, memoryPool);
+            var (algorithm, purpose, scheme, publicKeyOwner) = VerificationMethodCryptoConversions.DefaultConverter(verificationMethod, memoryPool);
             using(publicKeyOwner)
             {
                 if(algorithm.Equals(CryptoAlgorithm.X25519))

@@ -1,4 +1,4 @@
-﻿using Verifiable.Core.Did;
+﻿using Verifiable.Core.Model.Did;
 using Verifiable.Jwt;
 
 namespace Verifiable.Tests.Did

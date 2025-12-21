@@ -1,11 +1,11 @@
 ﻿using System.Text;
 using System.Text.Json;
 using Verifiable.Assessment;
-using Verifiable.Core.Builders;
 using Verifiable.Core.Cryptography;
 using Verifiable.Core.Cryptography.Context;
-using Verifiable.Core.Did;
-using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
