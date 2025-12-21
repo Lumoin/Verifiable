@@ -1,0 +1,26 @@
+{
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "name": "io.github.lumoin/verifiable",
+    "description": "Tools for DIDs (Decentralized Identifiers), Verifiable Credentials, and TPM",
+    "version": "1.0.0",
+    "repository": {
+        "url": "https://github.com/lumoin/verifiable",
+        "source": "github"
+    },
+    "packages": [
+        {
+            "registryType": "nuget",
+            "identifier": "Verifiable",
+            "transport": {
+                "type": "stdio"
+            },
+            "packageArguments": [
+                {
+                    "type": "positional",
+                    "value": "-mcp",
+                    "valueHint": "mcp_flag"
+                }
+            ]
+        }
+    ]
+}

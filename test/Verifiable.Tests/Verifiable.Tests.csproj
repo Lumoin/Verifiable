@@ -24,6 +24,9 @@
     <PackageReference Include="CsCheck" />
     <PackageReference Include="LiquidTestReports.Markdown" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="System.CommandLine" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,5 +37,6 @@
     <ProjectReference Include="..\..\src\Verifiable.NSec\Verifiable.NSec.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Sidetree\Verifiable.Sidetree.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable\Verifiable.csproj" />
   </ItemGroup>
 </Project>
