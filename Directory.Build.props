@@ -102,11 +102,16 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
   </ItemGroup>
 
   <!-- As this file is used in project file locations, the path is relative to them. -->
-  <ItemGroup>
+   <!-- Only include logo in packable (non-test) projects. -->
+  <ItemGroup Condition="!$(MSBuildProjectName.EndsWith('Tests'))">
     <None Include="../../resources/verifiable-nuget-logo.png">
       <Pack>True</Pack>
       <PackagePath>/resources</PackagePath>
     </None>
+  </ItemGroup>
+
+  <!-- SBOM for all projects. -->
+  <ItemGroup>
     <PackageReference Include="Microsoft.Sbom.Targets" PrivateAssets="All" />
   </ItemGroup>
 
