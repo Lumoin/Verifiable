@@ -1,7 +1,7 @@
 ﻿using System.Buffers;
 using System.Buffers.Text;
 using System.Text;
-using Verifiable.Core.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests

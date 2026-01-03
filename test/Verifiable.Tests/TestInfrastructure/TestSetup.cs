@@ -5,33 +5,37 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
-using Verifiable.Core;
-using Verifiable.Core.Cryptography;
-using Verifiable.Core.Cryptography.Context;
-using Verifiable.Core.Cryptography.testing;
+using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Microsoft;
 
 namespace Verifiable.Tests.TestInfrastructure
 {
     /// <summary>
-    /// Initializes structures needed in tests. This is basically the same as a any program setup for this library.
+    /// Initializes structures needed in tests. This is basically the same as any program setup for this library.
     /// </summary>
     public static class TestSetup
     {
+        /// <summary>
+        /// Base58 BTC encoder using SimpleBase.
+        /// </summary>
         public static EncodeDelegate Base58Encoder { get; } = data =>
         {
             int bufferSize = Base58.Bitcoin.GetSafeCharCountForEncoding(data);
             Span<char> buffer = bufferSize <= 1024 ? stackalloc char[bufferSize] : new char[bufferSize];
             if(!Base58.Bitcoin.TryEncode(data, buffer, out int charsWritten))
             {
-                throw new InvalidOperationException("Encoding failed");
+                throw new InvalidOperationException("Encoding failed.");
             }
 
             return new string(buffer.Slice(0, charsWritten));
         };
 
 
+        /// <summary>
+        /// Base64 URL encoder using built-in .NET APIs.
+        /// </summary>
         public static EncodeDelegate Base64UrlEncoder { get; } = data =>
         {
             //Use the built-in method to get the exact encoded length.
@@ -51,10 +55,14 @@ namespace Verifiable.Tests.TestInfrastructure
             {
                 charBuffer[i] = (char)byteBuffer[i];
             }
+
             return new string(charBuffer);
         };
 
 
+        /// <summary>
+        /// Base58 BTC decoder using SimpleBase.
+        /// </summary>
         public static DecodeDelegate Base58Decoder { get; } = (source, pool) =>
         {
             int safeEncodingBufferCount = Base58.Bitcoin.GetSafeByteCountForDecoding(source);
@@ -72,6 +80,7 @@ namespace Verifiable.Tests.TestInfrastructure
                 var rightSized = pool.Rent(numBytesWritten);
                 buffer.Memory.Span.Slice(0, numBytesWritten).CopyTo(rightSized.Memory.Span);
                 buffer.Dispose();
+
                 return rightSized;
             }
 
@@ -80,7 +89,7 @@ namespace Verifiable.Tests.TestInfrastructure
 
 
         /// <summary>
-        /// Base64Url decoder using <see cref="Base64Url"/>.
+        /// Base64 URL decoder using built-in .NET APIs.
         /// </summary>
         public static DecodeDelegate Base64UrlDecoder { get; } = (source, pool) =>
         {
@@ -107,6 +116,7 @@ namespace Verifiable.Tests.TestInfrastructure
                 var rightSized = pool.Rent(bytesWritten);
                 buffer.Memory.Span.Slice(0, bytesWritten).CopyTo(rightSized.Memory.Span);
                 buffer.Dispose();
+
                 return rightSized;
             }
 
@@ -127,81 +137,85 @@ namespace Verifiable.Tests.TestInfrastructure
         [ModuleInitializer]
         public static void Setup()
         {
-            //Use the old 3-parameter initialization method.
-            CryptoLibrary.InitializeProviders(Base58Encoder, Base58Decoder, SHA256.HashData);
+            InitializeCoders();
+            InitializeCryptoFunctions();
+            InitializeKeyFactory();
+        }
 
-            //Manually configure the DefaultCoderSelector to handle both Base58 and Base64Url.
-            DefaultCoderSelector.SelectEncoder = keyFormatType =>
-            {
-                return keyFormatType switch
+
+        private static void InitializeCoders()
+        {
+            CryptoLibrary.InitializeProviders(
+                keyFormatType => keyFormatType switch
                 {
                     Type kt when kt == WellKnownKeyFormats.PublicKeyMultibase => Base58Encoder,
                     Type kt when kt == WellKnownKeyFormats.PublicKeyJwk => Base64UrlEncoder,
-                    _ => throw new ArgumentException($"No encoder available for key format: {keyFormatType}")
-                };
-            };
-
-            DefaultCoderSelector.SelectDecoder = keyFormatType =>
-            {
-                return keyFormatType switch
+                    _ => throw new ArgumentException($"No encoder available for key format: {keyFormatType}.")
+                },
+                keyFormatType => keyFormatType switch
                 {
                     Type kt when kt == WellKnownKeyFormats.PublicKeyMultibase => Base58Decoder,
                     Type kt when kt == WellKnownKeyFormats.PublicKeyJwk => Base64UrlDecoder,
-                    _ => throw new ArgumentException($"No decoder available for key format: {keyFormatType}")
-                };
-            };
-
-            CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize((CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
-            {
-                return (algorithm, purpose, qualifier) switch
+                    _ => throw new ArgumentException($"No decoder available for key format: {keyFormatType}.")
+                },
+                hashAlgorithm =>
                 {
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP256Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP384Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP521Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignSecp256k1Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsa2048Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsa4096Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignEd25519Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP256Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP384Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP521Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignSecp256k1Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsa2048Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsa4096Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignEd25519Async,
-                    _ => throw new ArgumentException($"No signing function registered for {algorithm}, {purpose} with qualifier {qualifier}.")
-                };
-            },
-            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
-            {
-                return (algorithm, purpose, qualifier) switch
-                {
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP256Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP384Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP521Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifySecp256k1Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsa2048Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsa4096Async,
-                    (CryptoAlgorithm a, Purpose p, string q) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyEd25519Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP256Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP384Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP521Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifySecp256k1Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsa2048Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsa4096Async,
-                    (CryptoAlgorithm a, Purpose p, null) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyEd25519Async,
-                    _ => throw new ArgumentException($"No verification function registered for {algorithm}, {purpose} with qualifier {qualifier}.")
-                };
-            });
+                    if(hashAlgorithm.Equals(HashAlgorithmName.SHA256))
+                    {
+                        return SHA256.HashData;
+                    }
 
+                    throw new ArgumentException($"No hash function available for hash algorithm: {hashAlgorithm}.");
+                });
+        }
+
+
+        private static void InitializeCryptoFunctions()
+        {
+            CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(
+                (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+                {
+                    return (algorithm, purpose) switch
+                    {
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP256Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP384Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP521Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignSecp256k1Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsa2048Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsa4096Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignEd25519Async,
+                        _ => throw new ArgumentException($"No signing function registered for {algorithm}, {purpose} with qualifier {qualifier}.")
+                    };
+                },
+                (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+                {
+                    return (algorithm, purpose) switch
+                    {
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP256Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP384Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP521Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifySecp256k1Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsa2048Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsa4096Async,
+                        (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyEd25519Async,
+                        _ => throw new ArgumentException($"No verification function registered for {algorithm}, {purpose} with qualifier {qualifier}.")
+                    };
+                });
+        }
+
+
+        private static void InitializeKeyFactory()
+        {
             CryptographicKeyFactory.Initialize(
                 (Tag tag, string? qualifier) =>
                 {
                     CryptoAlgorithm algorithm = tag.Get<CryptoAlgorithm>();
                     Purpose purpose = tag.Get<Purpose>();
+
                     return (ReadOnlyMemory<byte> publicKeyBytes, ReadOnlyMemory<byte> dataToVerify, Signature signature) =>
                     {
                         var verificationDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose, qualifier);
+
                         return verificationDelegate(dataToVerify.Span, signature.AsReadOnlySpan(), publicKeyBytes.Span);
                     };
                 },
@@ -209,6 +223,7 @@ namespace Verifiable.Tests.TestInfrastructure
                 {
                     CryptoAlgorithm algorithm = tag.Get<CryptoAlgorithm>();
                     Purpose purpose = tag.Get<Purpose>();
+
                     return async (ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToVerify, MemoryPool<byte> signature) =>
                     {
                         var signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose, qualifier);

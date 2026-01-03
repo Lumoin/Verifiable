@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Security.Cryptography;
-using Verifiable.Core.Cryptography;
+using Verifiable.Cryptography;
 
 
 namespace Verifiable.Microsoft

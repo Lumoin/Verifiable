@@ -27,16 +27,18 @@
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verifiable.BouncyCastle\Verifiable.BouncyCastle.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Core\Verifiable.Core.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable.Jwt\Verifiable.Jwt.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Jose\Verifiable.Jose.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.NSec\Verifiable.NSec.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Sidetree\Verifiable.Sidetree.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable\Verifiable.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable\Verifiable.csproj" />    
   </ItemGroup>
 </Project>

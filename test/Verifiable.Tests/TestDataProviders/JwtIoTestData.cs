@@ -1,4 +1,4 @@
-﻿using Verifiable.Jwt;
+﻿using Verifiable.Jose;
 
 namespace Verifiable.Tests.DataProviders
 {

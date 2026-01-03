@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using Verifiable.Jwt;
+using Verifiable.Assessment;
+using Verifiable.Jose;
 
-namespace Verifiable.Assessment
+namespace Verifiable.Core.Assessment
 {
     public static class DefaultJwtValidationClaims
     {

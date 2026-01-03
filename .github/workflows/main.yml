@@ -40,7 +40,7 @@ env:
     Verifiable.BouncyCastle
     Verifiable.Core
     Verifiable.DecentralizedWebNode
-    Verifiable.Jwt
+    Verifiable.Jose
     Verifiable.NSec
     Verifiable.Microsoft
     Verifiable.Sidetree
