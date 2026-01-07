@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   
   <PropertyGroup>
     <Title>Implements functionality to intereact with trusted platform module</Title>
@@ -10,8 +10,13 @@
     <PackageReference Include="Microsoft.TSS" />
   </ItemGroup>
 
-  <ItemGroup>
-    
+   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <AdditionalFiles Include="..\..\BannedSymbols.Serialization.txt" Visible="false" />
+    <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
   </ItemGroup>
   
 </Project>

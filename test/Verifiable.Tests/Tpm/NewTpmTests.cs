@@ -6,9 +6,15 @@ using Verifiable.Tpm;
 
 namespace Verifiable.Tests.Tpm
 {
+    /// <summary>
+    /// Tests for TPM functionality across different platforms.
+    /// </summary>
     [TestClass]
     public sealed class NewTpmTests
     {
+        private const string TestStringToBeHashed = "Hello, SHA-256 world!";
+
+
         [SupportedOSPlatform(Platforms.Windows)]
         [RunOnlyOnPlatformTestMethod(platforms: [Platforms.Windows])]
         public void TpmWindowsSupportsWindows()
@@ -25,18 +31,18 @@ namespace Verifiable.Tests.Tpm
         }
 
 
-        [SkipOnCiTestMethod]
-        public void TpmVirtualSupportsAllPlatforms()
+        [RunOnlyOnPlatformSkipOnCiTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
+        public void TpmVirtualSupportsWindowsAndLinux()
         {
             Assert.IsTrue(TpmVirtual.IsSupported);
         }
 
 
-        [SkipOnCiTestMethod]
+        [RunOnlyOnPlatformSkipOnCiTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void GetVersionSucceeds()
         {
             var version = Verifiable.Tpm.Tpm.GetTpmFirmwareVersion();
-            Assert.IsTrue(version != null);
+            Assert.IsNotNull(version);
         }
 
 
@@ -49,7 +55,7 @@ namespace Verifiable.Tests.Tpm
         }
 
 
-        [SkipOnCiTestMethod]
+        [RunOnlyOnPlatformSkipOnCiTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void IsFipsSucceeds()
         {
             var isFips = Verifiable.Tpm.Tpm.IsFips();
@@ -64,14 +70,13 @@ namespace Verifiable.Tests.Tpm
             var supportedAlgorithms = Verifiable.Tpm.Tpm.GetSupportedAlgorithms();
 
             Assert.IsNotNull(supportedAlgorithms, "The collection is null.");
-            Assert.IsGreaterThan(0, supportedAlgorithms.Count, "The collection is empty.");
+            Assert.IsNotEmpty(supportedAlgorithms, "The collection is empty.");
         }
 
 
-        [SkipOnCiTestMethod]
+        [RunOnlyOnPlatformSkipOnCiTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void CalculateShortSha256()
         {
-            const string TestStringToBeHashed = "Hello, SHA-256 world!";
             ReadOnlySpan<byte> controlValue = Encoding.UTF8.GetBytes(TestStringToBeHashed);
             byte[] controlValueHash = SHA256.HashData(controlValue);
 
@@ -85,14 +90,13 @@ namespace Verifiable.Tests.Tpm
         [Ignore("Sketch. Does not work.")]
         public void CalculateLongSha256()
         {
-            //TODO: The array to be hashed is of constant value while developing
-            //on purpose.
-            byte[] longByteArray = new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 4, 5};
+            //The array to be hashed is of constant value while developing on purpose.
+            byte[] longByteArray = [0, 1, 2, 3, 4, 5, 6, 7, 4, 5];
 
             byte[] longControlValueHash = SHA256.HashData(longByteArray);
             byte[]? longTpmSha256 = Verifiable.Tpm.Tpm.CalculateLongSha256(longByteArray);
 
-            Assert.AreEqual(longControlValueHash, longTpmSha256);
+            CollectionAssert.AreEqual(longControlValueHash, longTpmSha256);
         }
     }
 }

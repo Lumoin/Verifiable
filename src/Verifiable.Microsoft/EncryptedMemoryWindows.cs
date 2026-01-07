@@ -1,8 +1,8 @@
-using Verifiable.Core.Cryptography;
 using System;
 using System.Buffers;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
+using Verifiable.Cryptography;
 
 
 namespace Verifiable.Security.Windows

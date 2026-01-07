@@ -5,7 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 
 
-namespace Verifiable.Assessment
+namespace Verifiable.Core.Assessment
 {
     /// <summary>
     /// Provides utilities for generating tracing information.

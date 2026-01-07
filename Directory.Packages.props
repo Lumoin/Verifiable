@@ -5,9 +5,15 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageVersion Include="CsCheck" Version="4.5.0" />
     <PackageVersion Include="dotNetRdf" Version="3.4.1" />
     <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="3.12.0-beta1.25218.8" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.1.0" />
+    <PackageVersion Include="Microsoft.Sbom.Targets" Version="4.1.5" />    
     <PackageVersion Include="Microsoft.TSS" Version="2.1.1" />
+    <PackageVersion Include="ModelContextProtocol" Version="0.5.0-preview.1" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.0.1" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.0.1" />
     <PackageVersion Include="NSec.Cryptography" Version="25.4.0" />
@@ -16,14 +22,11 @@
     <PackageVersion Include="SIL.ReleaseTasks" Version="3.1.1" />
     <PackageVersion Include="SimpleBase" Version="5.6.0" />
     <PackageVersion Include="System.Collections.Immutable" Version="10.0.1" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.1" />
+    <PackageVersion Include="System.Formats.Cbor" Version="10.0.1" />
     <PackageVersion Include="System.Net.Http.Json" Version="10.0.1" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.1" />
     <PackageVersion Include="System.Text.Json" Version="10.0.1" />
     <PackageVersion Include="WinSharpFuzz" Version="1.0.0" />
-    <PackageVersion Include="CsCheck" Version="4.5.0" />
-    <PackageVersion Include="Microsoft.Sbom.Targets" Version="4.1.5" />
-    <PackageVersion Include="ModelContextProtocol" Version="0.5.0-preview.1" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
-    <PackageVersion Include="System.CommandLine" Version="2.0.1" />
   </ItemGroup>
 </Project>

@@ -1,88 +1,77 @@
 ﻿using System;
 using System.Buffers;
 using System.Security.Cryptography;
-using Verifiable.Core.Cryptography;
+using Verifiable.Cryptography;
 
 
 namespace Verifiable.Microsoft
 {
+    /// <summary>
+    /// Creates cryptographic key material using .NET's built-in cryptographic providers.
+    /// </summary>
     public static class MicrosoftKeyMaterialCreator
     {
-        public static PublicPrivateKeyMaterial<PublicKeyMemoryDerived, PrivateKeyMemoryDerived> CreateP256KeyDerived(MemoryPool<byte> memoryPool)
-        {
-            var keys = CreateP256Keys(memoryPool);
-            return new PublicPrivateKeyMaterial<PublicKeyMemoryDerived, PrivateKeyMemoryDerived>(
-                new PublicKeyMemoryDerived(null!, Tag.Empty),
-                new PrivateKeyMemoryDerived(null!, Tag.Empty));
-        }
-
-
+        /// <summary>
+        /// Creates a P-256 (secp256r1/prime256v1) key pair.
+        /// </summary>
+        /// <param name="memoryPool">The memory pool for key data allocation.</param>
+        /// <returns>The public and private key material.</returns>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256Keys(MemoryPool<byte> memoryPool)
         {
             return CreateEcKeys(ECCurve.NamedCurves.nistP256, memoryPool);
         }
 
 
+        /// <summary>
+        /// Creates a P-384 (secp384r1) key pair.
+        /// </summary>
+        /// <param name="memoryPool">The memory pool for key data allocation.</param>
+        /// <returns>The public and private key material.</returns>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384Keys(MemoryPool<byte> memoryPool)
         {
             return CreateEcKeys(ECCurve.NamedCurves.nistP384, memoryPool);
         }
 
 
+        /// <summary>
+        /// Creates a P-521 (secp521r1) key pair.
+        /// </summary>
+        /// <param name="memoryPool">The memory pool for key data allocation.</param>
+        /// <returns>The public and private key material.</returns>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521Keys(MemoryPool<byte> memoryPool)
         {
             return CreateEcKeys(ECCurve.NamedCurves.nistP521, memoryPool);
         }
 
 
+        /// <summary>
+        /// Creates a secp256k1 key pair.
+        /// </summary>
+        /// <param name="memoryPool">The memory pool for key data allocation.</param>
+        /// <returns>The public and private key material.</returns>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateSecp256k1Keys(MemoryPool<byte> memoryPool)
         {
             return CreateEcKeys(ECCurve.CreateFromFriendlyName("secP256k1"), memoryPool);
         }
 
 
+        /// <summary>
+        /// Creates an RSA 2048-bit key pair.
+        /// </summary>
+        /// <param name="memoryPool">The memory pool for key data allocation.</param>
+        /// <returns>The public and private key material.</returns>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa2048Keys(MemoryPool<byte> memoryPool)
         {
             return CreateRsaKeys(2048, memoryPool);
         }
 
+
+        /// <summary>
+        /// Creates an RSA 4096-bit key pair.
+        /// </summary>
+        /// <param name="memoryPool">The memory pool for key data allocation.</param>
+        /// <returns>The public and private key material.</returns>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa4096Keys(MemoryPool<byte> memoryPool)
-        {
-            return CreateRsaKeys(4096, memoryPool);
-        }
-
-
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256Keys<TKeyLoadData>(TKeyLoadData state, MemoryPool<byte> memoryPool)
-        {
-            return CreateEcKeys(ECCurve.NamedCurves.nistP256, memoryPool);
-        }
-
-
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384Keys<TKeyLoadData>(TKeyLoadData state, MemoryPool<byte> memoryPool)
-        {
-            return CreateEcKeys(ECCurve.NamedCurves.nistP384, memoryPool);
-        }
-
-
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521Keys<TKeyLoadData>(TKeyLoadData state, MemoryPool<byte> memoryPool)
-        {
-            return CreateEcKeys(ECCurve.NamedCurves.nistP521, memoryPool);
-        }
-
-
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateSecp256l1Keys<TKeyLoadData>(TKeyLoadData state, MemoryPool<byte> memoryPool)
-        {
-            return CreateEcKeys(ECCurve.CreateFromFriendlyName("secP256k1"), memoryPool);
-        }
-
-
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa2048Keys<TKeyLoadData>(TKeyLoadData state, MemoryPool<byte> memoryPool)
-        {
-            return CreateRsaKeys(2048, memoryPool);
-        }
-
-
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa4096Keys<TKeyLoadData>(TKeyLoadData state, MemoryPool<byte> memoryPool)
         {
             return CreateRsaKeys(4096, memoryPool);
         }
@@ -110,10 +99,11 @@ namespace Verifiable.Microsoft
                 var (publicKeyTag, privateKeyTag) = GetTags(namedCurve);
                 var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(compressedKeyMaterial, memoryPool), publicKeyTag);
                 var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(parameters.D!, memoryPool), privateKeyTag);
-                Array.Clear(compressedKeyMaterial, 0, compressedKeyMaterial.Length);
-                Array.Clear(parameters.Q.X!, 0, parameters.Q.X!.Length);
-                Array.Clear(parameters.Q.Y!, 0, parameters.Q.Y!.Length);
-                Array.Clear(parameters.D!, 0, parameters.D!.Length);
+
+                CryptographicOperations.ZeroMemory(compressedKeyMaterial);
+                CryptographicOperations.ZeroMemory(parameters.Q.X);
+                CryptographicOperations.ZeroMemory(parameters.Q.Y);
+                CryptographicOperations.ZeroMemory(parameters.D);
 
                 return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
             }
@@ -140,9 +130,10 @@ namespace Verifiable.Microsoft
                 var (publicKeyTag, privateKeyTag) = GetTags(keySizeInBits);
                 var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(derEncodedPublicKey, memoryPool), publicKeyTag);
                 var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(key.ExportRSAPrivateKey(), memoryPool), privateKeyTag);
-                Array.Clear(derEncodedPublicKey, 0, derEncodedPublicKey.Length);
-                Array.Clear(parameters.Modulus!, 0, parameters.Modulus!.Length);
-                Array.Clear(parameters.D!, 0, parameters.D!.Length);
+
+                CryptographicOperations.ZeroMemory(derEncodedPublicKey);
+                CryptographicOperations.ZeroMemory(parameters.Modulus);
+                CryptographicOperations.ZeroMemory(parameters.D);
 
                 return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
             }
@@ -151,10 +142,9 @@ namespace Verifiable.Microsoft
 
         private static IMemoryOwner<byte> AsPooledMemory(byte[] keyBytes, MemoryPool<byte> memoryPool)
         {
-            //It may be that the provided MemoryPool allocates more bytes than asked for.
-            //Like the default .NET MemoryPool. But for many of the DID key operations
-            //that create string representations of the key material, such as Base58 encoding,
-            //it is important that the key material is not padded with zeroes.
+            //The default .NET MemoryPool may allocate more bytes than requested.
+            //For DID key operations that create string representations (e.g., Base58),
+            //the key material must not be padded with zeroes.
             IMemoryOwner<byte> keyBuffer = memoryPool.Rent(keyBytes.Length);
             keyBytes.AsSpan().CopyTo(keyBuffer.Memory.Span.Slice(0, keyBytes.Length));
 

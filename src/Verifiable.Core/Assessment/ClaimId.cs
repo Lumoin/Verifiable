@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 
-namespace Verifiable.Assessment
+namespace Verifiable.Core.Assessment
 {
     public static class WebDidClaims
     {

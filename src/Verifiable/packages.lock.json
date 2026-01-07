@@ -347,11 +347,17 @@
         "type": "Project",
         "dependencies": {
           "SimpleBase": "[5.6.0, )",
-          "Verifiable.Jwt": "[0.0.0, )"
+          "Verifiable.JCose": "[0.0.0, )"
         }
       },
-      "verifiable.jwt": {
+      "verifiable.cryptography": {
         "type": "Project"
+      },
+      "verifiable.jcose": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Cryptography": "[0.0.0, )"
+        }
       },
       "verifiable.tpm": {
         "type": "Project",

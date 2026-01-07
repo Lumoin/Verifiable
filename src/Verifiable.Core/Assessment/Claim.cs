@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Verifiable.Assessment
+namespace Verifiable.Core.Assessment
 {
     /// <summary>
     /// Represents a generic context for a claim, providing a mechanism to associate 

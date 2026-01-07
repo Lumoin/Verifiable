@@ -38,11 +38,15 @@ env:
   PROJECTS: >
     Verifiable
     Verifiable.BouncyCastle
+    Verifiable.Cbor
     Verifiable.Core
+    Verifiable.Cryptography
     Verifiable.DecentralizedWebNode
-    Verifiable.Jwt
-    Verifiable.NSec
+    Verifiable.JCose
+    Verifiable.Json
     Verifiable.Microsoft
+    Verifiable.NSec
+    Verifiable.OAuth
     Verifiable.Sidetree
     Verifiable.Tpm
 
@@ -221,7 +225,7 @@ jobs:
 
     - name: Create test summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: EnricoMi/publish-unit-test-result-action@34d7c956a59aed1bfebf31df77b8de55db9bbaaf
+      uses: EnricoMi/publish-unit-test-result-action@27d65e188ec43221b20d26de30f4892fad91df2f
       with:
         trx_files: '${{ github.workspace }}/reports/**/*.trx'
 

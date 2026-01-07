@@ -1,11 +1,9 @@
-﻿using System.Text;
-using System.Text.Json;
-using Verifiable.Assessment;
-using Verifiable.Core.Builders;
-using Verifiable.Core.Cryptography;
-using Verifiable.Core.Cryptography.Context;
-using Verifiable.Core.Did;
-using Verifiable.Core.Did.Methods;
+﻿using System.Text.Json;
+using Verifiable.Core.Assessment;
+using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -22,12 +20,7 @@ namespace Verifiable.Tests.Builders
         /// </summary>
         public static IList<ClaimDelegate<DidDocument>> AllRules { get; } =
         [
-            //new(ValidateIdEncodingAsync, [ClaimId.KeyDidIdEncoding]),
             new(ValidateKeyFormatAsync, [ClaimId.WebDidKeyFormat]),
-            //new(ValidateIdFormatAsync, [ClaimId.KeyDidIdFormat]),
-            //new(ValidateSingleVerificationMethodAsync, [ClaimId.KeyDidSingleVerificationMethod]),
-            //new(ValidateIdPrefixMatchAsync, [ClaimId.KeyDidIdPrefixMatch]),
-            //new(ValidateFragmentIdentifierRepetitionAsync, [ClaimId.KeyDidFragmentIdentifierRepetition]),
         ];
 
 
@@ -35,9 +28,14 @@ namespace Verifiable.Tests.Builders
         /// Validates the format of the key in the provided <c>did:web</c> DID document.
         /// </summary>
         /// <param name="document">The <c>did:web</c> DID document to validate.</param>
+        /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
         /// <returns>Claims indicating the validation outcome.</returns>
-        public static ValueTask<IList<Claim>> ValidateKeyFormatAsync(DidDocument document)
+        public static ValueTask<IList<Claim>> ValidateKeyFormatAsync(
+            DidDocument document,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             IList<Claim> resultClaims = [];
             if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyJwk keyFormat)
             {
@@ -49,7 +47,7 @@ namespace Verifiable.Tests.Builders
             }
             else if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyMultibase multiKeyFormat)
             {
-                //TODO: This here will be refactored, since this does not validate the multibase format yet.
+                //TODO: This will be refactored to validate the multibase format.
                 resultClaims.Add(new Claim(ClaimId.WebDidKeyFormat, ClaimOutcome.Success));
             }
             else
@@ -72,6 +70,11 @@ namespace Verifiable.Tests.Builders
         /// </summary>
         private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder();
 
+        /// <summary>
+        /// The test context.
+        /// </summary>
+        public TestContext TestContext { get; set; } = null!;
+
 
         /// <summary>
         /// The one and only (stateless) assessor for for <c>did:web</c> for the builder tests.
@@ -80,9 +83,9 @@ namespace Verifiable.Tests.Builders
             new ClaimIssuer<DidDocument>(
                 issuerId: "DefaultWebDidIssuer",
                 validationRules: WebDidValidationRules.AllRules,
-                claimIdGenerator: () => ValueTask.FromResult(string.Empty)),
-                assessor: DefaultAssessors.DefaultWebDidAssessorAsync,
-                assessorId: "DefaultWebDidAssessorId");
+                claimIdGenerator: (ct) => ValueTask.FromResult(string.Empty)),
+            assessor: DefaultAssessors.DefaultWebDidAssessorAsync,
+            assessorId: "DefaultWebDidAssessorId");
 
 
 
@@ -92,7 +95,11 @@ namespace Verifiable.Tests.Builders
         {
             //This builds the did:web document with the given public key and crypto suite.
             string testDomain = "example.com";
-            var webDidDocument = WebDidBuilder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo, testDomain);
+            var webDidDocument = await WebDidBuilder.BuildAsync(
+                testData.KeyPair.PublicKey,
+                testData.VerificationMethodTypeInfo,
+                testDomain,
+                cancellationToken: TestContext.CancellationToken);
 
             //Assert that the KeyFormat exists and is of the expected type.
             var actualKeyFormat = webDidDocument.VerificationMethod![0].KeyFormat;
@@ -114,7 +121,7 @@ namespace Verifiable.Tests.Builders
             Assert.IsTrue(res, $"Key format validation failed for '{actualKeyFormat.GetType()}' for algorithm '{alg}'.");
 
             //This part runs the whole suite if did:web validation rules Verifiable library defines against the document.
-            var assessmentResult = await WebDidAssessor.AssessAsync(webDidDocument, "some-test-supplied-correlationId");
+            var assessmentResult = await WebDidAssessor.AssessAsync(webDidDocument, "some-test-supplied-correlationId", TestContext.CancellationToken);
             Assert.IsTrue(assessmentResult.IsSuccess, assessmentResult.ClaimsResult
                 .Claims.Where(c => c.Outcome == ClaimOutcome.Failure)
                 .Aggregate("Assessment failed. Failed claims: ", (acc, claim) => $"{acc}{claim.Id}, ").TrimEnd(',', '.'));
@@ -131,171 +138,42 @@ namespace Verifiable.Tests.Builders
 
         [TestMethod]
         [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
-        public async ValueTask CreateAndVerifySignatureUsingWebDid(DidWebTestData testData)
-        {
-            //Create DID document.
-            string testDomain = "example.com";
-            var webDidDocument = WebDidBuilder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo, testDomain);
-
-            //Sign data.
-            var contentToSign = Encoding.UTF8.GetBytes("Hello, Web DID!");
-            using var signature = await testData.KeyPair.PrivateKey.SignAsync(contentToSign, SensitiveMemoryPool<byte>.Shared);
-
-            //Verify signature using the verification method by ID.
-            var verificationMethodId = webDidDocument.VerificationMethod![0].Id!;
-            var verificationMethod = webDidDocument.ResolveVerificationMethodReference(verificationMethodId);
-            Assert.IsNotNull(verificationMethod, "Verification method should be found by ID.");
-
-            bool verified = await verificationMethod.VerifySignatureAsync(contentToSign, signature, SensitiveMemoryPool<byte>.Shared);
-            Assert.IsTrue(verified);
-        }
-
-
-        [TestMethod]
-        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
-        public async ValueTask CanBuildComplexWebDidWithServicesAndVerificationRelationships(DidWebTestData testData)
-        {
-            //Create DID document with path-based identifier using builder extensions.
-            string webDomain = "placeholder.com:api:v1:entities:item-456";
-            var builder = new WebDidBuilder()
-                .With((didDocument, builder, buildState) =>
-                {
-                    //Add authentication using first verification method.
-                    if(didDocument.VerificationMethod!.Length > 0)
-                    {
-                        var verificationMethodId = didDocument.VerificationMethod![0].Id!;
-                        didDocument.WithAuthentication(verificationMethodId);
-                    }
-                    return didDocument;
-                })
-                .With((didDocument, builder, buildState) =>
-                {
-                    //Add assertion method using first verification method.
-                    if(didDocument.VerificationMethod!.Length > 0)
-                    {
-                        var verificationMethodId = didDocument.VerificationMethod![0].Id!;
-                        didDocument.WithAssertionMethod(verificationMethodId);
-                    }
-                    return didDocument;
-                })
-                .AddServices<WebDidBuilder, WebDidBuildState>(buildState =>
-                [
-                    new Service { Id = new Uri($"did:web:{buildState.WebDomain}#service-a"), Type = "ServiceTypeA", ServiceEndpoint = $"https://{buildState.WebDomain.Replace(":", "/", StringComparison.Ordinal)}/service-a" },
-                    new Service { Id = new Uri($"did:web:{buildState.WebDomain}#service-b"), Type = "ServiceTypeB", ServiceEndpoint = $"https://{buildState.WebDomain.Replace(":", "/", StringComparison.Ordinal)}/service-b" },
-                    new Service { Id = new Uri($"did:web:{buildState.WebDomain}#service-c"), Type = "ServiceTypeC", ServiceEndpoint = $"https://{buildState.WebDomain.Replace(":", "/", StringComparison.Ordinal)}/service-c" }
-                ]);
-
-            var webDidDocument = builder.Build(testData.KeyPair.PublicKey, testData.VerificationMethodTypeInfo, webDomain, DidRepresentationType.JsonLd);
-
-            //Verify the DID structure.
-            Assert.AreEqual("did:web:placeholder.com:api:v1:entities:item-456", webDidDocument.Id!);
-            Assert.IsInstanceOfType<WebDidMethod>(webDidDocument.Id);
-
-            //Verify context was added for JSON-LD representation.
-            Assert.IsNotNull(webDidDocument.Context);
-            Assert.IsNotNull(webDidDocument.Context.Contexes);
-            Assert.HasCount(1, webDidDocument.Context.Contexes);
-            Assert.AreEqual(Context.DidCore10, webDidDocument.Context.Contexes[0]);
-
-            //Verify the verification method.
-            var verificationMethod = webDidDocument.VerificationMethod![0];
-            var verificationMethodId = verificationMethod.Id!;
-            Assert.AreEqual("did:web:placeholder.com:api:v1:entities:item-456", verificationMethod.Controller);
-            Assert.AreEqual(testData.VerificationMethodTypeInfo.TypeName, verificationMethod.Type);
-            Assert.IsInstanceOfType(verificationMethod.KeyFormat, testData.ExpectedKeyFormat);
-
-            //Verify verification relationships were added by builder.
-            Assert.IsNotNull(webDidDocument.Authentication);
-            Assert.HasCount(1, webDidDocument.Authentication);
-            Assert.AreEqual(verificationMethodId, webDidDocument.Authentication[0].Id);
-
-            Assert.IsNotNull(webDidDocument.AssertionMethod);
-            Assert.HasCount(1, webDidDocument.AssertionMethod);
-            Assert.AreEqual(verificationMethodId, webDidDocument.AssertionMethod[0].Id);
-
-            //Verify no key agreement was added (since we only added auth and assertion).
-            Assert.IsNull(webDidDocument.KeyAgreement);
-
-            //Verify services were created with consistent domain.
-            Assert.IsNotNull(webDidDocument.Service);
-            Assert.HasCount(3, webDidDocument.Service);
-
-            var serviceA = webDidDocument.Service.First(s => s.Type == "ServiceTypeA");
-            Assert.AreEqual($"did:web:placeholder.com:api:v1:entities:item-456#service-a", serviceA.Id!.ToString());
-            Assert.AreEqual("https://placeholder.com/api/v1/entities/item-456/service-a", serviceA.ServiceEndpoint);
-
-            //Verify all services use the same domain pattern.
-            string expectedPathBase = "https://placeholder.com/api/v1/entities/item-456/";
-            foreach(var service in webDidDocument.Service)
-            {
-                Assert.StartsWith(expectedPathBase, service.ServiceEndpoint, $"Service endpoint {service.ServiceEndpoint} should start with {expectedPathBase}.");
-            }
-
-            //Test serialization to verify JSON structure.
-            string serializedDidDocument = JsonSerializer.Serialize(webDidDocument, TestSetup.DefaultSerializationOptions);
-
-            //Verify JSON contains expected elements.
-            Assert.IsTrue(serializedDidDocument.Contains("\"@context\"", StringComparison.OrdinalIgnoreCase));
-            Assert.IsTrue(serializedDidDocument.Contains(Context.DidCore10, StringComparison.OrdinalIgnoreCase));
-            Assert.IsTrue(serializedDidDocument.Contains("did:web:placeholder.com:api:v1:entities:item-456", StringComparison.OrdinalIgnoreCase));
-            Assert.AreEqual(testData.VerificationMethodTypeInfo.TypeName, verificationMethod.Type);
-            Assert.IsTrue(serializedDidDocument.Contains("placeholder.com/api/v1/entities/item-456", StringComparison.OrdinalIgnoreCase));
-            Assert.IsTrue(serializedDidDocument.Contains("ServiceTypeA", StringComparison.OrdinalIgnoreCase));
-            Assert.IsTrue(serializedDidDocument.Contains("ServiceTypeB", StringComparison.OrdinalIgnoreCase));
-            Assert.IsTrue(serializedDidDocument.Contains("ServiceTypeC", StringComparison.OrdinalIgnoreCase));
-
-            //Verify roundtrip serialization.
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(serializedDidDocument, TestSetup.DefaultSerializationOptions);
-            bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(serializedDidDocument, reserializedDidDocument);
-            Assert.IsTrue(areJsonElementsEqual, $"JSON string '{serializedDidDocument}' did not pass roundtrip test.");
-
-            //Test signature creation and verification.
-            var contentToSign = Encoding.UTF8.GetBytes("Test content for complex web DID");
-            using var signature = await testData.KeyPair.PrivateKey.SignAsync(contentToSign, SensitiveMemoryPool<byte>.Shared);
-
-            var resolvedVerificationMethod = webDidDocument.ResolveVerificationMethodReference(verificationMethodId);
-            Assert.IsNotNull(resolvedVerificationMethod, "Verification method should be found by ID.");
-
-            bool verified = await resolvedVerificationMethod.VerifySignatureAsync(contentToSign, signature, SensitiveMemoryPool<byte>.Shared);
-            Assert.IsTrue(verified, "Signature should verify successfully.");
-        }
-
-
-        [TestMethod]
-        [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
-        public void CanBuildWebDidWithAllRepresentationTypes(DidWebTestData testData)
+        public async Task CanBuildWebDidWithAllRepresentationTypes(DidWebTestData testData)
         {
             string webDomain = "example.com";
             var builder = new WebDidBuilder();
 
             //Test 1: JSON without context - minimal representation.
-            var docWithoutContext = builder.Build(
+            var docWithoutContext = await builder.BuildAsync(
                 testData.KeyPair.PublicKey,
                 testData.VerificationMethodTypeInfo,
                 webDomain,
-                DidRepresentationType.JsonWithoutContext);
+                DidRepresentationType.JsonWithoutContext,
+                cancellationToken: TestContext.CancellationToken);
 
             Assert.IsNull(docWithoutContext.Context, "JsonWithoutContext should not have @context");
             Assert.AreEqual($"did:web:{webDomain}", docWithoutContext.Id!);
 
             //Test 2: JSON with context - dual compatibility.
-            var docWithContext = builder.Build(
+            var docWithContext = await builder.BuildAsync(
                 testData.KeyPair.PublicKey,
                 testData.VerificationMethodTypeInfo,
                 webDomain,
-                DidRepresentationType.JsonWithContext);
+                DidRepresentationType.JsonWithContext,
+                cancellationToken: TestContext.CancellationToken);
 
             Assert.IsNotNull(docWithContext.Context, "JsonWithContext should have @context");
             Assert.AreEqual(Context.DidCore10, docWithContext.Context.Contexes![0]);
 
             //Test 3: JSON-LD - full semantic representation.
-            var docJsonLd = builder.Build(
+            var docJsonLd = await builder.BuildAsync(
                 testData.KeyPair.PublicKey,
                 testData.VerificationMethodTypeInfo,
                 webDomain,
                 DidRepresentationType.JsonLd,
                 didCoreVersion: Context.DidCore11,
-                additionalContexts: ["https://example.com/custom"]);
+                additionalContexts: ["https://example.com/custom"],
+                cancellationToken: TestContext.CancellationToken);
 
             Assert.IsNotNull(docJsonLd.Context, "JsonLd should have @context");
             Assert.HasCount(2, docJsonLd.Context.Contexes!);

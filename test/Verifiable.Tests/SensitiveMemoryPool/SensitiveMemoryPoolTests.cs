@@ -4,7 +4,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Verifiable.Core;
-using Verifiable.Core.Cryptography;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.SensitiveMemoryPool
 {
@@ -158,12 +158,12 @@ namespace Verifiable.Tests.SensitiveMemoryPool
                     await Task.Delay(TimeSpan.FromMilliseconds(10), TestContext.CancellationToken);
 
                     //Verify that total slabs metric was reported.
-                    bool foundSlabs = reportedMetrics.TryGetValue(VerifiableMetrics.SensitiveMemoryPoolTotalSlabs, out long totalSlabs);
+                    bool foundSlabs = reportedMetrics.TryGetValue(CryptographyMetrics.SensitiveMemoryPoolTotalSlabs, out long totalSlabs);
                     Assert.IsTrue(foundSlabs, "TotalSlabs metric should be reported.");
                     Assert.AreEqual(2, totalSlabs, "Should have created 2 slabs for different buffer sizes.");
 
                     //Verify that total memory allocated metric was reported.
-                    bool foundMemory = reportedMetrics.TryGetValue(VerifiableMetrics.SensitiveMemoryPoolTotalMemoryAllocated, out long totalMemory);
+                    bool foundMemory = reportedMetrics.TryGetValue(CryptographyMetrics.SensitiveMemoryPoolTotalMemoryAllocated, out long totalMemory);
                     Assert.IsTrue(foundMemory, "TotalMemoryAllocated metric should be reported.");
 
                     long expectedMemory = (100 + 200) * SensitiveMemoryPool<byte>.InitialSlabCapacity;

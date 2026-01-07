@@ -2,6 +2,7 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using Verifiable.Core.Cryptography;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.SensitiveMemoryPool
 {

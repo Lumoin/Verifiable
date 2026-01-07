@@ -1,6 +1,6 @@
 using System.Buffers;
 using Verifiable.Core;
-using Verifiable.Core.Cryptography;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Cryptography
 {

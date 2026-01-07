@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Title>JSON serialization for Verifiable credentials and JOSE types.</Title>
+    <Description>System.Text.Json converters and serialization support for Verifiable.JCose types. Provides JSON serialization for JWK keys, SD-JWT disclosures, and related cryptographic structures. Designed for AOT compatibility and trimming safety.</Description>
+    <PackageTags>JSON Serialization SystemTextJson JWK JOSE SD-JWT Converters AOT</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+    <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>    
+    <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
+  </ItemGroup> 
+</Project>

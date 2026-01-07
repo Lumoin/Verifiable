@@ -1,4 +1,4 @@
-using Verifiable.Core.Cryptography.Context;
+using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tests.Cryptography
 {

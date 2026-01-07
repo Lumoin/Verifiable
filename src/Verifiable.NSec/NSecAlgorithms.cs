@@ -1,8 +1,9 @@
-using Verifiable.Core.Cryptography;
 using NSec.Cryptography;
 using System;
 using System.Buffers;
 using System.Threading.Tasks;
+using System.Diagnostics.CodeAnalysis;
+using Verifiable.Cryptography;
 
 namespace Verifiable.NSec
 {
@@ -18,10 +19,13 @@ namespace Verifiable.NSec
         /// <param name="dataToSign">The data to be signed.</param>
         /// <param name="signaturePool">The pool from where to reserve the memory for <see cref="Signature"/>.</param>
         /// <returns>The signature created from <paramref name="dataToSign"/> using <paramref name="privateKeyBytes"/>.</returns>
+        [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of Signature is transferred to the caller.")]
         public static ValueTask<Signature> SignEd25519Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
+
             //TODO: Parameter checking...
-            
+
             var algorithm = SignatureAlgorithm.Ed25519;
             _ = global::NSec.Cryptography.Key.TryImport(algorithm, privateKeyBytes.Span, KeyBlobFormat.RawPrivateKey, out global::NSec.Cryptography.Key? signingKey);
 
@@ -29,6 +33,7 @@ namespace Verifiable.NSec
             var memoryPooledSignature = signaturePool.Rent(signature.Length);
             signature.CopyTo(memoryPooledSignature.Memory.Span);
 
+            //No CA2000 violation: transfer ownership to caller via ValueTask<Signature>.
             return ValueTask.FromResult(new Signature(memoryPooledSignature, Tag.Ed25519Signature));
         }
 

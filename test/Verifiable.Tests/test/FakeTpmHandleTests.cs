@@ -1,6 +1,6 @@
 ﻿using System.Text;
-using Verifiable.Core.Cryptography;
-using Verifiable.Core.Cryptography.Context;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tests.test
 {

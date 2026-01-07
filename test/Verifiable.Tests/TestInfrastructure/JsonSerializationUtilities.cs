@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Verifiable.Tests.TestInfrastructure
@@ -56,6 +57,101 @@ namespace Verifiable.Tests.TestInfrastructure
             var reserializedString2 = JsonSerializer.Serialize(deserializedObject2, options);
 
             return (deserializedObject1, deserializedObject2, reserializedString1, reserializedString2);
+        }
+
+
+        /// <summary>
+        /// Enumerates all nodes in a JSON tree using iterative depth-first traversal.
+        /// </summary>
+        /// <param name="root">The root node of the JSON tree.</param>
+        /// <returns>An enumerable of all nodes in the tree, including the root.</returns>
+        /// <remarks>
+        /// <para>
+        /// This method uses an explicit stack instead of recursion to avoid call stack overhead.
+        /// Since JSON is a tree structure (no cycles), no visited-node tracking is needed.
+        /// </para>
+        /// <para>
+        /// Traversal order is depth-first but the specific order among siblings is not guaranteed.
+        /// For validation purposes (checking all nodes satisfy some property), order does not matter.
+        /// </para>
+        /// </remarks>
+        public static IEnumerable<JsonNode> EnumerateNodes(JsonNode? root)
+        {
+            if(root is null)
+            {
+                yield break;
+            }
+
+            var stack = new Stack<JsonNode>();
+            stack.Push(root);
+
+            while(stack.Count > 0)
+            {
+                var current = stack.Pop();
+                yield return current;
+
+                if(current is JsonObject obj)
+                {
+                    foreach(var kvp in obj)
+                    {
+                        if(kvp.Value is not null)
+                        {
+                            stack.Push(kvp.Value);
+                        }
+                    }
+                }
+                else if(current is JsonArray arr)
+                {
+                    foreach(var element in arr)
+                    {
+                        if(element is not null)
+                        {
+                            stack.Push(element);
+                        }
+                    }
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// Enumerates all objects in a JSON tree using iterative depth-first traversal.
+        /// </summary>
+        /// <param name="root">The root node of the JSON tree.</param>
+        /// <returns>An enumerable of all <see cref="JsonObject"/> nodes in the tree.</returns>
+        /// <remarks>
+        /// This is a convenience method that filters <see cref="EnumerateNodes"/> to return only objects.
+        /// Useful for validating properties across all objects in a JSON document.
+        /// </remarks>
+        public static IEnumerable<JsonObject> EnumerateObjects(JsonNode? root)
+        {
+            foreach(var node in EnumerateNodes(root))
+            {
+                if(node is JsonObject obj)
+                {
+                    yield return obj;
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// Enumerates all arrays in a JSON tree using iterative depth-first traversal.
+        /// </summary>
+        /// <param name="root">The root node of the JSON tree.</param>
+        /// <returns>An enumerable of all <see cref="JsonArray"/> nodes in the tree.</returns>
+        /// <remarks>
+        /// This is a convenience method that filters <see cref="EnumerateNodes"/> to return only arrays.
+        /// </remarks>
+        public static IEnumerable<JsonArray> EnumerateArrays(JsonNode? root)
+        {
+            foreach(var node in EnumerateNodes(root))
+            {
+                if(node is JsonArray arr)
+                {
+                    yield return arr;
+                }
+            }
         }
     }
 }

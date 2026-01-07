@@ -1,9 +1,7 @@
 ﻿using SimpleBase;
-using Verifiable.Core;
-using Verifiable.Core.Cryptography;
-using Verifiable.Core.Cryptography.Context;
-using Verifiable.Core.Cryptography.testing;
-using Verifiable.Core.Did;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
+using Verifiable.Jose;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography
@@ -31,7 +29,7 @@ namespace Verifiable.Tests.Cryptography
             decodedVector1Owner.Dispose();
 
             //Call the converter using a simple inline buffer allocation delegate.
-            var (algorithm, purpose, scheme, keyMaterial) = VerifiableCryptoFormatConversions.DefaultBase58ToAlgorithmConverter(Vector1, SensitiveMemoryPool<byte>.Shared, TestSetup.Base58Decoder);
+            var (algorithm, purpose, scheme, keyMaterial) = CryptoFormatConversions.DefaultBase58ToAlgorithmConverter(Vector1, SensitiveMemoryPool<byte>.Shared, TestSetup.Base58Decoder);
 
             // Now you can assert on these values as needed.
             Assert.AreEqual(CryptoAlgorithm.Ed25519, algorithm);
@@ -49,7 +47,7 @@ namespace Verifiable.Tests.Cryptography
 
             // The delegate must decode Base58 data into bytes, remove the codec header,
             // and return an IMemoryOwner<byte> containing the final bytes.
-            var (algorithm, purpose, scheme, keyMaterial) = VerifiableCryptoFormatConversions.DefaultBase58ToAlgorithmConverter(Vector1, Verifiable.Core.Cryptography.SensitiveMemoryPool<byte>.Shared, TestSetup.Base58Decoder);
+            var (algorithm, purpose, scheme, keyMaterial) = CryptoFormatConversions.DefaultBase58ToAlgorithmConverter(Vector1, SensitiveMemoryPool<byte>.Shared, TestSetup.Base58Decoder);
 
             // Now you can assert on the returned values.
             Assert.AreEqual(CryptoAlgorithm.Ed25519, algorithm);
