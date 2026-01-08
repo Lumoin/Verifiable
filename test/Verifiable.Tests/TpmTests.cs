@@ -24,14 +24,14 @@ namespace Verifiable.Tests.Tpm
         /// <summary>
         /// Checks that calling supported TPM platforms does not throw.
         /// </summary>
-        [SkipOnCiTestMethod]
+        [RunOnlyOnPlatformSkipOnCiTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void TpmIsPlatformSupported()
         {
             _ = TpmExtensions.IsTpmPlatformSupported();
         }
 
 
-        [SkipOnCiTestMethod]
+        [RunOnlyOnPlatformSkipOnCiTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void TpmGetPropertiesSucceeds()
         {
             var tpmInfo = TpmWrapper.Tpm.GetAllTpmInfo();
@@ -44,7 +44,7 @@ namespace Verifiable.Tests.Tpm
         }
 
 
-        [SkipOnCiTestMethod]
+        [RunOnlyOnPlatformSkipOnCiTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void TpmGetPcrBanksSucceeds()
         {
             var pcrBanks = TpmWrapper.Tpm.GetPcrBanks();
@@ -56,7 +56,7 @@ namespace Verifiable.Tests.Tpm
             }
         }
 
-        [SkipOnCiTestMethod]
+        [RunOnlyOnPlatformSkipOnCiTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void HashCheck()
         {
             byte[] hashData = TpmWrapper.Tpm.Hash([1, 2, 3],   // Data to hash

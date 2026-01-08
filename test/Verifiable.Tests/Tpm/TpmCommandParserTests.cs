@@ -33,8 +33,7 @@ namespace Verifiable.Tests.Tpm
             Assert.AreEqual(1u, BinaryPrimitives.ReadUInt32BigEndian(isFipsCommandBreakDown[5].TpmInstruction));
         }
 
-        
-        [SkipOnCiTestMethod]
+        [RunOnlyOnPlatformSkipOnCiTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void GetSupportedAlgorithmsCommandSucceeds()
         {
             var command = new GetCapabilityCommand();
