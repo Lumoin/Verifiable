@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
   <PropertyGroup>
     <Title>CBOR serialization for Verifiable credentials and COSE types.</Title>
     <Description>System.Formats.Cbor serialization support for Verifiable.JCose types. Provides CBOR serialization for COSE keys, ECDSA-SD proof values, and related cryptographic structures. Designed for AOT compatibility and trimming safety.</Description>

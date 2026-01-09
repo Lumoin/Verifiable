@@ -36,6 +36,9 @@
         "dependencies": {
           "Verifiable.Cryptography": "[0.0.0, )"
         }
+      },
+      "verifiable.jsonpointer": {
+        "type": "Project"
       }
     }
   }

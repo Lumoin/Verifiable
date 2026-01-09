@@ -1,5 +1,4 @@
-﻿using System;
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Proofs;

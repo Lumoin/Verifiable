@@ -147,7 +147,7 @@ public static class CredentialBuilderExtensions
         /// <remarks>
         /// <para>
         /// This method returns a function rather than modifying the builder because JOSE signing
-        /// produces a <see cref="string"/> (the JWS) rather than a <see cref="VerifiableCredential"/>.
+        /// produces a <see cref="JwsMessage"/> rather than a <see cref="VerifiableCredential"/>.
         /// </para>
         /// <para>
         /// Usage:
@@ -160,11 +160,12 @@ public static class CredentialBuilderExtensions
         ///     base64UrlEncoder,
         ///     memoryPool);
         /// 
-        /// string jws = await buildAndSign(issuer, subject, validFrom, cancellationToken);
+        /// JwsMessage jwsMessage = await buildAndSign(issuer, subject, validFrom, cancellationToken);
+        /// string jws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
         /// </code>
         /// </para>
         /// </remarks>
-        public Func<Issuer, CredentialSubjectInput, DateTime, CancellationToken, ValueTask<string>> WithJoseSigning(
+        public Func<Issuer, CredentialSubjectInput, DateTime, CancellationToken, ValueTask<JwsMessage>> WithJoseSigning(
             PrivateKeyMemory privateKey,
             string verificationMethodId,
             CredentialToJsonBytesDelegate credentialSerializer,
@@ -208,7 +209,7 @@ public static class CredentialBuilderExtensions
         /// <param name="memoryPool">Memory pool for signature allocation.</param>
         /// <param name="mediaType">Optional media type for the <c>typ</c> header.</param>
         /// <returns>A function that builds and signs credentials as JWS with full options.</returns>
-        public Func<Issuer, CredentialSubjectInput, DateTime, IEnumerable<string>?, DateTime?, CancellationToken, ValueTask<string>> WithJoseSigningFull(
+        public Func<Issuer, CredentialSubjectInput, DateTime, IEnumerable<string>?, DateTime?, CancellationToken, ValueTask<JwsMessage>> WithJoseSigningFull(
             PrivateKeyMemory privateKey,
             string verificationMethodId,
             CredentialToJsonBytesDelegate credentialSerializer,

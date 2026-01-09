@@ -83,10 +83,10 @@ namespace Verifiable.Microsoft
             {
                 return namedCurve.Oid.FriendlyName switch
                 {
-                    "nistP256" => (Tag.P256PublicKey, Tag.P256PrivateKey),
-                    "nistP384" => (Tag.P384PublicKey, Tag.P384PrivateKey),
-                    "nistP521" => (Tag.P521PublicKey, Tag.P521PrivateKey),
-                    "secP256k1" => (Tag.Secp256k1PublicKey, Tag.Secp256k1PrivateKey),
+                    "nistP256" => (CryptoTags.P256PublicKey, CryptoTags.P256PrivateKey),
+                    "nistP384" => (CryptoTags.P384PublicKey, CryptoTags.P384PrivateKey),
+                    "nistP521" => (CryptoTags.P521PublicKey, CryptoTags.P521PrivateKey),
+                    "secP256k1" => (CryptoTags.Secp256k1PublicKey, CryptoTags.Secp256k1PrivateKey),
                     _ => throw new NotSupportedException($"The curve {namedCurve.Oid.FriendlyName} is not supported.")
                 };
             }
@@ -116,8 +116,8 @@ namespace Verifiable.Microsoft
             {
                 return keySizeInBits switch
                 {
-                    2048 => (Tag.Rsa2048PublicKey, Tag.Rsa2048PrivateKey),
-                    4096 => (Tag.Rsa4096PublicKey, Tag.Rsa4096PrivateKey),
+                    2048 => (CryptoTags.Rsa2048PublicKey, CryptoTags.Rsa2048PrivateKey),
+                    4096 => (CryptoTags.Rsa4096PublicKey, CryptoTags.Rsa4096PrivateKey),
                     _ => throw new NotSupportedException($"The RSA key size {keySizeInBits} bits is not supported.")
                 };
             }

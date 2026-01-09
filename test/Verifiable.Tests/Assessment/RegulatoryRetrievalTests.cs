@@ -30,115 +30,6 @@ public sealed class CompositeClaimAssessorTests
     }
 
 
-    /// <summary>
-    /// A fast assessor that always succeeds.
-    /// </summary>
-    private static ValueTask<AssessmentResult> FastSuccessAssessor(
-        ClaimIssueResult claims,
-        string assessorId,
-        DateTime timestamp,
-        string? traceId,
-        string? spanId,
-        IReadOnlyDictionary<string, string>? baggage,
-        CancellationToken ct = default)
-    {
-        return ValueTask.FromResult(new AssessmentResult(
-            IsSuccess: true,
-            AssessorId: assessorId,
-            AssessmentId: Guid.NewGuid().ToString(),
-            CorrelationId: claims.CorrelationId,
-            AssessorVersion: "1.0.0",
-            CreationTimestampInUtc: timestamp,
-            AssessmentContext: new AssessmentContext(),
-            ClaimsResult: claims,
-            TraceId: traceId,
-            SpanId: spanId,
-            Baggage: baggage));
-    }
-
-
-    /// <summary>
-    /// A fast assessor that always fails.
-    /// </summary>
-    private static ValueTask<AssessmentResult> FastFailureAssessor(
-        ClaimIssueResult claims,
-        string assessorId,
-        DateTime timestamp,
-        string? traceId,
-        string? spanId,
-        IReadOnlyDictionary<string, string>? baggage,
-        CancellationToken ct = default)
-    {
-        return ValueTask.FromResult(new AssessmentResult(
-            IsSuccess: false,
-            AssessorId: assessorId,
-            AssessmentId: Guid.NewGuid().ToString(),
-            CorrelationId: claims.CorrelationId,
-            AssessorVersion: "1.0.0",
-            CreationTimestampInUtc: timestamp,
-            AssessmentContext: new AssessmentContext(),
-            ClaimsResult: claims,
-            TraceId: traceId,
-            SpanId: spanId,
-            Baggage: baggage));
-    }
-
-
-    /// <summary>
-    /// A slow assessor that simulates a remote AI call.
-    /// </summary>
-    private static async ValueTask<AssessmentResult> SlowAiAssessor(
-        ClaimIssueResult claims,
-        string assessorId,
-        DateTime timestamp,
-        string? traceId,
-        string? spanId,
-        IReadOnlyDictionary<string, string>? baggage,
-        CancellationToken ct = default)
-    {
-        await Task.Delay(200, ct);
-
-        return new AssessmentResult(
-            IsSuccess: true,
-            AssessorId: assessorId,
-            AssessmentId: Guid.NewGuid().ToString(),
-            CorrelationId: claims.CorrelationId,
-            AssessorVersion: "ai-model-v2.1",
-            CreationTimestampInUtc: timestamp,
-            AssessmentContext: new MachineLearningClaimContext { ModelVersion = "gpt-4-turbo" },
-            ClaimsResult: claims,
-            TraceId: traceId,
-            SpanId: spanId,
-            Baggage: baggage);
-    }
-
-
-    /// <summary>
-    /// An assessor that throws an exception.
-    /// </summary>
-    private static ValueTask<AssessmentResult> FaultingAssessor(
-        ClaimIssueResult claims,
-        string assessorId,
-        DateTime timestamp,
-        string? traceId,
-        string? spanId,
-        IReadOnlyDictionary<string, string>? baggage,
-        CancellationToken ct = default)
-    {
-        throw new InvalidOperationException("Remote AI service unavailable.");
-    }
-
-
-    /// <summary>
-    /// A simple claim rule for testing.
-    /// </summary>
-    private static ValueTask<IList<Claim>> SimpleRule(string input, CancellationToken ct = default)
-    {
-        IList<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
-        return ValueTask.FromResult(claims);
-    }
-
-
     [TestMethod]
     public async Task AllAssessorsRunInParallel()
     {
@@ -296,7 +187,7 @@ public sealed class CompositeClaimAssessorTests
         var assessors = new List<AssessorConfiguration>
         {
             new("fast", FastSuccessAssessor),
-            new("slow", SlowAiAssessor, Timeout: TimeSpan.FromMilliseconds(50))
+            new("blocking", BlockingAssessor, Timeout: TimeSpan.FromMilliseconds(1))
         };
 
         var composite = new CompositeClaimAssessor<string>(
@@ -310,7 +201,7 @@ public sealed class CompositeClaimAssessorTests
         Assert.IsTrue(result.IsSuccess, "Fast assessor should still succeed.");
         Assert.AreEqual(1, result.CompletedCount);
 
-        var timedOutResult = result.IndividualResults.First(r => r.AssessorId == "slow");
+        var timedOutResult = result.IndividualResults.First(r => r.AssessorId == "blocking");
         Assert.AreEqual(AssessorCompletionStatus.TimedOut, timedOutResult.CompletionStatus);
     }
 
@@ -322,12 +213,41 @@ public sealed class CompositeClaimAssessorTests
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        //Use a TaskCompletionSource to control cancellation timing precisely.
+        using var cts = new CancellationTokenSource();
+        var fastAssessorCompleted = new TaskCompletionSource<bool>();
+
+        //A fast assessor that signals when it completes.
+        ValueTask<AssessmentResult> SignalingFastAssessor(
+            ClaimIssueResult claims,
+            string assessorId,
+            DateTime timestamp,
+            string? traceId,
+            string? spanId,
+            IReadOnlyDictionary<string, string>? baggage,
+            CancellationToken ct = default)
+        {
+            var result = new AssessmentResult(
+                IsSuccess: true,
+                AssessorId: assessorId,
+                AssessmentId: Guid.NewGuid().ToString(),
+                CorrelationId: claims.CorrelationId,
+                AssessorVersion: "1.0.0",
+                CreationTimestampInUtc: timestamp,
+                AssessmentContext: new AssessmentContext(),
+                ClaimsResult: claims,
+                TraceId: traceId,
+                SpanId: spanId,
+                Baggage: baggage);
+
+            fastAssessorCompleted.TrySetResult(true);
+            return ValueTask.FromResult(result);
+        }
 
         var assessors = new List<AssessorConfiguration>
         {
-            new("fast", FastSuccessAssessor),
-            new("slow", SlowAiAssessor)
+            new("fast", SignalingFastAssessor),
+            new("blocking", BlockingAssessor)
         };
 
         var composite = new CompositeClaimAssessor<string>(
@@ -336,14 +256,21 @@ public sealed class CompositeClaimAssessorTests
             AssessmentAggregationStrategy.AnyMustSucceed,
             timeProvider);
 
-        var result = await composite.AssessAsync("test-input", TestCorrelationId, cts.Token);
+        //Start the assessment in the background.
+        var assessTask = composite.AssessAsync("test-input", TestCorrelationId, cts.Token);
 
-        //Fast one should complete, slow one should be cancelled.
+        //Wait for the fast assessor to complete, then cancel.
+        await fastAssessorCompleted.Task;
+        await cts.CancelAsync();
+
+        var result = await assessTask;
+
+        //Fast one should complete, blocking one should be cancelled.
         Assert.IsTrue(result.IsSuccess, "Fast assessor result should make AnyMustSucceed pass.");
         Assert.AreEqual(1, result.CompletedCount);
         Assert.AreEqual(1, result.CancelledCount);
 
-        var cancelledResult = result.IndividualResults.First(r => r.AssessorId == "slow");
+        var cancelledResult = result.IndividualResults.First(r => r.AssessorId == "blocking");
         Assert.AreEqual(AssessorCompletionStatus.Cancelled, cancelledResult.CompletionStatus);
     }
 
@@ -439,4 +366,118 @@ public sealed class CompositeClaimAssessorTests
         Assert.Throws<ArgumentException>(() =>
             new CompositeClaimAssessor<string>(issuer, []));
     }
+
+
+    #region Test Helpers
+
+    /// <summary>
+    /// A simple claim rule for testing.
+    /// </summary>
+    private static ValueTask<IList<Claim>> SimpleRule(string input, CancellationToken ct = default)
+    {
+        IList<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
+        return ValueTask.FromResult(claims);
+    }
+
+
+    /// <summary>
+    /// A fast assessor that always succeeds.
+    /// </summary>
+    private static ValueTask<AssessmentResult> FastSuccessAssessor(
+        ClaimIssueResult claims,
+        string assessorId,
+        DateTime timestamp,
+        string? traceId,
+        string? spanId,
+        IReadOnlyDictionary<string, string>? baggage,
+        CancellationToken ct = default)
+    {
+        return ValueTask.FromResult(new AssessmentResult(
+            IsSuccess: true,
+            AssessorId: assessorId,
+            AssessmentId: Guid.NewGuid().ToString(),
+            CorrelationId: claims.CorrelationId,
+            AssessorVersion: "1.0.0",
+            CreationTimestampInUtc: timestamp,
+            AssessmentContext: new AssessmentContext(),
+            ClaimsResult: claims,
+            TraceId: traceId,
+            SpanId: spanId,
+            Baggage: baggage));
+    }
+
+
+    /// <summary>
+    /// A fast assessor that always fails.
+    /// </summary>
+    private static ValueTask<AssessmentResult> FastFailureAssessor(
+        ClaimIssueResult claims,
+        string assessorId,
+        DateTime timestamp,
+        string? traceId,
+        string? spanId,
+        IReadOnlyDictionary<string, string>? baggage,
+        CancellationToken ct = default)
+    {
+        return ValueTask.FromResult(new AssessmentResult(
+            IsSuccess: false,
+            AssessorId: assessorId,
+            AssessmentId: Guid.NewGuid().ToString(),
+            CorrelationId: claims.CorrelationId,
+            AssessorVersion: "1.0.0",
+            CreationTimestampInUtc: timestamp,
+            AssessmentContext: new AssessmentContext(),
+            ClaimsResult: claims,
+            TraceId: traceId,
+            SpanId: spanId,
+            Baggage: baggage));
+    }
+
+
+    /// <summary>
+    /// An assessor that waits indefinitely until cancelled.
+    /// </summary>
+    private static async ValueTask<AssessmentResult> BlockingAssessor(
+        ClaimIssueResult claims,
+        string assessorId,
+        DateTime timestamp,
+        string? traceId,
+        string? spanId,
+        IReadOnlyDictionary<string, string>? baggage,
+        CancellationToken ct = default)
+    {
+        await Task.Delay(Timeout.Infinite, ct);
+
+        //This line is never reached; the delay throws on cancellation.
+        return new AssessmentResult(
+            IsSuccess: true,
+            AssessorId: assessorId,
+            AssessmentId: Guid.NewGuid().ToString(),
+            CorrelationId: claims.CorrelationId,
+            AssessorVersion: "1.0.0",
+            CreationTimestampInUtc: timestamp,
+            AssessmentContext: new AssessmentContext(),
+            ClaimsResult: claims,
+            TraceId: traceId,
+            SpanId: spanId,
+            Baggage: baggage);
+    }
+
+
+    /// <summary>
+    /// An assessor that throws an exception.
+    /// </summary>
+    private static ValueTask<AssessmentResult> FaultingAssessor(
+        ClaimIssueResult claims,
+        string assessorId,
+        DateTime timestamp,
+        string? traceId,
+        string? spanId,
+        IReadOnlyDictionary<string, string>? baggage,
+        CancellationToken ct = default)
+    {
+        throw new InvalidOperationException("Remote AI service unavailable.");
+    }
+
+    #endregion
 }
