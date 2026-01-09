@@ -33,6 +33,8 @@
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="dotNetRdf" />
+    <PackageReference Include="SimpleBase" />
   </ItemGroup>
 
   <ItemGroup>

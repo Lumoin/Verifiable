@@ -60,40 +60,40 @@ namespace Verifiable.Jose
             return (jwaAlgorithm, purpose) switch
             {
                 //ECDSA signing.
-                (string alg, Purpose p) when WellKnownJwaValues.IsEs256(alg) && p.Equals(Purpose.Signing) => Tag.P256PrivateKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsEs384(alg) && p.Equals(Purpose.Signing) => Tag.P384PrivateKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsEs512(alg) && p.Equals(Purpose.Signing) => Tag.P521PrivateKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsEs256k1(alg) && p.Equals(Purpose.Signing) => Tag.Secp256k1PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEs256(alg) && p.Equals(Purpose.Signing) => CryptoTags.P256PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEs384(alg) && p.Equals(Purpose.Signing) => CryptoTags.P384PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEs512(alg) && p.Equals(Purpose.Signing) => CryptoTags.P521PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEs256k1(alg) && p.Equals(Purpose.Signing) => CryptoTags.Secp256k1PrivateKey,
 
                 //ECDSA verification.
-                (string alg, Purpose p) when WellKnownJwaValues.IsEs256(alg) && p.Equals(Purpose.Verification) => Tag.P256PublicKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsEs384(alg) && p.Equals(Purpose.Verification) => Tag.P384PublicKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsEs512(alg) && p.Equals(Purpose.Verification) => Tag.P521PublicKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsEs256k1(alg) && p.Equals(Purpose.Verification) => Tag.Secp256k1PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEs256(alg) && p.Equals(Purpose.Verification) => CryptoTags.P256PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEs384(alg) && p.Equals(Purpose.Verification) => CryptoTags.P384PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEs512(alg) && p.Equals(Purpose.Verification) => CryptoTags.P521PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEs256k1(alg) && p.Equals(Purpose.Verification) => CryptoTags.Secp256k1PublicKey,
 
                 //EdDSA signing and verification.
-                (string alg, Purpose p) when WellKnownJwaValues.IsEdDsa(alg) && p.Equals(Purpose.Signing) => Tag.Ed25519PrivateKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsEdDsa(alg) && p.Equals(Purpose.Verification) => Tag.Ed25519PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEdDsa(alg) && p.Equals(Purpose.Signing) => CryptoTags.Ed25519PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEdDsa(alg) && p.Equals(Purpose.Verification) => CryptoTags.Ed25519PublicKey,
 
                 //RSA PKCS#1 signing.
-                (string alg, Purpose p) when WellKnownJwaValues.IsRs256(alg) && p.Equals(Purpose.Signing) => Tag.Rsa2048PrivateKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsRs384(alg) && p.Equals(Purpose.Signing) => Tag.Rsa2048PrivateKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsRs512(alg) && p.Equals(Purpose.Signing) => Tag.Rsa2048PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsRs256(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsRs384(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsRs512(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
 
                 //RSA PKCS#1 verification.
-                (string alg, Purpose p) when WellKnownJwaValues.IsRs256(alg) && p.Equals(Purpose.Verification) => Tag.Rsa2048PublicKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsRs384(alg) && p.Equals(Purpose.Verification) => Tag.Rsa2048PublicKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsRs512(alg) && p.Equals(Purpose.Verification) => Tag.Rsa2048PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsRs256(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsRs384(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsRs512(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
 
                 //RSA PSS signing.
-                (string alg, Purpose p) when WellKnownJwaValues.IsPs256(alg) && p.Equals(Purpose.Signing) => Tag.Rsa2048PrivateKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsPs384(alg) && p.Equals(Purpose.Signing) => Tag.Rsa2048PrivateKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsPs512(alg) && p.Equals(Purpose.Signing) => Tag.Rsa2048PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsPs256(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsPs384(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsPs512(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
 
                 //RSA PSS verification.
-                (string alg, Purpose p) when WellKnownJwaValues.IsPs256(alg) && p.Equals(Purpose.Verification) => Tag.Rsa2048PublicKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsPs384(alg) && p.Equals(Purpose.Verification) => Tag.Rsa2048PublicKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsPs512(alg) && p.Equals(Purpose.Verification) => Tag.Rsa2048PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsPs256(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsPs384(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsPs512(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
 
                 _ => throw new NotSupportedException($"JWA algorithm '{jwaAlgorithm}' with purpose '{purpose}' is not supported.")
             };
@@ -167,7 +167,6 @@ namespace Verifiable.Jose
             }
 
             CryptoAlgorithm algorithm = tag.Get<CryptoAlgorithm>();
-
             if(algorithm.Equals(CryptoAlgorithm.P256))
             {
                 return WellKnownJwaValues.Es256;
@@ -246,27 +245,27 @@ namespace Verifiable.Jose
 
             if(WellKnownJwaValues.IsEs256(jwaAlgorithm))
             {
-                return Tag.P256Signature;
+                return CryptoTags.P256Signature;
             }
 
             if(WellKnownJwaValues.IsEs384(jwaAlgorithm))
             {
-                return Tag.P384Signature;
+                return CryptoTags.P384Signature;
             }
 
             if(WellKnownJwaValues.IsEs512(jwaAlgorithm))
             {
-                return Tag.P521Signature;
+                return CryptoTags.P521Signature;
             }
 
             if(WellKnownJwaValues.IsEs256k1(jwaAlgorithm))
             {
-                return Tag.Secp256k1Signature;
+                return CryptoTags.Secp256k1Signature;
             }
 
             if(WellKnownJwaValues.IsEdDsa(jwaAlgorithm))
             {
-                return Tag.Ed25519Signature;
+                return CryptoTags.Ed25519Signature;
             }
 
             //RSA and HMAC signatures don't have specific tags defined in Tag class.
@@ -365,8 +364,8 @@ namespace Verifiable.Jose
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) => AddEcHeaders(WellKnownJwaValues.Es384, WellKnownCurveValues.P384, keyMaterial, jwkHeaders, EllipticCurveTypes.P384, base64UrlEncoder),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) => AddEcHeaders(WellKnownJwaValues.Es512, WellKnownCurveValues.P521, keyMaterial, jwkHeaders, EllipticCurveTypes.P521, base64UrlEncoder),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) => AddEcHeaders(WellKnownJwaValues.Es256k1, WellKnownCurveValues.Secp256k1, keyMaterial, jwkHeaders, EllipticCurveTypes.Secp256k1, base64UrlEncoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => AddRsaHeaders(WellKnownJwaValues.Rs256, keyMaterial, jwkHeaders, Tag.Rsa2048PublicKey, base64UrlEncoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => AddRsaHeaders(WellKnownJwaValues.Rs256, keyMaterial, jwkHeaders, Tag.Rsa4096PublicKey, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => AddRsaHeaders(WellKnownJwaValues.Rs256, keyMaterial, jwkHeaders, CryptoTags.Rsa2048PublicKey, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => AddRsaHeaders(WellKnownJwaValues.Rs256, keyMaterial, jwkHeaders, CryptoTags.Rsa4096PublicKey, base64UrlEncoder),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) => AddEd25519Headers(keyMaterial, jwkHeaders, base64UrlEncoder),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) => AddX25519Headers(keyMaterial, jwkHeaders, base64UrlEncoder),
                 _ => throw new ArgumentException($"Unknown combination of algorithm and purpose: \"{algorithm}\", \"{purpose}\".")

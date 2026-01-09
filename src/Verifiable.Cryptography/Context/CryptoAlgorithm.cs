@@ -265,6 +265,42 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     public static CryptoAlgorithm WindowsPlatformEncrypted { get; } = new CryptoAlgorithm(11);
 
 
+    /// <summary>
+    /// RSA with SHA-256 hash (PKCS#1 v1.5 padding).
+    /// </summary>
+    public static CryptoAlgorithm RsaSha256 { get; } = new CryptoAlgorithm(12);
+
+
+    /// <summary>
+    /// RSA with SHA-256 hash (PSS padding).
+    /// </summary>
+    public static CryptoAlgorithm RsaSha256Pss { get; } = new CryptoAlgorithm(13);
+
+
+    /// <summary>
+    /// RSA with SHA-384 hash (PKCS#1 v1.5 padding).
+    /// </summary>
+    public static CryptoAlgorithm RsaSha384 { get; } = new CryptoAlgorithm(14);
+
+
+    /// <summary>
+    /// RSA with SHA-384 hash (PSS padding).
+    /// </summary>
+    public static CryptoAlgorithm RsaSha384Pss { get; } = new CryptoAlgorithm(15);
+
+
+    /// <summary>
+    /// RSA with SHA-512 hash (PKCS#1 v1.5 padding).
+    /// </summary>
+    public static CryptoAlgorithm RsaSha512 { get; } = new CryptoAlgorithm(16);
+
+
+    /// <summary>
+    /// RSA with SHA-512 hash (PSS padding).
+    /// </summary>
+    public static CryptoAlgorithm RsaSha512Pss { get; } = new CryptoAlgorithm(17);
+
+
     private static readonly List<CryptoAlgorithm> algorithms = new([Rsa2048]);
 
 
@@ -414,6 +450,12 @@ public static class CryptoAlgorithmNames
         var a when a == CryptoAlgorithm.Rsa2048.Algorithm => nameof(CryptoAlgorithm.Rsa2048),
         var a when a == CryptoAlgorithm.Rsa4096.Algorithm => nameof(CryptoAlgorithm.Rsa4096),
         var a when a == CryptoAlgorithm.WindowsPlatformEncrypted.Algorithm => nameof(CryptoAlgorithm.WindowsPlatformEncrypted),
+        var a when a == CryptoAlgorithm.RsaSha256.Algorithm => nameof(CryptoAlgorithm.RsaSha256),
+        var a when a == CryptoAlgorithm.RsaSha256Pss.Algorithm => nameof(CryptoAlgorithm.RsaSha256Pss),
+        var a when a == CryptoAlgorithm.RsaSha384.Algorithm => nameof(CryptoAlgorithm.RsaSha384),
+        var a when a == CryptoAlgorithm.RsaSha384Pss.Algorithm => nameof(CryptoAlgorithm.RsaSha384Pss),
+        var a when a == CryptoAlgorithm.RsaSha512.Algorithm => nameof(CryptoAlgorithm.RsaSha512),
+        var a when a == CryptoAlgorithm.RsaSha512Pss.Algorithm => nameof(CryptoAlgorithm.RsaSha512Pss),
         _ => $"Custom: ('{algorithm}')."
     };
 }

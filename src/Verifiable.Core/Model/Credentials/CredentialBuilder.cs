@@ -40,6 +40,7 @@ public class CredentialSubjectInput
 }
 
 
+#pragma warning disable RS0030 // Do not use banned APIs
 /// <summary>
 /// Builds Verifiable Credentials using a fold/aggregate pattern with sensible defaults.
 /// This builder follows the W3C Verifiable Credentials Data Model 2.0 specification
@@ -103,6 +104,7 @@ public class CredentialSubjectInput
 /// </code>
 /// </example>
 public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialBuildState, CredentialBuilder>
+#pragma warning restore RS0030 // Do not use banned APIs
 {
     /// <summary>
     /// Gets or sets the credential ID generator used to create unique identifiers for credentials.
@@ -159,8 +161,8 @@ public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialB
         .With((credential, builder, buildState) =>
         {
             credential.Issuer = buildState!.Issuer;
-            credential.ValidFrom = buildState.ValidFrom;
-            credential.ValidUntil = buildState.ValidUntil;
+            credential.ValidFrom = buildState.ValidFrom?.ToString("O");
+            credential.ValidUntil = buildState.ValidUntil?.ToString("O");
 
             //Set credential ID if provided or generate one.
             credential.Id = buildState.CredentialId ?? builder.CredentialIdGenerator(buildState);

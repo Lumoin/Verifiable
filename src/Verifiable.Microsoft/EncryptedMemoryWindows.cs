@@ -35,7 +35,7 @@ namespace Verifiable.Security.Windows
         /// <param name="protectionScope">The data protection scope.</param>
         /// <param name="protectedMemoryPool">The more pool in which to store the encrypted data.</param>
         public EncryptedMemoryWindows(byte[] sensitiveMemory, byte[] entropy, DataProtectionScope protectionScope, MemoryPool<byte> protectedMemoryPool): 
-            base(TransformToEncryptedMemory(sensitiveMemory, entropy, protectionScope, protectedMemoryPool), Tag.WindowsPlatformEncrypted)
+            base(TransformToEncryptedMemory(sensitiveMemory, entropy, protectionScope, protectedMemoryPool), CryptoTags.WindowsPlatformEncrypted)
         {
             ArgumentNullException.ThrowIfNull(sensitiveMemory);
             ArgumentNullException.ThrowIfNull(entropy);

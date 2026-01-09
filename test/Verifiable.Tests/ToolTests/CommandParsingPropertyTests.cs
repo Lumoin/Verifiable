@@ -32,7 +32,7 @@ public class CommandParsingPropertyTests
             //These are not bugs - they are intentional parser features (e.g. @ for response files).
             //Business logic is tested with arbitrary inputs in McpServerPropertyTests.
             if(VerifiableCliTestHelpers.IsUnsuitableForCliArgument(param) ||
-               StartsWithBuiltInOption(param))
+               VerifiableCliTestHelpers.StartsWithSystemCommandLineBuiltInOption(param))
             {
                 return;
             }
@@ -55,7 +55,7 @@ public class CommandParsingPropertyTests
             //These are not bugs - they are intentional parser features (e.g. @ for response files).
             //Business logic is tested with arbitrary inputs in McpServerPropertyTests.
             if(VerifiableCliTestHelpers.ContainsCliSpecialCharacters(param) ||
-               StartsWithBuiltInOption(param))
+               VerifiableCliTestHelpers.StartsWithSystemCommandLineBuiltInOption(param))
             {
                 return;
             }
@@ -104,7 +104,7 @@ public class CommandParsingPropertyTests
             //These are not bugs - they are intentional parser features (e.g. @ for response files).
             //Business logic is tested with arbitrary inputs in McpServerPropertyTests.
             if(VerifiableCliTestHelpers.IsUnsuitableForCliOptionValue(extra) ||
-               StartsWithBuiltInOption(extra))
+               VerifiableCliTestHelpers.StartsWithSystemCommandLineBuiltInOption(extra))
             {
                 return;
             }
@@ -127,7 +127,7 @@ public class CommandParsingPropertyTests
         Gen.String[1, 20].Where(s => !int.TryParse(s, out _) &&
                                      !string.IsNullOrWhiteSpace(s) &&
                                      !s.Any(char.IsWhiteSpace) &&
-                                     !StartsWithBuiltInOption(s))
+                                     !VerifiableCliTestHelpers.StartsWithSystemCommandLineBuiltInOption(s))
             .Sample(invalidId =>
             {
                 var rootCommand = VerifiableCliTestHelpers.BuildTestableRootCommand(out _, out _, out _);
@@ -153,22 +153,9 @@ public class CommandParsingPropertyTests
 
 
     /// <summary>
-    /// Determines whether the input starts with a built-in option prefix that
-    /// System.CommandLine handles specially (help and version options).
-    /// </summary>
-    private static bool StartsWithBuiltInOption(string input)
-    {
-        return input.StartsWith("-h", StringComparison.OrdinalIgnoreCase) ||
-               input.StartsWith("-?", StringComparison.Ordinal) ||
-               input.StartsWith("--help", StringComparison.OrdinalIgnoreCase) ||
-               input.StartsWith("--version", StringComparison.OrdinalIgnoreCase);
-    }
-
-
-    /// <summary>
     /// Determines whether the input matches a known command or could be interpreted
-    /// as a built-in option by System.CommandLine. This includes prefix matching
-    /// for short options like -h (help) and -? which parse without errors.
+    /// as a System.CommandLine built-in option. This includes prefix matching
+    /// for options like -h, /h (help) and -?, /? which parse without errors.
     /// </summary>
     private static bool IsKnownCommandOrBuiltInOption(string input)
     {
@@ -178,6 +165,6 @@ public class CommandParsingPropertyTests
             return true;
         }
 
-        return StartsWithBuiltInOption(input);
+        return VerifiableCliTestHelpers.StartsWithSystemCommandLineBuiltInOption(input);
     }
 }

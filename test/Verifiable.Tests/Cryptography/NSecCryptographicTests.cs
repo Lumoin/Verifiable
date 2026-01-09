@@ -37,7 +37,7 @@ namespace Verifiable.Tests.Cryptography
 
             var data = (ReadOnlyMemory<byte>)TestData;
             using Signature signature = await privateKey.SignAsync(data, NSecAlgorithms.SignEd25519Async, MemoryPool<byte>.Shared);
-            Assert.IsTrue(await publicKey.VerifyAsync(data, signature, NSecAlgorithms.VerifyEd25519));
+            Assert.IsTrue(await publicKey.VerifyAsync(data, signature, NSecAlgorithms.VerifyEd25519Async));
         }
 
 
@@ -46,7 +46,7 @@ namespace Verifiable.Tests.Cryptography
         {
             var keys = NSecKeyCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
 
-            var publicKey = new PublicKey(keys.PublicKey, "Test-1", NSecAlgorithms.VerifyEd25519);
+            var publicKey = new PublicKey(keys.PublicKey, "Test-1", NSecAlgorithms.VerifyEd25519Async);
             var privateKey = new PrivateKey(keys.PrivateKey, "Test-1", NSecAlgorithms.SignEd25519Async);
 
             var data = (ReadOnlyMemory<byte>)TestData;

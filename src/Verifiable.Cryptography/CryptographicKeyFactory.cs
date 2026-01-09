@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography;
 
@@ -8,9 +9,8 @@ namespace Verifiable.Cryptography;
 /// <remarks>
 /// <para>
 /// This factory creates <see cref="PublicKey"/> and <see cref="PrivateKey"/> objects by combining
-/// key material with appropriate cryptographic functions. It provides a higher-level abstraction
-/// than <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>, producing ready-to-use
-/// key objects rather than raw function delegates.
+/// key material with appropriate cryptographic functions resolved from 
+/// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>.
 /// </para>
 ///
 /// <para>
@@ -20,14 +20,20 @@ namespace Verifiable.Cryptography;
 /// +-------------------+     +-------------------------+     +------------------+
 /// |   Key Material    | --> | CryptographicKeyFactory | --> |   Bound Key      |
 /// | (PublicKeyMemory) |     |                         |     | (PublicKey with  |
-/// | (PrivateKeyMemory)|     |  Combines material with |     |  verify function)|
-/// +-------------------+     |  functions from mapping |     +------------------+
+/// | (PrivateKeyMemory)|     |  Extracts Algorithm &amp;  |     |  verify delegate)|
+/// +-------------------+     |  Purpose from Tag       |     +------------------+
+///                           +------------+------------+
+///                                        |
+///                                        | Resolves function from
+///                                        v
 ///                           +-------------------------+
-///                                       |
-///                                       | Uses mapping functions
-///                                       | to select appropriate
-///                                       | crypto operations
-///                                       v
+///                           | CryptoFunctionRegistry  |
+///                           | (Algorithm, Purpose) -> |
+///                           | SigningDelegate or      |
+///                           | VerificationDelegate    |
+///                           +------------+------------+
+///                                        |
+///                                        v
 ///                           +-------------------------+
 ///                           |  Backend Implementation |
 ///                           | (BouncyCastle, CNG, etc)|
@@ -35,74 +41,39 @@ namespace Verifiable.Cryptography;
 /// </code>
 ///
 /// <para>
-/// <strong>Difference from CryptoFunctionRegistry</strong>
+/// <strong>Relationship to CryptoFunctionRegistry</strong>
 /// </para>
 /// <para>
-/// While <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> dispatches based on
-/// <c>CryptoAlgorithm</c> and <c>Purpose</c> discriminators, this factory uses <see cref="Tag"/>
-/// metadata attached to key material. The Tag encapsulates the same information but is bound
-/// to the key itself, enabling a more object-oriented usage pattern.
+/// This factory uses <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> internally
+/// to resolve cryptographic functions. The <see cref="Tag"/> attached to key material contains
+/// <see cref="CryptoAlgorithm"/> and <see cref="Purpose"/> discriminators which are extracted
+/// and used for registry lookup.
 /// </para>
-/// <code>
-/// // CryptoFunctionRegistry approach (function-oriented):
-/// SigningDelegate sign = CryptoFunctionRegistry&lt;CryptoAlgorithm, Purpose&gt;
-///     .ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
-/// var signature = await sign(privateKeyBytes, data, pool);
-///
-/// // CryptographicKeyFactory approach (object-oriented):
-/// PrivateKey key = CryptographicKeyFactory.CreatePrivateKey(
-///     privateKeyMemory, "key-1", Tag.P256PrivateKey);
-/// var signature = await key.SignAsync(data, pool);
-/// </code>
 ///
 /// <para>
 /// <strong>Initialization</strong>
 /// </para>
 /// <para>
-/// Call <see cref="Initialize"/> during application startup to register the mapping functions.
-/// This method is not thread-safe; call it before any concurrent access.
+/// This factory does not require separate initialization. It uses the already-initialized
+/// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>. Ensure the registry
+/// is initialized before using this factory.
 /// </para>
 ///
 /// <para>
 /// <strong>Custom Function Registration</strong>
 /// </para>
 /// <para>
-/// For specialized scenarios, use <see cref="RegisterFunction{TFunction}"/> to register custom
-/// functions that don't fit the standard signing/verification pattern. These can be retrieved
-/// with <see cref="GetFunction{TFunction}"/>.
+/// For specialized scenarios that don't fit the standard signing/verification pattern,
+/// use <see cref="RegisterFunction{TFunction}"/> to register custom functions.
+/// These can be retrieved with <see cref="GetFunction{TFunction}"/>.
 /// </para>
 /// </remarks>
 public static class CryptographicKeyFactory
 {
-    private static Func<Tag, string?, VerificationFunction<byte, byte, Signature, ValueTask<bool>>>? VerificationMapping { get; set; }
-
-    private static Func<Tag, string?, SigningFunction<byte, byte, ValueTask<Signature>>>? SigningMapping { get; set; }
-
-    private static Dictionary<(Type KeyType, string? Qualifier), object> CustomFunctionMappings { get; } = [];
-
-
     /// <summary>
-    /// Initializes the factory with mapping functions for verification and signing operations.
+    /// Storage for custom function mappings that don't fit the standard signing/verification pattern.
     /// </summary>
-    /// <param name="verificationMapping">
-    /// A function that maps a <see cref="Tag"/> and optional qualifier to a verification function.
-    /// </param>
-    /// <param name="signingMapping">
-    /// A function that maps a <see cref="Tag"/> and optional qualifier to a signing function.
-    /// </param>
-    /// <remarks>
-    /// <para>
-    /// This method is not thread-safe. Call it only during application startup before
-    /// concurrent access begins, such as in static initializers or early in <c>Program.cs</c>.
-    /// </para>
-    /// </remarks>
-    public static void Initialize(
-        Func<Tag, string?, VerificationFunction<byte, byte, Signature, ValueTask<bool>>> verificationMapping,
-        Func<Tag, string?, SigningFunction<byte, byte, ValueTask<Signature>>> signingMapping)
-    {
-        VerificationMapping = verificationMapping;
-        SigningMapping = signingMapping;
-    }
+    private static Dictionary<(Type KeyType, string? Qualifier), object> CustomFunctionMappings { get; } = [];
 
 
     /// <summary>
@@ -111,33 +82,34 @@ public static class CryptographicKeyFactory
     /// <param name="publicKeyMemory">The memory containing the public key material.</param>
     /// <param name="keyIdentifier">A unique identifier for the key (e.g., DID URL, key ID).</param>
     /// <param name="tag">Metadata describing the key's algorithm and purpose.</param>
-    /// <param name="selector">An optional qualifier for selecting among multiple implementations.</param>
+    /// <param name="qualifier">An optional qualifier for selecting among multiple implementations.</param>
+    /// <param name="defaultContext">Optional default context for verification operations.</param>
     /// <returns>A <see cref="PublicKey"/> object ready for verification operations.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the factory has not been initialized.</exception>
-    /// <exception cref="ArgumentException">Thrown if no verification function is registered for the tag.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> has not been initialized.</exception>
+    /// <exception cref="ArgumentException">Thrown if no verification function is registered for the algorithm/purpose.</exception>
     /// <remarks>
     /// <para>
     /// The returned <see cref="PublicKey"/> takes ownership of the <paramref name="publicKeyMemory"/>.
     /// Dispose the <see cref="PublicKey"/> to release the underlying memory.
+    /// </para>
+    /// <para>
+    /// The <paramref name="tag"/> must contain <see cref="CryptoAlgorithm"/> and <see cref="Purpose"/>
+    /// components for function resolution.
     /// </para>
     /// </remarks>
     public static PublicKey CreatePublicKey(
         PublicKeyMemory publicKeyMemory,
         string keyIdentifier,
         Tag tag,
-        string? selector = null)
+        string? qualifier = null,
+        FrozenDictionary<string, object>? defaultContext = null)
     {
-        if(VerificationMapping == null)
-        {
-            throw new InvalidOperationException(
-                "Verification mapping has not been initialized. " +
-                "Call CryptographicKeyFactory.Initialize() during application startup.");
-        }
+        var algorithm = tag.Get<CryptoAlgorithm>();
+        var purpose = tag.Get<Purpose>();
 
-        var verificationFunction = VerificationMapping(tag, selector)
-            ?? throw new ArgumentException($"No verification function registered for tag {tag} with selector '{selector}'.");
+        var verificationDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose, qualifier);
 
-        return new PublicKey(publicKeyMemory, keyIdentifier, verificationFunction);
+        return new PublicKey(publicKeyMemory, keyIdentifier, verificationDelegate, defaultContext);
     }
 
 
@@ -147,95 +119,94 @@ public static class CryptographicKeyFactory
     /// <param name="privateKeyMemory">The memory containing the private key material.</param>
     /// <param name="keyIdentifier">A unique identifier for the key (e.g., DID URL, key ID).</param>
     /// <param name="tag">Metadata describing the key's algorithm and purpose.</param>
-    /// <param name="selector">An optional qualifier for selecting among multiple implementations.</param>
+    /// <param name="qualifier">An optional qualifier for selecting among multiple implementations.</param>
+    /// <param name="defaultContext">Optional default context for signing operations.</param>
     /// <returns>A <see cref="PrivateKey"/> object ready for signing operations.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the factory has not been initialized.</exception>
-    /// <exception cref="ArgumentException">Thrown if no signing function is registered for the tag.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> has not been initialized.</exception>
+    /// <exception cref="ArgumentException">Thrown if no signing function is registered for the algorithm/purpose.</exception>
     /// <remarks>
     /// <para>
     /// The returned <see cref="PrivateKey"/> takes ownership of the <paramref name="privateKeyMemory"/>.
     /// Dispose the <see cref="PrivateKey"/> to release the underlying memory.
+    /// </para>
+    /// <para>
+    /// The <paramref name="tag"/> must contain <see cref="CryptoAlgorithm"/> and <see cref="Purpose"/>
+    /// components for function resolution.
     /// </para>
     /// </remarks>
     public static PrivateKey CreatePrivateKey(
         PrivateKeyMemory privateKeyMemory,
         string keyIdentifier,
         Tag tag,
-        string? selector = null)
+        string? qualifier = null,
+        FrozenDictionary<string, object>? defaultContext = null)
     {
-        if(SigningMapping == null)
-        {
-            throw new InvalidOperationException(
-                "Signing mapping has not been initialized. " +
-                "Call CryptographicKeyFactory.Initialize() during application startup.");
-        }
+        var algorithm = tag.Get<CryptoAlgorithm>();
+        var purpose = tag.Get<Purpose>();
 
-        var signingFunction = SigningMapping(tag, selector)
-            ?? throw new ArgumentException($"No signing function registered for tag {tag} with selector '{selector}'.");
+        var signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose, qualifier);
 
-        return new PrivateKey(privateKeyMemory, keyIdentifier, signingFunction);
+        return new PrivateKey(privateKeyMemory, keyIdentifier, signingDelegate, defaultContext);
     }
 
 
     /// <summary>
-    /// Creates a public key using algorithm and purpose parameters instead of a Tag.
+    /// Creates a public key using algorithm and purpose parameters directly.
     /// </summary>
     /// <param name="publicKeyMemory">The memory containing the public key material.</param>
     /// <param name="keyIdentifier">A unique identifier for the key.</param>
     /// <param name="algorithm">The cryptographic algorithm associated with the key.</param>
     /// <param name="purpose">The purpose of the key.</param>
+    /// <param name="qualifier">An optional qualifier for selecting among multiple implementations.</param>
+    /// <param name="defaultContext">Optional default context for verification operations.</param>
     /// <returns>A <see cref="PublicKey"/> object.</returns>
     /// <remarks>
     /// <para>
-    /// This is a convenience method that constructs a <see cref="Tag"/> internally from the
-    /// provided algorithm and purpose. Use the <see cref="CreatePublicKey(PublicKeyMemory, string, Tag, string?)"/>
-    /// overload when you already have a Tag or need additional Tag components.
+    /// This is a convenience method that resolves the verification function directly from
+    /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> without requiring a Tag.
     /// </para>
     /// </remarks>
     public static PublicKey CreatePublicKey(
         PublicKeyMemory publicKeyMemory,
         string keyIdentifier,
-        Context.CryptoAlgorithm algorithm,
-        Context.Purpose purpose)
+        CryptoAlgorithm algorithm,
+        Purpose purpose,
+        string? qualifier = null,
+        FrozenDictionary<string, object>? defaultContext = null)
     {
-        var tag = new Tag(new Dictionary<Type, object>
-        {
-            [typeof(Context.CryptoAlgorithm)] = algorithm,
-            [typeof(Context.Purpose)] = purpose
-        });
+        var verificationDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose, qualifier);
 
-        return CreatePublicKey(publicKeyMemory, keyIdentifier, tag);
+        return new PublicKey(publicKeyMemory, keyIdentifier, verificationDelegate, defaultContext);
     }
 
 
     /// <summary>
-    /// Creates a private key using algorithm and purpose parameters instead of a Tag.
+    /// Creates a private key using algorithm and purpose parameters directly.
     /// </summary>
     /// <param name="privateKeyMemory">The memory containing the private key material.</param>
     /// <param name="keyIdentifier">A unique identifier for the key.</param>
     /// <param name="algorithm">The cryptographic algorithm associated with the key.</param>
     /// <param name="purpose">The purpose of the key.</param>
+    /// <param name="qualifier">An optional qualifier for selecting among multiple implementations.</param>
+    /// <param name="defaultContext">Optional default context for signing operations.</param>
     /// <returns>A <see cref="PrivateKey"/> object.</returns>
     /// <remarks>
     /// <para>
-    /// This is a convenience method that constructs a <see cref="Tag"/> internally from the
-    /// provided algorithm and purpose. Use the <see cref="CreatePrivateKey(PrivateKeyMemory, string, Tag, string?)"/>
-    /// overload when you already have a Tag or need additional Tag components.
+    /// This is a convenience method that resolves the signing function directly from
+    /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> without requiring a Tag.
     /// </para>
     /// </remarks>
     public static PrivateKey CreatePrivateKey(
         PrivateKeyMemory privateKeyMemory,
         string keyIdentifier,
-        Context.CryptoAlgorithm algorithm,
-        Context.Purpose purpose)
+        CryptoAlgorithm algorithm,
+        Purpose purpose,
+        string? qualifier = null,
+        FrozenDictionary<string, object>? defaultContext = null)
     {
-        var tag = new Tag(new Dictionary<Type, object>
-        {
-            [typeof(Context.CryptoAlgorithm)] = algorithm,
-            [typeof(Context.Purpose)] = purpose
-        });
+        var signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose, qualifier);
 
-        return CreatePrivateKey(privateKeyMemory, keyIdentifier, tag);
+        return new PrivateKey(privateKeyMemory, keyIdentifier, signingDelegate, defaultContext);
     }
 
 
@@ -252,6 +223,15 @@ public static class CryptographicKeyFactory
     /// pattern, such as key derivation functions, key agreement operations, or format-specific
     /// transformations.
     /// </para>
+    /// <para>
+    /// Example usage for key agreement:
+    /// </para>
+    /// <code>
+    /// CryptographicKeyFactory.RegisterFunction(
+    ///     typeof(X25519KeyAgreement),
+    ///     BouncyCastleCryptographicFunctions.DeriveX25519SharedSecretAsync,
+    ///     "bouncy-castle");
+    /// </code>
     /// </remarks>
     public static void RegisterFunction<TFunction>(Type functionType, TFunction function, string? qualifier = null)
         where TFunction : Delegate
@@ -267,6 +247,11 @@ public static class CryptographicKeyFactory
     /// <param name="functionType">The type that identifies the function category.</param>
     /// <param name="qualifier">The qualifier used when registering the function.</param>
     /// <returns>The registered function, or <see langword="null"/> if not found.</returns>
+    /// <remarks>
+    /// <para>
+    /// Use this to retrieve custom functions registered with <see cref="RegisterFunction{TFunction}"/>.
+    /// </para>
+    /// </remarks>
     public static TFunction? GetFunction<TFunction>(Type functionType, string? qualifier = null)
         where TFunction : Delegate
     {
@@ -290,6 +275,16 @@ public static class CryptographicKeyFactory
     /// scenarios and is safe for concurrent access. Use this for passing algorithm-specific
     /// parameters to signing and verification delegates.
     /// </para>
+    /// <para>
+    /// Example usage:
+    /// </para>
+    /// <code>
+    /// var context = CryptographicKeyFactory.CreateParameters(
+    ///     ("hashAlgorithm", HashAlgorithmName.SHA256),
+    ///     ("padding", RSASignaturePadding.Pss));
+    /// 
+    /// var signature = await privateKey.SignAsync(data, pool, context);
+    /// </code>
     /// </remarks>
     public static FrozenDictionary<string, object> CreateParameters(params (string Key, object Value)[] parameters)
     {

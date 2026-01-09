@@ -10,12 +10,12 @@ namespace Verifiable.NSec
     {
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEd25519Keys(MemoryPool<byte> memoryPool)
         {
-            return CreateKeys(SignatureAlgorithm.Ed25519, memoryPool, Tag.Ed25519PublicKey, Tag.Ed25519PrivateKey);
+            return CreateKeys(SignatureAlgorithm.Ed25519, memoryPool, CryptoTags.Ed25519PublicKey, CryptoTags.Ed25519PrivateKey);
         }
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateX25519Keys(MemoryPool<byte> memoryPool)
         {
-            return CreateKeys(KeyAgreementAlgorithm.X25519, memoryPool, Tag.X25519PublicKey, Tag.X25519PrivateKey);
+            return CreateKeys(KeyAgreementAlgorithm.X25519, memoryPool, CryptoTags.X25519PublicKey, CryptoTags.X25519PrivateKey);
         }
 
         

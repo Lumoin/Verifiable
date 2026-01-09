@@ -3,30 +3,166 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="CsCheck" Version="4.5.0" />
-    <PackageVersion Include="dotNetRdf" Version="3.4.1" />
-    <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
+
+  <!--
+    Core library packages used by runtime/library projects.
+    Serialization libraries are restricted to serialization projects only via banned APIs analyzer.
+    The build system enforces that core libraries do not have hard dependencies on serialization libraries, making them interchangeable.
+  -->
+  <ItemGroup Label="Library">
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="3.12.0-beta1.25218.8" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.1.0" />
-    <PackageVersion Include="Microsoft.Sbom.Targets" Version="4.1.5" />    
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Sbom.Targets" Version="4.1.5" />
     <PackageVersion Include="Microsoft.TSS" Version="2.1.1" />
     <PackageVersion Include="ModelContextProtocol" Version="0.5.0-preview.1" />
-    <PackageVersion Include="MSTest.TestAdapter" Version="4.0.1" />
-    <PackageVersion Include="MSTest.TestFramework" Version="4.0.1" />
     <PackageVersion Include="NSec.Cryptography" Version="25.4.0" />
     <PackageVersion Include="Portable.BouncyCastle" Version="1.9.0" />
-    <PackageVersion Include="SharpFuzz" Version="2.2.0" />
-    <PackageVersion Include="SIL.ReleaseTasks" Version="3.1.1" />
-    <PackageVersion Include="SimpleBase" Version="5.6.0" />
+    <PackageVersion Include="SIL.ReleaseTasks" Version="3.2.0" />
     <PackageVersion Include="System.Collections.Immutable" Version="10.0.1" />
-    <PackageVersion Include="System.CommandLine" Version="2.0.1" />
-    <PackageVersion Include="System.Formats.Cbor" Version="10.0.1" />
+    <PackageVersion Include="System.Formats.Cbor" Version="10.0.2" />
     <PackageVersion Include="System.Net.Http.Json" Version="10.0.1" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.1" />
-    <PackageVersion Include="System.Text.Json" Version="10.0.1" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.2" />
+    <PackageVersion Include="System.Text.Json" Version="10.0.1" />    
+  </ItemGroup>
+
+  <!--
+    CLI tool packages used only by the Verifiable command-line interface.
+    These provide functionality like JSON-LD processing and encoding that core libraries do not
+    take a dependency on directly.
+  -->
+  <ItemGroup Label="CLI">
+    <PackageVersion Include="dotNetRdf" Version="3.4.1" />
+    <PackageVersion Include="SimpleBase" Version="5.6.0" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.2" />
+  </ItemGroup>
+
+  <!--
+    Test packages used only in *.Tests projects.
+    These are developer dependencies providing test frameworks and utilities. The test project
+    can use also any other packages in other projects.
+  -->
+  <ItemGroup Label="Test">
+    <PackageVersion Include="CsCheck" Version="4.5.0" />
+    <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.2.0" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.3.2" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="4.0.1" />
+    <PackageVersion Include="MSTest.TestFramework" Version="4.0.1" />
+  </ItemGroup>
+
+  <!--
+    Benchmark packages used only in *.Benchmarks projects.
+    These provide performance measurement and analysis capabilities.
+  -->
+  <ItemGroup Label="Benchmark">
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+  <!--
+    Build and tooling packages for development workflows.
+    These support fuzzing, release automation, and other build-time operations.
+  -->
+  <ItemGroup Label="BuildTooling">
+    <PackageVersion Include="SharpFuzz" Version="2.2.0" />    
     <PackageVersion Include="WinSharpFuzz" Version="1.0.0" />
   </ItemGroup>
+
+  <!--
+    Validates that labeled packages are only referenced in appropriate projects.
+    Runs after package references are collected but before compilation begins.
+    Skips validation during design-time builds for better IDE performance.
+  -->
+  <Target Name="ValidatePackageUsage" 
+          AfterTargets="CollectPackageReferences" 
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    
+    <PropertyGroup>
+      <!--Determine project type based on naming convention.-->
+      <_IsTestProject Condition="$(MSBuildProjectName.EndsWith('.Tests'))">true</_IsTestProject>
+      <_IsBenchmarkProject Condition="$(MSBuildProjectName.EndsWith('.Benchmarks'))">true</_IsBenchmarkProject>
+      <_IsCliProject Condition="$(MSBuildProjectName) == 'Verifiable'">true</_IsCliProject>
+      <_IsLibraryProject Condition="'$(_IsTestProject)' != 'true' AND '$(_IsBenchmarkProject)' != 'true' AND '$(_IsCliProject)' != 'true'">true</_IsLibraryProject>
+    </PropertyGroup>
+
+    <!--
+      Validate that library projects don't reference scoped packages.
+      Reads package restrictions directly from Directory.Packages.props ItemGroup labels.
+    -->
+    <ValidateScopedPackages
+      Condition="'$(_IsLibraryProject)' == 'true' AND '@(PackageReference)' != ''"
+      ProjectName="$(MSBuildProjectName)"
+      PackageReferences="@(PackageReference)"
+      DirectoryPackagesPropsPath="$(MSBuildThisFileFullPath)" />
+  </Target>
+
+  <!--Inline Roslyn task for validating package references. Compiled once per build session and cached in memory.-->
+  <UsingTask TaskName="ValidateScopedPackages" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <ProjectName Required="true" />
+      <PackageReferences ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <DirectoryPackagesPropsPath Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Using Namespace="System.Xml.Linq" />
+      <Code Type="Method" Language="cs">
+        <![CDATA[
+        public override bool Execute()
+        {
+            //Early exit if no package references.
+            if(PackageReferences == null || PackageReferences.Length == 0)
+            {
+                return true;
+            }
+
+            //Parse Directory.Packages.props and extract labeled packages.
+            var doc = XDocument.Load(DirectoryPackagesPropsPath);
+            var nsUsed = doc.Root.Name.Namespace;
+            
+            var scopedPackages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);            
+            foreach(var itemGroup in doc.Descendants(nsUsed + "ItemGroup"))
+            {
+                var label = itemGroup.Attribute("Label")?.Value;
+                if(!string.IsNullOrEmpty(label) && label != "Library")
+                {
+                    foreach(var packageVersion in itemGroup.Elements(nsUsed + "PackageVersion"))
+                    {
+                        var packageName = packageVersion.Attribute("Include")?.Value;
+                        if(!string.IsNullOrEmpty(packageName))
+                        {
+                            scopedPackages[packageName] = label;
+                        }
+                    }
+                }
+            }
+
+            //Check for violations.
+            var violations = new List<string>();
+            foreach(var pkgRef in PackageReferences)
+            {
+                if(scopedPackages.TryGetValue(pkgRef.ItemSpec, out var label))
+                {
+                    violations.Add($"{pkgRef.ItemSpec} (Label: {label})");
+                }
+            }
+
+            if(violations.Count > 0)
+            {
+                Log.LogError(
+                    $"Restricted package(s) '{string.Join(", ", violations)}' " +
+                    $"referenced in library project '{ProjectName}'. " +
+                    "These packages should only be used in their designated project types.");
+                return false;
+            }
+
+            return true;
+        }
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
 </Project>

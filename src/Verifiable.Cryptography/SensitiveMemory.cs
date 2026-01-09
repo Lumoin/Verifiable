@@ -5,9 +5,6 @@ using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography;
 
-//
-// DUAL-DELEGATE DESIGN
-//
 // This library provides two parallel sets of cryptographic function delegates:
 //
 // +------------------------------------------------------------------+
