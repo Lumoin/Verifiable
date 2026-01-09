@@ -30,5 +30,11 @@ namespace Verifiable.Cryptography
         /// </summary>
         /// <remarks>Status: active.</remarks>
         public static readonly char Base64 = 'm';
+
+        /// <summary>
+        /// Base64Url. No padding.
+        /// </summary>
+        /// <remarks>Status: active.</remarks>
+        public static readonly char Base64Url = 'u';
     }
 }

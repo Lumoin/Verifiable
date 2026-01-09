@@ -24,8 +24,8 @@ namespace Verifiable.Cryptography;
 /// |              (CryptoFunctionRegistry.cs)                         |
 /// +------------------------------------------------------------------+
 /// | SigningDelegate, VerificationDelegate:                           |
-/// | - Use ReadOnlySpan&lt;byte&gt; for zero-allocation dispatch.     |
-/// | - Cannot be stored (span is stack-only).                         |
+/// | - Use ReadOnlyMemory&lt;byte&gt; for async safety.               |
+/// | - Can be stored and passed across async boundaries.              |
 /// | - Include FrozenDictionary context parameter.                    |
 /// | - Used by: Jws.SignAsync, CredentialJwsExtensions.               |
 /// +------------------------------------------------------------------+
@@ -47,8 +47,8 @@ namespace Verifiable.Cryptography;
 /// <list type="bullet">
 /// <item><description>
 /// <strong>Registry pattern</strong> resolves a function at call time, invokes it immediately,
-/// and discards it. <c>ReadOnlySpan</c> enables zero-allocation access to key bytes but cannot
-/// cross <c>await</c> boundaries or be stored in fields.
+/// and discards it. Functions return <see cref="Signature"/> which wraps the signature bytes
+/// with metadata about the algorithm used.
 /// </description></item>
 /// <item><description>
 /// <strong>Bound key pattern</strong> stores a function inside a <see cref="PublicKey"/> or
@@ -65,9 +65,9 @@ namespace Verifiable.Cryptography;
 /// ready-to-use key objects.
 /// </para>
 /// </remarks>
-public delegate ValueTask<IMemoryOwner<byte>> SigningDelegate(
-    ReadOnlySpan<byte> privateKeyBytes,
-    ReadOnlySpan<byte> dataToSign,
+public delegate ValueTask<Signature> SigningDelegate(
+    ReadOnlyMemory<byte> privateKeyBytes,
+    ReadOnlyMemory<byte> dataToSign,
     MemoryPool<byte> signaturePool,
     FrozenDictionary<string, object>? context = null);
 
@@ -81,9 +81,9 @@ public delegate ValueTask<IMemoryOwner<byte>> SigningDelegate(
 /// <param name="context">Optional context parameters for the verification operation.</param>
 /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
 public delegate ValueTask<bool> VerificationDelegate(
-    ReadOnlySpan<byte> dataToVerify,
-    ReadOnlySpan<byte> signature,
-    ReadOnlySpan<byte> publicKeyMaterial,
+    ReadOnlyMemory<byte> dataToVerify,
+    ReadOnlyMemory<byte> signature,
+    ReadOnlyMemory<byte> publicKeyMaterial,
     FrozenDictionary<string, object>? context = null);
 
 

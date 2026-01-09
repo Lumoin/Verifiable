@@ -1,5 +1,4 @@
-using Verifiable.Core.Cryptography;
-using Verifiable.Jose;
+using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Jose
@@ -39,7 +38,7 @@ namespace Verifiable.Tests.Jose
             var e = RsaExponent65537;
             var kty = "RSA";
             var n = "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw";
-            using var thumbPrintBytes = JoseUtilities.ComputeRsaThumbprint(e, kty, n);
+            using var thumbPrintBytes = JwkThumbprintUtilities.ComputeRsaThumbprint(e, kty, n);
 
             var thumbprint = TestSetup.Base64UrlEncoder(thumbPrintBytes.Memory.Span);
             Assert.AreEqual("NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs", thumbprint);
@@ -56,7 +55,7 @@ namespace Verifiable.Tests.Jose
             var kty = "OKP";
             var crv = "Ed25519";
             var x = "VCpo2LMLhn6iWku8MKvSLg2ZAoC-nlOyPVQaO3FxVeQ";
-            using var thumbPrintBytes = JoseUtilities.ComputeEdDsaThumbprint(crv, kty, x);
+            using var thumbPrintBytes = JwkThumbprintUtilities.ComputeEdDsaThumbprint(crv, kty, x);
 
             var thumbprint = TestSetup.Base64UrlEncoder(thumbPrintBytes.Memory.Span);
             Assert.AreEqual("_Qq0UL2Fq651Q0Fjd6TvnYE-faHiOpRlPVQcY_-tA4A", thumbprint);
@@ -70,7 +69,7 @@ namespace Verifiable.Tests.Jose
             var crv = "secp256k1";
             var x = "Z4Y3NNOxv0J6tCgqOBFnHnaZhJF6LdulT7z8A-2D5_8";
             var y = "i5a2NtJoUKXkLm6q8nOEu9WOkso1Ag6FTUT6k_LMnGk";
-            using var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
+            using var thumbPrintBytes = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
 
             var thumbprint = TestSetup.Base64UrlEncoder(thumbPrintBytes.Memory.Span);
             Assert.AreEqual("4SZ-StXrp5Yd4_4rxHVTCYTHyt4zyPfN1fIuYsm6k3A", thumbprint);
@@ -84,7 +83,7 @@ namespace Verifiable.Tests.Jose
             var e = RsaExponent65537;
             var kty = "RSA";
             var n = "omwsC1AqEk6whvxyOltCFWheSQvv1MExu5RLCMT4jVk9khJKv8JeMXWe3bWHatjPskdf2dlaGkW5QjtOnUKL742mvr4tCldKS3ULIaT1hJInMHHxj2gcubO6eEegACQ4QSu9LO0H-LM_L3DsRABB7Qja8HecpyuspW1Tu_DbqxcSnwendamwL52V17eKhlO4uXwv2HFlxufFHM0KmCJujIKyAxjD_m3q__IiHUVHD1tDIEvLPhG9Azsn3j95d-saIgZzPLhQFiKluGvsjrSkYU5pXVWIsV-B2jtLeeLC14XcYxWDUJ0qVopxkBvdlERcNtgF4dvW4X00EHj4vCljFw";
-            using var thumbPrintBytes = JoseUtilities.ComputeRsaThumbprint(e, kty, n);
+            using var thumbPrintBytes = JwkThumbprintUtilities.ComputeRsaThumbprint(e, kty, n);
 
             var thumbprint = TestSetup.Base64UrlEncoder(thumbPrintBytes.Memory.Span);
             Assert.AreEqual("n4cQ-I_WkHMcwXBJa7IHkYu8CMfdNcZKnKsOrnHLpFs", thumbprint);
@@ -98,10 +97,10 @@ namespace Verifiable.Tests.Jose
             var crv = "P-256";
             var x = "38M1FDts7Oea7urmseiugGW7tWc3mLpJh6rKe7xINZ8";
             var y = "nDQW6XZ7b_u2Sy9slofYLlG03sOEoug3I0aAPQ0exs4";
-            using var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
+            using var thumbPrintBytes = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
 
             var thumbprint = TestSetup.Base64UrlEncoder(thumbPrintBytes.Memory.Span);
-            var tbprint2 = System.Buffers.Text.Base64Url.EncodeToString(JoseUtilities.ComputeECThumbprint(crv, kty, x, y).Memory.Span);
+            var tbprint2 = System.Buffers.Text.Base64Url.EncodeToString(JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y).Memory.Span);
             Assert.AreEqual("_TKzHv2jFIyvdTGF1Dsgwngfdg3SH6TpDv0Ta1aOEkw", thumbprint);
             Assert.AreEqual(thumbprint, tbprint2);
         }
@@ -114,7 +113,7 @@ namespace Verifiable.Tests.Jose
             var crv = "P-384";
             var x = "GnLl6mDti7a2VUIZP5w6pcRX8q5nvEIgB3Q_5RI2p9F_QVsaAlDN7IG68Jn0dS_F";
             var y = "jq4QoAHKiIzezDp88s_cxSPXtuXYFliuCGndgU4Qp8l91xzD1spCmFIzQgVjqvcP";
-            using var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
+            using var thumbPrintBytes = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
 
             var thumbprint = TestSetup.Base64UrlEncoder(thumbPrintBytes.Memory.Span);
             Assert.AreEqual("8wgRfY3sWmzoeAL-78-oALNvNj67ZlQxd1ss_NX1hZY", thumbprint);
@@ -128,7 +127,7 @@ namespace Verifiable.Tests.Jose
             var crv = "P-521";
             var x = "AVlZG23LyXYwlbjbGPMxZbHmJpDSu-IvpuKigEN2pzgWtSo--Rwd-n78nrWnZzeDc187Ln3qHlw5LRGrX4qgLQ-y";
             var y = "ANIbFeRdPHf1WYMCUjcPz-ZhecZFybOqLIJjVOlLETH7uPlyG0gEoMWnIZXhQVypPy_HtUiUzdnSEPAylYhHBTX2";
-            using var thumbPrintBytes = JoseUtilities.ComputeECThumbprint(crv, kty, x, y);
+            using var thumbPrintBytes = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
 
             var thumbprint = TestSetup.Base64UrlEncoder(thumbPrintBytes.Memory.Span);
             Assert.AreEqual("NjQ6Y_ZMj6IUK_XkgCDwtKHlNTUTVjEYOWZtxhp1n-E", thumbprint);
