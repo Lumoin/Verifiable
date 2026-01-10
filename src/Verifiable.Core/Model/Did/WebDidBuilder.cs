@@ -163,7 +163,7 @@ namespace Verifiable.Core.Model.Did
                         //Create new context with the specified DID Core version.
                         var context = new Context
                         {
-                            Contexes = new List<object> { buildState.DidCoreVersion }
+                            Contexts = new List<object> { buildState.DidCoreVersion }
                         };
 
                         //Add any additional contexts.
@@ -171,7 +171,7 @@ namespace Verifiable.Core.Model.Did
                         {
                             foreach(var additionalContext in buildState.AdditionalContexts)
                             {
-                                context.Contexes.Add(additionalContext);
+                                context.Contexts.Add(additionalContext);
                             }
                         }
 

@@ -163,7 +163,7 @@ namespace Verifiable.Tests.Builders
                 cancellationToken: TestContext.CancellationToken);
 
             Assert.IsNotNull(docWithContext.Context, "JsonWithContext should have @context");
-            Assert.AreEqual(Context.DidCore10, docWithContext.Context.Contexes![0]);
+            Assert.AreEqual(Context.DidCore10, docWithContext.Context.Contexts![0]);
 
             //Test 3: JSON-LD - full semantic representation.
             var docJsonLd = await builder.BuildAsync(
@@ -176,9 +176,9 @@ namespace Verifiable.Tests.Builders
                 cancellationToken: TestContext.CancellationToken);
 
             Assert.IsNotNull(docJsonLd.Context, "JsonLd should have @context");
-            Assert.HasCount(2, docJsonLd.Context.Contexes!);
-            Assert.AreEqual(Context.DidCore11, docJsonLd.Context.Contexes![0]);
-            Assert.AreEqual("https://example.com/custom", docJsonLd.Context.Contexes[1]);
+            Assert.HasCount(2, docJsonLd.Context.Contexts!);
+            Assert.AreEqual(Context.DidCore11, docJsonLd.Context.Contexts![0]);
+            Assert.AreEqual("https://example.com/custom", docJsonLd.Context.Contexts[1]);
 
             //Verify all three have the same core structure.
             Assert.AreEqual(docWithoutContext.Id, docWithContext.Id);

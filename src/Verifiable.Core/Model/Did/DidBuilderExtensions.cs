@@ -19,7 +19,7 @@ public static class DidBuilderExtensions
     /// </summary>
     private static Context DefaultContext { get; } = new Context
     {
-        Contexes =
+        Contexts =
         [
             //This should be the first entry in the array.
             //See https://w3c-ccg.github.io/did-method-key/#document-creation-algorithm.

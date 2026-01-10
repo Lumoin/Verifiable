@@ -37,7 +37,7 @@ namespace Verifiable.Core.Model.Credentials
         /// </remarks>
         public static Context DefaultVc20Context { get; } = new Context
         {
-            Contexes = [CredentialsV2Context]
+            Contexts = [CredentialsV2Context]
         };
 
         /// <summary>

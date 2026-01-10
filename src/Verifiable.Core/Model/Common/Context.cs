@@ -20,7 +20,7 @@ namespace Verifiable.Core.Model.Common
     /// or the legacy <see cref="DidCore10"/>.
     /// </para>
     /// <para>
-    /// See <see href="https://www.w3.org/TR/json-ld11/#the-context">JSON-LD 1.1 ง3.1 The Context</see>.
+    /// See <see href="https://www.w3.org/TR/json-ld11/#the-context">JSON-LD 1.1 ยง3.1 The Context</see>.
     /// </para>
     /// </remarks>
     public sealed class Context
@@ -30,7 +30,7 @@ namespace Verifiable.Core.Model.Common
         /// Used for DID documents following the CID 1.0 specification.
         /// </summary>
         /// <remarks>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#json-ld-context">CID 1.0 ง4.2 JSON-LD context</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#json-ld-context">CID 1.0 ยง4.2 JSON-LD context</see>.
         /// </remarks>
         public static string Cid10 { get; } = "https://www.w3.org/ns/cid/v1";
 
@@ -39,7 +39,7 @@ namespace Verifiable.Core.Model.Common
         /// Must be the first context in any VC 2.0 credential or presentation.
         /// </summary>
         /// <remarks>
-        /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#contexts">VC Data Model 2.0 ง4.3 Contexts</see>.
+        /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#contexts">VC Data Model 2.0 ยง4.3 Contexts</see>.
         /// </remarks>
         public static string Credentials20 { get; } = "https://www.w3.org/ns/credentials/v2";
 
@@ -49,7 +49,7 @@ namespace Verifiable.Core.Model.Common
         /// </summary>
         /// <remarks>
         /// See <see href="https://www.w3.org/TR/vc-data-integrity/#contexts-and-vocabularies">
-        /// Data Integrity 1.0 ง2.4 Contexts and Vocabularies</see>.
+        /// Data Integrity 1.0 ยง2.4 Contexts and Vocabularies</see>.
         /// </remarks>
         public static string DataIntegrity20 { get; } = "https://w3id.org/security/data-integrity/v2";
 
@@ -63,7 +63,7 @@ namespace Verifiable.Core.Model.Common
         /// specification that supersedes DID-specific contexts.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/did-core/#json-ld">DID Core 1.0 ง6.3.2 JSON-LD</see>.
+        /// See <see href="https://www.w3.org/TR/did-core/#json-ld">DID Core 1.0 ยง6.3.2 JSON-LD</see>.
         /// </para>
         /// </remarks>
         public static string DidCore10 { get; } = "https://www.w3.org/ns/did/v1";
@@ -78,7 +78,7 @@ namespace Verifiable.Core.Model.Common
         /// Used when verification methods use the Multikey format.
         /// </summary>
         /// <remarks>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#Multikey">CID 1.0 ง2.2.2 Multikey</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#Multikey">CID 1.0 ยง2.2.2 Multikey</see>.
         /// </remarks>
         public static string Multikey10 { get; } = "https://w3id.org/security/multikey/v1";
 
@@ -95,7 +95,7 @@ namespace Verifiable.Core.Model.Common
         /// For DID documents, the first value should be <see cref="Cid10"/> or <see cref="DidCore10"/>.
         /// </para>
         /// </remarks>
-        public List<object>? Contexes { get; set; }
+        public List<object>? Contexts { get; set; }
 
         /// <summary>
         /// Additional inline context definitions.
