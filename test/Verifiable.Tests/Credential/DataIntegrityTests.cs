@@ -166,7 +166,7 @@ public sealed class DataIntegrityTests
 
         //Sign and verify signature.
         var privateKeyBytes = MultibaseSerializer.Decode(SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
-        PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, Tag.Ed25519PrivateKey);
+        PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
         var signature = await privateKeyMemory.SignAsync(hashData, BouncyCastleAlgorithms.SignEd25519Async, SensitiveMemoryPool<byte>.Shared);
         Assert.AreEqual(ExpectedSignatureHex, Convert.ToHexStringLower(signature.AsReadOnlySpan()), "Signature must match W3C test vector.");
@@ -196,10 +196,10 @@ public sealed class DataIntegrityTests
 
         //Verify the signature can be validated.
         var publicKeyBytes = MultibaseSerializer.Decode(PublicKeyMultibase, MulticodecHeaders.Ed25519PublicKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
-        PublicKeyMemory publicKeyMemory = new(publicKeyBytes, Tag.Ed25519PublicKey);
+        PublicKeyMemory publicKeyMemory = new(publicKeyBytes, CryptoTags.Ed25519PublicKey);
 
         var signatureBytes = MultibaseSerializer.Decode(proofValue, 0, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
-        var signatureToVerify = new Signature(signatureBytes, Tag.Ed25519Signature);
+        var signatureToVerify = new Signature(signatureBytes, CryptoTags.Ed25519Signature);
 
         bool isVerified = await publicKeyMemory.VerifyAsync(hashData, signatureToVerify, BouncyCastleAlgorithms.VerifyEd25519Async);
         Assert.IsTrue(isVerified, "Signature verification must succeed.");
@@ -225,8 +225,8 @@ public sealed class DataIntegrityTests
 
         var privateKeyBytes = MultibaseSerializer.Decode(SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
         var publicKeyBytes = MultibaseSerializer.Decode(PublicKeyMultibase, MulticodecHeaders.Ed25519PublicKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
-        PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, Tag.Ed25519PrivateKey);
-        PublicKeyMemory publicKeyMemory = new(publicKeyBytes, Tag.Ed25519PublicKey);
+        PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
+        PublicKeyMemory publicKeyMemory = new(publicKeyBytes, CryptoTags.Ed25519PublicKey);
 
         //Serialize credential to JSON for JWT payload.
         var credentialJson = JsonSerializer.Serialize(UnsignedCredential, JsonOptions);
@@ -247,7 +247,7 @@ public sealed class DataIntegrityTests
 
         var verificationInput = Encoding.UTF8.GetBytes($"{parts[0]}.{parts[1]}");
         using var signatureBytesFromJwt = TestSetup.Base64UrlDecoder(parts[2], SensitiveMemoryPool<byte>.Shared);
-        var signatureToVerify = new Signature(signatureBytesFromJwt, Tag.Ed25519Signature);
+        var signatureToVerify = new Signature(signatureBytesFromJwt, CryptoTags.Ed25519Signature);
 
         bool isValid = await publicKeyMemory.VerifyAsync(verificationInput, signatureToVerify, BouncyCastleAlgorithms.VerifyEd25519Async);
         Assert.IsTrue(isValid, "JWT signature verification must succeed.");

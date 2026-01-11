@@ -12,7 +12,8 @@
   </PropertyGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />    
+    <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
+    <ProjectReference Include="..\Verifiable.JsonPointer\Verifiable.JsonPointer.csproj" />    
   </ItemGroup>
 
   <ItemGroup>

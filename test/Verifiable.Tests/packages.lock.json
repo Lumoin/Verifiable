@@ -848,7 +848,8 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "Verifiable.JCose": "[0.0.0, )"
+          "Verifiable.JCose": "[0.0.0, )",
+          "Verifiable.JsonPointer": "[0.0.0, )"
         }
       },
       "verifiable.cryptography": {
@@ -866,6 +867,9 @@
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )"
         }
+      },
+      "verifiable.jsonpointer": {
+        "type": "Project"
       },
       "verifiable.microsoft": {
         "type": "Project",

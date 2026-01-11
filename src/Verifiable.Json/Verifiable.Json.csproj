@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
   <PropertyGroup>
     <Title>JSON serialization for Verifiable credentials and JOSE types.</Title>
     <Description>System.Text.Json converters and serialization support for Verifiable.JCose types. Provides JSON serialization for JWK keys, SD-JWT disclosures, and related cryptographic structures. Designed for AOT compatibility and trimming safety.</Description>

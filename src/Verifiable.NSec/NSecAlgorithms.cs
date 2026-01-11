@@ -34,7 +34,7 @@ namespace Verifiable.NSec
             signature.CopyTo(memoryPooledSignature.Memory.Span);
 
             //No CA2000 violation: transfer ownership to caller via ValueTask<Signature>.
-            return ValueTask.FromResult(new Signature(memoryPooledSignature, Tag.Ed25519Signature));
+            return ValueTask.FromResult(new Signature(memoryPooledSignature, CryptoTags.Ed25519Signature));
         }
 
 

@@ -15,22 +15,22 @@ namespace Verifiable.BouncyCastle
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256Keys(MemoryPool<byte> memoryPool)
         {
-            return CreateEcKeys("P-256", memoryPool);
+            return CreateEcKeys("secp256r1", CryptoTags.P256PublicKey, CryptoTags.P256PrivateKey, memoryPool);
         }
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384Keys(MemoryPool<byte> memoryPool)
         {
-            return CreateEcKeys("P-384", memoryPool);
+            return CreateEcKeys("secp384r1", CryptoTags.P384PublicKey, CryptoTags.P384PrivateKey, memoryPool);
         }
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521Keys(MemoryPool<byte> memoryPool)
         {
-            return CreateEcKeys("P-521", memoryPool);
+            return CreateEcKeys("secp521r1", CryptoTags.P521PublicKey, CryptoTags.P521PrivateKey, memoryPool);
         }
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateSecp256k1Keys(MemoryPool<byte> memoryPool)
         {
-            return CreateEcKeys("secp256k1", memoryPool);
+            return CreateEcKeys("secp256k1", CryptoTags.Secp256k1PublicKey, CryptoTags.Secp256k1PrivateKey, memoryPool);
         }
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa2048Keys(MemoryPool<byte> memoryPool)
@@ -54,8 +54,8 @@ namespace Verifiable.BouncyCastle
             var privateKey = ((Ed25519PrivateKeyParameters)keyPair.Private).GetEncoded();
 
             // Clear the sensitive data from memory as soon as possible
-            var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKey, memoryPool), Tag.Ed25519PublicKey);
-            var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKey, memoryPool), Tag.Ed25519PrivateKey);
+            var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKey, memoryPool), CryptoTags.Ed25519PublicKey);
+            var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKey, memoryPool), CryptoTags.Ed25519PrivateKey);
             Array.Clear(publicKey, 0, publicKey.Length);
             Array.Clear(privateKey, 0, privateKey.Length);
 
@@ -73,8 +73,8 @@ namespace Verifiable.BouncyCastle
             var privateKey = ((X25519PrivateKeyParameters)keyPair.Private).GetEncoded();
 
             // Clear the sensitive data from memory as soon as possible
-            var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKey, memoryPool), Tag.X25519PublicKey);
-            var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKey, memoryPool), Tag.X25519PrivateKey);
+            var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKey, memoryPool), CryptoTags.X25519PublicKey);
+            var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKey, memoryPool), CryptoTags.X25519PrivateKey);
             Array.Clear(publicKey, 0, publicKey.Length);
             Array.Clear(privateKey, 0, privateKey.Length);
 
@@ -82,21 +82,13 @@ namespace Verifiable.BouncyCastle
         }
 
 
-        private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEcKeys(string namedCurve, MemoryPool<byte> memoryPool)
+        private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEcKeys(
+            string secCurveName,
+            Tag publicKeyTag,
+            Tag privateKeyTag,
+            MemoryPool<byte> memoryPool)
         {
-            static (Tag PublicKeyTag, Tag PrivateKeyTag) GetTags(string namedCurve)
-            {
-                return namedCurve switch
-                {
-                    "P-256" => (Tag.P256PublicKey, Tag.P256PrivateKey),
-                    "P-384" => (Tag.P384PublicKey, Tag.P384PrivateKey),
-                    "P-521" => (Tag.P521PublicKey, Tag.P521PrivateKey),
-                    "secp256k1" => (Tag.Secp256k1PublicKey, Tag.Secp256k1PrivateKey),
-                    _ => throw new NotSupportedException($"The curve {namedCurve} is not supported.")
-                };
-            }
-
-            var curve = SecNamedCurves.GetByName(namedCurve);
+            var curve = SecNamedCurves.GetByName(secCurveName);
             var domainParams = new ECDomainParameters(curve.Curve, curve.G, curve.N, curve.H, curve.GetSeed());
             var generator = new ECKeyPairGenerator();
             var random = new SecureRandom();
@@ -109,7 +101,6 @@ namespace Verifiable.BouncyCastle
 
             byte[] compressedPublicKey = publicKeyParam.Q.GetEncoded(compressed: true);
             byte[] privateKeyBytes = privateKeyParam.D.ToByteArray();
-            var (publicKeyTag, privateKeyTag) = GetTags(namedCurve);
             var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(compressedPublicKey, memoryPool), publicKeyTag);
             var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool), privateKeyTag);
             Array.Clear(compressedPublicKey, 0, compressedPublicKey.Length);
@@ -125,8 +116,8 @@ namespace Verifiable.BouncyCastle
             {
                 return keySizeInBits switch
                 {
-                    2048 => (Tag.Rsa2048PublicKey, Tag.Rsa2048PrivateKey),
-                    4096 => (Tag.Rsa4096PublicKey, Tag.Rsa4096PrivateKey),
+                    2048 => (CryptoTags.Rsa2048PublicKey, CryptoTags.Rsa2048PrivateKey),
+                    4096 => (CryptoTags.Rsa4096PublicKey, CryptoTags.Rsa4096PrivateKey),
                     _ => throw new NotSupportedException($"The RSA key size {keySizeInBits} bits is not supported.")
                 };
             }

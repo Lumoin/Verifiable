@@ -48,13 +48,13 @@ namespace Verifiable.Tests.Cryptography
                 TestSetup.Base58Decoder,
                 SensitiveMemoryPool<byte>.Shared);
 
-            PublicKeyMemory publicKeyMemory = new(multibaseDecodedPublicKey, Tag.Ed25519PublicKey);
-            PrivateKeyMemory privateKeyMemory = new(multibaseDecodedPrivateKey, Tag.Ed25519PrivateKey);
+            PublicKeyMemory publicKeyMemory = new(multibaseDecodedPublicKey, CryptoTags.Ed25519PublicKey);
+            PrivateKeyMemory privateKeyMemory = new(multibaseDecodedPrivateKey, CryptoTags.Ed25519PrivateKey);
 
             var proofValueBytes = Base58.Bitcoin.Decode(Vc0ProofValue.AsSpan()[1..]);
             var pooledProofSignatureBytes = SensitiveMemoryPool<byte>.Shared.Rent(proofValueBytes.Length);
             proofValueBytes.CopyTo(pooledProofSignatureBytes.Memory.Span);
-            var proofSignature = new Signature(pooledProofSignatureBytes, Tag.Ed25519Signature);
+            var proofSignature = new Signature(pooledProofSignatureBytes, CryptoTags.Ed25519Signature);
 
             string canonicalizeDataWithoutProof = CanonicalVc0Document;
             var canonicalizedDataWithoutProofHashedData = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalizeDataWithoutProof));

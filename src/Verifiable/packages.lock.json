@@ -346,8 +346,8 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "SimpleBase": "[5.6.0, )",
-          "Verifiable.JCose": "[0.0.0, )"
+          "Verifiable.JCose": "[0.0.0, )",
+          "Verifiable.JsonPointer": "[0.0.0, )"
         }
       },
       "verifiable.cryptography": {
@@ -358,6 +358,9 @@
         "dependencies": {
           "Verifiable.Cryptography": "[0.0.0, )"
         }
+      },
+      "verifiable.jsonpointer": {
+        "type": "Project"
       },
       "verifiable.tpm": {
         "type": "Project",
@@ -370,12 +373,6 @@
         "requested": "[2.1.1, )",
         "resolved": "2.1.1",
         "contentHash": "87DBN+4ANSFO8TDRmFjjTBl6PL7tmrfofmxki4LUnE34gOdyQiBfJK/X1QSu0UfCGUtpoBVv/tD985s4FDpKiA=="
-      },
-      "SimpleBase": {
-        "type": "CentralTransitive",
-        "requested": "[5.6.0, )",
-        "resolved": "5.6.0",
-        "contentHash": "1nNr/DCvcxTrQzN1gUnYzFpLkbAKcFYhF/aMK34jVxrPUjMwL/J3KNEp89M0WaW2k9FUpacxRe4BmjFFjOv3zw=="
       }
     }
   }
