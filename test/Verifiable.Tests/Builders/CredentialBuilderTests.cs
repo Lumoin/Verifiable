@@ -358,8 +358,8 @@ public sealed class CredentialBuilderTests
             cancellationToken: TestContext.CancellationToken);
 
         Assert.IsNotNull(credential.Context);
-        Assert.IsNotNull(credential.Context.Contexes);
-        Assert.Contains(CredentialConstants.CredentialsV2Context, credential.Context.Contexes);
+        Assert.IsNotNull(credential.Context.Contexts);
+        Assert.Contains(CredentialConstants.CredentialsV2Context, credential.Context.Contexts);
     }
 
 

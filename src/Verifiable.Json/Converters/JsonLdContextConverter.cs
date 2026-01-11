@@ -26,7 +26,7 @@ namespace Verifiable.Json.Converters
         {
             //The DID JSON-LD context starts either with a single string, array of strings, array of objects and strings
             //or is an object that can contain whatever elements.
-            var context = new Context { Contexes = new List<object>(), AdditionalData = new Dictionary<string, object>() };
+            var context = new Context { Contexts = new List<object>(), AdditionalData = new Dictionary<string, object>() };
             var tokenType = reader.TokenType;
             if(reader.TokenType == JsonTokenType.PropertyName && reader.ValueTextEquals("@context"))
             {
@@ -43,7 +43,7 @@ namespace Verifiable.Json.Converters
                 var ctx = reader.GetString();
                 if(ctx != null)
                 {
-                    context.Contexes.Add(ctx);
+                    context.Contexts.Add(ctx);
                 }
 
                 return context;
@@ -57,7 +57,7 @@ namespace Verifiable.Json.Converters
                     for(int i = 0; i < strList.Length; i++)
                     {
                         var s = strList[i];
-                        context.Contexes.Add(s);
+                        context.Contexts.Add(s);
                     }
                 }
 
@@ -97,22 +97,22 @@ namespace Verifiable.Json.Converters
         public override void Write(Utf8JsonWriter writer, Context value, JsonSerializerOptions options)
         {
             //writer.WritePropertyName("@context");
-            if(value?.Contexes?.Count == 1)
+            if(value?.Contexts?.Count == 1)
             {
-                writer.WriteStringValue((string)value.Contexes.ElementAt(0));
+                writer.WriteStringValue((string)value.Contexts.ElementAt(0));
             }
-            else if(value?.Contexes?.Count > 1)
+            else if(value?.Contexts?.Count > 1)
             {
                 writer.WriteStartArray();
-                for(int i = 0; i < value?.Contexes.Count; ++i)
+                for(int i = 0; i < value?.Contexts.Count; ++i)
                 {
-                    if (value.Contexes.ElementAt(i) is string)
+                    if (value.Contexts.ElementAt(i) is string)
                     {
-                        writer.WriteStringValue((string)value.Contexes.ElementAt(i));
+                        writer.WriteStringValue((string)value.Contexts.ElementAt(i));
                     }
                     else
                     {
-                        JsonSerializer.Serialize(writer, value.Contexes.ElementAt(i));
+                        JsonSerializer.Serialize(writer, value.Contexts.ElementAt(i));
                     }
                 }
 

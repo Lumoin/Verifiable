@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Did
     {
         public static Claim ValidateJsonLdUriAsFirst(Context obj)
         {            
-            var firstContext = obj.Contexes?[0] as string;            
+            var firstContext = obj.Contexts?[0] as string;            
             bool isSuccess = firstContext?.Equals(DidCoreConstants.JsonLdContextFirstUri, StringComparison.OrdinalIgnoreCase) == true;
 
             return new Claim(ClaimId.DidCoreJsonLdUriAsFirst, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure);
@@ -33,7 +33,7 @@ namespace Verifiable.Tests.Did
             var faultyValidationResult = DidCoreValidation.ValidateJsonLdUriAsFirst(faultyContext);
             Assert.AreNotEqual(ClaimOutcome.Success, faultyValidationResult.Outcome, "Faulty context validation should fail.");                        
             
-            var correctContext = new Context() { Contexes = [DidCoreConstants.JsonLdContextFirstUri] };            
+            var correctContext = new Context() { Contexts = [DidCoreConstants.JsonLdContextFirstUri] };            
             var correctValidationResult = DidCoreValidation.ValidateJsonLdUriAsFirst(correctContext);
             Assert.AreEqual(ClaimOutcome.Success, correctValidationResult.Outcome, "Correct context validation should not fail.");            
         }
