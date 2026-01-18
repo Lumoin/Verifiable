@@ -54,6 +54,22 @@ public static class VerifiableCliTestHelpers
 
 
     /// <summary>
+    /// Determines whether the input starts with a System.CommandLine built-in option prefix.
+    /// These are framework-provided options (help, version) that parse without errors.
+    /// Includes both Unix-style (-h, --help) and Windows-style (/h, /?) prefixes.
+    /// </summary>
+    public static bool StartsWithSystemCommandLineBuiltInOption(string input)
+    {
+        return input.StartsWith("-h", StringComparison.OrdinalIgnoreCase) ||
+               input.StartsWith("-?", StringComparison.Ordinal) ||
+               input.StartsWith("--help", StringComparison.OrdinalIgnoreCase) ||
+               input.StartsWith("--version", StringComparison.OrdinalIgnoreCase) ||
+               input.StartsWith("/h", StringComparison.OrdinalIgnoreCase) ||
+               input.StartsWith("/?", StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
     /// Builds a testable root command that mirrors the structure in Program.cs.
     /// </summary>
     public static RootCommand BuildTestableRootCommand(

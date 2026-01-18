@@ -1,16 +1,15 @@
-﻿using System.Buffers;
+﻿using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Jose;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.Flows;
+namespace Verifiable.Tests.FlowTests;
 
 /// <summary>
 /// End-to-end flow tests for JOSE-secured Verifiable Credentials.
@@ -130,7 +129,7 @@ public sealed class JoseCredentialIssuanceFlowTests
             cancellationToken: TestContext.CancellationToken);
 
         //Sign as JWS.
-        string jws = await unsignedCredential.SignJwsAsync(
+        JwsMessage jwsMessage = await unsignedCredential.SignJwsAsync(
             testData.KeyPair.PrivateKey,
             issuerVerificationMethodId,
             CredentialSerializer,
@@ -138,6 +137,8 @@ public sealed class JoseCredentialIssuanceFlowTests
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken);
+
+        string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         //Verify the JWS structure.
         Assert.IsNotNull(jws);
@@ -191,7 +192,7 @@ public sealed class JoseCredentialIssuanceFlowTests
             additionalTypes: [AlumniCredentialType],
             cancellationToken: TestContext.CancellationToken);
 
-        string jws = await unsignedCredential.SignJwsAsync(
+        JwsMessage jwsMessage = await unsignedCredential.SignJwsAsync(
             testData.KeyPair.PrivateKey,
             issuerVerificationMethodId,
             CredentialSerializer,
@@ -199,6 +200,8 @@ public sealed class JoseCredentialIssuanceFlowTests
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken);
+
+        string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         //Tamper with the payload by modifying the JWS string.
         string[] parts = jws.Split('.');
@@ -250,7 +253,7 @@ public sealed class JoseCredentialIssuanceFlowTests
             additionalTypes: [AlumniCredentialType],
             cancellationToken: TestContext.CancellationToken);
 
-        string jws = await unsignedCredential.SignJwsAsync(
+        JwsMessage jwsMessage = await unsignedCredential.SignJwsAsync(
             testData.KeyPair.PrivateKey,
             issuerVerificationMethodId,
             CredentialSerializer,
@@ -258,6 +261,8 @@ public sealed class JoseCredentialIssuanceFlowTests
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken);
+
+        string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         //Decode and verify header.
         string[] parts = jws.Split('.');
@@ -309,7 +314,7 @@ public sealed class JoseCredentialIssuanceFlowTests
             cancellationToken: TestContext.CancellationToken);
 
         //Use the non-JSON-LD media type.
-        string jws = await unsignedCredential.SignJwsAsync(
+        JwsMessage jwsMessage = await unsignedCredential.SignJwsAsync(
             testData.KeyPair.PrivateKey,
             issuerVerificationMethodId,
             CredentialSerializer,
@@ -318,6 +323,8 @@ public sealed class JoseCredentialIssuanceFlowTests
             SensitiveMemoryPool<byte>.Shared,
             mediaType: WellKnownMediaTypes.Jwt.VcJwt,
             cancellationToken: TestContext.CancellationToken);
+
+        string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         //Decode and verify header has the custom media type.
         string[] parts = jws.Split('.');

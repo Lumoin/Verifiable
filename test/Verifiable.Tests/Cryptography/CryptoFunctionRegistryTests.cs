@@ -19,8 +19,8 @@ namespace Verifiable.Tests.Cryptography
             var privateKey = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
             var publicKey = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.P256, Purpose.Verification);
 
-            var signature = await privateKey(compressedKeys.PrivateKey.AsReadOnlySpan(), TestData, SensitiveMemoryPool<byte>.Shared);
-            bool isVerified = await publicKey(TestData, signature.Memory.Span, compressedKeys.PublicKey.AsReadOnlySpan());
+            var signature = await privateKey(compressedKeys.PrivateKey.AsReadOnlyMemory(), TestData, SensitiveMemoryPool<byte>.Shared);
+            bool isVerified = await publicKey(TestData, signature.AsReadOnlyMemory(), compressedKeys.PublicKey.AsReadOnlyMemory());
             Assert.IsTrue(isVerified);
         }
 
@@ -47,8 +47,8 @@ namespace Verifiable.Tests.Cryptography
             var privateKey = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.Rsa2048, Purpose.Signing);
             var publicKey = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.Rsa2048, Purpose.Verification);
 
-            var signature = await privateKey(keys.PrivateKey.AsReadOnlySpan(), TestData, SensitiveMemoryPool<byte>.Shared);
-            bool isVerified = await publicKey(TestData, signature.Memory.Span, keys.PublicKey.AsReadOnlySpan());
+            var signature = await privateKey(keys.PrivateKey.AsReadOnlyMemory(), TestData, SensitiveMemoryPool<byte>.Shared);
+            bool isVerified = await publicKey(TestData, signature.AsReadOnlyMemory(), keys.PublicKey.AsReadOnlyMemory());
             Assert.IsTrue(isVerified);
         }
     }

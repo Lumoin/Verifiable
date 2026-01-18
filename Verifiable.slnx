@@ -45,6 +45,7 @@
     <Project Path="src/Verifiable.DecentralizedWebNode/Verifiable.DecentralizedWebNode.csproj" />
     <Project Path="src/Verifiable.JCose/Verifiable.JCose.csproj" />
     <Project Path="src/Verifiable.Json/Verifiable.Json.csproj" Id="cf528db6-4a4f-4738-991d-21720336c535" />
+    <Project Path="src/Verifiable.JsonPointer/Verifiable.JsonPointer.csproj" Id="e2ec613b-f5d9-4d9f-8657-e047c5a6f7e5" />
     <Project Path="src/Verifiable.Microsoft/Verifiable.Microsoft.csproj" />
     <Project Path="src/Verifiable.NSec/Verifiable.NSec.csproj" />
     <Project Path="src/Verifiable.OAuth/Verifiable.OAuth.csproj" Id="96704fa5-df6c-47f4-9d51-5300c6b988e6" />

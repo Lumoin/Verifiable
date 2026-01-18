@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Common;
-using Verifiable.Core.Model.Proofs;
+using Verifiable.Core.Model.DataIntegrity;
 
 namespace Verifiable.Core.Model.Credentials;
 /// <summary>
@@ -144,7 +144,7 @@ public class VerifiableCredential: IEquatable<VerifiableCredential>
     /// VC Data Model 2.0 §4.9 Validity Period</see>.
     /// </para>
     /// </remarks>
-    public DateTime? ValidFrom { get; set; }
+    public string? ValidFrom { get; set; }
 
     /// <summary>
     /// The date and time when the credential expires.
@@ -159,7 +159,7 @@ public class VerifiableCredential: IEquatable<VerifiableCredential>
     /// VC Data Model 2.0 §4.9 Validity Period</see>.
     /// </para>
     /// </remarks>
-    public DateTime? ValidUntil { get; set; }
+    public string? ValidUntil { get; set; }
 
     /// <summary>
     /// Status information for checking revocation or suspension.

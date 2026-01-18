@@ -27,7 +27,7 @@ namespace Verifiable.Tests.TestDataProviders
         /// <summary>
         /// Secp256k1 key material by Microsoft.
         /// </summary>
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> Secp256k1KeyMaterial { get; } = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, MicrosoftKeyMaterialCreator.CreateSecp256k1Keys);
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> Secp256k1KeyMaterial { get; } = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, BouncyCastleKeyMaterialCreator.CreateSecp256k1Keys);
 
         /// <summary>
         /// RSA 2048 key material by Microsoft.
@@ -42,11 +42,11 @@ namespace Verifiable.Tests.TestDataProviders
         /// <summary>
         /// Ed25519 key material by BouncyCastle.
         /// </summary>
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> Ed25519KeyMaterial { get; } = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, BouncyCastleKeyCreator.CreateEd25519Keys);
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> Ed25519KeyMaterial { get; } = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, BouncyCastleKeyMaterialCreator.CreateEd25519Keys);
 
         /// <summary>
         /// X25519 key material by BouncyCastle.
         /// </summary>
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> X25519KeyMaterial { get; } = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, BouncyCastleKeyCreator.CreateX25519Keys);
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> X25519KeyMaterial { get; } = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, BouncyCastleKeyMaterialCreator.CreateX25519Keys);
     }
 }

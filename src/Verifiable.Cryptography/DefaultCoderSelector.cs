@@ -34,7 +34,7 @@ public delegate DecodeDelegate DecoderSelector(Type keyFormatType);
 /// <code>
 /// +------------------------------------------------------------------+
 /// |                    Key Format Layer                              |
-/// |  (JWK, DID Document, X.509, COSE_Key, etc.)                     |
+/// |  (JWK, DID Document, X.509, COSE_Key, etc.)                      |
 /// +-----------------------------+------------------------------------+
 ///                               |
 ///                               | Needs to encode/decode key bytes

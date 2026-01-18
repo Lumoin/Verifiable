@@ -121,7 +121,7 @@ namespace Verifiable.Tests.Builders
         public async ValueTask CreateAndPerformKeyExchangeUsingDidKey()
         {
             //Generate X25519 key pair for key agreement.
-            var keyPair = BouncyCastleKeyCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keyPair = BouncyCastleKeyMaterialCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared);
 
             //Create DID document with the key agreement key.
             var didDocument = await KeyDidBuilder.BuildAsync(
@@ -135,17 +135,17 @@ namespace Verifiable.Tests.Builders
             Assert.IsNotNull(keyAgreementMethod, "Key agreement method should be found by ID.");
 
             //Generate another X25519 key pair for the "other party".
-            var otherPartyKeyPair = BouncyCastleKeyCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var otherPartyKeyPair = BouncyCastleKeyMaterialCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared);
 
             //Perform key agreement from both sides.
             using var sharedSecret1 = await BouncyCastleCryptographicFunctions.DeriveX25519SharedSecretAsync(
-                keyPair.PrivateKey.AsReadOnlySpan(),
-                otherPartyKeyPair.PublicKey.AsReadOnlySpan(),
+                keyPair.PrivateKey.AsReadOnlyMemory(),
+                otherPartyKeyPair.PublicKey.AsReadOnlyMemory(),
                 SensitiveMemoryPool<byte>.Shared);
 
             using var sharedSecret2 = await BouncyCastleCryptographicFunctions.DeriveX25519SharedSecretAsync(
-                otherPartyKeyPair.PrivateKey.AsReadOnlySpan(),
-                keyPair.PublicKey.AsReadOnlySpan(),
+                otherPartyKeyPair.PrivateKey.AsReadOnlyMemory(),
+                keyPair.PublicKey.AsReadOnlyMemory(),
                 SensitiveMemoryPool<byte>.Shared);
 
             //Verify both parties derived the same shared secret.
@@ -184,8 +184,8 @@ namespace Verifiable.Tests.Builders
                 if(algorithm.Equals(CryptoAlgorithm.X25519))
                 {
                     return await BouncyCastleCryptographicFunctions.DeriveX25519SharedSecretAsync(
-                        otherPartyPrivateKey.AsReadOnlySpan(),
-                        publicKeyOwner.Memory.Span,
+                        otherPartyPrivateKey.AsReadOnlyMemory(),
+                        publicKeyOwner.Memory,
                         memoryPool);
                 }
 

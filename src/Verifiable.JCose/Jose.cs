@@ -10,8 +10,15 @@ namespace Verifiable.JCose;
 /// </summary>
 /// <typeparam name="TJwtPart">The type of JWT part.</typeparam>
 /// <param name="part">The JWT part.</param>
-/// <returns>Byte representation of the <paramref name="part"/>.</returns>
-public delegate ReadOnlySpan<byte> JwtPartEncoder<in TJwtPart>(TJwtPart part);
+/// <returns>Tagged memory containing the byte representation of the <paramref name="part"/>.</returns>
+/// <remarks>
+/// <para>
+/// The returned <see cref="TaggedMemory{T}"/> wraps the serialized bytes along with
+/// metadata identifying the buffer kind (header vs payload). This avoids copying
+/// while providing context for the opaque bytes.
+/// </para>
+/// </remarks>
+public delegate TaggedMemory<byte> JwtPartEncoder<in TJwtPart>(TJwtPart part);
 
 
 /// <summary>
@@ -31,6 +38,20 @@ public readonly record struct JoseKeyContext<TJwtPart>(TJwtPart Header, TJwtPart
 
 
 /// <summary>
+/// Result of JWS verification including decoded header and payload.
+/// </summary>
+/// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
+/// <param name="IsValid">Whether the signature is valid.</param>
+/// <param name="Header">The decoded header.</param>
+/// <param name="Payload">The decoded payload.</param>
+public readonly record struct JwsVerificationResult<TJwtPart>(bool IsValid, TJwtPart Header, TJwtPart Payload);
+
+
+// Note: JwtHeaderSerializer and JwtHeaderDeserializer are defined in
+// Verifiable.Core.Model.Credentials.CredentialSerializationDelegates
+
+
+/// <summary>
 /// JWS (JSON Web Signature) operations using secure key memory abstractions.
 /// </summary>
 /// <remarks>
@@ -39,28 +60,27 @@ public readonly record struct JoseKeyContext<TJwtPart>(TJwtPart Header, TJwtPart
 /// </para>
 /// <list type="bullet">
 /// <item><description>
-/// <strong>Registry-based</strong> - Uses <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
+/// <strong>Registry-based</strong>: Uses <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
 /// to resolve signing/verification functions from the key's <see cref="Tag"/>.
 /// </description></item>
 /// <item><description>
-/// <strong>Explicit function</strong> - Caller provides signing/verification functions directly,
+/// <strong>Explicit function</strong>: Caller provides signing/verification functions directly,
 /// useful for testing or custom cryptographic backends.
 /// </description></item>
 /// <item><description>
-/// <strong>Resolver/Binder</strong> - Uses <see cref="KeyMaterialResolver{TResult, TContext, TState}"/>
+/// <strong>Resolver/Binder</strong>: Uses <see cref="KeyMaterialResolver{TResult, TContext, TState}"/>
 /// and <see cref="KeyMaterialBinder{TInput, TResult, TState}"/> for complex key resolution scenarios.
 /// </description></item>
 /// </list>
 /// <para>
-/// All patterns use <see cref="PrivateKeyMemory"/> and <see cref="PublicKeyMemory"/> to ensure
-/// key material is never directly exposed, supporting both software keys and hardware security
-/// modules (HSM/TPM) where keys cannot be extracted.
+/// All methods return <see cref="JwsMessage"/> POCOs that can be serialized to any format
+/// using <see cref="JwsSerialization"/>.
 /// </para>
 /// </remarks>
 public static class Jws
 {
     /// <summary>
-    /// Creates a JWS compact serialization using registry-resolved signing function.
+    /// Creates a JWS using registry-resolved signing function.
     /// </summary>
     /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <param name="header">The JWT header containing algorithm information.</param>
@@ -69,12 +89,8 @@ public static class Jws
     /// <param name="base64UrlEncoder">Encodes bytes to Base64Url strings.</param>
     /// <param name="privateKey">The private key for signing.</param>
     /// <param name="signaturePool">Memory pool for signature allocation.</param>
-    /// <returns>The JWS compact serialization string.</returns>
-    /// <remarks>
-    /// The signing function is resolved from <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    /// based on the <see cref="CryptoAlgorithm"/> and <see cref="Purpose"/> in the key's <see cref="Tag"/>.
-    /// </remarks>
-    public static async ValueTask<string> SignAsync<TJwtPart>(
+    /// <returns>The JWS message containing the signature.</returns>
+    public static async ValueTask<JwsMessage> SignAsync<TJwtPart>(
         TJwtPart header,
         TJwtPart payload,
         JwtPartEncoder<TJwtPart> partEncoder,
@@ -82,8 +98,11 @@ public static class Jws
         PrivateKeyMemory privateKey,
         MemoryPool<byte> signaturePool)
     {
-        string headerSegment = base64UrlEncoder(partEncoder(header));
-        string payloadSegment = base64UrlEncoder(partEncoder(payload));
+        TaggedMemory<byte> headerBytes = partEncoder(header);
+        TaggedMemory<byte> payloadBytes = partEncoder(payload);
+
+        string headerSegment = base64UrlEncoder(headerBytes.Span);
+        string payloadSegment = base64UrlEncoder(payloadBytes.Span);
         string signingInput = $"{headerSegment}.{payloadSegment}";
         byte[] dataToSign = Encoding.ASCII.GetBytes(signingInput);
 
@@ -91,19 +110,24 @@ public static class Jws
         Purpose purpose = privateKey.Tag.Get<Purpose>();
         SigningDelegate signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose);
 
-        using IMemoryOwner<byte> signatureMemory = await signingDelegate(
-            privateKey.AsReadOnlySpan(),
+        Signature signatureMemory = await signingDelegate(
+            privateKey.AsReadOnlyMemory(),
             dataToSign,
             signaturePool);
 
-        string signatureSegment = base64UrlEncoder(signatureMemory.Memory.Span);
+        var protectedHeader = BuildProtectedHeaderDictionary(header);
 
-        return $"{signingInput}.{signatureSegment}";
+        var signatureComponent = new JwsSignatureComponent(
+            headerSegment,
+            protectedHeader,
+            signatureMemory);
+
+        return new JwsMessage(payloadBytes.Memory, signatureComponent);
     }
 
 
     /// <summary>
-    /// Creates a JWS compact serialization using an explicit signing function.
+    /// Creates a JWS using an explicit signing function.
     /// </summary>
     /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <param name="header">The JWT header containing algorithm information.</param>
@@ -113,30 +137,77 @@ public static class Jws
     /// <param name="privateKey">The private key for signing.</param>
     /// <param name="signingFunction">The signing function to use.</param>
     /// <param name="signaturePool">Memory pool for signature allocation.</param>
-    /// <returns>The JWS compact serialization string.</returns>
-    /// <remarks>
-    /// This overload is useful when you need to provide a custom signing function,
-    /// such as for testing or when using a cryptographic backend not registered in the
-    /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>.
-    /// </remarks>
-    public static async ValueTask<string> SignAsync<TJwtPart>(
+    /// <returns>The JWS message containing the signature.</returns>
+    public static async ValueTask<JwsMessage> SignAsync<TJwtPart>(
         TJwtPart header,
         TJwtPart payload,
         JwtPartEncoder<TJwtPart> partEncoder,
         EncodeDelegate base64UrlEncoder,
         PrivateKeyMemory privateKey,
-        SigningFunction<byte, byte, ValueTask<Signature>> signingFunction,
+        SigningDelegate signingDelegate,
         MemoryPool<byte> signaturePool)
     {
-        string headerSegment = base64UrlEncoder(partEncoder(header));
-        string payloadSegment = base64UrlEncoder(partEncoder(payload));
+        TaggedMemory<byte> headerBytes = partEncoder(header);
+        TaggedMemory<byte> payloadBytes = partEncoder(payload);
+
+        string headerSegment = base64UrlEncoder(headerBytes.Span);
+        string payloadSegment = base64UrlEncoder(payloadBytes.Span);
         string signingInput = $"{headerSegment}.{payloadSegment}";
         byte[] dataToSign = Encoding.UTF8.GetBytes(signingInput);
 
-        using Signature signature = await privateKey.WithKeyBytesAsync(signingFunction, dataToSign, signaturePool);
-        string signatureSegment = base64UrlEncoder(signature.AsReadOnlySpan());
+        Signature signature = await signingDelegate(
+            privateKey.AsReadOnlyMemory(),
+            dataToSign,
+            signaturePool);
 
-        return $"{signingInput}.{signatureSegment}";
+        var protectedHeader = BuildProtectedHeaderDictionary(header);
+
+        var signatureComponent = new JwsSignatureComponent(
+            headerSegment,
+            protectedHeader,
+            signature);
+
+        return new JwsMessage(payloadBytes.Memory, signatureComponent);
+    }
+
+
+    /// <summary>
+    /// Verifies a JWS message using registry-resolved verification function.
+    /// </summary>
+    /// <param name="message">The JWS message to verify.</param>
+    /// <param name="base64UrlEncoder">Encodes bytes to Base64Url strings.</param>
+    /// <param name="publicKey">The public key for verification.</param>
+    /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the message has multiple signatures.
+    /// </exception>
+    public static async ValueTask<bool> VerifyAsync(
+        JwsMessage message,
+        EncodeDelegate base64UrlEncoder,
+        PublicKeyMemory publicKey)
+    {
+        if(message.Signatures.Count != 1)
+        {
+            throw new InvalidOperationException(
+                $"This method verifies a single signature. Message has {message.Signatures.Count} signatures.");
+        }
+
+        JwsSignatureComponent signature = message.Signatures[0];
+
+        string payloadSegment = message.IsDetachedPayload
+            ? string.Empty
+            : base64UrlEncoder(message.Payload.Span);
+        string signingInput = $"{signature.Protected}.{payloadSegment}";
+        byte[] dataToVerify = Encoding.ASCII.GetBytes(signingInput);
+
+        CryptoAlgorithm algorithm = publicKey.Tag.Get<CryptoAlgorithm>();
+        Purpose purpose = publicKey.Tag.Get<Purpose>();
+        VerificationDelegate verificationDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose);
+
+        return await verificationDelegate(
+            dataToVerify,
+            signature.SignatureBytes,
+            publicKey.AsReadOnlyMemory());
     }
 
 
@@ -151,10 +222,6 @@ public static class Jws
     /// <param name="publicKey">The public key for verification.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS does not have exactly three parts.</exception>
-    /// <remarks>
-    /// The verification function is resolved from <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    /// based on the <see cref="CryptoAlgorithm"/> and <see cref="Purpose"/> in the key's <see cref="Tag"/>.
-    /// </remarks>
     public static async ValueTask<bool> VerifyAsync<TJwtPart>(
         string jws,
         DecodeDelegate base64UrlDecoder,
@@ -163,6 +230,7 @@ public static class Jws
         PublicKeyMemory publicKey)
     {
         string[] parts = jws.Split('.');
+
         if(parts.Length != 3)
         {
             throw new ArgumentException("JWS compact serialization must have exactly three parts.", nameof(jws));
@@ -177,8 +245,8 @@ public static class Jws
 
         return await verificationDelegate(
             dataToVerify,
-            signatureOwner.Memory.Span,
-            publicKey.AsReadOnlySpan());
+            signatureOwner.Memory,
+            publicKey.AsReadOnlyMemory());
     }
 
 
@@ -194,35 +262,33 @@ public static class Jws
     /// <param name="verificationFunction">The verification function to use.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS does not have exactly three parts.</exception>
-    /// <remarks>
-    /// This overload is useful when you need to provide a custom verification function,
-    /// such as for testing or when using a cryptographic backend not registered in the
-    /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>.
-    /// </remarks>
-    public static ValueTask<bool> VerifyAsync<TJwtPart>(
+    public static async ValueTask<bool> VerifyAsync<TJwtPart>(
         string jws,
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey,
-        VerificationFunctionWithBytes<byte, byte, byte, bool> verificationFunction)
+        VerificationDelegate verificationDelegate)
     {
         string[] parts = jws.Split('.');
+
         if(parts.Length != 3)
         {
             throw new ArgumentException("JWS compact serialization must have exactly three parts.", nameof(jws));
         }
 
         using IMemoryOwner<byte> signatureOwner = base64UrlDecoder(parts[2], pool);
-        byte[] dataToVerify = Encoding.UTF8.GetBytes($"{parts[0]}.{parts[1]}");
+        byte[] dataToVerify = Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}");
 
-        bool isValid = verificationFunction(publicKey.AsReadOnlyMemory(), dataToVerify, signatureOwner.Memory);
-        return ValueTask.FromResult(isValid);
+        return await verificationDelegate(
+            dataToVerify,
+            signatureOwner.Memory,
+            publicKey.AsReadOnlyMemory());
     }
 
 
     /// <summary>
-    /// Verifies a JWS and returns the decoded header and payload using registry-resolved verification.
+    /// Verifies a JWS and returns the decoded header and payload.
     /// </summary>
     /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <param name="jws">The JWS compact serialization to verify.</param>
@@ -240,6 +306,7 @@ public static class Jws
         PublicKeyMemory publicKey)
     {
         string[] parts = jws.Split('.');
+
         if(parts.Length != 3)
         {
             throw new ArgumentException("JWS compact serialization must have exactly three parts.", nameof(jws));
@@ -260,15 +327,15 @@ public static class Jws
 
         bool isValid = await verificationDelegate(
             dataToVerify,
-            signatureOwner.Memory.Span,
-            publicKey.AsReadOnlySpan());
+            signatureOwner.Memory,
+            publicKey.AsReadOnlyMemory());
 
         return new JwsVerificationResult<TJwtPart>(isValid, header, payload);
     }
 
 
     /// <summary>
-    /// Creates a JWS compact serialization using resolver/binder pattern.
+    /// Creates a JWS using resolver/binder pattern for key resolution.
     /// </summary>
     /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
@@ -277,15 +344,15 @@ public static class Jws
     /// <param name="payload">The JWT payload.</param>
     /// <param name="partEncoder">Encodes JWT parts to bytes.</param>
     /// <param name="base64UrlEncoder">Encodes bytes to Base64Url strings.</param>
-    /// <param name="pool">Memory pool for key material and signature allocation.</param>
+    /// <param name="pool">Memory pool for signature allocation.</param>
     /// <param name="resolverState">State for key material resolution.</param>
     /// <param name="resolver">Resolves and loads private key material from context.</param>
     /// <param name="binderState">State for key material binding.</param>
     /// <param name="binder">Binds signing function to key material.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The JWS compact serialization string.</returns>
+    /// <returns>The JWS message containing the signature.</returns>
     /// <exception cref="InvalidOperationException">Thrown when key resolution fails.</exception>
-    public static async ValueTask<string> SignAsync<TJwtPart, TResolverState, TBinderState>(
+    public static async ValueTask<JwsMessage> SignAsync<TJwtPart, TResolverState, TBinderState>(
         TJwtPart header,
         TJwtPart payload,
         JwtPartEncoder<TJwtPart> partEncoder,
@@ -297,29 +364,39 @@ public static class Jws
         KeyMaterialBinder<PrivateKeyMemory, PrivateKey, TBinderState> binder,
         CancellationToken cancellationToken = default)
     {
-        string headerSegment = base64UrlEncoder(partEncoder(header));
-        string payloadSegment = base64UrlEncoder(partEncoder(payload));
+        TaggedMemory<byte> headerBytes = partEncoder(header);
+        TaggedMemory<byte> payloadBytes = partEncoder(payload);
+
+        string headerSegment = base64UrlEncoder(headerBytes.Span);
+        string payloadSegment = base64UrlEncoder(payloadBytes.Span);
         string signingInput = $"{headerSegment}.{payloadSegment}";
         byte[] dataToSign = Encoding.UTF8.GetBytes(signingInput);
 
         var context = new JoseKeyContext<TJwtPart>(header, payload);
 
         PrivateKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken);
+
         if(material is null)
         {
             throw new InvalidOperationException("Key material resolution failed.");
         }
 
         using PrivateKey privateKey = await binder(material, binderState, cancellationToken);
-        using Signature signature = await privateKey.SignAsync(dataToSign, pool);
-        string signatureSegment = base64UrlEncoder(signature.AsReadOnlySpan());
+        Signature signature = await privateKey.SignAsync(dataToSign, pool);
 
-        return $"{signingInput}.{signatureSegment}";
+        var protectedHeader = BuildProtectedHeaderDictionary(header);
+
+        var signatureComponent = new JwsSignatureComponent(
+            headerSegment,
+            protectedHeader,
+            signature);
+
+        return new JwsMessage(payloadBytes.Memory, signatureComponent);
     }
 
 
     /// <summary>
-    /// Verifies a JWS compact serialization using resolver/binder pattern.
+    /// Verifies a JWS using resolver/binder pattern for key resolution.
     /// </summary>
     /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
@@ -348,6 +425,7 @@ public static class Jws
         CancellationToken cancellationToken = default)
     {
         string[] parts = jws.Split('.');
+
         if(parts.Length != 3)
         {
             throw new ArgumentException("JWS compact serialization must have exactly three parts.", nameof(jws));
@@ -365,6 +443,7 @@ public static class Jws
         var context = new JoseKeyContext<TJwtPart>(header, payload);
 
         PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken);
+
         if(material is null)
         {
             throw new InvalidOperationException("Key material resolution failed.");
@@ -411,6 +490,7 @@ public static class Jws
         CancellationToken cancellationToken = default)
     {
         string[] parts = jws.Split('.');
+
         if(parts.Length != 3)
         {
             throw new ArgumentException("JWS compact serialization must have exactly three parts.", nameof(jws));
@@ -428,6 +508,7 @@ public static class Jws
         var context = new JoseKeyContext<TJwtPart>(header, payload);
 
         PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken);
+
         if(material is null)
         {
             throw new InvalidOperationException("Key material resolution failed.");
@@ -444,14 +525,20 @@ public static class Jws
 
         return new JwsVerificationResult<TJwtPart>(isValid, header, payload);
     }
+
+
+    private static IReadOnlyDictionary<string, object> BuildProtectedHeaderDictionary<TJwtPart>(TJwtPart header)
+    {
+        if(header is IReadOnlyDictionary<string, object> dict)
+        {
+            return dict;
+        }
+
+        if(header is IDictionary<string, object> mutableDict)
+        {
+            return new Dictionary<string, object>(mutableDict);
+        }
+
+        return new Dictionary<string, object>();
+    }
 }
-
-
-/// <summary>
-/// Result of JWS verification including decoded header and payload.
-/// </summary>
-/// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
-/// <param name="IsValid">Whether the signature is valid.</param>
-/// <param name="Header">The decoded header.</param>
-/// <param name="Payload">The decoded payload.</param>
-public readonly record struct JwsVerificationResult<TJwtPart>(bool IsValid, TJwtPart Header, TJwtPart Payload);

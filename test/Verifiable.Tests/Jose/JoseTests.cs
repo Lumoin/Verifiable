@@ -1,14 +1,13 @@
 ﻿using System.Buffers;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Jose;
 using Verifiable.Json.Converters;
+using Verifiable.Microsoft;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Jose;
@@ -33,45 +32,24 @@ public sealed class JoseTests
     };
 
 
-    /// <summary>
-    /// Encodes a JWT part (dictionary) to UTF-8 JSON bytes.
-    /// </summary>
-    private static ReadOnlySpan<byte> EncodeJwtPart(Dictionary<string, object> part)
-    {
-        return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(part));
-    }
-
-
-    /// <summary>
-    /// Decodes UTF-8 JSON bytes to a dictionary.
-    /// </summary>
-    private static Dictionary<string, object> DecodeJwtPart(ReadOnlySpan<byte> bytes)
-    {
-        string json = Encoding.UTF8.GetString(bytes);
-        return JsonSerializer.Deserialize<Dictionary<string, object>>(json, JsonOptions)!;
-    }
-
-
     [TestMethod]
     public async Task SignAndVerifyWithExplicitFunctionSucceeds()
     {
         var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "1234567890", ["name"] = "Test User" };
 
-        using ECDsa ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        ECParameters parameters = ecdsa.ExportParameters(includePrivateParameters: true);
+        var keyMaterial = TestKeyMaterialProvider.P256KeyMaterial;
 
-        using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(parameters.D!, Tag.P256PrivateKey);
-        using PublicKeyMemory publicKey = CreatePublicKeyMemory(ecdsa.ExportSubjectPublicKeyInfo(), Tag.P256PublicKey);
-
-        string jws = await Jws.SignAsync(
+        using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
-            privateKey,
-            P256SigningFunction,
+            keyMaterial.PrivateKey,
+            MicrosoftCryptographicFunctions.SignP256Async,
             SensitiveMemoryPool<byte>.Shared);
+
+        string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         Assert.IsNotNull(jws);
         string[] parts = jws.Split('.');
@@ -82,8 +60,8 @@ public sealed class JoseTests
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
-            publicKey,
-            P256VerificationFunction);
+            keyMaterial.PublicKey,
+            MicrosoftCryptographicFunctions.VerifyP256Async);
 
         Assert.IsTrue(isValid, "Signature verification should succeed.");
     }
@@ -95,12 +73,12 @@ public sealed class JoseTests
         var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "resolver-test", ["name"] = "Resolver Test" };
 
-        using ECDsa ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        ECParameters parameters = ecdsa.ExportParameters(includePrivateParameters: true);
+        var keyMaterial = TestKeyMaterialProvider.P256KeyMaterial;
+        var resolverState = new TestResolverState(
+            keyMaterial.PrivateKey.AsReadOnlySpan().ToArray(),
+            keyMaterial.PublicKey.AsReadOnlySpan().ToArray());
 
-        var resolverState = new TestResolverState(parameters.D!, ecdsa.ExportSubjectPublicKeyInfo());
-
-        string jws = await Jws.SignAsync<Dictionary<string, object>, TestResolverState, int>(
+        JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
@@ -111,6 +89,8 @@ public sealed class JoseTests
             0,
             BindPrivateKey,
             TestContext.CancellationToken);
+
+        string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         Assert.IsNotNull(jws);
         string[] parts = jws.Split('.');
@@ -137,28 +117,26 @@ public sealed class JoseTests
         var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es384, [JwkProperties.Typ] = "JWT" };
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "user-384", [JwkProperties.Iat] = 1234567890 };
 
-        using ECDsa ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
-        ECParameters parameters = ecdsa.ExportParameters(includePrivateParameters: true);
+        var keyMaterial = TestKeyMaterialProvider.P384KeyMaterial;
 
-        using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(parameters.D!, Tag.P384PrivateKey);
-        using PublicKeyMemory publicKey = CreatePublicKeyMemory(ecdsa.ExportSubjectPublicKeyInfo(), Tag.P384PublicKey);
-
-        string jws = await Jws.SignAsync(
+        JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
-            privateKey,
-            P384SigningFunction,
+            keyMaterial.PrivateKey,
+            MicrosoftCryptographicFunctions.SignP384Async,
             SensitiveMemoryPool<byte>.Shared);
+
+        string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         bool isValid = await Jws.VerifyAsync(
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
-            publicKey,
-            P384VerificationFunction);
+            keyMaterial.PublicKey,
+            MicrosoftCryptographicFunctions.VerifyP384Async);
 
         Assert.IsTrue(isValid, "P-384 signature verification should succeed.");
     }
@@ -170,28 +148,26 @@ public sealed class JoseTests
         var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es512, [JwkProperties.Typ] = "JWT" };
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "user-521", [JwkProperties.Exp] = 9999999999 };
 
-        using ECDsa ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP521);
-        ECParameters parameters = ecdsa.ExportParameters(includePrivateParameters: true);
+        var keyMaterial = TestKeyMaterialProvider.P521KeyMaterial;
 
-        using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(parameters.D!, Tag.P521PrivateKey);
-        using PublicKeyMemory publicKey = CreatePublicKeyMemory(ecdsa.ExportSubjectPublicKeyInfo(), Tag.P521PublicKey);
-
-        string jws = await Jws.SignAsync(
+        JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
-            privateKey,
-            P521SigningFunction,
+            keyMaterial.PrivateKey,
+            MicrosoftCryptographicFunctions.SignP521Async,
             SensitiveMemoryPool<byte>.Shared);
+
+        string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         bool isValid = await Jws.VerifyAsync(
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
-            publicKey,
-            P521VerificationFunction);
+            keyMaterial.PublicKey,
+            MicrosoftCryptographicFunctions.VerifyP521Async);
 
         Assert.IsTrue(isValid, "P-521 signature verification should succeed.");
     }
@@ -203,31 +179,36 @@ public sealed class JoseTests
         var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "test" };
 
-        using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        using ECDsa wrongKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        //Use one key pair for signing.
+        var signingKeyMaterial = TestKeyMaterialProvider.P256KeyMaterial;
 
-        ECParameters signingParameters = signingKey.ExportParameters(includePrivateParameters: true);
-        using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(signingParameters.D!, Tag.P256PrivateKey);
-        using PublicKeyMemory wrongPublicKey = CreatePublicKeyMemory(wrongKey.ExportSubjectPublicKeyInfo(), Tag.P256PublicKey);
+        //Create a different key pair for verification (wrong key).
+        var wrongKeyMaterial = MicrosoftKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
 
-        string jws = await Jws.SignAsync(
+        JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
-            privateKey,
-            P256SigningFunction,
+            signingKeyMaterial.PrivateKey,
+            MicrosoftCryptographicFunctions.SignP256Async,
             SensitiveMemoryPool<byte>.Shared);
+
+        string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         bool isValid = await Jws.VerifyAsync(
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
-            wrongPublicKey,
-            P256VerificationFunction);
+            wrongKeyMaterial.PublicKey,
+            MicrosoftCryptographicFunctions.VerifyP256Async);
 
         Assert.IsFalse(isValid, "Verification with wrong key should fail.");
+
+        //Clean up the wrong key material.
+        wrongKeyMaterial.PublicKey.Dispose();
+        wrongKeyMaterial.PrivateKey.Dispose();
     }
 
 
@@ -237,20 +218,21 @@ public sealed class JoseTests
         var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "decode-test", ["custom"] = "value" };
 
-        using ECDsa ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        ECParameters parameters = ecdsa.ExportParameters(includePrivateParameters: true);
+        var keyMaterial = TestKeyMaterialProvider.P256KeyMaterial;
+        var resolverState = new TestResolverState(
+            keyMaterial.PrivateKey.AsReadOnlySpan().ToArray(),
+            keyMaterial.PublicKey.AsReadOnlySpan().ToArray());
 
-        using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(parameters.D!, Tag.P256PrivateKey);
-        var resolverState = new TestResolverState(parameters.D!, ecdsa.ExportSubjectPublicKeyInfo());
-
-        string jws = await Jws.SignAsync(
+        JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
-            privateKey,
-            P256SigningFunction,
+            keyMaterial.PrivateKey,
+            MicrosoftCryptographicFunctions.SignP256Async,
             SensitiveMemoryPool<byte>.Shared);
+
+        string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         JwsVerificationResult<Dictionary<string, object>> result = await Jws.VerifyAndDecodeAsync<Dictionary<string, object>, TestResolverState, int>(
             jws,
@@ -332,7 +314,7 @@ public sealed class JoseTests
     {
         IMemoryOwner<byte> memoryOwner = pool.Rent(state.PrivateKeyBytes.Length);
         state.PrivateKeyBytes.CopyTo(memoryOwner.Memory.Span);
-        return ValueTask.FromResult<PrivateKeyMemory?>(new PrivateKeyMemory(memoryOwner, Tag.P256PrivateKey));
+        return ValueTask.FromResult<PrivateKeyMemory?>(new PrivateKeyMemory(memoryOwner, CryptoTags.P256PrivateKey));
     }
 
 
@@ -347,7 +329,7 @@ public sealed class JoseTests
     {
         IMemoryOwner<byte> memoryOwner = pool.Rent(state.PublicKeyBytes.Length);
         state.PublicKeyBytes.CopyTo(memoryOwner.Memory.Span);
-        return ValueTask.FromResult<PublicKeyMemory?>(new PublicKeyMemory(memoryOwner, Tag.P256PublicKey));
+        return ValueTask.FromResult<PublicKeyMemory?>(new PublicKeyMemory(memoryOwner, CryptoTags.P256PublicKey));
     }
 
 
@@ -359,7 +341,7 @@ public sealed class JoseTests
         int state,
         CancellationToken cancellationToken)
     {
-        return ValueTask.FromResult(new PrivateKey(material, "test-key", P256SigningFunction));
+        return ValueTask.FromResult(new PrivateKey(material, "test-key", MicrosoftCryptographicFunctions.SignP256Async));
     }
 
 
@@ -371,129 +353,26 @@ public sealed class JoseTests
         int state,
         CancellationToken cancellationToken)
     {
-        return ValueTask.FromResult(new PublicKey(material, "test-key", P256VerificationFunctionWithSignature));
+        return ValueTask.FromResult(new PublicKey(material, "test-key", MicrosoftCryptographicFunctions.VerifyP256Async));
     }
 
 
     /// <summary>
-    /// Creates a <see cref="PrivateKeyMemory"/> from raw key bytes.
+    /// Encodes a JWT part (dictionary) to tagged memory with UTF-8 JSON bytes.
     /// </summary>
-    private static PrivateKeyMemory CreatePrivateKeyMemory(byte[] keyBytes, Tag tag)
+    private static TaggedMemory<byte> EncodeJwtPart(Dictionary<string, object> part)
     {
-        IMemoryOwner<byte> memoryOwner = SensitiveMemoryPool<byte>.Shared.Rent(keyBytes.Length);
-        keyBytes.CopyTo(memoryOwner.Memory.Span);
-        return new PrivateKeyMemory(memoryOwner, tag);
+        byte[] bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(part));
+        return new TaggedMemory<byte>(bytes, BufferTags.Json);
     }
 
 
     /// <summary>
-    /// Creates a <see cref="PublicKeyMemory"/> from raw key bytes.
+    /// Decodes UTF-8 JSON bytes to a dictionary.
     /// </summary>
-    private static PublicKeyMemory CreatePublicKeyMemory(byte[] keyBytes, Tag tag)
+    private static Dictionary<string, object> DecodeJwtPart(ReadOnlySpan<byte> bytes)
     {
-        IMemoryOwner<byte> memoryOwner = SensitiveMemoryPool<byte>.Shared.Rent(keyBytes.Length);
-        keyBytes.CopyTo(memoryOwner.Memory.Span);
-        return new PublicKeyMemory(memoryOwner, tag);
-    }
-
-
-    /// <summary>
-    /// P-256 signing function for explicit function pattern.
-    /// </summary>
-    private static ValueTask<Signature> P256SigningFunction(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool)
-    {
-        return EcdsaSigningFunction(privateKeyBytes, dataToSign, signaturePool, ECCurve.NamedCurves.nistP256, HashAlgorithmName.SHA256, Tag.P256Signature);
-    }
-
-
-    /// <summary>
-    /// P-384 signing function for explicit function pattern.
-    /// </summary>
-    private static ValueTask<Signature> P384SigningFunction(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool)
-    {
-        return EcdsaSigningFunction(privateKeyBytes, dataToSign, signaturePool, ECCurve.NamedCurves.nistP384, HashAlgorithmName.SHA384, Tag.P384Signature);
-    }
-
-
-    /// <summary>
-    /// P-521 signing function for explicit function pattern.
-    /// </summary>
-    private static ValueTask<Signature> P521SigningFunction(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool)
-    {
-        return EcdsaSigningFunction(privateKeyBytes, dataToSign, signaturePool, ECCurve.NamedCurves.nistP521, HashAlgorithmName.SHA512, Tag.P521Signature);
-    }
-
-
-    /// <summary>
-    /// Generic ECDSA signing function.
-    /// </summary>
-    private static ValueTask<Signature> EcdsaSigningFunction(
-        ReadOnlyMemory<byte> privateKeyBytes,
-        ReadOnlyMemory<byte> dataToSign,
-        MemoryPool<byte> signaturePool,
-        ECCurve curve,
-        HashAlgorithmName hashAlgorithm,
-        Tag signatureTag)
-    {
-        using ECDsa ecdsa = ECDsa.Create(new ECParameters
-        {
-            Curve = curve,
-            D = privateKeyBytes.ToArray()
-        });
-
-        byte[] signatureBytes = ecdsa.SignData(dataToSign.Span, hashAlgorithm);
-
-        IMemoryOwner<byte> memoryOwner = signaturePool.Rent(signatureBytes.Length);
-        signatureBytes.CopyTo(memoryOwner.Memory.Span);
-
-        return ValueTask.FromResult(new Signature(memoryOwner, signatureTag));
-    }
-
-
-    /// <summary>
-    /// P-256 verification function for explicit function pattern.
-    /// </summary>
-    private static bool P256VerificationFunction(ReadOnlyMemory<byte> publicKeyBytes, ReadOnlySpan<byte> dataToVerify, ReadOnlyMemory<byte> signatureBytes)
-    {
-        return EcdsaVerificationFunction(publicKeyBytes, dataToVerify, signatureBytes, HashAlgorithmName.SHA256);
-    }
-
-
-    /// <summary>
-    /// P-256 verification function for bound key pattern.
-    /// </summary>
-    private static ValueTask<bool> P256VerificationFunctionWithSignature(ReadOnlyMemory<byte> publicKeyBytes, ReadOnlyMemory<byte> dataToVerify, Signature signature)
-    {
-        bool result = EcdsaVerificationFunction(publicKeyBytes, dataToVerify.Span, signature.AsReadOnlyMemory(), HashAlgorithmName.SHA256);
-        return ValueTask.FromResult(result);
-    }
-
-
-    /// <summary>
-    /// P-384 verification function for explicit function pattern.
-    /// </summary>
-    private static bool P384VerificationFunction(ReadOnlyMemory<byte> publicKeyBytes, ReadOnlySpan<byte> dataToVerify, ReadOnlyMemory<byte> signatureBytes)
-    {
-        return EcdsaVerificationFunction(publicKeyBytes, dataToVerify, signatureBytes, HashAlgorithmName.SHA384);
-    }
-
-
-    /// <summary>
-    /// P-521 verification function for explicit function pattern.
-    /// </summary>
-    private static bool P521VerificationFunction(ReadOnlyMemory<byte> publicKeyBytes, ReadOnlySpan<byte> dataToVerify, ReadOnlyMemory<byte> signatureBytes)
-    {
-        return EcdsaVerificationFunction(publicKeyBytes, dataToVerify, signatureBytes, HashAlgorithmName.SHA512);
-    }
-
-
-    /// <summary>
-    /// Generic ECDSA verification function.
-    /// </summary>
-    private static bool EcdsaVerificationFunction(ReadOnlyMemory<byte> publicKeyBytes, ReadOnlySpan<byte> dataToVerify, ReadOnlyMemory<byte> signatureBytes, HashAlgorithmName hashAlgorithm)
-    {
-        using ECDsa ecdsa = ECDsa.Create();
-        ecdsa.ImportSubjectPublicKeyInfo(publicKeyBytes.Span, out _);
-        return ecdsa.VerifyData(dataToVerify, signatureBytes.Span, hashAlgorithm);
+        string json = Encoding.UTF8.GetString(bytes);
+        return JsonSerializer.Deserialize<Dictionary<string, object>>(json, JsonOptions)!;
     }
 }

@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Cryptography
 {
     /// <summary>
@@ -75,16 +73,34 @@ namespace Verifiable.Cryptography
         public static ReadOnlySpan<byte> P256PublicKey => [0x80, 0x24];
 
         /// <summary>
+        /// P256-priv (0x1306). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L157">P-256 private key (GitHub)</see>.
+        /// </summary>
+        /// <remarks>Status: draft.</remarks>
+        public static ReadOnlySpan<byte> P256PrivateKey => [0x86, 0x26];
+        
+        /// <summary>
         /// P2384-pub (0x1201). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L146">P-384 public Key (compressed) (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
         public static ReadOnlySpan<byte> P384PublicKey => [0x81, 0x24];
 
         /// <summary>
+        /// P384-priv (0x1307). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L158">P-384 private key (GitHub)</see>.
+        /// </summary>
+        /// <remarks>Status: draft.</remarks>
+        public static ReadOnlySpan<byte> P384PrivateKey => [0x87, 0x26];
+        
+        /// <summary>
         /// P521-pub (0x1202). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L147">P-512 public Key (compressed) (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>
         public static ReadOnlySpan<byte> P521PublicKey => [0x82, 0x24];
+
+        /// <summary>
+        /// P521-priv (0x1308). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L159">P-521 private key (GitHub)</see>.
+        /// </summary>
+        /// <remarks>Status: draft.</remarks>
+        public static ReadOnlySpan<byte> P521PrivateKey => [0x88, 0x26];
 
         /// <summary>
         /// Rsa-pub (0x1205). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L150">RSA public key. DER-encoded ASN.1 type RSAPublicKey according to IETF RFC 8017 (PKCS #1) (GitHub)</see>.
