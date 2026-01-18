@@ -12,10 +12,11 @@
   </PropertyGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />    
+    <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
+    <ProjectReference Include="..\Verifiable.JsonPointer\Verifiable.JsonPointer.csproj" />    
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup>    
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>

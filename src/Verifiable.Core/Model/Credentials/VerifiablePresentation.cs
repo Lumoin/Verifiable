@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
-using Verifiable.Core.Model.Proofs;
+using Verifiable.Core.Model.DataIntegrity;
 
 namespace Verifiable.Core.Credentials
 {

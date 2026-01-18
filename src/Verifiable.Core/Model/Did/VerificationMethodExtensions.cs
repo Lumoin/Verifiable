@@ -49,7 +49,7 @@ namespace Verifiable.Core.Model.Did
                     rawKeyMaterial.Purpose);
 
                 //Call verification function directly with extracted key material.
-                return await verificationFunction(data.Span, signature.AsReadOnlySpan(), rawKeyMaterial.keyMaterial.Memory.Span);
+                return await verificationFunction(data, signature.AsReadOnlyMemory(), rawKeyMaterial.keyMaterial.Memory);
             }
         }
 

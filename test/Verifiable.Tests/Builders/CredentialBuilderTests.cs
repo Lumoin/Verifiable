@@ -170,8 +170,8 @@ public sealed class CredentialBuilderTests
             validUntil: validUntil,
             cancellationToken: TestContext.CancellationToken);
 
-        Assert.AreEqual(validFrom, credential.ValidFrom);
-        Assert.AreEqual(validUntil, credential.ValidUntil);
+        Assert.AreEqual(validFrom.ToString("O"), credential.ValidFrom);
+        Assert.AreEqual(validUntil.ToString("O"), credential.ValidUntil);
     }
 
 
@@ -406,7 +406,7 @@ public sealed class CredentialBuilderTests
         Assert.Contains(CredentialConstants.VerifiableCredentialType, credential.Type);
         Assert.Contains(AlumniCredentialType, credential.Type);
         Assert.AreEqual(IssuerHttps, credential.Issuer?.Id);
-        Assert.AreEqual(validFrom, credential.ValidFrom);
+        Assert.AreEqual(validFrom.ToString("O"), credential.ValidFrom);
         Assert.IsNotNull(credential.CredentialSubject);
         Assert.AreEqual(SubjectDidExampleAbcdefgh, credential.CredentialSubject[0].Id);
     }

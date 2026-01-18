@@ -1,13 +1,9 @@
 ﻿using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using VDS.RDF;
-using VDS.RDF.JsonLd;
-using VDS.RDF.JsonLd.Syntax;
-using VDS.RDF.Parsing;
 using Verifiable.Core.Model.Credentials;
+using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Model.Proofs;
 using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Tests.Resolver;
@@ -75,162 +71,6 @@ public sealed class CredentialIssuanceFlowTests
     private const string DataIntegrityProofType = "DataIntegrityProof";
 
     /// <summary>
-    /// W3C Verifiable Credentials Data Model 2.0 context.
-    /// Source: https://www.w3.org/ns/credentials/v2
-    /// </summary>
-    private const string CredentialsV2ContextJson =
-        /*lang=json,strict*/
-        """
-        {
-          "@context": {
-            "@protected": true,
-            "id": "@id",
-            "type": "@type",
-            "description": "https://schema.org/description",
-            "digestMultibase": {
-              "@id": "https://w3id.org/security#digestMultibase",
-              "@type": "https://w3id.org/security#multibase"
-            },
-            "digestSRI": {
-              "@id": "https://www.w3.org/2018/credentials#digestSRI",
-              "@type": "https://www.w3.org/2018/credentials#sriString"
-            },
-            "mediaType": {
-              "@id": "https://schema.org/encodingFormat"
-            },
-            "name": "https://schema.org/name",
-            "VerifiableCredential": {
-              "@id": "https://www.w3.org/2018/credentials#VerifiableCredential",
-              "@context": {
-                "@protected": true,
-                "id": "@id",
-                "type": "@type",
-                "confidenceMethod": {
-                  "@id": "https://www.w3.org/2018/credentials#confidenceMethod",
-                  "@type": "@id"
-                },
-                "credentialSchema": {
-                  "@id": "https://www.w3.org/2018/credentials#credentialSchema",
-                  "@type": "@id"
-                },
-                "credentialStatus": {
-                  "@id": "https://www.w3.org/2018/credentials#credentialStatus",
-                  "@type": "@id"
-                },
-                "credentialSubject": {
-                  "@id": "https://www.w3.org/2018/credentials#credentialSubject",
-                  "@type": "@id"
-                },
-                "description": "https://schema.org/description",
-                "evidence": {
-                  "@id": "https://www.w3.org/2018/credentials#evidence",
-                  "@type": "@id"
-                },
-                "issuer": {
-                  "@id": "https://www.w3.org/2018/credentials#issuer",
-                  "@type": "@id"
-                },
-                "name": "https://schema.org/name",
-                "proof": {
-                  "@id": "https://w3id.org/security#proof",
-                  "@type": "@id",
-                  "@container": "@graph"
-                },
-                "refreshService": {
-                  "@id": "https://www.w3.org/2018/credentials#refreshService",
-                  "@type": "@id"
-                },
-                "relatedResource": {
-                  "@id": "https://www.w3.org/2018/credentials#relatedResource",
-                  "@type": "@id"
-                },
-                "renderMethod": {
-                  "@id": "https://www.w3.org/2018/credentials#renderMethod",
-                  "@type": "@id"
-                },
-                "termsOfUse": {
-                  "@id": "https://www.w3.org/2018/credentials#termsOfUse",
-                  "@type": "@id"
-                },
-                "validFrom": {
-                  "@id": "https://www.w3.org/2018/credentials#validFrom",
-                  "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
-                },
-                "validUntil": {
-                  "@id": "https://www.w3.org/2018/credentials#validUntil",
-                  "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
-                }
-              }
-            },
-            "DataIntegrityProof": {
-              "@id": "https://w3id.org/security#DataIntegrityProof",
-              "@context": {
-                "@protected": true,
-                "id": "@id",
-                "type": "@type",
-                "challenge": "https://w3id.org/security#challenge",
-                "created": {
-                  "@id": "http://purl.org/dc/terms/created",
-                  "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
-                },
-                "domain": "https://w3id.org/security#domain",
-                "expires": {
-                  "@id": "https://w3id.org/security#expiration",
-                  "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
-                },
-                "nonce": "https://w3id.org/security#nonce",
-                "previousProof": {
-                  "@id": "https://w3id.org/security#previousProof",
-                  "@type": "@id"
-                },
-                "proofPurpose": {
-                  "@id": "https://w3id.org/security#proofPurpose",
-                  "@type": "@vocab",
-                  "@context": {
-                    "@protected": true,
-                    "id": "@id",
-                    "type": "@type",
-                    "assertionMethod": {
-                      "@id": "https://w3id.org/security#assertionMethod",
-                      "@type": "@id",
-                      "@container": "@set"
-                    }
-                  }
-                },
-                "cryptosuite": {
-                  "@id": "https://w3id.org/security#cryptosuite",
-                  "@type": "https://w3id.org/security#cryptosuiteString"
-                },
-                "proofValue": {
-                  "@id": "https://w3id.org/security#proofValue",
-                  "@type": "https://w3id.org/security#multibase"
-                },
-                "verificationMethod": {
-                  "@id": "https://w3id.org/security#verificationMethod",
-                  "@type": "@id"
-                }
-              }
-            }
-          }
-        }
-        """;
-
-    /// <summary>
-    /// W3C Verifiable Credentials Examples context.
-    /// Source: https://www.w3.org/ns/credentials/examples/v2
-    /// </summary>
-    private const string CredentialsExamplesV2ContextJson =
-        /*lang=json,strict*/
-        """
-        {
-          "@context": {
-            "@vocab": "https://www.w3.org/ns/credentials/examples#"
-          }
-        }
-        """;
-
-
-    /// <summary>
     /// JSON serialization options with all required converters for Verifiable Credentials.
     /// </summary>
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
@@ -253,25 +93,15 @@ public sealed class CredentialIssuanceFlowTests
     /// <summary>
     /// Fake time provider for deterministic testing.
     /// </summary>
-    private static FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(
-        new DateTimeOffset(2024, 6, 15, 12, 0, 0, TimeSpan.Zero));
+    private static FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(new DateTimeOffset(2024, 6, 15, 12, 0, 0, TimeSpan.Zero));
 
 
     /// <summary>
     /// Context resolver delegate for JSON-LD processing.
-    /// Resolves W3C context URIs to embedded JSON strings.
+    /// Uses embedded W3C contexts for offline, deterministic testing.
     /// </summary>
-    private static ContextResolverDelegate ContextResolver { get; } = (uri, cancellationToken) =>
-    {
-        var contextJson = uri.ToString() switch
-        {
-            CredentialsV2ContextUrl => CredentialsV2ContextJson,
-            CredentialsExamplesV2ContextUrl => CredentialsExamplesV2ContextJson,
-            _ => null
-        };
-        return ValueTask.FromResult(contextJson);
-    };
-
+    private static ContextResolverDelegate ContextResolver { get; } = 
+        CanonicalizationTestUtilities.CreateTestContextResolver();
 
     /// <summary>
     /// JCS canonicalization delegate. Ignores context resolver since JCS does not use JSON-LD.
@@ -282,46 +112,24 @@ public sealed class CredentialIssuanceFlowTests
         return ValueTask.FromResult(canonical);
     };
 
-
     /// <summary>
     /// RDFC-1.0 canonicalization delegate using dotNetRdf.
+    /// Uses pre-validated embedded contexts for deterministic test behavior.
     /// </summary>
-    private static CanonicalizationDelegate RdfcCanonicalizer { get; } = (json, contextResolver, cancellationToken) =>
-    {
-        var store = new TripleStore();
-        var parserOptions = new JsonLdProcessorOptions
-        {
-            ProcessingMode = JsonLdProcessingMode.JsonLd11,
-            DocumentLoader = CreateDotNetRdfContextLoader(contextResolver)
-        };
-        var parser = new JsonLdParser(parserOptions);
-
-        using var reader = new StringReader(json);
-        parser.Load(store, reader);
-
-        var canonicalizer = new RdfCanonicalizer();
-        var canonicalizedResult = canonicalizer.Canonicalize(store);
-
-        return ValueTask.FromResult(canonicalizedResult.SerializedNQuads);
-    };
+    private static CanonicalizationDelegate RdfcCanonicalizer { get; } = 
+        CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
 
     /// <summary>
     /// Proof value encoder delegate using multibase Base58Btc encoding.
     /// </summary>
-    private static ProofValueEncoderDelegate ProofValueEncoder { get; } = (signatureBytes) =>
-    {
-        return $"{MultibaseAlgorithms.Base58Btc}{TestSetup.Base58Encoder(signatureBytes)}";
-    };
+    private static ProofValueEncoderDelegate ProofValueEncoder { get; } = ProofValueCodecs.EncodeBase58Btc;
 
 
     /// <summary>
     /// Proof value decoder delegate using multibase Base58Btc decoding.
     /// </summary>
-    private static ProofValueDecoderDelegate ProofValueDecoder { get; } = (proofValue, memoryPool) =>
-    {
-        return MultibaseSerializer.Decode(proofValue, 0, TestSetup.Base58Decoder, memoryPool);
-    };
+    private static ProofValueDecoderDelegate ProofValueDecoder { get; } = ProofValueCodecs.DecodeBase58Btc;
 
 
     /// <summary>
@@ -375,38 +183,6 @@ public sealed class CredentialIssuanceFlowTests
 
 
     /// <summary>
-    /// Creates a dotNetRdf document loader that delegates to our context resolver.
-    /// </summary>
-    private static Func<Uri, JsonLdLoaderOptions?, RemoteDocument> CreateDotNetRdfContextLoader(
-        ContextResolverDelegate? contextResolver)
-    {
-        return (uri, options) =>
-        {
-            string? contextJson = null;
-
-            if(contextResolver != null)
-            {
-                //Synchronously wait since dotNetRdf's loader is synchronous.
-                contextJson = contextResolver(uri, CancellationToken.None).AsTask().GetAwaiter().GetResult();
-            }
-
-            if(contextJson == null)
-            {
-                throw new JsonLdProcessorException(
-                    JsonLdErrorCode.LoadingDocumentFailed,
-                    $"Unknown context URI: {uri}");
-            }
-
-            return new RemoteDocument
-            {
-                DocumentUrl = uri,
-                Document = contextJson
-            };
-        };
-    }
-
-
-    /// <summary>
     /// Verifies that JSON-LD canonicalization includes claims only when context defines them.
     /// Without the examples context, alumniOf is dropped during expansion.
     /// With the examples context, alumniOf is included in the canonical form.
@@ -435,7 +211,7 @@ public sealed class CredentialIssuanceFlowTests
         var alumniOfInCanonicalWithoutContext = canonicalFormWithoutContext.Contains(ClaimValueUniversityName, StringComparison.Ordinal);
 
         //Add examples context and canonicalize again. The alumniOf claim should now be included.
-        var credentialWithContext = AddContextToCredential(credentialJson, CredentialsExamplesV2ContextUrl);
+        var credentialWithContext = AddContextToCredential(credentialJson, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl);
         var canonicalFormWithContext = await RdfcCanonicalizer(credentialWithContext, ContextResolver, cancellationToken: TestContext.CancellationToken);
         var alumniOfInCanonicalWithContext = canonicalFormWithContext.Contains(ClaimValueUniversityName, StringComparison.Ordinal);
 
@@ -487,7 +263,7 @@ public sealed class CredentialIssuanceFlowTests
 
         //Add examples context so alumniOf is protected by signature.
         var credentialJson = JsonSerializer.Serialize(unsignedCredential, JsonOptions);
-        var credentialWithContext = AddContextToCredential(credentialJson, CredentialsExamplesV2ContextUrl);
+        var credentialWithContext = AddContextToCredential(credentialJson, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl);
         var credentialWithContextObj = JsonSerializer.Deserialize<VerifiableCredential>(credentialWithContext, JsonOptions)!;
 
         var signedCredential = await credentialWithContextObj.SignAsync(
@@ -501,6 +277,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             DeserializeCredential,
             SerializeProofOptions,
+            TestSetup.Base58Encoder,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken);
 
@@ -512,6 +289,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             DeserializeCredential,
             SerializeProofOptions,
+            TestSetup.Base58Decoder,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken);
 
@@ -575,6 +353,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             DeserializeCredential,
             SerializeProofOptions,
+            TestSetup.Base58Encoder,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken);
 
@@ -586,6 +365,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             DeserializeCredential,
             SerializeProofOptions,
+            TestSetup.Base58Decoder,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken);
 
@@ -628,7 +408,7 @@ public sealed class CredentialIssuanceFlowTests
             cancellationToken: TestContext.CancellationToken);
 
         var credentialJson = JsonSerializer.Serialize(unsignedCredential, JsonOptions);
-        var credentialWithContext = AddContextToCredential(credentialJson, CredentialsExamplesV2ContextUrl);
+        var credentialWithContext = AddContextToCredential(credentialJson, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl);
         var credentialWithContextObj = JsonSerializer.Deserialize<VerifiableCredential>(credentialWithContext, JsonOptions)!;
 
         var signedCredential = await credentialWithContextObj.SignAsync(
@@ -642,6 +422,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             DeserializeCredential,
             SerializeProofOptions,
+            TestSetup.Base58Encoder,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken);
 
@@ -658,6 +439,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             DeserializeCredential,
             SerializeProofOptions,
+            TestSetup.Base58Decoder,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken);
 
@@ -708,6 +490,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             DeserializeCredential,
             SerializeProofOptions,
+            TestSetup.Base58Encoder,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken);
 
@@ -724,6 +507,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             DeserializeCredential,
             SerializeProofOptions,
+            TestSetup.Base58Decoder,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken);
 

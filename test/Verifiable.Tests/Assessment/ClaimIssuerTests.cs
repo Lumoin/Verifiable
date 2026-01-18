@@ -17,67 +17,15 @@ public sealed class ClaimIssuerTests
     /// </summary>
     public TestContext TestContext { get; set; } = null!;
 
-    //Test constants.
     private const string TestIssuerId = "test-issuer-id";
     private const string TestCorrelationId = "test-correlation-id";
     private const string TestClaimIdValue = "generated-claim-id-12345";
-
 
     /// <summary>
     /// Fake time provider for deterministic timestamp testing.
     /// </summary>
     private static FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(
         new DateTimeOffset(2024, 6, 15, 12, 0, 0, TimeSpan.Zero));
-
-
-    /// <summary>
-    /// A simple validation rule that always succeeds.
-    /// </summary>
-    private static ValueTask<IList<Claim>> SuccessfulRule(
-        string input,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        IList<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
-        return ValueTask.FromResult(claims);
-    }
-
-
-    /// <summary>
-    /// A validation rule that always fails.
-    /// </summary>
-    private static ValueTask<IList<Claim>> FailingRule(
-        string input,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        IList<Claim> claims = [new Claim(ClaimId.AlgIsNone, ClaimOutcome.Failure)];
-        return ValueTask.FromResult(claims);
-    }
-
-
-    /// <summary>
-    /// A validation rule that simulates a slow operation.
-    /// </summary>
-    private static async ValueTask<IList<Claim>> SlowRule(
-        string input,
-        CancellationToken cancellationToken = default)
-    {
-        await Task.Delay(100, cancellationToken);
-        IList<Claim> claims = [new Claim(ClaimId.AlgExists, ClaimOutcome.Success)];
-        return claims;
-    }
-
-
-    /// <summary>
-    /// A validation rule that throws an exception.
-    /// </summary>
-    private static ValueTask<IList<Claim>> ThrowingRule(
-        string input,
-        CancellationToken cancellationToken = default)
-    {
-        throw new InvalidOperationException("Simulated rule failure.");
-    }
 
 
     [TestMethod]
@@ -378,15 +326,24 @@ public sealed class ClaimIssuerTests
 
 
     [TestMethod]
-    public async Task GenerateClaimsAsyncWithSlowRulesCanBeCancelled()
+    public async Task GenerateClaimsAsyncWithBlockingRulesCanBeCancelled()
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        using var cts = new CancellationTokenSource();
+        var firstRuleCompleted = new TaskCompletionSource<bool>();
+
+        //A rule that signals when it completes.
+        ValueTask<IList<Claim>> SignalingRule(string input, CancellationToken ct)
+        {
+            IList<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
+            firstRuleCompleted.TrySetResult(true);
+            return ValueTask.FromResult(claims);
+        }
 
         var rules = new List<ClaimDelegate<string>>
         {
-            new(SlowRule, [ClaimId.AlgExists]),
-            new(SlowRule, [ClaimId.AlgIsValid]),
-            new(SlowRule, [ClaimId.AlgIsNone])
+            new(SignalingRule, [ClaimId.AlgIsValid]),
+            new(BlockingRule, [ClaimId.AlgExists]),
+            new(BlockingRule, [ClaimId.AlgIsNone])
         };
 
         var issuer = new ClaimIssuer<string>(
@@ -394,13 +351,71 @@ public sealed class ClaimIssuerTests
             rules,
             TimeProvider);
 
-        var result = await issuer.GenerateClaimsAsync(
-            "test-input",
-            TestCorrelationId,
-            cts.Token);
+        //Start the claim generation in the background.
+        var generateTask = issuer.GenerateClaimsAsync("test-input", TestCorrelationId, cts.Token);
+
+        //Wait for the first rule to complete, then cancel.
+        await firstRuleCompleted.Task;
+        await cts.CancelAsync();
+
+        var result = await generateTask;
 
         //Should have partial results due to cancellation.
         Assert.AreEqual(ClaimIssueCompletionStatus.Cancelled, result.CompletionStatus);
-        Assert.IsLessThan(result.TotalRules, result.RulesExecuted);
+        Assert.AreEqual(1, result.RulesExecuted);
+        Assert.AreEqual(3, result.TotalRules);
+        Assert.HasCount(1, result.Claims);
+    }
+
+
+    /// <summary>
+    /// A simple validation rule that always succeeds.
+    /// </summary>
+    private static ValueTask<IList<Claim>> SuccessfulRule(
+        string input,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        IList<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
+        return ValueTask.FromResult(claims);
+    }
+
+
+    /// <summary>
+    /// A validation rule that always fails.
+    /// </summary>
+    private static ValueTask<IList<Claim>> FailingRule(
+        string input,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        IList<Claim> claims = [new Claim(ClaimId.AlgIsNone, ClaimOutcome.Failure)];
+        return ValueTask.FromResult(claims);
+    }
+
+
+    /// <summary>
+    /// A validation rule that blocks indefinitely until cancelled.
+    /// </summary>
+    private static async ValueTask<IList<Claim>> BlockingRule(
+        string input,
+        CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(Timeout.Infinite, cancellationToken);
+
+        //This line is never reached; the delay throws on cancellation.
+        IList<Claim> claims = [new Claim(ClaimId.AlgExists, ClaimOutcome.Success)];
+        return claims;
+    }
+
+
+    /// <summary>
+    /// A validation rule that throws an exception.
+    /// </summary>
+    private static ValueTask<IList<Claim>> ThrowingRule(
+        string input,
+        CancellationToken cancellationToken = default)
+    {
+        throw new InvalidOperationException("Simulated rule failure.");
     }
 }

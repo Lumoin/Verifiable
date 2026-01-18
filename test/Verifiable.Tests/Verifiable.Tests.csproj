@@ -29,6 +29,10 @@
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="SimpleBase" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+    <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage">      
+      <VersionOverride>18.3.2</VersionOverride>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -53,4 +57,10 @@
     </PackageReference>    
     <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Cose\" />
+    <Folder Include="Utilities\" />
+  </ItemGroup>  
+  
 </Project>
