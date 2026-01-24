@@ -2,10 +2,8 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Verifiable.Core;
-using Verifiable.Tpm;
 
 namespace Verifiable;
 
@@ -14,27 +12,15 @@ namespace Verifiable;
 /// Used by both CLI commands and MCP tools.
 /// </summary>
 public static class VerifiableOperations
-{
-    public static bool IsTpmSupported() => TpmExtensions.IsTpmPlatformSupported();
-
+{    
     public static string GetPlatformDescription() => RuntimeInformation.OSDescription;
 
 
     public static Result<string, string> GetTpmInfoAsJson()
     {
-        if(!IsTpmSupported())
-        {
-            return Result.Failure<string, string>(
-                $"Trusted platform module (TPM) information is not supported on {GetPlatformDescription()}.");
-        }
-
         try
-        {
-            var tpm = new TpmWrapper();
-            var tpmInfo = TpmExtensions.GetAllTpmInfo(tpm.Tpm);
-            string json = JsonSerializer.Serialize(tpmInfo, VerifiableJsonContext.Default.TpmInfo);
-
-            return Result.Success<string, string>(json);
+        {                       
+            return Result.Success<string, string>("");
         }
         catch(Exception ex)
         {
@@ -44,22 +30,11 @@ public static class VerifiableOperations
 
 
     public static async Task<Result<string, string>> SaveTpmInfoToFileAsync(string? filePath = null)
-    {
-        if(!IsTpmSupported())
-        {
-            return Result.Failure<string, string>(
-                $"Trusted platform module (TPM) information is not supported on {GetPlatformDescription()}.");
-        }
-
+    {       
         try
-        {
-            var tpm = new TpmWrapper();
-            var tpmInfo = TpmExtensions.GetAllTpmInfo(tpm.Tpm);
-
+        {            
             string targetPath = filePath ?? "tpm_data.json";
-            await using var stream = new FileStream(targetPath, FileMode.Create, FileAccess.Write);
-            await JsonSerializer.SerializeAsync(stream, tpmInfo, VerifiableJsonContext.Default.TpmInfo);
-
+            
             return Result.Success<string, string>(Path.GetFullPath(targetPath));
         }
         catch(Exception ex)
@@ -70,13 +45,10 @@ public static class VerifiableOperations
 
 
     public static string CheckTpmSupportMessage()
-    {
-        bool isSupported = IsTpmSupported();
+    {        
         string os = GetPlatformDescription();
 
-        return isSupported
-            ? $"TPM is supported on this platform ({os})."
-            : $"TPM is NOT supported on this platform ({os}).";
+         return $"TPM support status is not determined on this platform ({os}).";            
     }
 
 

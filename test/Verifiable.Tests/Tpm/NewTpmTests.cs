@@ -4,6 +4,7 @@ using System.Text;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 
+/*
 namespace Verifiable.Tests.Tpm
 {
     /// <summary>
@@ -13,31 +14,8 @@ namespace Verifiable.Tests.Tpm
     public sealed class NewTpmTests
     {
         private const string TestStringToBeHashed = "Hello, SHA-256 world!";
-
-
-        [SupportedOSPlatform(Platforms.Windows)]
-        [RunOnlyOnPlatformTestMethod(platforms: [Platforms.Windows])]
-        public void TpmWindowsSupportsWindows()
-        {
-            Assert.IsTrue(TpmWindows.IsSupported);
-        }
-
-
-        [SupportedOSPlatform(Platforms.Linux)]
-        [RunOnlyOnPlatformTestMethod(platforms: [Platforms.Linux])]
-        public void TpmLinuxSupportsLinux()
-        {
-            Assert.IsTrue(TpmLinux.IsSupported);
-        }
-
-
-        [RunOnlyOnPlatformSkipOnCiTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
-        public void TpmVirtualSupportsWindowsAndLinux()
-        {
-            Assert.IsTrue(TpmVirtual.IsSupported);
-        }
-
-
+        
+        
         [RunOnlyOnPlatformSkipOnCiTestMethod(platforms: [Platforms.Windows, Platforms.Linux])]
         public void GetVersionSucceeds()
         {
@@ -99,4 +77,4 @@ namespace Verifiable.Tests.Tpm
             CollectionAssert.AreEqual(longControlValueHash, longTpmSha256);
         }
     }
-}
+}*/

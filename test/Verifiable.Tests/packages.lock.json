@@ -943,7 +943,6 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "SimpleBase": "[5.6.0, )",
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )"
         }
@@ -996,16 +995,7 @@
         }
       },
       "verifiable.tpm": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.TSS": "[2.1.1, )"
-        }
-      },
-      "Microsoft.TSS": {
-        "type": "CentralTransitive",
-        "requested": "[2.1.1, )",
-        "resolved": "2.1.1",
-        "contentHash": "87DBN+4ANSFO8TDRmFjjTBl6PL7tmrfofmxki4LUnE34gOdyQiBfJK/X1QSu0UfCGUtpoBVv/tD985s4FDpKiA=="
+        "type": "Project"
       },
       "NSec.Cryptography": {
         "type": "CentralTransitive",
