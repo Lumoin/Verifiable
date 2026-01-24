@@ -6,6 +6,11 @@ namespace Verifiable.Tests.TestInfrastructure
     public static class TestInfrastructureConstants
     {
         /// <summary>
+        /// No TPM device available message.
+        /// </summary>
+        public const string NoTpmDeviceAvailableMessage = "No TPM device available for testing.";
+
+        /// <summary>
         /// Path to test DID files.
         /// </summary>
         public const string RelativeTestPathToCurrent = "..//..//../TestDocuments//Did//";

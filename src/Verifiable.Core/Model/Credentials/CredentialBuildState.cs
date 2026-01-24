@@ -120,7 +120,7 @@ public struct CredentialBuildState: IEquatable<CredentialBuildState>, IBuilderSt
     /// </summary>
     /// <param name="other">The build state to compare with the current instance.</param>
     /// <returns><c>true</c> if the specified build state is equal to the current instance; otherwise, <c>false</c>.</returns>
-    public bool Equals(CredentialBuildState other)
+    public readonly bool Equals(CredentialBuildState other)
     {
         return Equals(Issuer, other.Issuer)
             && Nullable.Equals(ValidFrom, other.ValidFrom)
@@ -148,7 +148,7 @@ public struct CredentialBuildState: IEquatable<CredentialBuildState>, IBuilderSt
     /// Returns the hash code for this instance.
     /// </summary>
     /// <returns>A 32-bit signed integer that is the hash code for this instance.</returns>
-    public override int GetHashCode()
+    public override readonly int GetHashCode()
     {
         return HashCode.Combine(
             Issuer,

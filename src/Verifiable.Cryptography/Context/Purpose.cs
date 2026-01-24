@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -172,8 +170,47 @@ public readonly struct Purpose: IEquatable<Purpose>
     public static Purpose Encryption { get; } = new Purpose(6);
 
 
-    private static readonly List<Purpose> purposes = new([None, Verification, Signing, Exchange, Wrapped, Signature, Encryption]);
+    /// <summary>
+    /// Nonce value for session freshness and replay protection.
+    /// </summary>
+    /// <remarks>
+    /// Used in session protocols where a random value provides freshness guarantees.
+    /// In TPM, used for nonceCaller and nonceTPM in authorization sessions.
+    /// </remarks>
+    public static Purpose Nonce { get; } = new Purpose(7);
 
+
+    /// <summary>
+    /// Authorization value for access control.
+    /// </summary>
+    /// <remarks>
+    /// Used for passwords, PINs, or derived values that authorize operations.
+    /// In TPM, used for authValue and session HMACs.
+    /// </remarks>
+    public static Purpose Auth { get; } = new Purpose(8);
+
+
+    /// <summary>
+    /// Digest or hash value.
+    /// </summary>
+    /// <remarks>
+    /// Used for hash results, integrity values, and derived data.
+    /// In TPM, used for PCR values, cpHash, rpHash, and general digests.
+    /// </remarks>
+    public static Purpose Digest { get; } = new Purpose(9);
+
+    /// <summary>
+    /// TPM transport (in our out).
+    /// </summary>
+    public static Purpose Transport { get; } = new Purpose(10);
+
+    /// <summary>
+    /// Some data (e.g. in TPM opereations).
+    /// </summary>
+    public static Purpose Data { get; } = new Purpose(11);
+
+
+    private static readonly List<Purpose> purposes = new([None, Verification, Signing, Exchange, Wrapped, Signature, Encryption, Nonce, Auth, Digest, Transport, Data]);
 
     /// <summary>
     /// Gets all registered purpose values.
@@ -308,6 +345,11 @@ public static class PurposeNames
         var c when c == Purpose.Wrapped.Code => nameof(Purpose.Wrapped),
         var c when c == Purpose.Signature.Code => nameof(Purpose.Signature),
         var c when c == Purpose.Encryption.Code => nameof(Purpose.Encryption),
+        var c when c == Purpose.Nonce.Code => nameof(Purpose.Nonce),
+        var c when c == Purpose.Auth.Code => nameof(Purpose.Auth),
+        var c when c == Purpose.Digest.Code => nameof(Purpose.Digest),
+        var c when c == Purpose.Transport.Code => nameof(Purpose.Transport),
+        var c when c == Purpose.Data.Code => nameof(Purpose.Data),
         _ => $"Custom ({code})"
     };
 }

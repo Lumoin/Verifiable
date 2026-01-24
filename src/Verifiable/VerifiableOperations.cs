@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Tpm;
+using Verifiable.Tpm.Extensions.Info;
 
 namespace Verifiable;
 
@@ -15,51 +16,67 @@ namespace Verifiable;
 /// </summary>
 public static class VerifiableOperations
 {
-    public static bool IsTpmSupported() => TpmExtensions.IsTpmPlatformSupported();
-
     public static string GetPlatformDescription() => RuntimeInformation.OSDescription;
 
 
-    public static Result<string, string> GetTpmInfoAsJson()
+    /// <summary>
+    /// Gets TPM information as a structured object.
+    /// </summary>
+    public static Result<TpmInfo, string> GetTpmInfo()
     {
-        if(!IsTpmSupported())
+        if(!TpmDevice.IsAvailable)
         {
-            return Result.Failure<string, string>(
-                $"Trusted platform module (TPM) information is not supported on {GetPlatformDescription()}.");
+            return Result.Failure<TpmInfo, string>("TPM is not available on this platform.");
         }
 
         try
         {
-            var tpm = new TpmWrapper();
-            var tpmInfo = TpmExtensions.GetAllTpmInfo(tpm.Tpm);
-            string json = JsonSerializer.Serialize(tpmInfo, VerifiableJsonContext.Default.TpmInfo);
+            using TpmDevice device = TpmDevice.Open();
+            TpmResult<TpmInfo> result = device.GetInfo();
 
-            return Result.Success<string, string>(json);
+            return result.Match(
+                onSuccess: Result.Success<TpmInfo, string>,
+                onTpmError: rc => Result.Failure<TpmInfo, string>($"TPM error: {rc}"),
+                onTransportError: tc => Result.Failure<TpmInfo, string>($"Transport error: 0x{tc:X8}"));
         }
         catch(Exception ex)
         {
-            return Result.Failure<string, string>($"Error retrieving TPM information: {ex.Message}");
+            return Result.Failure<TpmInfo, string>($"Error retrieving TPM information: {ex.Message}");
         }
     }
 
 
+    /// <summary>
+    /// Gets TPM information as a JSON string.
+    /// </summary>
+    public static Result<string, string> GetTpmInfoAsJson()
+    {
+        var infoResult = GetTpmInfo();
+
+        if(!infoResult.IsSuccess)
+        {
+            return Result.Failure<string, string>(infoResult.Error!);
+        }
+
+        return Result.Success<string, string>(JsonSerializer.Serialize(infoResult.Value, TpmJsonContext.Default.TpmInfo));
+    }
+
+
+    /// <summary>
+    /// Saves TPM information to a JSON file.
+    /// </summary>
     public static async Task<Result<string, string>> SaveTpmInfoToFileAsync(string? filePath = null)
     {
-        if(!IsTpmSupported())
+        string targetPath = filePath ?? "tpm_data.json";
+        var infoResult = GetTpmInfoAsJson();
+        if(!infoResult.IsSuccess)
         {
-            return Result.Failure<string, string>(
-                $"Trusted platform module (TPM) information is not supported on {GetPlatformDescription()}.");
+            return Result.Failure<string, string>(infoResult.Error!);
         }
 
         try
         {
-            var tpm = new TpmWrapper();
-            var tpmInfo = TpmExtensions.GetAllTpmInfo(tpm.Tpm);
-
-            string targetPath = filePath ?? "tpm_data.json";
-            await using var stream = new FileStream(targetPath, FileMode.Create, FileAccess.Write);
-            await JsonSerializer.SerializeAsync(stream, tpmInfo, VerifiableJsonContext.Default.TpmInfo);
-
+            await File.WriteAllTextAsync(targetPath, infoResult.Value);
             return Result.Success<string, string>(Path.GetFullPath(targetPath));
         }
         catch(Exception ex)
@@ -69,14 +86,19 @@ public static class VerifiableOperations
     }
 
 
+    /// <summary>
+    /// Checks if TPM is supported and available on this platform.
+    /// </summary>
+    /// <returns>A message describing TPM support status.</returns>
     public static string CheckTpmSupportMessage()
     {
-        bool isSupported = IsTpmSupported();
         string os = GetPlatformDescription();
+        if(TpmDevice.IsAvailable)
+        {
+            return $"TPM is supported and available on this platform ({os}).";
+        }
 
-        return isSupported
-            ? $"TPM is supported on this platform ({os})."
-            : $"TPM is NOT supported on this platform ({os}).";
+        return $"TPM is not supported or not available on this platform ({os}).";
     }
 
 

@@ -119,10 +119,10 @@ public static class VerifiableCliTestHelpers
         };
         didCommand.Subcommands.Add(didViewCommand);
 
-        Command infoCommand = new("info", "Print selected platform information (only tpm currently).");
+        Command infoCommand = new("info", "Print selected platform information (only Tpm currently).");
         rootCommand.Subcommands.Add(infoCommand);
 
-        infoTpmCommand = new("tpm", "Print trusted platform module (TPM) information.");
+        infoTpmCommand = new("Tpm", "Print trusted platform module (TPM) information.");
         infoCommand.Subcommands.Add(infoTpmCommand);
 
         return rootCommand;

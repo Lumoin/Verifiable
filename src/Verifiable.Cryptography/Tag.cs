@@ -1,5 +1,4 @@
 ﻿using System.Collections.Frozen;
-using System.ComponentModel;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography;
@@ -103,7 +102,7 @@ public record Tag(IReadOnlyDictionary<Type, object> Data)
         Type key = typeof(T);
         if(!Data.TryGetValue(key, out object? value))
         {
-            throw new KeyNotFoundException($"Key '{key}' was not found in the tag's data.");
+            throw new KeyNotFoundException($"Key '{key}' was not found in the tag's Data.");
         }
 
         if(value is not T typedValue)

@@ -14,9 +14,15 @@
     <MSTestAnalysisMode>Recommended</MSTestAnalysisMode>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Cose\**" />
     <Compile Remove="test\VerificationResultResolution\**" />
+    <Compile Remove="Utilities\**" />
+    <EmbeddedResource Remove="Cose\**" />
     <EmbeddedResource Remove="test\VerificationResultResolution\**" />
+    <EmbeddedResource Remove="Utilities\**" />
+    <None Remove="Cose\**" />
     <None Remove="test\VerificationResultResolution\**" />
+    <None Remove="Utilities\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,7 +37,7 @@
     <PackageReference Include="SimpleBase" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage">      
-      <VersionOverride>18.3.2</VersionOverride>
+      <VersionOverride>18.4.1</VersionOverride>
     </PackageReference>
   </ItemGroup>
 
@@ -56,11 +62,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>    
     <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Cose\" />
-    <Folder Include="Utilities\" />
   </ItemGroup>  
   
 </Project>

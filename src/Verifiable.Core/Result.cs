@@ -32,12 +32,12 @@ public readonly struct Result<TValue, TError>: IEquatable<Result<TValue, TError>
     /// <summary>
     /// Assigned value if the operation succeeded.
     /// </summary>
-    private readonly TValue? _value;
+    private readonly TValue? value;
 
     /// <summary>
     /// Assigned value if the operation failed.
     /// </summary>
-    private readonly TError? _error;
+    private readonly TError? error;
 
 
     /// <summary>
@@ -51,13 +51,13 @@ public readonly struct Result<TValue, TError>: IEquatable<Result<TValue, TError>
     /// <summary>
     /// Gets the success value. Only valid when <see cref="IsSuccess"/> is true.
     /// </summary>
-    public TValue? Value => _value;
+    public TValue? Value => value;
 
 
     /// <summary>
     /// Gets the error. Only valid when <see cref="IsSuccess"/> is false.
     /// </summary>
-    public TError? Error => _error;
+    public TError? Error => error;
 
 
     /// <summary>
@@ -69,8 +69,8 @@ public readonly struct Result<TValue, TError>: IEquatable<Result<TValue, TError>
     private Result(bool isSuccess, TValue? value, TError? error)
     {
         IsSuccess = isSuccess;
-        _value = value;
-        _error = error;
+        this.value = value;
+        this.error = error;
     }
 
 
@@ -94,7 +94,7 @@ public readonly struct Result<TValue, TError>: IEquatable<Result<TValue, TError>
         ArgumentNullException.ThrowIfNull(onSuccess);
         ArgumentNullException.ThrowIfNull(onFailure);
 
-        return IsSuccess ? onSuccess(_value!) : onFailure(_error!);
+        return IsSuccess ? onSuccess(value!) : onFailure(error!);
     }
 
 
@@ -106,8 +106,8 @@ public readonly struct Result<TValue, TError>: IEquatable<Result<TValue, TError>
         ArgumentNullException.ThrowIfNull(map);
 
         return IsSuccess
-            ? Result<TNewValue, TError>.Success(map(_value!))
-            : Result<TNewValue, TError>.Failure(_error!);
+            ? Result<TNewValue, TError>.Success(map(value!))
+            : Result<TNewValue, TError>.Failure(error!);
     }
 
 
@@ -118,15 +118,15 @@ public readonly struct Result<TValue, TError>: IEquatable<Result<TValue, TError>
     {
         ArgumentNullException.ThrowIfNull(bind);
 
-        return IsSuccess ? bind(_value!) : Result<TNewValue, TError>.Failure(_error!);
+        return IsSuccess ? bind(value!) : Result<TNewValue, TError>.Failure(error!);
     }
 
 
     /// <inheritdoc />
     public bool Equals(Result<TValue, TError> other) =>
         IsSuccess == other.IsSuccess &&
-        EqualityComparer<TValue?>.Default.Equals(_value, other._value) &&
-        EqualityComparer<TError?>.Default.Equals(_error, other._error);
+        EqualityComparer<TValue?>.Default.Equals(value, other.value) &&
+        EqualityComparer<TError?>.Default.Equals(error, other.error);
 
 
     /// <inheritdoc />
@@ -134,7 +134,7 @@ public readonly struct Result<TValue, TError>: IEquatable<Result<TValue, TError>
 
 
     /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(IsSuccess, _value, _error);
+    public override int GetHashCode() => HashCode.Combine(IsSuccess, value, error);
 
 
     /// <summary>

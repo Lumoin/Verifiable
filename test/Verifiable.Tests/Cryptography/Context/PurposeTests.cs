@@ -191,6 +191,6 @@ public sealed class PurposeTests
     public void PurposesCollectionHasExpectedCount()
     {
         //Seven predefined values.
-        ContextTypeTestHelpers.AssertCollectionHasExpectedCount(Purpose.Purposes, 7);
+        ContextTypeTestHelpers.AssertCollectionHasExpectedCount(Purpose.Purposes, 12);
     }
 }
