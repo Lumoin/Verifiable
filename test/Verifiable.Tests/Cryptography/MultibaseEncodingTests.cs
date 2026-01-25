@@ -121,8 +121,14 @@ namespace Verifiable.Tests.Cryptography
         /// </summary>
         [TestMethod]
         [DynamicData(nameof(EllipticCurveTheoryData.GetEllipticCurveTestData), typeof(EllipticCurveTheoryData))]
-        public void EllipticCurvesWithMultibaseBtc58Succeeds(EllipticCurveTestData td)
+        public void EllipticCurvesWithMultibaseBtc58Succeeds(EllipticCurveTestCase testCase)
         {
+            if(OperatingSystem.IsMacOS() && testCase.CurveIdentifier == CryptoAlgorithm.Secp256k1)
+            {
+                return; // The secP256k1 curve is not supported on macOS.
+            }
+
+            var td = EllipticCurveTheoryData.CreateEllipticCurveTestData(testCase);
             var compressed = EllipticCurveUtilities.Compress(td.PublicKeyMaterialX, td.PublicKeyMaterialY);
 
             var multibaseEncodedPublicKey = MultibaseSerializer.Encode(
@@ -239,7 +245,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void P256KeyCreationTest()
         {
-            var keys = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, MicrosoftKeyMaterialCreator.CreateP256Keys);
+            var keys = MicrosoftKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
 
             //Use high-level API for encoding.
             var multibaseEncodedPublicKey = MultibaseSerializer.EncodeKey(

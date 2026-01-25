@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Microsoft;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography
 {
@@ -41,7 +42,7 @@ namespace Verifiable.Tests.Cryptography
         }
 
 
-        [TestMethod]
+        [SkipOnMacOSTestMethod(Reason = "The secP256k1 curve is not supported on macOS.")]
         public async ValueTask Secp256k1SignatureVerifies()
         {
             var compressedKeys = MicrosoftKeyMaterialCreator.CreateSecp256k1Keys(SensitiveMemoryPool<byte>.Shared);

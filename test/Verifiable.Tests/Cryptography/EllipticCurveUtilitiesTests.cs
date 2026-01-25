@@ -1,5 +1,7 @@
-﻿using System.Security.Cryptography;
+﻿using System.Reflection;
+using System.Security.Cryptography;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Tests.DataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -24,7 +26,7 @@ namespace Verifiable.Tests.Cryptography
         private const string YParameterNameInExceptionMessage = "yPoint";
 
 
-        [SkipOnMacOSTestMethod(Reason = "Elliptic curve compression is not supported on macOS.")]
+        [TestMethod]
         public void PrimeCurveCompressThrowsWithCorrectMessageIfEitherOrBothParametersNull()
         {
             using(var key = ECDsa.Create())
@@ -43,7 +45,7 @@ namespace Verifiable.Tests.Cryptography
         }
 
 
-        [SkipOnMacOSTestMethod(Reason = "Elliptic curve compression is not supported on macOS.")]
+        [TestMethod]
         public void CompressThrowsWithCorrectMessageIfPointsDifferentLength()
         {
             using(var key1 = ECDsa.Create(ECCurve.NamedCurves.nistP256))
@@ -61,7 +63,7 @@ namespace Verifiable.Tests.Cryptography
         }
 
 
-        [SkipOnMacOSTestMethod(Reason = "Elliptic curve compression is not supported on macOS.")]
+        [TestMethod]
         public void CompressThrowsWithCorrectMessageIfPointsWrongLength()
         {
             using(var key1 = ECDsa.Create(ECCurve.NamedCurves.nistP256))
@@ -80,12 +82,17 @@ namespace Verifiable.Tests.Cryptography
             }
         }
 
-
-        [SkipOnMacOSTestMethod(Reason = "Elliptic curve operations are not fully supported on macOS.")]
+        [TestMethod]
         [DynamicData(nameof(EllipticCurveTheoryData.GetEllipticCurveTestData), typeof(EllipticCurveTheoryData))]
-        public void PrimeCurvesRoundtripCompressAndDecompressSucceeds(EllipticCurveTestData td)
+        public void PrimeCurvesRoundtripCompressAndDecompressSucceeds(EllipticCurveTestCase testCase)
         {
-            var curveType = td.CurveIdentifier.Equals(EllipticCurveTheoryData.EllipticSecP256k1, StringComparison.OrdinalIgnoreCase)
+            if(OperatingSystem.IsMacOS() && testCase.CurveIdentifier == CryptoAlgorithm.Secp256k1)
+            {
+                return; // The secP256k1 curve is not supported on macOS.
+            }
+
+            var td = EllipticCurveTheoryData.CreateEllipticCurveTestData(testCase);
+            var curveType = td.CurveIdentifier == CryptoAlgorithm.Secp256k1
                 ? EllipticCurveTypes.Secp256k1
                 : EllipticCurveTypes.NistCurves;
 
@@ -94,27 +101,32 @@ namespace Verifiable.Tests.Cryptography
             CollectionAssert.AreEqual(td.PublicKeyMaterialY, evenUncompressedY);
         }
 
-
-        [SkipOnMacOSTestMethod(Reason = "Elliptic curve operations are not fully supported on macOS.")]
+        [TestMethod]
         [DynamicData(nameof(EllipticCurveTheoryData.GetEllipticCurveTestData), typeof(EllipticCurveTheoryData))]
-        public void EllipticPointOnCurveCheckSucceeds(EllipticCurveTestData td)
+        public void EllipticPointOnCurveCheckSucceeds(EllipticCurveTestCase testCase)
         {
+            if(OperatingSystem.IsMacOS() && testCase.CurveIdentifier == CryptoAlgorithm.Secp256k1)
+            {
+                return; // The secP256k1 curve is not supported on macOS.
+            }
+
+            var td = EllipticCurveTheoryData.CreateEllipticCurveTestData(testCase);
+
             ReadOnlySpan<byte> primeBytes = td.CurveIdentifier switch
             {
-                EllipticCurveTheoryData.EllipticP256 => EllipticCurveConstants.P256.PrimeBytes,
-                EllipticCurveTheoryData.EllipticP384 => EllipticCurveConstants.P384.PrimeBytes,
-                EllipticCurveTheoryData.EllipticP521 => EllipticCurveConstants.P521.PrimeBytes,
-                EllipticCurveTheoryData.EllipticSecP256k1 => EllipticCurveConstants.Secp256k1.PrimeBytes,
+                var a when a == CryptoAlgorithm.P256 => EllipticCurveConstants.P256.PrimeBytes,
+                var a when a == CryptoAlgorithm.P384 => EllipticCurveConstants.P384.PrimeBytes,
+                var a when a == CryptoAlgorithm.P521 => EllipticCurveConstants.P521.PrimeBytes,
+                var a when a == CryptoAlgorithm.Secp256k1 => EllipticCurveConstants.Secp256k1.PrimeBytes,
                 _ => throw new NotSupportedException($"Unsupported curve identifier: {td.CurveIdentifier}.")
             };
 
-            var curveType = td.CurveIdentifier.Equals(EllipticCurveTheoryData.EllipticSecP256k1, StringComparison.OrdinalIgnoreCase)
+            var curveType = td.CurveIdentifier == CryptoAlgorithm.Secp256k1
                 ? EllipticCurveTypes.Secp256k1
                 : EllipticCurveTypes.NistCurves;
 
             CheckPointOnCurveForEvenAndOdd(td.PublicKeyMaterialX, td.PublicKeyMaterialY, curveType, primeBytes, isEven: td.IsEven);
         }
-
 
         private static void CheckPointOnCurveForEvenAndOdd(
             ReadOnlySpan<byte> publicKeyX,
