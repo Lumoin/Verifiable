@@ -1,5 +1,7 @@
 ﻿using ModelContextProtocol.Client;
 using System.Text.Json;
+using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Tpm;
 
 namespace Verifiable.Tests.ToolTests;
 
@@ -20,14 +22,23 @@ public class McpServerTests
 
 
     [TestMethod]
+    [SkipIfNoTpm]
     public void CheckTpmSupportMessageReturnsValidResponse()
     {
         string result = VerifiableOperations.CheckTpmSupportMessage();
 
         Assert.IsNotNull(result);
         Assert.IsGreaterThan(0, result.Length);
-        Assert.Contains("supported", result, StringComparison.OrdinalIgnoreCase);
+
+        //Message should contain platform info and indicate support status.
         Assert.Contains("platform", result, StringComparison.OrdinalIgnoreCase);
+
+        //Should indicate either "supported and available" or "not supported".
+        bool indicatesAvailable = result.Contains("supported and available", StringComparison.OrdinalIgnoreCase);
+        bool indicatesNotAvailable = result.Contains("not supported", StringComparison.OrdinalIgnoreCase) ||
+                                     result.Contains("not available", StringComparison.OrdinalIgnoreCase);
+
+        Assert.IsTrue(indicatesAvailable || indicatesNotAvailable, "Message should clearly indicate TPM availability status.");
     }
 
 
@@ -102,8 +113,14 @@ public class McpServerTests
 
 
     [TestMethod]
+    [SkipIfNoTpm]
     public void GetTpmInfoAsJsonReturnsValidJsonOrError()
     {
+        if(!TpmDevice.IsAvailable)
+        {
+            Assert.Inconclusive(TestInfrastructureConstants.NoTpmDeviceAvailableMessage);
+        }
+
         var result = VerifiableOperations.GetTpmInfoAsJson();
 
         if(result.IsSuccess)
@@ -122,10 +139,15 @@ public class McpServerTests
 
 
     [TestMethod]
+    [SkipIfNoTpm]
     public async Task SaveTpmInfoToFileAsyncReturnsExpectedResult()
     {
-        string testFilePath = Path.Combine(Path.GetTempPath(), $"test_tpm_{Guid.NewGuid()}.json");
+        if(!TpmDevice.IsAvailable)
+        {
+            Assert.Inconclusive(TestInfrastructureConstants.NoTpmDeviceAvailableMessage);
+        }
 
+        string testFilePath = Path.Combine(Path.GetTempPath(), $"test_tpm_{Guid.NewGuid()}.json");
         try
         {
             var result = await VerifiableOperations.SaveTpmInfoToFileAsync(testFilePath);
@@ -154,8 +176,14 @@ public class McpServerTests
 
 
     [TestMethod]
+    [SkipIfNoTpm]
     public async Task SaveTpmInfoToFileAsyncNullPathUsesDefaultFileName()
     {
+        if(!TpmDevice.IsAvailable)
+        {
+            Assert.Inconclusive(TestInfrastructureConstants.NoTpmDeviceAvailableMessage);
+        }
+
         var result = await VerifiableOperations.SaveTpmInfoToFileAsync(null);
 
         if(result.IsSuccess)
@@ -210,7 +238,7 @@ public class McpServerTests
     [TestMethod]
     public void CreateDidVeryLongParameterHandlesCorrectly()
     {
-        string longParam = new string('x', 10000);
+        string longParam = new('x', 10000);
 
         var result = VerifiableOperations.CreateDid(1, longParam, null);
 

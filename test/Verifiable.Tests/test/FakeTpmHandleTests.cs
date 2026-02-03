@@ -10,7 +10,7 @@ public static class FakeTpmClient
     public static ValueTask<bool> VerifyAsync(string keyHandle, ReadOnlySpan<byte> data, ReadOnlySpan<byte> signature)
     {
         //Fake verification - just check if handle is valid.
-        return ValueTask.FromResult(keyHandle == "tpm-key-handle-123");
+        return ValueTask.FromResult(keyHandle == "Tpm-key-handle-123");
     }
 }
 
@@ -43,13 +43,13 @@ public class FakeTpmHandleTests
         });
 
         //Encode handle as bytes for storage.
-        string tpmHandle = "tpm-key-handle-123";
+        string tpmHandle = "Tpm-key-handle-123";
         var handleBytes = SensitiveMemoryPool<byte>.Shared.Rent(Encoding.UTF8.GetByteCount(tpmHandle));
         Encoding.UTF8.GetBytes(tpmHandle, handleBytes.Memory.Span);
         var handleMemory = new PublicKeyMemory(handleBytes, tpmTag);
 
         //Create TPM public key.
-        var tpmPublicKey = new PublicKey(handleMemory, "tpm-key-id", tpmVerificationDelegate);
+        var tpmPublicKey = new PublicKey(handleMemory, "Tpm-key-id", tpmVerificationDelegate);
 
         //Test data and fake signature.
         var testData = Encoding.UTF8.GetBytes("Hello TPM!");

@@ -26,30 +26,25 @@ namespace Verifiable.Tests
             };
 
             foreach(var originalData in testData)
-            {
-                Console.WriteLine($"Testing data: {Convert.ToHexString(originalData)}");
-
+            {                
                 //Test our Base64Url encoder/decoder roundtrip.
                 var pool = SensitiveMemoryPool<char>.Shared;
                 var memPool = SensitiveMemoryPool<byte>.Shared;
 
                 //Encode using our Base64Url encoder.
                 string ourBase64Url = TestSetup.Base64UrlEncoder(originalData);
-                Console.WriteLine($"Our Base64Url: {ourBase64Url}");
-
+                
                 //Decode using our Base64Url decoder.
                 using var decodedOwner = TestSetup.Base64UrlDecoder(ourBase64Url, memPool);
                 byte[] ourDecoded = decodedOwner.Memory.ToArray();
-                Console.WriteLine($"Our decoded: {Convert.ToHexString(ourDecoded)}");
-
+                
                 //Verify roundtrip works.
                 CollectionAssert.AreEqual(originalData, ourDecoded, "Our Base64Url roundtrip failed");
 
                 //Compare with .NET Base64 reference implementation.
                 string netBase64 = Convert.ToBase64String(originalData);
                 string netBase64Url = netBase64.TrimEnd('=').Replace('+', '-').Replace('/', '_');
-                Console.WriteLine($".NET Base64Url: {netBase64Url}");
-
+                
                 //Our encoder should produce the same result as .NET conversion.
                 Assert.AreEqual(netBase64Url, ourBase64Url, "Base64Url encoding doesn't match .NET reference");
 
@@ -58,9 +53,7 @@ namespace Verifiable.Tests
                 byte[] netDecoded = netDecodedOwner.Memory.ToArray();
 
                 //Should decode .NET Base64Url correctly.
-                CollectionAssert.AreEqual(originalData, netDecoded, "Failed to decode .NET Base64Url");
-
-                Console.WriteLine("✓ Roundtrip successful\n");
+                CollectionAssert.AreEqual(originalData, netDecoded, "Failed to decode .NET Base64Url");                
             }
         }
 
@@ -72,17 +65,14 @@ namespace Verifiable.Tests
 
             //Standard Base64.
             string base64 = Convert.ToBase64String(testData);
-            Console.WriteLine($"Standard Base64: {base64}");
-
+            
             //Manual Base64Url conversion.
             string manualBase64Url = base64.TrimEnd('=').Replace('+', '-').Replace('/', '_');
-            Console.WriteLine($"Manual Base64Url: {manualBase64Url}");
-
+            
             //Our Base64Url encoder.
             var pool = SensitiveMemoryPool<char>.Shared;
             string ourBase64Url = TestSetup.Base64UrlEncoder(testData);
-            Console.WriteLine($"Our Base64Url: {ourBase64Url}");
-
+            
             //Should match manual conversion.
             Assert.AreEqual(manualBase64Url, ourBase64Url, "Character replacement doesn't match manual conversion");
 
@@ -140,8 +130,7 @@ namespace Verifiable.Tests
             Assert.AreEqual(OperationStatus.Done, status, "Direct Base64 encoding failed");
 
             string directBase64 = Encoding.UTF8.GetString(directBase64Buffer[..bytesWritten]);
-            Console.WriteLine($"Direct Base64: {directBase64}");
-
+            
             //Our Base64Url encoder (should use same Base64 underneath).
             var pool = SensitiveMemoryPool<char>.Shared;
             string ourBase64Url = TestSetup.Base64UrlEncoder(testData);
@@ -155,10 +144,7 @@ namespace Verifiable.Tests
             {
                 ourAsBase64 = ourAsBase64.PadRight(ourAsBase64.Length + paddingNeeded, '=');
             }
-
-            Console.WriteLine($"Our as Base64: {ourAsBase64}");
-            Console.WriteLine($"Our Base64Url: {ourBase64Url}");
-
+            
             //Should match the direct Base64 encoding.
             Assert.AreEqual(directBase64, ourAsBase64, "Our Base64 doesn't match direct System.Buffers.Text.Base64");
         }

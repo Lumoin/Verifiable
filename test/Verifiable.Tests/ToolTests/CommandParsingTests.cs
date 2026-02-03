@@ -118,7 +118,7 @@ public class CommandParsingTests
             out _, out _, out _, out _, out _,
             out _, out _, out _, out _, out _);
 
-        ParseResult result = rootCommand.Parse("info tpm");
+        ParseResult result = rootCommand.Parse("info Tpm");
 
         Assert.IsEmpty(result.Errors);
     }

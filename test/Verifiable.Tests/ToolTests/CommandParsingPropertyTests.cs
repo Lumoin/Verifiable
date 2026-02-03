@@ -141,7 +141,12 @@ public class CommandParsingPropertyTests
     [TestMethod]
     public void ParseRandomUnknownCommandAlwaysFails()
     {
-        Gen.String[1, 20].Where(s => !IsKnownCommandOrBuiltInOption(s) && !string.IsNullOrWhiteSpace(s))
+        //Filter strings with CLI special characters (>, <, |, &, etc.) because shells
+        //intercept these before they reach the application. Testing them here would test
+        //System.CommandLine's internal handling rather than realistic user input.
+        Gen.String[1, 20].Where(s => !IsKnownCommandOrBuiltInOption(s) &&
+                                     !string.IsNullOrWhiteSpace(s) &&
+                                     !VerifiableCliTestHelpers.ContainsCliSpecialCharacters(s))
             .Sample(unknownCommand =>
             {
                 var rootCommand = VerifiableCliTestHelpers.BuildTestableRootCommand(out _, out _, out _);

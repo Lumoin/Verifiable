@@ -10,22 +10,22 @@
       },
       "dotNetRdf": {
         "type": "Direct",
-        "requested": "[3.4.1, )",
-        "resolved": "3.4.1",
-        "contentHash": "0rmzHSfSVjfNaXnaH/JV9myGnTKRj++v6wu/XF3ar2haQi4ofzuMxaU5ITv6z2I1Z3QfUrQo5ygY8UgSLdrFzQ==",
+        "requested": "[3.5.0, )",
+        "resolved": "3.5.0",
+        "contentHash": "VZbVVaHBNZYG5BjVNiGIND+lqsR/r31f8Wb+P9PXZaXrl0m0teqc3YsEzrAeFtMBCiXJxkluUM00UNxlOXZdfg==",
         "dependencies": {
-          "dotNetRdf.Client": "3.4.1",
-          "dotNetRdf.Core": "3.4.1",
-          "dotNetRdf.Data.DataTables": "3.4.1",
-          "dotNetRdf.Dynamic": "3.4.1",
-          "dotNetRdf.Inferencing": "3.4.1",
-          "dotNetRdf.Ldf": "3.4.1",
-          "dotNetRdf.Ontology": "3.4.1",
-          "dotNetRdf.Query.FullText": "3.4.1",
-          "dotNetRdf.Query.Spin": "3.4.1",
-          "dotNetRdf.Shacl": "3.4.1",
-          "dotNetRdf.Skos": "3.4.1",
-          "dotNetRdf.Writing.HtmlSchema": "3.4.1"
+          "dotNetRdf.Client": "3.5.0",
+          "dotNetRdf.Core": "3.5.0",
+          "dotNetRdf.Data.DataTables": "3.5.0",
+          "dotNetRdf.Dynamic": "3.5.0",
+          "dotNetRdf.Inferencing": "3.5.0",
+          "dotNetRdf.Ldf": "3.5.0",
+          "dotNetRdf.Ontology": "3.5.0",
+          "dotNetRdf.Query.FullText": "3.5.0",
+          "dotNetRdf.Query.Spin": "3.5.0",
+          "dotNetRdf.Shacl": "3.5.0",
+          "dotNetRdf.Skos": "3.5.0",
+          "dotNetRdf.Writing.HtmlSchema": "3.5.0"
         }
       },
       "LiquidTestReports.Markdown": {
@@ -237,8 +237,8 @@
       },
       "AngleSharp": {
         "type": "Transitive",
-        "resolved": "1.3.0",
-        "contentHash": "iHzfn4cK6CmhuURNdEpmSQCq5/HZFldEpkbnmqT9My8+6l2Sz3F+NxoqRA8z/jTkWB+SAu5boRdp4v/WtyjuIQ=="
+        "resolved": "1.4.0",
+        "contentHash": "6ph8mpaQx0KL0COYRt0kI8MB9gSp1PtKijKMhJU//+aVFgKAJLKDesG/+26JSaVCOrHNgPf12wpfoyRcMYOeXg=="
       },
       "DotLiquid": {
         "type": "Transitive",
@@ -247,115 +247,115 @@
       },
       "dotNetRdf.Client": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "1KX541Rx/n7hrr/18MAtXQWCjofQBGOyB7OfsAFIX+iDnszO0UrYBhN8+PPjmHBQ9i8OCwa/8wtklauro8o0xQ==",
+        "resolved": "3.5.0",
+        "contentHash": "u73xkSUVGVnWO+WWfw1Zn7IHIQSBorPtXCsDceMTDBMev09THmns4QYbWtHJxWgZsl3Tcl+h+ReIdoQ7GgkpJw==",
         "dependencies": {
-          "dotNetRdf.Core": "3.4.1"
+          "dotNetRdf.Core": "3.5.0"
         }
       },
       "dotNetRdf.Core": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "UrBu+bYAjVspf7XfHrDaubVzjhOiR7A6DRW42YB5nmzhg33veCaVhOENb2sL7BerYkqNsH1AufKJMt5xj/8MVQ==",
+        "resolved": "3.5.0",
+        "contentHash": "IhX7yLgYXxnC9nrUshvwPpA69QjAXD6hJoct1zi6u9cbH2xvJG+QSLqs1RIMzr5Qjl8gtKQM9PGC9yXy37wqRg==",
         "dependencies": {
-          "AngleSharp": "1.3.0",
-          "HtmlAgilityPack": "1.12.3",
-          "Microsoft.Extensions.Configuration": "9.0.9",
+          "AngleSharp": "1.4.0",
+          "HtmlAgilityPack": "1.12.4",
+          "Microsoft.Extensions.Configuration": "10.0.2",
           "Newtonsoft.Json": "13.0.4",
-          "System.Configuration.ConfigurationManager": "9.0.9",
+          "System.Configuration.ConfigurationManager": "10.0.2",
           "System.Reflection.TypeExtensions": "4.7.0",
           "VDS.Common": "3.0.0"
         }
       },
       "dotNetRdf.Data.DataTables": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "9h0nB4gPaw7oIp2qxzVvL+EM9edsDRl50qPQ0YJRPvGw4kFGh0oO996HUPq2oVqNUl7go7PQbGcZe1UEcMfFFw==",
+        "resolved": "3.5.0",
+        "contentHash": "uwmoZn+u3DZ4O2E8fF4ITStzqz9Fmtj+dSV9ylCxLWg4hdpL15rzQ6FLcpBndT+GebQ2b2pOfIOBWgfEeNGA8g==",
         "dependencies": {
-          "dotNetRdf.Core": "3.4.1"
+          "dotNetRdf.Core": "3.5.0"
         }
       },
       "dotNetRdf.Dynamic": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "p8SByuMot0mYy2U0vrCn062FeoGCKzqWMAujo7TzpaSitq4Vj4gf6hgLheK9ZtI2F032PB4l8tztbR1+ZlBdzQ==",
+        "resolved": "3.5.0",
+        "contentHash": "rweQiYC5GbcZKnSI6Neb+FBrkHW2nL3NsdJd0kZSm8xrb5tgxCph0jG2Q7PVrYNJ8Ni+TMx+2wyZacEJ6ksaug==",
         "dependencies": {
-          "dotNetRdf.Core": "3.4.1"
+          "dotNetRdf.Core": "3.5.0"
         }
       },
       "dotNetRdf.Inferencing": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "cZDdqpkEFsGO9D1gOoH/QcCHnWt3xtqjtUQWd2lznJ9S/7qQA0J93qfpuxlHIaU28mrOVqiRxThY2WtL9Nmx5Q==",
+        "resolved": "3.5.0",
+        "contentHash": "rrFzZQhrhhy0SNy4myQAesBhVSBPx/hN7BWzTr4FpS+mPJDT455eLzores+J2UjlWUr09n01Arh/zDbWrehrwg==",
         "dependencies": {
-          "dotNetRdf.Ontology": "3.4.1"
+          "dotNetRdf.Ontology": "3.5.0"
         }
       },
       "dotNetRdf.Ldf": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "LZJoEyStNHXJHLByPKyfQxe1ivFQISu/ToV68x+cDexetwQxdIDtcw027x17nDgwA7kswbVezKqXSJSMGGp8Kg==",
+        "resolved": "3.5.0",
+        "contentHash": "iErzlz9vUYlwZ1w1jHkcWA9WFT5FUe4CTZiuY0Px85xl3cRv4STzKifjC0tAyvmdwF3zwEQBOEUXbX0pGr447g==",
         "dependencies": {
           "Resta.UriTemplates": "1.4.0",
-          "dotNetRdf.Core": "3.4.1"
+          "dotNetRdf.Core": "3.5.0"
         }
       },
       "dotNetRdf.Ontology": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "5MI7+pY/MEepBUpo0c9JYKYajafSV/30Q86RYGcvZlaPYKNOkKtPXfdWuMqX4Q0XCUaxvqtMA7CNquG+NtaEWg==",
+        "resolved": "3.5.0",
+        "contentHash": "D2/BdvVFo8OHxsIbNywGZoHbcghpK8MhFAuvOUqqrSIhWiWhLYtU2vIVoVyazzqaalBphDSIwimUq3w+pcOJlw==",
         "dependencies": {
-          "dotNetRdf.Core": "3.4.1"
+          "dotNetRdf.Core": "3.5.0"
         }
       },
       "dotNetRdf.Query.FullText": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "Cv5n5PwVTlOAZeSgNFixWP3AnUnmeg8yCtIal0GGiDeZ8aql9CluYsd6jXkrsoFjlHHYrbpyTSKyW7wmoUc9Dg==",
+        "resolved": "3.5.0",
+        "contentHash": "bnM+IDIOf6P+QP6wSK/UIxynse6YRDsGmL+o1TXhOOeY3c2CdwH/L45B4QgKB+H5jvcx18WAzM0yLsYyXiTJcQ==",
         "dependencies": {
           "Lucene.Net": "4.8.0-beta00017",
           "Lucene.Net.QueryParser": "4.8.0-beta00017",
           "SharpZipLib": "1.4.2",
-          "dotNetRdf.Core": "3.4.1"
+          "dotNetRdf.Core": "3.5.0"
         }
       },
       "dotNetRdf.Query.Spin": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "2FDUVrE/rxhbOi8c1crG4sFU8TZCrAlhkBvV2jUn6LHzC6fyhaO99AiEQKZ6rxmXJSwfHQ2C+xTUfSSy0CV2Yg==",
+        "resolved": "3.5.0",
+        "contentHash": "1gYOd8kOOplZRBeoB4MfO/ZSnPjosyqH4ZwfxoDrU3ddNCD/M6z5KkrpliERkpqptBkJxnwNhz/E672RtVkUNA==",
         "dependencies": {
-          "dotNetRdf.Core": "3.4.1",
-          "dotNetRdf.Inferencing": "3.4.1"
+          "dotNetRdf.Core": "3.5.0",
+          "dotNetRdf.Inferencing": "3.5.0"
         }
       },
       "dotNetRdf.Shacl": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "hGsdL3qEqYvFXM8H8Bma3Prv8L1kA1ZJWLYI/OHIMea+m40rdlaQ3OHqIs81QY0s07KlXtxc4hYdqI8JV/s9JA==",
+        "resolved": "3.5.0",
+        "contentHash": "v5QUEnkhSEbgjeNTWk6/LTzDRJeG2fG7xMMWIz6Luhv6YvTvghHjyz9nfOjgjBMWQH1/CZnHSwPlHlsgk07xJA==",
         "dependencies": {
-          "dotNetRdf.Core": "3.4.1"
+          "dotNetRdf.Core": "3.5.0"
         }
       },
       "dotNetRdf.Skos": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "Y8Ykj3vGc9XDtmqXDUYKJneyQJbeOuDPUPFxZVfwrNmF8Z2F+BWz1vd/ZgwLcvf5Dsj6z5DZ3/K/kSMVV77wag==",
+        "resolved": "3.5.0",
+        "contentHash": "b0uSB9MJINtzJZbO3LudMyFMhnhrpSDij+y4GgsNPk4dQMfENZlOS/BW9iLEMIdtjqmpU03GRG81VwM2G+SY3g==",
         "dependencies": {
-          "dotNetRdf.Core": "3.4.1"
+          "dotNetRdf.Core": "3.5.0"
         }
       },
       "dotNetRdf.Writing.HtmlSchema": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "f3vSgh6HUphI/bYi6c7ZchbDfmBT8gb9iv3PP2wiFTQmdQCy/RVT/yNm8kmxs7l8mxz1pxNcMrBWioKtzy3raw==",
+        "resolved": "3.5.0",
+        "contentHash": "CSoE5JuMpGsmiF7Zj7rNfu0a74Exozv6l4btXXgjGp81YpBoZs+wmcJUWMPO8ad0iEs9X8XSJs8Munt46Ga6Nw==",
         "dependencies": {
-          "dotNetRdf.Core": "3.4.1"
+          "dotNetRdf.Core": "3.5.0"
         }
       },
       "HtmlAgilityPack": {
         "type": "Transitive",
-        "resolved": "1.12.3",
-        "contentHash": "NyckYLSQBI5fB9YH5XN94EGfidD5FgaKnfmGqApKQYBaf3fFmv9KGodl5kvUZg/QLz+/M4rE7vwUig25eA8PqQ=="
+        "resolved": "1.12.4",
+        "contentHash": "ljqvBabvFwKoLniuoQKO8b5bJfJweKLs4fUNS/V5dsvpo0A8MlJqxxn9XVmP2DaskbUXty6IYaWAi1SArGIMeQ=="
       },
       "J2N": {
         "type": "Transitive",
@@ -852,11 +852,11 @@
       },
       "System.Configuration.ConfigurationManager": {
         "type": "Transitive",
-        "resolved": "9.0.9",
-        "contentHash": "Q1LknxnRmmsUXt/ElBp739Gexppy0HeDYxvExpJq09jAYhpTHRRRkZIwfNKfM4BGRlFzRDVdnerZawxoE8naMg==",
+        "resolved": "10.0.2",
+        "contentHash": "UpBPpVzF+xbB3GsBrraPvlYCwUiOhs+RLxnTMKLqDs2gNNaAtxQRlKjXfMV3zxE+hiQkGId5olZ+9tE6xXHdwQ==",
         "dependencies": {
-          "System.Diagnostics.EventLog": "9.0.9",
-          "System.Security.Cryptography.ProtectedData": "9.0.9"
+          "System.Diagnostics.EventLog": "10.0.2",
+          "System.Security.Cryptography.ProtectedData": "10.0.2"
         }
       },
       "System.Diagnostics.EventLog": {
@@ -922,7 +922,7 @@
           "System.CommandLine": "[2.0.2, )",
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Tpm": "[0.0.0, )",
-          "dotNetRdf": "[3.4.1, )"
+          "dotNetRdf": "[3.5.0, )"
         }
       },
       "verifiable.bouncycastle": {
@@ -943,7 +943,6 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "SimpleBase": "[5.6.0, )",
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )"
         }
@@ -998,14 +997,8 @@
       "verifiable.tpm": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.TSS": "[2.1.1, )"
+          "Verifiable.Cryptography": "[0.0.0, )"
         }
-      },
-      "Microsoft.TSS": {
-        "type": "CentralTransitive",
-        "requested": "[2.1.1, )",
-        "resolved": "2.1.1",
-        "contentHash": "87DBN+4ANSFO8TDRmFjjTBl6PL7tmrfofmxki4LUnE34gOdyQiBfJK/X1QSu0UfCGUtpoBVv/tD985s4FDpKiA=="
       },
       "NSec.Cryptography": {
         "type": "CentralTransitive",

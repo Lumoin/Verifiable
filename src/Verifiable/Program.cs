@@ -32,7 +32,7 @@ public static class Program
         var builder = Host.CreateApplicationBuilder(args);
 
         builder.Services.AddMcpServer()
-            .WithStdioServerTransport()            
+            .WithStdioServerTransport()
             .WithTools<VerifiableMcpServer>();
 
         builder.Logging.AddConsole(options =>
@@ -48,6 +48,10 @@ public static class Program
     private static async Task<int> RunCliAsync(string[] args)
     {
         RootCommand rootCommand = new("A command line tool for security elements, DIDs and VCs");
+
+        //Global option for disabling colors.
+        Option<bool> noColorOption = new("--no-color") { Description = "Disable colored output." };
+        rootCommand.Options.Add(noColorOption);
 
         Command didCommand = new("did", "Create, revoke, list or view DIDs.");
         rootCommand.Subcommands.Add(didCommand);
@@ -122,28 +126,135 @@ public static class Program
             return 0;
         });
 
-        Command infoCommand = new("info", "Print selected platform information (only tpm currently).");
+        Command infoCommand = new("info", "Print selected platform information.");
         rootCommand.Subcommands.Add(infoCommand);
 
-        Command infoTpmCommand = new("tpm", "Print trusted platform module (TPM) information.");
+        Option<bool> jsonOption = new("--json", "-j") { Description = "Output as JSON." };
+        Option<string?> outputOption = new("--output", "-o") { Description = "Write output to file." };
+        Option<bool> revealOption = new("--reveal") { Description = "Reveal sensitive values (PCR digests). Use with caution." };
+
+        Command infoTpmCommand = new("tpm", "Print trusted platform module (TPM) information.")
+        {
+            jsonOption,
+            outputOption,
+            revealOption
+        };
         infoCommand.Subcommands.Add(infoTpmCommand);
 
         infoTpmCommand.SetAction(async parseResult =>
         {
-            var result = await VerifiableOperations.SaveTpmInfoToFileAsync();
+            bool useJson = parseResult.GetValue(jsonOption);
+            string? outputPath = parseResult.GetValue(outputOption);
+            bool reveal = parseResult.GetValue(revealOption);
 
-            if(result.IsSuccess)
+            //If output path specified, always use JSON format.
+            if(outputPath is not null)
             {
-                Console.WriteLine($"TPM data saved to: {result.Value}");
+                if(!reveal)
+                {
+                    Console.WriteLine(ConsoleFormatter.Warning("Warning: Saving full TPM data including PCR values to file."));
+                    Console.WriteLine(ConsoleFormatter.Dim("  PCR values can fingerprint your system. Consider if this file will be shared."));
+                    Console.WriteLine();
+                }
 
+                var saveResult = await VerifiableOperations.SaveTpmInfoToFileAsync(outputPath);
+
+                if(saveResult.IsSuccess)
+                {
+                    Console.WriteLine($"TPM data saved to: {saveResult.Value}");
+                    return 0;
+                }
+
+                Console.Error.WriteLine(ConsoleFormatter.Error(saveResult.Error!));
+                return 1;
+            }
+
+            //Output to stdout.
+            if(useJson)
+            {
+                if(!reveal)
+                {
+                    Console.Error.WriteLine(ConsoleFormatter.Warning("Warning: JSON output includes full PCR values."));
+                    Console.Error.WriteLine(ConsoleFormatter.Dim("  Use --reveal to acknowledge, or pipe to file intentionally."));
+                    Console.Error.WriteLine();
+                }
+
+                var jsonResult = VerifiableOperations.GetTpmInfoAsJson();
+
+                if(jsonResult.IsSuccess)
+                {
+                    Console.WriteLine(jsonResult.Value);
+                    return 0;
+                }
+
+                Console.Error.WriteLine(ConsoleFormatter.Error(jsonResult.Error!));
+                return 1;
+            }
+
+            //Human-readable format (default).
+            var infoResult = VerifiableOperations.GetTpmInfo();
+
+            if(infoResult.IsSuccess)
+            {
+                TpmInfoFormatter.WriteToConsole(infoResult.Value!, reveal);
                 return 0;
             }
 
-            Console.Error.WriteLine(result.Error);
-
+            Console.Error.WriteLine(ConsoleFormatter.Error(infoResult.Error!));
             return 1;
         });
 
-        return await rootCommand.Parse(args).InvokeAsync();
+        //Event log command - subcommand of tpm.
+        Option<int?> pcrFilterOption = new("--pcr", "-p") { Description = "Filter events by PCR index (0-23)." };
+        Option<bool> summaryOnlyOption = new("--summary", "-s") { Description = "Show summary only, no individual events." };
+        Option<bool> chronologicalOption = new("--chronological", "-c") { Description = "Show events in boot order (oldest first). Default is newest first." };
+
+        Command tpmEventLogCommand = new("eventlog", "Print detailed TCG event log (boot measurements).")
+        {
+            revealOption,
+            pcrFilterOption,
+            summaryOnlyOption,
+            chronologicalOption
+        };
+        infoTpmCommand.Subcommands.Add(tpmEventLogCommand);
+
+        tpmEventLogCommand.SetAction(parseResult =>
+        {
+            bool reveal = parseResult.GetValue(revealOption);
+            int? pcrFilter = parseResult.GetValue(pcrFilterOption);
+            bool summaryOnly = parseResult.GetValue(summaryOnlyOption);
+            bool chronological = parseResult.GetValue(chronologicalOption);
+
+            var log = TcgEventLogFormatter.TryReadEventLog(out string? error);
+
+            if(log is null)
+            {
+                Console.Error.WriteLine(ConsoleFormatter.Error($"Failed to read event log: {error}"));
+                return 1;
+            }
+
+            if(summaryOnly)
+            {
+                TcgEventLogFormatter.WriteSummary(log);
+                Console.WriteLine();
+                TcgEventLogFormatter.WritePcrSummary(log);
+            }
+            else
+            {
+                TcgEventLogFormatter.WriteFull(log, reveal, pcrFilter, chronological);
+            }
+
+            return 0;
+        });
+
+        var parsed = rootCommand.Parse(args);
+
+        //Handle --no-color before any command runs.
+        if(parsed.GetValue(noColorOption))
+        {
+            ConsoleFormatter.DisableColors();
+        }
+
+        return await parsed.InvokeAsync();
     }
 }

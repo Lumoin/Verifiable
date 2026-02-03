@@ -1,124 +1,112 @@
-<img style="display: block; margin-inline-start: auto; margin-inline-end: auto;" src="resources/verifiable-github-logo.svg" width="800" height="400" alt="Verifiable project logo: A shield in blue hues with a rounded top that narrows downwards in a 'V' like shape. In the center there is the tip of white 'V' that elongates across the left corner of the shield to white background. Undernath the lower side of 'V' there is a stylistic key handle also elongating over the edge of the shield.">
+<img style="display: block; margin-inline-start: auto; margin-inline-end: auto;" src="resources/verifiable-github-logo.svg" width="800" height="400" alt="Verifiable project logo: A shield in blue hues with a rounded top that narrows downwards in a 'V' like shape. In the center there is the tip of white 'V' that elongates across the left corner of the shield to white background. Underneath the lower side of 'V' there is a stylistic key handle also elongating over the edge of the shield.">
 
-#### Decentralized identifiers, verifiable credentials, associated protocols and key management with hardware security elements.
+# Verifiable
+
+**An integrated .NET stack for decentralized identity: DIDs, verifiable credentials, selective disclosure, and hardware-backed cryptography.**
 
 ![Main build workflow](https://github.com/lumoin/Verifiable/actions/workflows/main.yml/badge.svg)
-
 [![Mutation testing badge](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2Flumoin%2FVerifiable%2Fmain)](https://dashboard.stryker-mutator.io/reports/github.com/lumoin/Verifiable/main)
 
-<hr>
+---
 
-## Features
+## What is Verifiable?
 
-- Decentralized identifiers (DID).
-- Verifiable credentials (VC).
-- Various related protocols to DIDs and VCs.
-- Key and secrets management.
-- A simple [.NET tool](https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-tool-install), Verifiable, to use the libraries. 
+Verifiable is a comprehensive .NET library implementing the [W3C Decentralized Identifiers](https://www.w3.org/TR/did-core/) and [Verifiable Credentials](https://www.w3.org/TR/vc-data-model-2.0/) specifications, along with associated protocols from the [Decentralized Identity Foundation](https://identity.foundation/). The library provides an integrated stack where cryptographic primitives, serialization, credential management, and hardware security work together cohesively.
 
-| Library         | NuGet   |
-|---------------- | :------:|
-| Verifiable      | [![NuGet](https://img.shields.io/nuget/v/Verifiable.svg?style=flat)](https://www.nuget.org/packages/Verifiable/)
-| Verifiable.NSec | [![NuGet](https://img.shields.io/nuget/v/Verifiable.NSec.svg?style=flat)](https://www.nuget.org/packages/Verifiable.NSec/) |
-| Verifiable.Core | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Core.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Core/) |
-| Verifiable.BouncyCastle | [![NuGet](https://img.shields.io/nuget/v/Verifiable.BouncyCastle.svg?style=flat)](https://www.nuget.org/packages/Verifiable.BouncyCastle/) |
-| Verifiable.Tpm | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Tpm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Tpm/) |
-| Verifiable.Sidetree | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Sidetree.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Sidetree/) |
-| Verifiable.Microsoft | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Microsoft.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Microsoft/) |
-| Verifiable.Jwt | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Jwt.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Jwt/) |
-| Verifiable.Security.DataStorage | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DataStorage.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DataStorage/) |
+The core value proposition is documents that can be distinctly identified, cryptographically signed, linked, timestamped, and selectively disclosed without requiring a central governing party while remaining compatible with regulated ecosystems like [eIDAS](https://en.wikipedia.org/wiki/EIDAS).
 
+## Libraries
 
+| Library | Purpose | NuGet |
+|---------|---------|:-----:|
+| **Verifiable** | CLI tool for library functionality | [![NuGet](https://img.shields.io/nuget/v/Verifiable.svg?style=flat)](https://www.nuget.org/packages/Verifiable/) |
+| **Verifiable.Core** | DIDs, verifiable credentials, and data integrity proofs | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Core.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Core/) |
+| **Verifiable.Cryptography** | Cryptographic primitives: salt generation, memory-safe key handling, hash functions | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cryptography.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cryptography/) |
+| **Verifiable.JCose** | JOSE and COSE structures including SD-JWT and selective disclosure | [![NuGet](https://img.shields.io/nuget/v/Verifiable.JCose.svg?style=flat)](https://www.nuget.org/packages/Verifiable.JCose/) |
+| **Verifiable.Json** | JSON serialization converters | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Json.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Json/) |
+| **Verifiable.Cbor** | CBOR serialization for COSE envelopes | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cbor.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cbor/) |-->
+| **Verifiable.BouncyCastle** | Cross-platform cryptography via BouncyCastle | [![NuGet](https://img.shields.io/nuget/v/Verifiable.BouncyCastle.svg?style=flat)](https://www.nuget.org/packages/Verifiable.BouncyCastle/) |
+| **Verifiable.NSec** | High-performance cryptography via NSec | [![NuGet](https://img.shields.io/nuget/v/Verifiable.NSec.svg?style=flat)](https://www.nuget.org/packages/Verifiable.NSec/) |
+| **Verifiable.Microsoft** | .NET standard cryptographic functions | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Microsoft.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Microsoft/) |
+| **Verifiable.Tpm** | Trusted Platform Module integration | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Tpm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Tpm/) |
+| **Verifiable.Sidetree** | Sidetree protocol implementation | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Sidetree.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Sidetree/) |
+| **Verifiable.Jwt** | JWT integration | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Jwt.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Jwt/) |
+| **Verifiable.Security.DataStorage** | Secure storage utilities | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DataStorage.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DataStorage/) |
 
-<hr>
+## Key capabilities
 
-### Quickly about practicalities
+**Decentralized identifiers and credentials.** Full implementation of the W3C DID Core and Verifiable Credentials Data Model 2.0 specifications, including data integrity proofs with EdDSA-RDFC-2022, EdDSA-JCS-2022, and ECDSA-SD-2023 cryptosuites.
 
-Please, open an issue if you have a suggestion, improvement (e.g. even fixing a typo) or something in mind that could be useful and worth considering.
+**Selective disclosure.** Support for privacy-preserving credential presentation through SD-JWT (RFC 9901), ECDSA-SD-2023 for JSON-LD credentials, and foundations for SD-CWT. Wallet operations include minimum disclosure computation, maximum disclosure bounds, and optimal selection algorithms.
 
-Pressing **.** on keyboard on this repository page or when viewing any file to open this codebase in VS Code web editor is also a good way to get a feel of the code. See more great tips at [10 Fun Things You Can Do With GitHub.dev](https://dev.to/lostintangent/10-awesome-things-you-can-do-with-github-dev-5fm7) by [@lostintangent](https://github.com/lostintangent).
+**Multiple cryptographic backends.** Delegate-based architecture allows plugging in BouncyCastle for cross-platform support, NSec for high performance, .NET cryptographic functions, or hardware security modules.
 
-Otherwise the usual things about forking and sending pull requests work too. :)
+**Hardware security.** TPM 2.0 integration for hardware-backed key storage, PCR reading, event log parsing,attestations and other TPM functionality to come. The architecture extends to HSMs and cloud KMS services through the delegate pattern.
 
-#### This is an early version under development. All will be breaking.
+**Serialization flexibility.** Core types remain agnostic to serialization format. JSON support via System.Text.Json and CBOR support via System.Formats.Cbor are provided in separate packages, enabling the same credential logic to work across both formats or any other.
 
+**Memory-safe key handling.** Sensitive cryptographic material is ring-fenced using dedicated types with support for custom memory allocation through `MemoryPool<T>`, enabling scenarios like mlocked memory regions.
 
-<hr>
+## Architecture principles
 
-This repository contains projects that implement .NET libraries for [W3C decentralized identifier specification (DID)](https://www.w3.org/TR/did-core/), [Verifiable Credentials](https://www.w3.org/TR/vc-data-model/) and related technologies from [Decentralized Identity Foundation (DIF)](https://identity.foundation/).
+The library follows data-oriented programming principles where code is separate from immutable data, favoring generic data structures and general-purpose functions implemented as extension methods. Domain types contain raw cryptographic material without encoding artifacts, with encoding handled at serialization boundaries.
 
-In simple terms these libraries implement a specification for documents that have distinquishing identifier, can be signed, linked, timestamped, managed and combined into representations without the necessity of a central, governing party but can also function well with such parties ([eIDAS](https://en.wikipedia.org/wiki/EIDAS) may be one).
+Cryptographic operations use a delegate-based extensibility model rather than direct implementations. This allows the same high-level API to work with software keys, TPM-backed keys, HSM keys, or cloud KMS without changing calling code. The `SensitiveMemoryPool` provides exact-size memory allocation for cryptographic material.
 
-Since this technology and its likely applications rely on cryptography, these libraries include basic implementation for management of secrets such as the created documents and their material. Technologies include _trusted platform modules_ (TPM), _hardware security modules_ (HSM) and other potential technology such secure enclaves.
+The three-party credential flow (Issuer → Holder → Verifier) is modeled explicitly, with clear separation between what each party knows and computes. Internal computation state is not passed between parties; instead, each party derives what it needs from the credential and proof structures.
 
+## Specifications implemented (not exhaustive and updated)
 
+Coming... See tests in the meanwhile.
 
-#### Quick links
+## Getting started
 
-- [Decentralized Identifiers data model](https://www.w3.org/TR/did-core/)
-- [Decentralized Identifiers conformance and test suite](https://w3c.github.io/did-test-suite/)
-- [Verifiable Credentials data model](https://w3c.github.io/vc-data-model/)
-- [Verifiable Credentials conformance and test suite](https://w3c.github.io/vc-test-suite/implementations/)
-- [Trusted Platform Module (TPM 2.0) specifications](https://trustedcomputinggroup.org/resource/tpm-library-specification/)
+Install the packages relevant to your use case:
 
-<hr>
+```bash
+# Core functionality
+dotnet add package Verifiable.Core
 
-## The design principles
+# For JSON serialization
+dotnet add package Verifiable.Json
 
-- **Agnostic to serialization and deserialization library.** The design principles for DIDs and VCs and other data elements do not rely on specific deserialization and serialization (e.g. no library specific attributes on types) libraries. Current implementation uses [System.Text.Json](https://www.nuget.org/packages/System.Text.Json/) converters. [CBOR](https://github.com/dotnet/runtime/issues/32121) could be interesting.
-- **Data oriented programming**. Or leaning towards it. The code is structured around the idea of parameters going in functions and results from return values. Or in more length: code is separate from (immutable) data, leaning generic data structures and general-purpose functions (extenstions methods and static methods).
-- **Sensitive memory is ring-fenced using types.** The goal is to recognize sensitive key material and handle it appropriately (noting security practices and regulations). Currently public, private and other key material is ring-fenced to types. The types are wrappes that know how to point to and and unwrap material to operations. The material can be allocated using [MemoryPool&lt;T&gt;](https://docs.microsoft.com/en-us/dotnet/api/system.buffers.memorypool-1) and so a custom allocator can be provided (e.g. for [mlocked](https://man7.org/linux/man-pages/man2/mlock.2.html) memory regions).
-- **Agnostic to underlying cryptographic implementation**. The design should allow using external, special libraries. Currently [BouncyCastle](https://www.nuget.org/packages/Portable.BouncyCastle/), [NSec.Cryptography](https://www.nuget.org/packages/NSec.Cryptography) and [.NET standard cryptography](https://docs.microsoft.com/en-us/dotnet/standard/security/cryptography-model) are included (TPM is in progress).
-- **Hardware security elements**. It should be possible to use hardware security elements, such as [trusted platform modules](https://en.wikipedia.org/wiki/Trusted_Platform_Module).
-- **Developer experience**. Writing against an evolving specification or some specific specifications can be difficult. It takes time to learn. So code shoud link in comments to W3C and RFCs where appropriate (see code for examples).
-- **Tests and tests that use real data**. There should be as much tests as possible. Also thests that use as test vectors data from other implementations to cross-check.
+# For BouncyCastle cryptography (cross-platform)
+dotnet add package Verifiable.BouncyCastle
+
+# For TPM integration
+dotnet add package Verifiable.Tpm
+```
+
+## Development
+
+The codebase runs on Windows, Linux, and macOS. Some hardware-specific functionality such as TPM operations may only work on certain platforms.
+
+Press **.** on the repository page to open the codebase in VS Code web editor for quick exploration.
 
 ## Vulnerability disclosure
 
-If you find a vulnerability in this project please let us know as soon as possibly. For secure disclosure, please see the [security policy](.github/SECURITY.md).
+For secure disclosure of security vulnerabilities, please see the [security policy](.github/SECURITY.md).
 
 ## Contributing
 
-Please, read [contribution guidelines](.github/contributing.md) for technicalities.
+Please read the [contribution guidelines](.github/contributing.md) for technical details.
 
-For development, the code and project should run on Windows, Linux and MacOS. Some hardware specific elements may work on only some operating systems.
+The [TPM.DEV](https://developers.tpm.dev/) community provides excellent TPM-related study materials and discussions.
 
-Community at [TPM.DEV](https://developers.tpm.dev/) for TPM related study materials and discussions could be great, they have also.
+### Ways to contribute
 
-Taking something from contribution guide and adding specific ideas.
+- Open issues for bugs, suggestions, or improvements.
+- Create pull requests following the contribution guidelines.
+- Add tests, especially those using test vectors from other implementations for cross-checking.
+- Expand TPM functionality including signing, encryption, and permissions.
+- Add more cryptographic and security capabilities.
+- Support additional protocols from the [Decentralized Identity Foundation](https://identity.foundation/).
+- Improve threat and privacy modeling using frameworks like [LINDDUN](https://www.linddun.org/).
 
-#### The usual things :)
+## License
 
-:eyes: Please, do write issues.
+See the LICENSE file for details.
 
-:raised_hands: By all means, do create pull requests (see [contribution guidelines](.github/contributing.md)).
+---
 
-:star: Stars are always nice. :)
-
-#### The code things
-
-:white_check_mark: Adding tests is really good, of course.
-
-:computer: adding TPM functionality (signing, encryption, permissions) &ndash; and tests.
-
-:thought_balloon: Issue templates and other improvements to project.
-
-:rocket: improve continuous integration automation is always good!
-
-:closed_lock_with_key: Add more cryptographic and security capabilities.
-
-:key: As a corollary, add X509 related functionality.
-
-:blue_book: Support for more protocols (see at https://identity.foundation/).
-
-#### The things writing code
-
-:memo: Threat and privacy modelling diagrams and explanations would be cool! [LINDDUN](https://www.linddun.org/) is a great one! But not the only one! A nice compilation to choose from is [SEI: Threat Modeling: 12 Available Methods](https://insights.sei.cmu.edu/blog/threat-modeling-12-available-methods/). These really need to be written down at some point.
-
-:book: Draft plans, add documents and [eIDAS](https://en.wikipedia.org/wiki/EIDAS) data objects and some algorithms.
-
-
-
-## Repository visualization
-
-![Visualization of this repo](./resources/diagram.svg)
+> **Note:** This is an early version under active development. APIs may change between versions.

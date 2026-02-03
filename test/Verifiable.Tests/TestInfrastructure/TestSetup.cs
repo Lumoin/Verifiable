@@ -1,5 +1,4 @@
 ﻿using SimpleBase;
-using System.Buffers;
 using System.Buffers.Text;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
@@ -16,7 +15,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// Initializes structures needed in tests. This is basically the same as any program setup for this library.
 /// </summary>
 public static class TestSetup
-{
+{   
     /// <summary>
     /// Base58 BTC encoder using SimpleBase.
     /// </summary>

@@ -306,7 +306,7 @@ public static class MultibaseSerializer
             if(decodedBuffer.Memory.Length < codecHeaderLength)
             {
                 throw new FormatException(
-                    $"Codec header length ({codecHeaderLength}) exceeds decoded data length ({decodedBuffer.Memory.Length}).");
+                    $"Codec header length ({codecHeaderLength}) exceeds decoded Data length ({decodedBuffer.Memory.Length}).");
             }
 
             int resultLength = decodedBuffer.Memory.Length - codecHeaderLength;
@@ -399,7 +399,7 @@ public static class MultibaseSerializer
             _ when encoded.StartsWith(Base58BtcEncodedMulticodecHeaders.X25519PublicKey, StringComparison.Ordinal) => CryptoAlgorithm.X25519,
             _ when encoded.StartsWith(Base58BtcEncodedMulticodecHeaders.RsaPublicKey2048, StringComparison.Ordinal) => CryptoAlgorithm.Rsa2048,
             _ when encoded.StartsWith(Base58BtcEncodedMulticodecHeaders.RsaPublicKey4096, StringComparison.Ordinal) => CryptoAlgorithm.Rsa4096,
-            _ => throw new ArgumentException("Unknown key type in encoded data.")
+            _ => throw new ArgumentException("Unknown key type in encoded Data.")
         };
 
         var decodedKeyData = Decode(encoded, codecHeaderLength: 2, decoder, pool);
