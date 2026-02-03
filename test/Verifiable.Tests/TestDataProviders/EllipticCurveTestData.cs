@@ -1,5 +1,10 @@
-﻿using System.Security.Cryptography;
+﻿using DotLiquid.Tags;
+using System.Collections.Specialized;
+using System.Reflection;
+using System.Security.Cryptography;
+using Tpm2Lib;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 
 
 namespace Verifiable.Tests.DataProviders
@@ -11,7 +16,7 @@ namespace Verifiable.Tests.DataProviders
     /// or <see cref="EllipticCurveUtilities.OddYCoordinate"/>.</param>
     /// <param name="Base58BtcEncodedMulticodecHeaderPublicKey">A BTC 58 encoded public header prefix, see <see cref="Base58BtcEncodedMulticodecHeaders"/>.</param>
     /// <param name="Base58BtcEncodedMulticodecHeaderPrivateKey">A BTC 58 encoded public header prefix, see <see cref="Base58BtcEncodedMulticodecHeaders"/>.</param>
-    /// <param name="CurveIdentifier">The human-friendly name for elliptic curves according to Microsoft. See <see cref="EllipticCurveTheoryData.HumanReadableEllipticCurveConstants"/>.</param>
+    /// <param name="CurveIdentifier">The crypto algorytm for elliptic curve. See <see cref="CryptoAlgorithm"/>.</param>
     /// <param name="PublicKeyMaterialX">The public key point X key material.</param>
     /// <param name="PublicKeyMaterialY">The public key point Y key material.</param>
     /// <param name="PrivateKeyMaterial">The private key material.</param>
@@ -22,32 +27,32 @@ namespace Verifiable.Tests.DataProviders
         byte[] PrivateKeyMulticodecHeader,
         string Base58BtcEncodedMulticodecHeaderPublicKey,
         string Base58BtcEncodedMulticodecHeaderPrivateKey,
-        string CurveIdentifier,
+        CryptoAlgorithm CurveIdentifier,
         byte[] PublicKeyMaterialX,
         byte[] PublicKeyMaterialY,
         byte[] PrivateKeyMaterial,
         byte[] PrimeBytes);
+
+    public record EllipticCurveTestCase(CryptoAlgorithm CurveIdentifier, bool IsEven)
+    {
+        public override string ToString() => $"{CurveIdentifier.ToString()} {(IsEven ? "Even" : "Odd")}";
+    }
 
     /// <summary>
     /// Contains elliptic curve test data generator and provides it for MSTest DynamicData.
     /// </summary>
     public class EllipticCurveTheoryData
     {
-        public const string EllipticP256 = "P-256";
-        public const string EllipticP384 = "P-384";
-        public const string EllipticP521 = "P-521";
-        public const string EllipticSecP256k1 = "secP256k1";
-
         /// <summary>
         /// The DID supported elliptic curves. These are used to generate keys for testing.
         /// </summary>
-        public static IList<string> HumanReadableEllipticCurveConstants => new List<string>(new[]
-        {
-            EllipticP256,
-            EllipticP384,
-            EllipticP521,
-            EllipticSecP256k1
-        });
+        private static IList<CryptoAlgorithm> EllipticCurveCryptoAlgorithms => 
+        [
+            CryptoAlgorithm.P256,
+            CryptoAlgorithm.P384,
+            CryptoAlgorithm.P521,
+            CryptoAlgorithm.Secp256k1,
+        ];
 
         /// <summary>
         /// Provides the elliptic curve test data as DynamicData for MSTest.
@@ -55,15 +60,20 @@ namespace Verifiable.Tests.DataProviders
         /// <returns>An IEnumerable of object arrays containing test data.</returns>
         public static IEnumerable<object[]> GetEllipticCurveTestData()
         {
-            foreach(string humanReadableEllipticCurveConstant in HumanReadableEllipticCurveConstants)
+            foreach(var cryptoAlgorithm in EllipticCurveCryptoAlgorithms)
             {
-                (EllipticCurveTestData EvenKey, EllipticCurveTestData OddKey) = GenerateEllipticTestKeyMaterial(humanReadableEllipticCurveConstant);
-                yield return new object[] { EvenKey };
-                yield return new object[] { OddKey };
+                yield return new object[] { new EllipticCurveTestCase(cryptoAlgorithm, IsEven: true) };
+                yield return new object[] { new EllipticCurveTestCase(cryptoAlgorithm, IsEven: false) };
             }
         }
 
-        private static (EllipticCurveTestData EvenKey, EllipticCurveTestData OddKey) GenerateEllipticTestKeyMaterial(string humanReadableCurveName)
+        public static EllipticCurveTestData CreateEllipticCurveTestData(EllipticCurveTestCase testCase)
+        {
+            (EllipticCurveTestData EvenKey, EllipticCurveTestData OddKey) = GenerateEllipticTestKeyMaterial(testCase.CurveIdentifier);
+            return testCase.IsEven ? EvenKey : OddKey;
+        }
+        
+        private static (EllipticCurveTestData EvenKey, EllipticCurveTestData OddKey) GenerateEllipticTestKeyMaterial(CryptoAlgorithm humanReadableCurveName)
         {
             ECDsa? evenKey = null;
             ECDsa? oddKey = null;
@@ -84,10 +94,10 @@ namespace Verifiable.Tests.DataProviders
 
             byte[] primeBytes = humanReadableCurveName switch
             {
-                EllipticP256 => EllipticCurveConstants.P256.PrimeBytes.ToArray(),
-                EllipticP384 => EllipticCurveConstants.P384.PrimeBytes.ToArray(),
-                EllipticP521 => EllipticCurveConstants.P521.PrimeBytes.ToArray(),
-                EllipticSecP256k1 => EllipticCurveConstants.Secp256k1.PrimeBytes.ToArray(),
+                var a when a == CryptoAlgorithm.P256 => EllipticCurveConstants.P256.PrimeBytes.ToArray(),
+                var a when a == CryptoAlgorithm.P384 => EllipticCurveConstants.P384.PrimeBytes.ToArray(),
+                var a when a == CryptoAlgorithm.P521 => EllipticCurveConstants.P521.PrimeBytes.ToArray(),
+                var a when a == CryptoAlgorithm.Secp256k1 => EllipticCurveConstants.Secp256k1.PrimeBytes.ToArray(),
                 _ => throw new NotSupportedException()
             };
 
@@ -129,30 +139,30 @@ namespace Verifiable.Tests.DataProviders
             return (evenTestKeyMaterial, oddTestKeyMaterial);
         }
 
-        private static ECCurve FromHumanReadableEllipticPrimeCurve(string humanReadable) => humanReadable switch
+        private static ECCurve FromHumanReadableEllipticPrimeCurve(CryptoAlgorithm humanReadable) => humanReadable switch
         {
-            EllipticP256 => ECCurve.NamedCurves.nistP256,
-            EllipticP384 => ECCurve.NamedCurves.nistP384,
-            EllipticP521 => ECCurve.NamedCurves.nistP521,
-            EllipticSecP256k1 => ECCurve.CreateFromFriendlyName(EllipticSecP256k1),
+            var a when a == CryptoAlgorithm.P256 => ECCurve.NamedCurves.nistP256,
+            var a when a == CryptoAlgorithm.P384 => ECCurve.NamedCurves.nistP384,
+            var a when a == CryptoAlgorithm.P521 => ECCurve.NamedCurves.nistP521,
+            var a when a == CryptoAlgorithm.Secp256k1 => ECCurve.CreateFromFriendlyName("secP256k1"),
             _ => throw new NotSupportedException()
         };
 
-        private static (string PublicKey, string PrivateKey) FromCurveNameToBtc58EncodedHeader(string humanReadable) => humanReadable switch
+        private static (string PublicKey, string PrivateKey) FromCurveNameToBtc58EncodedHeader(CryptoAlgorithm humanReadable) => humanReadable switch
         {
-            EllipticP256 => (Base58BtcEncodedMulticodecHeaders.P256PublicKey.ToString(), string.Empty),
-            EllipticP384 => (Base58BtcEncodedMulticodecHeaders.P384PublicKey.ToString(), string.Empty),
-            EllipticP521 => (Base58BtcEncodedMulticodecHeaders.P521PublicKey.ToString(), string.Empty),
-            EllipticSecP256k1 => (Base58BtcEncodedMulticodecHeaders.Secp256k1PublicKey.ToString(), string.Empty),
+            var a when a == CryptoAlgorithm.P256 => (Base58BtcEncodedMulticodecHeaders.P256PublicKey.ToString(), string.Empty),
+            var a when a == CryptoAlgorithm.P384 => (Base58BtcEncodedMulticodecHeaders.P384PublicKey.ToString(), string.Empty),
+            var a when a == CryptoAlgorithm.P521 => (Base58BtcEncodedMulticodecHeaders.P521PublicKey.ToString(), string.Empty),
+            var a when a == CryptoAlgorithm.Secp256k1 => (Base58BtcEncodedMulticodecHeaders.Secp256k1PublicKey.ToString(), string.Empty),
             _ => throw new NotSupportedException()
         };
 
-        private static (byte[] PublicKeyHeader, byte[] PrivateKeyHeader) FromCurveNameToMultiCodecHeader(string humanReadable) => humanReadable switch
+        private static (byte[] PublicKeyHeader, byte[] PrivateKeyHeader) FromCurveNameToMultiCodecHeader(CryptoAlgorithm humanReadable) => humanReadable switch
         {
-            EllipticP256 => (MulticodecHeaders.P256PublicKey.ToArray(), Array.Empty<byte>()),
-            EllipticP384 => (MulticodecHeaders.P384PublicKey.ToArray(), Array.Empty<byte>()),
-            EllipticP521 => (MulticodecHeaders.P521PublicKey.ToArray(), Array.Empty<byte>()),
-            EllipticSecP256k1 => (MulticodecHeaders.Secp256k1PublicKey.ToArray(), MulticodecHeaders.Secp256k1PrivateKey.ToArray()),
+            var a when a == CryptoAlgorithm.P256 => (MulticodecHeaders.P256PublicKey.ToArray(), Array.Empty<byte>()),
+            var a when a == CryptoAlgorithm.P384 => (MulticodecHeaders.P384PublicKey.ToArray(), Array.Empty<byte>()),
+            var a when a == CryptoAlgorithm.P521 => (MulticodecHeaders.P521PublicKey.ToArray(), Array.Empty<byte>()),
+            var a when a == CryptoAlgorithm.Secp256k1 => (MulticodecHeaders.Secp256k1PublicKey.ToArray(), MulticodecHeaders.Secp256k1PrivateKey.ToArray()),
             _ => throw new NotSupportedException()
         };
     }
