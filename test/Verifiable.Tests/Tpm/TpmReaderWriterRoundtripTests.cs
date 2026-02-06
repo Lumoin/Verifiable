@@ -6,7 +6,7 @@ namespace Verifiable.Tests.Tpm;
 /// Roundtrip tests verifying TpmReader and TpmWriter interoperability.
 /// </summary>
 [TestClass]
-public class TpmReaderWriterRoundtripTests
+internal class TpmReaderWriterRoundtripTests
 {
     [TestMethod]
     public void UInt16Roundtrips()

@@ -7,7 +7,7 @@ namespace Verifiable.Tests.ToolTests;
 /// Property-based tests for command-line parsing using CsCheck.
 /// </summary>
 [TestClass]
-public class CommandParsingPropertyTests
+internal class CommandParsingPropertyTests
 {
     [TestMethod]
     public void ParseDidCreateAnyValidIntegerIdSucceeds()

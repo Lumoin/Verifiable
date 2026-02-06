@@ -1,4 +1,6 @@
-﻿namespace Verifiable.Tpm.Extensions.EventLog;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace Verifiable.Tpm.EventLog;
 
 /// <summary>
 /// Error codes specific to TCG event log reading operations.
@@ -14,6 +16,8 @@
 /// For Linux file errors, the <see cref="LinuxErrno"/> value is returned.
 /// </para>
 /// </remarks>
+
+[SuppressMessage("Design", "CA1008:EnumsShouldHaveZeroValue", Justification = "Enum values defined by TPM 2.0 specification.")]
 public enum TcgEventLogReaderError: uint
 {
     /// <summary>

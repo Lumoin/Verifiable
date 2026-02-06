@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -122,7 +122,7 @@ public sealed class EcdsaSd2023CryptosuiteInfo: CryptosuiteInfo
     /// W3C VC DI ECDSA §3.3.1 Selective Disclosure</see>.
     /// </para>
     /// </remarks>
-    public bool SupportsSelectiveDisclosure => true;
+    public static bool SupportsSelectiveDisclosure => true;
 
 
     /// <summary>

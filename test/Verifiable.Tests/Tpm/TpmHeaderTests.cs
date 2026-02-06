@@ -1,5 +1,5 @@
 using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Structures.Spec.Constants;
+using Verifiable.Tpm.Infrastructure.Spec.Constants;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Tpm;
 /// Tests for <see cref="TpmHeader"/>.
 /// </summary>
 [TestClass]
-public class TpmHeaderTests
+internal class TpmHeaderTests
 {
     [TestMethod]
     public void HeaderSizeIsTenBytes()

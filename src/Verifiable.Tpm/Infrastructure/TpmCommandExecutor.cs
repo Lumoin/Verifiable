@@ -62,6 +62,11 @@ public static class TpmCommandExecutor
         TpmResponseRegistry registry)
         where TResponse : ITpmWireType
     {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(registry);
         TpmCcConstants commandCode = input.CommandCode;
 
         //Look up codec first to fail fast.
@@ -320,8 +325,7 @@ public static class TpmCommandExecutor
 
             for(int i = 0; i < sessions.Count; i++)
             {
-                TpmsAuthResponse authResponse = TpmsAuthResponse.Parse(ref authReader, pool);
-
+                using TpmsAuthResponse authResponse = TpmsAuthResponse.Parse(ref authReader, pool);
                 if(!sessions[i].VerifyAndUpdate(authResponse, rpHashBuffer.Slice(0, rpHashSize), pool))
                 {
                     return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_AUTH_FAIL);

@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Tpm;
 /// Tests for <see cref="TpmAlgIdExtensions"/>.
 /// </summary>
 [TestClass]
-public class TpmAlgIdExtensionsTests
+internal class TpmAlgIdExtensionsTests
 {
     [TestMethod]
     public void GetNameReturnsCorrectHashAlgorithmNames()

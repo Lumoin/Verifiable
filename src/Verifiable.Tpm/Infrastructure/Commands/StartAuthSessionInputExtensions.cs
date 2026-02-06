@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
@@ -23,6 +24,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// See TPM 2.0 Part 1, Section 19.6 for session binding and salting details.
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with latest syntax.")]
 public static class StartAuthSessionInputExtensions
 {
     extension(StartAuthSessionInput)

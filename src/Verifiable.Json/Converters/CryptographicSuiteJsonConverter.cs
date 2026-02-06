@@ -1,6 +1,6 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
-using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.CryptographicSuites;
 
 namespace Verifiable.Json.Converters
 {
@@ -10,7 +10,7 @@ namespace Verifiable.Json.Converters
     {
         private VerificationMethodTypeInfoFactoryDelegate FactoryDelegate { get; }
 
-        public override bool CanConvert(Type objectType) => typeof(VerificationMethodTypeInfo).IsAssignableFrom(objectType);
+        public override bool CanConvert(Type typeToConvert) => typeof(VerificationMethodTypeInfo).IsAssignableFrom(typeToConvert);
 
         public CryptographicSuiteJsonConverter(VerificationMethodTypeInfoFactoryDelegate factoryDelegate)
         {
@@ -30,6 +30,8 @@ namespace Verifiable.Json.Converters
 
         public override void Write(Utf8JsonWriter writer, VerificationMethodTypeInfo value, JsonSerializerOptions options)
         {
+            ArgumentNullException.ThrowIfNull(writer);
+            ArgumentNullException.ThrowIfNull(value);
             writer.WriteStringValue(value.TypeName);
         }
     }

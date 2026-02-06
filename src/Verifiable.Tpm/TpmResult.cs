@@ -52,6 +52,7 @@ namespace Verifiable.Tpm;
 /// </remarks>
 /// <typeparam name="T">The type of the success value.</typeparam>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
+[SuppressMessage("Design", "CA1000:Do not declare static members on generic types", Justification = "This design is intentional to provide type-specific static members.")]
 public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
 {
     private readonly T? value;
@@ -226,7 +227,7 @@ public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
     /// Creates a successful result with the specified value.
     /// </summary>
     /// <param name="value">The success value.</param>
-    /// <returns>A successful result.</returns>
+    /// <returns>A successful result.</returns>    
     public static TpmResult<T> Success(T value) => new(value, default, 0, ResultKind.Success);
 
     /// <summary>

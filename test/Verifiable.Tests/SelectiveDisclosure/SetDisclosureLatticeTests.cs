@@ -6,7 +6,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// Tests for <see cref="SetDisclosureLattice{TClaim}"/>.
 /// </summary>
 [TestClass]
-public sealed class SetDisclosureLatticeTests
+internal sealed class SetDisclosureLatticeTests
 {
     public TestContext TestContext { get; set; } = null!;
 

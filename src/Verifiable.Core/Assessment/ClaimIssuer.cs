@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -96,7 +97,7 @@ namespace Verifiable.Core.Assessment
     ///     }
     /// }
     /// </code>
-    /// </remarks>
+    /// </remarks>    
     public class ClaimIssuer<TInput>
     {
         /// <summary>
@@ -105,6 +106,7 @@ namespace Verifiable.Core.Assessment
         /// </summary>
         /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
         /// <returns>A new GUID as a string.</returns>
+        [SuppressMessage("Design", "CA1000:Do not declare static members on generic types", Justification = "This design is intentional to provide type-specific static members.")]
         public static ValueTask<string> DefaultClaimIdGenerator(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -207,6 +209,7 @@ namespace Verifiable.Core.Assessment
         /// the failure context, and processing continues with the next rule.
         /// </para>
         /// </remarks>
+        [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "All exceptions are treated likewise.")]
         public async ValueTask<ClaimIssueResult> GenerateClaimsAsync(
             TInput input,
             string correlationId,

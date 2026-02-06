@@ -5,7 +5,7 @@ namespace Verifiable.Tests.Did
     /// <summary>
     /// Extension methods for CsCheck generators to enable property-based testing.
     /// </summary>
-    public static class CsCheckExtensions
+    internal static class CsCheckExtensions
     {
         /// <summary>
         /// Extension method to enable property-based testing with CsCheck.

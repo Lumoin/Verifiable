@@ -64,7 +64,7 @@ public static class JwsCredentialVerification
         bool isValid = await verificationDelegate(
             dataToVerify,
             signatureBytesOwner.Memory,
-            publicKey.AsReadOnlyMemory());
+            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
 
         return new JwsCredentialVerificationResult(isValid, header, credential);
     }
@@ -110,7 +110,7 @@ public static class JwsCredentialVerification
         bool isValid = await verificationDelegate(
             dataToVerify,
             signature.Signature.AsReadOnlyMemory(),
-            publicKey.AsReadOnlyMemory());
+            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
 
         VerifiableCredential credential = credentialDeserializer(message.Payload.Span);
         var header = new Dictionary<string, object>(signature.ProtectedHeader);

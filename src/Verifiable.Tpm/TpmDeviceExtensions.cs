@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Tpm;
 
@@ -29,6 +30,7 @@ namespace Verifiable.Tpm;
 /// <seealso cref="TpmDevice"/>
 /// <seealso cref="TpmBufferBuilder"/>
 /// <seealso cref="TpmBufferParser"/>
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with latest syntax.")]
 public static class TpmDeviceExtensions
 {
     extension(TpmDevice device)

@@ -85,14 +85,17 @@ public readonly record struct TpmtSymDefObject
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize()
+    public int SerializedSize
     {
-        if(IsNull)
+        get
         {
-            return sizeof(ushort); // algorithm only
-        }
+            if(IsNull)
+            {
+                return sizeof(ushort); // algorithm only
+            }
 
-        return sizeof(ushort) + sizeof(ushort) + sizeof(ushort); // algorithm + keyBits + mode
+            return sizeof(ushort) + sizeof(ushort) + sizeof(ushort); // algorithm + keyBits + mode
+        }
     }
 
     /// <summary>

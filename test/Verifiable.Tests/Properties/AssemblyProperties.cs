@@ -1,1 +1,2 @@
 ﻿[assembly: Parallelize]
+[assembly: DiscoverInternals]

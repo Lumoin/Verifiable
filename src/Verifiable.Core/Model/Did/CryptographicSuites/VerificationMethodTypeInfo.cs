@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Verifiable.Core.Model.Did
+namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
     /// <summary>
     /// Represents a verification method type used in DID documents and verifiable credentials.

@@ -2,6 +2,7 @@
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -32,6 +33,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("HolderContext: {SignedStatements.Count} statements, {LabelMap.Count} labels")]
+[SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
 public sealed class HolderProofContext: IDisposable
 {
     /// <summary>

@@ -53,7 +53,7 @@ public readonly struct TpmsSignatureHashMlDsa: IDisposable, IEquatable<TpmsSigna
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + Signature.GetSerializedSize();
+    public int SerializedSize => sizeof(ushort) + Signature.SerializedSize;
 
     /// <summary>
     /// Writes this structure to a TPM writer.

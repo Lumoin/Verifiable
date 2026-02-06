@@ -5,7 +5,7 @@ using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Tests.Did
 {
-    public static class DidCoreValidation
+    internal static class DidCoreValidation
     {
         public static Claim ValidateJsonLdUriAsFirst(Context obj)
         {            
@@ -21,7 +21,7 @@ namespace Verifiable.Tests.Did
     /// Validation tests.
     /// </summary>
     [TestClass]
-    public sealed class DidCoreValidationTests
+    internal sealed class DidCoreValidationTests
     {
         /// <summary>
         /// Validates the validator for context first URI checking as defined by <a href="https://www.w3.org/TR/did-core/#json-ld"/>.

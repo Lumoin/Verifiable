@@ -56,7 +56,7 @@ public static class TpmsActDataExtensions
             ? $"{hours}h {remainingMinutes}m remaining"
             : $"{hours} hours remaining";
     }
-
+    
     /// <summary>
     /// Gets a description of the ACT state.
     /// </summary>

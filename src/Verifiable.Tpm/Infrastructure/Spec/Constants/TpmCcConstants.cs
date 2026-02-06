@@ -1,6 +1,6 @@
-using System;
+using System.Diagnostics.CodeAnalysis;
 
-namespace Verifiable.Tpm.Structures.Spec.Constants;
+namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
 
 /// <summary>
 /// TPM_CC constants (command codes).
@@ -17,6 +17,8 @@ namespace Verifiable.Tpm.Structures.Spec.Constants;
 /// exclusive implementations).
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "This follows the TPM 2.0 specification.")]
+[SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "This follows the TPM 2.0 specification.")]
 public enum TpmCcConstants : uint
 {
     /// <summary>

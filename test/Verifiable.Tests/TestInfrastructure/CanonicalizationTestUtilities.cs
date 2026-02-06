@@ -72,7 +72,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// context integrity verification in production code.
 /// </para>
 /// </remarks>
-public static class CanonicalizationTestUtilities
+internal static class CanonicalizationTestUtilities
 {
     /// <summary>
     /// W3C Verifiable Credentials Data Model v2.0 context URL.
@@ -415,7 +415,7 @@ public static class CanonicalizationTestUtilities
         foreach(var contextUri in knownContexts)
         {
             //This will fetch, verify (if production resolver), and cache the context.
-            var result = await contextResolver(contextUri, cancellationToken);
+            var result = await contextResolver(contextUri, cancellationToken).ConfigureAwait(false);
             if(result == null)
             {
                 throw new InvalidOperationException(
@@ -451,7 +451,7 @@ public static class CanonicalizationTestUtilities
     public static async Task VerifyEmbeddedContextsAsync(HttpClient httpClient, CancellationToken cancellationToken = default)
     {
         //Verify Credentials v2 context.
-        var credV2Response = await httpClient.GetStringAsync(CredentialsV2ContextUrl, cancellationToken);
+        var credV2Response = await httpClient.GetStringAsync(new Uri(CredentialsV2ContextUrl), cancellationToken).ConfigureAwait(false);
         var credV2Hash = ComputeContextHash(credV2Response);
         var embeddedCredV2Hash = CredentialsV2ContextSha256;
 
@@ -462,7 +462,7 @@ public static class CanonicalizationTestUtilities
         }
 
         //Verify Credentials Examples v2 context.
-        var examplesV2Response = await httpClient.GetStringAsync(CredentialsExamplesV2ContextUrl, cancellationToken);
+        var examplesV2Response = await httpClient.GetStringAsync(new Uri(CredentialsExamplesV2ContextUrl), cancellationToken).ConfigureAwait(false);
         var examplesV2Hash = ComputeContextHash(examplesV2Response);
         var embeddedExamplesV2Hash = CredentialsExamplesV2ContextSha256;
 
@@ -536,7 +536,8 @@ public static class CanonicalizationTestUtilities
     /// <item><description>No network dependencies.</description></item>
     /// </list>
     /// <para>
-    /// <strong>Production Use:</strong> In production, use <see cref="CreateProductionContextResolver"/>
+    /// <strong>Production Use:</strong>
+    /// In production, use <see cref="CreateProductionContextResolver"/>
     /// which fetches contexts remotely and verifies their integrity using SHA-256 hashes.
     /// </para>
     /// <para>
@@ -634,10 +635,10 @@ public static class CanonicalizationTestUtilities
             }
 
             //Fetch from remote.
-            var response = await httpClient.GetAsync(uri, cancellationToken);
+            var response = await httpClient.GetAsync(uri, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
-            var contextJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            var contextJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
             //Verify integrity.
             var actualHash = ComputeContextHash(contextJson);
@@ -691,7 +692,7 @@ public static class CanonicalizationTestUtilities
         var bytes = Encoding.UTF8.GetBytes(contextJson);
         var hashBytes = SHA256.HashData(bytes);
 
-        return Convert.ToHexString(hashBytes).ToLowerInvariant();
+        return Convert.ToHexString(hashBytes).ToUpperInvariant();
     }
 
     /// <summary>
@@ -732,7 +733,7 @@ public static class CanonicalizationTestUtilities
                 try
                 {
                     contextJson = Task.Run(async () =>
-                        await contextResolver(uri, CancellationToken.None)).GetAwaiter().GetResult();
+                        await contextResolver(uri, CancellationToken.None).ConfigureAwait(false)).GetAwaiter().GetResult();
                 }
                 catch(Exception ex)
                 {

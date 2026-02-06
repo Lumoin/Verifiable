@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.Did

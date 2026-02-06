@@ -4,7 +4,7 @@
 /// Constants for MCP tool names exposed by the Verifiable MCP server.
 /// These names are used for tool registration and can be referenced in documentation.
 /// </summary>
-public static class McpToolNames
+internal static class McpToolNames
 {
     /// <summary>
     /// Gets TPM (Trusted Platform Module) information from the current system.

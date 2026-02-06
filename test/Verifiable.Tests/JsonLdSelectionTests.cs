@@ -20,7 +20,7 @@ namespace Verifiable.Tests.Json;
 /// </para>
 /// </remarks>
 [TestClass]
-public class JsonLdSelectionTests
+internal class JsonLdSelectionTests
 {
     /// <summary>
     /// Test credential with various property types for comprehensive testing.
@@ -413,13 +413,10 @@ public class JsonLdSelectionTests
     }
 
 
-    //=========================================================================
-    //Helper methods
-    //=========================================================================
-
+    
     private static string Canonicalize(string jsonLdDocument)
     {
-        var store = new TripleStore();
+        using var store = new TripleStore();
         var parser = new JsonLdParser();
         using var reader = new StringReader(jsonLdDocument);
         parser.Load(store, reader);

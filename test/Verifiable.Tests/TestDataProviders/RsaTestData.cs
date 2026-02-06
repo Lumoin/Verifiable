@@ -6,7 +6,7 @@ namespace Verifiable.Tests.DataProviders
     /// <summary>
     /// Test data container for RSA tests.
     /// </summary>
-    public record RsaTestData(
+    internal record RsaTestData(
         int KeyLength,
         byte[] PublicKeyMulticodecHeader,
         byte[] PrivateKeyMulticodecHeader,
@@ -17,7 +17,7 @@ namespace Verifiable.Tests.DataProviders
     /// <summary>
     /// RSA theory data generator for MSTest DynamicData.
     /// </summary>
-    public static class RsaTheoryData
+    internal static class RsaTheoryData
     {
         public const int Rsa2048KeyLength = 2048;
         public const int Rsa4096KeyLength = 4096;

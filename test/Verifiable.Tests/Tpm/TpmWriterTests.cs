@@ -6,7 +6,7 @@ namespace Verifiable.Tests.Tpm;
 /// Tests for <see cref="TpmWriter"/>.
 /// </summary>
 [TestClass]
-public class TpmWriterTests
+internal class TpmWriterTests
 {
     [TestMethod]
     public void WriteByteWritesOneByte()

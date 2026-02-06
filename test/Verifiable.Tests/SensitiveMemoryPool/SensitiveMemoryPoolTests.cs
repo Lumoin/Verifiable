@@ -2,6 +2,7 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using Verifiable.Core;
 using Verifiable.Cryptography;
@@ -9,7 +10,7 @@ using Verifiable.Cryptography;
 namespace Verifiable.Tests.SensitiveMemoryPool
 {
     [TestClass]
-    public sealed class SensitiveMemoryPoolTests
+    internal sealed class SensitiveMemoryPoolTests
     {
         public TestContext TestContext { get; set; }
 
@@ -121,7 +122,7 @@ namespace Verifiable.Tests.SensitiveMemoryPool
         [TestMethod]
         public async Task MetricsAreReportedCorrectly()
         {
-            var meter = new Meter(VerifiableMetrics.CoreMeterName, "1.0.0");
+            using var meter = new Meter(VerifiableMetrics.CoreMeterName, "1.0.0");
             var reportedMetrics = new ConcurrentDictionary<string, long>();
 
             using var listener = new MeterListener();
@@ -155,7 +156,7 @@ namespace Verifiable.Tests.SensitiveMemoryPool
                 using(pool.Rent(200))
                 {
                     listener.RecordObservableInstruments();
-                    await Task.Delay(TimeSpan.FromMilliseconds(10), TestContext.CancellationToken);
+                    await Task.Delay(TimeSpan.FromMilliseconds(10), TestContext.CancellationToken).ConfigureAwait(false);
 
                     //Verify that total slabs metric was reported.
                     bool foundSlabs = reportedMetrics.TryGetValue(CryptographyMetrics.SensitiveMemoryPoolTotalSlabs, out long totalSlabs);
@@ -176,6 +177,7 @@ namespace Verifiable.Tests.SensitiveMemoryPool
 
 
         [TestMethod]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "For some reason analyzer tells testRoot is not disposed.")]
         public void TracingActivitiesAreProperlyCreated()
         {
             //Clear any ambient activity state from other tests.
@@ -218,7 +220,7 @@ namespace Verifiable.Tests.SensitiveMemoryPool
             }
 
             testRoot.Stop();
-
+            
             //Should have recorded rent and dispose activities (2 rents + 2 disposes = 4 total).
             Assert.IsGreaterThanOrEqualTo(4, activities.Count, "Should have at least 4 activities (2 rent + 2 dispose).");
 
@@ -273,12 +275,12 @@ namespace Verifiable.Tests.SensitiveMemoryPool
                 //Simulate async work to ensure activities flow correctly through async context.
                 //This verifies that the parent-child relationship is maintained even when
                 //the disposal happens after an async operation.
-                await Task.Delay(TimeSpan.FromMilliseconds(10), TestContext.CancellationToken);
+                await Task.Delay(TimeSpan.FromMilliseconds(10), TestContext.CancellationToken).ConfigureAwait(false);
             }
 
             //Wait to ensure all activities are fully captured and stopped.
             //Without this delay, the Dispose activity might not be captured yet.
-            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.CancellationToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.CancellationToken).ConfigureAwait(false);
 
             //Filter to ONLY activities from this test run by TraceId.
             //This eliminates interference from other tests that may have run before.

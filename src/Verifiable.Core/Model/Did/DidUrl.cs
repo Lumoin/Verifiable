@@ -621,11 +621,14 @@ namespace Verifiable.Core.Model.Did
         {
             if(IsRelative)
             {
-                return $"#{Fragment}";
+                return string.Concat("#", Fragment);
             }
 
             var builder = new StringBuilder();
-            builder.Append($"did:{Method}:{MethodSpecificId}");
+            builder.Append("did:");
+            builder.Append(Method);
+            builder.Append(':');
+            builder.Append(MethodSpecificId);
 
             if(!string.IsNullOrEmpty(Path))
             {
@@ -634,12 +637,14 @@ namespace Verifiable.Core.Model.Did
 
             if(!string.IsNullOrEmpty(Query))
             {
-                builder.Append($"?{Query}");
+                builder.Append('?');
+                builder.Append(Query);
             }
 
             if(!string.IsNullOrEmpty(Fragment))
             {
-                builder.Append($"#{Fragment}");
+                builder.Append('#');
+                builder.Append(Fragment);
             }
 
             return builder.ToString();

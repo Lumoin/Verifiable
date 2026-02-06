@@ -1,6 +1,6 @@
 using System.Linq;
 
-namespace Verifiable.Core.Model.Did
+namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
     public sealed class Secp256k1VerificationKey2018MethodTypeInfo : VerificationMethodTypeInfo
     {

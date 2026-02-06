@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Verifiable.Tpm.Structures.Spec.Constants;
 
 
@@ -16,6 +18,8 @@ namespace Verifiable.Tpm.Structures.Spec.Constants;
 /// 16-19).
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "TPM 2.0 specification allows duplicate values for compatibility and other reasons.")]
+[SuppressMessage("Naming", "CA1700:Do not name enum values 'Reserved'", Justification = "Enum values defined by TPM 2.0 specification.")]
 public enum TpmRcConstants: uint
 {
     /// <summary>

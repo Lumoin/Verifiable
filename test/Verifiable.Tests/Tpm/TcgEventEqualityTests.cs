@@ -8,7 +8,7 @@ namespace Verifiable.Tests.Tpm;
 /// Tests for <see cref="TcgEvent"/>, <see cref="TcgEventDigest"/>, and <see cref="TcgEventLog"/> equality.
 /// </summary>
 [TestClass]
-public class TcgEventEqualityTests
+internal class TcgEventEqualityTests
 {
     [TestMethod]
     public void TcgEventDigestEqualsWithSameValues()
@@ -49,11 +49,10 @@ public class TcgEventEqualityTests
     [TestMethod]
     public void TcgEventDigestNullComparison()
     {
-        var digest = new TcgEventDigest(TpmAlgIdConstants.TPM_ALG_SHA256, [0x01]);
+        TcgEventDigest? digest = null;
 
-        Assert.IsFalse(digest == null);
-        Assert.IsTrue(digest != null);
-        Assert.IsFalse(digest.Equals(null));
+        Assert.IsTrue(IsNullDigest(digest));
+        Assert.IsFalse(IsNullDigest(new TcgEventDigest(TpmAlgIdConstants.TPM_ALG_SHA256, [0x01])));
     }
 
     [TestMethod]
@@ -108,12 +107,15 @@ public class TcgEventEqualityTests
     [TestMethod]
     public void TcgEventNullComparison()
     {
-        var evt = new TcgEvent(0, 0, TcgEventType.EV_POST_CODE, [], []);
+        TcgEvent? evt = null;
 
-        Assert.IsFalse(evt == null);
-        Assert.IsTrue(evt != null);
-        Assert.IsFalse(evt.Equals(null));
+        Assert.IsTrue(IsNullEvent(evt));
+        Assert.IsFalse(IsNullEvent(new TcgEvent(0, 0, TcgEventType.EV_POST_CODE, [], [])));
     }
+
+    private static bool IsNullDigest(TcgEventDigest? digest) => digest == null;
+
+    private static bool IsNullEvent(TcgEvent? evt) => evt == null;
 
     [TestMethod]
     public void TcgEventDigestAlgorithmNameReturnsCorrectValue()

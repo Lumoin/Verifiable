@@ -1,4 +1,5 @@
-﻿using Verifiable.Core;
+﻿using System.Diagnostics.CodeAnalysis;
+using Verifiable.Core;
 
 namespace Verifiable.Tests;
 
@@ -6,7 +7,7 @@ namespace Verifiable.Tests;
 /// Tests for <see cref="Result{TValue, TError}"/> <see cref="IEquatable{T}"/> implementation.
 /// </summary>
 [TestClass]
-public sealed class ResultEqualityTests
+internal sealed class ResultEqualityTests
 {
     /// <summary>
     /// Success result with value "value1".
@@ -99,12 +100,13 @@ public sealed class ResultEqualityTests
 
 
     [TestMethod]
+    [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Contract test: Equals(object) must return false when passed null.")]
     public void EqualsWithNullReturnsFalse()
     {
         object? nullObject = null;
-
         Assert.IsFalse(SuccessResult1.Equals(nullObject));
     }
+
 
 
     [TestMethod]

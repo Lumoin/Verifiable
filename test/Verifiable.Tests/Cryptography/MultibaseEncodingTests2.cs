@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Cryptography
     /// Tests for the MultibaseSerializer2 implementation.
     /// </summary>
     [TestClass]
-    public sealed class MultibaseSerializer2Tests
+    internal sealed class MultibaseSerializer2Tests
     {
         /// <summary>
         /// Tests that encoding and decoding with explicit memory pools produces the expected round-trip result.
@@ -83,7 +83,7 @@ namespace Verifiable.Tests.Cryptography
             string jwkEncoded = MultibaseSerializer.EncodeForJwk(originalData, Base64Url.EncodeToString);
 
             //Verify no multibase prefix is present.
-            Assert.IsFalse(jwkEncoded.StartsWith("u", StringComparison.Ordinal), "JWK encoding should not include multibase prefix.");
+            Assert.DoesNotStartWith("u", jwkEncoded, "JWK encoding should not include multibase prefix.");
 
             //Decode the JWK data.
             var decodedData = MultibaseSerializer.DecodeFromJwk(jwkEncoded, Base64Url.DecodeFromChars, SensitiveMemoryPool<byte>.Shared);

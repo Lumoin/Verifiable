@@ -20,6 +20,7 @@ public static class CborReaderExtensions
     /// <exception cref="CborContentException">Thrown when the current item is not a byte string.</exception>
     public static byte[] ReadByteStringAsArray(this CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         return reader.ReadByteString();
     }
 
@@ -32,6 +33,7 @@ public static class CborReaderExtensions
     /// <exception cref="CborContentException">Thrown when the structure is invalid.</exception>
     public static List<byte[]> ReadByteStringArray(this CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         int? length = reader.ReadStartArray();
         if(length is null)
         {
@@ -57,6 +59,7 @@ public static class CborReaderExtensions
     /// <exception cref="CborContentException">Thrown when the structure is invalid.</exception>
     public static List<string> ReadTextStringArray(this CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         int? length = reader.ReadStartArray();
         if(length is null)
         {
@@ -82,6 +85,7 @@ public static class CborReaderExtensions
     /// <exception cref="CborContentException">Thrown when the structure is invalid.</exception>
     public static List<int> ReadInt32Array(this CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         int? length = reader.ReadStartArray();
         if(length is null)
         {
@@ -107,6 +111,7 @@ public static class CborReaderExtensions
     /// <exception cref="CborContentException">Thrown when the structure is invalid.</exception>
     public static List<uint> ReadUInt32Array(this CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         int? length = reader.ReadStartArray();
         if(length is null)
         {
@@ -132,6 +137,7 @@ public static class CborReaderExtensions
     /// <returns><see langword="true"/> if a state was available; otherwise, <see langword="false"/>.</returns>
     public static bool TryPeekState(this CborReader reader, out CborReaderState state)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         try
         {
             state = reader.PeekState();
@@ -157,6 +163,8 @@ public static class CborReaderExtensions
         this CborReader reader,
         Func<CborReader, TValue> valueReader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(valueReader);
         int? length = reader.ReadStartMap();
         if(length is null)
         {
@@ -188,6 +196,8 @@ public static class CborReaderExtensions
         this CborReader reader,
         Func<CborReader, TValue> valueReader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(valueReader);
         int? length = reader.ReadStartMap();
         if(length is null)
         {
@@ -217,6 +227,7 @@ public static class CborReaderExtensions
     /// </remarks>
     public static void SkipValue(this CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         reader.SkipValue();
     }
 
@@ -228,6 +239,7 @@ public static class CborReaderExtensions
     /// <returns>The byte string, or null.</returns>
     public static byte[]? ReadNullableByteString(this CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         if(reader.PeekState() == CborReaderState.Null)
         {
             reader.ReadNull();
@@ -245,6 +257,7 @@ public static class CborReaderExtensions
     /// <returns>The text string, or null.</returns>
     public static string? ReadNullableTextString(this CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         if(reader.PeekState() == CborReaderState.Null)
         {
             reader.ReadNull();
@@ -263,6 +276,7 @@ public static class CborReaderExtensions
     /// <exception cref="CborContentException">Thrown when the length does not match.</exception>
     public static void ReadStartArrayExpectLength(this CborReader reader, int expectedLength)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         int? length = reader.ReadStartArray();
         if(length is null)
         {
@@ -286,6 +300,7 @@ public static class CborReaderExtensions
     /// <exception cref="CborContentException">Thrown when the length is out of range.</exception>
     public static int ReadStartArrayExpectLengthRange(this CborReader reader, int minLength, int maxLength)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         int? length = reader.ReadStartArray();
         if(length is null)
         {

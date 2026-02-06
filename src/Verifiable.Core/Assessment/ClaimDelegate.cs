@@ -36,9 +36,7 @@ namespace Verifiable.Core.Assessment
     /// </description></item>
     /// </list>
     /// </remarks>
-    public delegate ValueTask<IList<Claim>> ClaimDelegateAsync<TInput>(
-        TInput input,
-        CancellationToken cancellationToken = default);
+    public delegate ValueTask<List<Claim>> ClaimDelegateAsync<TInput>(TInput input, CancellationToken cancellationToken = default);
 
 
     /// <summary>

@@ -68,10 +68,8 @@ public sealed class Tpm2bSensitiveCreate: IDisposable
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize()
-    {
-        return sizeof(ushort) + Sensitive.GetSerializedSize();
-    }
+    public int SerializedSize => sizeof(ushort) + Sensitive.SerializedSize;
+    
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -81,7 +79,7 @@ public sealed class Tpm2bSensitiveCreate: IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        int innerSize = Sensitive.GetSerializedSize();
+        int innerSize = Sensitive.SerializedSize;
         writer.WriteUInt16((ushort)innerSize);
         Sensitive.WriteTo(ref writer);
     }

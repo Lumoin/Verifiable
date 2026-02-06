@@ -75,7 +75,7 @@ public readonly struct Tpm2bPublicKeyMlKem: IDisposable, IEquatable<Tpm2bPublicK
 
         if(publicKey.IsEmpty)
         {
-            return Empty();
+            return Empty;
         }
 
         pool ??= MemoryPool<byte>.Shared;
@@ -85,15 +85,14 @@ public readonly struct Tpm2bPublicKeyMlKem: IDisposable, IEquatable<Tpm2bPublicK
     }
 
     /// <summary>
-    /// Creates an empty ML-KEM public key buffer.
+    /// Gets an empty ML-KEM public key buffer.
     /// </summary>
-    /// <returns>An empty buffer.</returns>
-    public static Tpm2bPublicKeyMlKem Empty() => new(null, ReadOnlyMemory<byte>.Empty);
+    public static Tpm2bPublicKeyMlKem Empty { get; } = new(null, ReadOnlyMemory<byte>.Empty);
 
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + buffer.Length;
+    public int SerializedSize => sizeof(ushort) + buffer.Length;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -117,7 +116,7 @@ public readonly struct Tpm2bPublicKeyMlKem: IDisposable, IEquatable<Tpm2bPublicK
 
         if(size == 0)
         {
-            return Empty();
+            return Empty;
         }
 
         if(size > MaxMlKemPubSize)

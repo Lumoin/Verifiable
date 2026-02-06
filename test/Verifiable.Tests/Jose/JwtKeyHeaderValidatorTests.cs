@@ -1,10 +1,11 @@
 ﻿using Verifiable.Core.Assessment;
+using Verifiable.JCose;
 using Verifiable.Jose;
 
 namespace Verifiable.Tests.Jwt
 {
     [TestClass]
-    public sealed class JwtKeyHeaderValidatorTests
+    internal sealed class JwtKeyHeaderValidatorTests
     {
         //TODO: Put these to JsonWebKey2020?
         private static readonly List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> ValidAlgCrvPairs = new()

@@ -67,6 +67,7 @@ public sealed class Tpm2bSensitiveData: SensitiveMemory, ITpmWireType
     /// <returns>The parsed sensitive data.</returns>
     public static Tpm2bSensitiveData Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         ushort length = reader.ReadUInt16();
 
         if(length == 0)
@@ -93,16 +94,12 @@ public sealed class Tpm2bSensitiveData: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Gets the serialized size (2-byte length prefix + data).
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + Length;
+    public int SerializedSize => sizeof(ushort) + Length;
 
     /// <summary>
-    /// Creates empty sensitive data.
+    /// Gets empty sensitive data.
     /// </summary>
-    /// <returns>Empty sensitive data.</returns>
-    public static Tpm2bSensitiveData CreateEmpty()
-    {
-        return EmptyInstance;
-    }
+    public static Tpm2bSensitiveData Empty => EmptyInstance;
 
     /// <summary>
     /// Creates sensitive data from the specified bytes.
@@ -112,6 +109,7 @@ public sealed class Tpm2bSensitiveData: SensitiveMemory, ITpmWireType
     /// <returns>The created sensitive data.</returns>
     public static Tpm2bSensitiveData Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)
         {
             return EmptyInstance;
@@ -119,6 +117,7 @@ public sealed class Tpm2bSensitiveData: SensitiveMemory, ITpmWireType
 
         IMemoryOwner<byte> storage = pool.Rent(bytes.Length);
         bytes.CopyTo(storage.Memory.Span);
+
         return new Tpm2bSensitiveData(storage);
     }
 

@@ -8,7 +8,7 @@ namespace Verifiable.Tests.Did
     /// EBSI specific tests. The source is at <a href="https://api.ebsi.xyz/docs/?urls.primaryName=DID%20API#/DID/get-did-v1-identifier">EBSI DID API Swagger</a>.
     /// </summary>
     [TestClass]
-    public sealed class EbsiDidTests
+    internal sealed class EbsiDidTests
     {
         /// <summary>
         /// The reader should be able to deserialize all these test files correctly.

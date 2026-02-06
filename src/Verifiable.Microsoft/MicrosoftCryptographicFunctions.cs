@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Frozen;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
@@ -10,6 +11,7 @@ namespace Verifiable.Microsoft
     /// <summary>
     /// Provides cryptographic functions for digital signatures using Microsoft cryptographic libraries.
     /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned objects.")]
     public static class MicrosoftCryptographicFunctions
     {
         public static ValueTask<bool> VerifyP256Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, FrozenDictionary<string, object>? context = null)
@@ -19,6 +21,7 @@ namespace Verifiable.Microsoft
 
         public static ValueTask<Signature> SignP256Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.NamedCurves.nistP256, HashAlgorithmName.SHA256, CryptoTags.P256Signature);
         }
 
@@ -29,6 +32,7 @@ namespace Verifiable.Microsoft
 
         public static ValueTask<Signature> SignP384Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.NamedCurves.nistP384, HashAlgorithmName.SHA384, CryptoTags.P384Signature);
         }
 
@@ -39,6 +43,7 @@ namespace Verifiable.Microsoft
 
         public static ValueTask<Signature> SignP521Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.NamedCurves.nistP521, HashAlgorithmName.SHA512, CryptoTags.P521Signature);
         }
 
@@ -49,11 +54,13 @@ namespace Verifiable.Microsoft
 
         public static ValueTask<Signature> SignSecp256k1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.CreateFromFriendlyName("secP256k1"), HashAlgorithmName.SHA256, CryptoTags.Secp256k1Signature);
         }
 
         public static ValueTask<Signature> SignRsa2048Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, CryptoTags.Rsa2048Signature);
         }
 
@@ -64,6 +71,7 @@ namespace Verifiable.Microsoft
 
         public static ValueTask<Signature> SignRsa4096Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, CryptoTags.Rsa4096Signature);
         }
 
@@ -79,6 +87,7 @@ namespace Verifiable.Microsoft
 
         public static ValueTask<Signature> SignRsaSha256Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, CryptoTags.RsaSha256Pkcs1Signature);
         }
 
@@ -89,6 +98,7 @@ namespace Verifiable.Microsoft
 
         public static ValueTask<Signature> SignRsaSha256PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pss, CryptoTags.RsaSha256PssSignature);
         }
 
@@ -99,6 +109,7 @@ namespace Verifiable.Microsoft
 
         public static ValueTask<Signature> SignRsaSha384Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA384, RSASignaturePadding.Pkcs1, CryptoTags.RsaSha384Pkcs1Signature);
         }
 
@@ -109,6 +120,7 @@ namespace Verifiable.Microsoft
 
         public static ValueTask<Signature> SignRsaSha384PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA384, RSASignaturePadding.Pss, CryptoTags.RsaSha384PssSignature);
         }
 
@@ -119,6 +131,7 @@ namespace Verifiable.Microsoft
 
         public static ValueTask<Signature> SignRsaSha512Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA512, RSASignaturePadding.Pkcs1, CryptoTags.RsaSha512Pkcs1Signature);
         }
 
@@ -129,6 +142,7 @@ namespace Verifiable.Microsoft
 
         public static ValueTask<Signature> SignRsaSha512PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA512, RSASignaturePadding.Pss, CryptoTags.RsaSha512PssSignature);
         }
 
@@ -156,6 +170,7 @@ namespace Verifiable.Microsoft
             return ValueTask.FromResult(false);
         }
 
+        
         private static ValueTask<Signature> SignECDsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, MemoryPool<byte> signaturePool, ECCurve curve, HashAlgorithmName hashAlgorithmName, Tag signatureTag)
         {
             var key = ECDsa.Create(new ECParameters

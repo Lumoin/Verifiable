@@ -65,7 +65,11 @@ namespace Verifiable.Core.Model.Did
         /// Implicitly converts a <see cref="Controller"/> to its string representation.
         /// </summary>
         /// <param name="controller">The controller to convert.</param>
-        public static implicit operator string(Controller controller) => controller.Did;
+        public static implicit operator string(Controller controller)
+        {
+            ArgumentNullException.ThrowIfNull(controller);
+            return controller.Did;
+        }
 
 
         /// <summary>

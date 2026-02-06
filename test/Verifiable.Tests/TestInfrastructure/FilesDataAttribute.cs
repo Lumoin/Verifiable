@@ -7,36 +7,36 @@ namespace Verifiable.Tests.TestInfrastructure
     /// <summary>
     /// An attribute to retrieve files with the given glob pattern.
     /// </summary>
-    public sealed class FilesDataAttribute: Attribute, ITestDataSource
+    [AttributeUsage(AttributeTargets.Method)]
+    internal sealed class FilesDataAttribute: Attribute, ITestDataSource
     {
         /// <summary>
         /// The directory to search for files.
         /// </summary>
-        private string DirectoryPath { get; }
+        public string DirectoryPath { get; }
 
         /// <summary>
         /// The search pattern to apply for files.
         /// </summary>
-        private string SearchPattern { get; }
+        public string SearchPattern { get; }
 
         /// <summary>
         /// The option to search for files.
         /// </summary>
-        private SearchOption SearchOption { get; }
+        public SearchOption SearchOption { get; }
 
 
         /// <summary>
-        /// Loads the given file.
+        /// Gets the full path of the directory where the application is located.
         /// </summary>
-        /// <param name="file">The file to load.</param>
-        public FilesDataAttribute(string file): this(Path.GetDirectoryName(file ?? Path.GetTempPath()) ?? Path.GetTempPath(), Path.GetFileName(file ?? Path.GetTempFileName()), SearchOption.TopDirectoryOnly) { }
+        public string Directory { get; }
 
-
+       
         /// <summary>
         /// Loads files from a given directory with a given search pattern.
         /// </summary>
         /// <param name="directory">The absolute or relative path to the JSON file to load</param>
-        public FilesDataAttribute(string directory, string searchPattern) : this(directory, searchPattern, SearchOption.AllDirectories) { }
+        public FilesDataAttribute(string directory, string searchPattern): this(directory, searchPattern, SearchOption.AllDirectories) { }
 
 
         /// <summary>
@@ -50,17 +50,18 @@ namespace Verifiable.Tests.TestInfrastructure
             //The path validity check here is not exhaustive.
             if(string.IsNullOrWhiteSpace(directory))
             {
-                throw new ArgumentException(nameof(directory));
+                throw new ArgumentException(null, nameof(directory));
             }
 
             if(string.IsNullOrWhiteSpace(searchPattern))
             {
-                throw new ArgumentException(nameof(searchPattern));
+                throw new ArgumentException(null, nameof(searchPattern));
             }
 
             DirectoryPath = directory;
             SearchPattern = searchPattern;
             SearchOption = searchOption;
+            Directory = directory;            
         }
 
 
@@ -97,7 +98,7 @@ namespace Verifiable.Tests.TestInfrastructure
                     }
 
                     var entryPath = entry.ToFullPath();
-                    return entryPath.EndsWith(SearchPattern);
+                    return entryPath.EndsWith(SearchPattern, StringComparison.InvariantCulture);
                 }
             };
 
@@ -111,8 +112,8 @@ namespace Verifiable.Tests.TestInfrastructure
             }
             else
             {
-                throw new ArgumentException($"Could not find files using paramters directory \"{Path.GetFullPath(DirectoryPath)}\", \"{SearchPattern}\", \"{SearchOption}\"");
+                throw new ArgumentException($"Could not find files using paramters directory '{Path.GetFullPath(DirectoryPath)}', '{SearchPattern}', '{SearchOption}'.");
             }
-        }
+        }        
     }
 }

@@ -1,15 +1,14 @@
-﻿using System;
-using Verifiable.Core.Model.Did.Methods;
+﻿using Verifiable.Core.Model.Did.Methods;
 
 namespace Verifiable.Tests.Resolver
 {
-    public static class WebDidResolver
+    internal static class WebDidResolver
     {
         private static char[] Separator { get; } = [':'];
 
         public static string Resolve(string didWebIdentifier)
         {
-            if(!didWebIdentifier.StartsWith(WebDidMethod.Prefix))
+            if(!didWebIdentifier.StartsWith(WebDidMethod.Prefix, StringComparison.InvariantCulture))
             {
                 throw new ArgumentException($"The given DID identifier '{didWebIdentifier}' is not a valid DID Web identifier.");
             }

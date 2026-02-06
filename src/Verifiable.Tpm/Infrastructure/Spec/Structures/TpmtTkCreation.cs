@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Buffers;
 using System.Diagnostics;
+using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
-using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 
@@ -97,23 +97,25 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
     /// <summary>
     /// Gets the digest as a read-only span.
     /// </summary>
-    /// <returns>The digest bytes.</returns>
-    public ReadOnlySpan<byte> GetDigest()
+    public ReadOnlySpan<byte> Digest
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
-
-        if(storage is null)
+        get
         {
-            return ReadOnlySpan<byte>.Empty;
-        }
+            ObjectDisposedException.ThrowIf(disposed, this);
 
-        return storage.Memory.Span.Slice(0, digestLength);
+            if(storage is null)
+            {
+                return ReadOnlySpan<byte>.Empty;
+            }
+
+            return storage.Memory.Span.Slice(0, digestLength);
+        }
     }
 
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + sizeof(uint) + sizeof(ushort) + digestLength;
+    public int SerializedSize => sizeof(ushort) + sizeof(uint) + sizeof(ushort) + digestLength;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -129,7 +131,7 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
 
         if(digestLength > 0)
         {
-            writer.WriteBytes(GetDigest());
+            writer.WriteBytes(Digest);
         }
     }
 
@@ -141,6 +143,7 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
     /// <returns>The parsed creation ticket.</returns>
     public static TpmtTkCreation Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         ushort tag = reader.ReadUInt16();
 
         if(tag != (ushort)TpmStConstants.TPM_ST_CREATION)

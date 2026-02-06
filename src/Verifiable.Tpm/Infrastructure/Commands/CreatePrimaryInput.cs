@@ -99,9 +99,9 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
         ObjectDisposedException.ThrowIf(disposed, this);
 
         return sizeof(uint) + // primaryHandle
-               InSensitive.GetSerializedSize() +
+               InSensitive.SerializedSize +
                InPublic.GetSerializedSize() +
-               OutsideInfo.GetSerializedSize() +
+               OutsideInfo.SerializedSize +
                CreationPcr.GetSerializedSize();
     }
 

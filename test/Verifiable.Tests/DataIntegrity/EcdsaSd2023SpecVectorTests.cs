@@ -29,7 +29,7 @@ namespace Verifiable.Tests.DataIntegrity;
 /// </para>
 /// </remarks>
 [TestClass]
-public sealed class EcdsaSd2023W3cVectorTests
+internal sealed class EcdsaSd2023W3cVectorTests
 {
     /// <summary>
     /// The test context.
@@ -301,10 +301,10 @@ public sealed class EcdsaSd2023W3cVectorTests
         var cancellationToken = TestContext.CancellationToken;
 
         //Load W3C test vector keys (Example 71).
-        var issuerPublicKey = DecodeP256PublicKey(BasePublicKeyMultibase);
-        var issuerPrivateKey = DecodeP256PrivateKey(BaseSecretKeyMultibase);
-        var ephemeralPublicKey = DecodeP256PublicKey(ProofPublicKeyMultibase);
-        var ephemeralPrivateKey = DecodeP256PrivateKey(ProofSecretKeyMultibase);
+        using var issuerPublicKey = DecodeP256PublicKey(BasePublicKeyMultibase);
+        using var issuerPrivateKey = DecodeP256PrivateKey(BaseSecretKeyMultibase);
+        using var ephemeralPublicKey = DecodeP256PublicKey(ProofPublicKeyMultibase);
+        using var ephemeralPrivateKey = DecodeP256PrivateKey(ProofSecretKeyMultibase);
         byte[] hmacKey = Convert.FromHexString(HmacKeyHex);
 
         var ephemeralKeyPair = new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(ephemeralPublicKey, ephemeralPrivateKey);
@@ -337,7 +337,7 @@ public sealed class EcdsaSd2023W3cVectorTests
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         //Verify canonical statements match W3C Example 75.
         Assert.HasCount(
@@ -381,7 +381,7 @@ public sealed class EcdsaSd2023W3cVectorTests
         }
 
         //Verify proof options hash matches W3C Example 80.
-        string actualProofOptionsHash = Convert.ToHexString(baseProofResult.ProofOptionsHash).ToLowerInvariant();
+        string actualProofOptionsHash = Convert.ToHexStringLower(baseProofResult.ProofOptionsHash);
         Assert.AreEqual(ProofHashHex, actualProofOptionsHash, "Proof options hash must match W3C Example 80.");
 
         //Verify canonical proof configuration matches W3C Example 79.        
@@ -402,7 +402,7 @@ public sealed class EcdsaSd2023W3cVectorTests
         }
 
         //Verify mandatory hash matches W3C Example 80.
-        string actualMandatoryHash = Convert.ToHexString(baseProofResult.MandatoryHash).ToLowerInvariant();
+        string actualMandatoryHash = Convert.ToHexStringLower(baseProofResult.MandatoryHash);
         Assert.AreEqual(
             MandatoryHashHex,
             actualMandatoryHash,
@@ -412,7 +412,7 @@ public sealed class EcdsaSd2023W3cVectorTests
         bool baseSignatureValid = await issuerPublicKey.VerifyAsync(
             baseProofResult.BaseSignatureData.Memory[..baseProofResult.BaseSignatureDataLength],
             baseProofResult.BaseSignature,
-            BouncyCastleCryptographicFunctions.VerifyP256Async);
+            BouncyCastleCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
 
         Assert.IsTrue(baseSignatureValid, "Base signature must be valid.");
 
@@ -420,12 +420,12 @@ public sealed class EcdsaSd2023W3cVectorTests
         byte[] w3cBaseSignatureBytes = Convert.FromHexString(BaseSignatureHex);
         using var w3cBaseSignatureMemory = SensitiveMemoryPool<byte>.Shared.Rent(w3cBaseSignatureBytes.Length);
         w3cBaseSignatureBytes.CopyTo(w3cBaseSignatureMemory.Memory.Span);
-        var w3cBaseSignature = new Signature(w3cBaseSignatureMemory, CryptoTags.P256Signature);
+        using var w3cBaseSignature = new Signature(w3cBaseSignatureMemory, CryptoTags.P256Signature);
 
         bool w3cSignatureValid = await issuerPublicKey.VerifyAsync(
             baseProofResult.BaseSignatureData.Memory[..baseProofResult.BaseSignatureDataLength],
             w3cBaseSignature,
-            BouncyCastleCryptographicFunctions.VerifyP256Async);
+            BouncyCastleCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
 
         Assert.IsTrue(w3cSignatureValid, "W3C Example 81 base signature must verify with computed signature data.");
 
@@ -448,12 +448,12 @@ public sealed class EcdsaSd2023W3cVectorTests
             byte[] w3cSigBytes = Convert.FromHexString(NonMandatorySignaturesHex[i]);
             using var w3cSigMemory = SensitiveMemoryPool<byte>.Shared.Rent(w3cSigBytes.Length);
             w3cSigBytes.CopyTo(w3cSigMemory.Memory.Span);
-            var w3cSig = new Signature(w3cSigMemory, CryptoTags.P256Signature);
+            using var w3cSig = new Signature(w3cSigMemory, CryptoTags.P256Signature);
 
             bool w3cSigValid = await ephemeralPublicKey.VerifyAsync(
                 statementBytes,
                 w3cSig,
-                BouncyCastleCryptographicFunctions.VerifyP256Async);
+                BouncyCastleCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
 
             Assert.IsTrue(w3cSigValid, $"W3C Example 81 signature '{i}' must verify against statement.");
         }
@@ -491,10 +491,10 @@ public sealed class EcdsaSd2023W3cVectorTests
         var cancellationToken = TestContext.CancellationToken;
 
         //Load W3C test vector keys (Example 71).
-        var issuerPublicKey = DecodeP256PublicKey(BasePublicKeyMultibase);
-        var issuerPrivateKey = DecodeP256PrivateKey(BaseSecretKeyMultibase);
-        var ephemeralPublicKey = DecodeP256PublicKey(ProofPublicKeyMultibase);
-        var ephemeralPrivateKey = DecodeP256PrivateKey(ProofSecretKeyMultibase);
+        using var issuerPublicKey = DecodeP256PublicKey(BasePublicKeyMultibase);
+        using var issuerPrivateKey = DecodeP256PrivateKey(BaseSecretKeyMultibase);
+        using var ephemeralPublicKey = DecodeP256PublicKey(ProofPublicKeyMultibase);
+        using var ephemeralPrivateKey = DecodeP256PrivateKey(ProofSecretKeyMultibase);
         byte[] hmacKey = Convert.FromHexString(HmacKeyHex);
 
         var ephemeralKeyPair = new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(ephemeralPublicKey, ephemeralPrivateKey);
@@ -527,7 +527,7 @@ public sealed class EcdsaSd2023W3cVectorTests
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         //Construct signed credential from base proof result.
         var signedCredential = DeserializeCredential(SerializeCredential(credential));
@@ -545,7 +545,7 @@ public sealed class EcdsaSd2023W3cVectorTests
         ];
 
         //Verify issuer created correct mandatory hash.
-        string actualMandatoryHash = Convert.ToHexString(baseProofResult.MandatoryHash).ToLowerInvariant();
+        string actualMandatoryHash = Convert.ToHexStringLower(baseProofResult.MandatoryHash);
         Assert.AreEqual(
             MandatoryHashHex,
             actualMandatoryHash,
@@ -567,7 +567,7 @@ public sealed class EcdsaSd2023W3cVectorTests
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(
             CredentialVerificationResult.Success(),
@@ -601,7 +601,7 @@ public sealed class EcdsaSd2023W3cVectorTests
         }
 
         //Verify holder context has correct mandatory hash.
-        string holderMandatoryHash = Convert.ToHexString(holderContext.MandatoryHash).ToLowerInvariant();
+        string holderMandatoryHash = Convert.ToHexStringLower(holderContext.MandatoryHash);
         Assert.AreEqual(
             MandatoryHashHex,
             holderMandatoryHash,
@@ -633,7 +633,7 @@ public sealed class EcdsaSd2023W3cVectorTests
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(derivedCredential.Proof, "Derived credential must have proof.");
         Assert.StartsWith(
@@ -658,7 +658,7 @@ public sealed class EcdsaSd2023W3cVectorTests
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         //Verify derived proof contains expected number of filtered signatures.
         using var parsedDerivedProof = EcdsaSd2023CborSerializer.ParseDerivedProof(

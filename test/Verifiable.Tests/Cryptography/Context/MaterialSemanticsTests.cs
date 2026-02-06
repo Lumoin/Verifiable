@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Cryptography.Context;
 /// Tests for <see cref="MaterialSemantics"/> and <see cref="MaterialSemanticsNames"/>.
 /// </summary>
 [TestClass]
-public sealed class MaterialSemanticsTests
+internal sealed class MaterialSemanticsTests
 {
     //Constants using nameof to tie test expectations to actual property names.
     private const string DirectName = nameof(MaterialSemantics.Direct);

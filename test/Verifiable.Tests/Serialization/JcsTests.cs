@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Serialization;
 /// Test vectors derived from <see href="https://datatracker.ietf.org/doc/html/rfc8785">RFC 8785</see> examples.
 /// </summary>
 [TestClass]
-public sealed class JcsTests
+internal sealed class JcsTests
 {
     [TestMethod]
     public void CanonicalizeRemovesWhitespace()

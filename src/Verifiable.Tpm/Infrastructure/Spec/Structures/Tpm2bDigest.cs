@@ -78,6 +78,7 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
     /// <returns>The parsed digest.</returns>
     public static Tpm2bDigest Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
         if(size == 0)
         {
@@ -105,16 +106,7 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Gets the serialized size (2-byte size prefix + data).
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + Size;
-
-    /// <summary>
-    /// Creates an empty digest.
-    /// </summary>    
-    /// <returns>An empty digest.</returns>
-    public static Tpm2bDigest CreateEmpty()
-    {
-        return EmptyInstance;
-    }
+    public int SerializedSize => sizeof(ushort) + Size;
 
     /// <summary>
     /// Creates a digest from the specified bytes.
@@ -124,6 +116,7 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
     /// <returns>The created digest.</returns>
     public static Tpm2bDigest Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)
         {
             return EmptyInstance;

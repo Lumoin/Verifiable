@@ -1,4 +1,6 @@
-﻿namespace Verifiable.Core.Model.DataIntegrity;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace Verifiable.Core.Model.DataIntegrity;
 
 /// <summary>
 /// Provides extension accessors for discovering available cryptosuite types.
@@ -71,6 +73,7 @@
 /// and allowing seamless integration of custom cryptosuite types without modifying library code.
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with the latest syntax.")]
 public static class CryptosuiteInfoExtensions
 {
     extension(CryptosuiteInfo)

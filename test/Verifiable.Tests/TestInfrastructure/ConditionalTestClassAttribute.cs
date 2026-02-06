@@ -30,7 +30,7 @@
 /// </remarks>
 /// <seealso cref="ConditionalTestMethodAttribute"/>
 /// <seealso cref="BaseSkipAttribute"/>
-public class ConditionalTestClassAttribute: TestClassAttribute
+internal sealed class ConditionalTestClassAttribute: TestClassAttribute
 {
     /// <inheritdoc/>
     public override TestMethodAttribute? GetTestMethodAttribute(TestMethodAttribute? testMethodAttribute)

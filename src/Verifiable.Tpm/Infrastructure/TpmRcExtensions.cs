@@ -1,4 +1,5 @@
-﻿using Verifiable.Tpm.Structures.Spec.Constants;
+﻿using System.Diagnostics.CodeAnalysis;
+using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Infrastructure;
 
@@ -59,6 +60,7 @@ public static class TpmRcExtensions
     private const int NumberFieldShift = 8;
 
     //Error number masks differ by format (TPM 2.0 Library Specification Part 2, Tables 16 and 18).
+    [SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "Spec-defined mask for format-zero error extraction (TPM 2.0 Part 2, Table 16).")]
     private const uint FormatZeroErrorMask = 0x07F;
     private const uint FormatOneErrorMask = 0x03F;
 

@@ -1,4 +1,5 @@
-﻿using Verifiable.Core.Model.Did;
+﻿using System.Diagnostics.CodeAnalysis;
+using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Tests.Did
 {
@@ -6,7 +7,7 @@ namespace Verifiable.Tests.Did
     /// Tests for <see cref="VerificationMethod" /> <see cref="System.IEquatable{T}" /> implementation.
     /// </summary>
     [TestClass]
-    public sealed class VerificationMethodEquatableTests
+    internal sealed class VerificationMethodEquatableTests
     {
         /// <summary>
         /// A first instance for testing comparisons.
@@ -158,6 +159,7 @@ namespace Verifiable.Tests.Did
 
 
         [TestMethod]
+        [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Intentional null/null case to verify custom equality operator semantics; analyzer cannot reason about operator overloads.")]
         public void NullVerificationMethodsAreEqual()
         {
             VerificationMethod? method1 = null;

@@ -6,14 +6,14 @@ namespace Verifiable.Tests.Tpm;
 /// Tests for <see cref="TpmRecorder"/> functionality.
 /// </summary>
 [TestClass]
-public class TpmRecorderTests
+internal class TpmRecorderTests
 {
     public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
     public void RecordsExchanges()
     {
-        var recorder = new TpmRecorder();
+        using var recorder = new TpmRecorder();
         var exchange1 = new TpmExchange(0, 100, new byte[] { 0x01 }, new byte[] { 0x02 });
         var exchange2 = new TpmExchange(100, 200, new byte[] { 0x03 }, new byte[] { 0x04 });
 
@@ -26,7 +26,7 @@ public class TpmRecorderTests
     [TestMethod]
     public void StopsRecordingAfterCompletion()
     {
-        var recorder = new TpmRecorder();
+        using var recorder = new TpmRecorder();
         var exchange = new TpmExchange(0, 100, new byte[] { 0x01 }, new byte[] { 0x02 });
 
         recorder.OnNext(exchange);
@@ -39,7 +39,7 @@ public class TpmRecorderTests
     [TestMethod]
     public void StopsRecordingAfterError()
     {
-        var recorder = new TpmRecorder();
+        using var recorder = new TpmRecorder();
         var exchange = new TpmExchange(0, 100, new byte[] { 0x01 }, new byte[] { 0x02 });
 
         recorder.OnNext(exchange);
@@ -55,7 +55,7 @@ public class TpmRecorderTests
         const string expectedManufacturer = "INTC";
         const string expectedFirmwareVersion = "7.2.0";
 
-        var recorder = new TpmRecorder();
+        using var recorder = new TpmRecorder();
         recorder.OnNext(new TpmExchange(0, 100, new byte[] { 0x01 }, new byte[] { 0x02 }));
 
         TpmSessionInfo info = TpmSessionInfo.Create(expectedManufacturer, expectedFirmwareVersion, TpmPlatform.Windows, TimeProvider.System);
@@ -71,7 +71,7 @@ public class TpmRecorderTests
     [TestMethod]
     public void ClearResetsState()
     {
-        var recorder = new TpmRecorder();
+        using var recorder = new TpmRecorder();
         recorder.OnNext(new TpmExchange(0, 100, new byte[] { 0x01 }, new byte[] { 0x02 }));
         recorder.OnCompleted();
 
@@ -84,7 +84,7 @@ public class TpmRecorderTests
     [TestMethod]
     public void ToRecordingReturnsSnapshotNotLiveReference()
     {
-        var recorder = new TpmRecorder();
+        using var recorder = new TpmRecorder();
         recorder.OnNext(new TpmExchange(0, 100, new byte[] { 0x01 }, new byte[] { 0x02 }));
 
         TpmSessionInfo info = TpmSessionInfo.Create(null, null, TpmPlatform.Unknown, TimeProvider.System);
@@ -99,7 +99,7 @@ public class TpmRecorderTests
     [TestMethod]
     public void DisposeStopsRecording()
     {
-        var recorder = new TpmRecorder();
+        using var recorder = new TpmRecorder();
         recorder.OnNext(new TpmExchange(0, 100, new byte[] { 0x01 }, new byte[] { 0x02 }));
 
         recorder.Dispose();

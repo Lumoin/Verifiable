@@ -18,7 +18,7 @@ namespace Verifiable.Json.Converters
         /// supplied as parameter to the constructor.
         /// </summary>
         /// <remarks><see langword="true"/> if type derives from <see cref="GenericDidId"/>; <see langword="false"/> otherwise.</remarks>
-        public override bool CanConvert(Type objectType) => typeof(GenericDidMethod).IsAssignableFrom(objectType);
+        public override bool CanConvert(Type typeToConvert) => typeof(GenericDidMethod).IsAssignableFrom(typeToConvert);
 
 
         public DidIdConverter(DidMethodFactoryDelegate didFactory)
@@ -41,6 +41,8 @@ namespace Verifiable.Json.Converters
 
         public override void Write(Utf8JsonWriter writer, GenericDidMethod value, JsonSerializerOptions options)
         {
+    ArgumentNullException.ThrowIfNull(writer);
+    ArgumentNullException.ThrowIfNull(value);
             writer.WriteStringValue((string)value);
         }
     }

@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Cryptography
     /// Property based tests on elliptic curve utilities.
     /// </summary>
     [TestClass]
-    public sealed class EllipticCurveUtilitiesPropertyTests
+    internal sealed class EllipticCurveUtilitiesPropertyTests
     {
         [TestMethod]
         public void CompressionDecompressionShouldBeInverseIfOnTheCurve()

@@ -8,7 +8,7 @@ namespace Verifiable.Core.Did
     /// <summary>
     /// Contains validation rules common for all DID documents.
     /// </summary>
-    public static class DidDocumentValidationRules
+    internal static class DidDocumentValidationRules
     {
         public static IList<Claim> ValidatePrefix(DidDocument document)
         {

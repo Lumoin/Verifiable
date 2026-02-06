@@ -12,7 +12,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// Tests for <see cref="SdJwtSerializer"/> based on RFC 9901.
 /// </summary>
 [TestClass]
-public sealed class SdJwtSerializerTests
+internal sealed class SdJwtSerializerTests
 {
     private static MemoryPool<byte> MemoryPool => SensitiveMemoryPool<byte>.Shared;
     private static EncodeDelegate Encoder => TestSetup.Base64UrlEncoder;
@@ -347,12 +347,13 @@ public sealed class SdJwtSerializerTests
 
     private static byte[] ComputeHash(byte[] data, string algorithmName)
     {
-        return algorithmName.ToLowerInvariant() switch
+        HashAlgorithmName algorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(algorithmName);
+        return algorithm.Name switch
         {
-            "sha-256" => SHA256.HashData(data),
-            "sha-384" => SHA384.HashData(data),
-            "sha-512" => SHA512.HashData(data),
-            _ => throw new ArgumentException($"Unsupported hash algorithm: {algorithmName}", nameof(algorithmName))
+            WellKnownHashAlgorithms.Sha256 => SHA256.HashData(data),
+            WellKnownHashAlgorithms.Sha384 => SHA384.HashData(data),
+            WellKnownHashAlgorithms.Sha512 => SHA512.HashData(data),
+            _ => throw new ArgumentException($"Unsupported hash algorithm: '{algorithmName}'.", nameof(algorithmName))
         };
     }
 }

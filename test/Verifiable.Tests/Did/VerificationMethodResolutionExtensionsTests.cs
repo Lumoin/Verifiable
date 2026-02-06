@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Did
     /// from DID documents and handle both local and external resolution scenarios.
     /// </summary>
     [TestClass]
-    public sealed class VerificationMethodResolutionExtensionsTests
+    internal sealed class VerificationMethodResolutionExtensionsTests
     {
         private static VerificationMethod TestVerificationMethod1 { get; } = new()
         {
@@ -159,7 +159,7 @@ namespace Verifiable.Tests.Did
         {
             var didDocument = CreateTestDidDocument();
 
-            var results = await didDocument.SelectFromAuthenticationAsync();
+            var results = await didDocument.SelectFromAuthenticationAsync().ConfigureAwait(false);
             var resultsList = results.ToList();
 
             Assert.HasCount(2, resultsList, "Should have exactly two authentication methods.");
@@ -182,7 +182,7 @@ namespace Verifiable.Tests.Did
         {
             var didDocument = CreateTestDidDocument();
 
-            var results = await didDocument.SelectFromAssertionMethodAsync();
+            var results = await didDocument.SelectFromAssertionMethodAsync().ConfigureAwait(false);
             var resultsList = results.ToList();
 
             Assert.HasCount(2, resultsList, "Should have exactly two assertion methods.");
@@ -195,7 +195,7 @@ namespace Verifiable.Tests.Did
         {
             var didDocument = CreateTestDidDocument();
 
-            var results = await didDocument.SelectFromKeyAgreementAsync();
+            var results = await didDocument.SelectFromKeyAgreementAsync().ConfigureAwait(false);
             var resultsList = results.ToList();
 
             Assert.HasCount(1, resultsList, "Should have exactly one key agreement method.");
@@ -209,7 +209,7 @@ namespace Verifiable.Tests.Did
         {
             var didDocument = CreateTestDidDocument();
 
-            var results = await didDocument.SelectFromCapabilityInvocationAsync();
+            var results = await didDocument.SelectFromCapabilityInvocationAsync().ConfigureAwait(false);
             var resultsList = results.ToList();
 
             Assert.HasCount(1, resultsList, "Should have exactly one capability invocation method.");
@@ -222,7 +222,7 @@ namespace Verifiable.Tests.Did
         {
             var didDocument = CreateTestDidDocument();
 
-            var results = await didDocument.SelectFromCapabilityDelegationAsync();
+            var results = await didDocument.SelectFromCapabilityDelegationAsync().ConfigureAwait(false);
             var resultsList = results.ToList();
 
             Assert.HasCount(2, resultsList, "Should have exactly two capability delegation methods.");
@@ -235,7 +235,7 @@ namespace Verifiable.Tests.Did
         {
             var didDocument = CreateTestDidDocument();
 
-            var results = await didDocument.SelectFromAllVerificationRelationshipsAsync();
+            var results = await didDocument.SelectFromAllVerificationRelationshipsAsync().ConfigureAwait(false);
             var resultsList = results.ToList();
 
             Assert.HasCount(8, resultsList, "Should have eight total verification relationship methods.");
@@ -266,7 +266,7 @@ namespace Verifiable.Tests.Did
                 ]
             };
 
-            var results = await didDocument.SelectFromAuthenticationAsync(resolver);
+            var results = await didDocument.SelectFromAuthenticationAsync(resolver).ConfigureAwait(false);
             var resultsList = results.ToList();
 
             Assert.HasCount(1, resultsList, "Should have one authentication method.");
@@ -291,7 +291,7 @@ namespace Verifiable.Tests.Did
                 ]
             };
 
-            var results = await didDocument.SelectFromAuthenticationAsync(resolver);
+            var results = await didDocument.SelectFromAuthenticationAsync(resolver).ConfigureAwait(false);
             var resultsList = results.ToList();
 
             Assert.HasCount(1, resultsList, "Should have one authentication method.");
@@ -345,19 +345,19 @@ namespace Verifiable.Tests.Did
                 CapabilityDelegation = null
             };
 
-            var authResults = await didDocument.SelectFromAuthenticationAsync();
-            var assertionResults = await didDocument.SelectFromAssertionMethodAsync();
-            var keyAgreementResults = await didDocument.SelectFromKeyAgreementAsync();
-            var capInvocationResults = await didDocument.SelectFromCapabilityInvocationAsync();
-            var capDelegationResults = await didDocument.SelectFromCapabilityDelegationAsync();
-            var allResults = await didDocument.SelectFromAllVerificationRelationshipsAsync();
+            var authResults = await didDocument.SelectFromAuthenticationAsync().ConfigureAwait(false);
+            var assertionResults = await didDocument.SelectFromAssertionMethodAsync().ConfigureAwait(false);
+            var keyAgreementResults = await didDocument.SelectFromKeyAgreementAsync().ConfigureAwait(false);
+            var capInvocationResults = await didDocument.SelectFromCapabilityInvocationAsync().ConfigureAwait(false);
+            var capDelegationResults = await didDocument.SelectFromCapabilityDelegationAsync().ConfigureAwait(false);
+            var allResults = await didDocument.SelectFromAllVerificationRelationshipsAsync().ConfigureAwait(false);
 
-            Assert.IsFalse(authResults.Any(), "Authentication should return empty.");
-            Assert.IsFalse(assertionResults.Any(), "AssertionMethod should return empty.");
-            Assert.IsFalse(keyAgreementResults.Any(), "KeyAgreement should return empty.");
-            Assert.IsFalse(capInvocationResults.Any(), "CapabilityInvocation should return empty.");
-            Assert.IsFalse(capDelegationResults.Any(), "CapabilityDelegation should return empty.");
-            Assert.IsFalse(allResults.Any(), "All relationships should return empty.");
+            Assert.IsEmpty(authResults, "Authentication should return empty.");
+            Assert.IsEmpty(assertionResults, "AssertionMethod should return empty.");
+            Assert.IsEmpty(keyAgreementResults, "KeyAgreement should return empty.");
+            Assert.IsEmpty(capInvocationResults, "CapabilityInvocation should return empty.");
+            Assert.IsEmpty(capDelegationResults, "CapabilityDelegation should return empty.");
+            Assert.IsEmpty(allResults, "All relationships should return empty.");
         }
 
 
@@ -374,19 +374,19 @@ namespace Verifiable.Tests.Did
                 CapabilityDelegation = []
             };
 
-            var authResults = await didDocument.SelectFromAuthenticationAsync();
-            var assertionResults = await didDocument.SelectFromAssertionMethodAsync();
-            var keyAgreementResults = await didDocument.SelectFromKeyAgreementAsync();
-            var capInvocationResults = await didDocument.SelectFromCapabilityInvocationAsync();
-            var capDelegationResults = await didDocument.SelectFromCapabilityDelegationAsync();
-            var allResults = await didDocument.SelectFromAllVerificationRelationshipsAsync();
+            var authResults = await didDocument.SelectFromAuthenticationAsync().ConfigureAwait(false);
+            var assertionResults = await didDocument.SelectFromAssertionMethodAsync().ConfigureAwait(false);
+            var keyAgreementResults = await didDocument.SelectFromKeyAgreementAsync().ConfigureAwait(false);
+            var capInvocationResults = await didDocument.SelectFromCapabilityInvocationAsync().ConfigureAwait(false);
+            var capDelegationResults = await didDocument.SelectFromCapabilityDelegationAsync().ConfigureAwait(false);
+            var allResults = await didDocument.SelectFromAllVerificationRelationshipsAsync().ConfigureAwait(false);
 
-            Assert.IsFalse(authResults.Any(), "Authentication should return empty for empty array.");
-            Assert.IsFalse(assertionResults.Any(), "AssertionMethod should return empty for empty array.");
-            Assert.IsFalse(keyAgreementResults.Any(), "KeyAgreement should return empty for empty array.");
-            Assert.IsFalse(capInvocationResults.Any(), "CapabilityInvocation should return empty for empty array.");
-            Assert.IsFalse(capDelegationResults.Any(), "CapabilityDelegation should return empty for empty array.");
-            Assert.IsFalse(allResults.Any(), "All relationships should return empty for empty arrays.");
+            Assert.IsEmpty(authResults, "Authentication should return empty for empty array.");
+            Assert.IsEmpty(assertionResults, "AssertionMethod should return empty for empty array.");
+            Assert.IsEmpty(keyAgreementResults, "KeyAgreement should return empty for empty array.");
+            Assert.IsEmpty(capInvocationResults, "CapabilityInvocation should return empty for empty array.");
+            Assert.IsEmpty(capDelegationResults, "CapabilityDelegation should return empty for empty array.");
+            Assert.IsEmpty(allResults, "All relationships should return empty for empty arrays.");
         }
 
 
@@ -400,7 +400,7 @@ namespace Verifiable.Tests.Did
             Assert.IsNotNull(resolved, "Reference should be resolved.");
             Assert.AreEqual("#key-1", resolved.Id, "Resolved method ID should match.");
 
-            var results = await didDocument.SelectFromAuthenticationAsync();
+            var results = await didDocument.SelectFromAuthenticationAsync().ConfigureAwait(false);
             var result = results.FirstOrDefault(r => r.Method?.Id == "#key-1");
 
             Assert.IsTrue(result.IsResolved, "Selection should resolve the reference.");
@@ -434,7 +434,7 @@ namespace Verifiable.Tests.Did
                 Authentication = [new AuthenticationMethod(embeddedMethod)]
             };
 
-            var results = await didDocument.SelectFromAuthenticationAsync();
+            var results = await didDocument.SelectFromAuthenticationAsync().ConfigureAwait(false);
             var result = results.First();
 
             Assert.IsTrue(result.IsResolved, "Embedded method should be resolved.");

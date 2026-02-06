@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Tpm.Structures;
+using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 
@@ -46,12 +46,12 @@ public readonly record struct TpmsActData(uint Handle, uint Timeout, TpmaAct Att
 
             var states = new System.Collections.Generic.List<string>();
 
-            if(Attributes.HasFlag(TpmaAct.Signaled))
+            if(Attributes.HasFlag(TpmaAct.SIGNALED))
             {
                 states.Add("signaled");
             }
 
-            if(Attributes.HasFlag(TpmaAct.PreserveSignaled))
+            if(Attributes.HasFlag(TpmaAct.PRESERVED_SIGNALED))
             {
                 states.Add("preserve-signaled");
             }

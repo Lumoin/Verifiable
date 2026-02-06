@@ -301,8 +301,8 @@ public static class KeyBindingJwt
             null => "null",
             string s => $"\"{EscapeJsonString(s)}\"",
             bool b => b ? "true" : "false",
-            int i => i.ToString(),
-            long l => l.ToString(),
+            int i => i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture),
             double d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
             decimal m => m.ToString(System.Globalization.CultureInfo.InvariantCulture),
             _ => $"\"{value}\""
@@ -363,6 +363,7 @@ public enum KeyBindingValidationResult
 /// </summary>
 internal static class HashUtilities
 {
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1308:Normalize strings to uppercase", Justification = "This file will be refactored (TODO).")]
     public static byte[] ComputeHash(byte[] data, string algorithmName)
     {
         System.Security.Cryptography.HashAlgorithmName hashAlgorithm = algorithmName.ToLowerInvariant() switch

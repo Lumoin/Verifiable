@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Tpm.Infrastructure.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure;
 
@@ -12,8 +11,7 @@ namespace Verifiable.Tpm.Infrastructure;
 /// <param name="reader">The reader positioned at the response parameter area.</param>
 /// <param name="pool">The memory pool for allocations.</param>
 /// <returns>The parsed response.</returns>
-public delegate TResponse TpmResponseParser<TResponse>(ref TpmReader reader, MemoryPool<byte> pool)
-    where TResponse : ITpmWireType;
+public delegate TResponse TpmResponseParser<TResponse>(ref TpmReader reader, MemoryPool<byte> pool) where TResponse: ITpmWireType;
 
 /// <summary>
 /// Delegate for parsing TPM response with one output handle.
@@ -23,8 +21,7 @@ public delegate TResponse TpmResponseParser<TResponse>(ref TpmReader reader, Mem
 /// <param name="handle">The output handle from the response handle area.</param>
 /// <param name="pool">The memory pool for allocations.</param>
 /// <returns>The parsed response.</returns>
-public delegate TResponse TpmResponseParserWithHandle<TResponse>(ref TpmReader reader, uint handle, MemoryPool<byte> pool)
-    where TResponse : ITpmWireType;
+public delegate TResponse TpmResponseParserWithHandle<TResponse>(ref TpmReader reader, uint handle, MemoryPool<byte> pool) where TResponse: ITpmWireType;
 
 /// <summary>
 /// Internal delegate for type-erased response parsing with ref support.

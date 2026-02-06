@@ -99,6 +99,8 @@ public class VerificationMethodReferenceConverter<T>: JsonConverter<T> where T :
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
     {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(value);
         if(value.IsEmbeddedVerification)
         {
             JsonSerializer.Serialize(writer, value.EmbeddedVerification, options);

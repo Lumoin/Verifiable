@@ -1,4 +1,6 @@
-﻿namespace Verifiable.Tpm;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace Verifiable.Tpm;
 
 /// <summary>
 /// TBS command priority values.
@@ -13,6 +15,7 @@
 /// Tbsip_Submit_Command</see>.
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "This follows the Windows TBS API.")]
 public enum TbsPriority: uint
 {
     /// <summary>

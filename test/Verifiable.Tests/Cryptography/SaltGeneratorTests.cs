@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Cryptography;
 /// Tests for <see cref="SaltGenerator"/>.
 /// </summary>
 [TestClass]
-public sealed class SaltGeneratorTests
+internal sealed class SaltGeneratorTests
 {
     private static EncodeDelegate Encoder => TestSetup.Base64UrlEncoder;
     private static DecodeDelegate Decoder => TestSetup.Base64UrlDecoder;

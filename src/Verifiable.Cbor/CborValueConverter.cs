@@ -1,4 +1,5 @@
-﻿using System.Formats.Cbor;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Formats.Cbor;
 
 namespace Verifiable.Cbor;
 
@@ -232,6 +233,7 @@ public static class CborValueConverter
     /// <exception cref="CborContentException">Thrown when the CBOR content is invalid.</exception>
     public static object? ReadValue(ref CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         CborReaderState state = reader.PeekState();
 
         return state switch
@@ -260,6 +262,7 @@ public static class CborValueConverter
     /// <returns>The converted CLR object.</returns>
     public static object? ReadValue(CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         return ReadValue(ref reader);
     }
 
@@ -277,6 +280,7 @@ public static class CborValueConverter
     /// </remarks>
     public static object? ReadValue(ref CborReader reader, CborSerializerOptions options)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(options);
 
         CborReaderState state = reader.PeekState();
@@ -307,12 +311,12 @@ public static class CborValueConverter
     }
 
 
+    [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "Boxing to object is intentional for generic value conversion.")]
     private static object ReadUnsignedInteger(ref CborReader reader)
     {
         //Always return long for consistency.
         //This ensures round-trip behavior is predictable.
         ulong value = reader.ReadUInt64();
-
         if(value <= long.MaxValue)
         {
             return (long)value;

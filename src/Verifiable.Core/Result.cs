@@ -27,6 +27,7 @@ public static class Result
 /// </summary>
 /// <typeparam name="TValue">The type of the success value.</typeparam>
 /// <typeparam name="TError">The type of the error.</typeparam>
+[SuppressMessage("Design", "CA1000:Do not declare static members on generic types", Justification = "This design is intentional to provide type-specific static members.")]
 public readonly struct Result<TValue, TError>: IEquatable<Result<TValue, TError>>
 {
     /// <summary>

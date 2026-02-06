@@ -3,7 +3,7 @@ namespace Verifiable.Tests.TestInfrastructure
     /// <summary>
     /// Some constants and utilities used in tests.
     /// </summary>
-    public static class TestInfrastructureConstants
+    internal static class TestInfrastructureConstants
     {
         /// <summary>
         /// No TPM device available message.

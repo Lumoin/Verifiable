@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -126,6 +127,7 @@ public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialB
     /// </summary>
     /// <param name="baseUrl">The base URL for credential identifiers.</param>
     /// <returns>A credential ID generator function.</returns>
+    [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings", Justification = "This is by design.")]
     public static CredentialIdGenerator HttpsCredentialIdGenerator(string baseUrl) => _ =>
         $"{baseUrl.TrimEnd('/')}/credentials/{Guid.NewGuid()}";
 

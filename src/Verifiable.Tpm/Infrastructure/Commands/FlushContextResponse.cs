@@ -51,5 +51,5 @@ public sealed class FlushContextResponse: ITpmWireType
         return Instance;
     }
 
-    private string DebuggerDisplay => "FlushContextResponse()";
+    private static string DebuggerDisplay => "FlushContextResponse()";
 }

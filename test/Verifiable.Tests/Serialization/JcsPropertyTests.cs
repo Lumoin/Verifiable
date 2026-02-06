@@ -58,7 +58,7 @@ namespace Verifiable.Tests.Serialization;
 /// </para>
 /// </remarks>
 [TestClass]
-public sealed class JcsPropertyTests
+internal sealed class JcsPropertyTests
 {
     /// <summary>
     /// Generator for JSON-safe strings that avoid problematic characters.

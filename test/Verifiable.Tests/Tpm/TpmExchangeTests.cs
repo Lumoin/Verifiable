@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Tpm;
 /// Tests for <see cref="TpmExchange"/> record.
 /// </summary>
 [TestClass]
-public class TpmExchangeTests
+internal class TpmExchangeTests
 {
     public TestContext TestContext { get; set; } = null!;
 

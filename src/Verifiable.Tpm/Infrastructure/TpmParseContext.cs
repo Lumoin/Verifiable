@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
-using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Infrastructure;
 
@@ -43,6 +44,7 @@ namespace Verifiable.Tpm.Infrastructure;
 /// (via <see cref="TpmBlob"/>) or own their own memory (via <see cref="IMemoryOwner{T}"/>).
 /// </para>
 /// </remarks>
+[SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Internal parsing accumulator. Properties are set during response parsing, not exposed to consumers.")]
 public sealed class TpmParseContext
 {
     /// <summary>

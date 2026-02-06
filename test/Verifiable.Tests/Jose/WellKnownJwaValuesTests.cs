@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Jwt
     /// Tests that canonicalization of JWK properies algorithms works correctly.
     /// </summary>
     [TestClass]
-    public sealed class JwkPropertiesTests
+    internal sealed class JwkPropertiesTests
     {
         /// <summary>
         /// All of the well-known JWE algorithms should be recognized.

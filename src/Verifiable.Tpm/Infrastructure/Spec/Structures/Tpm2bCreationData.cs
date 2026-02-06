@@ -65,6 +65,7 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
     /// <returns>The parsed creation data.</returns>
     public static Tpm2bCreationData Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
 
         if(size == 0)

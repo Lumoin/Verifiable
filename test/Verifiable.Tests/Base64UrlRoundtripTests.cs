@@ -7,7 +7,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests
 {
     [TestClass]
-    public class Base64UrlRoundtripTests
+    internal class Base64UrlRoundtripTests
     {
         [TestMethod]
         public void Base64UrlEncoderDecoderRoundtripTest()

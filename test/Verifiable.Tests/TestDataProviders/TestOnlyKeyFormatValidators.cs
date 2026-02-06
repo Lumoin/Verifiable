@@ -1,6 +1,7 @@
 ﻿using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.JCose;
 using Verifiable.Jose;
 
 namespace Verifiable.Tests.TestDataProviders
@@ -18,7 +19,7 @@ namespace Verifiable.Tests.TestDataProviders
     /// <para>These validators serve to bridge that gap in testing by double-checking that the generated key material
     /// conforms to the original builder parameters.</para>
     /// </summary>
-    public static class TestOnlyKeyFormatValidators
+    internal static class TestOnlyKeyFormatValidators
     {
         public static bool KeyDidJwkValidator(KeyFormat keyFormatInTest, CryptoAlgorithm algorithmInTest)
         {

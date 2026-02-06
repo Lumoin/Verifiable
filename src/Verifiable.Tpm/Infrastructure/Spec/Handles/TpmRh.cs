@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Verifiable.Tpm.Infrastructure.Spec.Handles;
 
 
@@ -20,6 +22,8 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Handles;
 /// (Part 2: Structures, section "Handles" / TPM_RH).
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "This follows the TPM 2.0 specification.")]
+[SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "This follows the TPM 2.0 specification.")]
 public enum TpmRh: uint
 {
     /// <summary>

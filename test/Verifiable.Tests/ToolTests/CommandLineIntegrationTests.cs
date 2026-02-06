@@ -5,7 +5,7 @@
 /// These tests verify end-to-end behavior including process startup, argument handling, and exit codes.
 /// </summary>
 [TestClass]
-public class CommandLineIntegrationTests
+internal class CommandLineIntegrationTests
 {
     /// <summary>
     /// The MSTest context for the current test run.
@@ -24,7 +24,8 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did create 123 testParam", TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did create 123 testParam", TestContext.CancellationToken)
+            .ConfigureAwait(false);
 
         Assert.AreEqual(0, result.ExitCode);
         Assert.IsGreaterThan(0, result.Stdout.Length);
@@ -42,7 +43,8 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did create 456 myParam --extraParam extra", TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did create 456 myParam --extraParam extra", TestContext.CancellationToken)
+            .ConfigureAwait(false);
 
         Assert.AreEqual(0, result.ExitCode);
         Assert.IsGreaterThan(0, result.Stdout.Length);
@@ -60,7 +62,8 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did revoke 789", TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did revoke 789", TestContext.CancellationToken)
+            .ConfigureAwait(false);
 
         Assert.AreEqual(0, result.ExitCode);
         Assert.IsGreaterThan(0, result.Stdout.Length);
@@ -78,7 +81,8 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did list", TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did list", TestContext.CancellationToken)
+            .ConfigureAwait(false);
 
         Assert.AreEqual(0, result.ExitCode);
         Assert.IsGreaterThan(0, result.Stdout.Length);
@@ -96,7 +100,8 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did view 42", TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did view 42", TestContext.CancellationToken)
+            .ConfigureAwait(false);
 
         Assert.AreEqual(0, result.ExitCode);
         Assert.IsGreaterThan(0, result.Stdout.Length);
@@ -114,7 +119,8 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "--help", TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "--help", TestContext.CancellationToken)
+            .ConfigureAwait(false);
 
         Assert.AreEqual(0, result.ExitCode);
         Assert.Contains("did", result.Stdout, StringComparison.OrdinalIgnoreCase);
@@ -133,7 +139,7 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did --help", TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did --help", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(0, result.ExitCode);
         Assert.Contains("create", result.Stdout, StringComparison.OrdinalIgnoreCase);
@@ -154,7 +160,7 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "--version", TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "--version", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(0, result.ExitCode);
     }
@@ -171,7 +177,7 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "unknowncommand", TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "unknowncommand", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreNotEqual(0, result.ExitCode);
         Assert.IsGreaterThan(0, result.Stderr.Length);
@@ -189,7 +195,7 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did create", TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did create", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreNotEqual(0, result.ExitCode);
         Assert.IsGreaterThan(0, result.Stderr.Length);
@@ -207,7 +213,7 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did create notAnInt param", TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did create notAnInt param", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreNotEqual(0, result.ExitCode);
         Assert.IsGreaterThan(0, result.Stderr.Length);
@@ -226,7 +232,7 @@ public class CommandLineIntegrationTests
         }
 
         string unicodeParam = "Wano_国_Gateway";
-        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, ["did", "create", "1500000000", unicodeParam], TestContext.CancellationToken);
+        var result = await VerifiableCliTestHelpers.RunCliAsync(executablePath, ["did", "create", "1500000000", unicodeParam], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(0, result.ExitCode);
         Assert.IsGreaterThan(0, result.Stdout.Length);
@@ -244,9 +250,9 @@ public class CommandLineIntegrationTests
             return;
         }
 
-        var maxResult = await VerifiableCliTestHelpers.RunCliAsync(executablePath, $"did create {int.MaxValue} param", TestContext.CancellationToken);
-        var minResult = await VerifiableCliTestHelpers.RunCliAsync(executablePath, $"did create {int.MinValue} param", TestContext.CancellationToken);
-        var zeroResult = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did create 0 param", TestContext.CancellationToken);
+        var maxResult = await VerifiableCliTestHelpers.RunCliAsync(executablePath, $"did create {int.MaxValue} param", TestContext.CancellationToken).ConfigureAwait(false);
+        var minResult = await VerifiableCliTestHelpers.RunCliAsync(executablePath, $"did create {int.MinValue} param", TestContext.CancellationToken).ConfigureAwait(false);
+        var zeroResult = await VerifiableCliTestHelpers.RunCliAsync(executablePath, "did create 0 param", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(0, maxResult.ExitCode);
         Assert.AreEqual(0, minResult.ExitCode);

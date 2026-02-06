@@ -167,26 +167,23 @@ public static class JsonLdSelection
 
         foreach(JsonPointerSegment segment in pointer.Segments)
         {
-            if(segment.IsProperty)
+            if(result.ValueKind == JsonValueKind.Object)
             {
-                if(result.ValueKind != JsonValueKind.Object ||
-                   !result.TryGetProperty(segment.PropertyName!, out result))
+                if(!result.TryGetProperty(segment.Value, out result))
                 {
                     result = default;
                     return false;
                 }
             }
-            else if(segment.IsArrayIndex)
+            else if(result.ValueKind == JsonValueKind.Array)
             {
-                if(result.ValueKind != JsonValueKind.Array)
+                if(!segment.TryGetArrayIndex(out int index))
                 {
                     result = default;
                     return false;
                 }
 
-                int index = segment.ArrayIndex!.Value;
                 int length = result.GetArrayLength();
-
                 if(index >= length)
                 {
                     result = default;
@@ -197,7 +194,7 @@ public static class JsonLdSelection
             }
             else
             {
-                //Append marker not supported for evaluation.
+                //Scalar node cannot be navigated further.
                 result = default;
                 return false;
             }
@@ -309,26 +306,26 @@ public static class JsonLdSelection
             JsonPointerSegment segment = segments[i];
             bool isLast = i == segments.Length - 1;
 
-            if(segment.IsProperty)
+            if(current.ValueKind == JsonValueKind.Object)
             {
-                string propertyName = segment.PropertyName!;
+                string token = segment.Value;
 
-                if(!current.TryGetProperty(propertyName, out JsonElement child))
+                if(!current.TryGetProperty(token, out JsonElement child))
                 {
                     throw new ArgumentException(
-                        $"JSON Pointer '{pointer}' does not resolve: property '{propertyName}' not found.",
+                        $"JSON Pointer '{pointer}' does not resolve: property '{token}' not found.",
                         nameof(pointer));
                 }
 
                 if(isLast)
                 {
                     //Add the final value.
-                    currentSelection[propertyName] = JsonNode.Parse(child.GetRawText());
+                    currentSelection[token] = JsonNode.Parse(child.GetRawText());
                 }
                 else
                 {
                     //Create intermediate object if needed.
-                    if(!currentSelection.ContainsKey(propertyName))
+                    if(!currentSelection.ContainsKey(token))
                     {
                         var intermediate = new JsonObject();
 
@@ -350,22 +347,20 @@ public static class JsonLdSelection
                             }
                         }
 
-                        currentSelection[propertyName] = intermediate;
+                        currentSelection[token] = intermediate;
                     }
 
-                    currentSelection = currentSelection[propertyName]!.AsObject();
+                    currentSelection = currentSelection[token]!.AsObject();
                 }
 
                 current = child;
             }
-            else if(segment.IsArrayIndex)
+            else if(current.ValueKind == JsonValueKind.Array)
             {
-                int index = segment.ArrayIndex!.Value;
-
-                if(current.ValueKind != JsonValueKind.Array)
+                if(!segment.TryGetArrayIndex(out int index))
                 {
                     throw new ArgumentException(
-                        $"JSON Pointer '{pointer}' does not resolve: expected array at index {index}.",
+                        $"JSON Pointer '{pointer}' does not resolve: token '{segment.Value}' is not a valid array index.",
                         nameof(pointer));
                 }
 
@@ -387,7 +382,7 @@ public static class JsonLdSelection
             else
             {
                 throw new ArgumentException(
-                    $"JSON Pointer '{pointer}' contains unsupported append marker.",
+                    $"JSON Pointer '{pointer}' does not resolve: cannot navigate into scalar value.",
                     nameof(pointer));
             }
         }

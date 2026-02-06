@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -44,6 +45,7 @@ public static class CredentialJwsExtensions
     /// <param name="mediaType">Optional media type for typ header.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The JWS message containing the signed credential.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller takes ownership of the returned JwsMessage and is responsible for disposing it.")]
     public static async ValueTask<JwsMessage> SignJwsAsync(
         this VerifiableCredential credential,
         PrivateKeyMemory privateKey,
@@ -86,15 +88,15 @@ public static class CredentialJwsExtensions
         Purpose purpose = privateKey.Tag.Get<Purpose>();
         SigningDelegate signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(cryptoAlgorithm, purpose);
 
-        Signature signatureMemory = await signingDelegate(
+        Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             dataToSign,
-            memoryPool);
+            memoryPool).ConfigureAwait(false);
 
         var signatureComponent = new JwsSignatureComponent(
             headerSegment,
             header,
-            signatureMemory);
+            signature);
 
         return new JwsMessage(payloadBytes, signatureComponent);
     }

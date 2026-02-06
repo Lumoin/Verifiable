@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Verifiable.JCose;
 using Verifiable.Jose;
 
 namespace Verifiable.Core.Assessment
@@ -19,6 +20,7 @@ namespace Verifiable.Core.Assessment
         /// <returns>A ValidationResult object indicating the result of the validation check.</returns>
         public static IList<Claim> ValidateAlgIsNotNone(Dictionary<string, object> jwtHeaders)
         {
+            ArgumentNullException.ThrowIfNull(jwtHeaders);
             var checks = new List<Claim>();
             if(!jwtHeaders.TryGetValue("alg", out object? value))
             {
@@ -57,6 +59,7 @@ namespace Verifiable.Core.Assessment
         /// <returns>A ClaimCheckPoint object indicating the result of the validation check.</returns>
         public static List<Claim> ValidateHeader(Dictionary<string, object> jwtHeaders)
         {
+            ArgumentNullException.ThrowIfNull(jwtHeaders);
             List<Claim> claims = [];
             if(!jwtHeaders.TryGetValue(JwkProperties.Kty, out object? ktyValue) || ktyValue is not string kty || string.IsNullOrEmpty(kty))
             {
@@ -102,6 +105,8 @@ namespace Verifiable.Core.Assessment
             bool isEcAlgRequired = false,
             bool isYCoordinateMandatory = true)
         {
+            ArgumentNullException.ThrowIfNull(jwtHeaders);
+            ArgumentNullException.ThrowIfNull(algCrvPairs);
             List<Claim> claims = new();
 
             // Check for mandatory 'crv' field (Curve)
@@ -177,6 +182,7 @@ namespace Verifiable.Core.Assessment
 
         public static List<Claim> ValidateRsa(Dictionary<string, object> jwtHeaders)
         {
+            ArgumentNullException.ThrowIfNull(jwtHeaders);
             List<Claim> claims = [];
             if(!jwtHeaders.TryGetValue("e", out object? eValue) || eValue is not string eStr || string.IsNullOrEmpty(eStr))
             {
@@ -210,6 +216,8 @@ namespace Verifiable.Core.Assessment
 
         public static List<Claim> ValidateOkp(Dictionary<string, object> jwtHeaders, List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> algCrvPairs, bool isOkpAlgRequired = false)
         {
+            ArgumentNullException.ThrowIfNull(jwtHeaders);
+            ArgumentNullException.ThrowIfNull(algCrvPairs);
             List<Claim> claims = [];
             if(!jwtHeaders.TryGetValue(JwkProperties.Crv, out object? crvValue) || crvValue is not string crvStr || string.IsNullOrEmpty(crvStr))
             {

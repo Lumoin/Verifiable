@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Globalization;
 
 namespace Verifiable.JsonPointer;
 
@@ -106,7 +107,7 @@ public readonly struct JsonPointer: IEquatable<JsonPointer>, IComparable<JsonPoi
 
         if(pointer.Length == 1)
         {
-            return new JsonPointer([JsonPointerSegment.Property("")], pointer);
+            return new JsonPointer([JsonPointerSegment.Create("")], pointer);
         }
 
         return ParseCore(pointer);
@@ -174,54 +175,7 @@ public readonly struct JsonPointer: IEquatable<JsonPointer>, IComparable<JsonPoi
 
     private static JsonPointerSegment ParseSegment(string unescaped)
     {
-        if(unescaped.Length > 0 && IsValidArrayIndex(unescaped, out int index))
-        {
-            return JsonPointerSegment.Index(index);
-        }
-
-        if(unescaped == "-")
-        {
-            return JsonPointerSegment.AppendMarker;
-        }
-
-        return JsonPointerSegment.Property(unescaped);
-    }
-
-
-    private static bool IsValidArrayIndex(string value, out int index)
-    {
-        index = 0;
-
-        if(value.Length == 0)
-        {
-            return false;
-        }
-
-        if(value.Length == 1)
-        {
-            if(char.IsAsciiDigit(value[0]))
-            {
-                index = value[0] - '0';
-                return true;
-            }
-            return false;
-        }
-
-        //No leading zeros per RFC 6901.
-        if(value[0] == '0')
-        {
-            return false;
-        }
-
-        foreach(char c in value)
-        {
-            if(!char.IsAsciiDigit(c))
-            {
-                return false;
-            }
-        }
-
-        return int.TryParse(value, out index) && index >= 0;
+        return JsonPointerSegment.Create(unescaped);
     }
 
 
@@ -240,7 +194,7 @@ public readonly struct JsonPointer: IEquatable<JsonPointer>, IComparable<JsonPoi
     public static JsonPointer FromProperty(string propertyName)
     {
         ArgumentNullException.ThrowIfNull(propertyName);
-        return new JsonPointer([JsonPointerSegment.Property(propertyName)]);
+        return new JsonPointer([JsonPointerSegment.Create(propertyName)]);
     }
 
 
@@ -254,7 +208,7 @@ public readonly struct JsonPointer: IEquatable<JsonPointer>, IComparable<JsonPoi
             throw new ArgumentOutOfRangeException(nameof(index), index, "Array index must be non-negative.");
         }
 
-        return new JsonPointer([JsonPointerSegment.Index(index)]);
+        return new JsonPointer([JsonPointerSegment.FromIndex(index)]);
     }
 
 
@@ -308,7 +262,7 @@ public readonly struct JsonPointer: IEquatable<JsonPointer>, IComparable<JsonPoi
 
         var newSegments = new JsonPointerSegment[Depth + 1];
         Segments.CopyTo(newSegments);
-        newSegments[Depth] = JsonPointerSegment.Property(propertyName);
+        newSegments[Depth] = JsonPointerSegment.Create(propertyName);
 
         return new JsonPointer(newSegments);
     }
@@ -326,7 +280,7 @@ public readonly struct JsonPointer: IEquatable<JsonPointer>, IComparable<JsonPoi
 
         var newSegments = new JsonPointerSegment[Depth + 1];
         Segments.CopyTo(newSegments);
-        newSegments[Depth] = JsonPointerSegment.Index(index);
+        newSegments[Depth] = JsonPointerSegment.FromIndex(index);
 
         return new JsonPointer(newSegments);
     }
@@ -518,6 +472,7 @@ public readonly struct JsonPointer: IEquatable<JsonPointer>, IComparable<JsonPoi
     /// Converts this pointer to a URI fragment identifier representation.
     /// </summary>
     /// <returns>The URI fragment starting with '#'.</returns>
+    [SuppressMessage("Design", "CA1055:URI-like return values should not be strings", Justification = "This is by design.")]
     public string ToUriFragment()
     {
         string pointerString = ToString();
@@ -530,7 +485,7 @@ public readonly struct JsonPointer: IEquatable<JsonPointer>, IComparable<JsonPoi
                 foreach(byte b in Encoding.UTF8.GetBytes([c]))
                 {
                     result.Append('%');
-                    result.Append(b.ToString("X2"));
+                    result.Append(b.ToString("X2", CultureInfo.InvariantCulture));
                 }
             }
             else

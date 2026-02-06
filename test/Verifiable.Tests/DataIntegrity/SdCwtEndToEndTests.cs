@@ -19,7 +19,7 @@ namespace Verifiable.Tests.DataIntegrity;
 /// </para>
 /// </remarks>
 [TestClass]
-public class SdCwtEndToEndTests
+internal class SdCwtEndToEndTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -307,7 +307,7 @@ public class SdCwtEndToEndTests
     }
 
 
-    private void VerifyRoundTrip(byte[] salt, string claimName, object? value)
+    private static void VerifyRoundTrip(byte[] salt, string claimName, object? value)
     {
         SdDisclosure original = SdDisclosure.CreateProperty(salt, claimName, value);
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(original);
@@ -318,7 +318,7 @@ public class SdCwtEndToEndTests
     }
 
 
-    private void VerifyNullRoundTrip(byte[] salt, string claimName)
+    private static void VerifyNullRoundTrip(byte[] salt, string claimName)
     {
         SdDisclosure original = SdDisclosure.CreateProperty(salt, claimName, null);
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(original);

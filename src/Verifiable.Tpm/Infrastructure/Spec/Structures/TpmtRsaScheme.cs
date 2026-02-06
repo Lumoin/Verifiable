@@ -104,20 +104,23 @@ public readonly record struct TpmtRsaScheme
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize()
+    public int SerializedSize
     {
-        if(IsNull)
+        get
         {
-            return sizeof(ushort); // scheme only
-        }
+            if(IsNull)
+            {
+                return sizeof(ushort); // scheme only
+            }
 
-        // RSAES has no hash parameter.
-        if(Scheme == TpmAlgIdConstants.TPM_ALG_RSAES)
-        {
-            return sizeof(ushort); // scheme only
-        }
+            // RSAES has no hash parameter.
+            if(Scheme == TpmAlgIdConstants.TPM_ALG_RSAES)
+            {
+                return sizeof(ushort); // scheme only
+            }
 
-        return sizeof(ushort) + sizeof(ushort); // scheme + hashAlg
+            return sizeof(ushort) + sizeof(ushort); // scheme + hashAlg
+        }
     }
 
     /// <summary>

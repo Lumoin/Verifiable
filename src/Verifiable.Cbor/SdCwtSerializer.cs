@@ -1,5 +1,6 @@
 ﻿using System.Formats.Cbor;
 using System.Security.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Sd;
 
@@ -350,6 +351,7 @@ public static class SdCwtSerializer
     /// <returns>The parsed disclosure.</returns>
     public static SdDisclosure ReadDisclosure(ref CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         int? arrayLength = reader.ReadStartArray();
         if(arrayLength is not (2 or 3))
         {
@@ -383,6 +385,7 @@ public static class SdCwtSerializer
     /// <returns>The list of disclosures.</returns>
     public static IReadOnlyList<SdDisclosure> ReadSdClaimsHeader(ref CborReader reader)
     {
+        ArgumentNullException.ThrowIfNull(reader);
         int? count = reader.ReadStartArray();
         var disclosures = new List<SdDisclosure>(count ?? 4);
 
@@ -446,6 +449,7 @@ public static class SdCwtSerializer
         using HashAlgorithm hasher = CreateHashAlgorithm(algorithm);
         byte[] hash = new byte[hasher.HashSize / 8];
         hasher.TryComputeHash(disclosureCbor, hash, out _);
+
         return hash;
     }
 
@@ -481,18 +485,28 @@ public static class SdCwtSerializer
         using HashAlgorithm hasher = CreateHashAlgorithm(algorithm);
         byte[] hash = new byte[hasher.HashSize / 8];
         hasher.TryComputeHash(sdClaimsCbor, hash, out _);
+
         return hash;
     }
 
 
     private static HashAlgorithm CreateHashAlgorithm(string algorithm)
     {
-        return algorithm.ToLowerInvariant() switch
+        if(WellKnownHashAlgorithms.IsSha256(algorithm))
         {
-            "sha-256" => SHA256.Create(),
-            "sha-384" => SHA384.Create(),
-            "sha-512" => SHA512.Create(),
-            _ => throw new ArgumentException($"Unsupported hash algorithm: {algorithm}", nameof(algorithm))
-        };
+            return SHA256.Create();
+        }
+
+        if(WellKnownHashAlgorithms.IsSha384(algorithm))
+        {
+            return SHA384.Create();
+        }
+
+        if(WellKnownHashAlgorithms.IsSha512(algorithm))
+        {
+            return SHA512.Create();
+        }
+
+        throw new ArgumentException($"Unsupported hash algorithm: '{algorithm}'.", nameof(algorithm));
     }
 }

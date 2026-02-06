@@ -1,4 +1,4 @@
-﻿using Verifiable.Jose;
+﻿using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Jwt
@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Jwt
     /// Tests that canonicalization of media type values works correctly.
     /// </summary>
     [TestClass]
-    public sealed class WellKnownMediaTypesTests
+    internal sealed class WellKnownMediaTypesTests
     {
         /// <summary>
         /// All of the well-known Application media type values and their comparison functions.

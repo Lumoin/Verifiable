@@ -19,6 +19,7 @@ public static class CborWriterExtensions
     /// <param name="values">The byte arrays to write.</param>
     public static void WriteByteStringArray(this CborWriter writer, IReadOnlyList<byte[]> values)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(values);
 
         writer.WriteStartArray(values.Count);
@@ -38,6 +39,7 @@ public static class CborWriterExtensions
     /// <param name="values">The byte array spans to write.</param>
     public static void WriteByteStringArray(this CborWriter writer, ReadOnlySpan<byte[]> values)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         writer.WriteStartArray(values.Length);
         for(int i = 0; i < values.Length; i++)
         {
@@ -55,6 +57,7 @@ public static class CborWriterExtensions
     /// <param name="values">The strings to write.</param>
     public static void WriteTextStringArray(this CborWriter writer, IReadOnlyList<string> values)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(values);
 
         writer.WriteStartArray(values.Count);
@@ -74,6 +77,7 @@ public static class CborWriterExtensions
     /// <param name="values">The integers to write.</param>
     public static void WriteInt32Array(this CborWriter writer, IReadOnlyList<int> values)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(values);
 
         writer.WriteStartArray(values.Count);
@@ -93,6 +97,7 @@ public static class CborWriterExtensions
     /// <param name="values">The unsigned integers to write.</param>
     public static void WriteUInt32Array(this CborWriter writer, IReadOnlyList<uint> values)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(values);
 
         writer.WriteStartArray(values.Count);
@@ -117,6 +122,7 @@ public static class CborWriterExtensions
         IReadOnlyDictionary<long, TValue> map,
         Action<CborWriter, TValue> valueWriter)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(valueWriter);
 
@@ -143,6 +149,7 @@ public static class CborWriterExtensions
         IReadOnlyDictionary<string, TValue> map,
         Action<CborWriter, TValue> valueWriter)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(valueWriter);
 
@@ -164,6 +171,7 @@ public static class CborWriterExtensions
     /// <param name="value">The byte string to write, or null.</param>
     public static void WriteNullableByteString(this CborWriter writer, byte[]? value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         if(value is null)
         {
             writer.WriteNull();
@@ -183,6 +191,7 @@ public static class CborWriterExtensions
     /// <param name="writeNullIfEmpty">If true, writes null for empty spans; otherwise writes empty byte string.</param>
     public static void WriteByteString(this CborWriter writer, ReadOnlySpan<byte> value, bool writeNullIfEmpty = false)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         if(writeNullIfEmpty && value.IsEmpty)
         {
             writer.WriteNull();
@@ -201,6 +210,7 @@ public static class CborWriterExtensions
     /// <param name="value">The text string to write, or null.</param>
     public static void WriteNullableTextString(this CborWriter writer, string? value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         if(value is null)
         {
             writer.WriteNull();
@@ -220,6 +230,7 @@ public static class CborWriterExtensions
     /// <param name="value">The byte string value.</param>
     public static void WriteMapEntry(this CborWriter writer, long key, byte[] value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         writer.WriteInt64(key);
         writer.WriteByteString(value);
     }
@@ -233,6 +244,7 @@ public static class CborWriterExtensions
     /// <param name="value">The byte string value.</param>
     public static void WriteMapEntry(this CborWriter writer, long key, ReadOnlySpan<byte> value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         writer.WriteInt64(key);
         writer.WriteByteString(value);
     }
@@ -246,6 +258,7 @@ public static class CborWriterExtensions
     /// <param name="value">The text string value.</param>
     public static void WriteMapEntry(this CborWriter writer, long key, string value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         writer.WriteInt64(key);
         writer.WriteTextString(value);
     }
@@ -259,6 +272,7 @@ public static class CborWriterExtensions
     /// <param name="value">The integer value.</param>
     public static void WriteMapEntry(this CborWriter writer, long key, long value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         writer.WriteInt64(key);
         writer.WriteInt64(value);
     }
@@ -272,6 +286,7 @@ public static class CborWriterExtensions
     /// <param name="value">The text string value.</param>
     public static void WriteMapEntry(this CborWriter writer, string key, string value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         writer.WriteTextString(key);
         writer.WriteTextString(value);
     }
@@ -285,6 +300,7 @@ public static class CborWriterExtensions
     /// <param name="value">The byte string value.</param>
     public static void WriteMapEntry(this CborWriter writer, string key, byte[] value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         writer.WriteTextString(key);
         writer.WriteByteString(value);
     }
@@ -299,6 +315,7 @@ public static class CborWriterExtensions
     /// <returns><see langword="true"/> if the entry was written; otherwise, <see langword="false"/>.</returns>
     public static bool WriteMapEntryIfNotNull(this CborWriter writer, long key, byte[]? value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         if(value is null)
         {
             return false;
@@ -319,6 +336,7 @@ public static class CborWriterExtensions
     /// <returns><see langword="true"/> if the entry was written; otherwise, <see langword="false"/>.</returns>
     public static bool WriteMapEntryIfNotNull(this CborWriter writer, long key, string? value)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         if(value is null)
         {
             return false;

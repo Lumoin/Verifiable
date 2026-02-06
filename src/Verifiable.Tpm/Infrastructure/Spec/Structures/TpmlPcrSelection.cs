@@ -85,11 +85,10 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        int size = sizeof(uint); // count
-
+        int size = sizeof(uint); //Count.
         foreach(var selection in selections)
         {
-            // hash (2) + sizeofSelect (1) + pcrSelect (variable)
+            //Hash (2) + sizeofSelect (1) + pcrSelect (variable).
             size += sizeof(ushort) + sizeof(byte) + selection.PcrSelect.Length;
         }
 
@@ -122,6 +121,7 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     /// <returns>The parsed selection list.</returns>
     public static TpmlPcrSelection Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         uint count = reader.ReadUInt32();
 
         if(count == 0)
@@ -162,6 +162,7 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     /// <returns>The PCR selection list.</returns>
     public static TpmlPcrSelection Create(TpmAlgIdConstants hashAlg, ReadOnlySpan<int> pcrIndices, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         if(pcrIndices.IsEmpty)
         {
             return Empty;

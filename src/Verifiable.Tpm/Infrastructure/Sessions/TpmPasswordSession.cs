@@ -107,7 +107,7 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
         return sizeof(uint) +          // sessionHandle
                sizeof(ushort) +        // nonceCaller.size (always 0)
                sizeof(byte) +          // sessionAttributes
-               password.GetSerializedSize(); // hmac (TPM2B_AUTH)
+               password.               SerializedSize; // hmac (TPM2B_AUTH)
     }
 
     /// <inheritdoc/>

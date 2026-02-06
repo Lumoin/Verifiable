@@ -124,10 +124,7 @@ public readonly ref struct TpmsAuthCommand
     /// Gets the serialized size of this structure.
     /// </summary>
     /// <returns>The size in bytes.</returns>
-    public int GetSerializedSize()
-    {
-        return sizeof(uint) + NonceCaller.GetSerializedSize() + sizeof(byte) + Hmac.GetSerializedSize();
-    }
+    public int SerializedSize => sizeof(uint) + NonceCaller.SerializedSize + sizeof(byte) + Hmac.SerializedSize;
 
     private string DebuggerDisplay => $"TPMS_AUTH_COMMAND(0x{SessionHandle.Value:X8}, {SessionAttributes})";
 }

@@ -80,7 +80,7 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
 
         if(signature.IsEmpty)
         {
-            return Empty();
+            return Empty;
         }
 
         pool ??= MemoryPool<byte>.Shared;
@@ -90,15 +90,14 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
     }
 
     /// <summary>
-    /// Creates an empty ML-DSA signature buffer.
+    /// Gets an empty ML-DSA signature buffer.
     /// </summary>
-    /// <returns>An empty buffer.</returns>
-    public static Tpm2bSignatureMlDsa Empty() => new(null, ReadOnlyMemory<byte>.Empty);
+    public static Tpm2bSignatureMlDsa Empty { get; } = new(null, ReadOnlyMemory<byte>.Empty);
 
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + buffer.Length;
+    public int SerializedSize => sizeof(ushort) + buffer.Length;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -122,7 +121,7 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
 
         if(size == 0)
         {
-            return Empty();
+            return Empty;
         }
 
         if(size > MaxMlDsaSigSize)

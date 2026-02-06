@@ -1,4 +1,5 @@
 ﻿using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -77,6 +78,7 @@ public readonly record struct JwsVerificationResult<TJwtPart>(bool IsValid, TJwt
 /// using <see cref="JwsSerialization"/>.
 /// </para>
 /// </remarks>
+[SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned JwsMessage.")]
 public static class Jws
 {
     /// <summary>
@@ -89,7 +91,7 @@ public static class Jws
     /// <param name="base64UrlEncoder">Encodes bytes to Base64Url strings.</param>
     /// <param name="privateKey">The private key for signing.</param>
     /// <param name="signaturePool">Memory pool for signature allocation.</param>
-    /// <returns>The JWS message containing the signature.</returns>
+    /// <returns>The JWS message containing the signature.</returns>    
     public static async ValueTask<JwsMessage> SignAsync<TJwtPart>(
         TJwtPart header,
         TJwtPart payload,
@@ -98,6 +100,10 @@ public static class Jws
         PrivateKeyMemory privateKey,
         MemoryPool<byte> signaturePool)
     {
+        ArgumentNullException.ThrowIfNull(partEncoder);
+        ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+        ArgumentNullException.ThrowIfNull(privateKey);
+        ArgumentNullException.ThrowIfNull(signaturePool);
         TaggedMemory<byte> headerBytes = partEncoder(header);
         TaggedMemory<byte> payloadBytes = partEncoder(payload);
 
@@ -113,7 +119,7 @@ public static class Jws
         Signature signatureMemory = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             dataToSign,
-            signaturePool);
+            signaturePool).ConfigureAwait(false);
 
         var protectedHeader = BuildProtectedHeaderDictionary(header);
 
@@ -147,6 +153,11 @@ public static class Jws
         SigningDelegate signingDelegate,
         MemoryPool<byte> signaturePool)
     {
+        ArgumentNullException.ThrowIfNull(partEncoder);
+        ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+        ArgumentNullException.ThrowIfNull(privateKey);
+        ArgumentNullException.ThrowIfNull(signingDelegate);
+        ArgumentNullException.ThrowIfNull(signaturePool);
         TaggedMemory<byte> headerBytes = partEncoder(header);
         TaggedMemory<byte> payloadBytes = partEncoder(payload);
 
@@ -158,7 +169,7 @@ public static class Jws
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             dataToSign,
-            signaturePool);
+            signaturePool).ConfigureAwait(false);
 
         var protectedHeader = BuildProtectedHeaderDictionary(header);
 
@@ -186,6 +197,9 @@ public static class Jws
         EncodeDelegate base64UrlEncoder,
         PublicKeyMemory publicKey)
     {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+        ArgumentNullException.ThrowIfNull(publicKey);
         if(message.Signatures.Count != 1)
         {
             throw new InvalidOperationException(
@@ -207,7 +221,7 @@ public static class Jws
         return await verificationDelegate(
             dataToVerify,
             signature.SignatureBytes,
-            publicKey.AsReadOnlyMemory());
+            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
     }
 
 
@@ -229,6 +243,11 @@ public static class Jws
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey)
     {
+        ArgumentNullException.ThrowIfNull(jws);
+        ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(partDecoder);
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(publicKey);
         string[] parts = jws.Split('.');
 
         if(parts.Length != 3)
@@ -246,7 +265,7 @@ public static class Jws
         return await verificationDelegate(
             dataToVerify,
             signatureOwner.Memory,
-            publicKey.AsReadOnlyMemory());
+            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
     }
 
 
@@ -270,6 +289,12 @@ public static class Jws
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate)
     {
+        ArgumentNullException.ThrowIfNull(jws);
+        ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(partDecoder);
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(publicKey);
+        ArgumentNullException.ThrowIfNull(verificationDelegate);
         string[] parts = jws.Split('.');
 
         if(parts.Length != 3)
@@ -283,7 +308,7 @@ public static class Jws
         return await verificationDelegate(
             dataToVerify,
             signatureOwner.Memory,
-            publicKey.AsReadOnlyMemory());
+            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
     }
 
 
@@ -305,6 +330,11 @@ public static class Jws
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey)
     {
+        ArgumentNullException.ThrowIfNull(jws);
+        ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(partDecoder);
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(publicKey);
         string[] parts = jws.Split('.');
 
         if(parts.Length != 3)
@@ -328,7 +358,7 @@ public static class Jws
         bool isValid = await verificationDelegate(
             dataToVerify,
             signatureOwner.Memory,
-            publicKey.AsReadOnlyMemory());
+            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
 
         return new JwsVerificationResult<TJwtPart>(isValid, header, payload);
     }
@@ -364,6 +394,11 @@ public static class Jws
         KeyMaterialBinder<PrivateKeyMemory, PrivateKey, TBinderState> binder,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(partEncoder);
+        ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(resolver);
+        ArgumentNullException.ThrowIfNull(binder);
         TaggedMemory<byte> headerBytes = partEncoder(header);
         TaggedMemory<byte> payloadBytes = partEncoder(payload);
 
@@ -374,15 +409,15 @@ public static class Jws
 
         var context = new JoseKeyContext<TJwtPart>(header, payload);
 
-        PrivateKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken);
+        PrivateKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken).ConfigureAwait(false);
 
         if(material is null)
         {
             throw new InvalidOperationException("Key material resolution failed.");
         }
 
-        using PrivateKey privateKey = await binder(material, binderState, cancellationToken);
-        Signature signature = await privateKey.SignAsync(dataToSign, pool);
+        using PrivateKey privateKey = await binder(material, binderState, cancellationToken).ConfigureAwait(false);
+        Signature signature = await privateKey.SignAsync(dataToSign, pool).ConfigureAwait(false);
 
         var protectedHeader = BuildProtectedHeaderDictionary(header);
 
@@ -424,6 +459,12 @@ public static class Jws
         KeyMaterialBinder<PublicKeyMemory, PublicKey, TBinderState> binder,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(jws);
+        ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(partDecoder);
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(resolver);
+        ArgumentNullException.ThrowIfNull(binder);
         string[] parts = jws.Split('.');
 
         if(parts.Length != 3)
@@ -442,7 +483,7 @@ public static class Jws
 
         var context = new JoseKeyContext<TJwtPart>(header, payload);
 
-        PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken);
+        PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken).ConfigureAwait(false);
 
         if(material is null)
         {
@@ -450,13 +491,13 @@ public static class Jws
         }
 
         Tag signatureTag = material.Tag;
-        using PublicKey publicKey = await binder(material, binderState, cancellationToken);
+        using PublicKey publicKey = await binder(material, binderState, cancellationToken).ConfigureAwait(false);
 
         IMemoryOwner<byte> signatureMemory = pool.Rent(signatureOwner.Memory.Length);
         signatureOwner.Memory.Span.CopyTo(signatureMemory.Memory.Span);
         using var signature = new Signature(signatureMemory, signatureTag);
 
-        return await publicKey.VerifyAsync(dataToVerify, signature);
+        return await publicKey.VerifyAsync(dataToVerify, signature).ConfigureAwait(false);
     }
 
 
@@ -489,6 +530,12 @@ public static class Jws
         KeyMaterialBinder<PublicKeyMemory, PublicKey, TBinderState> binder,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(jws);
+        ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(partDecoder);
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(resolver);
+        ArgumentNullException.ThrowIfNull(binder);
         string[] parts = jws.Split('.');
 
         if(parts.Length != 3)
@@ -507,21 +554,15 @@ public static class Jws
 
         var context = new JoseKeyContext<TJwtPart>(header, payload);
 
-        PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken);
-
-        if(material is null)
-        {
-            throw new InvalidOperationException("Key material resolution failed.");
-        }
-
+        PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException("Key material resolution failed.");
         Tag signatureTag = material.Tag;
-        using PublicKey publicKey = await binder(material, binderState, cancellationToken);
+        using PublicKey publicKey = await binder(material, binderState, cancellationToken).ConfigureAwait(false);
 
         IMemoryOwner<byte> signatureMemory = pool.Rent(signatureOwner.Memory.Length);
         signatureOwner.Memory.Span.CopyTo(signatureMemory.Memory.Span);
         using var signature = new Signature(signatureMemory, signatureTag);
 
-        bool isValid = await publicKey.VerifyAsync(dataToVerify, signature);
+        bool isValid = await publicKey.VerifyAsync(dataToVerify, signature).ConfigureAwait(false);
 
         return new JwsVerificationResult<TJwtPart>(isValid, header, payload);
     }

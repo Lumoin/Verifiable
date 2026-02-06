@@ -53,8 +53,7 @@ public readonly ref struct Tpm2bRef<T>(T source) where T : SensitiveMemory
     /// <summary>
     /// Gets the underlying data as a read-only span.
     /// </summary>
-    /// <returns>A read-only span over the buffer data.</returns>
-    public ReadOnlySpan<byte> AsSpan() => Buffer.AsSpan();
+    public ReadOnlySpan<byte> Span => Buffer.AsSpan();
 
     /// <summary>
     /// Gets the length of the buffer in bytes.
@@ -86,5 +85,5 @@ public readonly ref struct Tpm2bRef<T>(T source) where T : SensitiveMemory
     /// <summary>
     /// Gets the serialized size (2-byte length prefix + data).
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + Buffer.Length;
+    public int SerializedSize => sizeof(ushort) + Buffer.Length;
 }

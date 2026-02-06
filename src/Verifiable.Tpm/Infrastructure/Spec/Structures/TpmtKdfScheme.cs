@@ -65,14 +65,17 @@ public readonly record struct TpmtKdfScheme
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize()
+    public int SerializedSize
     {
-        if(IsNull)
+        get
         {
-            return sizeof(ushort); // scheme only
-        }
+            if(IsNull)
+            {
+                return sizeof(ushort); // scheme only
+            }
 
-        return sizeof(ushort) + sizeof(ushort); // scheme + hashAlg
+            return sizeof(ushort) + sizeof(ushort); // scheme + hashAlg
+        }
     }
 
     /// <summary>

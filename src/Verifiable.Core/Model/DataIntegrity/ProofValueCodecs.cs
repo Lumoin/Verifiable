@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Buffers;
-
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -110,6 +110,7 @@ public static class ProofValueCodecs
     /// used by some cryptosuites like ecdsa-sd-2023.
     /// </para>
     /// </remarks>
+    [SuppressMessage("Design", "CA1055:URI-like return values should not be strings", Justification = "This is on purpose.")]
     public static string EncodeBase64Url(
         ReadOnlySpan<byte> signatureBytes,
         EncodeDelegate encoder,
@@ -137,6 +138,9 @@ public static class ProofValueCodecs
         DecodeDelegate decoder,
         MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(proofValue);
+        ArgumentNullException.ThrowIfNull(decoder);
+        ArgumentNullException.ThrowIfNull(pool);
         if(proofValue.Length < 2 || proofValue[0] != MultibaseAlgorithms.Base64Url)
         {
             throw new FormatException("Proof value must start with 'u' for Base64Url encoding.");

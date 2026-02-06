@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Formats.Cbor;
+using System.Globalization;
 using Verifiable.Cbor.Sd;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
@@ -214,7 +215,7 @@ public static class SdCwtPathExtraction
                 else
                 {
                     //Recurse into child.
-                    string keyName = key is int ik ? ik.ToString() : (string)key;
+                    string keyName = key is int ik ? ik.ToString(CultureInfo.InvariantCulture) : (string)key;
                     CredentialPath childPath = currentPath.Append(keyName);
                     ExtractPathsFromCborReader(reader, childPath, digestToDisclosure, result, encoder);
                 }
@@ -297,7 +298,7 @@ public static class SdCwtPathExtraction
                 }
                 else
                 {
-                    string keyName = key is int ik ? ik.ToString() : (string)key;
+                    string keyName = key is int ik ? ik.ToString(CultureInfo.InvariantCulture) : (string)key;
                     CredentialPath childPath = currentPath.Append(keyName);
                     paths.Add(childPath);
                     CollectPathsFromCborReader(reader, childPath, paths);
@@ -370,7 +371,7 @@ public static class SdCwtPathExtraction
                 }
                 else
                 {
-                    string keyName = key is int ik ? ik.ToString() : (string)key;
+                    string keyName = key is int ik ? ik.ToString(CultureInfo.InvariantCulture) : (string)key;
                     CredentialPath childPath = currentPath.Append(keyName);
                     mandatory.Add(childPath);
                     CollectMandatoryPathsFromCborReader(reader, childPath, mandatory);

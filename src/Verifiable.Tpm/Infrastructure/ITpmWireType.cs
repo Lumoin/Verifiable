@@ -1,4 +1,6 @@
-﻿namespace Verifiable.Tpm.Infrastructure;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace Verifiable.Tpm.Infrastructure;
 
 /// <summary>
 /// Marker interface for TPM wire types.
@@ -23,6 +25,7 @@
 /// wire types in the extensions layer, not in the core.
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "Marker interface used to tag TPM wire types for discovery and generic constraints.")]
 public interface ITpmWireType
 {
 }

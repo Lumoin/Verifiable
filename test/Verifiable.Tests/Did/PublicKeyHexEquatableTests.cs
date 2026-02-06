@@ -1,4 +1,5 @@
-﻿using Verifiable.Core.Did;
+﻿using System.Diagnostics.CodeAnalysis;
+using Verifiable.Core.Did;
 using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Tests.Did
@@ -8,7 +9,7 @@ namespace Verifiable.Tests.Did
     /// </summary>
     [TestClass]
     [Obsolete("Test JSON material still contains these types.")]
-    public sealed class PublicKeyHexEquatableTests
+    internal sealed class PublicKeyHexEquatableTests
     {
         /// <summary>
         /// A first instance for testing comparisons.
@@ -136,6 +137,7 @@ namespace Verifiable.Tests.Did
 
 
         [TestMethod]
+        [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Intentional null/null case to verify custom equality operator semantics; analyzer cannot reason about operator overloads.")]
         public void NullKeyFormatsAreEqual()
         {
             PublicKeyHex? hex1 = null;

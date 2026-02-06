@@ -20,7 +20,7 @@ namespace Verifiable.Tests.Tpm;
 [DoNotParallelize]
 [SkipIfNoTpm]
 [TestCategory("RequiresHardwareTpm")]
-public class HwTpmCreatePrimaryTests
+internal class HwTpmCreatePrimaryTests
 {
     /// <summary>
     /// The TPM device for the tests.
@@ -30,7 +30,7 @@ public class HwTpmCreatePrimaryTests
     /// <summary>
     /// Whether a TPM device is available.
     /// </summary>
-    private static bool HasTpm { get; set; } = false;
+    private static bool HasTpm { get; set; }
 
 
     /// <summary>
@@ -105,7 +105,7 @@ public class HwTpmCreatePrimaryTests
         TestContext.WriteLine($"Key type: {response.OutPublic.PublicArea.Type}, nameAlg: {response.OutPublic.PublicArea.NameAlg}");
 
         Assert.IsFalse(response.Name.IsEmpty, "Name should not be empty.");
-        TestContext.WriteLine($"Key name ({response.Name.Size} bytes): {Convert.ToHexString(response.Name.AsSpan())}");
+        TestContext.WriteLine($"Key name ({response.Name.Size} bytes): {Convert.ToHexString(response.Name.Span)}");
 
         //Clean up: flush the key.
         var flushInput = FlushContextInput.ForHandle(response.ObjectHandle.Value);
@@ -245,11 +245,11 @@ public class HwTpmCreatePrimaryTests
 
             if(i == 0)
             {
-                firstKeyName = response.Name.AsSpan().ToArray();
+                firstKeyName = response.Name.Span.ToArray();
             }
             else
             {
-                secondKeyName = response.Name.AsSpan().ToArray();
+                secondKeyName = response.Name.Span.ToArray();
             }
 
             var flushInput = FlushContextInput.ForHandle(response.ObjectHandle.Value);

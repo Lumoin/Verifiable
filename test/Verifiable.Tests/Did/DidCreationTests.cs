@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Did
     /// <summary>
     /// Nothing here yet.
     /// </summary>
-    public class DidCreationTests
+    internal class DidCreationTests
     {
     }
 }

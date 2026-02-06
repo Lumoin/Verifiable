@@ -1,12 +1,13 @@
 ﻿using System.Security.Cryptography;
 using Verifiable.Cbor;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Serialization;
+
 
 /// <summary>
 /// Unit tests for ecdsa-sd-2023 CBOR serialization and configuration.
@@ -22,7 +23,7 @@ namespace Verifiable.Tests.Serialization;
 /// </para>
 /// </remarks>
 [TestClass]
-public sealed class EcdsaSd2023SerializerTests
+internal sealed class EcdsaSd2023SerializerTests
 {
     /// <summary>
     /// Tests ecdsa-sd-2023 base proof CBOR serialization round-trips correctly.
@@ -180,7 +181,7 @@ public sealed class EcdsaSd2023SerializerTests
         Assert.AreEqual(CanonicalizationAlgorithm.Rdfc10, cryptosuite.Canonicalization);
         Assert.AreEqual("SHA-256", cryptosuite.HashAlgorithm);
         Assert.AreEqual(CryptoAlgorithm.P256, cryptosuite.SignatureAlgorithm);
-        Assert.IsTrue(cryptosuite.SupportsSelectiveDisclosure);
+        Assert.IsTrue(EcdsaSd2023CryptosuiteInfo.SupportsSelectiveDisclosure);
 
         //Verify compatible with Multikey verification method.
         Assert.IsTrue(cryptosuite.IsCompatibleWith(MultikeyVerificationMethodTypeInfo.Instance));

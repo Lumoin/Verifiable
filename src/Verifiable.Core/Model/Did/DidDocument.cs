@@ -33,6 +33,7 @@ namespace Verifiable.Core.Model.Did
     /// </para>
     /// </remarks>
     [DebuggerDisplay("{Id}")]
+    [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "POCO representing parsed DID components.")]
     public class DidDocument: IEquatable<DidDocument>
     {
         /// <summary>

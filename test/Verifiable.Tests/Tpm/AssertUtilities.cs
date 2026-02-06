@@ -5,7 +5,7 @@ namespace Verifiable.Tests.Tpm
     /// <summary>
     /// TPM testing utilities for assertions.
     /// </summary>
-    public static class AssertUtilities
+    internal static class AssertUtilities
     {
         /// <summary>
         /// Asserts the TPM call was a success.

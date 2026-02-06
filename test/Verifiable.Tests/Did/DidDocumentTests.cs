@@ -13,7 +13,7 @@ namespace Verifiable.Tests.Did
     /// General DID tests.
     /// </summary>
     [TestClass]
-    public sealed class DidDocumentTests
+    internal sealed class DidDocumentTests
     {
         /// <summary>
         /// An example combining https://www.w3.org/TR/did-core/#example-19-various-service-endpoints and other pieces.

@@ -11,7 +11,7 @@ namespace Verifiable.Tests.DataIntegrity;
 /// See <see href="https://www.w3.org/TR/vc-di-ecdsa/#representation-ecdsa-sd-2023"/>.
 /// </summary>
 [TestClass]
-public sealed class BlankNodeRelabelingW3CTests
+internal sealed class BlankNodeRelabelingW3CTests
 {
     public TestContext TestContext { get; set; } = null!;
 

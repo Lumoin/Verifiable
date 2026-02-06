@@ -1,4 +1,6 @@
-﻿namespace Verifiable.Jose
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace Verifiable.JCose
 {
     /// <summary>
     /// Well-known media types for Verifiable Credentials and related specifications.
@@ -18,6 +20,7 @@
         /// <summary>
         /// Media types in the <c>application</c> top-level type.
         /// </summary>
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
         public static class Application
         {
             /// <summary>
@@ -179,6 +182,7 @@
         /// See <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see>.
         /// </para>
         /// </remarks>
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
         public static class Jwt
         {
             /// <summary>

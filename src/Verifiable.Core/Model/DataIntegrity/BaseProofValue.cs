@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -17,6 +18,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// VC Data Integrity ECDSA Cryptosuites: parseBaseProofValue</see>.
 /// </para>
 /// </remarks>
+[SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
 public sealed class BaseProofValue: IDisposable
 {
     /// <summary>

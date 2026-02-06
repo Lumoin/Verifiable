@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
@@ -12,6 +14,8 @@ namespace Verifiable.Core.Model.Did;
 /// <summary>
 /// Provides extension members for DID document builders and related types.
 /// </summary>
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "Analyzer is not yet up to date with new extension syntax.")]
+[SuppressMessage("Naming", "CA1708:Identifiers should differ by more than case", Justification = "Analyzer is not yet up to date with new extension syntax.")]
 public static class DidBuilderExtensions
 {
     /// <summary>

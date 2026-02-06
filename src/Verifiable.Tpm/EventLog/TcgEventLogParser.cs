@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 
@@ -120,7 +121,19 @@ public static class TcgEventLogParser
         {
             return ParseInternal(logData);
         }
-        catch
+        catch(ArgumentException)
+        {
+            return TpmResult<TcgEventLog>.TransportError((uint)TcgEventLogError.ParseException);
+        }
+        catch(IndexOutOfRangeException)
+        {
+            return TpmResult<TcgEventLog>.TransportError((uint)TcgEventLogError.ParseException);
+        }
+        catch(FormatException)
+        {
+            return TpmResult<TcgEventLog>.TransportError((uint)TcgEventLogError.ParseException);
+        }
+        catch(OverflowException)
         {
             return TpmResult<TcgEventLog>.TransportError((uint)TcgEventLogError.ParseException);
         }
@@ -242,7 +255,7 @@ public static class TcgEventLogParser
     private static TpmResult<CryptoAgileEvent> ParseCryptoAgileEvent(
         ReadOnlySpan<byte> data,
         ref int offset,
-        IReadOnlyDictionary<TpmAlgIdConstants, ushort> digestSizes)
+        Dictionary<TpmAlgIdConstants, ushort> digestSizes)
     {
         //TCG_PCR_EVENT2: PCRIndex(4) + EventType(4) = 8 bytes minimum header.
         const int headerSize = sizeof(uint) + sizeof(uint);
@@ -426,6 +439,7 @@ public static class TcgEventLogParser
             description);
     }
 
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "<Pending>")]
     private static string? TryParseEventData(uint eventType, byte[] eventData)
     {
         try
@@ -458,7 +472,7 @@ public static class TcgEventLogParser
         if(eventData.Length >= SpecIdSignatureSize)
         {
             string sig = Encoding.ASCII.GetString(eventData, 0, SpecIdSignatureSize).TrimEnd('\0');
-            if(sig.StartsWith("Spec ID Event"))
+            if(sig.StartsWith("Spec ID Event", StringComparison.InvariantCulture))
             {
                 return sig;
             }
@@ -509,6 +523,7 @@ public static class TcgEventLogParser
         return Encoding.ASCII.GetString(eventData).TrimEnd('\0');
     }
 
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "First UEFI Unicode is tried, then ASCII. On purpose.")]
     private static string? ParseAsciiOrUnicodeString(byte[] eventData)
     {
         if(eventData.Length == 0)
@@ -597,6 +612,7 @@ public static class TcgEventLogParser
         return null;
     }
 
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "<Pending>")]
     private static string? TryExtractDevicePathString(byte[] pathData)
     {
         //EFI device path node: Type(1) + SubType(1) + Length(2) + Data(variable).

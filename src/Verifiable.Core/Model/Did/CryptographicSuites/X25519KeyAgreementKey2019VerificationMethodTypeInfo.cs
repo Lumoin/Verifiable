@@ -1,6 +1,6 @@
 using System.Linq;
 
-namespace Verifiable.Core.Model.Did
+namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
     public sealed class X25519KeyAgreementKey2019VerificationMethodTypeInfo: VerificationMethodTypeInfo
     {

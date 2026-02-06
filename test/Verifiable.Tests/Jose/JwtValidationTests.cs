@@ -1,10 +1,11 @@
 ﻿using Verifiable.Core.Assessment;
+using Verifiable.JCose;
 using Verifiable.Jose;
 
 namespace Verifiable.Tests.Jwt
 {
     [TestClass]
-    public sealed class JwtValidationTests
+    internal sealed class JwtValidationTests
     {
         [TestMethod]
         public void Test1()

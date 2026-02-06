@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Core.Model.DataIntegrity;
 
@@ -55,6 +56,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// <seealso cref="EcdsaSd2023CryptosuiteInfo"/>
 /// <seealso cref="EcdsaSd2023ProofSerializer"/>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
+[SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
 public sealed class EcdsaSdBaseProof: IEquatable<EcdsaSdBaseProof>
 {
     /// <summary>

@@ -3,10 +3,10 @@ using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tests.TestDataProviders
 {
-    public delegate bool KeyFormatValidatorDelegate(KeyFormat keyFormat, CryptoAlgorithm alg);
+    internal delegate bool KeyFormatValidatorDelegate(KeyFormat keyFormat, CryptoAlgorithm alg);
 
 
-    public class KeyFormatValidator
+    internal class KeyFormatValidator
     {
         private List<(Type Type, KeyFormatValidatorDelegate Validator)> Validators { get; } = [];
 

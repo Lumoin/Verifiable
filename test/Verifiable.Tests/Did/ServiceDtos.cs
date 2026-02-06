@@ -7,12 +7,12 @@ namespace Verifiable.Tests.Did
     //Quickly done some DTOs to test serialization of more specialized services in DidDocumentTests.
 
     [DebuggerDisplay("OpenIdConnectVersion1(Id = {Id})")]
-    public class OpenIdConnectVersion1: Service
+    internal class OpenIdConnectVersion1: Service
     { }
 
 
     [DebuggerDisplay("SpamCost(Amount = {Amount}, Currency = {Currency})")]
-    public class SpamCost
+    internal class SpamCost
     {
         public string? Amount { get; set; }
 
@@ -20,7 +20,7 @@ namespace Verifiable.Tests.Did
     }
 
     [DebuggerDisplay("SocialWebInboxService(Id = {Id})")]
-    public class SocialWebInboxService: Service
+    internal class SocialWebInboxService: Service
     {
         public string? Description { get; set; }
 
@@ -29,7 +29,7 @@ namespace Verifiable.Tests.Did
 
 
     [DebuggerDisplay("VerifiableCredentialService(Id = {Id})")]
-    public class VerifiableCredentialService: Service
+    internal class VerifiableCredentialService: Service
     {
     }
 }

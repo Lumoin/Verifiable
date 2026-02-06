@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -15,6 +16,8 @@ namespace Verifiable.Core.Model.Did
     {
         public static string EncodeKey(PublicKeyMemory publicKey, KeyFormat keyFormat)
         {
+            ArgumentNullException.ThrowIfNull(publicKey);
+            ArgumentNullException.ThrowIfNull(keyFormat);
             if(keyFormat is PublicKeyJwk)
             {
                 return DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyJwk)(publicKey.AsReadOnlySpan());

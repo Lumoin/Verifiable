@@ -97,11 +97,11 @@ public sealed class TpmtPublic: IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        return sizeof(ushort) +                 // type
-               sizeof(ushort) +                 // nameAlg
-               sizeof(uint) +                   // objectAttributes
-               AuthPolicy.GetSerializedSize() + // authPolicy (TPM2B_DIGEST)
-               Parameters.GetSerializedSize() +
+        return sizeof(ushort) +                 //Type.
+               sizeof(ushort) +                 //NameAlg.
+               sizeof(uint) +                   //ObjectAttributes.
+               AuthPolicy.SerializedSize + //AuthPolicy (TPM2B_DIGEST).
+               Parameters.SerializedSize +
                Unique.GetSerializedSize();
     }
 

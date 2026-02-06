@@ -35,12 +35,13 @@ namespace Verifiable.Security.Windows
         /// <param name="protectionScope">The data protection scope.</param>
         /// <param name="protectedMemoryPool">The more pool in which to store the encrypted data.</param>
         public EncryptedMemoryWindows(byte[] sensitiveMemory, byte[] entropy, DataProtectionScope protectionScope, MemoryPool<byte> protectedMemoryPool): 
-            base(TransformToEncryptedMemory(sensitiveMemory, entropy, protectionScope, protectedMemoryPool), CryptoTags.WindowsPlatformEncrypted)
+            base(TransformToEncryptedMemory(
+                sensitiveMemory ?? throw new ArgumentNullException(nameof(sensitiveMemory)),
+                entropy ?? throw new ArgumentNullException(nameof(entropy)),
+                protectionScope,
+                protectedMemoryPool ?? throw new ArgumentNullException(nameof(protectedMemoryPool))),
+                CryptoTags.WindowsPlatformEncrypted)
         {
-            ArgumentNullException.ThrowIfNull(sensitiveMemory);
-            ArgumentNullException.ThrowIfNull(entropy);
-            ArgumentNullException.ThrowIfNull(protectedMemoryPool);
-
             Entropy = entropy;
             DataProtectionScope = protectionScope;
         }
@@ -49,6 +50,7 @@ namespace Verifiable.Security.Windows
         /// <inheritdoc />
         public TResult WithSensitiveMemory<TResult>(ReadOnlySpanFunc<byte, TResult> sensitiveFunc)
         {
+            ArgumentNullException.ThrowIfNull(sensitiveFunc);
             ReadOnlySpan<byte> unEncryptedData = ProtectedData.Unprotect(AsReadOnlySpan().ToArray(), Entropy, DataProtectionScope);
             return sensitiveFunc(unEncryptedData);
         }
@@ -64,7 +66,9 @@ namespace Verifiable.Security.Windows
         /// <returns>The encrypted memory in a buffer.</returns>
         private static IMemoryOwner<byte> TransformToEncryptedMemory(byte[] sensitiveMemory, byte[] entropy, DataProtectionScope protectionScope, MemoryPool<byte> protectedMemoryPool)
         {
-            //The parameters are known to be non-null as they're checked in the constructor.
+            ArgumentNullException.ThrowIfNull(sensitiveMemory);
+            ArgumentNullException.ThrowIfNull(entropy);
+            ArgumentNullException.ThrowIfNull(protectedMemoryPool);
             
             var encryptedData = ProtectedData.Protect(sensitiveMemory, entropy, protectionScope);
             var bufferedMemory = protectedMemoryPool.Rent(encryptedData.Length);

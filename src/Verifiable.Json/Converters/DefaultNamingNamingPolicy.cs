@@ -24,14 +24,14 @@ namespace Verifiable.Json.Converters
         /// <param name="policies">Policies that are applied in given order.</param>
         public DefaultNamingNamingPolicy(ReadOnlyCollection<JsonNamingPolicy> policies)
         {
-            Policies = policies ?? throw new ArgumentException(nameof(policies));
+            Policies = policies ?? throw new ArgumentException(null, nameof(policies));
         }
 
 
         /// <inheritdoc />
         public override string ConvertName(string name)
         {
-            ArgumentException.ThrowIfNullOrEmpty(nameof(name));
+            ArgumentNullException.ThrowIfNull(name);
             
             string convertedName = name;
 #pragma warning disable CA1309 // Use ordinal string comparison

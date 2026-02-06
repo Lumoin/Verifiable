@@ -18,6 +18,8 @@
 
     <!-- Allow build to succeed despite TSS.Net trim warnings. -->
     <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
+
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

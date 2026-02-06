@@ -70,6 +70,33 @@ public static class WellKnownHashAlgorithms
     public const string Sha512Iana = "sha-512";
 
     /// <summary>
+    /// SHA-256 algorithm name in COSE display format (uppercase, hyphenated).
+    /// </summary>
+    /// <remarks>
+    /// Used in the IANA COSE Algorithms registry display names.
+    /// See <see href="https://www.iana.org/assignments/cose/cose.xhtml#algorithms">IANA COSE Algorithms</see>.
+    /// </remarks>
+    public const string Sha256Cose = "SHA-256";
+
+    /// <summary>
+    /// SHA-384 algorithm name in COSE display format (uppercase, hyphenated).
+    /// </summary>
+    /// <remarks>
+    /// Used in the IANA COSE Algorithms registry display names.
+    /// See <see href="https://www.iana.org/assignments/cose/cose.xhtml#algorithms">IANA COSE Algorithms</see>.
+    /// </remarks>
+    public const string Sha384Cose = "SHA-384";
+
+    /// <summary>
+    /// SHA-512 algorithm name in COSE display format (uppercase, hyphenated).
+    /// </summary>
+    /// <remarks>
+    /// Used in the IANA COSE Algorithms registry display names.
+    /// See <see href="https://www.iana.org/assignments/cose/cose.xhtml#algorithms">IANA COSE Algorithms</see>.
+    /// </remarks>
+    public const string Sha512Cose = "SHA-512";
+
+    /// <summary>
     /// SHA-256 output size in bytes.
     /// </summary>
     public const int Sha256SizeBytes = 32;
@@ -112,9 +139,10 @@ public static class WellKnownHashAlgorithms
             return false;
         }
 
-        return string.Equals(value, Sha256, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(value, Sha256Iana, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(value, "sha256", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(value, Sha256, StringComparison.OrdinalIgnoreCase) 
+            || string.Equals(value, Sha256Iana, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, Sha256Cose, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "sha256", StringComparison.OrdinalIgnoreCase);
     }
 
 
@@ -130,9 +158,10 @@ public static class WellKnownHashAlgorithms
             return false;
         }
 
-        return string.Equals(value, Sha384, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(value, Sha384Iana, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(value, "sha384", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(value, Sha384, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, Sha384Iana, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, Sha384Cose, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "sha384", StringComparison.OrdinalIgnoreCase);
     }
 
 
@@ -148,9 +177,10 @@ public static class WellKnownHashAlgorithms
             return false;
         }
 
-        return string.Equals(value, Sha512, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(value, Sha512Iana, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(value, "sha512", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(value, Sha512, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, Sha512Iana, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, Sha512Cose, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "sha512", StringComparison.OrdinalIgnoreCase);
     }
 
 
@@ -223,6 +253,54 @@ public static class WellKnownHashAlgorithms
         if(IsSha512(value))
         {
             return Sha512Iana;
+        }
+
+        throw new ArgumentException($"Unsupported hash algorithm: '{value}'.", nameof(value));
+    }
+
+
+    /// <summary>
+    /// Converts a <see cref="HashAlgorithmName"/> to COSE display format (uppercase, hyphenated).
+    /// </summary>
+    /// <param name="algorithm">The hash algorithm.</param>
+    /// <returns>The COSE-formatted algorithm name.</returns>
+    /// <exception cref="ArgumentException">Thrown for unsupported algorithms.</exception>
+    /// <remarks>
+    /// Use this when producing display names for the IANA COSE Algorithms registry.
+    /// </remarks>
+    public static string ToCoseName(HashAlgorithmName algorithm)
+    {
+        return algorithm.Name switch
+        {
+            Sha256 => Sha256Cose,
+            Sha384 => Sha384Cose,
+            Sha512 => Sha512Cose,
+            _ => throw new ArgumentException($"Unsupported hash algorithm: '{algorithm.Name}'.", nameof(algorithm))
+        };
+    }
+
+
+    /// <summary>
+    /// Converts a string algorithm name to COSE display format (uppercase, hyphenated).
+    /// </summary>
+    /// <param name="value">The algorithm name in any supported format.</param>
+    /// <returns>The COSE-formatted algorithm name.</returns>
+    /// <exception cref="ArgumentException">Thrown for unsupported algorithm names.</exception>
+    public static string ToCoseName(string value)
+    {
+        if(IsSha256(value))
+        {
+            return Sha256Cose;
+        }
+
+        if(IsSha384(value))
+        {
+            return Sha384Cose;
+        }
+
+        if(IsSha512(value))
+        {
+            return Sha512Cose;
         }
 
         throw new ArgumentException($"Unsupported hash algorithm: '{value}'.", nameof(value));

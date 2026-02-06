@@ -1,6 +1,7 @@
 ﻿using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.JCose;
 
 
 namespace Verifiable.Jose
@@ -109,13 +110,9 @@ namespace Verifiable.Jose
         /// </remarks>
         public static TagToJwaDelegate DefaultTagToJwaConverter => tag =>
         {
-            if(tag == null)
-            {
-                throw new ArgumentNullException(nameof(tag));
-            }
+            ArgumentNullException.ThrowIfNull(tag);
 
             CryptoAlgorithm algorithm = tag.Get<CryptoAlgorithm>();
-
             if(algorithm.Equals(CryptoAlgorithm.P256))
             {
                 return WellKnownJwaValues.Es256;
@@ -161,10 +158,7 @@ namespace Verifiable.Jose
         /// <exception cref="NotSupportedException">Thrown when the tag does not map to a JWA algorithm.</exception>
         public static string GetJwaAlgorithm(Tag tag, string? hashAlgorithm = null, bool usePss = false)
         {
-            if(tag == null)
-            {
-                throw new ArgumentNullException(nameof(tag));
-            }
+            ArgumentNullException.ThrowIfNull(tag);
 
             CryptoAlgorithm algorithm = tag.Get<CryptoAlgorithm>();
             if(algorithm.Equals(CryptoAlgorithm.P256))
@@ -436,11 +430,11 @@ namespace Verifiable.Jose
                 {
                     case string key when WellKnownKeyTypeValues.IsEc(key):
                         //EC keys require 'x' and 'y' coordinates.
-                        if(!jwk.ContainsKey(JwkProperties.X) || jwk[JwkProperties.X] is not string)
+                        if(!jwk.TryGetValue(JwkProperties.X, out var ecX) || ecX is not string)
                         {
                             throw new ArgumentException($"EC JWK must contain a valid '{JwkProperties.X}' field.", nameof(jwk));
                         }
-                        if(!jwk.ContainsKey(JwkProperties.Y) || jwk[JwkProperties.Y] is not string)
+                        if(!jwk.TryGetValue(JwkProperties.Y, out var ecY) || ecY is not string)
                         {
                             throw new ArgumentException($"EC JWK must contain a valid '{JwkProperties.Y}' field.", nameof(jwk));
                         }
@@ -448,7 +442,7 @@ namespace Verifiable.Jose
 
                     case string key when WellKnownKeyTypeValues.IsOkp(key):
                         //OKP keys require 'x' coordinate.
-                        if(!jwk.ContainsKey(JwkProperties.X) || jwk[JwkProperties.X] is not string)
+                        if(!jwk.TryGetValue(JwkProperties.X, out var okpX) || okpX is not string)
                         {
                             throw new ArgumentException($"OKP JWK must contain a valid '{JwkProperties.X}' field.", nameof(jwk));
                         }
@@ -456,11 +450,11 @@ namespace Verifiable.Jose
 
                     case string key when WellKnownKeyTypeValues.IsRsa(key):
                         //RSA keys require 'n' (modulus) and 'e' (exponent).
-                        if(!jwk.ContainsKey(JwkProperties.N) || jwk[JwkProperties.N] is not string)
+                        if(!jwk.TryGetValue(JwkProperties.N, out var rsaN) || rsaN is not string)
                         {
                             throw new ArgumentException($"RSA JWK must contain a valid '{JwkProperties.N}' field.", nameof(jwk));
                         }
-                        if(!jwk.ContainsKey(JwkProperties.E) || jwk[JwkProperties.E] is not string)
+                        if(!jwk.TryGetValue(JwkProperties.E, out var rsaE) || rsaE is not string)
                         {
                             throw new ArgumentException($"RSA JWK must contain a valid '{JwkProperties.E}' field.", nameof(jwk));
                         }

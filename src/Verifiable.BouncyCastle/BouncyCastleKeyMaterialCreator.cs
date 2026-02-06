@@ -5,47 +5,56 @@ using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Security;
 using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 
 namespace Verifiable.BouncyCastle
 {
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned key material instances.")]
     public static class BouncyCastleKeyMaterialCreator
     {
         private static readonly SecureRandom random = new();
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256Keys(MemoryPool<byte> memoryPool)
         {
+            ArgumentNullException.ThrowIfNull(memoryPool);
             return CreateEcKeys("secp256r1", CryptoTags.P256PublicKey, CryptoTags.P256PrivateKey, memoryPool);
         }
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384Keys(MemoryPool<byte> memoryPool)
         {
+            ArgumentNullException.ThrowIfNull(memoryPool);
             return CreateEcKeys("secp384r1", CryptoTags.P384PublicKey, CryptoTags.P384PrivateKey, memoryPool);
         }
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521Keys(MemoryPool<byte> memoryPool)
         {
+            ArgumentNullException.ThrowIfNull(memoryPool);
             return CreateEcKeys("secp521r1", CryptoTags.P521PublicKey, CryptoTags.P521PrivateKey, memoryPool);
         }
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateSecp256k1Keys(MemoryPool<byte> memoryPool)
         {
+            ArgumentNullException.ThrowIfNull(memoryPool);
             return CreateEcKeys("secp256k1", CryptoTags.Secp256k1PublicKey, CryptoTags.Secp256k1PrivateKey, memoryPool);
         }
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa2048Keys(MemoryPool<byte> memoryPool)
         {
+            ArgumentNullException.ThrowIfNull(memoryPool);
             return CreateRsaKeys(2048, memoryPool);
         }
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa4096Keys(MemoryPool<byte> memoryPool)
         {
+            ArgumentNullException.ThrowIfNull(memoryPool);
             return CreateRsaKeys(4096, memoryPool);
         }
 
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEd25519Keys(MemoryPool<byte> memoryPool)
         {
+            ArgumentNullException.ThrowIfNull(memoryPool);
             var generator = new Ed25519KeyPairGenerator();
             generator.Init(new Ed25519KeyGenerationParameters(random));
             var keyPair = generator.GenerateKeyPair();
@@ -65,6 +74,7 @@ namespace Verifiable.BouncyCastle
 
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateX25519Keys(MemoryPool<byte> memoryPool)
         {
+            ArgumentNullException.ThrowIfNull(memoryPool);
             var generator = new X25519KeyPairGenerator();
             generator.Init(new X25519KeyGenerationParameters(random));
             var keyPair = generator.GenerateKeyPair();
@@ -72,7 +82,7 @@ namespace Verifiable.BouncyCastle
             var publicKey = ((X25519PublicKeyParameters)keyPair.Public).GetEncoded();
             var privateKey = ((X25519PrivateKeyParameters)keyPair.Private).GetEncoded();
 
-            // Clear the sensitive data from memory as soon as possible
+            //Clear the sensitive data from memory as soon as possible.
             var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKey, memoryPool), CryptoTags.X25519PublicKey);
             var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKey, memoryPool), CryptoTags.X25519PrivateKey);
             Array.Clear(publicKey, 0, publicKey.Length);
@@ -81,7 +91,7 @@ namespace Verifiable.BouncyCastle
             return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
         }
 
-
+        
         private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEcKeys(
             string secCurveName,
             Tag publicKeyTag,
@@ -173,6 +183,8 @@ namespace Verifiable.BouncyCastle
 
         private static IMemoryOwner<byte> AsPooledMemory(byte[] keyBytes, MemoryPool<byte> memoryPool)
         {
+            ArgumentNullException.ThrowIfNull(keyBytes);
+            ArgumentNullException.ThrowIfNull(memoryPool);
             //It may be that the provided MemoryPool allocates more bytes than asked for.
             //Like the default .NET MemoryPool. But for many of the DID key operations
             //that create string representations of the key material, such as Base58 encoding,

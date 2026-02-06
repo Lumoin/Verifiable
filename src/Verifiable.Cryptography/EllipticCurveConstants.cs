@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 
@@ -17,6 +18,7 @@ namespace Verifiable.Cryptography
         /// <see href="https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-186.pdf">NIST Special Publication 800-186
         /// Recommendations for Discrete Logarithm-Based Cryptography: Elliptic Curve Domain Parameters</see> page 10.
         /// </summary>
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
         public static class P256
         {
             /// <summary>
@@ -118,6 +120,7 @@ namespace Verifiable.Cryptography
         /// <see href="https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-186.pdf">Draft NIST Special Publication 800-186
         /// Recommendations for Discrete Logarithm-Based Cryptography: Elliptic Curve Domain Parameters</see> page 11.
         /// </summary>
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
         public static class P384
         {
             /// <summary>
@@ -219,6 +222,7 @@ namespace Verifiable.Cryptography
         /// <see href="https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-186.pdf">Draft NIST Special Publication 800-186
         /// Recommendations for Discrete Logarithm-Based Cryptography: Elliptic Curve Domain Parameters</see> page 12.
         /// </summary>
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
         public static class P521
         {
             /// <summary>
@@ -319,6 +323,7 @@ namespace Verifiable.Cryptography
         /// These are precomputed constants for P-521 elliptic curve. The source of definitions is at
         /// <see href="https://www.secg.org/sec2-v2.pdf">SEC 2: Recommended Elliptic Curve Domain Parameters</see> page 9.
         /// </summary>
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
         public static class Secp256k1
         {
             /// <summary>
@@ -415,12 +420,12 @@ namespace Verifiable.Cryptography
             public static BigInteger PIdentity => new(PIdentityBytes, true, true);
         }
 
-
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
         public static class Curve25519
         {
             public const int PointArrayLength = 32;
 
-            public static readonly BigInteger Prime = BigInteger.Parse("7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED", NumberStyles.HexNumber);
+            public static readonly BigInteger Prime = BigInteger.Parse("7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED", NumberStyles.HexNumber, CultureInfo.InvariantCulture);
             public static readonly BigInteger A = 486662;
             public static readonly BigInteger B = 1;
         }

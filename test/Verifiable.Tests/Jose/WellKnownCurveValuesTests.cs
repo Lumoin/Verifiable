@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Jwt
     /// Tests that canonicalization of kty values works correctly.
     /// </summary>
     [TestClass]
-    public sealed class WellKnownCurveValuesTests
+    internal sealed class WellKnownCurveValuesTests
     {
         /// <summary>
         /// All of the well-known curve values and their comparison functions..

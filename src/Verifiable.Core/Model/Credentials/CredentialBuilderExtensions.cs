@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core.Model.DataIntegrity;
@@ -40,8 +41,9 @@ namespace Verifiable.Core.Model.Credentials;
 /// at build time.
 /// </para>
 /// </remarks>
-public static class CredentialBuilderExtensions
 #pragma warning restore RS0030 // Do not use banned APIs
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with latest syntax.")]
+public static class CredentialBuilderExtensions
 {
     extension(CredentialBuilder builder)
     {
@@ -130,7 +132,7 @@ public static class CredentialBuilderExtensions
                     serializeProofOptions,
                     encoder,
                     memoryPool,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
             });
         }
 
@@ -187,7 +189,8 @@ public static class CredentialBuilderExtensions
 
             return async (issuer, subject, validFrom, cancellationToken) =>
             {
-                VerifiableCredential credential = await builder.BuildAsync(issuer, subject, validFrom, cancellationToken: cancellationToken);
+                VerifiableCredential credential = await builder.BuildAsync(issuer, subject, validFrom, cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
 
                 return await credential.SignJwsAsync(
                     privateKey,
@@ -197,7 +200,7 @@ public static class CredentialBuilderExtensions
                     base64UrlEncoder,
                     memoryPool,
                     mediaType,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
             };
         }
 
@@ -237,7 +240,7 @@ public static class CredentialBuilderExtensions
                     validFrom,
                     additionalTypes,
                     validUntil,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 return await credential.SignJwsAsync(
                     privateKey,
@@ -247,7 +250,7 @@ public static class CredentialBuilderExtensions
                     base64UrlEncoder,
                     memoryPool,
                     mediaType,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
             };
         }
     }

@@ -66,7 +66,7 @@ public static class Cose
         Signature signatureMemory = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             toBeSigned,
-            signaturePool);
+            signaturePool).ConfigureAwait(false);
 
         return new CoseSign1Message(
             protectedHeaderBytes,
@@ -106,7 +106,7 @@ public static class Cose
             payload.Span,
             ReadOnlySpan<byte>.Empty);
 
-        using Signature signature = await privateKey.WithKeyBytesAsync(signingFunction, toBeSigned, signaturePool);
+        using Signature signature = await privateKey.SignWithKeyBytesAsync(signingFunction, toBeSigned, signaturePool).ConfigureAwait(false);
 
         return new CoseSign1Message(
             protectedHeaderBytes,
@@ -144,7 +144,7 @@ public static class Cose
         return await verificationDelegate(
             toBeSigned,
             message.Signature,
-            publicKey.AsReadOnlyMemory());
+            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
     }
 
 
@@ -180,7 +180,7 @@ public static class Cose
 
         using var signature = new Signature(signatureMemory, publicKey.Tag);
 
-        return await verificationFunction(publicKey.AsReadOnlyMemory(), toBeSigned, signature);
+        return await verificationFunction(publicKey.AsReadOnlyMemory(), toBeSigned, signature).ConfigureAwait(false);
     }
 
 
@@ -225,16 +225,17 @@ public static class Cose
 
         var context = new CoseKeyContext(protectedHeaderBytes, unprotectedHeader, payload);
 
-        PrivateKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken);
+        PrivateKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken).ConfigureAwait(false);
 
         if(material is null)
         {
             throw new InvalidOperationException("Key material resolution failed.");
         }
 
-        using PrivateKey privateKey = await binder(material, binderState, cancellationToken);
-        using Signature signature = await privateKey.SignAsync(toBeSigned, pool);
+        using PrivateKey privateKey = await binder(material, binderState, cancellationToken).ConfigureAwait(false);
+        Signature signature = await privateKey.SignAsync(toBeSigned, pool).ConfigureAwait(false);
 
+        //TODO: Change CoseSign1Message to take Signature.
         return new CoseSign1Message(
             protectedHeaderBytes,
             unprotectedHeader,
@@ -284,7 +285,7 @@ public static class Cose
             message.UnprotectedHeader,
             message.Payload);
 
-        PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken);
+        PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken).ConfigureAwait(false);
 
         if(material is null)
         {
@@ -292,13 +293,13 @@ public static class Cose
         }
 
         Tag signatureTag = material.Tag;
-        using PublicKey publicKey = await binder(material, binderState, cancellationToken);
+        using PublicKey publicKey = await binder(material, binderState, cancellationToken).ConfigureAwait(false);
 
         IMemoryOwner<byte> signatureMemory = pool.Rent(message.Signature.Length);
         message.Signature.Span.CopyTo(signatureMemory.Memory.Span);
 
         using var signature = new Signature(signatureMemory, signatureTag);
 
-        return await publicKey.VerifyAsync(toBeSigned, signature);
+        return await publicKey.VerifyAsync(toBeSigned, signature).ConfigureAwait(false);
     }
 }

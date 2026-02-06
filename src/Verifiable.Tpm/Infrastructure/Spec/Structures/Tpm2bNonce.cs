@@ -72,6 +72,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <returns>The parsed nonce.</returns>
     public static Tpm2bNonce Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
         if(size == 0)
         {
@@ -99,7 +100,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Gets the serialized size (2-byte length prefix + data).
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + Size;
+    public int SerializedSize => sizeof(ushort) + Size;
 
     /// <summary>
     /// Creates an empty nonce.
@@ -108,6 +109,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <returns>An empty nonce.</returns>
     public static Tpm2bNonce CreateEmpty(MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         return EmptyInstance;
     }
 
@@ -119,6 +121,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <returns>The created nonce.</returns>
     public static Tpm2bNonce Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)
         {
             return EmptyInstance;
@@ -138,6 +141,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <exception cref="ArgumentOutOfRangeException">Length is zero or negative.</exception>
     public static Tpm2bNonce CreateRandom(int length, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         if(length <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(length), "Nonce size must be greater than zero.");

@@ -1,10 +1,12 @@
-﻿using Verifiable.Core.Model.Did;
+﻿using System.Diagnostics.CodeAnalysis;
+using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Core.Model.Common
 {
     /// <summary>
     /// Marker interface for builder state objects.
     /// </summary>
+    [SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "Marker interface used to tag builder state types for discovery and generic constraints.")]
     public interface IBuilderState { }
 
 

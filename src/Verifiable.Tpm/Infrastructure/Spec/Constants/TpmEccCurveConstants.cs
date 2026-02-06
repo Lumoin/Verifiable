@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Verifiable.Tpm.Structures.Spec.Constants;
 
 /// <summary>
@@ -10,6 +12,8 @@ namespace Verifiable.Tpm.Structures.Spec.Constants;
 /// (Part 2: Structures, section "6 Constants", Table 12).
 /// </para>
 /// </remarks>
+
+[SuppressMessage("Design", "CA1027:Mark enums with FlagsAttribute", Justification = "This is specified in the TPM 2.0 Library Specification.")]
 public enum TpmEccCurveConstants: ushort
 {
     /// <summary>

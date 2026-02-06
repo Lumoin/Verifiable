@@ -1,4 +1,7 @@
-﻿namespace Verifiable.Core.Model.Did
+﻿using System.Diagnostics.CodeAnalysis;
+using Verifiable.Core.Model.Did.CryptographicSuites;
+
+namespace Verifiable.Core.Model.Did
 {
     /// <remarks>
     /// <para>
@@ -40,6 +43,7 @@
     /// allowing seamless integration of custom verification method types.
     /// </para>
     /// </remarks>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "Analyzer is not yet up to date with new extension syntax.")]
     public static class VerificationMethodTypeInfoExtensions
     {
         extension(VerificationMethodTypeInfo)

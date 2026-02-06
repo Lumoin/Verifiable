@@ -190,9 +190,17 @@ public abstract class SensitiveData
 ///     |       +-- PublicKey           Memory + bound VerificationFunction + KeyId
 ///     |
 ///     +-- PrivateKeyMemory            Typed wrapper with WithKeyBytesAsync
-///             |
-///             +-- PrivateKey          Memory + bound SigningFunction + KeyId
+///     |       |
+///     |       +-- PrivateKey          Memory + bound SigningFunction + KeyId
+///     |
+///     +-- Signature                   Sealed. Output of signing operations.
 /// </code>
+/// <para>
+/// All cryptographic material in this library is tracked through this hierarchy.
+/// There are no naked, opaque byte buffers. Every piece of sensitive memory carries
+/// a <see cref="Tag"/> describing what it is (algorithm, purpose, encoding, semantics),
+/// is disposable to ensure cleanup, and is guarded against use-after-dispose.
+/// </para>
 /// 
 /// <para>
 /// <strong>Memory Contents: Material vs Handle</strong>
@@ -310,12 +318,14 @@ public abstract class SensitiveData
 /// When possible, security-sensitive operations should be done on locked systems
 /// with restricted privileges. The <see cref="Dispose"/> method clears memory contents.
 /// For hardware-backed keys (<see cref="MaterialSemantics.TpmHandle"/>), the actual
-/// key material never enters process memory.
+/// key material never enters process memory. Accessing memory after disposal throws
+/// <see cref="ObjectDisposedException"/> to guard against use-after-free bugs.
 /// </para>
 /// </remarks>
 /// <seealso cref="Tag"/>
 /// <seealso cref="PublicKeyMemory"/>
 /// <seealso cref="PrivateKeyMemory"/>
+/// <seealso cref="Signature"/>
 /// <seealso cref="PublicKey"/>
 /// <seealso cref="PrivateKey"/>
 /// <seealso cref="MaterialSemantics"/>
@@ -347,19 +357,23 @@ public abstract class SensitiveMemory: SensitiveData, IDisposable, IEquatable<Se
 
 
     /// <summary>
-    /// Exposes the internal sensitive memory for some special purposes, such as formatting.
+    /// Exposes the internal sensitive memory as a read-only span.
     /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown if this instance has been disposed.</exception>
     public ReadOnlySpan<byte> AsReadOnlySpan()
     {
+        ObjectDisposedException.ThrowIf(disposed, this);
         return MemoryOwner.Memory.Span;
     }
 
 
     /// <summary>
-    /// Exposes the internal sensitive memory for some special purposes, such as formatting.
+    /// Exposes the internal sensitive memory as read-only memory.
     /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown if this instance has been disposed.</exception>
     public ReadOnlyMemory<byte> AsReadOnlyMemory()
     {
+        ObjectDisposedException.ThrowIf(disposed, this);
         return MemoryOwner.Memory;
     }
 
@@ -376,10 +390,18 @@ public abstract class SensitiveMemory: SensitiveData, IDisposable, IEquatable<Se
     /// Allows inherited resources to hook into application defined tasks with freeing,
     /// releasing, or resetting unmanaged resources.
     /// </summary>
-    /// <param name="disposing"></param>
+    /// <param name="disposing"><see langword="true"/> if called from <see cref="Dispose()"/>; <see langword="false"/> if called from a finalizer.</param>
     protected virtual void Dispose(bool disposing)
     {
         if(disposed)
+        {
+            return;
+        }
+
+        //Shared empty instances backed by EmptyMemoryOwner are singletons
+        //that must never be disposed. Their Dispose is a no-op, but setting
+        //the disposed flag would poison all future users of the singleton.
+        if(MemoryOwner is EmptyMemoryOwner)
         {
             return;
         }
@@ -409,7 +431,7 @@ public abstract class SensitiveMemory: SensitiveData, IDisposable, IEquatable<Se
 
     /// <inheritdoc />
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public override bool Equals([NotNullWhen(true)] object? o) => (o is SensitiveMemory s) && Equals(s);
+    public override bool Equals([NotNullWhen(true)] object? obj) => (obj is SensitiveMemory s) && Equals(s);
 
 
     /// <inheritdoc />

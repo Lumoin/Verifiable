@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Jwt
     /// Tests that canonicalization of JWE encryption algorithms works correctly.
     /// </summary>
     [TestClass]
-    public sealed class WellKnownJweEncryptionAlgorithmsTests
+    internal sealed class WellKnownJweEncryptionAlgorithmsTests
     {
         /// <summary>
         /// All of the well-known JWE encryption algorithms should be recognized.

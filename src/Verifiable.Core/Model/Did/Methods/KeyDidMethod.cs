@@ -66,7 +66,7 @@ namespace Verifiable.Core.Model.Did.Methods
         public KeyDidMethod(string didString): base(didString)
         {
             ArgumentNullException.ThrowIfNull(didString);
-            if(!didString.StartsWith(Prefix, StringComparison.Ordinal))
+            if(!didString.StartsWith(Prefix, StringComparison.InvariantCulture))
             {
                 throw new ArgumentException($"The DID string must start with '{Prefix}'.", nameof(didString));
             }
@@ -77,14 +77,24 @@ namespace Verifiable.Core.Model.Did.Methods
         /// Implicit conversion from <see cref="KeyDidMethod"/> or derived DID methods to <see langword="string"/>.
         /// </summary>
         /// <param name="didId"></param>
-        public static implicit operator string(KeyDidMethod didId) => didId.Id;
+        public static implicit operator string(KeyDidMethod didId)
+        {
+            ArgumentNullException.ThrowIfNull(didId);
+
+            return didId.Id;
+        }
 
 
         /// <summary>
         /// Explicit conversion from <see langword="string"/> to <see cref="KeyDidMethod"/> or derived DID methods.
         /// </summary>
         /// <param name="didId"></param>
-        public static explicit operator KeyDidMethod(string didId) => new(didId);
+        public static explicit operator KeyDidMethod(string didId)
+        {
+            ArgumentNullException.ThrowIfNull(didId);
+
+            return new(didId);
+        }
 
 
         /// <inheritdoc/>

@@ -130,6 +130,7 @@ public sealed class TpmsCreationData: IDisposable
     /// <returns>The parsed creation data.</returns>
     public static TpmsCreationData Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         var pcrSelect = TpmlPcrSelection.Parse(ref reader, pool);
 
         ushort pcrDigestSize = reader.ReadUInt16();

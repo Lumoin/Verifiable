@@ -93,7 +93,7 @@ public readonly struct VerificationMethodResolutionResult: IEquatable<Verificati
 
     /// <inheritdoc />
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public override bool Equals([NotNullWhen(true)] object? o) => o is VerificationMethodResolutionResult result && Equals(result);
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is VerificationMethodResolutionResult result && Equals(result);
 
 
     /// <inheritdoc />

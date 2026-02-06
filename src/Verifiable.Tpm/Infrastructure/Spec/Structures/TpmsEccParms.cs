@@ -1,5 +1,4 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
@@ -96,13 +95,11 @@ public readonly record struct TpmsEccParms
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize()
-    {
-        return Symmetric.GetSerializedSize() +
-               Scheme.GetSerializedSize() +
-               sizeof(ushort) + // curveID
-               Kdf.GetSerializedSize();
-    }
+    public int SerializedSize =>
+        Symmetric.SerializedSize +
+        Scheme.SerializedSize +
+        sizeof(ushort) + //CurveID.
+        Kdf.SerializedSize;
 
     /// <summary>
     /// Writes this structure to a TPM writer.

@@ -4,7 +4,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Jose
 {
     [TestClass]
-    public sealed class JwtUtilitiesTests
+    internal sealed class JwtUtilitiesTests
     {
         /* ReadOnlySpan<byte> RsaExponent65537 = new byte[] { 0x01, 0x00, 0x01 };
            var e = Base64Url.Encode(RsaExponent65537);

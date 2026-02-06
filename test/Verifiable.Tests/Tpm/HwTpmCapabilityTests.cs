@@ -6,7 +6,6 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
-using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -17,7 +16,7 @@ namespace Verifiable.Tests.Tpm;
 [DoNotParallelize]
 [SkipIfNoTpm]
 [TestCategory("RequiresHardwareTpm")]
-public class HwTpmCapabilityTests
+internal class HwTpmCapabilityTests
 {
     /// <summary>
     /// The TPM device for the tests.
@@ -27,7 +26,7 @@ public class HwTpmCapabilityTests
     /// <summary>
     /// Whether a TPM device is available.
     /// </summary>
-    private static bool HasTpm { get; set; } = false;
+    private static bool HasTpm { get; set; }
 
 
     /// <summary>

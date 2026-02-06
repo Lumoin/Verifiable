@@ -4,6 +4,7 @@ using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Sidetree
 {
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1067:Override Object.Equals(object) when implementing IEquatable<T>", Justification = "This project is likely removed.")]
     public class SideTreeDocument: IEquatable<SideTreeDocument>
     {
         public Context? Context { get; set; }
@@ -12,6 +13,7 @@ namespace Verifiable.Sidetree
 
 
         /// <inheritdoc/>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "This project is likely removed.")]
         public bool Equals(SideTreeDocument? other)
         {
             if (other is null)
