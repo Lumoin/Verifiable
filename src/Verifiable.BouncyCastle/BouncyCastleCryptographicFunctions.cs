@@ -10,16 +10,19 @@ using Org.BouncyCastle.Security;
 using System;
 using System.Buffers;
 using System.Collections.Frozen;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.BouncyCastle
 {
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned objects.")]
     public static class BouncyCastleCryptographicFunctions
     {
         public static ValueTask<Signature> SignEd25519Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             AsymmetricKeyParameter keyParameter = new Ed25519PrivateKeyParameters(privateKeyBytes.ToArray(), 0);
             var privateKey = (Ed25519PrivateKeyParameters)keyParameter;
 
@@ -48,6 +51,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<Signature> SignP256Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "secp256r1", CryptoTags.P256Signature, 32);
         }
 
@@ -60,6 +64,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<Signature> SignP384Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "secp384r1", CryptoTags.P384Signature, 48);
         }
 
@@ -72,6 +77,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<Signature> SignP521Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "secp521r1", CryptoTags.P521Signature, 66);
         }
 
@@ -84,6 +90,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<IMemoryOwner<byte>> DeriveX25519SharedSecretAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> publicKeyBytes, MemoryPool<byte> memoryPool)
         {   
+            ArgumentNullException.ThrowIfNull(memoryPool);
             var privateKeyParams = new X25519PrivateKeyParameters(privateKeyBytes.Span.ToArray());
             var publicKeyParams = new X25519PublicKeyParameters(publicKeyBytes.Span.ToArray());
 
@@ -109,6 +116,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<Signature> SignRsa2048Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPkcs1Async(privateKeyBytes, dataToSign, signaturePool, new Sha256Digest(), CryptoTags.Rsa2048Signature);
         }
 
@@ -121,6 +129,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<Signature> SignRsa4096Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPkcs1Async(privateKeyBytes, dataToSign, signaturePool, new Sha256Digest(), CryptoTags.Rsa4096Signature);
         }
 
@@ -133,6 +142,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<Signature> SignRsaSha256Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPkcs1Async(privateKeyBytes, dataToSign, signaturePool, new Sha256Digest(), CryptoTags.RsaSha256Pkcs1Signature);
         }
 
@@ -145,6 +155,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<Signature> SignRsaSha256PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPssAsync(privateKeyBytes, dataToSign, signaturePool, new Sha256Digest(), CryptoTags.RsaSha256PssSignature);
         }
 
@@ -157,6 +168,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<Signature> SignRsaSha384Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPkcs1Async(privateKeyBytes, dataToSign, signaturePool, new Sha384Digest(), CryptoTags.RsaSha384Pkcs1Signature);
         }
 
@@ -169,6 +181,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<Signature> SignRsaSha384PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPssAsync(privateKeyBytes, dataToSign, signaturePool, new Sha384Digest(), CryptoTags.RsaSha384PssSignature);
         }
 
@@ -181,6 +194,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<Signature> SignRsaSha512Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPkcs1Async(privateKeyBytes, dataToSign, signaturePool, new Sha512Digest(), CryptoTags.RsaSha512Pkcs1Signature);
         }
 
@@ -193,6 +207,7 @@ namespace Verifiable.BouncyCastle
 
         public static ValueTask<Signature> SignRsaSha512PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
+            ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPssAsync(privateKeyBytes, dataToSign, signaturePool, new Sha512Digest(), CryptoTags.RsaSha512PssSignature);
         }
 

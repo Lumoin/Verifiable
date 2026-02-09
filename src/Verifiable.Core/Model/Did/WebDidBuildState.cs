@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Model.Did
@@ -9,6 +10,7 @@ namespace Verifiable.Core.Model.Did
     /// This state is passed between transformation functions during the fold/aggregate process
     /// and contains all the information needed to construct a <c>did:web</c> DID document.
     /// </summary>
+    [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Building accumulator. Properties are set before building.")]
     public struct WebDidBuildState: IEquatable<WebDidBuildState>, IBuilderState
     {
         /// <summary>

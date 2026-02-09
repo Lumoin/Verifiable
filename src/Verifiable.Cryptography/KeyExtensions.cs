@@ -46,7 +46,10 @@ public static class KeyExtensions
     /// <seealso cref="PrivateKey.SignAsync"/>
     public static ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningFunction<byte, byte, ValueTask<Signature>> signingFunction, MemoryPool<byte> signaturePool)
     {
-        return privateKey.WithKeyBytesAsync((privateKeyBytes, dataToSign, signaturePool) => signingFunction(privateKeyBytes, dataToSign, signaturePool), dataToSign, signaturePool);
+        ArgumentNullException.ThrowIfNull(privateKey);
+        ArgumentNullException.ThrowIfNull(signingFunction);
+        ArgumentNullException.ThrowIfNull(signaturePool);
+        return privateKey.SignWithKeyBytesAsync((privateKeyBytes, dataToSign, signaturePool) => signingFunction(privateKeyBytes, dataToSign, signaturePool), dataToSign, signaturePool);
     }
 
 
@@ -64,7 +67,11 @@ public static class KeyExtensions
     /// <returns>The signature of the data.</returns>
     public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningDelegate signingDelegate, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
     {
-        return await privateKey.WithKeyBytesAsync(async (privateKeyBytes, dataToSign, signaturePool) => await signingDelegate(privateKeyBytes, dataToSign, signaturePool, context), dataToSign, signaturePool);
+        ArgumentNullException.ThrowIfNull(privateKey);
+        ArgumentNullException.ThrowIfNull(signingDelegate);
+        ArgumentNullException.ThrowIfNull(signaturePool);
+        return await privateKey.SignWithKeyBytesAsync(async (privateKeyBytes, dataToSign, signaturePool) => await signingDelegate(privateKeyBytes, dataToSign, signaturePool, context).ConfigureAwait(false), dataToSign, signaturePool)
+            .ConfigureAwait(false);
     }
 
 
@@ -73,11 +80,13 @@ public static class KeyExtensions
     /// </summary>
     public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool)
     {
+        ArgumentNullException.ThrowIfNull(privateKey);
+        ArgumentNullException.ThrowIfNull(signaturePool);
         var algorithm = privateKey.Tag.Get<CryptoAlgorithm>();
         var purpose = privateKey.Tag.Get<Purpose>();
         var signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose);
         
-        return await privateKey.SignAsync(dataToSign, signingDelegate, signaturePool);
+        return await privateKey.SignAsync(dataToSign, signingDelegate, signaturePool).ConfigureAwait(false);
     }
 
 
@@ -97,6 +106,9 @@ public static class KeyExtensions
     /// <seealso cref="PublicKey.VerifyAsync"/>
     public static ValueTask<bool> VerifyAsync(this PublicKeyMemory publicKey, ReadOnlyMemory<byte> dataToVerify, Signature signature, VerificationFunction<byte, byte, Signature, ValueTask<bool>> verificationFunction)
     {
+        ArgumentNullException.ThrowIfNull(publicKey);
+        ArgumentNullException.ThrowIfNull(signature);
+        ArgumentNullException.ThrowIfNull(verificationFunction);
         return publicKey.WithKeyBytesAsync((publicKeyBytes, dataToVerify, signature) => verificationFunction(publicKeyBytes, dataToVerify, signature), dataToVerify, signature);
     }
 
@@ -115,6 +127,9 @@ public static class KeyExtensions
     /// <returns>True if the signature matches the data for the used key. False otherwise.</returns>
     public static ValueTask<bool> VerifyAsync(this PublicKeyMemory publicKey, ReadOnlyMemory<byte> dataToVerify, Signature signature, VerificationDelegate verificationDelegate, FrozenDictionary<string, object>? context = null)
     {
+        ArgumentNullException.ThrowIfNull(publicKey);
+        ArgumentNullException.ThrowIfNull(signature);
+        ArgumentNullException.ThrowIfNull(verificationDelegate);
         return publicKey.WithKeyBytesAsync((publicKeyBytes, dataToVerify, sig) => verificationDelegate(dataToVerify, sig.AsReadOnlyMemory(), publicKeyBytes, context), dataToVerify, signature);
     }
 }

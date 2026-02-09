@@ -1,4 +1,4 @@
-﻿using Verifiable.Jose;
+﻿using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Jwt
@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Jwt
     /// Tests that canonicalization of JWA algorithms works correctly.
     /// </summary>
     [TestClass]
-    public sealed class WellKnownJwaValuesTests
+    internal sealed class WellKnownJwaValuesTests
     {
         /// <summary>
         /// All of the well-known JWE algorithms should be recognized.

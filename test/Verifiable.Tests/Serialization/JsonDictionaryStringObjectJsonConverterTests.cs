@@ -4,7 +4,7 @@ using Verifiable.Json.Converters;
 namespace Verifiable.Tests.Serialization;
 
 [TestClass]
-public sealed class JsonDictionaryStringObjectJsonConverterTests
+internal sealed class JsonDictionaryStringObjectJsonConverterTests
 {
     private static JsonSerializerOptions CreateOptions()
     {

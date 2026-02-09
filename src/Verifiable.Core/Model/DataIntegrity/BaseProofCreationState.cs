@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Cryptography;
 
@@ -21,6 +22,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// VC Data Integrity ECDSA Cryptosuites: Add Base Proof (ecdsa-sd-2023)</see>.
 /// </para>
 /// </remarks>
+[SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
 public sealed class BaseProofCreationState: IDisposable
 {
     /// <summary>

@@ -1,4 +1,5 @@
 ﻿using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Cryptography;
 
@@ -8,6 +9,7 @@ namespace Verifiable.JCose;
 /// Functions for parsing JWS messages from various JOSE formats.
 /// Returns <see cref="UnverifiedJwsMessage"/> containing untrusted data that must be verified.
 /// </summary>
+[SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned UnverifiedJwsMessage.")]
 public static class JwsParsing
 {
     /// <summary>
@@ -261,6 +263,10 @@ public static class JwsParsing
         out UnverifiedJwsMessage? message,
         out JoseSerializationFormat format)
     {
+        ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(headerDeserializer);
+        ArgumentNullException.ThrowIfNull(jsonDeserializer);
+        ArgumentNullException.ThrowIfNull(pool);
         message = null;
         format = JoseSerializationFormat.Compact;
 

@@ -1,4 +1,5 @@
 ﻿using ModelContextProtocol.Client;
+using System.Globalization;
 using System.Text.Json;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -9,15 +10,12 @@ namespace Verifiable.Tests.ToolTests;
 /// Tests for the shared operations and MCP server functionality.
 /// </summary>
 [TestClass]
-public class McpServerTests
+internal sealed class McpServerTests
 {
     /// <summary>
-    /// Gets or sets the context information for the current test run, including test metadata and utilities for logging
-    /// and result tracking.
+    /// Gets or sets the context information for the current test run, including test metadata
+    /// and utilities for logging and result tracking.
     /// </summary>
-    /// <remarks>Use this property to access details about the executing test, such as its name, outcome, and
-    /// associated data. The property is typically set by the test framework and should not be assigned manually in user
-    /// code.</remarks>
     public TestContext TestContext { get; set; } = null!;
 
 
@@ -150,7 +148,8 @@ public class McpServerTests
         string testFilePath = Path.Combine(Path.GetTempPath(), $"test_tpm_{Guid.NewGuid()}.json");
         try
         {
-            var result = await VerifiableOperations.SaveTpmInfoToFileAsync(testFilePath);
+            var result = await VerifiableOperations.SaveTpmInfoToFileAsync(testFilePath)
+                .ConfigureAwait(false);
 
             if(result.IsSuccess)
             {
@@ -184,7 +183,8 @@ public class McpServerTests
             Assert.Inconclusive(TestInfrastructureConstants.NoTpmDeviceAvailableMessage);
         }
 
-        var result = await VerifiableOperations.SaveTpmInfoToFileAsync(null);
+        var result = await VerifiableOperations.SaveTpmInfoToFileAsync(null)
+            .ConfigureAwait(false);
 
         if(result.IsSuccess)
         {
@@ -199,11 +199,11 @@ public class McpServerTests
     {
         var maxResult = VerifiableOperations.CreateDid(int.MaxValue, "param", null);
         Assert.IsTrue(maxResult.IsSuccess);
-        Assert.Contains(int.MaxValue.ToString(), maxResult.Value!, StringComparison.Ordinal);
+        Assert.Contains(int.MaxValue.ToString(CultureInfo.InvariantCulture), maxResult.Value!, StringComparison.Ordinal);
 
         var minResult = VerifiableOperations.CreateDid(int.MinValue, "param", null);
         Assert.IsTrue(minResult.IsSuccess);
-        Assert.Contains(int.MinValue.ToString(), minResult.Value!, StringComparison.Ordinal);
+        Assert.Contains(int.MinValue.ToString(CultureInfo.InvariantCulture), minResult.Value!, StringComparison.Ordinal);
 
         var zeroResult = VerifiableOperations.CreateDid(0, "param", null);
         Assert.IsTrue(zeroResult.IsSuccess);
@@ -258,8 +258,6 @@ public class McpServerTests
         if(executablePath is null)
         {
             Assert.Inconclusive("Executable not found. Build the project first.");
-
-            return;
         }
 
         using var process = VerifiableCliTestHelpers.CreateMcpServerProcess(executablePath);
@@ -267,11 +265,8 @@ public class McpServerTests
         try
         {
             process.Start();
-            await Task.Delay(500, TestContext.CancellationToken);
 
-            Assert.IsFalse(process.HasExited, "MCP server should still be running after startup.");
-
-            var initializeRequest = new
+            string initializeJson = JsonSerializer.Serialize(new
             {
                 jsonrpc = "2.0",
                 id = 1,
@@ -280,23 +275,18 @@ public class McpServerTests
                 {
                     protocolVersion = "2025-11-25",
                     capabilities = new { },
-                    clientInfo = new
-                    {
-                        name = "test-client",
-                        version = "1.0.0"
-                    }
+                    clientInfo = new { name = "test-client", version = "1.0.0" }
                 }
-            };
+            });
 
-            string requestJson = JsonSerializer.Serialize(initializeRequest);
-            await process.StandardInput.WriteLineAsync(requestJson.AsMemory(), TestContext.CancellationToken);
-            await process.StandardInput.FlushAsync(TestContext.CancellationToken);
+            await SendMessageAsync(process, initializeJson, TestContext.CancellationToken)
+                .ConfigureAwait(false);
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(5));
-            string? response = await VerifiableCliTestHelpers.ReadLineWithTimeoutAsync(process.StandardOutput, cts.Token);
 
-            Assert.IsNotNull(response, "Should receive a response from MCP server.");
+            string response = await ReadResponseByIdAsync(process, 1, cts.Token)
+                .ConfigureAwait(false);
 
             using var responseDoc = JsonDocument.Parse(response);
             var root = responseDoc.RootElement;
@@ -307,11 +297,12 @@ public class McpServerTests
             Assert.IsTrue(root.TryGetProperty("id", out var id));
             Assert.AreEqual(1, id.GetInt32());
 
-            Assert.IsTrue(root.TryGetProperty("result", out _), "Should have result property.");
+            Assert.IsTrue(root.TryGetProperty("result", out _), "Response should have a result property.");
         }
         finally
         {
-            await VerifiableCliTestHelpers.EnsureProcessTerminatedAsync(process, TestContext.CancellationToken);
+            await VerifiableCliTestHelpers.EnsureProcessTerminatedAsync(process, TestContext.CancellationToken)
+                .ConfigureAwait(false);
         }
     }
 
@@ -326,8 +317,6 @@ public class McpServerTests
         if(executablePath is null)
         {
             Assert.Inconclusive("Executable not found.");
-
-            return;
         }
 
         using var process = VerifiableCliTestHelpers.CreateMcpServerProcess(executablePath);
@@ -336,7 +325,8 @@ public class McpServerTests
         {
             process.Start();
 
-            var initRequest = JsonSerializer.Serialize(new
+            //Send initialize request.
+            string initRequest = JsonSerializer.Serialize(new
             {
                 jsonrpc = "2.0",
                 id = 1,
@@ -349,37 +339,39 @@ public class McpServerTests
                 }
             });
 
-            await process.StandardInput.WriteLineAsync(initRequest.AsMemory(), TestContext.CancellationToken);
-            await process.StandardInput.FlushAsync(TestContext.CancellationToken);
+            await SendMessageAsync(process, initRequest, TestContext.CancellationToken)
+                .ConfigureAwait(false);
 
             using var cts1 = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
             cts1.CancelAfter(TimeSpan.FromSeconds(5));
-            await VerifiableCliTestHelpers.ReadLineWithTimeoutAsync(process.StandardOutput, cts1.Token);
+            await ReadResponseByIdAsync(process, 1, cts1.Token)
+                .ConfigureAwait(false);
 
-            var initializedNotification = JsonSerializer.Serialize(new
+            //Send initialized notification.
+            string initializedNotification = JsonSerializer.Serialize(new
             {
                 jsonrpc = "2.0",
                 method = "notifications/initialized"
             });
 
-            await process.StandardInput.WriteLineAsync(initializedNotification.AsMemory(), TestContext.CancellationToken);
-            await process.StandardInput.FlushAsync(TestContext.CancellationToken);
+            await SendMessageAsync(process, initializedNotification, TestContext.CancellationToken)
+                .ConfigureAwait(false);
 
-            var toolsRequest = JsonSerializer.Serialize(new
+            //Send tools/list request.
+            string toolsRequest = JsonSerializer.Serialize(new
             {
                 jsonrpc = "2.0",
                 id = 2,
                 method = "tools/list"
             });
 
-            await process.StandardInput.WriteLineAsync(toolsRequest.AsMemory(), TestContext.CancellationToken);
-            await process.StandardInput.FlushAsync(TestContext.CancellationToken);
+            await SendMessageAsync(process, toolsRequest, TestContext.CancellationToken)
+                .ConfigureAwait(false);
 
             using var cts2 = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
             cts2.CancelAfter(TimeSpan.FromSeconds(5));
-            string? response = await VerifiableCliTestHelpers.ReadLineWithTimeoutAsync(process.StandardOutput, cts2.Token);
-
-            Assert.IsNotNull(response);
+            string response = await ReadResponseByIdAsync(process, 2, cts2.Token)
+                .ConfigureAwait(false);
 
             using var responseDoc = JsonDocument.Parse(response);
             var root = responseDoc.RootElement;
@@ -406,7 +398,8 @@ public class McpServerTests
         }
         finally
         {
-            await VerifiableCliTestHelpers.EnsureProcessTerminatedAsync(process, TestContext.CancellationToken);
+            await VerifiableCliTestHelpers.EnsureProcessTerminatedAsync(process, TestContext.CancellationToken)
+                .ConfigureAwait(false);
         }
     }
 
@@ -422,8 +415,6 @@ public class McpServerTests
         if(executablePath is null)
         {
             Assert.Inconclusive("Executable not found. Build the project first.");
-
-            return;
         }
 
         var clientTransport = new StdioClientTransport(new StdioClientTransportOptions
@@ -433,20 +424,79 @@ public class McpServerTests
             Arguments = ["-mcp"]
         });
 
-        await using var client = await McpClient.CreateAsync(clientTransport, cancellationToken: TestContext.CancellationToken);
+        var client = await McpClient.CreateAsync(clientTransport, cancellationToken: TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        await using(client.ConfigureAwait(false))
+        {
+            var tools = await client.ListToolsAsync(cancellationToken: TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            var toolNames = tools.Select(t => t.Name).ToList();
 
-        var tools = await client.ListToolsAsync(cancellationToken: TestContext.CancellationToken);
-        var toolNames = tools.Select(t => t.Name).ToList();
+            Assert.IsGreaterThan(0, tools.Count);
+            Assert.Contains(McpToolNames.CheckTpmSupport, toolNames);
+            Assert.Contains(McpToolNames.ListDids, toolNames);
 
-        Assert.IsGreaterThan(0, tools.Count);
-        Assert.Contains(McpToolNames.CheckTpmSupport, toolNames);
-        Assert.Contains(McpToolNames.ListDids, toolNames);
+            var result = await client.CallToolAsync(
+                McpToolNames.ListDids,
+                new Dictionary<string, object?>(),
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        var result = await client.CallToolAsync(
-            McpToolNames.ListDids,
-            new Dictionary<string, object?>(),
-            cancellationToken: TestContext.CancellationToken);
+            Assert.IsNotNull(result);
+        }
+    }
 
-        Assert.IsNotNull(result);
+
+    /// <summary>
+    /// Sends a JSON-RPC message to the MCP server process via stdin.
+    /// </summary>
+    private static async Task SendMessageAsync(
+        System.Diagnostics.Process process,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        await process.StandardInput.WriteLineAsync(message.AsMemory(), cancellationToken)
+            .ConfigureAwait(false);
+        await process.StandardInput.FlushAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Reads lines from the MCP server stdout until a JSON-RPC response with the
+    /// expected id is found. Notifications and other messages are skipped.
+    /// </summary>
+    /// <param name="process">The MCP server process.</param>
+    /// <param name="expectedId">The JSON-RPC request id to match.</param>
+    /// <param name="cancellationToken">Cancellation token that should include a timeout.</param>
+    /// <returns>The raw JSON string of the matching response.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server closes stdout before sending the expected response.
+    /// </exception>
+    private static async Task<string> ReadResponseByIdAsync(
+        System.Diagnostics.Process process,
+        int expectedId,
+        CancellationToken cancellationToken)
+    {
+        while(true)
+        {
+            string? line = await VerifiableCliTestHelpers.ReadLineWithTimeoutAsync(
+                process.StandardOutput, cancellationToken)
+                .ConfigureAwait(false);
+
+            if(line is null)
+            {
+                throw new InvalidOperationException(
+                    $"Server closed stdout before responding to request id {expectedId}.");
+            }
+
+            //Try to parse and match the id. Skip notifications and other messages.
+            using var doc = JsonDocument.Parse(line);
+            if(doc.RootElement.TryGetProperty("id", out var idElement) &&
+               idElement.TryGetInt32(out int id) &&
+               id == expectedId)
+            {
+                return line;
+            }
+        }
     }
 }

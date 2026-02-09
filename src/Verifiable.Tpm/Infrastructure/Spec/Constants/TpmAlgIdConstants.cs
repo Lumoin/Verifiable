@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
 
 /// <summary>
@@ -10,6 +12,7 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
 /// (Part 2: Structures, section "6 Constants", Table 11).
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "TPM 2.0 specification allows duplicate values for compatibility and other reasons.")]
 public enum TpmAlgIdConstants: ushort
 {
     /// <summary>

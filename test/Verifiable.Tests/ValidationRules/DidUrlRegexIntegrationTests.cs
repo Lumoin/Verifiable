@@ -9,7 +9,7 @@ namespace Verifiable.Tests
     /// These tests ensure that the regex patterns and the DidUrl parser remain synchronized.
     /// </summary>
     [TestClass]
-    public sealed class DidUrlParsingTests
+    internal sealed class DidUrlParsingTests
     {
         /// <summary>
         /// Test cases for absolute DID URL validation, including expected results.

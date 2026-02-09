@@ -75,7 +75,7 @@ public readonly struct Tpm2bPublicKeyMlDsa: IDisposable, IEquatable<Tpm2bPublicK
 
         if(publicKey.IsEmpty)
         {
-            return Empty();
+            return Empty;
         }
 
         pool ??= MemoryPool<byte>.Shared;
@@ -85,15 +85,14 @@ public readonly struct Tpm2bPublicKeyMlDsa: IDisposable, IEquatable<Tpm2bPublicK
     }
 
     /// <summary>
-    /// Creates an empty ML-DSA public key buffer.
+    /// Gets an empty ML-DSA public key buffer.
     /// </summary>
-    /// <returns>An empty buffer.</returns>
-    public static Tpm2bPublicKeyMlDsa Empty() => new(null, ReadOnlyMemory<byte>.Empty);
+    public static Tpm2bPublicKeyMlDsa Empty { get; } = new(null, ReadOnlyMemory<byte>.Empty);
 
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + buffer.Length;
+    public int SerializedSize => sizeof(ushort) + buffer.Length;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -117,7 +116,7 @@ public readonly struct Tpm2bPublicKeyMlDsa: IDisposable, IEquatable<Tpm2bPublicK
 
         if(size == 0)
         {
-            return Empty();
+            return Empty;
         }
 
         if(size > MaxMlDsaPubSize)

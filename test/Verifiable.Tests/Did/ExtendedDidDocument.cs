@@ -8,7 +8,7 @@ namespace Verifiable.Tests.Did
     /// https://www.w3.org/TR/did-core/#service-endpoints
     /// </summary>
     [DebuggerDisplay("Service(Id = {Id})")]
-    public class ExtendedService: Service
+    internal class ExtendedService: Service
     {        
     }
 
@@ -20,7 +20,7 @@ namespace Verifiable.Tests.Did
     /// data is a potential security or information disclosure risk so
     /// is not provided in the model by default.
     /// </summary>
-    public class TestExtendedDidDocument: DidDocument
+    internal class TestExtendedDidDocument: DidDocument
     {
         public new ExtendedService[]? Service { get; set; }
 

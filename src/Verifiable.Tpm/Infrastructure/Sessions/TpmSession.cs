@@ -143,9 +143,9 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     {
         //TPMS_AUTH_COMMAND: sessionHandle + nonceCaller + sessionAttributes + hmac.
         return sizeof(uint) +
-               nonceCaller.GetSerializedSize() +
+               nonceCaller.SerializedSize +
                sizeof(byte) +
-               (sizeof(ushort) + digestSize);
+               sizeof(ushort) + digestSize;
     }
 
     /// <inheritdoc/>

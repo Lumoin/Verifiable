@@ -85,7 +85,7 @@ public sealed class CryptoAlgorithmRegistrationAttribute: Attribute
 /// public static class CustomCryptoAlgorithms
 /// {
 ///     public static CryptoAlgorithm Kyber512 { get; } = CryptoAlgorithm.Create(1001);
-///     public static CryptoAlgorithm Dilithium2 { get; } = CryptoAlgorithm.Create(1002);
+///     public static CryptoAlgorithm SlhDsa128s { get; } = CryptoAlgorithm.Create(1002);
 /// }
 /// </code>
 /// <para>
@@ -301,6 +301,66 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     public static CryptoAlgorithm RsaSha512Pss { get; } = new CryptoAlgorithm(17);
 
 
+    /// <summary>
+    /// ML-DSA-44 post-quantum digital signature algorithm (NIST FIPS 204, security level 2).
+    /// </summary>
+    /// <remarks>
+    /// Corresponds to JWA identifier <c>"ML-DSA-44"</c> as defined in
+    /// <see href="https://datatracker.ietf.org/doc/draft-ietf-cose-dilithium/">draft-ietf-cose-dilithium</see>.
+    /// Public key size: 1312 bytes. Signature size: 2420 bytes.
+    /// </remarks>
+    public static CryptoAlgorithm MlDsa44 { get; } = new CryptoAlgorithm(18);
+
+
+    /// <summary>
+    /// ML-DSA-65 post-quantum digital signature algorithm (NIST FIPS 204, security level 3).
+    /// </summary>
+    /// <remarks>
+    /// Corresponds to JWA identifier <c>"ML-DSA-65"</c> as defined in
+    /// <see href="https://datatracker.ietf.org/doc/draft-ietf-cose-dilithium/">draft-ietf-cose-dilithium</see>.
+    /// Public key size: 1952 bytes. Signature size: 3309 bytes.
+    /// </remarks>
+    public static CryptoAlgorithm MlDsa65 { get; } = new CryptoAlgorithm(19);
+
+
+    /// <summary>
+    /// ML-DSA-87 post-quantum digital signature algorithm (NIST FIPS 204, security level 5).
+    /// </summary>
+    /// <remarks>
+    /// Corresponds to JWA identifier <c>"ML-DSA-87"</c> as defined in
+    /// <see href="https://datatracker.ietf.org/doc/draft-ietf-cose-dilithium/">draft-ietf-cose-dilithium</see>.
+    /// Public key size: 2592 bytes. Signature size: 4627 bytes.
+    /// </remarks>
+    public static CryptoAlgorithm MlDsa87 { get; } = new CryptoAlgorithm(20);
+
+
+    /// <summary>
+    /// ML-KEM-512 post-quantum key encapsulation mechanism (NIST FIPS 203, security level 1).
+    /// </summary>
+    /// <remarks>
+    /// Public key size: 800 bytes. Ciphertext size: 768 bytes. Shared secret: 32 bytes.
+    /// </remarks>
+    public static CryptoAlgorithm MlKem512 { get; } = new CryptoAlgorithm(21);
+
+
+    /// <summary>
+    /// ML-KEM-768 post-quantum key encapsulation mechanism (NIST FIPS 203, security level 3).
+    /// </summary>
+    /// <remarks>
+    /// Public key size: 1184 bytes. Ciphertext size: 1088 bytes. Shared secret: 32 bytes.
+    /// </remarks>
+    public static CryptoAlgorithm MlKem768 { get; } = new CryptoAlgorithm(22);
+
+
+    /// <summary>
+    /// ML-KEM-1024 post-quantum key encapsulation mechanism (NIST FIPS 203, security level 5).
+    /// </summary>
+    /// <remarks>
+    /// Public key size: 1568 bytes. Ciphertext size: 1568 bytes. Shared secret: 32 bytes.
+    /// </remarks>
+    public static CryptoAlgorithm MlKem1024 { get; } = new CryptoAlgorithm(23);
+
+
     private static readonly List<CryptoAlgorithm> algorithms = new([Rsa2048]);
 
 
@@ -456,6 +516,12 @@ public static class CryptoAlgorithmNames
         var a when a == CryptoAlgorithm.RsaSha384Pss.Algorithm => nameof(CryptoAlgorithm.RsaSha384Pss),
         var a when a == CryptoAlgorithm.RsaSha512.Algorithm => nameof(CryptoAlgorithm.RsaSha512),
         var a when a == CryptoAlgorithm.RsaSha512Pss.Algorithm => nameof(CryptoAlgorithm.RsaSha512Pss),
+        var a when a == CryptoAlgorithm.MlDsa44.Algorithm => nameof(CryptoAlgorithm.MlDsa44),
+        var a when a == CryptoAlgorithm.MlDsa65.Algorithm => nameof(CryptoAlgorithm.MlDsa65),
+        var a when a == CryptoAlgorithm.MlDsa87.Algorithm => nameof(CryptoAlgorithm.MlDsa87),
+        var a when a == CryptoAlgorithm.MlKem512.Algorithm => nameof(CryptoAlgorithm.MlKem512),
+        var a when a == CryptoAlgorithm.MlKem768.Algorithm => nameof(CryptoAlgorithm.MlKem768),
+        var a when a == CryptoAlgorithm.MlKem1024.Algorithm => nameof(CryptoAlgorithm.MlKem1024),
         _ => $"Custom: ('{algorithm}')."
     };
 }

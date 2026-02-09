@@ -119,13 +119,13 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
     /// <summary>
     /// Gets the serialized size of this union.
     /// </summary>
-    public int GetSerializedSize() => Type switch
+    public int SerializedSize => Type switch
     {
-        TpmAlgIdConstants.TPM_ALG_RSA => RsaDetail!.Value.GetSerializedSize(),
-        TpmAlgIdConstants.TPM_ALG_ECC => EccDetail!.Value.GetSerializedSize(),
-        TpmAlgIdConstants.TPM_ALG_MLDSA => MlDsaDetail!.Value.GetSerializedSize(),
-        TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => HashMlDsaDetail!.Value.GetSerializedSize(),
-        TpmAlgIdConstants.TPM_ALG_MLKEM => MlKemDetail!.Value.GetSerializedSize(),
+        TpmAlgIdConstants.TPM_ALG_RSA => RsaDetail!.Value.SerializedSize,
+        TpmAlgIdConstants.TPM_ALG_ECC => EccDetail!.Value.SerializedSize,
+        TpmAlgIdConstants.TPM_ALG_MLDSA => TpmsMlDsaParms.SerializedSize,
+        TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => TpmsHashMlDsaParms.SerializedSize,
+        TpmAlgIdConstants.TPM_ALG_MLKEM => MlKemDetail!.Value.SerializedSize,
         _ => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization.")
     };
 

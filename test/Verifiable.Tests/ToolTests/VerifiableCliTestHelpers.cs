@@ -9,12 +9,12 @@ namespace Verifiable.Tests.ToolTests;
 /// <param name="ExitCode">The process exit code. Zero indicates success.</param>
 /// <param name="Stdout">The standard output captured from the process.</param>
 /// <param name="Stderr">The standard error captured from the process.</param>
-public readonly record struct CliResult(int ExitCode, string Stdout, string Stderr);
+internal readonly record struct CliResult(int ExitCode, string Stdout, string Stderr);
 
 /// <summary>
 /// Shared test infrastructure and helper methods for test classes.
 /// </summary>
-public static class VerifiableCliTestHelpers
+internal static class VerifiableCliTestHelpers
 {
     /// <summary>
     /// Characters that have special meaning in System.CommandLine parsing.
@@ -208,7 +208,7 @@ public static class VerifiableCliTestHelpers
         if(!process.HasExited)
         {
             process.Kill();
-            await process.WaitForExitAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -222,7 +222,7 @@ public static class VerifiableCliTestHelpers
     {
         try
         {
-            return await reader.ReadLineAsync(cancellationToken);
+            return await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException)
         {
@@ -254,10 +254,10 @@ public static class VerifiableCliTestHelpers
 
         process.Start();
 
-        string stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-        string stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+        string stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        string stderr = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 
-        await process.WaitForExitAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
 
         return new CliResult(process.ExitCode, stdout, stderr);
     }
@@ -290,10 +290,10 @@ public static class VerifiableCliTestHelpers
 
         process.Start();
 
-        string stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-        string stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+        string stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        string stderr = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 
-        await process.WaitForExitAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
 
         return new CliResult(process.ExitCode, stdout, stderr);
     }

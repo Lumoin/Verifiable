@@ -2,6 +2,7 @@
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -43,6 +44,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("BaseProof: {ProofValue.Substring(0, Math.Min(20, ProofValue.Length))}..., Statements: {SignedStatements.Count}")]
+[SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
 public sealed class BaseProofResult: IDisposable
 {
     /// <summary>

@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Assessment;
 /// parallel execution, partial results, timeout handling, and aggregation strategies.
 /// </summary>
 [TestClass]
-public sealed class CompositeClaimAssessorTests
+internal sealed class CompositeClaimAssessorTests
 {
     /// <summary>
     /// The test context.
@@ -51,7 +51,7 @@ public sealed class CompositeClaimAssessorTests
             timeProvider);
 
         var stopwatch = Stopwatch.StartNew();
-        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken);
+        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
         stopwatch.Stop();
 
         Assert.IsTrue(result.IsSuccess);
@@ -85,7 +85,7 @@ public sealed class CompositeClaimAssessorTests
             AssessmentAggregationStrategy.AllMustSucceed,
             timeProvider);
 
-        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken);
+        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess, "AllMustSucceed should fail when any assessor fails.");
         Assert.AreEqual(3, result.CompletedCount, "All assessors should complete.");
@@ -113,7 +113,7 @@ public sealed class CompositeClaimAssessorTests
             AssessmentAggregationStrategy.AnyMustSucceed,
             timeProvider);
 
-        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken);
+        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, "AnyMustSucceed should pass when at least one assessor succeeds.");
     }
@@ -139,7 +139,7 @@ public sealed class CompositeClaimAssessorTests
             AssessmentAggregationStrategy.MajorityMustSucceed,
             timeProvider);
 
-        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken);
+        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, "MajorityMustSucceed should pass with 2/3 success.");
     }
@@ -165,7 +165,7 @@ public sealed class CompositeClaimAssessorTests
             AssessmentAggregationStrategy.AnyMustSucceed,
             timeProvider);
 
-        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken);
+        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, "Faulting assessor should not prevent others from succeeding.");
         Assert.AreEqual(2, result.CompletedCount);
@@ -196,7 +196,7 @@ public sealed class CompositeClaimAssessorTests
             AssessmentAggregationStrategy.AnyMustSucceed,
             timeProvider);
 
-        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken);
+        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, "Fast assessor should still succeed.");
         Assert.AreEqual(1, result.CompletedCount);
@@ -260,10 +260,10 @@ public sealed class CompositeClaimAssessorTests
         var assessTask = composite.AssessAsync("test-input", TestCorrelationId, cts.Token);
 
         //Wait for the fast assessor to complete, then cancel.
-        await fastAssessorCompleted.Task;
-        await cts.CancelAsync();
+        await fastAssessorCompleted.Task.ConfigureAwait(false);
+        await cts.CancelAsync().ConfigureAwait(false);
 
-        var result = await assessTask;
+        var result = await assessTask.ConfigureAwait(false);
 
         //Fast one should complete, blocking one should be cancelled.
         Assert.IsTrue(result.IsSuccess, "Fast assessor result should make AnyMustSucceed pass.");
@@ -306,7 +306,7 @@ public sealed class CompositeClaimAssessorTests
         activity?.AddBaggage("model-version", "v2.1");
         activity?.AddBaggage("docker-sha", "sha256:abc123");
 
-        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken);
+        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Aggregated result should have trace info.
         Assert.IsNotNull(result.TraceId);
@@ -348,7 +348,7 @@ public sealed class CompositeClaimAssessorTests
             timeProvider,
             requiredQuorum: 2);
 
-        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken);
+        var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, "Quorum of 2 should be met with 3 successful assessors.");
         Assert.AreEqual(3, result.CompletedCount);
@@ -373,9 +373,10 @@ public sealed class CompositeClaimAssessorTests
     /// <summary>
     /// A simple claim rule for testing.
     /// </summary>
-    private static ValueTask<IList<Claim>> SimpleRule(string input, CancellationToken ct = default)
+    private static ValueTask<List<Claim>> SimpleRule(string input, CancellationToken ct = default)
     {
-        IList<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
+        List<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
+
         return ValueTask.FromResult(claims);
     }
 
@@ -446,7 +447,7 @@ public sealed class CompositeClaimAssessorTests
         IReadOnlyDictionary<string, string>? baggage,
         CancellationToken ct = default)
     {
-        await Task.Delay(Timeout.Infinite, ct);
+        await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
 
         //This line is never reached; the delay throws on cancellation.
         return new AssessmentResult(

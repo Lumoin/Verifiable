@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -90,11 +91,10 @@ public delegate string ProofOptionsSerializeDelegate(
 /// (e.g., System.Text.Json, Newtonsoft.Json) while allowing users to provide their own implementations.
 /// </para>
 /// </remarks>
-public static class CredentialDataIntegrityExtensions
 #pragma warning restore RS0030 // Do not use banned APIs
-{
-    private const string DataIntegrityProofType = "DataIntegrityProof";
-
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with the latest syntax.")]
+public static class CredentialDataIntegrityExtensions
+{    
     extension(VerifiableCredential credential)
     {
         /// <summary>
@@ -187,7 +187,7 @@ public static class CredentialDataIntegrityExtensions
             //Build proof options.
             var requiresContext = cryptosuite.Canonicalization.Equals(CanonicalizationAlgorithm.Rdfc10);
             var proofOptionsSerialized = serializeProofOptions(
-                DataIntegrityProofType,
+                CredentialConstants.DataIntegrityProofType,
                 cryptosuite.CryptosuiteName,
                 proofCreatedString,
                 verificationMethodId,
@@ -195,8 +195,10 @@ public static class CredentialDataIntegrityExtensions
                 requiresContext ? credential.Context : null);
 
             //Canonicalize credential and proof options.
-            var canonicalCredential = await canonicalize(credentialSerialized, contextResolver, cancellationToken);
-            var canonicalProofOptions = await canonicalize(proofOptionsSerialized, contextResolver, cancellationToken);
+            var canonicalCredential = await canonicalize(credentialSerialized, contextResolver, cancellationToken)
+                .ConfigureAwait(false);
+            var canonicalProofOptions = await canonicalize(proofOptionsSerialized, contextResolver, cancellationToken)
+                .ConfigureAwait(false);
 
             //Hash using the cryptosuite's hash algorithm.
             var hashAlgorithm = NormalizeHashAlgorithmName(cryptosuite.HashAlgorithm);
@@ -216,7 +218,8 @@ public static class CredentialDataIntegrityExtensions
             credentialHash.CopyTo(hashData.Slice(proofOptionsHash.Length));
 
             //Sign using the private key (uses CryptoFunctionRegistry internally via Tag).
-            using var signature = await privateKey.SignAsync(hashDataOwner.Memory, memoryPool);
+            using var signature = await privateKey.SignAsync(hashDataOwner.Memory, memoryPool)
+                .ConfigureAwait(false);
 
             //Encode proof value using the provided encoder delegate.
             var proofValue = encodeProofValue(signature.AsReadOnlySpan(), encoder, memoryPool);
@@ -227,7 +230,7 @@ public static class CredentialDataIntegrityExtensions
             [
                 new DataIntegrityProof
                 {
-                    Type = DataIntegrityProofType,
+                    Type = CredentialConstants.DataIntegrityProofType,
                     Cryptosuite = cryptosuite,
                     Created = proofCreatedString,
                     VerificationMethod = new AssertionMethod(verificationMethodId),
@@ -350,8 +353,10 @@ public static class CredentialDataIntegrityExtensions
                 requiresContext ? credential.Context : null);
 
             //Canonicalize and hash using the cryptosuite's algorithm.
-            var canonicalCredential = await canonicalize(credentialWithoutProofSerialized, contextResolver, cancellationToken);
-            var canonicalProofOptions = await canonicalize(proofOptionsSerialized, contextResolver, cancellationToken);
+            var canonicalCredential = await canonicalize(credentialWithoutProofSerialized, contextResolver, cancellationToken)
+                .ConfigureAwait(false);
+            var canonicalProofOptions = await canonicalize(proofOptionsSerialized, contextResolver, cancellationToken)
+                .ConfigureAwait(false);
 
             var hashAlgorithm = NormalizeHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
             var hashFunction = DefaultHashFunctionSelector.Select(hashAlgorithm);
@@ -373,15 +378,14 @@ public static class CredentialDataIntegrityExtensions
             using var signatureBytes = decodeProofValue(proof.ProofValue!, decoder, memoryPool);
 
             //Build signature with algorithm from cryptosuite.
+            //Verify using the verification method (uses CryptoFunctionRegistry internally).
             var signatureTag = new Tag(new Dictionary<Type, object>
             {
                 [typeof(CryptoAlgorithm)] = proof.Cryptosuite.SignatureAlgorithm,
                 [typeof(Purpose)] = Purpose.Verification
-            });
-            var signature = new Signature(signatureBytes, signatureTag);
-
-            //Verify using the verification method (uses CryptoFunctionRegistry internally).
-            var isValid = await verificationMethod.VerifySignatureAsync(hashDataOwner.Memory, signature, memoryPool);
+            });            
+            using var signature = new Signature(signatureBytes, signatureTag);
+            var isValid = await verificationMethod.VerifySignatureAsync(hashDataOwner.Memory, signature, memoryPool).ConfigureAwait(false);
 
             if(!isValid)
             {

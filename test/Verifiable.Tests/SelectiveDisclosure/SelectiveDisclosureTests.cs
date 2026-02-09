@@ -6,7 +6,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// Tests for <see cref="SelectiveDisclosure"/>.
 /// </summary>
 [TestClass]
-public sealed class SelectiveDisclosureTests
+internal sealed class SelectiveDisclosureTests
 {
     public TestContext TestContext { get; set; } = null!;
 

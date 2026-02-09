@@ -1,4 +1,6 @@
-﻿namespace Verifiable.Cbor.Sd;
+﻿using Verifiable.Cryptography;
+
+namespace Verifiable.Cbor.Sd;
 
 /// <summary>
 /// Constants specific to SD-CWT (Selective Disclosure CBOR Web Tokens).
@@ -237,13 +239,24 @@ public static class SdCwtConstants
     /// <exception cref="ArgumentException">Thrown for unsupported algorithms.</exception>
     public static int GetCoseAlgorithmId(string algorithmName)
     {
-        return algorithmName.ToLowerInvariant() switch
+        ArgumentNullException.ThrowIfNull(algorithmName);
+
+        if(WellKnownHashAlgorithms.IsSha256(algorithmName))
         {
-            "sha-256" or "sha256" => Sha256AlgorithmId,
-            "sha-384" or "sha384" => Sha384AlgorithmId,
-            "sha-512" or "sha512" => Sha512AlgorithmId,
-            _ => throw new ArgumentException($"Unsupported hash algorithm: {algorithmName}", nameof(algorithmName))
-        };
+            return Sha256AlgorithmId;
+        }
+
+        if(WellKnownHashAlgorithms.IsSha384(algorithmName))
+        {
+            return Sha384AlgorithmId;
+        }
+
+        if(WellKnownHashAlgorithms.IsSha512(algorithmName))
+        {
+            return Sha512AlgorithmId;
+        }
+
+        throw new ArgumentException($"Unsupported hash algorithm: {algorithmName}", nameof(algorithmName));
     }
 
 
@@ -257,9 +270,9 @@ public static class SdCwtConstants
     {
         return coseAlgorithmId switch
         {
-            Sha256AlgorithmId => "sha-256",
-            Sha384AlgorithmId => "sha-384",
-            Sha512AlgorithmId => "sha-512",
+            Sha256AlgorithmId => WellKnownHashAlgorithms.Sha256Iana,
+            Sha384AlgorithmId => WellKnownHashAlgorithms.Sha384Iana,
+            Sha512AlgorithmId => WellKnownHashAlgorithms.Sha512Iana,
             _ => throw new ArgumentException($"Unsupported COSE algorithm ID: {coseAlgorithmId}", nameof(coseAlgorithmId))
         };
     }

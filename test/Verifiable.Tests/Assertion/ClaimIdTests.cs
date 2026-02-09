@@ -1,11 +1,12 @@
-﻿using System.Reflection;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using Verifiable.Core.Assessment;
 
 
 namespace Verifiable.Tests.Assertion
 {
     [TestClass]
-    public sealed class ClaimIdTests
+    internal sealed class ClaimIdTests
     {
         //TODO:
         /// <summary>
@@ -160,6 +161,7 @@ namespace Verifiable.Tests.Assertion
 
 
         [TestMethod]
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness", Justification = "This is some test data without needing cryptographic security.")]
         public void CreateReturnsClaimIdForValidInput()
         {
             //This genereates a unique claim ID for testing purposes. The values are held in a static dictionary

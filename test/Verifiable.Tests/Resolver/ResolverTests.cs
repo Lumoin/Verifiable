@@ -1,7 +1,7 @@
 ﻿namespace Verifiable.Tests.Resolver
 {
     [TestClass]
-    public sealed class ResolverTests
+    internal sealed class ResolverTests
     {
         //TODO: These test vectors are taken from https://w3c-ccg.github.io/did-method-web/#did-method-operations.
         [TestMethod]

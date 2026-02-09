@@ -15,7 +15,7 @@ namespace Verifiable.Cryptography
         /// <summary>
         /// The piece of memory held by this key.
         /// </summary>
-        protected readonly SensitiveMemory KeyMaterial;
+        protected SensitiveMemory KeyMaterial { get; }
 
         /// <summary>
         /// The key identity.

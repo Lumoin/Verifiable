@@ -13,7 +13,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// Tests for <see cref="SdJwtPathExtraction"/> utility.
 /// </summary>
 [TestClass]
-public sealed class SdJwtPathExtractionTests
+internal sealed class SdJwtPathExtractionTests
 {
     public TestContext TestContext { get; set; } = null!;
 

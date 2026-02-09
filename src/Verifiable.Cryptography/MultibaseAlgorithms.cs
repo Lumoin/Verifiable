@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Verifiable.Cryptography
 {
     /// <summary>
@@ -10,6 +12,7 @@ namespace Verifiable.Cryptography
         /// Identity. 8-bit binary (encoder and decoder keeps data unmodified).
         /// </summary>
         /// <remarks>Status: active.</remarks>
+        [SuppressMessage("Performance", "CA1805:Do not initialize unnecessarily", Justification = "This initialization is done for clarity.")]
         public static readonly char Identity = (char)0x00;
 
         /// <summary>

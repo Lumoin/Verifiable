@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Extensions.Pcr;
@@ -14,6 +15,7 @@ namespace Verifiable.Tpm.Extensions.Info;
 /// <summary>
 /// TPM information extensions for <see cref="TpmDevice"/>.
 /// </summary>
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "Analyzer is not up to date with latest syntax.")]
 public static class TpmDeviceExtensions
 {
     extension(TpmDevice device)
@@ -34,6 +36,7 @@ public static class TpmDeviceExtensions
             return GetInfoCore(device);
         }
     }
+
 
     private static TpmResult<TpmInfo> GetInfoCore(TpmDevice device)
     {

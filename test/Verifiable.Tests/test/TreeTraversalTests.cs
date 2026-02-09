@@ -1,14 +1,13 @@
 ﻿using Verifiable.Core.Assessment;
-using Verifiable.Core.Asssesment;
 
 
 namespace Verifiable.Tests.test
 {
-    public record TestClaimContext: ClaimContext { }
+internal record TestClaimContext: ClaimContext { }
 
 
-    [TestClass]
-    public class TreeTraversalTests
+[TestClass]
+internal class TreeTraversalTests
     {
         private static ClaimContext TestClaimContext { get; } = new TestClaimContext();
 
@@ -32,13 +31,13 @@ namespace Verifiable.Tests.test
             async Task asyncTestSink(Claim output)
             {
                 asyncOutputList.Add(output);
-                await Task.CompletedTask;
+                await Task.CompletedTask.ConfigureAwait(false);
             }
 
             NodeFormatter<Claim, Claim> nullFormatter = node => NullFormatter(node);
 
             TraverseAndOutput(mainClaim, (root) => root.SubClaims.AsEnumerable(), nullFormatter, testSink);
-            await TraverseAndOutputAsync(mainClaim, (root) => Task.FromResult(root.SubClaims.AsEnumerable()), nullFormatter, asyncTestSink);
+            await TraverseAndOutputAsync(mainClaim, (root) => Task.FromResult(root.SubClaims.AsEnumerable()), nullFormatter, asyncTestSink).ConfigureAwait(false);
 
             Assert.IsNotNull(outputList);
             Assert.IsNotNull(asyncOutputList);
@@ -64,10 +63,10 @@ namespace Verifiable.Tests.test
 
         private static async Task TraverseAndOutputAsync<TNodeType, TFormat>(TNodeType root, Func<TNodeType, Task<IEnumerable<TNodeType>>> descendantsSelector, NodeFormatter<TNodeType, TFormat> formatter, AsyncOutputSink<TFormat> sink)
         {
-            await foreach(var node in TreeTraversalExtensions.DepthFirstTreeTraversalAsync(root, descendantsSelector))
+            await foreach(var node in TreeTraversalExtensions.DepthFirstTreeTraversalAsync(root, descendantsSelector).ConfigureAwait(false))
             {
                 var formattedData = formatter(node);
-                await sink(formattedData);
+                await sink(formattedData).ConfigureAwait(false);
             }
         }
     }

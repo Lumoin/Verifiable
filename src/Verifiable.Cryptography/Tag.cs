@@ -1,5 +1,6 @@
 ﻿using System.Collections.Frozen;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography;
 
@@ -120,7 +121,7 @@ public record Tag(IReadOnlyDictionary<Type, object> Data)
     /// <typeparam name="T">The type of the value to retrieve, also used as the key.</typeparam>
     /// <param name="value">When successful, contains the retrieved value.</param>
     /// <returns><see langword="true"/> if the value was found and cast successfully; otherwise <see langword="false"/>.</returns>
-    public bool TryGet<T>([System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out T value)
+    public bool TryGet<T>([MaybeNullWhen(false)] out T value)
     {
         Type key = typeof(T);
         if(Data.TryGetValue(key, out object? obj) && obj is T typedValue)
@@ -140,6 +141,7 @@ public record Tag(IReadOnlyDictionary<Type, object> Data)
     /// <param name="key">The key of the value to get.</param>
     /// <returns>The value associated with the specified key.</returns>
     /// <exception cref="KeyNotFoundException">Thrown if the key is not found.</exception>
+    [SuppressMessage("Design", "CA1043:Use Integral Or String Argument For Indexers", Justification = "This is by design.")]
     public object this[Type key] => Data[key];
 
 

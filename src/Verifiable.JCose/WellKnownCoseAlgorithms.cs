@@ -1,4 +1,7 @@
-﻿namespace Verifiable.JCose;
+﻿using Verifiable.Cryptography;
+using Verifiable.Jose;
+
+namespace Verifiable.JCose;
 
 /// <summary>
 /// COSE algorithm identifiers as defined in
@@ -147,6 +150,33 @@ public static class WellKnownCoseAlgorithms
     /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9053#section-6.3">RFC 9053 §6.3</see>.</remarks>
     public const int EcdhEsHkdf512 = -26;
 
+    /// <summary>
+    /// ML-DSA-44 post-quantum digital signature (NIST FIPS 204, security level 2).
+    /// </summary>
+    /// <remarks>
+    /// See <see href="https://datatracker.ietf.org/doc/draft-ietf-cose-dilithium/">draft-ietf-cose-dilithium</see>.
+    /// Requested IANA assignment: -48.
+    /// </remarks>
+    public const int MlDsa44 = -48;
+
+    /// <summary>
+    /// ML-DSA-65 post-quantum digital signature (NIST FIPS 204, security level 3).
+    /// </summary>
+    /// <remarks>
+    /// See <see href="https://datatracker.ietf.org/doc/draft-ietf-cose-dilithium/">draft-ietf-cose-dilithium</see>.
+    /// Requested IANA assignment: -49.
+    /// </remarks>
+    public const int MlDsa65 = -49;
+
+    /// <summary>
+    /// ML-DSA-87 post-quantum digital signature (NIST FIPS 204, security level 5).
+    /// </summary>
+    /// <remarks>
+    /// See <see href="https://datatracker.ietf.org/doc/draft-ietf-cose-dilithium/">draft-ietf-cose-dilithium</see>.
+    /// Requested IANA assignment: -50.
+    /// </remarks>
+    public const int MlDsa87 = -50;
+
 
     /// <summary>
     /// Determines if the algorithm is <see cref="EdDsa"/>.
@@ -229,31 +259,66 @@ public static class WellKnownCoseAlgorithms
 
 
     /// <summary>
+    /// Determines if the algorithm is <see cref="MlDsa44"/>.
+    /// </summary>
+    /// <param name="algorithm">The algorithm identifier.</param>
+    /// <returns><see langword="true"/> if the algorithm is ML-DSA-44; otherwise, <see langword="false"/>.</returns>
+    public static bool IsMlDsa44(int algorithm) => algorithm == MlDsa44;
+
+
+    /// <summary>
+    /// Determines if the algorithm is <see cref="MlDsa65"/>.
+    /// </summary>
+    /// <param name="algorithm">The algorithm identifier.</param>
+    /// <returns><see langword="true"/> if the algorithm is ML-DSA-65; otherwise, <see langword="false"/>.</returns>
+    public static bool IsMlDsa65(int algorithm) => algorithm == MlDsa65;
+
+
+    /// <summary>
+    /// Determines if the algorithm is <see cref="MlDsa87"/>.
+    /// </summary>
+    /// <param name="algorithm">The algorithm identifier.</param>
+    /// <returns><see langword="true"/> if the algorithm is ML-DSA-87; otherwise, <see langword="false"/>.</returns>
+    public static bool IsMlDsa87(int algorithm) => algorithm == MlDsa87;
+
+
+    /// <summary>
+    /// Determines if the algorithm is any ML-DSA variant.
+    /// </summary>
+    /// <param name="algorithm">The algorithm identifier.</param>
+    /// <returns><see langword="true"/> if the algorithm is any ML-DSA variant; otherwise, <see langword="false"/>.</returns>
+    public static bool IsMlDsa(int algorithm) => algorithm is MlDsa44 or MlDsa65 or MlDsa87;
+
+
+    /// <summary>
     /// Gets the algorithm name for a COSE algorithm identifier.
     /// </summary>
     /// <param name="algorithm">The COSE algorithm identifier.</param>
     /// <returns>The algorithm name, or null if unknown.</returns>
     public static string? GetAlgorithmName(int algorithm) => algorithm switch
     {
-        EdDsa => "EdDSA",
-        Es256 => "ES256",
-        Es384 => "ES384",
-        Es512 => "ES512",
-        Ps256 => "PS256",
-        Ps384 => "PS384",
-        Ps512 => "PS512",
-        Rs256 => "RS256",
-        Rs384 => "RS384",
-        Rs512 => "RS512",
-        Hs256 => "HS256",
-        Hs384 => "HS384",
-        Hs512 => "HS512",
-        Sha256 => "SHA-256",
-        Sha384 => "SHA-384",
-        Sha512 => "SHA-512",
-        A128Gcm => "A128GCM",
-        A192Gcm => "A192GCM",
-        A256Gcm => "A256GCM",
+        EdDsa => WellKnownJwaValues.EdDsa,
+        Es256 => WellKnownJwaValues.Es256,
+        Es384 => WellKnownJwaValues.Es384,
+        Es512 => WellKnownJwaValues.Es512,
+        Ps256 => WellKnownJwaValues.Ps256,
+        Ps384 => WellKnownJwaValues.Ps384,
+        Ps512 => WellKnownJwaValues.Ps512,
+        Rs256 => WellKnownJwaValues.Rs256,
+        Rs384 => WellKnownJwaValues.Rs384,
+        Rs512 => WellKnownJwaValues.Rs512,
+        Hs256 => WellKnownJwaValues.Hs256,
+        Hs384 => WellKnownJwaValues.Hs384,
+        Hs512 => WellKnownJwaValues.Hs512,
+        Sha256 => Cryptography.WellKnownHashAlgorithms.Sha256Cose,
+        Sha384 => Cryptography.WellKnownHashAlgorithms.Sha384Cose,
+        Sha512 => Cryptography.WellKnownHashAlgorithms.Sha512Cose,
+        A128Gcm => WellKnownJweEncryptionAlgorithms.A128Gcm,
+        A192Gcm => WellKnownJweEncryptionAlgorithms.A192Gcm,
+        A256Gcm => WellKnownJweEncryptionAlgorithms.A256Gcm,
+        MlDsa44 => WellKnownJwaValues.MlDsa44,
+        MlDsa65 => WellKnownJwaValues.MlDsa65,
+        MlDsa87 => WellKnownJwaValues.MlDsa87,
         _ => null
     };
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using Verifiable.Tpm.Extensions.Info;
 using Verifiable.Tpm.Extensions.Pcr;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
@@ -36,14 +37,14 @@ internal static class TpmInfoFormatter
         ConsoleFormatter.WriteLabeled("Manufacturer:", identity.ManufacturerId.Trim());
         ConsoleFormatter.WriteLabeled("Vendor:", identity.VendorString);
         ConsoleFormatter.WriteLabeled("Family:", identity.Family);
-        ConsoleFormatter.WriteLabeled("Revision:", identity.Revision.ToString());
+        ConsoleFormatter.WriteLabeled("Revision:", identity.Revision.ToString(CultureInfo.InvariantCulture));
         ConsoleFormatter.WriteLabeled("Firmware:", identity.FirmwareVersion);
 
         string buildDate = $"Day {identity.FirmwareDayOfYear}, {identity.FirmwareYear}";
         ConsoleFormatter.WriteLabeled("Build Date:", buildDate);
 
         ConsoleFormatter.WriteLabeled("Platform:", platform);
-        ConsoleFormatter.WriteLabeled("PCR Count:", identity.PcrCount.ToString());
+        ConsoleFormatter.WriteLabeled("PCR Count:", identity.PcrCount.ToString(CultureInfo.InvariantCulture));
         ConsoleFormatter.WriteLabeled("Max Input Buffer:", $"{identity.MaxInputBuffer} bytes");
         ConsoleFormatter.WriteLabeled("Max NV Buffer:", $"{identity.MaxNvBuffer} bytes");
     }
@@ -142,7 +143,7 @@ internal static class TpmInfoFormatter
         }
 
         ConsoleFormatter.WriteLabeled("Format:", log.SpecVersion);
-        ConsoleFormatter.WriteLabeled("Events:", log.Events.Count.ToString());
+        ConsoleFormatter.WriteLabeled("Events:", log.Events.Count.ToString(CultureInfo.InvariantCulture));
 
         if(log.IsTruncated)
         {

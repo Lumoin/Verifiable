@@ -169,7 +169,7 @@ namespace Verifiable.Core.Assessment
             //Step 2: Run all assessors in parallel.
             var creationTimestamp = TimeProvider.GetUtcNow().UtcDateTime;
             var assessorTasks = Assessors.Select(config =>
-                RunAssessorWithTimeoutAsync(config, claimsResult, creationTimestamp, traceId, baggage, cancellationToken));
+                CompositeClaimAssessor<TInput>.RunAssessorWithTimeoutAsync(config, claimsResult, creationTimestamp, traceId, baggage, cancellationToken));
 
             var individualResults = await Task.WhenAll(assessorTasks).ConfigureAwait(false);
 
@@ -198,7 +198,7 @@ namespace Verifiable.Core.Assessment
         /// <summary>
         /// Runs a single assessor with optional timeout, capturing all outcomes.
         /// </summary>
-        private async Task<IndividualAssessorResult> RunAssessorWithTimeoutAsync(
+        private static async Task<IndividualAssessorResult> RunAssessorWithTimeoutAsync(
             AssessorConfiguration config,
             ClaimIssueResult claimsResult,
             DateTime creationTimestamp,

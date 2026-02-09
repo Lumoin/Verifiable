@@ -5,7 +5,7 @@ namespace Verifiable.Jwt
     /// <summary>
     /// Xyz.
     /// </summary>
-    public static class JsonWebKeyThumbprintParameterNames
+    internal static class JsonWebKeyThumbprintParameterNames
     {
         public static string Crv => "crv";
 

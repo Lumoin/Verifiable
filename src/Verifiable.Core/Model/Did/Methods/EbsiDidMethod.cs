@@ -13,7 +13,8 @@ namespace Verifiable.Core.Model.Did.Methods
 
         public EbsiDidMethod(string didString): base(didString)
         {
-            if(!didString.StartsWith(Prefix))
+            ArgumentNullException.ThrowIfNull(didString);
+            if(!didString.StartsWith(Prefix, StringComparison.InvariantCulture))
             {
                 throw new ArgumentException($"The DID string must start with '{Prefix}'.", nameof(didString));
             }
@@ -24,14 +25,24 @@ namespace Verifiable.Core.Model.Did.Methods
         /// Implicit conversion from <see cref="EbsiDidMethod"/> or derived DID methods to <see langword="string"/>.
         /// </summary>
         /// <param name="didId"></param>
-        public static implicit operator string(EbsiDidMethod didId) => didId.Id;
+        public static implicit operator string(EbsiDidMethod didId)
+        {
+            ArgumentNullException.ThrowIfNull(didId);
+
+            return didId.Id;
+        }
 
 
         /// <summary>
         /// Explicit conversion from <see langword="string"/> to <see cref="EbsiDidMethod"/> or derived DID methods.
         /// </summary>
         /// <param name="didId"></param>
-        public static explicit operator EbsiDidMethod(string didId) => new(didId);
+        public static explicit operator EbsiDidMethod(string didId)
+        {
+            ArgumentNullException.ThrowIfNull(didId);
+
+            return new(didId);
+        }
 
 
         /// <inheritdoc/>

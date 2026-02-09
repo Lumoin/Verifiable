@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Attributes;
 
@@ -15,6 +16,7 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
+[SuppressMessage("Usage", "CA2217:Do not mark enums with FlagsAttribute", Justification = "Enum values defined by TPM 2.0 specification.")]
 public enum TpmaLocality: byte
 {
     /// <summary>TPM_LOC_ZERO (bit 0).</summary>

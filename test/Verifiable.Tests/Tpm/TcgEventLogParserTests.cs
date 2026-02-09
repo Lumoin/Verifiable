@@ -12,7 +12,7 @@ namespace Verifiable.Tests.Tpm;
 /// Tests for <see cref="TcgEventLogParser"/>.
 /// </summary>
 [TestClass]
-public class TcgEventLogParserTests
+internal class TcgEventLogParserTests
 {
     [TestMethod]
     public void ParseReturnsErrorForEmptyData()

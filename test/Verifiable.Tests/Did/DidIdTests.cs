@@ -7,7 +7,7 @@ using Verifiable.Json.Converters;
 namespace Verifiable.Tests.Did
 {
     [TestClass]
-    public sealed class DidIdTests
+    internal sealed class DidIdTests
     {
         /// <summary>
         /// All the known DID methods.

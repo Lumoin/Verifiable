@@ -8,7 +8,7 @@ namespace Verifiable.Tests.Cryptography
     /// These are tests that are sourced from well-known, cross-checked locations.
     /// </summary>
     [TestClass]
-    public sealed class MulticodecTestVectorTests
+    internal sealed class MulticodecTestVectorTests
     {
         /// <summary>
         /// Sourced from <href="https://w3c-ccg.github.io/did-method-key/#ed25519-x25519">Ed25519</href>.

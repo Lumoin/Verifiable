@@ -17,17 +17,11 @@ namespace Verifiable;
 ///   <item><description>Dark blue-gray (#2c3e50) - secondary, muted text.</description></item>
 /// </list>
 /// </remarks>
-internal static class ConsoleFormatter
+internal static partial class ConsoleFormatter
 {
-    private static readonly bool colorsSupported;
-    private static readonly bool trueColorSupported;
+    private static readonly bool colorsSupported = DetectColorSupport();
+    private static readonly bool trueColorSupported = DetectTrueColorSupport();
     private static bool colorsDisabled;
-
-    static ConsoleFormatter()
-    {
-        colorsSupported = DetectColorSupport();
-        trueColorSupported = DetectTrueColorSupport();
-    }
 
     /// <summary>
     /// Gets whether ANSI colors are supported in the current terminal.
@@ -186,8 +180,8 @@ internal static class ConsoleFormatter
         //Check TERM for known true-color terminals.
         string? term = Environment.GetEnvironmentVariable("TERM");
         if(term is not null &&
-            (term.Contains("256color", StringComparison.InvariantCultureIgnoreCase) 
-            || term.Contains("truecolor", StringComparison.InvariantCultureIgnoreCase)))
+            (term.Contains("256color", StringComparison.OrdinalIgnoreCase)
+            || term.Contains("truecolor", StringComparison.OrdinalIgnoreCase)))
         {
             return true;
         }
@@ -206,8 +200,15 @@ internal static class ConsoleFormatter
         return false;
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "<Pending>")]
     private static bool TryEnableWindowsAnsi()
     {
+        //Only call Windows APIs on Windows.
+        if(!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return false;
+        }
+
         try
         {
             const int STD_OUTPUT_HANDLE = -11;
@@ -233,12 +234,18 @@ internal static class ConsoleFormatter
         }
     }
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr GetStdHandle(int nStdHandle);
+    //Windows kernel32 interop for console mode configuration.
+    [LibraryImport("kernel32.dll", EntryPoint = "GetStdHandle", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial IntPtr GetStdHandle(int nStdHandle);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+    [LibraryImport("kernel32.dll", EntryPoint = "GetConsoleMode", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+    [LibraryImport("kernel32.dll", EntryPoint = "SetConsoleMode", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
 }

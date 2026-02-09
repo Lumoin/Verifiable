@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Verifiable.Tpm.Infrastructure.Spec.Handles;
 
 
@@ -19,6 +21,7 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Handles;
 /// (Part 2: Structures, section "Handles" / TPM_HT).
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "TPM 2.0 specification allows duplicate values for compatibility and other reasons.")]
 public enum TpmHt: byte
 {
     /// <summary>

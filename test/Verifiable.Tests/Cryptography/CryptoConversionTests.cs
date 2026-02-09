@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Cryptography
     /// Tests for <see cref="VerifiableCryptoFormatConversions" />.
     /// </summary>
     [TestClass]
-    public sealed class CryptoConversionTests
+    internal sealed class CryptoConversionTests
     {
         [TestMethod]
         public void TestConversion1()

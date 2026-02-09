@@ -11,7 +11,7 @@ namespace Verifiable.Tests.Did
     /// Sidetree specific tests. See https://identity.foundation/ion/explorer/ for documents.
     /// </summary>
     [TestClass]
-    public sealed class SidetreeTests
+    internal sealed class SidetreeTests
     {
         /// <summary>
         /// The reader should be able to deserialize all these test files correctly.

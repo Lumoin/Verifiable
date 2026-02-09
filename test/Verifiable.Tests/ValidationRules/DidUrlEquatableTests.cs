@@ -1,4 +1,5 @@
-﻿using Verifiable.Core.Model.Did;
+﻿using System.Diagnostics.CodeAnalysis;
+using Verifiable.Core.Model.Did;
 
 
 namespace Verifiable.Tests
@@ -7,7 +8,7 @@ namespace Verifiable.Tests
     /// Tests for <see cref="DidUrl"/> <see cref="System.IEquatable{T}"/> implementation.
     /// </summary>
     [TestClass]
-    public sealed class DidUrlEquatableTests
+    internal sealed class DidUrlEquatableTests
     {
         /// <summary>
         /// A first absolute DID URL instance for testing comparisons.
@@ -146,6 +147,7 @@ namespace Verifiable.Tests
 
 
         [TestMethod]
+        [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Intentional null/null case to verify custom equality operator semantics; analyzer cannot reason about operator overloads.")]
         public void NullDidUrlEqualityOperatorWorks()
         {
             DidUrl? nullDidUrl1 = null;

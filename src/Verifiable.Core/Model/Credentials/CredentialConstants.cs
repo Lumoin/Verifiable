@@ -1,4 +1,5 @@
-﻿using Verifiable.Core.Model.Common;
+﻿using System.Diagnostics.CodeAnalysis;
+using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Model.Credentials
 {
@@ -75,6 +76,7 @@ namespace Verifiable.Core.Model.Credentials
         /// <summary>
         /// Proof purposes as defined in the VC and DID specifications.
         /// </summary>
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "These are nested on purpose.")]
         public static class ProofPurposes
         {
             /// <summary>
@@ -109,6 +111,8 @@ namespace Verifiable.Core.Model.Credentials
         /// <summary>
         /// Well-known cryptosuite identifiers for Data Integrity proofs.
         /// </summary>
+
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "These are nested on purpose.")]
         public static class Cryptosuites
         {
             /// <summary>
@@ -146,6 +150,7 @@ namespace Verifiable.Core.Model.Credentials
         /// <summary>
         /// Status types for credential revocation and suspension.
         /// </summary>
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "These are nested on purpose.")]
         public static class StatusTypes
         {
             /// <summary>
@@ -163,6 +168,7 @@ namespace Verifiable.Core.Model.Credentials
         /// <summary>
         /// Status purposes for credential status mechanisms.
         /// </summary>
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "These are nested on purpose.")]
         public static class StatusPurposes
         {
             /// <summary>

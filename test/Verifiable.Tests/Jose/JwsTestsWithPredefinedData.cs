@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Jose;
 /// Tests using predefined JWT test data from external sources like jwt.io.
 /// </summary>
 [TestClass]
-public sealed class JwsTestsWithPredefinedData
+internal sealed class JwsTestsWithPredefinedData
 {
     /// <summary>
     /// Test context for async operations.
@@ -63,7 +63,7 @@ public sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared);
+            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -92,7 +92,7 @@ public sealed class JwsTestsWithPredefinedData
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
             publicKey,
-            verificationDelegate);
+            verificationDelegate).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Signature verification should succeed.");
     }
@@ -127,7 +127,7 @@ public sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared);
+            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -166,7 +166,7 @@ public sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared);
+            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -190,7 +190,7 @@ public sealed class JwsTestsWithPredefinedData
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
             publicKey,
-            verificationDelegate);
+            verificationDelegate).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "RSA-PSS signature verification should succeed.");
     }
@@ -396,16 +396,5 @@ public sealed class JwsTestsWithPredefinedData
     {
         string json = Encoding.UTF8.GetString(bytes);
         return JsonSerializer.Deserialize<Dictionary<string, object>>(json, JsonOptions)!;
-    }
-
-
-    private static ValueTask<PrivateKey> BindPrivateKey(PrivateKeyMemory material, int state, CancellationToken cancellationToken)
-    {
-        return ValueTask.FromResult(new PrivateKey(material, "test-key", MicrosoftCryptographicFunctions.SignP256Async));
-    }
-
-    private static ValueTask<PublicKey> BindPublicKey(PublicKeyMemory material, int state, CancellationToken cancellationToken)
-    {
-        return ValueTask.FromResult(new PublicKey(material, "test-key", MicrosoftCryptographicFunctions.VerifyP256Async));
-    }
+    }    
 }

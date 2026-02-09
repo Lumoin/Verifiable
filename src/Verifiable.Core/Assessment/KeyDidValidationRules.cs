@@ -67,15 +67,15 @@ namespace Verifiable.Core.Assessment
         /// a complete validation pipeline for <c>did:key</c> documents.
         /// </para>
         /// </remarks>
-        public static IList<ClaimDelegate<DidDocument>> AllRules { get; } = new List<ClaimDelegate<DidDocument>>
-        {
+        public static List<ClaimDelegate<DidDocument>> AllRules { get; } =
+        [
             new(ValidateIdEncodingAsync, [ClaimId.KeyDidIdEncoding]),
             new(ValidateKeyFormatAsync, [ClaimId.KeyDidKeyFormat]),
             new(ValidateIdFormatAsync, [ClaimId.KeyDidIdFormat]),
             new(ValidateSingleVerificationMethodAsync, [ClaimId.KeyDidSingleVerificationMethod]),
             new(ValidateIdPrefixMatchAsync, [ClaimId.KeyDidIdPrefixMatch]),
             new(ValidateFragmentIdentifierRepetitionAsync, [ClaimId.KeyDidFragmentIdentifierRepetition]),
-        };
+        ];
 
 
         /// <summary>
@@ -100,13 +100,14 @@ namespace Verifiable.Core.Assessment
         /// <item><description>X25519</description></item>
         /// </list>
         /// </remarks>
-        public static ValueTask<IList<Claim>> ValidateIdEncodingAsync(
+        public static ValueTask<List<Claim>> ValidateIdEncodingAsync(
             DidDocument document,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(document);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IList<Claim> claims = new List<Claim>();
+            List<Claim> claims = new List<Claim>();
             if(document.Id != null)
             {
                 var idFormat = document.Id.Id.AsSpan();
@@ -157,13 +158,14 @@ namespace Verifiable.Core.Assessment
         /// confused (0, O, I, l).
         /// </para>
         /// </remarks>
-        public static ValueTask<IList<Claim>> ValidateIdFormatAsync(
+        public static ValueTask<List<Claim>> ValidateIdFormatAsync(
             DidDocument document,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(document);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IList<Claim> claims = new List<Claim>(1);
+            List<Claim> claims = new List<Claim>(1);
             ClaimOutcome isFormatValid = ClaimOutcome.Failure;
             if(document.Id != null)
             {
@@ -190,13 +192,14 @@ namespace Verifiable.Core.Assessment
         /// exactly one verification method that is derived from the key in the DID.
         /// </para>
         /// </remarks>
-        public static ValueTask<IList<Claim>> ValidateSingleVerificationMethodAsync(
+        public static ValueTask<List<Claim>> ValidateSingleVerificationMethodAsync(
             DidDocument document,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(document);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IList<Claim> claims = new List<Claim>(1);
+            List<Claim> claims = new List<Claim>(1);
             bool isSuccess = document.VerificationMethod?.Length == 1;
             claims.Add(new Claim(ClaimId.KeyDidSingleVerificationMethod, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure));
 
@@ -218,14 +221,15 @@ namespace Verifiable.Core.Assessment
         /// verification method ID should be <c>did:key:z6Mk...#z6Mk...</c>.
         /// </para>
         /// </remarks>
-        public static ValueTask<IList<Claim>> ValidateIdPrefixMatchAsync(
+        public static ValueTask<List<Claim>> ValidateIdPrefixMatchAsync(
             DidDocument document,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(document);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IList<Claim> claims = new List<Claim>(1);
-            bool isSuccess = document.VerificationMethod?[0].Id?.StartsWith(document?.Id?.Id ?? string.Empty) ?? false;
+            List<Claim> claims = new List<Claim>(1);
+            bool isSuccess = document.VerificationMethod?[0].Id?.StartsWith(document?.Id?.Id ?? string.Empty,StringComparison.InvariantCulture) ?? false;
             claims.Add(new Claim(ClaimId.KeyDidIdPrefixMatch, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure));
 
             return ValueTask.FromResult(claims);
@@ -247,13 +251,14 @@ namespace Verifiable.Core.Assessment
         /// method ID should be <c>did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK#z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK</c>.
         /// </para>
         /// </remarks>
-        public static ValueTask<IList<Claim>> ValidateFragmentIdentifierRepetitionAsync(
+        public static ValueTask<List<Claim>> ValidateFragmentIdentifierRepetitionAsync(
             DidDocument document,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(document);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IList<Claim> claims = new List<Claim>(1);
+            List<Claim> claims = [];
             string? verificationMethodId = document.VerificationMethod?[0].Id;
             string? documentId = document.Id?.Id;
 
@@ -300,13 +305,14 @@ namespace Verifiable.Core.Assessment
         /// </description></item>
         /// </list>
         /// </remarks>
-        public static ValueTask<IList<Claim>> ValidateKeyFormatAsync(
+        public static ValueTask<List<Claim>> ValidateKeyFormatAsync(
             DidDocument document,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(document);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IList<Claim> resultClaims = new List<Claim>();
+            List<Claim> resultClaims = [];
             if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyJwk keyFormat)
             {
                 var headers = keyFormat.Header;

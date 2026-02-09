@@ -5,7 +5,7 @@ namespace Verifiable.Tests.Tpm;
 
 
 [TestClass]
-public class TpmRcExtensionsTests
+internal class TpmRcExtensionsTests
 {
     [TestMethod]
     public void IsFormatOneReturnsFalseForFormatZeroErrors()

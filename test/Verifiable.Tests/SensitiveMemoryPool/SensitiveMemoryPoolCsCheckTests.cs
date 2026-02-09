@@ -9,7 +9,7 @@ namespace Verifiable.Tests.SensitiveMemoryPool
     /// Property-based tests using CsCheck for comprehensive validation.
     /// </summary>
     [TestClass]
-    public sealed class SensitiveMemoryPoolPropertyTests
+    internal sealed class SensitiveMemoryPoolPropertyTests
     {
         public TestContext TestContext { get; set; }
 

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using Verifiable.Tpm;
 using Verifiable.Tpm.EventLog;
 using Verifiable.Tpm.Extensions.EventLog;
@@ -16,6 +18,7 @@ internal static class TcgEventLogFormatter
     /// Writes a summary of the event log to the console.
     /// </summary>
     /// <param name="log">The parsed event log.</param>
+    [SuppressMessage("Globalization", "CA1303:Do not pass literals as localized parameters", Justification = "There is no other resources than printing to console.")]
     public static void WriteSummary(TcgEventLog log)
     {
         ConsoleFormatter.WriteHeader("Event Log Summary");
@@ -32,7 +35,7 @@ internal static class TcgEventLogFormatter
 
         ConsoleFormatter.WriteLabeled("Version:",
             $"{log.SpecVersionNumber.Major}.{log.SpecVersionNumber.Minor}.{log.SpecVersionNumber.Errata}");
-        ConsoleFormatter.WriteLabeled("Events:", log.Events.Count.ToString());
+        ConsoleFormatter.WriteLabeled("Events:", log.Events.Count.ToString(CultureInfo.InvariantCulture));
         Console.WriteLine(ConsoleFormatter.Dim("  (Recorded chronologically during boot; displayed newest first by default)"));
 
         if(log.IsTruncated)
@@ -44,7 +47,7 @@ internal static class TcgEventLogFormatter
         if(log.DigestSizes.Count > 0)
         {
             Console.WriteLine();
-            Console.Write("  Algorithms: ");
+            Console.Write(ConsoleFormatter.Label("  Algorithms: "));
             bool first = true;
             foreach(var (alg, size) in log.DigestSizes)
             {
@@ -154,7 +157,7 @@ internal static class TcgEventLogFormatter
             typeCounts[evt.EventType] = count + 1;
         }
 
-        Console.WriteLine("  Event Types:");
+        Console.WriteLine(ConsoleFormatter.Label("  Event Types:"));
         foreach(var (eventType, count) in typeCounts)
         {
             string name = TcgEventType.GetName(eventType);

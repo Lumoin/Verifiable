@@ -2,7 +2,9 @@
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
+using System.Globalization;
 using System.Threading;
 
 namespace Verifiable.Cryptography
@@ -102,25 +104,25 @@ namespace Verifiable.Cryptography
         /// Thread-safe counter for the total number of slabs created.
         /// Updated atomically to ensure accuracy in multi-threaded scenarios.
         /// </summary>
-        private int totalSlabs = 0;
+        private int totalSlabs;
 
         /// <summary>
         /// Thread-safe counter for the total memory allocated in bytes.
         /// Includes all memory in all slabs, both used and available.
         /// </summary>
-        private long totalMemoryAllocated = 0;
+        private long totalMemoryAllocated;
 
         /// <summary>
         /// Thread-safe counter for the number of currently active rentals.
         /// Decremented when memory is returned to the pool.
         /// </summary>
-        private int activeRentals = 0;
+        private int activeRentals;
 
         /// <summary>
         /// Thread-safe counter for the total number of segments across all slabs.
         /// Used for calculating allocation efficiency metrics.
         /// </summary>
-        private int totalSegments = 0;
+        private int totalSegments;
 
         /// <summary>
         /// Default initial capacity for new slabs when no allocation strategy is specified.
@@ -234,13 +236,11 @@ namespace Verifiable.Cryptography
         /// The rented memory will be automatically cleared when disposed, ensuring that
         /// sensitive cryptographic material does not remain in memory.
         /// </remarks>
+        [SuppressMessage("Naming", "CA1725:Parameter names should match base declaration", Justification = "This memorypool returns buffers on the specificed size.")]
         public override IMemoryOwner<T> Rent(int bufferSize)
         {
             //Validate preconditions before proceeding with allocation.
-            if(IsDisposed)
-            {
-                throw new ObjectDisposedException(nameof(SensitiveMemoryPool<T>));
-            }
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
 
             if(bufferSize <= 0)
             {
@@ -252,7 +252,7 @@ namespace Verifiable.Cryptography
             //IMPORTANT: Do NOT use 'using' here - the activity ownership is transferred to ExactSizeMemoryOwner.
             var activity = ActivitySource.StartActivity("Rent", ActivityKind.Internal,
                 Activity.Current?.Context ?? default);
-            activity?.AddTag("bufferSize", bufferSize.ToString());
+            activity?.AddTag("bufferSize", bufferSize.ToString(CultureInfo.InvariantCulture));
             activity?.AddTag("poolType", typeof(T).Name);
 
             DiagnosticSource.Write("Rent.Start", new { bufferSize, poolType = typeof(T).Name });
@@ -733,8 +733,8 @@ namespace Verifiable.Cryptography
                         //Create the dispose activity which will automatically use Activity.Current as parent.
                         disposeActivity = ActivitySource.StartActivity("Dispose", ActivityKind.Internal);
 
-                        disposeActivity?.AddTag("segmentSize", Segment.Count.ToString());
-                        disposeActivity?.AddTag("segmentOffset", Segment.Offset.ToString());
+                        disposeActivity?.AddTag("segmentSize", Segment.Count.ToString(CultureInfo.InvariantCulture));
+                        disposeActivity?.AddTag("segmentOffset", Segment.Offset.ToString(CultureInfo.InvariantCulture));
 
                         DiagnosticSource.Write("Dispose.Start", new
                         {

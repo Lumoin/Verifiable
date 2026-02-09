@@ -50,7 +50,7 @@ public static class CoseCredentialVerification
         bool isValid = await verificationDelegate(
             toBeSigned,
             message.Signature,
-            publicKey.AsReadOnlyMemory());
+            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
 
         if(!isValid)
         {
@@ -107,7 +107,7 @@ public static class CoseCredentialVerification
 
         using var signature = new Signature(signatureMemory, publicKey.Tag);
 
-        bool isValid = await verificationFunction(publicKey.AsReadOnlyMemory(), toBeSigned, signature);
+        bool isValid = await verificationFunction(publicKey.AsReadOnlyMemory(), toBeSigned, signature).ConfigureAwait(false);
 
         if(!isValid)
         {

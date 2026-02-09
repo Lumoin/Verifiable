@@ -180,7 +180,7 @@ namespace Verifiable.Core.Assessment
         /// The minimum number of assessors required for quorum-based strategies.
         /// Defaults to majority if not explicitly set.
         /// </summary>
-        public int RequiredQuorum { get; init; } = 0;
+        public int RequiredQuorum { get; init; }
 
         /// <summary>
         /// Gets the successful assessment results.

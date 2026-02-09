@@ -163,6 +163,7 @@ public sealed class TpmuPublicId: IDisposable
     /// <returns>The parsed public ID.</returns>
     public static TpmuPublicId Parse(TpmAlgIdConstants type, ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         switch(type)
         {
             case TpmAlgIdConstants.TPM_ALG_RSA:

@@ -101,6 +101,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// <returns>The parsed public buffer.</returns>
     public static Tpm2bPublic Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
 
         if(size == 0)

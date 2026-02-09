@@ -45,13 +45,10 @@ namespace Verifiable.Json.Converters
 
         public override void Write(Utf8JsonWriter writer, Dictionary<string, object> value, JsonSerializerOptions options)
         {
-            if(value == null)
-            {
-                throw new ArgumentNullException(nameof(value));
-            }
+            ArgumentNullException.ThrowIfNull(writer);
+            ArgumentNullException.ThrowIfNull(value);
 
             writer.WriteStartObject();
-
             foreach(var keyValuePair in value)
             {
                 writer.WritePropertyName(keyValuePair.Key);
@@ -138,7 +135,7 @@ namespace Verifiable.Json.Converters
             return list;
         }
 
-        private void WriteJsonElement(Utf8JsonWriter writer, JsonElement element, JsonSerializerOptions options)
+        private static void WriteJsonElement(Utf8JsonWriter writer, JsonElement element, JsonSerializerOptions options)
         {
             switch(element.ValueKind)
             {

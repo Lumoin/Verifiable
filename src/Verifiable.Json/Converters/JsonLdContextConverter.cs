@@ -93,6 +93,8 @@ namespace Verifiable.Json.Converters
 
         public override void Write(Utf8JsonWriter writer, Context value, JsonSerializerOptions options)
         {
+            ArgumentNullException.ThrowIfNull(writer);
+            ArgumentNullException.ThrowIfNull(value);
             //writer.WritePropertyName("@context");
             if(value?.Contexts?.Count == 1)
             {
@@ -149,7 +151,7 @@ namespace Verifiable.Json.Converters
                     return reader.GetDecimal();
                 case JsonTokenType.StartObject:
                 {
-                    return JsonSerializer.Deserialize(ref reader, typeof(object));
+                    return JsonSerializer.Deserialize<object>(ref reader, options);
                 }
                 case JsonTokenType.StartArray:
 

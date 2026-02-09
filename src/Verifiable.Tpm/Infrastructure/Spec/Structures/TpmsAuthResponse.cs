@@ -155,14 +155,17 @@ public sealed class TpmsAuthResponse: ITpmWireType, IDisposable
     /// Gets the serialized size of this structure.
     /// </summary>
     /// <exception cref="InvalidOperationException">NonceTPM or Hmac has been taken.</exception>
-    public int GetSerializedSize()
+    public int SerializedSize
     {
-        if(NonceTPM is null || Hmac is null)
+        get
         {
-            throw new InvalidOperationException("Cannot compute size after ownership has been transferred.");
-        }
+            if(NonceTPM is null || Hmac is null)
+            {
+                throw new InvalidOperationException("Cannot compute size after ownership has been transferred.");
+            }
 
-        return NonceTPM.GetSerializedSize() + sizeof(byte) + Hmac.GetSerializedSize();
+            return NonceTPM.SerializedSize + sizeof(byte) + Hmac.SerializedSize;
+        }
     }
 
     /// <summary>

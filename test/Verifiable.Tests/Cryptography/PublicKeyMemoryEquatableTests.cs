@@ -1,119 +1,114 @@
 using System.Buffers;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 
-namespace Verifiable.Tests.Cryptography
+namespace Verifiable.Tests.Cryptography;
+
+/// <summary>
+/// Tests for <see cref="PublicKeyMemory"/> <see cref="IEquatable{T}"/> implementation.
+/// </summary>
+[TestClass]
+internal sealed class PublicKeyMemoryEquatableTests
 {
-    /// <summary>
-    /// Tests for <see cref="PublicKeyMemory" /> <see cref="System.IEquatable{T}" /> implementation.
-    /// </summary>
-    [TestClass]
-    public sealed class PublicKeyMemoryEquatableTests
+    [TestMethod]
+    public void InstancesFromDifferentSizedBuffersAreNotEqual()
     {
-        /// <summary>
-        /// First instance of a buffer for memory in multiple comparisons.
-        /// </summary>
-        private static IMemoryOwner<byte> Buffer1 => SensitiveMemoryPool<byte>.Shared.Rent(1);
+        using var pkm1 = CreatePublicKeyMemory(1);
+        using var pkm2 = CreatePublicKeyMemory(2);
 
-        /// <summary>
-        /// A second instance of a buffer for memory in multiple comparisons.
-        /// </summary>
-        private static IMemoryOwner<byte> Buffer2 => SensitiveMemoryPool<byte>.Shared.Rent(2);
-
-        /// <summary>
-        /// A first instance of public key memory used in multiple tests.
-        /// </summary>
-        private static PublicKeyMemory PublicKeyMemory1 => new(Buffer1, Tag.Empty);
-
-        /// <summary>
-        /// A second instance of public key memory used in multiple tests.
-        /// </summary>
-        private static PublicKeyMemory PublicKeyMemory2 => new(Buffer2, Tag.Empty);
-
-        /// <summary>
-        /// A third instance of public key memory used in multiple tests.
-        /// </summary>
-        private static PublicKeyMemory PublicKeyMemory3 => new(Buffer1, Tag.Empty);
+        Assert.IsFalse(pkm1.Equals(pkm2));
+        Assert.IsFalse(pkm1 == pkm2);
+        Assert.IsTrue(pkm1 != pkm2);
+    }
 
 
-        [TestMethod]
-        public void InstancesFromDifferentSizedBuffersAreNotEqual()
-        {
-            Assert.IsFalse(PublicKeyMemory1.Equals(PublicKeyMemory2));
-            Assert.IsFalse(PublicKeyMemory1 == PublicKeyMemory2);
-            Assert.IsTrue(PublicKeyMemory1 != PublicKeyMemory2);
-        }
+    [TestMethod]
+    public void InstancesFromSameSizeBuffersAreEqual()
+    {
+        using var pkm1 = CreatePublicKeyMemory(1);
+        using var pkm2 = CreatePublicKeyMemory(1);
+
+        Assert.IsTrue(pkm1.Equals(pkm2));
+        Assert.IsTrue(pkm1 == pkm2);
+        Assert.IsFalse(pkm1 != pkm2);
+    }
 
 
-        [TestMethod]
-        public void InstancesFromSameMemoryAreEqual()
-        {
-            var publicKeyMemory1 = new PublicKeyMemory(Buffer1, Tag.Empty);
-            var publicKeyMemory2 = new PublicKeyMemory(Buffer1, Tag.Empty);
+    [TestMethod]
+    public void SameLengthInstancesWithDifferentDataAreNotEqual()
+    {
+        using var pkm1 = CreatePublicKeyMemory(1);
+        using var pkm2 = CreatePublicKeyMemory(1, fillByte: 0x01);
 
-            Assert.IsTrue(publicKeyMemory1.Equals(publicKeyMemory2));
-            Assert.IsTrue(publicKeyMemory1 == publicKeyMemory2);
-            Assert.IsFalse(publicKeyMemory1 != publicKeyMemory2);
-        }
-
-
-        [TestMethod]
-        public void SameLengthInstancesWithDifferentDataAreNotEqual()
-        {
-            var buffer1 = SensitiveMemoryPool<byte>.Shared.Rent(1);
-            var buffer2 = SensitiveMemoryPool<byte>.Shared.Rent(1);
-            buffer2.Memory.Span[0] = 0x01;
-
-            var publicKeyMemory1 = new PublicKeyMemory(buffer1, Tag.Empty);
-            var publicKeyMemory2 = new PublicKeyMemory(buffer2, Tag.Empty);
-
-            Assert.IsFalse(publicKeyMemory1.Equals(publicKeyMemory2));
-            Assert.IsTrue(publicKeyMemory1 != publicKeyMemory2);
-            Assert.IsFalse(publicKeyMemory1 == publicKeyMemory2);
-
-            publicKeyMemory1.Dispose();
-            publicKeyMemory2.Dispose();
-        }
+        Assert.IsFalse(pkm1.Equals(pkm2));
+        Assert.IsTrue(pkm1 != pkm2);
+        Assert.IsFalse(pkm1 == pkm2);
+    }
 
 
-        [TestMethod]
-        public void ComparisonWithTypeAndObjectSucceeds()
-        {
-            Assert.IsTrue((object)PublicKeyMemory1 == PublicKeyMemory3);
-            Assert.IsTrue(PublicKeyMemory1 == (object)PublicKeyMemory3);
-            Assert.IsFalse((object)PublicKeyMemory1 != PublicKeyMemory3);
-            Assert.IsFalse(PublicKeyMemory1 != (object)PublicKeyMemory3);
-        }
+    [TestMethod]
+    public void ComparisonWithTypeAndObjectSucceeds()
+    {
+        using var pkm1 = CreatePublicKeyMemory(1);
+        using var pkm2 = CreatePublicKeyMemory(1);
+
+        Assert.IsTrue((object)pkm1 == pkm2);
+        Assert.IsTrue(pkm1 == (object)pkm2);
+        Assert.IsFalse((object)pkm1 != pkm2);
+        Assert.IsFalse(pkm1 != (object)pkm2);
+    }
 
 
-        [TestMethod]
-        public void EqualsWithTypeAndObjectSucceeds()
-        {
-            Assert.IsTrue(((object)PublicKeyMemory1).Equals(PublicKeyMemory3));
-            Assert.IsTrue(PublicKeyMemory1.Equals((object)PublicKeyMemory3));
-        }
+    [TestMethod]
+    public void EqualsWithTypeAndObjectSucceeds()
+    {
+        using var pkm1 = CreatePublicKeyMemory(1);
+        using var pkm2 = CreatePublicKeyMemory(1);
+
+        Assert.IsTrue(((object)pkm1).Equals(pkm2));
+        Assert.IsTrue(pkm1.Equals((object)pkm2));
+    }
 
 
-        [TestMethod]
-        public void ComparisonWithObjectAndObjectFails()
-        {
-            //The reasons for this is that == operator is searched
-            //at compile time. Compiler does not find the overloads
-            //and so the test fails. This is included here for the sake
-            //of completeness. See EqualsWithObjectAndObjectSucceeds.
+    [TestMethod]
+    public void ComparisonWithObjectAndObjectFails()
+    {
+        using var pkm1 = CreatePublicKeyMemory(1);
+        using var pkm2 = CreatePublicKeyMemory(1);
+
+        //The reason for this is that the == operator is resolved
+        //at compile time. The compiler does not find the overloads
+        //and so the test fails. This is included here for the sake
+        //of completeness. See EqualsWithObjectAndObjectSucceeds.
 #pragma warning disable MSTEST0037 // Use proper 'Assert' methods
-            Assert.IsFalse((object)PublicKeyMemory1 == (object)PublicKeyMemory3);
+        Assert.IsFalse((object)pkm1 == (object)pkm2);
 #pragma warning restore MSTEST0037 // Use proper 'Assert' methods
-        }
+    }
 
 
-        [TestMethod]
-        public void EqualsWithObjectAndObjectSucceeds()
-        {
-            //As opposed to ComparisonWithObjectAndObjectFails,
-            //.Equals is a runtime construct and it does find
-            //the overloads and so this comparison succeeds.
-            Assert.IsTrue(((object)PublicKeyMemory1).Equals(PublicKeyMemory3));
-        }
+    [TestMethod]
+    public void EqualsWithObjectAndObjectSucceeds()
+    {
+        //As opposed to ComparisonWithObjectAndObjectFails,
+        //.Equals is a runtime construct and it does find
+        //the overloads and so this comparison succeeds.
+        using var pkm1 = CreatePublicKeyMemory(1);
+        using var pkm2 = CreatePublicKeyMemory(1);
+
+        Assert.IsTrue(((object)pkm1).Equals(pkm2));
+    }
+
+
+    /// <summary>
+    /// Creates a <see cref="PublicKeyMemory"/> with the specified buffer size.
+    /// </summary>
+    /// <param name="size">The buffer size in bytes.</param>
+    /// <param name="fillByte">Optional byte value to fill the buffer with.</param>
+    /// <returns>A new public key memory instance. The caller must dispose it.</returns>
+    private static PublicKeyMemory CreatePublicKeyMemory(int size, byte fillByte = 0x00)
+    {
+        IMemoryOwner<byte> buffer = SensitiveMemoryPool<byte>.Shared.Rent(size);
+        buffer.Memory.Span.Fill(fillByte);
+
+        return new PublicKeyMemory(buffer, Tag.Empty);
     }
 }

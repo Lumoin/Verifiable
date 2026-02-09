@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Jose
+﻿namespace Verifiable.JCose
 {
     /// <summary>
     /// JSON Web Algorithms (JWA) as defined in <see href="https://www.rfc-editor.org/rfc/rfc7518">RFC 7518</see>.
@@ -105,9 +105,34 @@
 
 
         /// <summary>
-        ///
+        /// ECDH-ES key agreement.
         /// </summary>
         public static readonly string Ecdha = "ECDH-ES";
+
+
+        /// <summary>
+        /// ML-DSA-44 post-quantum digital signature (NIST FIPS 204, security level 2).
+        /// </summary>
+        /// <remarks>
+        /// See <see href="https://datatracker.ietf.org/doc/draft-ietf-cose-dilithium/">ML-DSA for JOSE and COSE</see>.
+        /// </remarks>
+        public static readonly string MlDsa44 = "ML-DSA-44";
+
+        /// <summary>
+        /// ML-DSA-65 post-quantum digital signature (NIST FIPS 204, security level 3).
+        /// </summary>
+        /// <remarks>
+        /// See <see href="https://datatracker.ietf.org/doc/draft-ietf-cose-dilithium/">ML-DSA for JOSE and COSE</see>.
+        /// </remarks>
+        public static readonly string MlDsa65 = "ML-DSA-65";
+
+        /// <summary>
+        /// ML-DSA-87 post-quantum digital signature (NIST FIPS 204, security level 5).
+        /// </summary>
+        /// <remarks>
+        /// See <see href="https://datatracker.ietf.org/doc/draft-ietf-cose-dilithium/">ML-DSA for JOSE and COSE</see>.
+        /// </remarks>
+        public static readonly string MlDsa87 = "ML-DSA-87";
 
 
         /// <summary>
@@ -286,6 +311,50 @@
 
 
         /// <summary>
+        /// If <paramref name="alg"/> is <see cref="MlDsa44"/> or not.
+        /// </summary>
+        /// <param name="alg">The algorithm.</param>
+        /// <returns><see langword="true" /> if <paramref name="alg"/> is <see cref="MlDsa44"/>; otherwise, <see langword="false" />.</returns>
+        public static bool IsMlDsa44(string alg)
+        {
+            return Equals(MlDsa44, alg);
+        }
+
+
+        /// <summary>
+        /// If <paramref name="alg"/> is <see cref="MlDsa65"/> or not.
+        /// </summary>
+        /// <param name="alg">The algorithm.</param>
+        /// <returns><see langword="true" /> if <paramref name="alg"/> is <see cref="MlDsa65"/>; otherwise, <see langword="false" />.</returns>
+        public static bool IsMlDsa65(string alg)
+        {
+            return Equals(MlDsa65, alg);
+        }
+
+
+        /// <summary>
+        /// If <paramref name="alg"/> is <see cref="MlDsa87"/> or not.
+        /// </summary>
+        /// <param name="alg">The algorithm.</param>
+        /// <returns><see langword="true" /> if <paramref name="alg"/> is <see cref="MlDsa87"/>; otherwise, <see langword="false" />.</returns>
+        public static bool IsMlDsa87(string alg)
+        {
+            return Equals(MlDsa87, alg);
+        }
+
+
+        /// <summary>
+        /// If <paramref name="alg"/> is any ML-DSA variant.
+        /// </summary>
+        /// <param name="alg">The algorithm.</param>
+        /// <returns><see langword="true" /> if <paramref name="alg"/> is any ML-DSA variant; otherwise, <see langword="false" />.</returns>
+        public static bool IsMlDsa(string alg)
+        {
+            return IsMlDsa44(alg) || IsMlDsa65(alg) || IsMlDsa87(alg);
+        }
+
+
+        /// <summary>
         /// Returns the equivalent static instance, or the original instance if none match.
         /// This conversion is optional but allows for performance optimizations when comparing method values elsewhere.
         /// </summary>
@@ -308,6 +377,9 @@
             string _ when IsRs384(alg) => Rs384,
             string _ when IsRs512(alg) => Rs512,
             string _ when IsEdDsa(alg) => EdDsa,
+            string _ when IsMlDsa44(alg) => MlDsa44,
+            string _ when IsMlDsa65(alg) => MlDsa65,
+            string _ when IsMlDsa87(alg) => MlDsa87,
             string _ => alg
         };
 

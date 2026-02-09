@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Builders;
 /// Tests for <see cref="CredentialBuilder"/>.
 /// </summary>
 [TestClass]
-public sealed class CredentialBuilderTests
+internal sealed class CredentialBuilderTests
 {
     /// <summary>
     /// The test context.
@@ -99,7 +99,7 @@ public sealed class CredentialBuilderTests
             subject,
             TestValidFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(credential);
         Assert.IsNotNull(credential.Context);
@@ -129,7 +129,7 @@ public sealed class CredentialBuilderTests
             issuer,
             subjects,
             TestValidFrom,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(credential.CredentialSubject);
         Assert.HasCount(2, credential.CredentialSubject);
@@ -149,7 +149,7 @@ public sealed class CredentialBuilderTests
             subject,
             TestValidFrom,
             credentialId: CustomCredentialId,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CustomCredentialId, credential.Id);
     }
@@ -168,7 +168,7 @@ public sealed class CredentialBuilderTests
             subject,
             validFrom,
             validUntil: validUntil,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(validFrom.ToString("O"), credential.ValidFrom);
         Assert.AreEqual(validUntil.ToString("O"), credential.ValidUntil);
@@ -186,7 +186,7 @@ public sealed class CredentialBuilderTests
             subject,
             TestValidFrom,
             additionalTypes: [AlumniCredentialType, UniversityDegreeCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(credential.Type);
         Assert.Contains(CredentialConstants.VerifiableCredentialType, credential.Type);
@@ -210,7 +210,7 @@ public sealed class CredentialBuilderTests
             issuer,
             subject,
             TestValidFrom,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(IssuerDidWeb, credential.Issuer?.Id);
         Assert.AreEqual(IssuerName, credential.Issuer?.Name);
@@ -233,12 +233,13 @@ public sealed class CredentialBuilderTests
             issuer,
             subject,
             TestValidFrom,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
         var credential2 = await customBuilder.BuildAsync(
             issuer,
             subject,
             TestValidFrom,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual($"{CustomCredentialIdPrefix}1", credential1.Id);
         Assert.AreEqual($"{CustomCredentialIdPrefix}2", credential2.Id);
@@ -263,7 +264,7 @@ public sealed class CredentialBuilderTests
             issuer,
             [subject],
             TestValidFrom,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(seedName, credential.Name);
         Assert.AreEqual(seedDescription, credential.Description);
@@ -277,7 +278,7 @@ public sealed class CredentialBuilderTests
         var subject = new CredentialSubjectInput { Id = SubjectDidExample };
 
         await Assert.ThrowsAsync<ArgumentNullException>(async () =>
-            await CredentialBuilder.BuildAsync(null!, subject, TestValidFrom, cancellationToken: TestContext.CancellationToken));
+            await CredentialBuilder.BuildAsync(null!, subject, TestValidFrom, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -287,7 +288,7 @@ public sealed class CredentialBuilderTests
         var issuer = new Issuer { Id = IssuerDidWeb };
 
         await Assert.ThrowsAsync<ArgumentNullException>(async () =>
-            await CredentialBuilder.BuildAsync(issuer, (CredentialSubjectInput)null!, TestValidFrom, cancellationToken: TestContext.CancellationToken));
+            await CredentialBuilder.BuildAsync(issuer, (CredentialSubjectInput)null!, TestValidFrom, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -298,7 +299,7 @@ public sealed class CredentialBuilderTests
         var emptySubjects = new List<CredentialSubjectInput>();
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await CredentialBuilder.BuildAsync(issuer, emptySubjects, TestValidFrom, cancellationToken: TestContext.CancellationToken));
+            await CredentialBuilder.BuildAsync(issuer, emptySubjects, TestValidFrom, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.IsTrue(exception.Message.Contains("At least one credential subject is required", StringComparison.Ordinal));
     }
@@ -318,7 +319,7 @@ public sealed class CredentialBuilderTests
                 subject,
                 validFrom,
                 validUntil: validUntil,
-                cancellationToken: TestContext.CancellationToken));
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false));
     }
 
 
@@ -331,13 +332,13 @@ public sealed class CredentialBuilderTests
             issuer,
             new CredentialSubjectInput { Id = SubjectDidExampleAlice },
             TestValidFrom,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var credential2 = await CredentialBuilder.BuildAsync(
             issuer,
             new CredentialSubjectInput { Id = SubjectDidExampleBob },
             TestValidFrom,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreNotEqual(credential1.Id, credential2.Id, "Each credential should have a unique ID.");
         Assert.AreEqual(SubjectDidExampleAlice, credential1.CredentialSubject?[0].Id);
@@ -355,7 +356,7 @@ public sealed class CredentialBuilderTests
             issuer,
             subject,
             TestValidFrom,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(credential.Context);
         Assert.IsNotNull(credential.Context.Contexts);
@@ -373,7 +374,7 @@ public sealed class CredentialBuilderTests
             issuer,
             subject,
             TestValidFrom,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(IssuerDidWeb, credential.Issuer?.Id);
     }
@@ -399,7 +400,7 @@ public sealed class CredentialBuilderTests
             subject,
             validFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(credential.Context);
         Assert.IsNotNull(credential.Type);
@@ -431,7 +432,7 @@ public sealed class CredentialBuilderTests
             issuer,
             subject,
             TestValidFrom,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CustomCredentialName, credential.Name);
         Assert.AreEqual($"Issued by {IssuerDidWebCustom}", credential.Description);
@@ -462,7 +463,7 @@ public sealed class CredentialBuilderTests
             subject,
             validFrom,
             additionalTypes: [UniversityDegreeCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var json = JsonSerializer.Serialize(originalCredential, TestSetup.DefaultSerializationOptions);
         var deserializedCredential = JsonSerializer.Deserialize<VerifiableCredential>(json, TestSetup.DefaultSerializationOptions);
@@ -494,7 +495,7 @@ public sealed class CredentialBuilderTests
             subject,
             TestValidFrom,
             additionalTypes: [MembershipCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(credential.CredentialSubject);
         Assert.HasCount(1, credential.CredentialSubject);
@@ -533,13 +534,14 @@ public sealed class CredentialBuilderTests
             dictionarySubject,
             TestValidFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
         var credentialFromTyped = await CredentialBuilder.BuildAsync(
             issuer,
             typedSubject,
             TestValidFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Both credentials should have equivalent structure.
         Assert.AreEqual(credentialFromDictionary.Issuer?.Id, credentialFromTyped.Issuer?.Id);
@@ -577,7 +579,7 @@ public sealed class CredentialBuilderTests
             subject,
             TestValidFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Serialize and deserialize to simulate storage/transmission.
         var json = JsonSerializer.Serialize(credential, TestSetup.DefaultSerializationOptions);
@@ -616,7 +618,7 @@ public sealed class CredentialBuilderTests
             subject,
             TestValidFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var additionalData = credential.CredentialSubject![0].AdditionalData!;
 
@@ -644,7 +646,7 @@ public sealed class CredentialBuilderTests
             issuer,
             subject,
             TestValidFrom,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var exception = Assert.Throws<InvalidOperationException>(
             () => AlumniCredentialClaims.FromCredentialSubject(credential.CredentialSubject![0]));
@@ -658,7 +660,7 @@ public sealed class CredentialBuilderTests
 /// Strongly-typed claims for an Alumni Credential.
 /// Demonstrates type-safe credential construction as an alternative to dictionary-based claims.
 /// </summary>
-public sealed class AlumniCredentialClaims
+internal sealed class AlumniCredentialClaims
 {
     [JsonPropertyName("alumniOf")]
     public required string AlumniOf { get; init; }

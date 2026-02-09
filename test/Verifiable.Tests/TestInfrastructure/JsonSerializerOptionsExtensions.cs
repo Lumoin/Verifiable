@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Jose;
@@ -6,15 +7,15 @@ using Verifiable.Json.Converters;
 
 namespace Verifiable.Tests.TestInfrastructure
 {
-    public static class JsonSerializerOptionsExtensions
+    internal static class JsonSerializerOptionsExtensions
     {
         public static DidMethodFactoryDelegate DefaultDidIdFactory = did =>
         {
             return did switch
             {
-                var d when did.StartsWith(EbsiDidMethod.Prefix) => new EbsiDidMethod(did),
-                var d when did.StartsWith(KeyDidMethod.Prefix) => new KeyDidMethod(did),
-                var d when did.StartsWith(WebDidMethod.Prefix) => new WebDidMethod(did),
+                var d when did.StartsWith(EbsiDidMethod.Prefix, StringComparison.Ordinal) => new EbsiDidMethod(did),
+                var d when did.StartsWith(KeyDidMethod.Prefix, StringComparison.Ordinal) => new KeyDidMethod(did),
+                var d when did.StartsWith(WebDidMethod.Prefix, StringComparison.Ordinal) => new WebDidMethod(did),
                 _ => new GenericDidMethod(did)
             };
         };

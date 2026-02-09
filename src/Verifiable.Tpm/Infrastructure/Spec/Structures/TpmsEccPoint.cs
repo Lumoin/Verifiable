@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 
@@ -73,7 +74,7 @@ public sealed class TpmsEccPoint: IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        return X.GetSerializedSize() + Y.GetSerializedSize();
+        return X.SerializedSize + Y.SerializedSize;
     }
 
     /// <summary>
@@ -94,11 +95,11 @@ public sealed class TpmsEccPoint: IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed ECC point.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "TpmsEndpoint and Tpm2bEccParameter implement IDiposable and the purpose is to return these values.")]
     public static TpmsEccPoint Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
         Tpm2bEccParameter x = Tpm2bEccParameter.Parse(ref reader, pool);
         Tpm2bEccParameter y = Tpm2bEccParameter.Parse(ref reader, pool);
-
         if(x.IsEmpty && y.IsEmpty)
         {
             return Empty;

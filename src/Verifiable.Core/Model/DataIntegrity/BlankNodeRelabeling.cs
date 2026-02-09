@@ -597,6 +597,7 @@ public static class BlankNodeRelabelingExtensions
     /// <returns><see langword="true"/> if canonical; otherwise <see langword="false"/>.</returns>
     public static bool IsCanonicalBlankNode(string blankNodeId)
     {
+        ArgumentNullException.ThrowIfNull(blankNodeId);
         return blankNodeId.StartsWith(BlankNodeRelabeling.CanonicalBlankNodePrefix, StringComparison.Ordinal);
     }
 
@@ -608,6 +609,7 @@ public static class BlankNodeRelabelingExtensions
     /// <returns><see langword="true"/> if HMAC-relabeled; otherwise <see langword="false"/>.</returns>
     public static bool IsHmacBlankNode(string blankNodeId)
     {
+        ArgumentNullException.ThrowIfNull(blankNodeId);
         return blankNodeId.StartsWith(BlankNodeRelabeling.HmacBlankNodePrefix, StringComparison.Ordinal);
     }
 }

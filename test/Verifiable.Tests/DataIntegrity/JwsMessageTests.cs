@@ -12,7 +12,7 @@ namespace Verifiable.Tests.DataIntegrity;
 /// Tests for JWS credential signing with JwsMessage POCO.
 /// </summary>
 [TestClass]
-public sealed class JwsMessageTests
+internal sealed class JwsMessageTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -50,7 +50,7 @@ public sealed class JwsMessageTests
     public async ValueTask SignJwsReturnsJwsMessageWithCorrectStructure()
     {
         var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
-        PrivateKeyMemory privateKeyMemory = CreateEd25519PrivateKey();
+        using PrivateKeyMemory privateKeyMemory = CreateEd25519PrivateKey();
 
         using JwsMessage jwsMessage = await credential.SignJwsAsync(
             privateKeyMemory,
@@ -59,7 +59,7 @@ public sealed class JwsMessageTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(jwsMessage);
         Assert.HasCount(1, jwsMessage.Signatures);
@@ -79,7 +79,7 @@ public sealed class JwsMessageTests
     public async ValueTask JwsMessageSerializesToCompactAndVerifies()
     {
         var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
-        PrivateKeyMemory privateKeyMemory = CreateEd25519PrivateKey();
+        using PrivateKeyMemory privateKeyMemory = CreateEd25519PrivateKey();
 
         using JwsMessage jwsMessage = await credential.SignJwsAsync(
             privateKeyMemory,
@@ -88,7 +88,7 @@ public sealed class JwsMessageTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string compact = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -96,14 +96,14 @@ public sealed class JwsMessageTests
         string[] parts = compact.Split('.');
         Assert.HasCount(3, parts);
 
-        PublicKeyMemory publicKeyMemory = CreateEd25519PublicKey();
+        using PublicKeyMemory publicKeyMemory = CreateEd25519PublicKey();
         var verificationResult = await JwsCredentialVerification.VerifyAsync(
             compact,
             publicKeyMemory,
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid, "JWS signature verification must succeed.");
         Assert.IsNotNull(verificationResult.Credential);
@@ -115,24 +115,24 @@ public sealed class JwsMessageTests
     public async ValueTask JwsMessageVerifiesDirectlyWithoutSerialization()
     {
         var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
-        PrivateKeyMemory privateKeyMemory = CreateEd25519PrivateKey();
+        using PrivateKeyMemory privateKeyMemory = CreateEd25519PrivateKey();
 
-        using JwsMessage jwsMessage = await credential.SignJwsAsync(
+        using JwsMessage jwsMessage = await credential. SignJwsAsync(
             privateKeyMemory,
             Ed25519VerificationMethodId,
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        PublicKeyMemory publicKeyMemory = CreateEd25519PublicKey();
+        using PublicKeyMemory publicKeyMemory = CreateEd25519PublicKey();
         var verificationResult = await JwsCredentialVerification.VerifyAsync(
             jwsMessage,
             publicKeyMemory,
             TestSetup.Base64UrlEncoder,
             CredentialDeserializer,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid, "JWS message verification must succeed.");
         Assert.IsNotNull(verificationResult.Credential);
@@ -144,7 +144,7 @@ public sealed class JwsMessageTests
     public async ValueTask CompactJwsRoundTripsToUnverifiedJwsMessage()
     {
         var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
-        PrivateKeyMemory privateKeyMemory = CreateEd25519PrivateKey();
+        using PrivateKeyMemory privateKeyMemory = CreateEd25519PrivateKey();
 
         using JwsMessage originalMessage = await credential.SignJwsAsync(
             privateKeyMemory,
@@ -153,7 +153,7 @@ public sealed class JwsMessageTests
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string compact = JwsSerialization.SerializeCompact(originalMessage, TestSetup.Base64UrlEncoder);
 
@@ -204,13 +204,12 @@ public sealed class JwsMessageTests
         using var sig1 = signatureBytes.ToSignature(CryptoTags.P256Signature, SensitiveMemoryPool<byte>.Shared);
         using var sig2 = signatureBytes.ToSignature(CryptoTags.P256Signature, SensitiveMemoryPool<byte>.Shared);
 
-        var component1 = new JwsSignatureComponent("encoded1", header, sig1);
-        var component2 = new JwsSignatureComponent("encoded2", header, sig2);
+        using var component1 = new JwsSignatureComponent("encoded1", header, sig1);
+        using var component2 = new JwsSignatureComponent("encoded2", header, sig2);
 
-        var message = new JwsMessage(payload, [component1, component2]);
+        using var message = new JwsMessage(payload, [component1, component2]);
 
-        Assert.Throws<InvalidOperationException>(() =>
-            JwsSerialization.SerializeCompact(message, TestSetup.Base64UrlEncoder));
+        Assert.Throws<InvalidOperationException>(() => JwsSerialization.SerializeCompact(message, TestSetup.Base64UrlEncoder));
     }
 
 
@@ -222,11 +221,10 @@ public sealed class JwsMessageTests
         byte[] signatureBytes = [5, 6, 7, 8];
 
         using var sig = signatureBytes.ToSignature(CryptoTags.P256Signature, SensitiveMemoryPool<byte>.Shared);
-        var component = new JwsSignatureComponent("encoded", header, sig);
-        var message = new JwsMessage(payload, component, isDetachedPayload: true);
+        using var component = new JwsSignatureComponent("encoded", header, sig);
+        using var message = new JwsMessage(payload, component, isDetachedPayload: true);
 
-        Assert.Throws<InvalidOperationException>(() =>
-            JwsSerialization.SerializeCompact(message, TestSetup.Base64UrlEncoder));
+        Assert.Throws<InvalidOperationException>(() => JwsSerialization.SerializeCompact(message, TestSetup.Base64UrlEncoder));
     }
 
 

@@ -5,7 +5,7 @@ using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tests.test;
 
-public static class FakeTpmClient
+internal static class FakeTpmClient
 {
     public static ValueTask<bool> VerifyAsync(string keyHandle, ReadOnlySpan<byte> data, ReadOnlySpan<byte> signature)
     {
@@ -16,7 +16,7 @@ public static class FakeTpmClient
 
 
 [TestClass]
-public class FakeTpmHandleTests
+internal class FakeTpmHandleTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -32,7 +32,8 @@ public class FakeTpmHandleTests
                 string handle = Encoding.UTF8.GetString(verificationContext.Span);
 
                 //Call fake TPM verification logic.
-                return await FakeTpmClient.VerifyAsync(handle, dataToVerify.Span, signature.Span);
+                return await FakeTpmClient.VerifyAsync(handle, dataToVerify.Span, signature.Span)
+                    .ConfigureAwait(false);
             };
 
         //Create TPM tag.
@@ -46,18 +47,18 @@ public class FakeTpmHandleTests
         string tpmHandle = "Tpm-key-handle-123";
         var handleBytes = SensitiveMemoryPool<byte>.Shared.Rent(Encoding.UTF8.GetByteCount(tpmHandle));
         Encoding.UTF8.GetBytes(tpmHandle, handleBytes.Memory.Span);
-        var handleMemory = new PublicKeyMemory(handleBytes, tpmTag);
+        using var handleMemory = new PublicKeyMemory(handleBytes, tpmTag);
 
         //Create TPM public key.
-        var tpmPublicKey = new PublicKey(handleMemory, "Tpm-key-id", tpmVerificationDelegate);
+        using var tpmPublicKey = new PublicKey(handleMemory, "Tpm-key-id", tpmVerificationDelegate);
 
         //Test data and fake signature.
         var testData = Encoding.UTF8.GetBytes("Hello TPM!");
-        var fakeSignature = new Signature(SensitiveMemoryPool<byte>.Shared.Rent(64), Tag.Empty);
-
+        using var fakeSignature = new Signature(SensitiveMemoryPool<byte>.Shared.Rent(64), Tag.Empty);
         //Verify using TPM key - should work transparently.
-        bool verified = await tpmPublicKey.VerifyAsync(testData, fakeSignature);
-        bool verifiedWithExtension = await handleMemory.VerifyAsync(testData, fakeSignature, tpmVerificationDelegate);
+        bool verified = await tpmPublicKey.VerifyAsync(testData, fakeSignature).ConfigureAwait(false);
+        bool verifiedWithExtension = await handleMemory.VerifyAsync(testData, fakeSignature, tpmVerificationDelegate)
+            .ConfigureAwait(false);
 
         Assert.IsTrue(verified, "TPM verification should succeed.");
         Assert.IsTrue(verifiedWithExtension, "TPM verification with extension should succeed.");

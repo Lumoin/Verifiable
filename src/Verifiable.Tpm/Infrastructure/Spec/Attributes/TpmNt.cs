@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Verifiable.Tpm.Infrastructure.Spec.Attributes;
 
 /// <summary>
@@ -11,6 +13,8 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Attributes;
 /// Specification: <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library Specification</see>, Part 2: Structures, section 13.2 (TPM_NT).
 /// </para>
 /// </remarks>
+/// 
+[SuppressMessage("Design", "CA1027:Mark enums with FlagsAttribute", Justification = "Enum values defined by TPM 2.0 specification.")]
 public enum TpmNt: uint
 {
     /// <summary>

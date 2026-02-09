@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Cryptography.Context;
 /// Tests for <see cref="Purpose"/> and <see cref="PurposeNames"/>.
 /// </summary>
 [TestClass]
-public sealed class PurposeTests
+internal sealed class PurposeTests
 {
     //Constants using nameof to tie test expectations to actual property names.
     private const string NoneName = nameof(Purpose.None);

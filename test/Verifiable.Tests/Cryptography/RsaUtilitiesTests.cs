@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Cryptography
     /// Tests for RSA utilities.
     /// </summary>
     [TestClass]
-    public sealed class RsaUtilitiesTests
+    internal sealed class RsaUtilitiesTests
     {
         /// <summary>
         /// Test array that is wrong length for RSA encoding.

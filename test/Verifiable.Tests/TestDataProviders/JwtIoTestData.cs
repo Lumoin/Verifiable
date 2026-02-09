@@ -1,4 +1,5 @@
-﻿using Verifiable.Jose;
+﻿using Verifiable.JCose;
+using Verifiable.Jose;
 
 namespace Verifiable.Tests.DataProviders
 {
@@ -8,7 +9,7 @@ namespace Verifiable.Tests.DataProviders
     /// <remarks>These vectors are sourced from <see href="https://jwt.io/">jwt.io</see>
     /// for cross-reference purposes. They can be pasted back to the web interface for
     /// easy cross-checking.</remarks>
-    public class BaseJwtTestData
+    internal class BaseJwtTestData
     {
         public static Dictionary<string, object> DefaultJwtPayload => new(StringComparer.InvariantCultureIgnoreCase)
     {
@@ -56,7 +57,7 @@ namespace Verifiable.Tests.DataProviders
     /// <summary>
     /// ES test data class.
     /// </summary>
-    public class ESTestData: BaseJwtTestData
+    internal class ESTestData: BaseJwtTestData
     {
         public ESTestData(Dictionary<string, object> header, Dictionary<string, object> payload, string crossCheckJwt, string publicKeyKeyInPem, string privateKeyInPem) :
             base(header, payload, crossCheckJwt, publicKeyKeyInPem, privateKeyInPem)
@@ -66,7 +67,7 @@ namespace Verifiable.Tests.DataProviders
     /// <summary>
     /// RSA test data class.
     /// </summary>
-    public class RsaRSTestData(
+    internal class RsaRSTestData(
         Dictionary<string, object> header,
         Dictionary<string, object> payload,
         string crossCheckJwt,
@@ -78,7 +79,7 @@ namespace Verifiable.Tests.DataProviders
     /// <summary>
     /// RSA PS test data class.
     /// </summary>
-    public class RsaPSTestData: BaseJwtTestData
+    internal class RsaPSTestData: BaseJwtTestData
     {
         public RsaPSTestData(Dictionary<string, object> header, Dictionary<string, object> payload, string crossCheckJwt, string publicKeyKeyInPem, string privateKeyInPem)
             : base(header, payload, crossCheckJwt, publicKeyKeyInPem, privateKeyInPem) { }
@@ -87,7 +88,7 @@ namespace Verifiable.Tests.DataProviders
     /// <summary>
     /// HS test data class for symmetric keys.
     /// </summary>
-    public class HsTestData: BaseJwtTestData
+    internal class HsTestData: BaseJwtTestData
     {
         public HsTestData(Dictionary<string, object> header, Dictionary<string, object> payload, string crossCheckJwt, string privateKey) :
             base(header, payload, crossCheckJwt, privateKey, privateKey)
@@ -99,7 +100,7 @@ namespace Verifiable.Tests.DataProviders
     /// <summary>
     /// Provides test data for JWT-related tests, including RSA and HS algorithms.
     /// </summary>
-    public static class JwtTestDataProvider
+    internal static class JwtTestDataProvider
     {
         private static Dictionary<string, object> ES256Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
@@ -290,7 +291,7 @@ namespace Verifiable.Tests.DataProviders
     /// Tests for RSA RS JWTs.
     /// </summary>
     [TestClass]
-    public class RsaRsJwtTests
+    internal class RsaRsJwtTests
     {
         [TestMethod]
         [DynamicData(nameof(JwtTestDataProvider.GetRsaRsTestData), typeof(JwtTestDataProvider))]

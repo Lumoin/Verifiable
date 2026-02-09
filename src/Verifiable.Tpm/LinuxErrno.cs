@@ -1,4 +1,6 @@
-﻿namespace Verifiable.Tpm;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace Verifiable.Tpm;
 
 /// <summary>
 /// Common Linux errno values used for TPM transport errors.
@@ -9,6 +11,7 @@
 /// communicating with /dev/tpmrm0 on Linux.
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "These values follow standard POSIX error codes.")]
 public enum LinuxErrno: uint
 {
     /// <summary>

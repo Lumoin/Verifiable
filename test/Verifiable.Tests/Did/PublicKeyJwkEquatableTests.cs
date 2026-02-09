@@ -1,4 +1,6 @@
-﻿using Verifiable.Core.Model.Did;
+﻿using System.Diagnostics.CodeAnalysis;
+using Verifiable.Core.Model.Did;
+using Verifiable.JCose;
 using Verifiable.Jose;
 
 namespace Verifiable.Tests.Did
@@ -7,7 +9,7 @@ namespace Verifiable.Tests.Did
     /// Tests for <see cref="PublicKeyJwk" /> <see cref="System.IEquatable{T}" /> implementation.
     /// </summary>
     [TestClass]
-    public sealed class PublicKeyJwkEquatableTests
+    internal sealed class PublicKeyJwkEquatableTests
     {
         /// <summary>
         /// A first instance for testing comparisons.
@@ -160,6 +162,7 @@ namespace Verifiable.Tests.Did
 
 
         [TestMethod]
+        [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Intentional null/null case to verify custom equality operator semantics; analyzer cannot reason about operator overloads.")]
         public void NullKeyFormatsAreEqual()
         {
             PublicKeyJwk? jwk1 = null;

@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-using Verifiable.Core.Asssesment;
+﻿using Verifiable.Core.Assessment;
 
 namespace Verifiable.Tests.test
 {
@@ -34,7 +29,7 @@ namespace Verifiable.Tests.test
                 var current = stack.Pop();        
                 yield return current;
                 
-                var children = await descendantsSelector(current.Node);
+                var children = await descendantsSelector(current.Node).ConfigureAwait(false);
                 foreach(var child in children.Reverse())
                 {
                     stack.Push(new TreeTraversalNode<TNodeType>(child, current.Depth + 1));
@@ -44,13 +39,13 @@ namespace Verifiable.Tests.test
     }
 
 
-    public delegate TOutputFormat NodeFormatter<TNodeType, TOutputFormat>(TreeTraversalNode<TNodeType> node);
+    internal delegate TOutputFormat NodeFormatter<TNodeType, TOutputFormat>(TreeTraversalNode<TNodeType> node);
 
-    public delegate void OutputSink<TFormatted>(TFormatted formattedData);
+    internal delegate void OutputSink<TFormatted>(TFormatted formattedData);
 
-    public delegate Task AsyncOutputSink<TFormatted>(TFormatted formattedData);
+    internal delegate Task AsyncOutputSink<TFormatted>(TFormatted formattedData);
 
-    public static class TreeNodeFormatters
+    internal static class TreeNodeFormatters
     {
         public static string SimpleNodeFormatter<TNodeType>(TreeTraversalNode<TNodeType> node)
         {            
@@ -59,7 +54,7 @@ namespace Verifiable.Tests.test
         }
     }
 
-    public static class TreeNodeSinks
+    internal static class TreeNodeSinks
     {
         public static void ConsoleOutputSink(string formattedData)
         {
@@ -70,7 +65,7 @@ namespace Verifiable.Tests.test
         public static async Task FileOutputSinkAsync(string formattedData)
         {         
             string path = "output.txt";
-            await File.AppendAllTextAsync(path, formattedData + Environment.NewLine);
+            await File.AppendAllTextAsync(path, formattedData + Environment.NewLine).ConfigureAwait(false);
         }
     }
 }

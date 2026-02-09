@@ -1,18 +1,19 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
-using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Extensions.Pcr;
 
 /// <summary>
 /// PCR-related extensions for <see cref="TpmDevice"/>.
 /// </summary>
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with latest syntax.")]
 public static class TpmDeviceExtensions
 {
     extension(TpmDevice device)

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Core.Model.Did
 {
@@ -24,6 +25,7 @@ namespace Verifiable.Core.Model.Did
     /// across different DID method implementations while maintaining type safety and builder pattern compatibility.
     /// </para>
     /// </remarks>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with the latest syntax.")]
     public static class DidDocumentVerificationExtensions
     {
         extension(DidDocument document)

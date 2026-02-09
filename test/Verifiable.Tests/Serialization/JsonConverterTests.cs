@@ -11,7 +11,7 @@ namespace Verifiable.Tests.Serialization
     /// </summary>
     /// <remarks>
     [TestClass]
-    public sealed class JsonConverterTests
+    internal sealed class JsonConverterTests
     {
         [TestMethod]
         public void RoundtripControllerSingle()

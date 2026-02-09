@@ -91,7 +91,7 @@ public readonly struct TpmsMlDsaParms: IEquatable<TpmsMlDsaParms>
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + sizeof(byte);
+    public static int SerializedSize => sizeof(ushort) + sizeof(byte);
 
     /// <summary>
     /// Writes this structure to a TPM writer.

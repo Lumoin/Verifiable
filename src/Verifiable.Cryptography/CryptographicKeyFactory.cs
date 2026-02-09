@@ -104,6 +104,9 @@ public static class CryptographicKeyFactory
         string? qualifier = null,
         FrozenDictionary<string, object>? defaultContext = null)
     {
+        ArgumentNullException.ThrowIfNull(publicKeyMemory);
+        ArgumentNullException.ThrowIfNull(keyIdentifier);
+        ArgumentNullException.ThrowIfNull(tag);
         var algorithm = tag.Get<CryptoAlgorithm>();
         var purpose = tag.Get<Purpose>();
 
@@ -141,6 +144,9 @@ public static class CryptographicKeyFactory
         string? qualifier = null,
         FrozenDictionary<string, object>? defaultContext = null)
     {
+        ArgumentNullException.ThrowIfNull(privateKeyMemory);
+        ArgumentNullException.ThrowIfNull(keyIdentifier);
+        ArgumentNullException.ThrowIfNull(tag);
         var algorithm = tag.Get<CryptoAlgorithm>();
         var purpose = tag.Get<Purpose>();
 
@@ -174,6 +180,8 @@ public static class CryptographicKeyFactory
         string? qualifier = null,
         FrozenDictionary<string, object>? defaultContext = null)
     {
+        ArgumentNullException.ThrowIfNull(publicKeyMemory);
+        ArgumentNullException.ThrowIfNull(keyIdentifier);
         var verificationDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose, qualifier);
 
         return new PublicKey(publicKeyMemory, keyIdentifier, verificationDelegate, defaultContext);
@@ -204,6 +212,8 @@ public static class CryptographicKeyFactory
         string? qualifier = null,
         FrozenDictionary<string, object>? defaultContext = null)
     {
+        ArgumentNullException.ThrowIfNull(privateKeyMemory);
+        ArgumentNullException.ThrowIfNull(keyIdentifier);
         var signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose, qualifier);
 
         return new PrivateKey(privateKeyMemory, keyIdentifier, signingDelegate, defaultContext);
@@ -288,6 +298,7 @@ public static class CryptographicKeyFactory
     /// </remarks>
     public static FrozenDictionary<string, object> CreateParameters(params (string Key, object Value)[] parameters)
     {
+        ArgumentNullException.ThrowIfNull(parameters);
         var dict = new Dictionary<string, object>(parameters.Length);
         foreach(var (key, value) in parameters)
         {

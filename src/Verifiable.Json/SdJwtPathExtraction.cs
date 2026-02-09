@@ -159,6 +159,9 @@ public static class SdJwtPathExtraction
         string algorithmName,
         EncodeDelegate encoder)
     {
+        ArgumentNullException.ThrowIfNull(encodedDisclosure);
+        ArgumentNullException.ThrowIfNull(algorithmName);
+        ArgumentNullException.ThrowIfNull(encoder);
         byte[] disclosureBytes = Encoding.ASCII.GetBytes(encodedDisclosure);
         byte[] hashBytes = ComputeHash(disclosureBytes, algorithmName);
         return encoder(hashBytes);
@@ -167,15 +170,15 @@ public static class SdJwtPathExtraction
 
     private static byte[] ComputeHash(byte[] data, string algorithmName)
     {
-        return algorithmName.ToLowerInvariant() switch
+        HashAlgorithmName algorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(algorithmName);
+        return algorithm.Name switch
         {
-            "sha-256" => SHA256.HashData(data),
-            "sha-384" => SHA384.HashData(data),
-            "sha-512" => SHA512.HashData(data),
-            _ => throw new ArgumentException($"Unsupported hash algorithm: {algorithmName}", nameof(algorithmName))
+            WellKnownHashAlgorithms.Sha256 => SHA256.HashData(data),
+            WellKnownHashAlgorithms.Sha384 => SHA384.HashData(data),
+            WellKnownHashAlgorithms.Sha512 => SHA512.HashData(data),
+            _ => throw new ArgumentException($"Unsupported hash algorithm: '{algorithmName}'.", nameof(algorithmName))
         };
     }
-
 
     private static JsonElement ParseJwtPayload(string jwt, DecodeDelegate decoder, MemoryPool<byte> pool)
     {

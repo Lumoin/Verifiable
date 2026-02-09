@@ -65,7 +65,7 @@ public sealed class TpmsSensitiveCreate: IDisposable
     {
         return new TpmsSensitiveCreate(
             Tpm2bAuth.CreateEmpty(pool),
-            Tpm2bSensitiveData.CreateEmpty());
+            Tpm2bSensitiveData.Empty);
     }
 
     /// <summary>
@@ -75,7 +75,7 @@ public sealed class TpmsSensitiveCreate: IDisposable
     /// <returns>Sensitive creation data with the specified auth.</returns>
     public static TpmsSensitiveCreate WithAuth(Tpm2bAuth userAuth)
     {
-        return new TpmsSensitiveCreate(userAuth, Tpm2bSensitiveData.CreateEmpty());
+        return new TpmsSensitiveCreate(userAuth, Tpm2bSensitiveData.Empty);
     }
 
     /// <summary>
@@ -86,18 +86,13 @@ public sealed class TpmsSensitiveCreate: IDisposable
     /// <returns>Sensitive creation data with the specified auth.</returns>
     public static TpmsSensitiveCreate WithPassword(string password, MemoryPool<byte> pool)
     {
-        return new TpmsSensitiveCreate(
-            Tpm2bAuth.CreateFromPassword(password, pool),
-            Tpm2bSensitiveData.CreateEmpty());
+        return new TpmsSensitiveCreate(Tpm2bAuth.CreateFromPassword(password, pool), Tpm2bSensitiveData.Empty);
     }
 
     /// <summary>
     /// Gets the serialized size of the inner TPMS_SENSITIVE_CREATE.
     /// </summary>
-    public int GetSerializedSize()
-    {
-        return UserAuth.GetSerializedSize() + Data.GetSerializedSize();
-    }
+    public int SerializedSize => UserAuth.SerializedSize + Data.SerializedSize;
 
     /// <summary>
     /// Writes this structure to a TPM writer.

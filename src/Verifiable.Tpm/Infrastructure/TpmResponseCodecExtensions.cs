@@ -1,4 +1,5 @@
-﻿using Verifiable.Tpm.Infrastructure.Commands;
+﻿using System.Diagnostics.CodeAnalysis;
+using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
 
 namespace Verifiable.Tpm.Infrastructure;
@@ -24,6 +25,7 @@ namespace Verifiable.Tpm.Infrastructure;
 /// registry.Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);
 /// </code>
 /// </remarks>
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with latest syntax.")]
 public static class TpmResponseCodecExtensions
 {
     extension(TpmResponseCodec)
@@ -42,8 +44,7 @@ public static class TpmResponseCodecExtensions
         /// See TPM 2.0 Part 3, Section 16.1 - TPM2_GetRandom.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec GetRandom => TpmResponseCodec.Create<GetRandomResponse>(
-            GetRandomResponse.Parse);
+        public static TpmResponseCodec GetRandom => TpmResponseCodec.Create(GetRandomResponse.Parse);
 
         /// <summary>
         /// Codec for TPM2_StartAuthSession response.
@@ -65,7 +66,7 @@ public static class TpmResponseCodecExtensions
         /// See TPM 2.0 Part 3, Section 11.1 - TPM2_StartAuthSession.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec StartAuthSession => TpmResponseCodec.CreateWithHandle<StartAuthSessionResponse>(
+        public static TpmResponseCodec StartAuthSession => TpmResponseCodec.CreateWithHandle(
             static (ref TpmReader reader, uint handle, System.Buffers.MemoryPool<byte> pool) =>
                 StartAuthSessionResponse.Parse(ref reader, TpmiShAuthSession.FromValue(handle), pool));
 
@@ -106,7 +107,7 @@ public static class TpmResponseCodecExtensions
         /// See TPM 2.0 Part 3, Section 24.1 - TPM2_CreatePrimary.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec CreatePrimary => TpmResponseCodec.CreateWithHandle<CreatePrimaryResponse>(
+        public static TpmResponseCodec CreatePrimary => TpmResponseCodec.CreateWithHandle(
             static (ref TpmReader reader, uint handle, System.Buffers.MemoryPool<byte> pool) =>
                 CreatePrimaryResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
@@ -125,7 +126,7 @@ public static class TpmResponseCodecExtensions
         /// See TPM 2.0 Part 3, Section 30.2 - TPM2_GetCapability.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec GetCapability => TpmResponseCodec.Create<GetCapabilityResponse>(
+        public static TpmResponseCodec GetCapability => TpmResponseCodec.Create(
             GetCapabilityResponse.Parse);
 
         /// <summary>
@@ -144,7 +145,6 @@ public static class TpmResponseCodecExtensions
         /// See TPM 2.0 Part 3, Section 22.4 - TPM2_PCR_Read.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec PcrRead => TpmResponseCodec.Create<PcrReadResponse>(
-            PcrReadResponse.Parse);
+        public static TpmResponseCodec PcrRead => TpmResponseCodec.Create(PcrReadResponse.Parse);
     }
 }

@@ -1,4 +1,5 @@
-﻿using System.Formats.Cbor;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Formats.Cbor;
 
 namespace Verifiable.Cbor.Converters;
 
@@ -24,6 +25,7 @@ namespace Verifiable.Cbor.Converters;
 /// ]
 /// </code>
 /// </remarks>
+[SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
 public sealed class EcdsaSdDerivedProofValue: IEquatable<EcdsaSdDerivedProofValue>
 {
     /// <summary>

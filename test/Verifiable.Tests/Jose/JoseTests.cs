@@ -1,4 +1,5 @@
 ﻿using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Cryptography;
@@ -16,7 +17,7 @@ namespace Verifiable.Tests.Jose;
 /// Tests for JOSE operations using both registry-based and explicit function APIs.
 /// </summary>
 [TestClass]
-public sealed class JoseTests
+internal sealed class JoseTests
 {
     /// <summary>
     /// Test context for accessing test information and cancellation token.
@@ -38,16 +39,18 @@ public sealed class JoseTests
         var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "1234567890", ["name"] = "Test User" };
 
-        var keyMaterial = TestKeyMaterialProvider.P256KeyMaterial;
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
 
         using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
-            keyMaterial.PrivateKey,
+            privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared);
+            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -60,8 +63,8 @@ public sealed class JoseTests
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
-            keyMaterial.PublicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async);
+            publicKey,
+            MicrosoftCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Signature verification should succeed.");
     }
@@ -73,12 +76,15 @@ public sealed class JoseTests
         var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "resolver-test", ["name"] = "Resolver Test" };
 
-        var keyMaterial = TestKeyMaterialProvider.P256KeyMaterial;
-        var resolverState = new TestResolverState(
-            keyMaterial.PrivateKey.AsReadOnlySpan().ToArray(),
-            keyMaterial.PublicKey.AsReadOnlySpan().ToArray());
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
 
-        JwsMessage jwsMessage = await Jws.SignAsync(
+        var resolverState = new TestResolverState(
+            privateKey.AsReadOnlySpan().ToArray(),
+            publicKey.AsReadOnlySpan().ToArray());
+
+        using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
@@ -88,7 +94,7 @@ public sealed class JoseTests
             ResolvePrivateKeyMaterial,
             0,
             BindPrivateKey,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -96,7 +102,7 @@ public sealed class JoseTests
         string[] parts = jws.Split('.');
         Assert.HasCount(3, parts);
 
-        bool isValid = await Jws.VerifyAsync<Dictionary<string, object>, TestResolverState, int>(
+        bool isValid = await Jws.VerifyAsync(
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
@@ -105,7 +111,7 @@ public sealed class JoseTests
             ResolvePublicKeyMaterial,
             0,
             BindPublicKey,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Signature verification with resolver/binder should succeed.");
     }
@@ -117,16 +123,18 @@ public sealed class JoseTests
         var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es384, [JwkProperties.Typ] = "JWT" };
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "user-384", [JwkProperties.Iat] = 1234567890 };
 
-        var keyMaterial = TestKeyMaterialProvider.P384KeyMaterial;
+        var keyPair = TestKeyMaterialProvider.CreateP384KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
 
-        JwsMessage jwsMessage = await Jws.SignAsync(
+        using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
-            keyMaterial.PrivateKey,
+            privateKey,
             MicrosoftCryptographicFunctions.SignP384Async,
-            SensitiveMemoryPool<byte>.Shared);
+            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -135,8 +143,8 @@ public sealed class JoseTests
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
-            keyMaterial.PublicKey,
-            MicrosoftCryptographicFunctions.VerifyP384Async);
+            publicKey,
+            MicrosoftCryptographicFunctions.VerifyP384Async).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-384 signature verification should succeed.");
     }
@@ -148,16 +156,18 @@ public sealed class JoseTests
         var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es512, [JwkProperties.Typ] = "JWT" };
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "user-521", [JwkProperties.Exp] = 9999999999 };
 
-        var keyMaterial = TestKeyMaterialProvider.P521KeyMaterial;
+        var keyPair = TestKeyMaterialProvider.CreateP521KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
 
-        JwsMessage jwsMessage = await Jws.SignAsync(
+        using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
-            keyMaterial.PrivateKey,
+            privateKey,
             MicrosoftCryptographicFunctions.SignP521Async,
-            SensitiveMemoryPool<byte>.Shared);
+            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -166,8 +176,8 @@ public sealed class JoseTests
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
-            keyMaterial.PublicKey,
-            MicrosoftCryptographicFunctions.VerifyP521Async);
+            publicKey,
+            MicrosoftCryptographicFunctions.VerifyP521Async).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-521 signature verification should succeed.");
     }
@@ -180,19 +190,23 @@ public sealed class JoseTests
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "test" };
 
         //Use one key pair for signing.
-        var signingKeyMaterial = TestKeyMaterialProvider.P256KeyMaterial;
+        var signingKeyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var signingPublicKey = signingKeyPair.PublicKey;
+        using var signingPrivateKey = signingKeyPair.PrivateKey;
 
         //Create a different key pair for verification (wrong key).
-        var wrongKeyMaterial = MicrosoftKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+        var wrongKeyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var wrongPublicKey = wrongKeyPair.PublicKey;
+        using var wrongPrivateKey = wrongKeyPair.PrivateKey;
 
-        JwsMessage jwsMessage = await Jws.SignAsync(
+        using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
-            signingKeyMaterial.PrivateKey,
+            signingPrivateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared);
+            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -201,14 +215,10 @@ public sealed class JoseTests
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
-            wrongKeyMaterial.PublicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async);
+            wrongPublicKey,
+            MicrosoftCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
 
         Assert.IsFalse(isValid, "Verification with wrong key should fail.");
-
-        //Clean up the wrong key material.
-        wrongKeyMaterial.PublicKey.Dispose();
-        wrongKeyMaterial.PrivateKey.Dispose();
     }
 
 
@@ -218,23 +228,26 @@ public sealed class JoseTests
         var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
         var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "decode-test", ["custom"] = "value" };
 
-        var keyMaterial = TestKeyMaterialProvider.P256KeyMaterial;
-        var resolverState = new TestResolverState(
-            keyMaterial.PrivateKey.AsReadOnlySpan().ToArray(),
-            keyMaterial.PublicKey.AsReadOnlySpan().ToArray());
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
 
-        JwsMessage jwsMessage = await Jws.SignAsync(
+        var resolverState = new TestResolverState(
+            privateKey.AsReadOnlySpan().ToArray(),
+            publicKey.AsReadOnlySpan().ToArray());
+
+        using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
             EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
-            keyMaterial.PrivateKey,
+            privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared);
+            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
-        JwsVerificationResult<Dictionary<string, object>> result = await Jws.VerifyAndDecodeAsync<Dictionary<string, object>, TestResolverState, int>(
+        JwsVerificationResult<Dictionary<string, object>> result = await Jws.VerifyAndDecodeAsync(
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
@@ -243,7 +256,7 @@ public sealed class JoseTests
             ResolvePublicKeyMaterial,
             0,
             BindPublicKey,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid, "Signature should be valid.");
         Assert.AreEqual(WellKnownJwaValues.Es256, result.Header[JwkProperties.Alg]?.ToString());
@@ -271,8 +284,8 @@ public sealed class JoseTests
                 (context, pool, state, ct) => ValueTask.FromResult<PrivateKeyMemory?>(null),
                 0,
                 (material, state, ct) => throw new InvalidOperationException("Binder should not be called."),
-                cancellationToken);
-        });
+                cancellationToken).ConfigureAwait(false);
+        }).ConfigureAwait(false);
     }
 
 
@@ -306,6 +319,8 @@ public sealed class JoseTests
     /// <summary>
     /// Test resolver that returns private key material from state.
     /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership transfers to the caller (Jws.SignAsync) which disposes via PrivateKey.")]
     private static ValueTask<PrivateKeyMemory?> ResolvePrivateKeyMaterial(
         JoseKeyContext<Dictionary<string, object>> context,
         MemoryPool<byte> pool,
@@ -314,6 +329,7 @@ public sealed class JoseTests
     {
         IMemoryOwner<byte> memoryOwner = pool.Rent(state.PrivateKeyBytes.Length);
         state.PrivateKeyBytes.CopyTo(memoryOwner.Memory.Span);
+
         return ValueTask.FromResult<PrivateKeyMemory?>(new PrivateKeyMemory(memoryOwner, CryptoTags.P256PrivateKey));
     }
 
@@ -321,6 +337,8 @@ public sealed class JoseTests
     /// <summary>
     /// Test resolver that returns public key material from state.
     /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership transfers to the caller (Jws.VerifyAsync) which disposes via PublicKey.")]
     private static ValueTask<PublicKeyMemory?> ResolvePublicKeyMaterial(
         JoseKeyContext<Dictionary<string, object>> context,
         MemoryPool<byte> pool,
@@ -329,6 +347,7 @@ public sealed class JoseTests
     {
         IMemoryOwner<byte> memoryOwner = pool.Rent(state.PublicKeyBytes.Length);
         state.PublicKeyBytes.CopyTo(memoryOwner.Memory.Span);
+
         return ValueTask.FromResult<PublicKeyMemory?>(new PublicKeyMemory(memoryOwner, CryptoTags.P256PublicKey));
     }
 
@@ -336,6 +355,8 @@ public sealed class JoseTests
     /// <summary>
     /// Test binder that binds signing function to private key material.
     /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership transfers to the caller (Jws.SignAsync) which disposes the returned PrivateKey.")]
     private static ValueTask<PrivateKey> BindPrivateKey(
         PrivateKeyMemory material,
         int state,
@@ -348,6 +369,8 @@ public sealed class JoseTests
     /// <summary>
     /// Test binder that binds verification function to public key material.
     /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership transfers to the caller (Jws.VerifyAsync) which disposes the returned PublicKey.")]
     private static ValueTask<PublicKey> BindPublicKey(
         PublicKeyMemory material,
         int state,

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -59,11 +60,9 @@ public delegate byte[] HmacKeyGeneratorDelegate();
 /// See <see href="https://www.w3.org/TR/vc-di-ecdsa/">VC Data Integrity ECDSA Cryptosuites v1.0</see>.
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with the latest syntax.")]
 public static class CredentialEcdsaSd2023Extensions
-{
-    private const string DataIntegrityProofType = "DataIntegrityProof";
-    private const string EcdsaSd2023CryptosuiteName = "ecdsa-sd-2023";
-
+{    
     extension(VerifiableCredential credential)
     {
         /// <summary>
@@ -130,14 +129,14 @@ public static class CredentialEcdsaSd2023Extensions
                 serializeBaseProof,
                 encoder,
                 memoryPool,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             var signedCredential = deserialize(serialize(credential));
             signedCredential.Proof =
             [
                 new DataIntegrityProof
                 {
-                    Type = DataIntegrityProofType,
+                    Type = CredentialConstants.DataIntegrityProofType,
                     Cryptosuite = EcdsaSd2023CryptosuiteInfo.Instance,
                     Created = DateTimeStampFormat.Format(proofCreated),
                     VerificationMethod = new AssertionMethod(verificationMethodId),
@@ -244,8 +243,8 @@ public static class CredentialEcdsaSd2023Extensions
             var credentialJson = serialize(credential);
 
             var proofOptionsJson = serializeProofOptions(
-                DataIntegrityProofType,
-                EcdsaSd2023CryptosuiteName,
+                CredentialConstants.DataIntegrityProofType,
+                CredentialConstants.Cryptosuites.EcdsaSd2023,
                 proofCreatedString,
                 verificationMethodId,
                 AssertionMethod.Purpose,
@@ -303,7 +302,7 @@ public static class CredentialEcdsaSd2023Extensions
 
             var baseSignature = await issuerPrivateKey.SignAsync(
                 baseSignatureData.Memory[..signatureDataLength],
-                memoryPool);
+                memoryPool).ConfigureAwait(false);
 
             //Sign non-mandatory statements.
             var sortedNonMandatoryIndexes = prepared.NonMandatoryIndexes.OrderBy(i => i).ToList();
@@ -316,7 +315,7 @@ public static class CredentialEcdsaSd2023Extensions
                 sortedNonMandatoryIndexes,
                 ephemeralKeyPair.PrivateKey,
                 memoryPool,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             var signatureBytes = baseSignature.AsReadOnlySpan().ToArray();
             var statementSignatures = signedStatements
@@ -403,7 +402,7 @@ public static class CredentialEcdsaSd2023Extensions
                 encoder,
                 decoder,
                 memoryPool,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             context?.Dispose();
             return result;
@@ -435,6 +434,7 @@ public static class CredentialEcdsaSd2023Extensions
         /// For production usage, prefer <see cref="VerifyBaseProofAsync"/> which discards intermediates.
         /// </para>
         /// </remarks>
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the signatures.")]
         public async ValueTask<(CredentialVerificationResult Result, HolderProofContext? Context)> VerifyBaseProofVerboseAsync(
             PublicKeyMemory issuerPublicKey,
             VerificationDelegate verificationDelegate,
@@ -466,7 +466,7 @@ public static class CredentialEcdsaSd2023Extensions
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.NoProof), null);
             }
 
-            if(proof.Cryptosuite?.CryptosuiteName != EcdsaSd2023CryptosuiteName)
+            if(proof.Cryptosuite?.CryptosuiteName != CredentialConstants.Cryptosuites.EcdsaSd2023)
             {
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.MissingCryptosuite), null);
             }
@@ -509,8 +509,8 @@ public static class CredentialEcdsaSd2023Extensions
             var mandatoryHash = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("", sortedMandatoryStatements)));
 
             var proofOptionsJson = serializeProofOptions(
-                proof.Type ?? DataIntegrityProofType,
-                EcdsaSd2023CryptosuiteName,
+                proof.Type ?? CredentialConstants.DataIntegrityProofType,
+                CredentialConstants.Cryptosuites.EcdsaSd2023,
                 proof.Created ?? "",
                 proof.VerificationMethod?.Id ?? "",
                 proof.ProofPurpose ?? AssertionMethod.Purpose,
@@ -535,7 +535,7 @@ public static class CredentialEcdsaSd2023Extensions
             var isValid = await issuerPublicKey.VerifyAsync(
                 baseSignatureData.Memory[..signatureDataLength],
                 parsedProof.BaseSignature,
-                verificationDelegate);
+                verificationDelegate).ConfigureAwait(false);
 
             if(!isValid)
             {
@@ -648,7 +648,7 @@ public static class CredentialEcdsaSd2023Extensions
                 encoder,
                 decoder,
                 memoryPool,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             return derivedCredential;
         }
@@ -706,9 +706,9 @@ public static class CredentialEcdsaSd2023Extensions
             
             var proof = credential.Proof?.FirstOrDefault() ?? throw new InvalidOperationException("Credential must have a proof to derive from.");
 
-            if(proof.Cryptosuite?.CryptosuiteName != EcdsaSd2023CryptosuiteName)
+            if(proof.Cryptosuite?.CryptosuiteName != CredentialConstants.Cryptosuites.EcdsaSd2023)
             {
-                throw new InvalidOperationException($"Expected cryptosuite '{EcdsaSd2023CryptosuiteName}' but found '{proof.Cryptosuite?.CryptosuiteName}'.");
+                throw new InvalidOperationException($"Expected cryptosuite '{CredentialConstants.Cryptosuites.EcdsaSd2023}' but found '{proof.Cryptosuite?.CryptosuiteName}'.");
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -919,7 +919,7 @@ public static class CredentialEcdsaSd2023Extensions
                 encoder,
                 decoder,
                 memoryPool,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             context?.Dispose();
             return result;
@@ -944,6 +944,7 @@ public static class CredentialEcdsaSd2023Extensions
         /// A tuple containing the verification result and, if successful, the verifier context
         /// with all intermediate values for W3C test vector validation.
         /// </returns>
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "<Pending>")]
         public async ValueTask<(CredentialVerificationResult Result, VerifierProofContext? Context)> VerifyDerivedProofVerboseAsync(
             PublicKeyMemory issuerPublicKey,
             VerificationDelegate verificationDelegate,
@@ -973,7 +974,7 @@ public static class CredentialEcdsaSd2023Extensions
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.NoProof), null);
             }
 
-            if(proof.Cryptosuite?.CryptosuiteName != EcdsaSd2023CryptosuiteName)
+            if(proof.Cryptosuite?.CryptosuiteName != CredentialConstants.Cryptosuites.EcdsaSd2023)
             {
                 return (CredentialVerificationResult.Failed(VerificationFailureReason.MissingCryptosuite), null);
             }
@@ -1016,8 +1017,8 @@ public static class CredentialEcdsaSd2023Extensions
             var mandatoryHash = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("", mandatoryStatements)));
 
             var proofOptionsJson = serializeProofOptions(
-                proof.Type ?? DataIntegrityProofType,
-                EcdsaSd2023CryptosuiteName,
+                proof.Type ?? CredentialConstants.DataIntegrityProofType,
+                CredentialConstants.Cryptosuites.EcdsaSd2023,
                 proof.Created ?? "",
                 proof.VerificationMethod?.Id ?? "",
                 proof.ProofPurpose ?? AssertionMethod.Purpose,
@@ -1042,7 +1043,7 @@ public static class CredentialEcdsaSd2023Extensions
             var baseSignatureValid = await issuerPublicKey.VerifyAsync(
                 baseSignatureData.Memory[..signatureDataLength],
                 parsedProof.BaseSignature,
-                verificationDelegate);
+                verificationDelegate).ConfigureAwait(false);
 
             if(!baseSignatureValid)
             {
@@ -1073,7 +1074,7 @@ public static class CredentialEcdsaSd2023Extensions
                 var sigValid = await ephemeralPublicKey.VerifyAsync(
                     statementBytes,
                     signature,
-                    verificationDelegate);
+                    verificationDelegate).ConfigureAwait(false);
 
                 if(!sigValid)
                 {
@@ -1125,7 +1126,7 @@ public static class CredentialEcdsaSd2023Extensions
             var statement = statements[i];
             var signature = await privateKey.SignAsync(
                 Encoding.UTF8.GetBytes(statement),
-                pool);
+                pool).ConfigureAwait(false);
 
             signedStatements.Add(new NQuadSignedStatement(statement, signature, statementIndexes[i]));
         }

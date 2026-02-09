@@ -23,7 +23,7 @@ namespace Verifiable.Tests.Serialization;
 /// </para>
 /// </remarks>
 [TestClass]
-public sealed class SdCwtPathExtractionTests
+internal sealed class SdCwtPathExtractionTests
 {
     /// <summary>
     /// The test context.

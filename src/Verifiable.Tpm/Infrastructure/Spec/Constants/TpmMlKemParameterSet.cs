@@ -1,4 +1,6 @@
-﻿namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
 
 /// <summary>
 /// ML-KEM parameter set identifiers (TPMI_MLKEM_PARAMETER_SET).
@@ -12,6 +14,8 @@
 /// Specification reference: TPM 2.0 Library Part 2, Section 6.3.21 (v1.85).
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "This follows the TPM 2.0 specification.")]
+[SuppressMessage("Design", "CA1028:Enum Storage should be Int32", Justification = "This follows the TPM 2.0 specification.")]
 public enum TpmMlKemParameterSet: ushort
 {
     /// <summary>

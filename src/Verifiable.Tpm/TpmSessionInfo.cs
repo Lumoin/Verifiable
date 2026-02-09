@@ -42,6 +42,7 @@ public sealed record TpmSessionInfo(
         TpmPlatform platform,
         TimeProvider timeProvider)
     {
+        ArgumentNullException.ThrowIfNull(timeProvider);
         return new TpmSessionInfo(manufacturer, firmwareVersion, platform, timeProvider.GetUtcNow());
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Jose
+﻿namespace Verifiable.JCose
 {
     /// <summary>
     /// Class containing the well-known key type (kty) values used in JSON Web Key (JWK).
@@ -29,15 +29,25 @@
         /// <summary>
         /// RSA key type.
         /// </summary>
-        /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.3.1">RFC 7518 - Section 6.3.1</see>.</remarks>
+        /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.3.1">RFC 7518 §6.3.1</see>.</remarks>
         public static readonly string Rsa = "RSA";
+
+        /// <summary>
+        /// Algorithm Key Pair (AKP) key type for post-quantum algorithms.
+        /// </summary>
+        /// <remarks>
+        /// See <see href="https://datatracker.ietf.org/doc/draft-ietf-cose-dilithium/">ML-DSA for JOSE and COSE</see>.
+        /// Used for ML-DSA and other algorithms where the key structure is algorithm-specific.
+        /// The <c>pub</c> and <c>priv</c> parameters carry the raw public and private key bytes.
+        /// </remarks>
+        public static readonly string Akp = "AKP";
 
 
         /// <summary>
-        /// If <paramref name="kty"/> is <see cref="Ec"/> or not.
+        /// If <paramref name="kty"/> is <see cref="Rsa"/> or not.
         /// </summary>
         /// <param name="kty">The key type.</param>
-        /// <returns><see langword="true" /> if <paramref name="kty"/> is <see cref="Ec"/>; otherwise, <see langword="false" /></returns>.
+        /// <returns><see langword="true" /> if <paramref name="kty"/> is <see cref="Rsa"/>; otherwise, <see langword="false" />.</returns>
         public static bool IsRsa(string kty) => Equals(kty, Rsa);
 
 
@@ -45,23 +55,31 @@
         /// If <paramref name="kty"/> is <see cref="Oct"/> or not.
         /// </summary>
         /// <param name="kty">The key type.</param>
-        /// <returns><see langword="true" /> if <paramref name="kty"/> is <see cref="Oct"/>; otherwise, <see langword="false" /></returns>.
+        /// <returns><see langword="true" /> if <paramref name="kty"/> is <see cref="Oct"/>; otherwise, <see langword="false" />.</returns>
         public static bool IsOct(string kty) => Equals(kty, Oct);
 
         /// <summary>
         /// If <paramref name="kty"/> is <see cref="Ec"/> or not.
         /// </summary>
         /// <param name="kty">The key type.</param>
-        /// <returns><see langword="true" /> if <paramref name="kty"/> is <see cref="Ec"/>; otherwise, <see langword="false" /></returns>.  
+        /// <returns><see langword="true" /> if <paramref name="kty"/> is <see cref="Ec"/>; otherwise, <see langword="false" />.</returns>
         public static bool IsEc(string kty) => Equals(kty, Ec);
-        
+
 
         /// <summary>
-        /// If <paramref name="kty"/> is <see cref="Ec"/> or not.
+        /// If <paramref name="kty"/> is <see cref="Okp"/> or not.
         /// </summary>
         /// <param name="kty">The key type.</param>
-        /// <returns><see langword="true" /> if <paramref name="kty"/> is <see cref="Okp"/>; otherwise, <see langword="false" /></returns>.
+        /// <returns><see langword="true" /> if <paramref name="kty"/> is <see cref="Okp"/>; otherwise, <see langword="false" />.</returns>
         public static bool IsOkp(string kty) => Equals(kty, Okp);
+
+
+        /// <summary>
+        /// If <paramref name="kty"/> is <see cref="Akp"/> or not.
+        /// </summary>
+        /// <param name="kty">The key type.</param>
+        /// <returns><see langword="true" /> if <paramref name="kty"/> is <see cref="Akp"/>; otherwise, <see langword="false" />.</returns>
+        public static bool IsAkp(string kty) => Equals(kty, Akp);
 
 
         /// <summary>
@@ -76,7 +94,8 @@
             string _ when IsEc(kty) => Ec,
             string _ when IsOct(kty) => Oct,
             string _ when IsOkp(kty) => Okp,
-            string _ when IsRsa(kty) => Rsa,            
+            string _ when IsRsa(kty) => Rsa,
+            string _ when IsAkp(kty) => Akp,
             string _ => kty
         };
 

@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Jose;
 /// Includes post-quantum cryptography algorithm tests based on draft IETF specifications.
 /// </summary>
 [TestClass]
-public class JwkThumbprintMalformedInputTests
+internal class JwkThumbprintMalformedInputTests
 {
     [TestMethod]
     public void ComputeRsaThumbprintNullExponentThrowsArgumentNullException()

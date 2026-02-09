@@ -195,6 +195,7 @@ namespace Verifiable.Core.Assessment
             IReadOnlyDictionary<string, string>? baggage,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(claimsToAssess);
             //Note: We intentionally do not throw on cancellation here.
             //Assessment is fast and we want to evaluate partial results
             //even when the token was cancelled during claim generation.
@@ -259,6 +260,7 @@ namespace Verifiable.Core.Assessment
             IReadOnlyDictionary<string, string>? baggage,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(claimsToAssess);
             //Note: We intentionally do not throw on cancellation here.
             //Assessment is fast and we want to evaluate partial results
             //even when the token was cancelled during claim generation.

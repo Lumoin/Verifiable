@@ -115,7 +115,13 @@ public class Issuer: IEquatable<Issuer>
     /// Implicitly converts an <see cref="Issuer"/> to its URI string.
     /// </summary>
     /// <param name="issuer">The issuer to convert.</param>
-    public static implicit operator string(Issuer issuer) => issuer.Id;
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="issuer"/> is null.</exception>
+    public static implicit operator string(Issuer issuer)
+    {
+        ArgumentNullException.ThrowIfNull(issuer);
+
+        return issuer.Id;
+    }
 
 
     /// <inheritdoc/>

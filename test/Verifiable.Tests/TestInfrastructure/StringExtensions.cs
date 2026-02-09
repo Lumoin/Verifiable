@@ -1,9 +1,11 @@
-﻿namespace Verifiable.Tests.TestInfrastructure
+﻿using System.Globalization;
+
+namespace Verifiable.Tests.TestInfrastructure
 {
     /// <summary>
     /// Extension methods for <see cref="string"/> to help with testing.
     /// </summary>
-    public static class StringExtensions
+    internal static class StringExtensions
     {
         /// <summary>
         /// Toggles the case of the character at the given index.
@@ -37,7 +39,7 @@
         /// <returns>The character toggled.</returns>
         private static char ToggleCase(this char character)
         {
-            return char.IsUpper(character) ? char.ToLower(character) : char.ToUpper(character);
+            return char.IsUpper(character) ? char.ToLower(character, CultureInfo.CurrentCulture) : char.ToUpper(character, CultureInfo.CurrentCulture);
         }
     }
 }

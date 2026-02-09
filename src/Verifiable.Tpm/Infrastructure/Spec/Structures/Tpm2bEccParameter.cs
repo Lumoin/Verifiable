@@ -64,7 +64,7 @@ public sealed class Tpm2bEccParameter: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + Length;
+    public int SerializedSize => sizeof(ushort) + Length;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -83,6 +83,7 @@ public sealed class Tpm2bEccParameter: SensitiveMemory, ITpmWireType
     /// <returns>The parsed ECC parameter.</returns>
     public static Tpm2bEccParameter Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
 
         if(size == 0)
@@ -110,6 +111,7 @@ public sealed class Tpm2bEccParameter: SensitiveMemory, ITpmWireType
     /// <returns>The created ECC parameter.</returns>
     public static Tpm2bEccParameter Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)
         {
             return Empty;

@@ -53,7 +53,7 @@ namespace Verifiable.Tests.DataIntegrity;
 /// </para>
 /// </remarks>
 [TestClass]
-public sealed class CredentialIssuanceFlowTests
+internal sealed class CredentialIssuanceFlowTests
 {
     /// <summary>
     /// Test context providing test run information and cancellation support.
@@ -106,7 +106,7 @@ public sealed class CredentialIssuanceFlowTests
     /// Uses embedded contexts for deterministic testing. See <see cref="CanonicalizationTestUtilities"/>
     /// for production context resolution with integrity verification.
     /// </remarks>
-    private static ContextResolverDelegate ContextResolver { get; } = 
+    private static ContextResolverDelegate ContextResolver { get; } =
         CanonicalizationTestUtilities.CreateTestContextResolver();
 
     /// <summary>
@@ -116,7 +116,7 @@ public sealed class CredentialIssuanceFlowTests
     /// Implements RDF Dataset Canonicalization per W3C specification.
     /// See <see cref="CanonicalizationTestUtilities.CreateRdfcCanonicalizer"/> for details.
     /// </remarks>
-    private static CanonicalizationDelegate RdfcCanonicalizer { get; } = 
+    private static CanonicalizationDelegate RdfcCanonicalizer { get; } =
         CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
     /// <summary>
@@ -238,16 +238,16 @@ public sealed class CredentialIssuanceFlowTests
             subject,
             validFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         var credentialJson = JsonSerializer.Serialize(credential, JsonOptions);
 
         //Canonicalize without examples context. The alumniOf claim should be dropped.
-        var canonicalFormWithoutContext = await RdfcCanonicalizer(credentialJson, ContextResolver, cancellationToken: TestContext.CancellationToken);
+        var canonicalFormWithoutContext = await RdfcCanonicalizer(credentialJson, ContextResolver, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         var alumniOfInCanonicalWithoutContext = canonicalFormWithoutContext.Contains(ClaimValueUniversityName, StringComparison.Ordinal);
 
         //Add examples context and canonicalize again. The alumniOf claim should now be included.
         var credentialWithContext = AddContextToCredential(credentialJson, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl);
-        var canonicalFormWithContext = await RdfcCanonicalizer(credentialWithContext, ContextResolver, cancellationToken: TestContext.CancellationToken);
+        var canonicalFormWithContext = await RdfcCanonicalizer(credentialWithContext, ContextResolver, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         var alumniOfInCanonicalWithContext = canonicalFormWithContext.Contains(ClaimValueUniversityName, StringComparison.Ordinal);
 
         Assert.IsFalse(alumniOfInCanonicalWithoutContext, "Claim should NOT be in canonical form without examples context.");
@@ -262,18 +262,22 @@ public sealed class CredentialIssuanceFlowTests
     [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
     public async Task IssueAndVerifyCredentialWithRdfcSucceeds(DidWebTestData testData)
     {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
         var issuerDidDocument = await WebDidBuilder.BuildAsync(
-            testData.KeyPair.PublicKey,
+            publicKey,
             testData.VerificationMethodTypeInfo,
             IssuerDomain,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
 
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
-            testData.KeyPair.PublicKey,
+            publicKey,
             testData.VerificationMethodTypeInfo,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var holderDid = holderDidDocument.Id!.ToString();
 
@@ -294,7 +298,7 @@ public sealed class CredentialIssuanceFlowTests
             validFrom,
             additionalTypes: [AlumniCredentialType],
             validUntil: validUntil,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Add examples context so alumniOf is protected by signature.
         var credentialJson = JsonSerializer.Serialize(unsignedCredential, JsonOptions);
@@ -302,7 +306,7 @@ public sealed class CredentialIssuanceFlowTests
         var credentialWithContextObj = JsonSerializer.Deserialize<VerifiableCredential>(credentialWithContext, JsonOptions)!;
 
         var signedCredential = await credentialWithContextObj.SignAsync(
-            testData.KeyPair.PrivateKey,
+            privateKey,
             issuerVerificationMethodId,
             EddsaRdfc2022CryptosuiteInfo.Instance,
             proofCreated,
@@ -314,7 +318,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var verificationResult = await signedCredential.VerifyAsync(
             issuerDidDocument,
@@ -326,7 +330,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CredentialVerificationResult.Success(), verificationResult);
         Assert.AreEqual(holderDid, signedCredential.CredentialSubject![0].Id);
@@ -342,18 +346,22 @@ public sealed class CredentialIssuanceFlowTests
     [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
     public async Task IssueAndVerifyCredentialWithJcsSucceeds(DidWebTestData testData)
     {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
         var issuerDidDocument = await WebDidBuilder.BuildAsync(
-            testData.KeyPair.PublicKey,
+            publicKey,
             testData.VerificationMethodTypeInfo,
             IssuerDomain,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
 
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
-            testData.KeyPair.PublicKey,
+            publicKey,
             testData.VerificationMethodTypeInfo,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var holderDid = holderDidDocument.Id!.ToString();
 
@@ -374,11 +382,11 @@ public sealed class CredentialIssuanceFlowTests
             validFrom,
             additionalTypes: [AlumniCredentialType],
             validUntil: validUntil,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //No need for examples context with JCS since all properties are signed.
         var signedCredential = await unsignedCredential.SignAsync(
-            testData.KeyPair.PrivateKey,
+            privateKey,
             issuerVerificationMethodId,
             EddsaJcs2022CryptosuiteInfo.Instance,
             proofCreated,
@@ -390,7 +398,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var verificationResult = await signedCredential.VerifyAsync(
             issuerDidDocument,
@@ -402,7 +410,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CredentialVerificationResult.Success(), verificationResult);
         Assert.AreEqual(holderDid, signedCredential.CredentialSubject![0].Id);
@@ -417,11 +425,15 @@ public sealed class CredentialIssuanceFlowTests
     [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
     public async Task TamperedCredentialFailsVerificationWithRdfc(DidWebTestData testData)
     {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
         var issuerDidDocument = await WebDidBuilder.BuildAsync(
-            testData.KeyPair.PublicKey,
+            publicKey,
             testData.VerificationMethodTypeInfo,
             IssuerDomain,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
 
@@ -440,14 +452,14 @@ public sealed class CredentialIssuanceFlowTests
             subject,
             validFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var credentialJson = JsonSerializer.Serialize(unsignedCredential, JsonOptions);
         var credentialWithContext = AddContextToCredential(credentialJson, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl);
         var credentialWithContextObj = JsonSerializer.Deserialize<VerifiableCredential>(credentialWithContext, JsonOptions)!;
 
         var signedCredential = await credentialWithContextObj.SignAsync(
-            testData.KeyPair.PrivateKey,
+            privateKey,
             issuerVerificationMethodId,
             EddsaRdfc2022CryptosuiteInfo.Instance,
             proofCreated,
@@ -459,7 +471,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Tamper by modifying the JSON string directly.
         var signedCredentialJson = JsonSerializer.Serialize(signedCredential, JsonOptions);
@@ -476,7 +488,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), verificationResult);
     }
@@ -489,11 +501,15 @@ public sealed class CredentialIssuanceFlowTests
     [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
     public async Task TamperedCredentialFailsVerificationWithJcs(DidWebTestData testData)
     {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
         var issuerDidDocument = await WebDidBuilder.BuildAsync(
-            testData.KeyPair.PublicKey,
+            publicKey,
             testData.VerificationMethodTypeInfo,
             IssuerDomain,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
 
@@ -512,10 +528,10 @@ public sealed class CredentialIssuanceFlowTests
             subject,
             validFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedCredential = await unsignedCredential.SignAsync(
-            testData.KeyPair.PrivateKey,
+            privateKey,
             issuerVerificationMethodId,
             EddsaJcs2022CryptosuiteInfo.Instance,
             proofCreated,
@@ -527,7 +543,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Tamper by modifying the JSON string directly.
         var signedCredentialJson = JsonSerializer.Serialize(signedCredential, JsonOptions);
@@ -544,7 +560,7 @@ public sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), verificationResult);
     }

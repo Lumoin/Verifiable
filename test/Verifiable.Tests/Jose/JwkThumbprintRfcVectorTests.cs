@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Jose;
 /// Ensures compliance with <see href="https://tools.ietf.org/html/rfc7638">RFC 7638</see> specification and interoperability.
 /// </summary>
 [TestClass]
-public class JwkThumbprintRfcVectorTests
+internal class JwkThumbprintRfcVectorTests
 {
     /// <summary>
     /// RFC 7638 Section 3.1 test vector for RSA key thumbprint.

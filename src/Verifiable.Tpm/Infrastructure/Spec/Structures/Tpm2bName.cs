@@ -97,73 +97,80 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     /// <summary>
     /// Gets the Name data as a read-only span.
     /// </summary>
-    /// <returns>The Name bytes.</returns>
-    public ReadOnlySpan<byte> AsSpan()
+    public ReadOnlySpan<byte> Span
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
-
-        if(storage is null)
+        get
         {
-            return ReadOnlySpan<byte>.Empty;
-        }
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if(storage is null)
+            {
+                return [];
+            }
 
-        return storage.Memory.Span.Slice(0, size);
+            return storage.Memory.Span.Slice(0, size);
+        }
     }
 
     /// <summary>
     /// Gets the name algorithm if this is a digest-based Name.
     /// </summary>
-    /// <returns>The algorithm identifier, or 0 if this is a handle-based Name.</returns>
-    public ushort GetNameAlgorithm()
+    public ushort NameAlgorithm
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
-
-        if(!IsDigestName)
+        get
         {
-            return 0;
-        }
+            ObjectDisposedException.ThrowIf(disposed, this);
 
-        ReadOnlySpan<byte> span = AsSpan();
-        return (ushort)((span[0] << 8) | span[1]);
+            if(!IsDigestName)
+            {
+                return 0;
+            }
+
+            ReadOnlySpan<byte> span = Span;
+            return (ushort)((span[0] << 8) | span[1]);
+        }
     }
 
     /// <summary>
     /// Gets the digest portion if this is a digest-based Name.
     /// </summary>
-    /// <returns>The digest bytes, or empty if this is a handle-based Name.</returns>
-    public ReadOnlySpan<byte> GetDigest()
+    public ReadOnlySpan<byte> Digest
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
-
-        if(!IsDigestName)
+        get
         {
-            return ReadOnlySpan<byte>.Empty;
-        }
+            ObjectDisposedException.ThrowIf(disposed, this);
 
-        return AsSpan().Slice(2);
+            if(!IsDigestName)
+            {
+                return ReadOnlySpan<byte>.Empty;
+            }
+
+            return Span.Slice(2);
+        }
     }
 
     /// <summary>
     /// Gets the handle value if this is a handle-based Name.
     /// </summary>
-    /// <returns>The handle value, or 0 if this is a digest-based Name.</returns>
-    public uint GetHandle()
+    public uint Handle
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
-
-        if(!IsHandleName)
+        get
         {
-            return 0;
-        }
+            ObjectDisposedException.ThrowIf(disposed, this);
 
-        ReadOnlySpan<byte> span = AsSpan();
-        return (uint)((span[0] << 24) | (span[1] << 16) | (span[2] << 8) | span[3]);
+            if(!IsHandleName)
+            {
+                return 0;
+            }
+
+            ReadOnlySpan<byte> span = Span;
+            return (uint)((span[0] << 24) | (span[1] << 16) | (span[2] << 8) | span[3]);
+        }
     }
 
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + size;
+    public int SerializedSize => sizeof(ushort) + size;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -177,7 +184,7 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
 
         if(size > 0)
         {
-            writer.WriteBytes(AsSpan());
+            writer.WriteBytes(Span);
         }
     }
 
@@ -189,6 +196,7 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     /// <returns>The parsed Name.</returns>
     public static Tpm2bName Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
 
         if(size == 0)
@@ -216,6 +224,7 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     /// <returns>The created Name.</returns>
     public static Tpm2bName Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)
         {
             return Empty;
@@ -255,10 +264,10 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
 
             if(IsHandleName)
             {
-                return $"TPM2B_NAME(handle=0x{GetHandle():X8})";
+                return $"TPM2B_NAME(handle=0x{Handle:X8})";
             }
 
-            return $"TPM2B_NAME(alg=0x{GetNameAlgorithm():X4}, {GetDigest().Length} bytes)";
+            return $"TPM2B_NAME(alg=0x{NameAlgorithm:X4}, {Digest.Length} bytes)";
         }
     }
 }

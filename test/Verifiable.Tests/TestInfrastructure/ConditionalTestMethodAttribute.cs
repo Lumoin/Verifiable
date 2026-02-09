@@ -1,6 +1,5 @@
 ﻿using System.Reflection;
 using System.Runtime.CompilerServices;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -22,7 +21,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// public void TestRequiringTpm()
 /// {
 ///     using TpmDevice tpm = TpmDevice.Open();
-///     // Test code here.
+///     //Test code here.
 /// }
 /// </code>
 /// <para>
@@ -32,8 +31,22 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </remarks>
 /// <seealso cref="BaseSkipAttribute"/>
 /// <seealso cref="ConditionalTestClassAttribute"/>
-public class ConditionalTestMethodAttribute: TestMethodAttribute
+internal sealed class ConditionalTestMethodAttribute: TestMethodAttribute
 {
+    /// <summary>
+    /// Gets the file path of the source file that contains the method that called this property.
+    /// </summary>
+    public string CallerFilePath { get; }
+    
+    /// <summary>
+    /// Gets the line number in the source file at which the method that called this property is invoked.
+    /// </summary>
+    /// <remarks>This property is typically used for debugging, logging, or diagnostic purposes to help
+    /// identify the exact location in the source code where a call originated. It is especially useful when combined
+    /// with caller information attributes to provide detailed trace information.</remarks>
+    public int CallerLineNumber { get; }
+
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ConditionalTestMethodAttribute"/> class.
     /// </summary>
@@ -41,16 +54,17 @@ public class ConditionalTestMethodAttribute: TestMethodAttribute
     /// <param name="callerLineNumber">The line number of the caller. Automatically populated.</param>
     public ConditionalTestMethodAttribute(
         [CallerFilePath] string callerFilePath = "",
-        [CallerLineNumber] int callerLineNumber = -1)
-        : base(callerFilePath, callerLineNumber)
+        [CallerLineNumber] int callerLineNumber = -1): base(callerFilePath, callerLineNumber)
     {
+        CallerFilePath = callerFilePath;
+        CallerLineNumber = callerLineNumber;
     }
+
 
     /// <inheritdoc/>
     public override async Task<TestResult[]> ExecuteAsync(ITestMethod testMethod)
     {
-        IEnumerable<BaseSkipAttribute> skipAttributes = FindSkipAttributes(testMethod);
-
+        List<BaseSkipAttribute> skipAttributes = FindSkipAttributes(testMethod);
         foreach(BaseSkipAttribute skipAttribute in skipAttributes)
         {
             if(skipAttribute.ShouldSkip(testMethod))
@@ -66,10 +80,11 @@ public class ConditionalTestMethodAttribute: TestMethodAttribute
             }
         }
 
-        return await base.ExecuteAsync(testMethod);
+        return await base.ExecuteAsync(testMethod).ConfigureAwait(false);
     }
 
-    private static IEnumerable<BaseSkipAttribute> FindSkipAttributes(ITestMethod testMethod)
+
+    private static List<BaseSkipAttribute> FindSkipAttributes(ITestMethod testMethod)
     {
         var skipAttributes = new List<BaseSkipAttribute>();
 
@@ -89,5 +104,5 @@ public class ConditionalTestMethodAttribute: TestMethodAttribute
         }
 
         return skipAttributes;
-    }
+    }    
 }

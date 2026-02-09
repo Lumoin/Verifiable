@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Cryptography.Context;
 /// Tests for <see cref="EncodingScheme"/> and <see cref="EncodingSchemeNames"/>.
 /// </summary>
 [TestClass]
-public sealed class EncodingSchemeTests
+internal sealed class EncodingSchemeTests
 {
     //Constants using nameof to tie test expectations to actual property names.
     private const string DerName = nameof(EncodingScheme.Der);

@@ -10,7 +10,7 @@ namespace Verifiable;
 /// <summary>
 /// A console program for DID and VC documents.
 /// </summary>
-public static class Program
+internal static class Program
 {
     /// <summary>
     /// An entry point to a console program for DID and VC documents.
@@ -19,12 +19,13 @@ public static class Program
     /// <returns>The exit code from the program.</returns>
     public static async Task<int> Main(string[] args)
     {
+        ArgumentNullException.ThrowIfNull(args);
         if(args.Length == 1 && args[0] == "-mcp")
         {
-            return await RunMcpServerAsync(args);
+            return await RunMcpServerAsync(args).ConfigureAwait(false);
         }
 
-        return await RunCliAsync(args);
+        return await RunCliAsync(args).ConfigureAwait(false);
     }
 
     private static async Task<int> RunMcpServerAsync(string[] args)
@@ -40,7 +41,7 @@ public static class Program
             options.LogToStandardErrorThreshold = LogLevel.Trace;
         });
 
-        await builder.Build().RunAsync();
+        await builder.Build().RunAsync().ConfigureAwait(false);
 
         return 0;
     }
@@ -157,7 +158,7 @@ public static class Program
                     Console.WriteLine();
                 }
 
-                var saveResult = await VerifiableOperations.SaveTpmInfoToFileAsync(outputPath);
+                var saveResult = await VerifiableOperations.SaveTpmInfoToFileAsync(outputPath).ConfigureAwait(false);
 
                 if(saveResult.IsSuccess)
                 {
@@ -165,7 +166,7 @@ public static class Program
                     return 0;
                 }
 
-                Console.Error.WriteLine(ConsoleFormatter.Error(saveResult.Error!));
+                await Console.Error.WriteLineAsync(ConsoleFormatter.Error(saveResult.Error!)).ConfigureAwait(false);
                 return 1;
             }
 
@@ -174,9 +175,9 @@ public static class Program
             {
                 if(!reveal)
                 {
-                    Console.Error.WriteLine(ConsoleFormatter.Warning("Warning: JSON output includes full PCR values."));
-                    Console.Error.WriteLine(ConsoleFormatter.Dim("  Use --reveal to acknowledge, or pipe to file intentionally."));
-                    Console.Error.WriteLine();
+                    await Console.Error.WriteLineAsync(ConsoleFormatter.Warning("Warning: JSON output includes full PCR values.")).ConfigureAwait(false);
+                    await Console.Error.WriteLineAsync(ConsoleFormatter.Dim("  Use --reveal to acknowledge, or pipe to file intentionally.")).ConfigureAwait(false);
+                    await Console.Error.WriteLineAsync().ConfigureAwait(false);
                 }
 
                 var jsonResult = VerifiableOperations.GetTpmInfoAsJson();
@@ -187,7 +188,7 @@ public static class Program
                     return 0;
                 }
 
-                Console.Error.WriteLine(ConsoleFormatter.Error(jsonResult.Error!));
+                await Console.Error.WriteLineAsync(ConsoleFormatter.Error(jsonResult.Error!)).ConfigureAwait(false);
                 return 1;
             }
 
@@ -200,7 +201,7 @@ public static class Program
                 return 0;
             }
 
-            Console.Error.WriteLine(ConsoleFormatter.Error(infoResult.Error!));
+            await Console.Error.WriteLineAsync(ConsoleFormatter.Error(infoResult.Error!)).ConfigureAwait(false);
             return 1;
         });
 
@@ -255,6 +256,6 @@ public static class Program
             ConsoleFormatter.DisableColors();
         }
 
-        return await parsed.InvokeAsync();
+        return await parsed.InvokeAsync().ConfigureAwait(false);
     }
 }

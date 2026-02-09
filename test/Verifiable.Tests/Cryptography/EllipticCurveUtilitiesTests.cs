@@ -1,6 +1,6 @@
 ﻿using System.Security.Cryptography;
 using Verifiable.Cryptography;
-using Verifiable.Tests.DataProviders;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography
@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Cryptography
     /// Tests for Elliptic curve utilities.
     /// </summary>
     [TestClass]
-    public sealed class EllipticCurveUtilitiesTests
+    internal sealed class EllipticCurveUtilitiesTests
     {
         /// <summary>
         /// Some elliptic curve exceptions need to contain this parameter name, so that

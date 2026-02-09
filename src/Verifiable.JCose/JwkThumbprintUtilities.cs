@@ -535,7 +535,7 @@ public static class JwkThumbprintUtilities
     /// </summary>
     /// <param name="sortedParams">The sorted JWK parameters.</param>
     /// <returns>The exact byte length needed for JSON representation.</returns>
-    private static int CalculateJsonLength(IList<KeyValuePair<string, string>> sortedParams)
+    private static int CalculateJsonLength(List<KeyValuePair<string, string>> sortedParams)
     {
         var length = 2; //'{' and '}'.
         for(int i = 0; i < sortedParams.Count; i++)
@@ -638,7 +638,7 @@ public static class JwkThumbprintUtilities
     /// These values are used to optimize memory allocation for JWK thumbprint computations.
     /// All constants align with the well-known values from <see cref="JwkProperties"/>, <see cref="WellKnownKeyTypeValues"/>, and <see cref="WellKnownCurveValues"/>.
     /// </summary>
-    public static class JwkTemplateConstants
+    internal static class JwkTemplateConstants
     {
         /// <summary>
         /// SHA-256 hash output size in bytes as defined by <see href="https://tools.ietf.org/html/rfc6234">RFC 6234</see>.

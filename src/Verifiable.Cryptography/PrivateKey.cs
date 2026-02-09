@@ -77,8 +77,8 @@ namespace Verifiable.Cryptography
         /// <returns>The signature of the data.</returns>
         public ValueTask<Signature> SignAsync(ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
-            return KeyMaterial.WithKeyBytesAsync(async (privateKeyBytes, dataToSign, signaturePool) =>
-                await signingDelegate(privateKeyBytes, dataToSign, signaturePool, context ?? defaultContext), dataToSign, signaturePool);
+            return KeyMaterial.SignWithKeyBytesAsync(async (privateKeyBytes, dataToSign, signaturePool) =>
+                await signingDelegate(privateKeyBytes, dataToSign, signaturePool, context ?? defaultContext).ConfigureAwait(false), dataToSign, signaturePool);
         }
     }
 }

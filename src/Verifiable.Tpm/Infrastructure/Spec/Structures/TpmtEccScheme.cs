@@ -93,19 +93,22 @@ public readonly record struct TpmtEccScheme
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize()
+    public int SerializedSize
     {
-        if(IsNull)
+        get
         {
-            return sizeof(ushort); // scheme only
-        }
+            if(IsNull)
+            {
+                return sizeof(ushort); // scheme only
+            }
 
-        if(Scheme == TpmAlgIdConstants.TPM_ALG_ECDAA)
-        {
-            return sizeof(ushort) + sizeof(ushort) + sizeof(ushort); // scheme + hashAlg + count
-        }
+            if(Scheme == TpmAlgIdConstants.TPM_ALG_ECDAA)
+            {
+                return sizeof(ushort) + sizeof(ushort) + sizeof(ushort); // scheme + hashAlg + count
+            }
 
-        return sizeof(ushort) + sizeof(ushort); // scheme + hashAlg
+            return sizeof(ushort) + sizeof(ushort); // scheme + hashAlg
+        }
     }
 
     /// <summary>

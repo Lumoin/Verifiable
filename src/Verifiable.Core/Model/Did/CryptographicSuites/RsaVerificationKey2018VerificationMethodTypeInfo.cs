@@ -1,6 +1,6 @@
 using System.Linq;
 
-namespace Verifiable.Core.Model.Did
+namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
     public sealed class RsaVerificationKey2018VerificationMethodTypeInfo : VerificationMethodTypeInfo
     {

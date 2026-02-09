@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.CryptographicSuites;
 
 namespace Verifiable.Json.Converters
 {
@@ -147,6 +148,9 @@ namespace Verifiable.Json.Converters
         /// <inheritdoc/>
         public override void Write(Utf8JsonWriter writer, VerificationMethod value, JsonSerializerOptions options)
         {
+            ArgumentNullException.ThrowIfNull(writer);
+            ArgumentNullException.ThrowIfNull(value);
+
             //TODO: Write use TypeMap as KeyFormat Converter so that these need not to be hardcoded like this.
             //See also ServiceConverter for using options.
             writer.WriteStartObject();
@@ -169,23 +173,23 @@ namespace Verifiable.Json.Converters
 #pragma warning disable CS0618 // Type or member is obsolete
             if(value?.KeyFormat is PublicKeyHex hex)
             {
-                writer.WriteString("publicKeyHex", hex?.Key);
+                writer.WriteString("publicKeyHex", hex.Key);
             }
 
             if(value?.KeyFormat is PublicKeyBase58 base58)
             {
-                writer.WriteString("publicKeyBase58", base58?.Key);
+                writer.WriteString("publicKeyBase58", base58.Key);
             }
 
             if(value?.KeyFormat is PublicKeyPem pem)
             {
-                writer.WriteString("publicKeyPem", pem?.Key);
+                writer.WriteString("publicKeyPem", pem.Key);
             }
 #pragma warning restore CS0618 // Type or member is obsolete
 
             if(value?.KeyFormat is PublicKeyMultibase multibase)
             {
-                writer.WriteString("publicKeyMultibase", multibase?.Key);
+                writer.WriteString("publicKeyMultibase", multibase.Key);
             }
 
             if(value?.KeyFormat is PublicKeyJwk jwk)

@@ -196,6 +196,7 @@ public static class CborThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowConverterNotFound(Type type)
     {
+        ArgumentNullException.ThrowIfNull(type);
         throw new InvalidOperationException($"No CBOR converter found for type '{type.FullName}'.");
     }
 
@@ -208,6 +209,7 @@ public static class CborThrowHelper
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void ThrowNullConverterResult(Type type)
     {
+        ArgumentNullException.ThrowIfNull(type);
         throw new InvalidOperationException($"Converter for type '{type.FullName}' returned null.");
     }
 }

@@ -1,10 +1,9 @@
-﻿using System;
-using System.Buffers;
+﻿using System.Buffers;
 using System.Runtime.InteropServices;
 
-namespace Verifiable.Core
+namespace Verifiable.Tests
 {
-    public static class Sodium
+    internal static partial class Sodium
     {
         public unsafe static IMemoryOwner<byte> ConvertEd25519PublicKeyToCurve25519PublicKey(ReadOnlySpan<byte> ed25519PublicKey, MemoryPool<byte> sensitiveMemoryPool)
         {
@@ -33,11 +32,13 @@ namespace Verifiable.Core
         }
 
 
+        [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
         [DllImport("libsodium", CallingConvention = CallingConvention.Cdecl)]
         private unsafe static extern int crypto_sign_ed25519_pk_to_curve25519(byte* curve25519Pk, in byte* ed25519Pk);
 
 
-        [DllImport("libsodium", CallingConvention = CallingConvention.Cdecl)]
-        private static extern int crypto_sign_ed25519_sk_to_curve25519(byte[] x25519_sk, in byte[] ed25519_skpk);
+        [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+        [LibraryImport("libsodium")]
+        private static partial int crypto_sign_ed25519_sk_to_curve25519(byte[] x25519_sk, in byte[] ed25519_skpk);
     }
 }

@@ -31,7 +31,9 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 /// <para>
 /// <strong>Empty auth (EmptyAuth):</strong> Use <see cref="CreateEmpty"/> to obtain a shared
 /// empty instance backed by <see cref="EmptyMemoryOwner"/>. This avoids pool allocations
-/// for zero-length buffers and represents the TPM "EmptyAuth" concept.
+/// for zero-length buffers and represents the TPM "EmptyAuth" concept. The shared instance
+/// is immune to disposal because <see cref="SensitiveMemory"/> recognizes
+/// <see cref="EmptyMemoryOwner"/> and skips the dispose logic for singletons.
 /// </para>
 /// <para>
 /// See TPM 2.0 Part 1, Section 17.6.4 - Authorization Values.
@@ -44,7 +46,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Shared empty instance (EmptyAuth) backed by <see cref="EmptyMemoryOwner"/>.
     /// </summary>
-    private static readonly Tpm2bAuth EmptyInstance = new(Cryptography.EmptyMemoryOwner.Instance);
+    private static readonly Tpm2bAuth EmptyInstance = new(EmptyMemoryOwner.Instance);
 
     /// <summary>
     /// Initializes a new auth value with the specified storage.
@@ -72,6 +74,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <returns>The parsed auth value.</returns>
     public static Tpm2bAuth Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         ushort length = reader.ReadUInt16();
 
         if(length == 0)
@@ -100,7 +103,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Gets the serialized size (2-byte length prefix + data).
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + Length;
+    public int SerializedSize => sizeof(ushort) + Length;
 
     /// <summary>
     /// Creates an empty auth value (EmptyAuth).
@@ -109,6 +112,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <returns>An empty auth value.</returns>
     public static Tpm2bAuth CreateEmpty(MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         return EmptyInstance;
     }
 
@@ -120,6 +124,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <returns>The created auth value.</returns>
     public static Tpm2bAuth Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)
         {
             return EmptyInstance;
@@ -144,6 +149,8 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// </remarks>
     public static Tpm2bAuth CreateFromPassword(string password, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(password);
         if(string.IsNullOrEmpty(password))
         {
             return EmptyInstance;

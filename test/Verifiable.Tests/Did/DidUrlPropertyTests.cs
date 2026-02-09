@@ -11,7 +11,7 @@ namespace Verifiable.Tests.Did
     /// and catch edge cases that might not be covered by traditional unit tests.
     /// </summary>
     [TestClass]
-    public sealed class DidUrlPropertyTests
+    internal sealed class DidUrlPropertyTests
     {
         /// <summary>
         /// Generates valid DID method names according to the ABNF specification.
@@ -169,7 +169,11 @@ namespace Verifiable.Tests.Did
         /// <returns>A complete DID URL string.</returns>
         private static string BuildDidUrl(string method, string methodId, string? path, string? query, string? fragment)
         {
-            var builder = new StringBuilder($"did:{method}:{methodId}");
+            var builder = new StringBuilder();
+            builder.Append("did:");
+            builder.Append(method);
+            builder.Append(':');
+            builder.Append(methodId);
 
             if(path != null)
             {
@@ -178,12 +182,14 @@ namespace Verifiable.Tests.Did
 
             if(query != null)
             {
-                builder.Append($"?{query}");
+                builder.Append('?');
+                builder.Append(query);
             }
 
             if(fragment != null)
             {
-                builder.Append($"#{fragment}");
+                builder.Append('#');
+                builder.Append(fragment);
             }
 
             return builder.ToString();

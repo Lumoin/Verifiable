@@ -166,6 +166,8 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, DataIntegrityProof value, JsonSerializerOptions options)
     {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(value);
         writer.WriteStartObject();
 
         if(value.Id is not null)

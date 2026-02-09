@@ -1,4 +1,6 @@
-﻿namespace Verifiable.Tests.TestInfrastructure;
+﻿using System.Globalization;
+
+namespace Verifiable.Tests.TestInfrastructure;
 
 /// <summary>
 /// Helpers for testing context types that follow the dynamic enum pattern.
@@ -17,7 +19,7 @@
 /// across each type's test class.
 /// </para>
 /// </remarks>
-public static class ContextTypeTestHelpers
+internal static class ContextTypeTestHelpers
 {
     /// <summary>
     /// Tests IEquatable contract for two different values.
@@ -191,7 +193,7 @@ public static class ContextTypeTestHelpers
     {
         var name = getName(unknownCode);
         Assert.StartsWith("Custom", name, $"Expected 'Custom' prefix for unknown code but got '{name}'.");
-        Assert.Contains(unknownCode.ToString(), name, StringComparison.Ordinal, $"Expected name to contain code {unknownCode}.");
+        Assert.Contains(unknownCode.ToString(CultureInfo.InvariantCulture), name, StringComparison.Ordinal, $"Expected name to contain code {unknownCode}.");
     }
 
 

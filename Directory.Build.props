@@ -8,8 +8,7 @@
     <RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditLevel>low</NuGetAuditLevel>
-    <NugetAuditMode>all</NugetAuditMode>
-    <NoWarn>$(NoWarn);1591</NoWarn>
+    <NugetAuditMode>all</NugetAuditMode>    
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <EnablePackageValidation>true</EnablePackageValidation>
@@ -29,6 +28,22 @@
   <PropertyGroup>
     <EnableMSTestRunner>true</EnableMSTestRunner>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!--
+      CA1000: Static members on generic types. Standard C# practice, no usability issue.
+      CA1002: Don't expose List<T>. Library types are sealed; List<T> ergonomics preferred.
+      CA1031: Catch general exception. Used in debugger display code where any failure must be swallowed.
+      CA1711: Names ending in 'Delegate'. Applied to actual delegate declarations where the suffix is correct.
+      CA1716: Identifier contains type name. The library name, namespace and typename are as designed.
+      CA1720: Identifier contains type name. The library name, namespace and typename are as designed.
+      CA1724: Type names should be unique. The library name, namespace and typename are as designed.
+      CA1819: Properties returning arrays. Low-level crypto and TPM types expose raw byte arrays by design.
+      CA2225: Named alternatives for operators. Only consumed from C# and F#, both support operators natively.
+      CA2227: Read-only collection properties. POCOs require settable properties for deserialization.
+    -->
+    <NoWarn>$(NoWarn);CA1000;CA1002;CA1031;CA1711;CA1716;CA1720;CA1724;CA1819;CA2225;CA2227</NoWarn>    
   </PropertyGroup>
 
   <!-- Common nuget package parameters and resources. -->
@@ -61,11 +76,11 @@
 See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.md.]]>
     </AppendToReleaseNotesProperty>
     <ChangelogFile>../../CHANGELOG.md</ChangelogFile>
+    
 
-    <!--
     <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>All</AnalysisMode>
-    -->
+        
   </PropertyGroup>
 
   <ItemGroup>
@@ -73,7 +88,7 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
   </ItemGroup>
 
   <!-- As this file is used in project file locations, the path is relative to them. -->
-   <!-- Only include logo in packable (non-test) projects. -->
+  <!-- Only include logo in packable (non-test) projects. -->
   <ItemGroup Condition="!$(MSBuildProjectName.EndsWith('Tests'))">
     <None Include="../../resources/verifiable-nuget-logo.png">
       <Pack>True</Pack>
@@ -85,5 +100,10 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
   <ItemGroup>
     <PackageReference Include="Microsoft.Sbom.Targets" PrivateAssets="All" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Verifiable.Tests" />
+    <InternalsVisibleTo Include="Verifiable.Benchmarks" />
+</ItemGroup>
 
 </Project>

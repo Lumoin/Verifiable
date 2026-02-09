@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;

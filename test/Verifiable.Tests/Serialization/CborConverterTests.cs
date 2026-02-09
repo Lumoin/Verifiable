@@ -12,7 +12,7 @@ namespace Verifiable.Tests.Serialization;
 /// back to CBOR and verifies the round-trip produces identical bytes.
 /// </remarks>
 [TestClass]
-public sealed class CborConverterTests
+internal sealed class CborConverterTests
 {
     /// <summary>
     /// Tries to convert the input CBOR bytes to a strongly typed object using the given converter.

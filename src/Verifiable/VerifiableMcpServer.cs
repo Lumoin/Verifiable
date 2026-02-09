@@ -9,7 +9,7 @@ namespace Verifiable;
 /// These tools are exposed to AI clients like GitHub Copilot when running in MCP mode.
 /// </summary>
 [McpServerToolType]
-public sealed class VerifiableMcpServer
+internal sealed class VerifiableMcpServer
 {
     [McpServerTool(Name = McpToolNames.GetTpmInfo), Description("Get TPM (Trusted Platform Module) information from the current system. Returns JSON with TPM details or an error if TPM is not supported.")]
     public static string GetTpmInfo()
@@ -24,7 +24,7 @@ public sealed class VerifiableMcpServer
     public static async Task<string> SaveTpmInfoToFile(
         [Description("The file path where to save the TPM information JSON. Defaults to 'tpm_data.json' if not specified.")] string? filePath = null)
     {
-        var result = await VerifiableOperations.SaveTpmInfoToFileAsync(filePath);
+        var result = await VerifiableOperations.SaveTpmInfoToFileAsync(filePath).ConfigureAwait(false);
 
         return result.IsSuccess
             ? $"TPM information saved to '{result.Value}'."

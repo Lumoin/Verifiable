@@ -5,7 +5,7 @@ namespace Verifiable.Tests.Cryptography
     /// APIs that abstract the underlying providers.
     /// </summary>
     /// <remarks>There should not be code specific to underlying providers.</remarks>
-    public class DidCryptoProviderTests
+    internal class DidCryptoProviderTests
     {
         /// <summary>
         /// A test for loading and rountripping a signing and verifying event.

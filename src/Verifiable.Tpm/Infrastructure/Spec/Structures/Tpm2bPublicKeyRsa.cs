@@ -64,7 +64,7 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
     /// <summary>
     /// Gets the serialized size in bytes.
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + Size;
+    public int SerializedSize => sizeof(ushort) + Size;
 
     /// <summary>
     /// Writes this structure to a writer.
@@ -88,7 +88,7 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
 
         if(size == 0)
         {
-            return Empty();
+            return Empty;
         }
 
         if(size > MaxRsaKeyBytes)
@@ -117,7 +117,7 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
 
         if(modulus.IsEmpty)
         {
-            return Empty();
+            return Empty;
         }
 
         pool ??= MemoryPool<byte>.Shared;
@@ -127,10 +127,9 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
     }
 
     /// <summary>
-    /// Creates an empty RSA public key buffer.
+    /// Gets an empty RSA public key buffer.
     /// </summary>
-    /// <returns>An empty buffer.</returns>
-    public static Tpm2bPublicKeyRsa Empty() => new(null, ReadOnlyMemory<byte>.Empty);
+    public static Tpm2bPublicKeyRsa Empty { get; } = new(null, ReadOnlyMemory<byte>.Empty);
 
     /// <inheritdoc/>
     public void Dispose()

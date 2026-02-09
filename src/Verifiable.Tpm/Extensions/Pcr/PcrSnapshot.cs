@@ -50,7 +50,14 @@ public sealed class PcrSnapshot
     /// <param name="algorithm">The algorithm name (e.g., "SHA256", "SHA-256", "sha256").</param>
     /// <returns>The PCR bank.</returns>
     /// <exception cref="KeyNotFoundException">The algorithm is not present or has no allocated PCRs.</exception>
-    public PcrBank this[string algorithm] => banksByAlgorithm[NormalizeAlgorithmName(algorithm)];
+    public PcrBank this[string algorithm]
+    {
+        get
+        {
+            ArgumentNullException.ThrowIfNull(algorithm);
+            return banksByAlgorithm[NormalizeAlgorithmName(algorithm)];
+        }
+    }
 
     internal PcrSnapshot(
         List<PcrBank> banks,
@@ -75,6 +82,7 @@ public sealed class PcrSnapshot
     /// <returns><c>true</c> if the bank exists with allocated PCRs; otherwise, <c>false</c>.</returns>
     public bool HasBank(string algorithm)
     {
+        ArgumentNullException.ThrowIfNull(algorithm);
         return banksByAlgorithm.ContainsKey(NormalizeAlgorithmName(algorithm));
     }
 
@@ -86,6 +94,7 @@ public sealed class PcrSnapshot
     /// <returns><c>true</c> if the bank exists; otherwise, <c>false</c>.</returns>
     public bool TryGetBank(string algorithm, [NotNullWhen(true)] out PcrBank? bank)
     {
+        ArgumentNullException.ThrowIfNull(algorithm);
         return banksByAlgorithm.TryGetValue(NormalizeAlgorithmName(algorithm), out bank);
     }
 
@@ -98,6 +107,7 @@ public sealed class PcrSnapshot
     /// <exception cref="KeyNotFoundException">The algorithm or PCR index is not present.</exception>
     public byte[] GetPcr(string algorithm, int index)
     {
+        ArgumentNullException.ThrowIfNull(algorithm);
         return this[algorithm][index];
     }
 
@@ -110,6 +120,7 @@ public sealed class PcrSnapshot
     /// <returns><c>true</c> if the value was found; otherwise, <c>false</c>.</returns>
     public bool TryGetPcr(string algorithm, int index, [NotNullWhen(true)] out byte[]? value)
     {
+        ArgumentNullException.ThrowIfNull(algorithm);
         value = null;
 
         if(!TryGetBank(algorithm, out var bank))

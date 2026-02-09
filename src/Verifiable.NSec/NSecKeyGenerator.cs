@@ -1,11 +1,13 @@
 ﻿using NSec.Cryptography;
 using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Key = NSec.Cryptography.Key;
 
 namespace Verifiable.NSec
 {
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned key material instances.")]
     public static class NSecKeyCreator
     {
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEd25519Keys(MemoryPool<byte> memoryPool)

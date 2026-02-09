@@ -1,4 +1,4 @@
-﻿using Verifiable.Jose;
+﻿using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Jwt
@@ -7,7 +7,7 @@ namespace Verifiable.Tests.Jwt
     /// Tests that canonicalization of kty values works correctly.
     /// </summary>
     [TestClass]
-    public sealed class WellKnownKeyTypeTests
+    internal sealed class WellKnownKeyTypeTests
     {
         /// <summary>
         /// All of the well-known key type values and their comparison functions..

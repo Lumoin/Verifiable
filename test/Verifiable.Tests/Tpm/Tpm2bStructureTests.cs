@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Tpm;
 /// Tests for TPM2B buffer structures.
 /// </summary>
 [TestClass]
-public class Tpm2bStructureTests
+internal class Tpm2bStructureTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -45,7 +45,7 @@ public class Tpm2bStructureTests
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
 
-        using Tpm2bDigest digest = Tpm2bDigest.CreateEmpty();
+        using Tpm2bDigest digest = Tpm2bDigest.Empty;
 
         Assert.IsTrue(digest.IsEmpty);
         Assert.AreEqual(0, digest.Size);
@@ -73,7 +73,7 @@ public class Tpm2bStructureTests
         using Tpm2bDigest digest = Tpm2bDigest.Create(testData, pool);
 
         //Size field (2) + data length.
-        Assert.AreEqual(66, digest.GetSerializedSize());
+        Assert.AreEqual(66, digest.SerializedSize);
     }
 
     [TestMethod]

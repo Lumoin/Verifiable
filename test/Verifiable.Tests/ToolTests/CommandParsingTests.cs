@@ -7,7 +7,7 @@ namespace Verifiable.Tests.ToolTests;
 /// Tests for command-line parsing behavior and command invocation.
 /// </summary>
 [TestClass]
-public class CommandParsingTests
+internal class CommandParsingTests
 {
     [TestMethod]
     public void ParseDidCreateValidArgumentsNoErrors()

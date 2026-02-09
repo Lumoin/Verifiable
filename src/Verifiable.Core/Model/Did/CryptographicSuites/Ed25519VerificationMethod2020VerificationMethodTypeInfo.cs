@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 
-namespace Verifiable.Core.Model.Did
+namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
     public sealed class Ed25519VerificationMethod2020VerificationMethodTypeInfo: VerificationMethodTypeInfo
     {

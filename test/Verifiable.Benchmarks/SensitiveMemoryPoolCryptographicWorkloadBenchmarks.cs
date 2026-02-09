@@ -2,6 +2,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Benchmarks
@@ -12,7 +13,8 @@ namespace Verifiable.Benchmarks
     /// </summary>
     [MemoryDiagnoser]
     [SimpleJob]
-    public class SensitiveMemoryPoolCryptographicWorkloadBenchmarks
+    [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "Cleanup handled in GlobalCleanup.")]
+    internal class SensitiveMemoryPoolCryptographicWorkloadBenchmarks
     {
         private SensitiveMemoryPool<byte> sensitivePool = null!;
         private ArrayPool<byte> arrayPool = null!;
@@ -22,8 +24,7 @@ namespace Verifiable.Benchmarks
         public void Setup()
         {
             sensitivePool = new SensitiveMemoryPool<byte>();
-            arrayPool = ArrayPool<byte>.Shared;
-            new Random(42).NextBytes(testData);
+            arrayPool = ArrayPool<byte>.Shared;            
         }
 
         [GlobalCleanup]

@@ -35,7 +35,7 @@ namespace Verifiable.Cryptography
 
         /// <inheritdoc />
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public override bool Equals([NotNullWhen(true)] object? o) => (o is PublicKeyMemory p) && Equals(p);
+        public override bool Equals([NotNullWhen(true)] object? obj) => (obj is PublicKeyMemory p) && Equals(p);
 
 
         /// <inheritdoc />
@@ -88,6 +88,7 @@ namespace Verifiable.Cryptography
         /// <returns>The result of calling An argument given to <paramref name="sensitiveFunc"/>.</returns>
         public ValueTask<TResult> WithKeyBytesAsync<TArg0, TArg1, TResult>(VerificationFunction<byte, TArg0, TArg1, ValueTask<TResult>> sensitiveFunc, ReadOnlyMemory<TArg0> arg0, TArg1 arg1)
         {
+            ArgumentNullException.ThrowIfNull(sensitiveFunc);
             return sensitiveFunc(MemoryOwner.Memory, arg0, arg1);
         }
     }

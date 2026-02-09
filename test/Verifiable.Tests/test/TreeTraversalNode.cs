@@ -2,68 +2,50 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Verifiable.Core.Asssesment
+namespace Verifiable.Core.Assessment;
+
+[DebuggerDisplay("Node = {Node}, Depth = {Depth}")]
+internal readonly struct TreeTraversalNode<TNodeType>(TNodeType node, int depth)
+    : IEquatable<TreeTraversalNode<TNodeType>>
 {
-    [DebuggerDisplay("Node = {Node}, Depth = {Depth}")]
-    public readonly struct TreeTraversalNode<TNodeType>
+    public TNodeType Node { get; } = node;
+
+    public int Depth { get; } = depth;
+
+
+    /// <inheritdoc/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool Equals(TreeTraversalNode<TNodeType> other)
     {
-        public TNodeType Node { get; }
-        public int Depth { get; }
-
-        public TreeTraversalNode(TNodeType node, int depth)
-        {
-            Node = node;
-            Depth = depth;
-        }
-
-        /// <inheritdoc />
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool Equals(TreeTraversalNode<TNodeType> other)
-        {
-            return EqualityComparer<TNodeType>.Default.Equals(Node, other.Node) && Depth == other.Depth;
-        }
-
-
-        /// <inheritdoc />
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public override bool Equals([NotNullWhen(true)] object? o) => o is TreeTraversalNode<TNodeType> cryptoAlgorithm && Equals(cryptoAlgorithm);
-
-
-        /// <inheritdoc />
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public static bool operator ==(in TreeTraversalNode<TNodeType> treeNode1, in TreeTraversalNode<TNodeType> treeNode2) => Equals(treeNode1, treeNode2);
-
-
-        /// <inheritdoc />
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public static bool operator !=(in TreeTraversalNode<TNodeType> treeNode1, in TreeTraversalNode<TNodeType> treeNode2) => !Equals(treeNode1, treeNode2);
-
-
-        /// <inheritdoc />
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public static bool operator ==(in object treeNode1, in TreeTraversalNode<TNodeType> treeNode2) => Equals(treeNode1, treeNode2);
-
-
-        /// <inheritdoc />
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public static bool operator ==(in TreeTraversalNode<TNodeType> treeNode1, in object treeNode2) => Equals(treeNode1, treeNode2);
-
-
-        /// <inheritdoc />
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public static bool operator !=(in object treeNode1, in TreeTraversalNode<TNodeType> treeNode2) => !Equals(treeNode1, treeNode2);
-
-
-        /// <inheritdoc />
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public static bool operator !=(in TreeTraversalNode<TNodeType> treeNode1, in object treeNode2) => !Equals(treeNode1, treeNode2);
-
-
-        /// <inheritdoc />
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public override int GetHashCode()
-        {
-            return HashCode.Combine(Node, Depth);
-        }
+        return EqualityComparer<TNodeType>.Default.Equals(Node, other.Node) && Depth == other.Depth;
     }
+
+
+    /// <inheritdoc/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public override bool Equals([NotNullWhen(true)] object? obj)
+    {
+        return obj is TreeTraversalNode<TNodeType> other && Equals(other);
+    }
+
+
+    /// <inheritdoc/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Node, Depth);
+    }
+
+
+    /// <summary>
+    /// Determines whether two nodes are equal.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static bool operator ==(TreeTraversalNode<TNodeType> left, TreeTraversalNode<TNodeType> right) => left.Equals(right);
+
+    /// <summary>
+    /// Determines whether two nodes are not equal.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static bool operator !=(TreeTraversalNode<TNodeType> left, TreeTraversalNode<TNodeType> right) => !left.Equals(right);
 }

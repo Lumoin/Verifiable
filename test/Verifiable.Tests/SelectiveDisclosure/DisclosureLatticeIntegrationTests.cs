@@ -7,7 +7,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// Integration tests for the disclosure lattice with realistic scenarios.
 /// </summary>
 [TestClass]
-public sealed class DisclosureLatticeIntegrationTests
+internal sealed class DisclosureLatticeIntegrationTests
 {
     public TestContext TestContext { get; set; } = null!;
 

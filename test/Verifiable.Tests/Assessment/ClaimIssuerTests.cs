@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Assessment;
 /// partial results, and cancellation handling.
 /// </summary>
 [TestClass]
-public sealed class ClaimIssuerTests
+internal sealed class ClaimIssuerTests
 {
     /// <summary>
     /// The test context.
@@ -45,7 +45,7 @@ public sealed class ClaimIssuerTests
         var result = await issuer.GenerateClaimsAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsComplete, "Result should be complete.");
         Assert.AreEqual(ClaimIssueCompletionStatus.Complete, result.CompletionStatus);
@@ -76,7 +76,7 @@ public sealed class ClaimIssuerTests
         var result = await issuer.GenerateClaimsAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(fixedTime.UtcDateTime, result.CreationTimestampInUtc);
     }
@@ -99,7 +99,7 @@ public sealed class ClaimIssuerTests
         var result = await issuer.GenerateClaimsAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(TestClaimIdValue, result.ClaimIssueResultId);
     }
@@ -121,7 +121,7 @@ public sealed class ClaimIssuerTests
         var result = await issuer.GenerateClaimsAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         //Tracing information should always be present.
         Assert.IsNotNull(result.ClaimIssuerTraceId, "TraceId should be captured.");
@@ -166,7 +166,7 @@ public sealed class ClaimIssuerTests
         var result = await issuer.GenerateClaimsAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         //Tracing should capture the activity context.
         Assert.AreEqual(activity.TraceId.ToString(), result.ClaimIssuerTraceId);
@@ -186,12 +186,12 @@ public sealed class ClaimIssuerTests
         var rules = new List<ClaimDelegate<string>>
         {
             new(SuccessfulRule, [ClaimId.AlgIsValid]),
-            new((input, ct) =>
+            new(async (input, ct) =>
             {
                 //Cancel after the first rule completes.
-                cts.Cancel();
+                await cts.CancelAsync().ConfigureAwait(false);
                 ct.ThrowIfCancellationRequested();
-                return SuccessfulRule(input, ct);
+                return await SuccessfulRule(input, ct).ConfigureAwait(false);
             }, [ClaimId.AlgExists]),
             new(SuccessfulRule, [ClaimId.AlgIsNone])
         };
@@ -204,7 +204,7 @@ public sealed class ClaimIssuerTests
         var result = await issuer.GenerateClaimsAsync(
             "test-input",
             TestCorrelationId,
-            cts.Token);
+            cts.Token).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsComplete, "Result should be partial.");
         Assert.AreEqual(ClaimIssueCompletionStatus.Cancelled, result.CompletionStatus);
@@ -232,7 +232,7 @@ public sealed class ClaimIssuerTests
         var result = await issuer.GenerateClaimsAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         //All rules should be counted as executed, including the failing one.
         Assert.IsTrue(result.IsComplete);
@@ -268,7 +268,7 @@ public sealed class ClaimIssuerTests
         var result = await issuer.GenerateClaimsAsync(
             testInput,
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result.IssuingContext);
         Assert.AreEqual(testInput, result.IssuingContext.Inputs);
@@ -288,7 +288,7 @@ public sealed class ClaimIssuerTests
         var result = await issuer.GenerateClaimsAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsComplete);
         Assert.AreEqual(0, result.RulesExecuted);
@@ -332,10 +332,11 @@ public sealed class ClaimIssuerTests
         var firstRuleCompleted = new TaskCompletionSource<bool>();
 
         //A rule that signals when it completes.
-        ValueTask<IList<Claim>> SignalingRule(string input, CancellationToken ct)
+        ValueTask<List<Claim>> SignalingRule(string input, CancellationToken ct)
         {
-            IList<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
+            List<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
             firstRuleCompleted.TrySetResult(true);
+
             return ValueTask.FromResult(claims);
         }
 
@@ -355,10 +356,10 @@ public sealed class ClaimIssuerTests
         var generateTask = issuer.GenerateClaimsAsync("test-input", TestCorrelationId, cts.Token);
 
         //Wait for the first rule to complete, then cancel.
-        await firstRuleCompleted.Task;
-        await cts.CancelAsync();
+        await firstRuleCompleted.Task.ConfigureAwait(false);
+        await cts.CancelAsync().ConfigureAwait(false);
 
-        var result = await generateTask;
+        var result = await generateTask.ConfigureAwait(false);
 
         //Should have partial results due to cancellation.
         Assert.AreEqual(ClaimIssueCompletionStatus.Cancelled, result.CompletionStatus);
@@ -371,12 +372,13 @@ public sealed class ClaimIssuerTests
     /// <summary>
     /// A simple validation rule that always succeeds.
     /// </summary>
-    private static ValueTask<IList<Claim>> SuccessfulRule(
+    private static ValueTask<List<Claim>> SuccessfulRule(
         string input,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        IList<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
+        List<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
+
         return ValueTask.FromResult(claims);
     }
 
@@ -384,12 +386,13 @@ public sealed class ClaimIssuerTests
     /// <summary>
     /// A validation rule that always fails.
     /// </summary>
-    private static ValueTask<IList<Claim>> FailingRule(
+    private static ValueTask<List<Claim>> FailingRule(
         string input,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        IList<Claim> claims = [new Claim(ClaimId.AlgIsNone, ClaimOutcome.Failure)];
+        List<Claim> claims = [new Claim(ClaimId.AlgIsNone, ClaimOutcome.Failure)];
+
         return ValueTask.FromResult(claims);
     }
 
@@ -397,14 +400,15 @@ public sealed class ClaimIssuerTests
     /// <summary>
     /// A validation rule that blocks indefinitely until cancelled.
     /// </summary>
-    private static async ValueTask<IList<Claim>> BlockingRule(
+    private static async ValueTask<List<Claim>> BlockingRule(
         string input,
         CancellationToken cancellationToken = default)
     {
-        await Task.Delay(Timeout.Infinite, cancellationToken);
+        await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
 
         //This line is never reached; the delay throws on cancellation.
-        IList<Claim> claims = [new Claim(ClaimId.AlgExists, ClaimOutcome.Success)];
+        List<Claim> claims = [new Claim(ClaimId.AlgExists, ClaimOutcome.Success)];
+
         return claims;
     }
 
@@ -412,7 +416,7 @@ public sealed class ClaimIssuerTests
     /// <summary>
     /// A validation rule that throws an exception.
     /// </summary>
-    private static ValueTask<IList<Claim>> ThrowingRule(
+    private static ValueTask<List<Claim>> ThrowingRule(
         string input,
         CancellationToken cancellationToken = default)
     {

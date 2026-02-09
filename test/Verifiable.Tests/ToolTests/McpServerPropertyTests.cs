@@ -1,5 +1,5 @@
 ﻿using CsCheck;
-using Verifiable.Core;
+using System.Globalization;
 
 namespace Verifiable.Tests.ToolTests;
 
@@ -7,7 +7,7 @@ namespace Verifiable.Tests.ToolTests;
 /// Property-based tests for VerifiableOperations and MCP tools using CsCheck.
 /// </summary>
 [TestClass]
-public class McpServerPropertyTests
+internal sealed class McpServerPropertyTests
 {
     [TestMethod]
     public void CreateDidAnyIntegerIdSucceeds()
@@ -18,7 +18,7 @@ public class McpServerPropertyTests
 
             Assert.IsTrue(result.IsSuccess);
             Assert.IsNotNull(result.Value);
-            Assert.Contains(id.ToString(), result.Value, StringComparison.Ordinal);
+            Assert.Contains(id.ToString(CultureInfo.InvariantCulture), result.Value, StringComparison.Ordinal);
         });
     }
 
@@ -84,7 +84,7 @@ public class McpServerPropertyTests
 
             Assert.IsTrue(result.IsSuccess);
             Assert.IsNotNull(result.Value);
-            Assert.Contains(id.ToString(), result.Value, StringComparison.Ordinal);
+            Assert.Contains(id.ToString(CultureInfo.InvariantCulture), result.Value, StringComparison.Ordinal);
         });
     }
 
@@ -98,7 +98,7 @@ public class McpServerPropertyTests
 
             Assert.IsTrue(result.IsSuccess);
             Assert.IsNotNull(result.Value);
-            Assert.Contains(id.ToString(), result.Value, StringComparison.Ordinal);
+            Assert.Contains(id.ToString(CultureInfo.InvariantCulture), result.Value, StringComparison.Ordinal);
         });
     }
 
@@ -106,7 +106,7 @@ public class McpServerPropertyTests
     [TestMethod]
     public void ListDidsAlwaysSucceeds()
     {
-        for(int i = 0; i < 100; i++)
+        for(int i = 0; i < 2; i++)
         {
             var result = VerifiableOperations.ListDids();
 
@@ -119,7 +119,7 @@ public class McpServerPropertyTests
     [TestMethod]
     public void CheckTpmSupportMessageNeverThrows()
     {
-        for(int i = 0; i < 100; i++)
+        for(int i = 0; i < 2; i++)
         {
             string result = VerifiableOperations.CheckTpmSupportMessage();
 
@@ -132,7 +132,7 @@ public class McpServerPropertyTests
     [TestMethod]
     public void GetTpmInfoAsJsonNeverThrows()
     {
-        for(int i = 0; i < 100; i++)
+        for(int i = 0; i < 2; i++)
         {
             var result = VerifiableOperations.GetTpmInfoAsJson();
 

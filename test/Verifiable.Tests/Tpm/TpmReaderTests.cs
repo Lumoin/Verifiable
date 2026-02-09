@@ -6,7 +6,7 @@ namespace Verifiable.Tests.Tpm;
 /// Tests for <see cref="TpmReader"/>.
 /// </summary>
 [TestClass]
-public class TpmReaderTests
+internal class TpmReaderTests
 {
     [TestMethod]
     public void ReadByteConsumesOneByte()

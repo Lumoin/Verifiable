@@ -13,7 +13,8 @@ namespace Verifiable.Core.Model.Did.Methods
 
         public WebDidMethod(string didString): base(didString)
         {
-            if(!didString.StartsWith(WellKnownDidMethodPrefixes.WebDidMethodPrefix))
+        ArgumentNullException.ThrowIfNull(didString);
+        if(!didString.StartsWith(WellKnownDidMethodPrefixes.WebDidMethodPrefix, StringComparison.InvariantCulture))
             {
                 throw new ArgumentException($"The DID string must start with '{Prefix}'.", nameof(didString));
             }
@@ -24,14 +25,24 @@ namespace Verifiable.Core.Model.Did.Methods
         /// Implicit conversion from <see cref="WebDidMethod"/> or derived DID methods to <see langword="string"/>.
         /// </summary>
         /// <param name="didId"></param>
-        public static implicit operator string(WebDidMethod didId) => didId.Id;
+    public static implicit operator string(WebDidMethod didId)
+    {
+        ArgumentNullException.ThrowIfNull(didId);
+
+        return didId.Id;
+    }
 
 
         /// <summary>
         /// Explicit conversion from <see langword="string"/> to <see cref="WebDidMethod"/> or derived DID methods.
         /// </summary>
         /// <param name="didId"></param>
-        public static explicit operator WebDidMethod(string didId) => new(didId);
+    public static explicit operator WebDidMethod(string didId)
+    {
+        ArgumentNullException.ThrowIfNull(didId);
+
+        return new(didId);
+    }
 
 
         /// <inheritdoc/>

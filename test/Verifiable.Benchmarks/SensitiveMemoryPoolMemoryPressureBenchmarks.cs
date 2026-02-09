@@ -1,6 +1,7 @@
 ﻿using BenchmarkDotNet.Attributes;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Benchmarks
@@ -10,7 +11,8 @@ namespace Verifiable.Benchmarks
     /// </summary>
     [MemoryDiagnoser]
     [SimpleJob]
-    public class SensitiveMemoryPoolMemoryPressureBenchmarks
+    [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "Cleanup handled in GlobalCleanup.")]
+    internal class SensitiveMemoryPoolMemoryPressureBenchmarks
     {
         private SensitiveMemoryPool<byte> sensitivePool = null!;
 

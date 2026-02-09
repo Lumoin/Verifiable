@@ -7,7 +7,7 @@ namespace Verifiable.Tests.TestInfrastructure
     /// <summary>
     /// Platform identifiers for use with platform-specific test attributes.
     /// </summary>
-    public static class Platforms
+    internal static class Platforms
     {
         /// <summary>
         /// Windows operating system identifier.
@@ -23,13 +23,48 @@ namespace Verifiable.Tests.TestInfrastructure
         /// macOS operating system identifier.
         /// </summary>
         public const string MacOS = "macos";
+
+        /// <summary>
+        /// Determines whether the current runtime environment matches any of the specified platforms.
+        /// </summary>
+        /// <remarks>This method checks the provided platform names against the operating system of the
+        /// current runtime. It supports Windows, Linux, and macOS platforms.</remarks>
+        /// <param name="platforms">An array of platform names to check against the current runtime environment. Each platform name should be
+        /// specified in a case-insensitive manner.</param>
+        /// <returns>True if the current runtime environment matches any of the specified platforms; otherwise, false.</returns>
+        internal static bool IsRunningOnAnyPlatform(string[] platforms)
+        {
+            foreach(var platform in platforms)
+            {
+                bool isMatch = platform switch
+                {
+                    var p when p.Equals(Windows, StringComparison.OrdinalIgnoreCase)
+                        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows),
+
+                    var p when p.Equals(Linux, StringComparison.OrdinalIgnoreCase)
+                        => RuntimeInformation.IsOSPlatform(OSPlatform.Linux),
+
+                    var p when p.Equals(MacOS, StringComparison.OrdinalIgnoreCase)
+                        => RuntimeInformation.IsOSPlatform(OSPlatform.OSX),
+
+                    _ => false
+                };
+
+                if(isMatch)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
 
     /// <summary>
     /// Provides methods to check the current test execution environment.
     /// </summary>
-    public static class TestConditions
+    internal static class TestConditions
     {
         /// <summary>
         /// Returns true if the current platform is Linux.
@@ -64,10 +99,32 @@ namespace Verifiable.Tests.TestInfrastructure
     /// On other platforms, the test is marked as inconclusive.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-    public sealed class RunOnlyOnPlatformTestMethodAttribute: TestMethodAttribute
+    internal sealed class RunOnlyOnPlatformTestMethodAttribute: TestMethodAttribute
     {
-        private readonly string[] _platforms;
-        private readonly string _reason;
+        /// <summary>
+        /// Gets the array of platforms supported by the application.
+        /// </summary>
+        /// <remarks>This property provides a list of platforms on which the application can run, allowing
+        /// developers to determine compatibility with various environments.</remarks>
+        public string[] Platforms { get; }
+        
+        /// <summary>
+        /// Gets the reason associated with the current state or operation.
+        /// </summary>
+        public string Reason { get; }
+        
+        /// <summary>
+        /// Gets the file path of the source code where the associated event, such as an error or exception, occurred.
+        /// </summary>
+        public string? FilePath { get; }
+
+        /// <summary>
+        /// Gets the line number in the source code where the associated event, such as an error or exception, occurred.
+        /// </summary>
+        /// <remarks>This property is typically used for debugging and diagnostic purposes to help
+        /// identify the precise location in the source file related to the event.</remarks>
+        public int LineNumber { get; }
+
 
         /// <summary>
         /// Creates a new instance that will only run on the specified platforms.
@@ -80,49 +137,27 @@ namespace Verifiable.Tests.TestInfrastructure
             [CallerFilePath] string? filePath = null,
             [CallerLineNumber] int lineNumber = 0) : base(filePath ?? string.Empty, lineNumber)
         {
-            _platforms = platforms;
-            _reason = $"Test only runs on {string.Join(", ", _platforms)}.";
+            Platforms = platforms;
+            Reason = $"Test only runs on {string.Join(", ", Platforms)}.";
         }
 
 
         /// <inheritdoc/>
         public override Task<TestResult[]> ExecuteAsync(ITestMethod testMethod)
         {
-            if(!IsRunningOnAnyPlatform(_platforms))
+            if(!TestInfrastructure.Platforms.IsRunningOnAnyPlatform(Platforms))
             {
                 return Task.FromResult<TestResult[]>([
                     new TestResult
                     {
                         Outcome = UnitTestOutcome.Inconclusive,
-                        TestFailureException = new AssertInconclusiveException(_reason)
+                        TestFailureException = new AssertInconclusiveException(Reason)
                     }
                 ]);
             }
 
             return base.ExecuteAsync(testMethod);
-        }
-
-
-        private static bool IsRunningOnAnyPlatform(string[] platforms)
-        {
-            foreach(var platform in platforms)
-            {
-                bool isMatch = platform.ToLowerInvariant() switch
-                {
-                    Platforms.Windows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows),
-                    Platforms.Linux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux),
-                    Platforms.MacOS => RuntimeInformation.IsOSPlatform(OSPlatform.OSX),
-                    _ => false
-                };
-
-                if(isMatch)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        }      
     }
 
 
@@ -131,9 +166,28 @@ namespace Verifiable.Tests.TestInfrastructure
     /// Useful for tests that require hardware or resources not available in CI.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-    public sealed class SkipOnCiTestMethodAttribute: TestMethodAttribute
+    internal sealed class SkipOnCiTestMethodAttribute: TestMethodAttribute
     {
-        private readonly string _reason;
+        /// <summary>
+        /// Gets the reason associated with the current state or action.
+        /// </summary>
+        public string Reason { get; }
+
+        /// <summary>
+        /// Gets the full path of the source code file that contains the caller of the method.
+        /// </summary>
+        /// <remarks>This property is useful for debugging and logging scenarios, as it allows developers
+        /// to identify the exact location in the code where a method was invoked. It can help trace errors or
+        /// understand the context of method calls during development and troubleshooting.</remarks>
+        public string CallerFilePath { get; }
+        
+        /// <summary>
+        /// Gets the line number in the source code at which the method is called.
+        /// </summary>
+        /// <remarks>This property is useful for debugging and logging purposes, allowing developers to
+        /// trace the origin of method calls.</remarks>
+        public int CallerLineNumber { get; }
+
 
         /// <summary>
         /// Creates a new instance with a default skip reason.
@@ -142,9 +196,11 @@ namespace Verifiable.Tests.TestInfrastructure
         /// <param name="callerLineNumber">Automatically populated by the compiler.</param>
         public SkipOnCiTestMethodAttribute(
             [CallerFilePath] string callerFilePath = "",
-            [CallerLineNumber] int callerLineNumber = -1) : base(callerFilePath, callerLineNumber)
+            [CallerLineNumber] int callerLineNumber = -1): base(callerFilePath, callerLineNumber)
         {
-            _reason = "Skipping on CI since running this test is not supported on CI at the moment.";
+            Reason = "Skipping on CI since running this test is not supported on CI at the moment.";
+            CallerFilePath = callerFilePath;
+            CallerLineNumber = callerLineNumber;
         }
 
 
@@ -159,7 +215,9 @@ namespace Verifiable.Tests.TestInfrastructure
             [CallerFilePath] string callerFilePath = "",
             [CallerLineNumber] int callerLineNumber = -1) : base(callerFilePath, callerLineNumber)
         {
-            _reason = reason;
+            Reason = reason;
+            CallerFilePath = callerFilePath;
+            CallerLineNumber = callerLineNumber;
         }
 
 
@@ -172,13 +230,13 @@ namespace Verifiable.Tests.TestInfrastructure
                     new TestResult
                     {
                         Outcome = UnitTestOutcome.Inconclusive,
-                        TestFailureException = new AssertInconclusiveException(_reason)
+                        TestFailureException = new AssertInconclusiveException(Reason)
                     }
                 ]);
             }
 
             return base.ExecuteAsync(testMethod);
-        }
+        }        
     }
 
 
@@ -186,8 +244,15 @@ namespace Verifiable.Tests.TestInfrastructure
     /// Test method attribute that skips the test on macOS.
     /// Useful for tests that use APIs not supported on macOS, such as certain cryptographic curves.
     /// </summary>
+    /// <remarks>
+    /// Creates a new instance with a default skip reason.
+    /// </remarks>
+    /// <param name="callerFilePath">Automatically populated by the compiler.</param>
+    /// <param name="callerLineNumber">Automatically populated by the compiler.</param>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-    public sealed class SkipOnMacOSTestMethodAttribute: TestMethodAttribute
+    internal sealed class SkipOnMacOSTestMethodAttribute(
+        [CallerFilePath] string callerFilePath = "",
+        [CallerLineNumber] int callerLineNumber = -1): TestMethodAttribute(callerFilePath, callerLineNumber)
     {
         private const string DefaultReason = "This test is not supported on macOS.";
 
@@ -197,15 +262,20 @@ namespace Verifiable.Tests.TestInfrastructure
         public string Reason { get; set; } = DefaultReason;
 
         /// <summary>
-        /// Creates a new instance with a default skip reason.
+        /// Gets the full path of the source code file that contains the caller of the method or property.
         /// </summary>
-        /// <param name="callerFilePath">Automatically populated by the compiler.</param>
-        /// <param name="callerLineNumber">Automatically populated by the compiler.</param>
-        public SkipOnMacOSTestMethodAttribute(
-            [CallerFilePath] string callerFilePath = "",
-            [CallerLineNumber] int callerLineNumber = -1) : base(callerFilePath, callerLineNumber)
-        {
-        }
+        /// <remarks>This property is typically used for debugging, logging, or diagnostic purposes to
+        /// identify the location in source code where a method or property was invoked. It can help trace the origin of
+        /// calls in complex applications and is especially useful when troubleshooting issues or generating detailed
+        /// logs.</remarks>
+        public string CallerFilePath { get; } = callerFilePath;
+
+        /// <summary>
+        /// Gets the line number in the source code at which the method is called.
+        /// </summary>
+        /// <remarks>This property is useful for debugging and logging purposes, allowing developers to
+        /// trace the origin of method calls.</remarks>
+        public int CallerLineNumber { get; } = callerLineNumber;
 
 
         /// <inheritdoc/>
@@ -223,7 +293,7 @@ namespace Verifiable.Tests.TestInfrastructure
             }
 
             return base.ExecuteAsync(testMethod);
-        }
+        }        
     }
 
 
@@ -232,11 +302,45 @@ namespace Verifiable.Tests.TestInfrastructure
     /// The test is skipped if not on a supported platform OR if running in CI.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-    public sealed class RunOnlyOnPlatformSkipOnCiTestMethodAttribute: TestMethodAttribute
+    internal sealed class RunOnlyOnPlatformSkipOnCiTestMethodAttribute: TestMethodAttribute
     {
-        private readonly string[] _platforms;
-        private readonly string _platformReason;
-        private readonly string _ciReason;
+        /// <summary>
+        /// Gets the array of platforms supported by the application.
+        /// </summary>
+        /// <remarks>This property provides a list of platforms on which the application can run, allowing
+        /// developers to determine compatibility with various environments.</remarks>
+        public string[] Platforms { get; }
+        
+        /// <summary>
+        /// Gets the reason for the platform's current state or behavior.
+        /// </summary>
+        /// <remarks>This property provides insight into the underlying reasons that may affect platform
+        /// functionality or performance. It is useful for debugging and understanding platform-specific
+        /// issues.</remarks>
+        public string PlatformReason { get; }
+        
+        /// <summary>
+        /// Gets the reason associated with the current configuration item.
+        /// </summary>
+        /// <remarks>This property provides a description of the context or purpose for the configuration
+        /// item, which can help developers understand why it was set or modified.</remarks>
+        public string CIReason { get; }
+
+        /// <summary>
+        /// Gets the full path of the source code file that contains the caller of the method.
+        /// </summary>
+        /// <remarks>This property is useful for debugging and logging scenarios, as it allows developers
+        /// to trace the location in the code where a method was invoked. It can help identify the origin of errors or
+        /// track execution flow during development.</remarks>
+        public string CallerFilePath { get; }
+
+        /// <summary>
+        /// Gets the line number in the source code at which the method is called.
+        /// </summary>
+        /// <remarks>This property is useful for debugging and logging purposes, allowing developers to
+        /// trace the origin of method calls.</remarks>
+        public int CallerLineNumber { get; }
+
 
         /// <summary>
         /// Creates a new instance that will only run on the specified platforms and not in CI.
@@ -247,24 +351,26 @@ namespace Verifiable.Tests.TestInfrastructure
         public RunOnlyOnPlatformSkipOnCiTestMethodAttribute(
             string[] platforms,
             [CallerFilePath] string callerFilePath = "",
-            [CallerLineNumber] int callerLineNumber = -1) : base(callerFilePath, callerLineNumber)
+            [CallerLineNumber] int callerLineNumber = -1): base(callerFilePath, callerLineNumber)
         {
-            _platforms = platforms;
-            _platformReason = $"Test only runs on {string.Join(", ", _platforms)}.";
-            _ciReason = "Skipping on CI since running this test is not supported on CI at the moment.";
+            Platforms = platforms;
+            PlatformReason = $"Test only runs on {string.Join(", ", Platforms)}.";
+            CIReason = "Skipping on CI since running this test is not supported on CI at the moment.";
+            CallerFilePath = callerFilePath;
+            CallerLineNumber = callerLineNumber;
         }
 
 
         /// <inheritdoc/>
         public override Task<TestResult[]> ExecuteAsync(ITestMethod testMethod)
         {
-            if(!IsRunningOnAnyPlatform(_platforms))
+            if(!TestInfrastructure.Platforms.IsRunningOnAnyPlatform(Platforms))
             {
                 return Task.FromResult<TestResult[]>([
                     new TestResult
                     {
                         Outcome = UnitTestOutcome.Inconclusive,
-                        TestFailureException = new AssertInconclusiveException(_platformReason)
+                        TestFailureException = new AssertInconclusiveException(PlatformReason)
                     }
                 ]);
             }
@@ -275,35 +381,13 @@ namespace Verifiable.Tests.TestInfrastructure
                     new TestResult
                     {
                         Outcome = UnitTestOutcome.Inconclusive,
-                        TestFailureException = new AssertInconclusiveException(_ciReason)
+                        TestFailureException = new AssertInconclusiveException(CIReason)
                     }
                 ]);
             }
 
             return base.ExecuteAsync(testMethod);
-        }
-
-
-        private static bool IsRunningOnAnyPlatform(string[] platforms)
-        {
-            foreach(var platform in platforms)
-            {
-                bool isMatch = platform.ToLowerInvariant() switch
-                {
-                    Platforms.Windows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows),
-                    Platforms.Linux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux),
-                    Platforms.MacOS => RuntimeInformation.IsOSPlatform(OSPlatform.OSX),
-                    _ => false
-                };
-
-                if(isMatch)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        }        
     }
 
 
@@ -312,10 +396,34 @@ namespace Verifiable.Tests.TestInfrastructure
     /// Use with <see cref="TestConditions"/> methods.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-    public sealed class IgnoreIfAttribute: Attribute, ITestDataSource
+    internal sealed class IgnoreIfAttribute: Attribute, ITestDataSource
     {
-        private readonly Func<bool> _condition;
-        private readonly string _reason;
+        /// <summary>
+        /// Gets the condition function that determines whether the test should be ignored.
+        /// </summary>
+        public Func<bool> Condition { get; }
+        
+        /// <summary>
+        /// Gets the reason associated with the current state or operation.
+        /// </summary>
+        public string Reason { get; }
+
+        /// <summary>
+        /// Gets the type of the condition associated with this instance.
+        /// </summary>
+        /// <remarks>Use this property to determine the specific condition type represented by the
+        /// instance. This can be useful for reflection, type checking, or when implementing custom logic based on the
+        /// condition's type.</remarks>
+        public Type ConditionType { get; }
+
+        /// <summary>
+        /// Gets the name of the method that is used to evaluate the condition for processing.
+        /// </summary>
+        /// <remarks>Use this property to determine which method is responsible for establishing the
+        /// condition under which certain operations are performed. This can be useful for debugging or for
+        /// understanding the application's logic flow.</remarks>
+        public string ConditionMethodName { get; }
+
 
         /// <summary>
         /// Creates a new instance that ignores the test when the condition returns true.
@@ -325,19 +433,22 @@ namespace Verifiable.Tests.TestInfrastructure
         /// <param name="reason">The reason displayed when the test is skipped.</param>
         public IgnoreIfAttribute(Type conditionType, string conditionMethodName, string reason)
         {
-            var method = conditionType.GetMethod(conditionMethodName, BindingFlags.Static | BindingFlags.Public)
+            var method = 
+                conditionType.GetMethod(conditionMethodName, BindingFlags.Static | BindingFlags.Public)
                 ?? throw new ArgumentException($"Method '{conditionMethodName}' not found on type '{conditionType.Name}'.");
-            _condition = (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), method);
-            _reason = reason;
+            Condition = (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), method);
+            Reason = reason;
+            ConditionType = conditionType;
+            ConditionMethodName = conditionMethodName;
         }
 
 
         /// <inheritdoc/>
         public IEnumerable<object[]> GetData(MethodInfo methodInfo)
         {
-            if(_condition())
+            if(Condition())
             {
-                Assert.Inconclusive($"Test ignored: {_reason}");
+                Assert.Inconclusive($"Test ignored: {Reason}");
             }
 
             yield return Array.Empty<object>();
@@ -348,6 +459,6 @@ namespace Verifiable.Tests.TestInfrastructure
         public string? GetDisplayName(MethodInfo methodInfo, object?[]? data)
         {
             return methodInfo.Name;
-        }
+        }  
     }
 }

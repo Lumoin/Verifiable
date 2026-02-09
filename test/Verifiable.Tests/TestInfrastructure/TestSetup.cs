@@ -14,7 +14,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <summary>
 /// Initializes structures needed in tests. This is basically the same as any program setup for this library.
 /// </summary>
-public static class TestSetup
+internal static class TestSetup
 {   
     /// <summary>
     /// Base58 BTC encoder using SimpleBase.

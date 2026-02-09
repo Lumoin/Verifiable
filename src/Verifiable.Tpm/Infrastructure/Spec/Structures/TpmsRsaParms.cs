@@ -103,19 +103,17 @@ public readonly record struct TpmsRsaParms
         Symmetric = symmetric,
         Scheme = TpmtRsaScheme.Null,
         KeyBits = keyBits,
-        Exponent = 0 // Default
+        Exponent = 0 //Default.
     };
 
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize()
-    {
-        return Symmetric.GetSerializedSize() +
-               Scheme.GetSerializedSize() +
-               sizeof(ushort) + // keyBits
-               sizeof(uint);    // exponent
-    }
+    public int SerializedSize =>
+        Symmetric.SerializedSize +
+        Scheme.SerializedSize +
+        sizeof(ushort) + //KeyBits.
+        sizeof(uint);    //Exponent.
 
     /// <summary>
     /// Writes this structure to a TPM writer.

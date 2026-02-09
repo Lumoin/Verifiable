@@ -1,4 +1,6 @@
-﻿namespace Verifiable.Tpm.EventLog;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace Verifiable.Tpm.EventLog;
 
 /// <summary>
 /// Error codes for TCG event log parsing.
@@ -10,6 +12,7 @@
 /// with TBS and TPM error codes.
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "These values from the TCG specification.")]
 public enum TcgEventLogError: uint
 {
     /// <summary>

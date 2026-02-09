@@ -6,110 +6,87 @@ using System.Globalization;
 namespace Verifiable.JsonPointer;
 
 /// <summary>
-/// Represents a single segment (reference token) in a JSON Pointer.
+/// Represents a single reference token in a JSON Pointer (RFC 6901).
 /// </summary>
 /// <remarks>
 /// <para>
-/// A JSON Pointer segment identifies either:
+/// A reference token is an unescaped string that identifies a location within a JSON document.
+/// Per RFC 6901 §4, interpretation depends on the document node encountered during evaluation:
 /// </para>
 /// <list type="bullet">
 /// <item><description>
-/// A property name in a JSON object (any string, including empty string).
+/// Against a JSON object, the token is used as a property name.
 /// </description></item>
 /// <item><description>
-/// An array index in a JSON array (non-negative integer).
-/// </description></item>
-/// <item><description>
-/// The array append marker ("-") for inserting at the end of an array.
+/// Against a JSON array, the token must be a valid non-negative integer index or "-".
 /// </description></item>
 /// </list>
 /// <para>
-/// <strong>Design Decisions:</strong>
+/// This type stores only the raw token string. It does not decide whether the token
+/// represents a property name or array index — that determination is made at evaluation
+/// time by the code that navigates a specific document format.
 /// </para>
-/// <list type="bullet">
-/// <item><description>
-/// Immutable value type for efficient storage and comparison.
-/// </description></item>
-/// <item><description>
-/// Uses a discriminated union pattern with exactly one of <see cref="PropertyName"/>,
-/// <see cref="ArrayIndex"/>, or <see cref="IsAppendMarker"/> being meaningful.
-/// </description></item>
-/// <item><description>
-/// Factory methods (<see cref="Property"/>, <see cref="Index"/>) enforce validity.
-/// </description></item>
-/// </list>
+/// <para>
+/// <strong>Design Rationale:</strong> RFC 6901 defines reference tokens as strings.
+/// The token "0" in <c>/items/0</c> could address either an array element or an object
+/// property named "0" — only the document structure determines which. Premature
+/// classification at parse time would lose information and prevent correct handling
+/// of documents with numeric property keys (common in JSON-LD, JSON Schema, and others).
+/// </para>
 /// <para>
 /// <strong>Thread Safety:</strong> This type is immutable and thread-safe.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// //Create segments.
-/// var property = JsonPointerSegment.Property("name");
-/// var index = JsonPointerSegment.Index(0);
+/// //Create segments from tokens.
+/// var name = JsonPointerSegment.Create("name");
+/// var index = JsonPointerSegment.Create("0");
 /// var append = JsonPointerSegment.AppendMarker;
-/// 
-/// //Inspect segments.
-/// if (segment.IsProperty)
+///
+/// //Check token characteristics for evaluation.
+/// if(segment.TryGetArrayIndex(out int idx))
 /// {
-///     Console.WriteLine($"Property: {segment.PropertyName}");
+///     Console.WriteLine($"Can be used as array index: {idx}");
 /// }
-/// else if (segment.IsArrayIndex)
-/// {
-///     Console.WriteLine($"Index: {segment.ArrayIndex}");
-/// }
+///
+/// //The token is always available as a string.
+/// Console.WriteLine($"Token: {segment.Value}");
 /// </code>
 /// </example>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public readonly struct JsonPointerSegment: IEquatable<JsonPointerSegment>, IComparable<JsonPointerSegment>
 {
     /// <summary>
-    /// Property name for object property access, or <c>null</c> if this is an index.
+    /// The raw, unescaped reference token.
     /// </summary>
     /// <remarks>
-    /// May be an empty string, which is a valid JSON property name.
+    /// This is the decoded token value. Escape sequences (<c>~0</c> for <c>~</c>,
+    /// <c>~1</c> for <c>/</c>) have already been resolved. The value may be empty,
+    /// which is a valid property name.
     /// </remarks>
-    public string? PropertyName { get; }
+    public string Value { get; }
 
     /// <summary>
-    /// Array index for array element access, or <c>null</c> if this is a property.
+    /// Whether this token could be interpreted as a non-negative array index.
     /// </summary>
     /// <remarks>
-    /// Always non-negative when present. Use <see cref="IsAppendMarker"/> to check
-    /// for the special "-" append position.
+    /// Returns <c>true</c> when the token is a string of digits with no leading zeros
+    /// (or exactly "0") that fits in an <see cref="int"/>. This does not mean it
+    /// <em>is</em> an array index — that depends on the document node at evaluation time.
     /// </remarks>
-    public int? ArrayIndex { get; }
+    public bool CanBeArrayIndex => TryGetArrayIndex(out _);
 
     /// <summary>
-    /// Whether this segment represents a property name.
+    /// Whether this token is the append marker ("-").
     /// </summary>
     /// <remarks>
-    /// Mutually exclusive with <see cref="IsArrayIndex"/> and <see cref="IsAppendMarker"/>.
+    /// Per RFC 6901 §4, the "-" character references the nonexistent member after
+    /// the last array element. It is primarily used in JSON Patch (RFC 6902) to
+    /// append to arrays.
     /// </remarks>
-    public bool IsProperty => PropertyName is not null;
+    public bool IsAppendMarker => Value == "-";
 
-    /// <summary>
-    /// Whether this segment represents an array index.
-    /// </summary>
-    /// <remarks>
-    /// Mutually exclusive with <see cref="IsProperty"/> and <see cref="IsAppendMarker"/>.
-    /// </remarks>
-    public bool IsArrayIndex => ArrayIndex.HasValue;
-
-    /// <summary>
-    /// Whether this segment is the append marker ("-").
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The append marker is used in JSON Patch operations to indicate insertion
-    /// at the end of an array. When evaluating a pointer, this typically results
-    /// in an error unless specifically handled.
-    /// </para>
-    /// <para>
-    /// Mutually exclusive with <see cref="IsProperty"/> and <see cref="IsArrayIndex"/>.
-    /// </para>
-    /// </remarks>
-    public bool IsAppendMarker { get; }
 
     /// <summary>
     /// The append marker segment ("-").
@@ -118,106 +95,121 @@ public readonly struct JsonPointerSegment: IEquatable<JsonPointerSegment>, IComp
     /// Per RFC 6901 §4, the "-" character represents the member after the last
     /// array element. It is used in JSON Patch to append to arrays.
     /// </remarks>
-    public static JsonPointerSegment AppendMarker { get; } = new(null, null, isAppendMarker: true);
+    public static JsonPointerSegment AppendMarker { get; } = new("-");
 
 
     /// <summary>
-    /// Creates a segment. Use factory methods <see cref="Property"/> or <see cref="Index"/> instead.
+    /// Creates a segment from an unescaped reference token.
     /// </summary>
-    private JsonPointerSegment(string? propertyName, int? arrayIndex, bool isAppendMarker = false)
-    {
-        PropertyName = propertyName;
-        ArrayIndex = arrayIndex;
-        IsAppendMarker = isAppendMarker;
-    }
-
-
-    /// <summary>
-    /// Creates a property name segment.
-    /// </summary>
-    /// <param name="name">
-    /// The property name. May be empty but not <c>null</c>.
+    /// <param name="token">
+    /// The unescaped reference token. May be empty but not <c>null</c>.
     /// </param>
-    /// <returns>A segment representing the property.</returns>
+    /// <returns>A segment representing the token.</returns>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="name"/> is <c>null</c>.
+    /// Thrown when <paramref name="token"/> is <c>null</c>.
     /// </exception>
-    /// <remarks>
-    /// The name should be the unescaped property name. Escaping is handled
-    /// during serialization to string form.
-    /// </remarks>
-    public static JsonPointerSegment Property(string name)
+    public static JsonPointerSegment Create(string token)
     {
-        ArgumentNullException.ThrowIfNull(name);
-        return new JsonPointerSegment(name, null);
+        ArgumentNullException.ThrowIfNull(token);
+        return new JsonPointerSegment(token);
     }
 
 
     /// <summary>
-    /// Creates an array index segment.
+    /// Creates a segment from an array index.
     /// </summary>
     /// <param name="index">The array index (must be non-negative).</param>
-    /// <returns>A segment representing the array index.</returns>
+    /// <returns>A segment whose token is the decimal string representation of the index.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="index"/> is negative.
     /// </exception>
-    public static JsonPointerSegment Index(int index)
+    /// <remarks>
+    /// This is a convenience method. The resulting segment stores the index as its
+    /// string representation. At evaluation time, the evaluator determines whether
+    /// to use it as an array index or property name based on the document structure.
+    /// </remarks>
+    public static JsonPointerSegment FromIndex(int index)
     {
         if(index < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(index), index, "Array index must be non-negative.");
         }
 
-        return new JsonPointerSegment(null, index);
+        return new JsonPointerSegment(index.ToString(CultureInfo.InvariantCulture));
+    }
+
+
+    private JsonPointerSegment(string value)
+    {
+        Value = value;
     }
 
 
     /// <summary>
-    /// Converts this segment to its escaped string representation for use in a JSON Pointer.
+    /// Attempts to interpret this token as a non-negative array index.
     /// </summary>
+    /// <param name="index">
+    /// When this method returns <c>true</c>, contains the parsed index value.
+    /// </param>
     /// <returns>
-    /// The escaped string. '~' becomes '~0' and '/' becomes '~1'.
+    /// <c>true</c> if the token is a valid RFC 6901 array index (digits with no
+    /// leading zeros, fits in an <see cref="int"/>); otherwise, <c>false</c>.
     /// </returns>
     /// <remarks>
-    /// For array indexes, returns the decimal string representation.
-    /// For the append marker, returns "-".
+    /// Per RFC 6901, valid array indexes are "0" or a digit 1-9 followed by
+    /// zero or more digits 0-9. Leading zeros are not permitted.
     /// </remarks>
-    public string ToEscapedString()
+    public bool TryGetArrayIndex(out int index)
     {
-        if(IsAppendMarker)
+        index = 0;
+
+        if(Value.Length == 0)
         {
-            return "-";
+            return false;
         }
 
-        if(IsArrayIndex)
+        if(Value.Length == 1)
         {
-            return ArrayIndex!.Value.ToString(CultureInfo.InvariantCulture);
+            if(char.IsAsciiDigit(Value[0]))
+            {
+                index = Value[0] - '0';
+                return true;
+            }
+
+            return false;
         }
 
-        return JsonPointer.Escape(PropertyName!);
+        //No leading zeros per RFC 6901.
+        if(Value[0] == '0')
+        {
+            return false;
+        }
+
+        foreach(char c in Value)
+        {
+            if(!char.IsAsciiDigit(c))
+            {
+                return false;
+            }
+        }
+
+        return int.TryParse(Value, NumberStyles.None, CultureInfo.InvariantCulture, out index) && index >= 0;
     }
 
 
     /// <summary>
-    /// Returns the unescaped string value of this segment.
+    /// Returns the escaped form of this token for use in a JSON Pointer string.
     /// </summary>
     /// <returns>
-    /// The property name, index as string, or "-" for append marker.
+    /// The token with <c>~</c> escaped as <c>~0</c> and <c>/</c> escaped as <c>~1</c>.
     /// </returns>
-    public string ToUnescapedString()
-    {
-        if(IsAppendMarker)
-        {
-            return "-";
-        }
+    public string ToEscapedString() => JsonPointer.Escape(Value);
 
-        if(IsArrayIndex)
-        {
-            return ArrayIndex!.Value.ToString(CultureInfo.InvariantCulture);
-        }
 
-        return PropertyName!;
-    }
+    /// <summary>
+    /// Returns the raw, unescaped token value.
+    /// </summary>
+    public override string ToString() => Value;
 
 
     /// <summary>
@@ -227,22 +219,22 @@ public readonly struct JsonPointerSegment: IEquatable<JsonPointerSegment>, IComp
     {
         get
         {
+            if(Value.Length == 0)
+            {
+                return "(empty)";
+            }
+
             if(IsAppendMarker)
             {
                 return "[-]";
             }
 
-            if(IsArrayIndex)
+            if(TryGetArrayIndex(out int idx))
             {
-                return $"[{ArrayIndex}]";
+                return $"{Value} (index {idx})";
             }
 
-            if(IsProperty)
-            {
-                return PropertyName!.Length == 0 ? "(empty)" : PropertyName!;
-            }
-
-            return "(invalid)";
+            return Value;
         }
     }
 
@@ -251,22 +243,7 @@ public readonly struct JsonPointerSegment: IEquatable<JsonPointerSegment>, IComp
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(JsonPointerSegment other)
     {
-        if(IsAppendMarker && other.IsAppendMarker)
-        {
-            return true;
-        }
-
-        if(IsProperty && other.IsProperty)
-        {
-            return string.Equals(PropertyName, other.PropertyName, StringComparison.Ordinal);
-        }
-
-        if(IsArrayIndex && other.IsArrayIndex)
-        {
-            return ArrayIndex == other.ArrayIndex;
-        }
-
-        return false;
+        return string.Equals(Value, other.Value, StringComparison.Ordinal);
     }
 
 
@@ -282,89 +259,22 @@ public readonly struct JsonPointerSegment: IEquatable<JsonPointerSegment>, IComp
     [EditorBrowsable(EditorBrowsableState.Never)]
     public override int GetHashCode()
     {
-        if(IsAppendMarker)
-        {
-            return HashCode.Combine(3, "-");
-        }
-
-        if(IsProperty)
-        {
-            return HashCode.Combine(1, PropertyName);
-        }
-
-        if(IsArrayIndex)
-        {
-            return HashCode.Combine(2, ArrayIndex);
-        }
-
-        return 0;
+        return string.GetHashCode(Value, StringComparison.Ordinal);
     }
 
 
     /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// Ordering is defined as:
-    /// </para>
-    /// <list type="number">
-    /// <item><description>Properties (sorted alphabetically by ordinal comparison).</description></item>
-    /// <item><description>Array indexes (sorted numerically).</description></item>
-    /// <item><description>Append marker (sorts after all indexes).</description></item>
-    /// </list>
-    /// <para>
-    /// This ordering ensures that traversing a sorted collection of segments
-    /// visits object properties before array elements.
-    /// </para>
+    /// Ordering is ordinal string comparison of the raw token values. This provides
+    /// a consistent, deterministic ordering suitable for sorted collections and
+    /// canonicalization. Tokens that can be interpreted as array indexes are compared
+    /// as strings, not numerically — use a custom comparer if numeric ordering is needed.
     /// </remarks>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public int CompareTo(JsonPointerSegment other)
     {
-        //Properties sort first.
-        if(IsProperty && other.IsProperty)
-        {
-            return string.Compare(PropertyName, other.PropertyName, StringComparison.Ordinal);
-        }
-
-        if(IsProperty)
-        {
-            return -1;
-        }
-
-        if(other.IsProperty)
-        {
-            return 1;
-        }
-
-        //Then array indexes.
-        if(IsArrayIndex && other.IsArrayIndex)
-        {
-            return ArrayIndex!.Value.CompareTo(other.ArrayIndex!.Value);
-        }
-
-        if(IsArrayIndex)
-        {
-            return -1;
-        }
-
-        if(other.IsArrayIndex)
-        {
-            return 1;
-        }
-
-        //Append markers are equal to each other.
-        if(IsAppendMarker && other.IsAppendMarker)
-        {
-            return 0;
-        }
-
-        return 0;
+        return string.Compare(Value, other.Value, StringComparison.Ordinal);
     }
-
-
-    /// <summary>
-    /// Returns the unescaped string representation.
-    /// </summary>
-    public override string ToString() => ToUnescapedString();
 
 
     /// <summary>
@@ -380,14 +290,38 @@ public readonly struct JsonPointerSegment: IEquatable<JsonPointerSegment>, IComp
     public static bool operator !=(JsonPointerSegment left, JsonPointerSegment right) => !left.Equals(right);
 
     /// <summary>
-    /// Implicitly converts a string to a property segment.
+    /// Determines whether the left segment precedes the right segment.
     /// </summary>
-    /// <param name="propertyName">The property name.</param>
-    public static implicit operator JsonPointerSegment(string propertyName) => Property(propertyName);
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static bool operator <(JsonPointerSegment left, JsonPointerSegment right) => left.CompareTo(right) < 0;
 
     /// <summary>
-    /// Implicitly converts an integer to an index segment.
+    /// Determines whether the left segment precedes or equals the right segment.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static bool operator <=(JsonPointerSegment left, JsonPointerSegment right) => left.CompareTo(right) <= 0;
+
+    /// <summary>
+    /// Determines whether the left segment follows the right segment.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static bool operator >(JsonPointerSegment left, JsonPointerSegment right) => left.CompareTo(right) > 0;
+
+    /// <summary>
+    /// Determines whether the left segment follows or equals the right segment.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static bool operator >=(JsonPointerSegment left, JsonPointerSegment right) => left.CompareTo(right) >= 0;
+
+    /// <summary>
+    /// Implicitly converts a string to a segment.
+    /// </summary>
+    /// <param name="token">The unescaped reference token.</param>
+    public static implicit operator JsonPointerSegment(string token) => Create(token);
+
+    /// <summary>
+    /// Implicitly converts an integer to a segment.
     /// </summary>
     /// <param name="index">The array index.</param>
-    public static implicit operator JsonPointerSegment(int index) => Index(index);
+    public static implicit operator JsonPointerSegment(int index) => FromIndex(index);
 }

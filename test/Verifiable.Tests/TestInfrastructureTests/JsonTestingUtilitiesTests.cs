@@ -7,7 +7,7 @@ namespace Verifiable.Tests.TestInfrastructureTests;
 /// Tests for <see cref="JsonTestingUtilities"/> to ensure the test infrastructure itself is correct.
 /// </summary>
 [TestClass]
-public sealed class JsonTestingUtilitiesTests
+internal sealed class JsonTestingUtilitiesTests
 {
     private static JsonSerializerOptions DefaultOptions { get; } = new()
     {

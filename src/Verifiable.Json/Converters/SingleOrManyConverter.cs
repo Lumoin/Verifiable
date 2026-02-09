@@ -49,6 +49,8 @@ namespace Verifiable.Json.Converters
 
         public override void Write(Utf8JsonWriter writer, Controller[] controller, JsonSerializerOptions options)
         {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(controller);
             if(controller.Length == 1)
             {
                 writer.WriteStringValue(controller[0].Did);
@@ -112,6 +114,8 @@ namespace Verifiable.Json.Converters
 
         public override void Write(Utf8JsonWriter writer, VerificationMethod[] verificationMethod, JsonSerializerOptions options)
         {
+            ArgumentNullException.ThrowIfNull(writer);
+            ArgumentNullException.ThrowIfNull(verificationMethod);
             if(verificationMethod.Length == 1)
             {
                 JsonSerializer.Serialize(writer, verificationMethod[0]);

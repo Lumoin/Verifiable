@@ -113,6 +113,7 @@ namespace Verifiable.Json.Converters
         /// <inheritdoc/>
         public override void Write(Utf8JsonWriter writer, Issuer value, JsonSerializerOptions options)
         {
+            ArgumentNullException.ThrowIfNull(writer);
             if(value is null)
             {
                 writer.WriteNullValue();

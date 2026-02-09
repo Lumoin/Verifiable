@@ -2,6 +2,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Globalization;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Verifiable.Core;
@@ -14,9 +15,12 @@ namespace Verifiable;
 /// Shared operations for DID, VC, and TPM functionality.
 /// Used by both CLI commands and MCP tools.
 /// </summary>
-public static class VerifiableOperations
+internal static class VerifiableOperations
 {
-    public static string GetPlatformDescription() => RuntimeInformation.OSDescription;
+    /// <summary>
+    /// Gets a description of the current operating system platform.
+    /// </summary>
+    public static string PlatformDescription => RuntimeInformation.OSDescription;
 
 
     /// <summary>
@@ -76,7 +80,7 @@ public static class VerifiableOperations
 
         try
         {
-            await File.WriteAllTextAsync(targetPath, infoResult.Value);
+            await File.WriteAllTextAsync(targetPath, infoResult.Value).ConfigureAwait(false);
             return Result.Success<string, string>(Path.GetFullPath(targetPath));
         }
         catch(Exception ex)
@@ -92,7 +96,7 @@ public static class VerifiableOperations
     /// <returns>A message describing TPM support status.</returns>
     public static string CheckTpmSupportMessage()
     {
-        string os = GetPlatformDescription();
+        string os = PlatformDescription;
         if(TpmDevice.IsAvailable)
         {
             return $"TPM is supported and available on this platform ({os}).";
@@ -105,12 +109,18 @@ public static class VerifiableOperations
     public static Result<string, string> CreateDid(int id, string param, string? extraParam = null)
     {
         var result = new StringBuilder();
-        result.AppendLine($"Created DID document with ID: {id}");
-        result.AppendLine($"Parameter: {param}");
+        result.Append("Created DID document with ID: ");
+        result.Append(id.ToString(CultureInfo.InvariantCulture));
+        result.AppendLine();
+        result.Append("Parameter: ");
+        result.Append(param);
+        result.AppendLine();
 
         if(!string.IsNullOrEmpty(extraParam))
         {
-            result.AppendLine($"Extra parameter: {extraParam}");
+            result.Append("Extra parameter: ");
+            result.Append(extraParam);
+            result.AppendLine();
         }
 
         //TODO: Implement actual DID creation logic.

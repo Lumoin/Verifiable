@@ -6,7 +6,7 @@ namespace Verifiable.Tests.Did
     /// Tests for <see cref="VerificationMethodResolutionResult" /> <see cref="System.IEquatable{T}" /> implementation.
     /// </summary>
     [TestClass]
-    public sealed class VerificationMethodResolutionResultEquatableTests
+    internal sealed class VerificationMethodResolutionResultEquatableTests
     {
         /// <summary>
         /// A first instance for testing comparisons.
@@ -138,9 +138,8 @@ namespace Verifiable.Tests.Did
 
         [TestMethod]
         public void EqualsWithNullObjectReturnsFalse()
-        {
-            object? nullObject = null;
-            Assert.IsFalse(Result1.Equals(nullObject));
+        {            
+            Assert.IsFalse(Result1.Equals(null));
         }
 
 

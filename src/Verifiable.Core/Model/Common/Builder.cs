@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,6 +10,7 @@ namespace Verifiable.Core.Model.Common
     /// Marker interface for all builder types in the Verifiable library.
     /// This provides a common type that can be used for builder collections and constraints.
     /// </summary>
+    [SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "Marker interface used to tag builder types for discovery and generic constraints.")]
     public interface IBuilder { }
 
 
@@ -325,13 +327,13 @@ namespace Verifiable.Core.Model.Common
         {
             ArgumentNullException.ThrowIfNull(preBuildActionAsync, nameof(preBuildActionAsync));
 
-            TState buildInvariant = await preBuildActionAsync(param, (TBuilder)this, cancellationToken);
+            TState buildInvariant = await preBuildActionAsync(param, (TBuilder)this, cancellationToken).ConfigureAwait(false);
             TResult result = new();
 
             foreach(Func<TResult, TBuilder, TState?, CancellationToken, ValueTask<TResult>> actionAsync in WithActions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                result = await actionAsync(result, (TBuilder)this, buildInvariant, cancellationToken);
+                result = await actionAsync(result, (TBuilder)this, buildInvariant, cancellationToken).ConfigureAwait(false);
             }
 
             return result;
@@ -410,13 +412,13 @@ namespace Verifiable.Core.Model.Common
             ArgumentNullException.ThrowIfNull(seedGeneratorAsync, nameof(seedGeneratorAsync));
             ArgumentNullException.ThrowIfNull(preBuildActionAsync, nameof(preBuildActionAsync));
 
-            TState buildInvariant = await preBuildActionAsync(seedGeneratorParameter, (TBuilder)this, cancellationToken);
-            TResult seed = await seedGeneratorAsync(seedGeneratorParameter, cancellationToken);
+            TState buildInvariant = await preBuildActionAsync(seedGeneratorParameter, (TBuilder)this, cancellationToken).ConfigureAwait(false);
+            TResult seed = await seedGeneratorAsync(seedGeneratorParameter, cancellationToken).ConfigureAwait(false);
 
             foreach(Func<TResult, TBuilder, TState?, CancellationToken, ValueTask<TResult>> actionAsync in WithActions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                seed = await actionAsync(seed, (TBuilder)this, buildInvariant, cancellationToken);
+                seed = await actionAsync(seed, (TBuilder)this, buildInvariant, cancellationToken).ConfigureAwait(false);
             }
 
             return seed;
@@ -492,7 +494,7 @@ namespace Verifiable.Core.Model.Common
             foreach(TSource element in source)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                result = await funcAsync(result, element, buildInvariant, cancellationToken);
+                result = await funcAsync(result, element, buildInvariant, cancellationToken).ConfigureAwait(false);
             }
 
             return result;
@@ -530,7 +532,7 @@ namespace Verifiable.Core.Model.Common
             foreach(TSource element in source)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                result = await funcAsync(result, element, cancellationToken);
+                result = await funcAsync(result, element, cancellationToken).ConfigureAwait(false);
             }
 
             return result;

@@ -78,23 +78,25 @@ public sealed class Tpm2bData: IDisposable
     /// <summary>
     /// Gets the data as a read-only span.
     /// </summary>
-    /// <returns>The data bytes.</returns>
-    public ReadOnlySpan<byte> AsSpan()
+    public ReadOnlySpan<byte> Span
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
-
-        if(storage is null)
+        get
         {
-            return ReadOnlySpan<byte>.Empty;
-        }
+            ObjectDisposedException.ThrowIf(disposed, this);
 
-        return storage.Memory.Span.Slice(0, length);
+            if(storage is null)
+            {
+                return ReadOnlySpan<byte>.Empty;
+            }
+
+            return storage.Memory.Span.Slice(0, length);
+        }
     }
 
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize() => sizeof(ushort) + length;
+    public int SerializedSize => sizeof(ushort) + length;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -108,7 +110,7 @@ public sealed class Tpm2bData: IDisposable
 
         if(length > 0)
         {
-            writer.WriteBytes(AsSpan());
+            writer.WriteBytes(Span);
         }
     }
 
@@ -120,6 +122,7 @@ public sealed class Tpm2bData: IDisposable
     /// <returns>The parsed data buffer.</returns>
     public static Tpm2bData Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
 
         if(size == 0)
@@ -147,6 +150,7 @@ public sealed class Tpm2bData: IDisposable
     /// <returns>The created data buffer.</returns>
     public static Tpm2bData Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)
         {
             return Empty;

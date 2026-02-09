@@ -11,7 +11,8 @@ namespace Verifiable.Core.Model.Did.Methods
     {
         public KeriDidMethod(string didString): base(didString)
         {
-            if(!didString.StartsWith("did:keri:"))
+            ArgumentNullException.ThrowIfNull(didString);
+            if(!didString.StartsWith("did:keri:", StringComparison.InvariantCulture))
             {
                 throw new ArgumentException("The DID string must start with 'did:keri:'", nameof(didString));
             }
@@ -22,17 +23,27 @@ namespace Verifiable.Core.Model.Did.Methods
         /// Implicit conversion from <see cref="KeriDidMethod"/> or derived DID methods to <see langword="string"/>.
         /// </summary>
         /// <param name="didId"></param>
-        public static implicit operator string(KeriDidMethod didId) => didId.Id;
+        public static implicit operator string(KeriDidMethod didId)
+        {
+            ArgumentNullException.ThrowIfNull(didId);
+
+            return didId.Id;
+        }
 
 
         /// <summary>
         /// Explicit conversion from <see langword="string"/> to <see cref="KeriDidMethod"/> or derived DID methods.
         /// </summary>
         /// <param name="didId"></param>
-        public static explicit operator KeriDidMethod(string didId) => new(didId);
+        public static explicit operator KeriDidMethod(string didId)
+        {
+            ArgumentNullException.ThrowIfNull(didId);
 
+            return new KeriDidMethod(didId);
+        }
 
+       
         /// <inheritdoc/>
-        public override string ToString() => Id;
+        public override string ToString() => Id;        
     }
 }

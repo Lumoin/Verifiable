@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Assessment;
 /// timestamp handling, and integration with <see cref="ClaimIssuer{TInput}"/>.
 /// </summary>
 [TestClass]
-public sealed class ClaimAssessorTests
+internal sealed class ClaimAssessorTests
 {
     /// <summary>
     /// The test context.
@@ -26,12 +26,13 @@ public sealed class ClaimAssessorTests
     /// <summary>
     /// A simple validation rule that always succeeds.
     /// </summary>
-    private static ValueTask<IList<Claim>> SuccessfulRule(
+    private static ValueTask<List<Claim>> SuccessfulRule(
         string input,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        IList<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
+        List<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
+
         return ValueTask.FromResult(claims);
     }
 
@@ -39,12 +40,13 @@ public sealed class ClaimAssessorTests
     /// <summary>
     /// A validation rule that always fails.
     /// </summary>
-    private static ValueTask<IList<Claim>> FailingRule(
+    private static ValueTask<List<Claim>> FailingRule(
         string input,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        IList<Claim> claims = [new Claim(ClaimId.AlgIsNone, ClaimOutcome.Failure)];
+        List<Claim> claims = [new Claim(ClaimId.AlgIsNone, ClaimOutcome.Failure)];
+
         return ValueTask.FromResult(claims);
     }
 
@@ -70,7 +72,7 @@ public sealed class ClaimAssessorTests
         var result = await assessor.AssessAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, "Assessment should succeed when all claims succeed.");
         Assert.AreEqual(TestAssessorId, result.AssessorId);
@@ -100,7 +102,7 @@ public sealed class ClaimAssessorTests
         var result = await assessor.AssessAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess, "Assessment should fail when any claim fails.");
     }
@@ -126,7 +128,7 @@ public sealed class ClaimAssessorTests
         var result = await assessor.AssessAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         //Assessment result should have tracing information.
         Assert.IsNotNull(result.TraceId, "Assessment TraceId should be captured.");
@@ -174,7 +176,7 @@ public sealed class ClaimAssessorTests
         var result = await assessor.AssessAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         //TraceId should match the activity.
         Assert.AreEqual(activity.TraceId.ToString(), result.TraceId);
@@ -203,9 +205,9 @@ public sealed class ClaimAssessorTests
             new(SuccessfulRule, [ClaimId.AlgIsValid]),
             new(async (input, ct) =>
             {
-                cts.Cancel();
+                await cts.CancelAsync().ConfigureAwait(false);
                 ct.ThrowIfCancellationRequested();
-                return await SuccessfulRule(input, ct);
+                return await SuccessfulRule(input, ct).ConfigureAwait(false);
             }, [ClaimId.AlgExists])
         };
 
@@ -219,7 +221,7 @@ public sealed class ClaimAssessorTests
         var result = await assessor.AssessAsync(
             "test-input",
             TestCorrelationId,
-            cts.Token);
+            cts.Token).ConfigureAwait(false);
 
         //Default assessor should fail for incomplete claim results.
         Assert.IsFalse(result.IsSuccess, "Assessment should fail when claim generation was incomplete.");
@@ -249,7 +251,7 @@ public sealed class ClaimAssessorTests
         var result = await assessor.AssessAsync(
             "test-input",
             specificCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         //Correlation ID should flow through to both assessment and claims results.
         Assert.AreEqual(specificCorrelationId, result.CorrelationId);
@@ -300,7 +302,7 @@ public sealed class ClaimAssessorTests
         var result = await assessor.AssessAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, "Custom assessor should succeed with exactly 2 successful claims.");
         Assert.AreEqual(customVersion, result.AssessorVersion);
@@ -371,7 +373,7 @@ public sealed class ClaimAssessorTests
         var result = await assessor.AssessAsync(
             "test-input",
             TestCorrelationId,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         //Timestamp should match the TimeProvider's time.
         Assert.AreEqual(fixedTime.UtcDateTime, result.CreationTimestampInUtc);

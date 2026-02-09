@@ -1,6 +1,7 @@
 ﻿using BenchmarkDotNet.Attributes;
 using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
@@ -12,7 +13,8 @@ namespace Verifiable.Benchmarks
     /// </summary>
     [MemoryDiagnoser]
     [SimpleJob]
-    public class SensitiveMemoryPoolBenchmarks
+    [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "Cleanup handled in GlobalCleanup.")]
+    internal class SensitiveMemoryPoolBenchmarks
     {
         private SensitiveMemoryPool<byte> sensitivePool = null!;
         private ArrayPool<byte> arrayPool = null!;
@@ -79,7 +81,7 @@ namespace Verifiable.Benchmarks
         [Arguments(64)]
         [Arguments(256)]
         [Arguments(512)]
-        public void ByteArraySingleAllocation(int bufferSize)
+        public static void ByteArraySingleAllocation(int bufferSize)
         {
             var buffer = new byte[bufferSize];
             //Simulate some work.

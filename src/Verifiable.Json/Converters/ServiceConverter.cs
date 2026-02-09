@@ -143,6 +143,8 @@ namespace Verifiable.Json.Converters
         /// <inheritdoc/>
         public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
         {
+            ArgumentNullException.ThrowIfNull(writer);
+            ArgumentNullException.ThrowIfNull(value);
             JsonSerializer.Serialize(writer, value, value.GetType(), DefaultOptionsForAll);
         }
     }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
 
@@ -9,6 +10,7 @@ namespace Verifiable.Microsoft
     /// <summary>
     /// Creates cryptographic key material using .NET's built-in cryptographic providers.
     /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned key material instances.")]
     public static class MicrosoftKeyMaterialCreator
     {
         /// <summary>

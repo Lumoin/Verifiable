@@ -26,7 +26,7 @@ namespace Verifiable.Tests.DataIntegrity;
 /// </para>
 /// </remarks>
 [TestClass]
-public sealed class JoseCredentialIssuanceFlowTests
+internal sealed class JoseCredentialIssuanceFlowTests
 {
     /// <summary>
     /// Test context providing test run information and cancellation support.
@@ -95,18 +95,22 @@ public sealed class JoseCredentialIssuanceFlowTests
     [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
     public async Task IssueAndVerifyCredentialWithJoseSucceeds(DidWebTestData testData)
     {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
         var issuerDidDocument = await WebDidBuilder.BuildAsync(
-            testData.KeyPair.PublicKey,
+            publicKey,
             testData.VerificationMethodTypeInfo,
             IssuerDomain,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
 
         var holderDidDocument = await KeyDidBuilder.BuildAsync(
-            testData.KeyPair.PublicKey,
+            publicKey,
             testData.VerificationMethodTypeInfo,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var holderDid = holderDidDocument.Id!.ToString();
 
@@ -126,17 +130,17 @@ public sealed class JoseCredentialIssuanceFlowTests
             validFrom,
             additionalTypes: [AlumniCredentialType],
             validUntil: validUntil,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Sign as JWS.
         JwsMessage jwsMessage = await unsignedCredential.SignJwsAsync(
-            testData.KeyPair.PrivateKey,
+            privateKey,
             issuerVerificationMethodId,
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -148,11 +152,11 @@ public sealed class JoseCredentialIssuanceFlowTests
         //Verify the signature.
         var verificationResult = await JwsCredentialVerification.VerifyAsync(
             jws,
-            testData.KeyPair.PublicKey,
+            publicKey,
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid);
         Assert.IsNotNull(verificationResult.Credential);
@@ -168,11 +172,15 @@ public sealed class JoseCredentialIssuanceFlowTests
     [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
     public async Task TamperedJwsCredentialFailsVerification(DidWebTestData testData)
     {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
         var issuerDidDocument = await WebDidBuilder.BuildAsync(
-            testData.KeyPair.PublicKey,
+            publicKey,
             testData.VerificationMethodTypeInfo,
             IssuerDomain,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
 
@@ -190,33 +198,33 @@ public sealed class JoseCredentialIssuanceFlowTests
             subject,
             validFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         JwsMessage jwsMessage = await unsignedCredential.SignJwsAsync(
-            testData.KeyPair.PrivateKey,
+            privateKey,
             issuerVerificationMethodId,
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         //Tamper with the payload by modifying the JWS string.
         string[] parts = jws.Split('.');
         string tamperedPayload = parts[1].Length > 10
-            ? parts[1].Substring(0, 5) + "XXXXX" + parts[1].Substring(10)
+            ? string.Concat(parts[1].AsSpan(0, 5), "XXXXX", parts[1].AsSpan(10))
             : "tampered";
         string tamperedJws = $"{parts[0]}.{tamperedPayload}.{parts[2]}";
 
         var verificationResult = await JwsCredentialVerification.VerifyAsync(
             tamperedJws,
-            testData.KeyPair.PublicKey,
+            publicKey,
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(verificationResult.IsValid);
     }
@@ -229,11 +237,15 @@ public sealed class JoseCredentialIssuanceFlowTests
     [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
     public async Task JwsHeaderContainsCorrectMetadata(DidWebTestData testData)
     {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
         var issuerDidDocument = await WebDidBuilder.BuildAsync(
-            testData.KeyPair.PublicKey,
+            publicKey,
             testData.VerificationMethodTypeInfo,
             IssuerDomain,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
 
@@ -251,16 +263,16 @@ public sealed class JoseCredentialIssuanceFlowTests
             subject,
             validFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         JwsMessage jwsMessage = await unsignedCredential.SignJwsAsync(
-            testData.KeyPair.PrivateKey,
+            privateKey,
             issuerVerificationMethodId,
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -289,11 +301,15 @@ public sealed class JoseCredentialIssuanceFlowTests
     [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
     public async Task JwsWithCustomMediaTypeSucceeds(DidWebTestData testData)
     {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
         var issuerDidDocument = await WebDidBuilder.BuildAsync(
-            testData.KeyPair.PublicKey,
+            publicKey,
             testData.VerificationMethodTypeInfo,
             IssuerDomain,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerVerificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
 
@@ -311,18 +327,18 @@ public sealed class JoseCredentialIssuanceFlowTests
             subject,
             validFrom,
             additionalTypes: [AlumniCredentialType],
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Use the non-JSON-LD media type.
         JwsMessage jwsMessage = await unsignedCredential.SignJwsAsync(
-            testData.KeyPair.PrivateKey,
+            privateKey,
             issuerVerificationMethodId,
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
             mediaType: WellKnownMediaTypes.Jwt.VcJwt,
-            cancellationToken: TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 

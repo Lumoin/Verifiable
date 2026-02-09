@@ -1,11 +1,11 @@
 using SimpleBase;
 using System.Buffers;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Microsoft;
 using Verifiable.NSec;
 using Verifiable.Tests.DataProviders;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography
@@ -15,7 +15,7 @@ namespace Verifiable.Tests.Cryptography
     /// W3C DID and verifiable credentials specifications.
     /// </summary>
     [TestClass]
-    public sealed class W3CdataTests
+    internal sealed class W3CdataTests
     {
         /// <summary>
         /// Source for this vector at <see href="https://w3c-ccg.github.io/did-method-key/#secp256k1">did:key secp256k1</see>.
@@ -114,7 +114,7 @@ namespace Verifiable.Tests.Cryptography
     /// <see cref="CryptoSuiteConstants"/> used.
     /// </remarks>
     [TestClass]
-    public sealed class MultibaseEncodingTests
+    internal sealed class MultibaseEncodingTests
     {
         /// <summary>
         /// Test elliptic curve key generation and validation.

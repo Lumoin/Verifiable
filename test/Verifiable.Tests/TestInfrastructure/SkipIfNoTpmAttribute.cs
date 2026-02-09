@@ -42,7 +42,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <seealso cref="ConditionalTestMethodAttribute"/>
 /// <seealso cref="ConditionalTestClassAttribute"/>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
-public sealed class SkipIfNoTpmAttribute: BaseSkipAttribute
+internal sealed class SkipIfNoTpmAttribute: BaseSkipAttribute
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="SkipIfNoTpmAttribute"/> class.

@@ -13,7 +13,7 @@ namespace Verifiable.Tests.Builders
     /// <summary>
     /// Contains validation rules specific for <c>did:web</c> DID documents.
     /// </summary>
-    public static class WebDidValidationRules
+    internal static class WebDidValidationRules
     {
         /// <summary>
         /// A collection of all the assessment rules that are applied to <c>did:web</c> DID documents.
@@ -30,13 +30,13 @@ namespace Verifiable.Tests.Builders
         /// <param name="document">The <c>did:web</c> DID document to validate.</param>
         /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
         /// <returns>Claims indicating the validation outcome.</returns>
-        public static ValueTask<IList<Claim>> ValidateKeyFormatAsync(
+        public static ValueTask<List<Claim>> ValidateKeyFormatAsync(
             DidDocument document,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            IList<Claim> resultClaims = [];
+            List<Claim> resultClaims = [];
             if(document.VerificationMethod?[0]?.KeyFormat is PublicKeyJwk keyFormat)
             {
                 var headers = keyFormat.Header;
@@ -63,7 +63,7 @@ namespace Verifiable.Tests.Builders
     /// Tests for <see cref="WebDidBuilder"/>.
     /// </summary>
     [TestClass]
-    public sealed class WebDidBuilderTests
+    internal sealed class WebDidBuilderTests
     {
         /// <summary>
         /// The one and only (stateless) builder for <c>did:web</c> DID used in the tests.
@@ -77,7 +77,7 @@ namespace Verifiable.Tests.Builders
 
 
         /// <summary>
-        /// The one and only (stateless) assessor for for <c>did:web</c> for the builder tests.
+        /// The one and only (stateless) assessor for <c>did:web</c> for the builder tests.
         /// </summary>
         private static ClaimAssessor<DidDocument> WebDidAssessor { get; } = new ClaimAssessor<DidDocument>(
             new ClaimIssuer<DidDocument>(
@@ -93,13 +93,17 @@ namespace Verifiable.Tests.Builders
         [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
         public async Task CanBuildWebDidFromRandomKeysAsync(DidWebTestData testData)
         {
+            var keyPair = testData.KeyPairFactory();
+            using var publicKey = keyPair.PublicKey;
+            using var privateKey = keyPair.PrivateKey;
+
             //This builds the did:web document with the given public key and crypto suite.
             string testDomain = "example.com";
             var webDidDocument = await WebDidBuilder.BuildAsync(
-                testData.KeyPair.PublicKey,
+                publicKey,
                 testData.VerificationMethodTypeInfo,
                 testDomain,
-                cancellationToken: TestContext.CancellationToken);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             //Assert that the KeyFormat exists and is of the expected type.
             var actualKeyFormat = webDidDocument.VerificationMethod![0].KeyFormat;
@@ -114,14 +118,14 @@ namespace Verifiable.Tests.Builders
             //did:web it is specified how the identifier is generated from the key
             //material and how it affects the key encoding to its string representation.
             var keyFormatValidator = new KeyFormatValidator();
-            var alg = testData.KeyPair.PublicKey.Tag.Get<CryptoAlgorithm>();
+            var alg = publicKey.Tag.Get<CryptoAlgorithm>();
             keyFormatValidator.AddValidator(typeof(PublicKeyJwk), TestOnlyKeyFormatValidators.KeyDidJwkValidator);
             keyFormatValidator.AddValidator(typeof(PublicKeyMultibase), TestOnlyKeyFormatValidators.KeyDidMultibaseValidator);
             bool res = keyFormatValidator.Validate(actualKeyFormat, alg);
             Assert.IsTrue(res, $"Key format validation failed for '{actualKeyFormat.GetType()}' for algorithm '{alg}'.");
 
-            //This part runs the whole suite if did:web validation rules Verifiable library defines against the document.
-            var assessmentResult = await WebDidAssessor.AssessAsync(webDidDocument, "some-test-supplied-correlationId", TestContext.CancellationToken);
+            //This part runs the whole suite of did:web validation rules the Verifiable library defines against the document.
+            var assessmentResult = await WebDidAssessor.AssessAsync(webDidDocument, "some-test-supplied-correlationId", TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(assessmentResult.IsSuccess, assessmentResult.ClaimsResult
                 .Claims.Where(c => c.Outcome == ClaimOutcome.Failure)
                 .Aggregate("Assessment failed. Failed claims: ", (acc, claim) => $"{acc}{claim.Id}, ").TrimEnd(',', '.'));
@@ -140,42 +144,46 @@ namespace Verifiable.Tests.Builders
         [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
         public async Task CanBuildWebDidWithAllRepresentationTypes(DidWebTestData testData)
         {
+            var keyPair = testData.KeyPairFactory();
+            using var publicKey = keyPair.PublicKey;
+            using var privateKey = keyPair.PrivateKey;
+
             string webDomain = "example.com";
             var builder = new WebDidBuilder();
 
             //Test 1: JSON without context - minimal representation.
             var docWithoutContext = await builder.BuildAsync(
-                testData.KeyPair.PublicKey,
+                publicKey,
                 testData.VerificationMethodTypeInfo,
                 webDomain,
                 DidRepresentationType.JsonWithoutContext,
-                cancellationToken: TestContext.CancellationToken);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsNull(docWithoutContext.Context, "JsonWithoutContext should not have @context");
+            Assert.IsNull(docWithoutContext.Context, "JsonWithoutContext should not have @context.");
             Assert.AreEqual($"did:web:{webDomain}", docWithoutContext.Id!);
 
             //Test 2: JSON with context - dual compatibility.
             var docWithContext = await builder.BuildAsync(
-                testData.KeyPair.PublicKey,
+                publicKey,
                 testData.VerificationMethodTypeInfo,
                 webDomain,
                 DidRepresentationType.JsonWithContext,
-                cancellationToken: TestContext.CancellationToken);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsNotNull(docWithContext.Context, "JsonWithContext should have @context");
+            Assert.IsNotNull(docWithContext.Context, "JsonWithContext should have @context.");
             Assert.AreEqual(Context.DidCore10, docWithContext.Context.Contexts![0]);
 
             //Test 3: JSON-LD - full semantic representation.
             var docJsonLd = await builder.BuildAsync(
-                testData.KeyPair.PublicKey,
+                publicKey,
                 testData.VerificationMethodTypeInfo,
                 webDomain,
                 DidRepresentationType.JsonLd,
                 didCoreVersion: Context.DidCore11,
                 additionalContexts: ["https://example.com/custom"],
-                cancellationToken: TestContext.CancellationToken);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsNotNull(docJsonLd.Context, "JsonLd should have @context");
+            Assert.IsNotNull(docJsonLd.Context, "JsonLd should have @context.");
             Assert.HasCount(2, docJsonLd.Context.Contexts!);
             Assert.AreEqual(Context.DidCore11, docJsonLd.Context.Contexts![0]);
             Assert.AreEqual("https://example.com/custom", docJsonLd.Context.Contexts[1]);

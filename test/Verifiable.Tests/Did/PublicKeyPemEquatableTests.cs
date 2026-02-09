@@ -1,4 +1,5 @@
-﻿using Verifiable.Core.Model.Did;
+﻿using System.Diagnostics.CodeAnalysis;
+using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Tests.Did
 {
@@ -7,7 +8,7 @@ namespace Verifiable.Tests.Did
     /// </summary>
     [TestClass]
     [Obsolete("Test JSON material still contains these types.")]
-    public sealed class PublicKeyPemEquatableTests
+    internal sealed class PublicKeyPemEquatableTests
     {
         /// <summary>
         /// A first instance for testing comparisons.
@@ -148,6 +149,7 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4f7jGC8Y4A8L2Y9XZGx8QY4Y8A8L2Y9XZGx8QY4Y8A8L
 
 
         [TestMethod]
+        [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "Intentional null/null case to verify custom equality operator semantics; analyzer cannot reason about operator overloads.")]
         public void NullKeyFormatsAreEqual()
         {
             PublicKeyPem? pem1 = null;

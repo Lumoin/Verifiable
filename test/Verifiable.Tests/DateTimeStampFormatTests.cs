@@ -3,7 +3,7 @@
 namespace Verifiable.Tests;
 
 [TestClass]
-public sealed class DateTimeStampFormatTests
+internal sealed class DateTimeStampFormatTests
 {
     private static readonly DateTimeOffset SampleUtc = new(2024, 1, 15, 10, 30, 45, 123, TimeSpan.Zero);
     private static readonly DateTimeOffset SampleWithOffset = new(2024, 1, 15, 10, 30, 45, 123, TimeSpan.FromHours(2));
@@ -81,7 +81,7 @@ public sealed class DateTimeStampFormatTests
         var result = DateTimeStampFormat.Format(localTime);
 
         //Result should be UTC version of local time.
-        Assert.IsTrue(result.EndsWith("Z", StringComparison.Ordinal));
+        Assert.EndsWith("Z", result);
     }
 
 

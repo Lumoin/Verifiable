@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tests.Cryptography
@@ -6,7 +7,7 @@ namespace Verifiable.Tests.Cryptography
     /// Tests for <see cref="CryptoAlgorithm" /> <see cref="System.IEquatable{T}" /> implementation.
     /// </summary>
     [TestClass]
-    public sealed class CryptoAlgorithmEquatableTests
+    internal sealed class CryptoAlgorithmEquatableTests
     {
         /// <summary>
         /// A first instance for testing comparisons.
@@ -91,6 +92,7 @@ namespace Verifiable.Tests.Cryptography
 
 
         [TestMethod]
+        [SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "The operation is intentional for testing.")]
         public void EqualsWithNullObjectReturnsFalse()
         {
             object? nullObject = null;

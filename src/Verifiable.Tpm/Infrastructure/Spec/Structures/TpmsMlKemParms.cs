@@ -55,7 +55,7 @@ public readonly struct TpmsMlKemParms: IEquatable<TpmsMlKemParms>
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int GetSerializedSize() => Symmetric.GetSerializedSize() + sizeof(ushort);
+    public int SerializedSize => Symmetric.SerializedSize + sizeof(ushort);
 
     /// <summary>
     /// Writes this structure to a TPM writer.

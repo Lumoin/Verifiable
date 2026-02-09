@@ -10,7 +10,8 @@ namespace Verifiable.Core.Model.Did.Methods
     {
         public PlaceholderDidMethod(string didString): base(didString)
         {
-            if(!didString.StartsWith("did:plc:"))
+        ArgumentNullException.ThrowIfNull(didString);
+        if(!didString.StartsWith("did:plc:", StringComparison.InvariantCulture))
             {
                 throw new ArgumentException("The DID string must start with 'did:plc:'", nameof(didString));
             }
@@ -21,14 +22,24 @@ namespace Verifiable.Core.Model.Did.Methods
         /// Implicit conversion from <see cref="PlaceholderDidMethod"/> or derived DID methods to <see langword="string"/>.
         /// </summary>
         /// <param name="didId"></param>
-        public static implicit operator string(PlaceholderDidMethod didId) => didId.Id;
+    public static implicit operator string(PlaceholderDidMethod didId)
+    {
+        ArgumentNullException.ThrowIfNull(didId);
+
+        return didId.Id;
+    }
 
 
         /// <summary>
         /// Explicit conversion from <see langword="string"/> to <see cref="PlaceholderDidMethod"/> or derived DID methods.
         /// </summary>
         /// <param name="didId"></param>
-        public static explicit operator PlaceholderDidMethod(string didId) => new(didId);
+    public static explicit operator PlaceholderDidMethod(string didId)
+    {
+        ArgumentNullException.ThrowIfNull(didId);
+
+        return new(didId);
+    }
 
 
         /// <inheritdoc/>

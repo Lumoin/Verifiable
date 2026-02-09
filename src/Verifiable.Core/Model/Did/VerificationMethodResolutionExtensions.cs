@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -29,6 +30,7 @@ namespace Verifiable.Core.Model.Did;
 /// </description></item>
 /// </list>
 /// </remarks>
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with the latest syntax.")]
 public static class VerificationMethodResolutionExtensions
 {
     extension(DidDocument document)
@@ -374,11 +376,16 @@ public static class VerificationMethodResolutionExtensions
         {
             var results = new List<VerificationMethodResolutionResult>();
 
-            results.AddRange(await ResolveVerificationMethodReferencesAsync(document.Authentication, document, externalResolver));
-            results.AddRange(await ResolveVerificationMethodReferencesAsync(document.AssertionMethod, document, externalResolver));
-            results.AddRange(await ResolveVerificationMethodReferencesAsync(document.KeyAgreement, document, externalResolver));
-            results.AddRange(await ResolveVerificationMethodReferencesAsync(document.CapabilityInvocation, document, externalResolver));
-            results.AddRange(await ResolveVerificationMethodReferencesAsync(document.CapabilityDelegation, document, externalResolver));
+            results.AddRange(await ResolveVerificationMethodReferencesAsync(document.Authentication, document, externalResolver)
+                .ConfigureAwait(false));
+            results.AddRange(await ResolveVerificationMethodReferencesAsync(document.AssertionMethod, document, externalResolver)
+                .ConfigureAwait(false));
+            results.AddRange(await ResolveVerificationMethodReferencesAsync(document.KeyAgreement, document, externalResolver)
+                .ConfigureAwait(false));
+            results.AddRange(await ResolveVerificationMethodReferencesAsync(document.CapabilityInvocation, document, externalResolver)
+                .ConfigureAwait(false));
+            results.AddRange(await ResolveVerificationMethodReferencesAsync(document.CapabilityDelegation, document, externalResolver)
+                .ConfigureAwait(false));
 
             return [.. results];
         }
@@ -412,6 +419,7 @@ public static class VerificationMethodResolutionExtensions
         /// </example>
         public VerificationMethod? ResolveVerificationMethodReference(string reference)
         {
+            ArgumentNullException.ThrowIfNull(reference);
             if(document.VerificationMethod is null || document.VerificationMethod.Length == 0)
             {
                 return null;
@@ -712,7 +720,8 @@ public static class VerificationMethodResolutionExtensions
                     VerificationMethodResolutionResult.Resolved(reference.EmbeddedVerification, isLocal: true),
 
                 { VerificationReferenceId: not null } =>
-                    await ResolveReferenceAsync(reference.VerificationReferenceId, document, externalResolver),
+                    await ResolveReferenceAsync(reference.VerificationReferenceId, document, externalResolver)
+                        .ConfigureAwait(false),
 
                 _ => VerificationMethodResolutionResult.Unresolved("malformed-verification-method-reference")
             };
@@ -756,7 +765,7 @@ public static class VerificationMethodResolutionExtensions
 
         if(externalResolver is not null)
         {
-            var externalMethod = await externalResolver(reference);
+            var externalMethod = await externalResolver(reference).ConfigureAwait(false);
             if(externalMethod is not null)
             {
                 return VerificationMethodResolutionResult.Resolved(externalMethod, isLocal: false);

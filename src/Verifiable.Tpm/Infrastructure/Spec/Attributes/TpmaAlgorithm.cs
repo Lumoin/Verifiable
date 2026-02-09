@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Attributes;
 
@@ -18,6 +19,7 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
+[SuppressMessage("Naming", "CA1720:Identifier contains type name", Justification = "Enum values defined by TPM 2.0 specification.")]
 public enum TpmaAlgorithm: uint
 {
     /// <summary>
