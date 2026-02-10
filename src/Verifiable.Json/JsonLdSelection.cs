@@ -209,9 +209,14 @@ public static class JsonLdSelection
     /// </summary>
     /// <param name="document">The compact JSON-LD document.</param>
     /// <param name="mandatoryPointers">JSON Pointers identifying mandatory claims.</param>
-    /// <param name="canonicalize">The canonicalization function (JSON-LD → N-Quads).</param>
+    /// <param name="canonicalize">The canonicalization delegate (JSON-LD → N-Quads).</param>
+    /// <param name="contextResolver">
+    /// Optional delegate for resolving JSON-LD contexts during canonicalization.
+    /// Required for RDFC canonicalization, ignored by JCS canonicalization.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// A result containing the partitioned statements and their indexes.
+    /// A task that resolves to the partition result containing statements and their indexes.
     /// </returns>
     /// <remarks>
     /// <para>
@@ -228,25 +233,27 @@ public static class JsonLdSelection
     /// relabeling preserves statement order.
     /// </para>
     /// </remarks>
-    public static StatementPartitionResult PartitionStatements(
+    public static async ValueTask<StatementPartitionResult> PartitionStatements(
         string document,
         IReadOnlyList<Rfc6901JsonPointer> mandatoryPointers,
-        Func<string, string> canonicalize)
+        CanonicalizationDelegate canonicalize,
+        ContextResolverDelegate? contextResolver,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(document);
         ArgumentNullException.ThrowIfNull(mandatoryPointers);
         ArgumentNullException.ThrowIfNull(canonicalize);
 
         //Canonicalize the full document.
-        string fullNQuads = canonicalize(document);
+        string fullNQuads = await canonicalize(document, contextResolver, cancellationToken).ConfigureAwait(false);
         string[] rawStatements = fullNQuads.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         //Each N-Quad statement must end with newline per W3C spec for correct hashing.
-        string[] allStatements = rawStatements.Select(s => s + "\n").ToArray();
+        string[] allStatements = [.. rawStatements.Select(s => s + "\n")];
 
         if(mandatoryPointers.Count == 0)
         {
-            //No mandatory pointers - all statements are non-mandatory.
+            //No mandatory pointers — all statements are non-mandatory.
             var allNonMandatoryIndexes = new List<int>(allStatements.Length);
             for(int i = 0; i < allStatements.Length; i++)
             {
@@ -261,9 +268,9 @@ public static class JsonLdSelection
 
         //Select and canonicalize the mandatory fragments.
         string mandatorySelection = SelectFragments(document, mandatoryPointers);
-        string mandatoryNQuads = canonicalize(mandatorySelection);
+        string mandatoryNQuads = await canonicalize(mandatorySelection, contextResolver, cancellationToken).ConfigureAwait(false);
         string[] rawMandatoryStatements = mandatoryNQuads.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        string[] mandatoryStatements = rawMandatoryStatements.Select(s => s + "\n").ToArray();
+        string[] mandatoryStatements = [.. rawMandatoryStatements.Select(s => s + "\n")];
 
         //Build a set of mandatory statements for O(1) lookup.
         var mandatorySet = new HashSet<string>(mandatoryStatements, StringComparer.Ordinal);
@@ -374,7 +381,7 @@ public static class JsonLdSelection
 
                 //For arrays, we need to handle this differently.
                 //The spec says we need to preserve the array structure.
-                //This is a simplified implementation - full spec compliance would need more work.
+                //This is a simplified implementation — full spec compliance would need more work.
                 throw new NotImplementedException(
                     "Array index selection in JSON Pointers is not yet fully implemented. " +
                     "Use property paths for now.");

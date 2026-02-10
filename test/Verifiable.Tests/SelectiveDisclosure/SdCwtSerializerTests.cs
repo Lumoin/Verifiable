@@ -1,5 +1,6 @@
 ﻿using System.Formats.Cbor;
 using Verifiable.Cbor;
+using Verifiable.Cryptography;
 using Verifiable.JCose.Sd;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
@@ -103,7 +104,7 @@ internal sealed class SdCwtSerializerTests
         SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor);
 
         Assert.AreEqual("age", parsed.ClaimName);
-        Assert.AreEqual(30L, parsed.ClaimValue);
+        Assert.AreEqual(30, parsed.ClaimValue);
     }
 
 
@@ -140,7 +141,7 @@ internal sealed class SdCwtSerializerTests
         {
             ["street"] = "123 Main St",
             ["city"] = "Anytown",
-            ["zip"] = 12345L
+            ["zip"] = 12345
         };
 
         SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalt, "address", address);
@@ -154,7 +155,7 @@ internal sealed class SdCwtSerializerTests
         var parsedAddress = (Dictionary<object, object?>)parsed.ClaimValue!;
         Assert.AreEqual("123 Main St", parsedAddress["street"]);
         Assert.AreEqual("Anytown", parsedAddress["city"]);
-        Assert.AreEqual(12345L, parsedAddress["zip"]);
+        Assert.AreEqual(12345, parsedAddress["zip"]);
     }
 
 
@@ -201,8 +202,8 @@ internal sealed class SdCwtSerializerTests
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
 
-        byte[] digest1 = SdCwtSerializer.ComputeDisclosureDigest(cbor, SdConstants.DefaultHashAlgorithm);
-        byte[] digest2 = SdCwtSerializer.ComputeDisclosureDigest(cbor, SdConstants.DefaultHashAlgorithm);
+        byte[] digest1 = SdCwtSerializer.ComputeDisclosureDigest(cbor, WellKnownHashAlgorithms.Sha256Iana);
+        byte[] digest2 = SdCwtSerializer.ComputeDisclosureDigest(cbor, WellKnownHashAlgorithms.Sha256Iana);
 
         CollectionAssert.AreEqual(digest1, digest2, "Digest must be deterministic.");
     }
@@ -275,8 +276,7 @@ internal sealed class SdCwtSerializerTests
         writer.WriteEndArray();
         byte[] cbor = writer.Encode();
 
-        Assert.Throws<CborContentException>(() =>
-            SdCwtSerializer.ParseDisclosure(cbor));
+        Assert.Throws<CborContentException>(() => SdCwtSerializer.ParseDisclosure(cbor));
     }
 
 
@@ -315,8 +315,8 @@ internal sealed class SdCwtSerializerTests
         writer.WriteEndArray();
         byte[] sdClaimsCbor = writer.Encode();
 
-        byte[] hash1 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, SdConstants.DefaultHashAlgorithm);
-        byte[] hash2 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, SdConstants.DefaultHashAlgorithm);
+        byte[] hash1 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana);
+        byte[] hash2 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana);
 
         CollectionAssert.AreEqual(hash1, hash2, "SD hash must be deterministic.");
     }
@@ -333,6 +333,6 @@ internal sealed class SdCwtSerializerTests
         SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor);
 
         Assert.AreEqual("iat", parsed.ClaimName);
-        Assert.AreEqual(1683000000L, parsed.ClaimValue);
+        Assert.AreEqual(1683000000, parsed.ClaimValue);
     }
 }

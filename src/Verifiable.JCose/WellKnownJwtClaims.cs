@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Jose
+﻿namespace Verifiable.JCose
 {
     /// <summary>    
     /// JWT parameters as defined in <see href="https://www.iana.org/assignments/jwt/jwt.xhtml#claims">JSON Web Token (JWT)</see>.    
@@ -95,6 +95,19 @@
         /// <remarks>See more at <see href="https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims">OpenID Connect Core 1.0, Section 5.1 Standard Claims</see>.</remarks>
         public static readonly string Name = "name";
 
+        /// <summary>
+        /// The "vct" (verifiable credential type) claim identifies the type of the SD-JWT VC.
+        /// </summary>
+        /// <remarks>See more at <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-sd-jwt-vc-08.html#section-3.2.2.1.1">"vct" Claim</see>.</remarks>
+        public static readonly string Vct = "vct";
+
+        /// <summary>
+        /// The "cnf" (confirmation) claim contains the confirmation method, typically
+        /// the holder's public key for key binding.
+        /// </summary>
+        /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7800.html#section-3.1">"cnf" (Confirmation) Claim</see>.</remarks>
+        public static readonly string Cnf = "cnf";
+
 
         /// <summary>
         /// If <paramref name="claim"/> is <see cref="Iss"/> or not.
@@ -185,6 +198,28 @@
 
 
         /// <summary>
+        /// If <paramref name="claim"/> is <see cref="Vct"/> or not.
+        /// </summary>
+        /// <param name="claim">The claim to check.</param>
+        /// <returns><see langword="true" /> if is <see cref="Vct"/>; otherwise, <see langword="false" />.</returns>
+        public static bool IsVct(string claim)
+        {
+            return Equals(Vct, claim);
+        }
+
+
+        /// <summary>
+        /// If <paramref name="claim"/> is <see cref="Cnf"/> or not.
+        /// </summary>
+        /// <param name="claim">The claim to check.</param>
+        /// <returns><see langword="true" /> if is <see cref="Cnf"/>; otherwise, <see langword="false" />.</returns>
+        public static bool IsCnf(string claim)
+        {
+            return Equals(Cnf, claim);
+        }
+
+
+        /// <summary>
         /// Returns the equivalent static instance, or the original instance if none match.
         /// This conversion is optional but allows for performance optimizations when comparing method values elsewhere.
         /// </summary>
@@ -200,6 +235,8 @@
             string _ when IsIat(claim) => Iat,
             string _ when IsJti(claim) => Jti,
             string _ when IsJti(claim) => Name,
+            string _ when IsVct(claim) => Vct,
+            string _ when IsCnf(claim) => Cnf,
             string _ => claim
         };
 

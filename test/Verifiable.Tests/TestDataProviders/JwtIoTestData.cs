@@ -1,7 +1,7 @@
 ﻿using Verifiable.JCose;
 using Verifiable.Jose;
 
-namespace Verifiable.Tests.DataProviders
+namespace Verifiable.Tests.TestDataProviders
 {
     /// <summary>
     /// This defines a base class for various predefined JWT test data.
@@ -12,12 +12,12 @@ namespace Verifiable.Tests.DataProviders
     internal class BaseJwtTestData
     {
         public static Dictionary<string, object> DefaultJwtPayload => new(StringComparer.InvariantCultureIgnoreCase)
-    {
-        { WellKnownJwtClaims.Sub, "1234567890" },
-        { WellKnownJwtClaims.Name, "John Doe" },
-        { "admin", true },
-        { WellKnownJwtClaims.Iat, 1516239022 }
-    };
+        {
+            { WellKnownJwtClaims.Sub, "1234567890" },
+            { WellKnownJwtClaims.Name, "John Doe" },
+            { "admin", true },
+            { WellKnownJwtClaims.Iat, 1516239022 }
+        };
 
         public static Dictionary<string, object> AddTypParameter(Dictionary<string, object> header)
         {

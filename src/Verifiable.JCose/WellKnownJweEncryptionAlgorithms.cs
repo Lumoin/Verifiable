@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Jose
+﻿namespace Verifiable.JCose
 {
     /// <summary>    
     /// JSON Web Algorithms (JWA) for JSON Web Encryption (JWE) content encryption algorithms

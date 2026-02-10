@@ -181,8 +181,7 @@ jobs:
 
     # MacOS is skipped at the moment due to issues with some .NET crypto libraries.
     # Until tests are a fixed a bit. The coverage from the executable does not have a file suffix in Linux.
-    - name: Test
-      if: runner.os != 'macOS'
+    - name: Test      
       run: dotnet tool run dotnet-coverage collect --output '${{ github.workspace }}/reports/coverage.cobertura.xml' --output-format cobertura '${{ github.workspace }}/test/${{ env.VERIFIABLE_TESTS }}/bin/${{ env.BUILD_CONFIGURATION }}/net10.0/${{ env.VERIFIABLE_TESTS }}' --report-trx --report-trx-filename testresults.trx --results-directory '${{ github.workspace }}/reports'
       timeout-minutes: 5
 

@@ -1,10 +1,9 @@
 ﻿using System.Text.Json;
+using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
-using VDS.RDF;
-using VDS.RDF.Parsing;
 
-namespace Verifiable.Tests.Json;
+namespace Verifiable.Tests;
 
 /// <summary>
 /// Tests for <see cref="JsonLdSelection"/> following W3C VC DI ECDSA specification.
@@ -22,6 +21,18 @@ namespace Verifiable.Tests.Json;
 [TestClass]
 internal class JsonLdSelectionTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>
+    /// Offline RDFC-1.0 canonicalizer using embedded W3C context documents.
+    /// </summary>
+    private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
+
+    /// <summary>
+    /// Offline context resolver using embedded W3C context documents.
+    /// </summary>
+    private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
+
     /// <summary>
     /// Test credential with various property types for comprehensive testing.
     /// </summary>
@@ -48,11 +59,7 @@ internal class JsonLdSelectionTests
         }
         """;
 
-
-    //=========================================================================
-    //SelectFragment tests
-    //=========================================================================
-
+   
     [TestMethod]
     public void SelectFragmentWithRootPointerReturnsMinimalDocument()
     {
@@ -145,11 +152,7 @@ internal class JsonLdSelectionTests
             "Invalid pointer must throw ArgumentException.");
     }
 
-
-    //=========================================================================
-    //SelectFragments tests (multiple pointers)
-    //=========================================================================
-
+       
     [TestMethod]
     public void SelectFragmentsMergesMultipleSelections()
     {
@@ -210,10 +213,6 @@ internal class JsonLdSelectionTests
     }
 
 
-    //=========================================================================
-    //TryEvaluate tests
-    //=========================================================================
-
     [TestMethod]
     public void TryEvaluateWithValidPointerReturnsTrue()
     {
@@ -254,12 +253,8 @@ internal class JsonLdSelectionTests
     }
 
 
-    //=========================================================================
-    //PartitionStatements tests
-    //=========================================================================
-
     [TestMethod]
-    public void PartitionStatementsWithMandatoryPointersPartitionsCorrectly()
+    public async ValueTask PartitionStatementsWithMandatoryPointersPartitionsCorrectly()
     {
         var pointers = new[]
         {
@@ -267,10 +262,12 @@ internal class JsonLdSelectionTests
             Verifiable.JsonPointer.JsonPointer.Parse("/type")
         };
 
-        var partition = JsonLdSelection.PartitionStatements(
+        var partition = await JsonLdSelection.PartitionStatements(
             TestCredentialJson,
             pointers,
-            Canonicalize);
+            RdfcCanonicalizer,
+            ContextResolver,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         //Verify all statements are accounted for.
         int total = partition.MandatoryIndexes.Count + partition.NonMandatoryIndexes.Count;
@@ -299,12 +296,14 @@ internal class JsonLdSelectionTests
 
 
     [TestMethod]
-    public void PartitionStatementsWithEmptyPointersReturnsAllNonMandatory()
+    public async ValueTask PartitionStatementsWithEmptyPointersReturnsAllNonMandatory()
     {
-        var partition = JsonLdSelection.PartitionStatements(
+        var partition = await JsonLdSelection.PartitionStatements(
             TestCredentialJson,
             mandatoryPointers: [],
-            Canonicalize);
+            RdfcCanonicalizer,
+            ContextResolver,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsEmpty(partition.MandatoryIndexes, "Empty pointers must produce no mandatory indexes.");
         Assert.HasCount(partition.AllStatements.Count, partition.NonMandatoryIndexes,
@@ -313,17 +312,19 @@ internal class JsonLdSelectionTests
 
 
     [TestMethod]
-    public void PartitionStatementsMandatoryStatementsPropertyReturnsCorrectStatements()
+    public async ValueTask PartitionStatementsMandatoryStatementsPropertyReturnsCorrectStatements()
     {
         var pointers = new[]
         {
             Verifiable.JsonPointer.JsonPointer.Parse("/issuer")
         };
 
-        var partition = JsonLdSelection.PartitionStatements(
+        var partition = await JsonLdSelection.PartitionStatements(
             TestCredentialJson,
             pointers,
-            Canonicalize);
+            RdfcCanonicalizer,
+            ContextResolver,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         var mandatoryStatements = partition.MandatoryStatements;
 
@@ -339,7 +340,7 @@ internal class JsonLdSelectionTests
 
 
     [TestMethod]
-    public void PartitionStatementsApplyToPreservesOrder()
+    public async ValueTask PartitionStatementsApplyToPreservesOrder()
     {
         var pointers = new[]
         {
@@ -347,10 +348,12 @@ internal class JsonLdSelectionTests
             Verifiable.JsonPointer.JsonPointer.Parse("/validFrom")
         };
 
-        var partition = JsonLdSelection.PartitionStatements(
+        var partition = await JsonLdSelection.PartitionStatements(
             TestCredentialJson,
             pointers,
-            Canonicalize);
+            RdfcCanonicalizer,
+            ContextResolver,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         //Create a modified statement list (simulating relabeling).
         var modifiedStatements = partition.AllStatements
@@ -373,13 +376,9 @@ internal class JsonLdSelectionTests
         }
     }
 
-
-    //=========================================================================
-    //Integration test: Full flow
-    //=========================================================================
-
+        
     [TestMethod]
-    public void FullSelectionAndPartitionFlowProducesConsistentResults()
+    public async ValueTask FullSelectionAndPartitionFlowProducesConsistentResults()
     {
         //Select a subset of properties.
         var selectPointers = new[]
@@ -393,14 +392,16 @@ internal class JsonLdSelectionTests
         var selection = JsonLdSelection.SelectFragments(TestCredentialJson, selectPointers);
 
         //Partition both original and selection.
-        var originalPartition = JsonLdSelection.PartitionStatements(
+        var originalPartition = await JsonLdSelection.PartitionStatements(
             TestCredentialJson,
             selectPointers,
-            Canonicalize);
+            RdfcCanonicalizer,
+            ContextResolver,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         //The mandatory statements from the original should match what we'd get
         //from canonicalizing the selection document.
-        var selectionCanonical = Canonicalize(selection);
+        var selectionCanonical = await RdfcCanonicalizer(selection, ContextResolver, TestContext.CancellationToken).ConfigureAwait(false);
         var selectionStatements = selectionCanonical.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         //Selection canonical should be a subset of mandatory statements (approximately).
@@ -410,16 +411,5 @@ internal class JsonLdSelectionTests
             "Selection document must produce canonical statements.");
         Assert.IsGreaterThan(0, originalPartition.MandatoryStatements.Count,
             "Original must have mandatory statements for the given pointers.");
-    }
-
-
-    
-    private static string Canonicalize(string jsonLdDocument)
-    {
-        using var store = new TripleStore();
-        var parser = new JsonLdParser();
-        using var reader = new StringReader(jsonLdDocument);
-        parser.Load(store, reader);
-        return new RdfCanonicalizer().Canonicalize(store).SerializedNQuads;
     }
 }

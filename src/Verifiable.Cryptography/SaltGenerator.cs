@@ -39,6 +39,7 @@ public static class SaltGenerator
         {
             byte[] saltBytes = new byte[saltLengthBytes];
             RandomNumberGenerator.Fill(saltBytes);
+
             return base64UrlEncoder(saltBytes);
         };
     }
@@ -71,6 +72,19 @@ public static class SaltGenerator
 
             return saltQueue.Dequeue();
         };
+    }
+
+
+    /// <summary>
+    /// Generates cryptographically secure random salt bytes.
+    /// </summary>
+    /// <param name="lengthBytes">The salt length in bytes. Defaults to 16 (128 bits).</param>
+    /// <returns>A new byte array containing the salt.</returns>
+    public static byte[] Create(int lengthBytes = DefaultSaltLengthBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(lengthBytes, 1, nameof(lengthBytes));
+
+        return RandomNumberGenerator.GetBytes(lengthBytes);
     }
 
 

@@ -287,19 +287,19 @@ internal sealed class SdJwtSerializerTests
     [TestMethod]
     public void IsValidJwtStructureReturnsTrueForValidJwt()
     {
-        Assert.IsTrue(SdJwtSerializer.IsValidJwtStructure(Rfc9901IssuerSignedJwt));
-        Assert.IsTrue(SdJwtSerializer.IsValidJwtStructure(Rfc9901KeyBindingJwt));
+        Assert.IsTrue(SdJwtSerializer.IsCompactJws(Rfc9901IssuerSignedJwt));
+        Assert.IsTrue(SdJwtSerializer.IsCompactJws(Rfc9901KeyBindingJwt));
     }
 
 
     [TestMethod]
     public void IsValidJwtStructureReturnsFalseForInvalidJwt()
     {
-        Assert.IsFalse(SdJwtSerializer.IsValidJwtStructure("not-a-jwt"));
-        Assert.IsFalse(SdJwtSerializer.IsValidJwtStructure("a.b"));
-        Assert.IsFalse(SdJwtSerializer.IsValidJwtStructure("a.b.c.d"));
-        Assert.IsFalse(SdJwtSerializer.IsValidJwtStructure(""));
-        Assert.IsFalse(SdJwtSerializer.IsValidJwtStructure("a..c"));
+        Assert.IsFalse(SdJwtSerializer.IsCompactJws("not-a-jwt"));
+        Assert.IsFalse(SdJwtSerializer.IsCompactJws("a.b"));
+        Assert.IsFalse(SdJwtSerializer.IsCompactJws("a.b.c.d"));
+        Assert.IsFalse(SdJwtSerializer.IsCompactJws(""));
+        Assert.IsFalse(SdJwtSerializer.IsCompactJws("a..c"));
     }
 
 

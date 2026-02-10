@@ -38,7 +38,7 @@ public static class SdJwtPathExtraction
         DecodeDelegate decoder,
         EncodeDelegate encoder,
         MemoryPool<byte> pool,
-        string hashAlgorithm = SdConstants.DefaultHashAlgorithm)
+        string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana)
     {
         ArgumentNullException.ThrowIfNull(token);
         ArgumentNullException.ThrowIfNull(decoder);
@@ -127,7 +127,7 @@ public static class SdJwtPathExtraction
         DecodeDelegate decoder,
         EncodeDelegate encoder,
         MemoryPool<byte> pool,
-        string hashAlgorithm = SdConstants.DefaultHashAlgorithm)
+        string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana)
     {
         ArgumentNullException.ThrowIfNull(token);
 

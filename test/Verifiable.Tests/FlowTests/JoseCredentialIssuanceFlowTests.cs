@@ -77,7 +77,7 @@ internal sealed class JoseCredentialIssuanceFlowTests
     /// <summary>
     /// Serializes a JWT header dictionary to UTF-8 JSON bytes.
     /// </summary>
-    private static JwtHeaderSerializer HeaderSerializer => header =>
+    private static Core.Model.Credentials.JwtHeaderSerializer HeaderSerializer => header =>
         JsonSerializer.SerializeToUtf8Bytes(header);
 
 
@@ -150,12 +150,13 @@ internal sealed class JoseCredentialIssuanceFlowTests
         Assert.HasCount(3, parts);
 
         //Verify the signature.
-        var verificationResult = await JwsCredentialVerification.VerifyAsync(
+        var verificationResult = await CredentialJwsExtensions.VerifyJwsAsync(
             jws,
             publicKey,
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
+            SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid);
@@ -218,12 +219,13 @@ internal sealed class JoseCredentialIssuanceFlowTests
             : "tampered";
         string tamperedJws = $"{parts[0]}.{tamperedPayload}.{parts[2]}";
 
-        var verificationResult = await JwsCredentialVerification.VerifyAsync(
+        var verificationResult = await CredentialJwsExtensions.VerifyJwsAsync(
             tamperedJws,
             publicKey,
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
+            SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(verificationResult.IsValid);
@@ -287,7 +289,7 @@ internal sealed class JoseCredentialIssuanceFlowTests
         Assert.IsTrue(header.ContainsKey(JwkProperties.Kid));
 
         //Verify the typ is the VC+LD+JWT media type.
-        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcLdJwt, header[JwkProperties.Typ].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[JwkProperties.Typ].ToString());
 
         //Verify the kid matches the verification method ID.
         Assert.AreEqual(issuerVerificationMethodId, header[JwkProperties.Kid].ToString());
