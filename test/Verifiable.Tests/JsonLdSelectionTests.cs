@@ -327,14 +327,14 @@ internal class JsonLdSelectionTests
 
         var mandatoryStatements = partition.MandatoryStatements;
 
-        Assert.HasCount(partition.MandatoryIndexes.Count, mandatoryStatements,
-            "MandatoryStatements count must match MandatoryIndexes count.");
+        Assert.HasCount(partition.MandatoryIndexes.Count, mandatoryStatements, "MandatoryStatements count must match MandatoryIndexes count.");
 
         //Verify statements contain issuer-related content.
-        Assert.IsTrue(
-            mandatoryStatements.Any(s => s.Contains("issuer", StringComparison.OrdinalIgnoreCase) ||
-                                         s.Contains("did:example:issuer", StringComparison.Ordinal)),
-            "Mandatory statements must contain issuer-related content.");
+        string? issuerStatement = mandatoryStatements.FirstOrDefault(s =>
+            s.Contains("issuer", StringComparison.OrdinalIgnoreCase)
+            || s.Contains("did:example:issuer", StringComparison.Ordinal));
+
+        Assert.IsNotNull(issuerStatement, "Mandatory statements must contain issuer-related content.");
     }
 
 
