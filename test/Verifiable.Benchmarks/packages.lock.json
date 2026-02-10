@@ -270,7 +270,6 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "SimpleBase": "[5.6.0, )",
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )"
         }
@@ -287,17 +286,11 @@
       "verifiable.jsonpointer": {
         "type": "Project"
       },
-      "SimpleBase": {
-        "type": "CentralTransitive",
-        "requested": "[5.6.0, )",
-        "resolved": "5.6.0",
-        "contentHash": "1nNr/DCvcxTrQzN1gUnYzFpLkbAKcFYhF/aMK34jVxrPUjMwL/J3KNEp89M0WaW2k9FUpacxRe4BmjFFjOv3zw=="
-      },
       "System.Security.Cryptography.ProtectedData": {
         "type": "CentralTransitive",
-        "requested": "[10.0.2, )",
-        "resolved": "10.0.2",
-        "contentHash": "me7W69hkjdu5EzHXCQSXv9OS3uAkMXT26oZuWTaabeoO5BPxSVuRVJ2FSfIW8xyGxBb6mKCE6ZKg7TLk3IzJBQ=="
+        "requested": "[10.0.3, )",
+        "resolved": "10.0.3",
+        "contentHash": "JCKbH/CN5l0CSoJBILEvJmNQVp5vV+FY3q2ue4K9p4eDT4mFEv0bjTQCV+MD6Qk1b/qk9fWmZZKhG1TklbXw1Q=="
       }
     }
   }
