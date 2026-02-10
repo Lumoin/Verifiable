@@ -36,7 +36,7 @@ namespace Verifiable.Cbor;
 /// <list type="bullet">
 /// <item><description>CBOR null -> null.</description></item>
 /// <item><description>CBOR boolean -> bool.</description></item>
-/// <item><description>CBOR integer -> long (always, for consistency).</description></item>
+/// <item><description>CBOR integer -> int if within Int32 range, otherwise long, otherwise ulong.</description></item>
 /// <item><description>CBOR float -> float or double.</description></item>
 /// <item><description>CBOR text string -> string.</description></item>
 /// <item><description>CBOR byte string -> byte[].</description></item>
@@ -241,7 +241,7 @@ public static class CborValueConverter
             CborReaderState.Null => ReadNull(ref reader),
             CborReaderState.Boolean => reader.ReadBoolean(),
             CborReaderState.UnsignedInteger => ReadUnsignedInteger(ref reader),
-            CborReaderState.NegativeInteger => reader.ReadInt64(),
+            CborReaderState.NegativeInteger => ReadNegativeInteger(ref reader),
             CborReaderState.HalfPrecisionFloat => reader.ReadDouble(),
             CborReaderState.SinglePrecisionFloat => reader.ReadSingle(),
             CborReaderState.DoublePrecisionFloat => reader.ReadDouble(),
@@ -290,7 +290,7 @@ public static class CborValueConverter
             CborReaderState.Null => ReadNull(ref reader),
             CborReaderState.Boolean => reader.ReadBoolean(),
             CborReaderState.UnsignedInteger => ReadUnsignedInteger(ref reader),
-            CborReaderState.NegativeInteger => reader.ReadInt64(),
+            CborReaderState.NegativeInteger => ReadNegativeInteger(ref reader),
             CborReaderState.HalfPrecisionFloat => reader.ReadDouble(),
             CborReaderState.SinglePrecisionFloat => reader.ReadSingle(),
             CborReaderState.DoublePrecisionFloat => reader.ReadDouble(),
@@ -314,12 +314,28 @@ public static class CborValueConverter
     [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "Boxing to object is intentional for generic value conversion.")]
     private static object ReadUnsignedInteger(ref CborReader reader)
     {
-        //Always return long for consistency.
-        //This ensures round-trip behavior is predictable.
         ulong value = reader.ReadUInt64();
+        if(value <= int.MaxValue)
+        {
+            return (int)value;
+        }
+
         if(value <= long.MaxValue)
         {
             return (long)value;
+        }
+
+        return value;
+    }
+
+
+    [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "Boxing to object is intentional for generic value conversion.")]
+    private static object ReadNegativeInteger(ref CborReader reader)
+    {
+        long value = reader.ReadInt64();
+        if(value >= int.MinValue && value <= int.MaxValue)
+        {
+            return (int)value;
         }
 
         return value;

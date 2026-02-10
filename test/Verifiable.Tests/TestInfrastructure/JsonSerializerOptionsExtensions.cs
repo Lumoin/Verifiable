@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Jose;
 using Verifiable.Json.Converters;
+using Verifiable.Json.Converters.Dcql;
 
 namespace Verifiable.Tests.TestInfrastructure
 {
@@ -42,6 +43,14 @@ namespace Verifiable.Tests.TestInfrastructure
             options.Converters.Add(new CredentialSubjectConverter());
             options.Converters.Add(new DataIntegrityProofConverter());
             options.Converters.Add(new DidIdConverter(DefaultDidIdFactory));
+
+            //DCQL converters.
+            options.Converters.Add(new DcqlQueryConverter());
+            options.Converters.Add(new CredentialQueryConverter());
+            options.Converters.Add(new CredentialQueryMetaConverter());
+            options.Converters.Add(new ClaimsQueryConverter());
+            options.Converters.Add(new TrustedAuthoritiesQueryConverter());
+            options.Converters.Add(new CredentialSetQueryConverter());
 
             return options;
         }

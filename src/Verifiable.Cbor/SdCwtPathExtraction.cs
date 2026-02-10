@@ -1,10 +1,8 @@
 ﻿using System.Buffers;
 using System.Formats.Cbor;
 using System.Globalization;
-using Verifiable.Cbor.Sd;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.JCose;
 using Verifiable.JCose.Sd;
 
 namespace Verifiable.Cbor;
@@ -176,7 +174,7 @@ public static class SdCwtPathExtraction
                 }
 
                 //Check if this is the SD digest array.
-                if(key is int intKey && intKey == SdCwtConstants.SdClaimsHeaderParameter)
+                if(key is int intKey && intKey == SdCwtConstants.SdClaimsHeaderKey)
                 {
                     if(reader.PeekState() == CborReaderState.StartArray)
                     {
@@ -207,7 +205,7 @@ public static class SdCwtPathExtraction
                         reader.SkipValue();
                     }
                 }
-                else if(key is int algoKey && algoKey == SdCwtConstants.SdAlgHeaderParameter)
+                else if(key is int algoKey && algoKey == SdCwtConstants.SdAlgHeaderKey)
                 {
                     //Skip the algorithm claim.
                     reader.SkipValue();
@@ -292,7 +290,7 @@ public static class SdCwtPathExtraction
                     key = reader.ReadTextString();
                 }
 
-                if(key is int intKey && (intKey == SdCwtConstants.SdClaimsHeaderParameter || intKey == SdCwtConstants.SdAlgHeaderParameter))
+                if(key is int intKey && (intKey == SdCwtConstants.SdClaimsHeaderKey || intKey == SdCwtConstants.SdAlgHeaderKey))
                 {
                     reader.SkipValue();
                 }
@@ -365,7 +363,7 @@ public static class SdCwtPathExtraction
                 }
 
                 //Skip SD-related keys.
-                if(key is int intKey && (intKey == SdCwtConstants.SdClaimsHeaderParameter || intKey == SdCwtConstants.SdAlgHeaderParameter))
+                if(key is int intKey && (intKey == SdCwtConstants.SdClaimsHeaderKey || intKey == SdCwtConstants.SdAlgHeaderKey))
                 {
                     reader.SkipValue();
                 }

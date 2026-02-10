@@ -8,7 +8,7 @@ using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Verifiable.Jose;
+using Verifiable.JCose;
 
 namespace Verifiable.Core.Model.Did
 {

@@ -1,10 +1,10 @@
 ﻿using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Verifiable.JCose;
+using Verifiable.Jose;
 
 
-namespace Verifiable.Jose
+namespace Verifiable.JCose
 {
     /// <summary>
     /// Delegate for converting algorithm and key material to JWK format.
@@ -40,6 +40,21 @@ namespace Verifiable.Jose
     /// <param name="tag">The tag containing algorithm information.</param>
     /// <returns>The JWA algorithm identifier.</returns>
     public delegate string TagToJwaDelegate(Tag tag);
+
+    /// <summary>
+    /// Delegate for converting a <see cref="Tag"/> to a COSE algorithm identifier.
+    /// </summary>
+    /// <param name="tag">The tag containing algorithm information.</param>
+    /// <returns>The COSE algorithm identifier (a negative integer per IANA COSE Algorithms).</returns>
+    public delegate int TagToCoseDelegate(Tag tag);
+
+    /// <summary>
+    /// Delegate for converting a COSE algorithm identifier to a <see cref="Tag"/>.
+    /// </summary>
+    /// <param name="coseAlgorithm">The COSE algorithm identifier.</param>
+    /// <param name="purpose">The intended purpose (signing or verification).</param>
+    /// <returns>The corresponding <see cref="Tag"/>.</returns>
+    public delegate Tag CoseToTagDelegate(int coseAlgorithm, Purpose purpose);
 
 
     /// <summary>
@@ -96,6 +111,16 @@ namespace Verifiable.Jose
                 (string alg, Purpose p) when WellKnownJwaValues.IsPs384(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
                 (string alg, Purpose p) when WellKnownJwaValues.IsPs512(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
 
+                //ML-DSA signing.
+                (string alg, Purpose p) when WellKnownJwaValues.IsMlDsa44(alg) && p.Equals(Purpose.Signing) => CryptoTags.MlDsa44PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsMlDsa65(alg) && p.Equals(Purpose.Signing) => CryptoTags.MlDsa65PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsMlDsa87(alg) && p.Equals(Purpose.Signing) => CryptoTags.MlDsa87PrivateKey,
+
+                //ML-DSA verification.
+                (string alg, Purpose p) when WellKnownJwaValues.IsMlDsa44(alg) && p.Equals(Purpose.Verification) => CryptoTags.MlDsa44PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsMlDsa65(alg) && p.Equals(Purpose.Verification) => CryptoTags.MlDsa65PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsMlDsa87(alg) && p.Equals(Purpose.Verification) => CryptoTags.MlDsa87PublicKey,
+
                 _ => throw new NotSupportedException($"JWA algorithm '{jwaAlgorithm}' with purpose '{purpose}' is not supported.")
             };
         };
@@ -106,45 +131,26 @@ namespace Verifiable.Jose
         /// </summary>
         /// <remarks>
         /// For RSA algorithms, this returns the SHA-256 variant (RS256) by default.
-        /// Use <see cref="GetJwaAlgorithm(Tag, string)"/> for explicit hash algorithm selection.
+        /// Use <see cref="GetJwaAlgorithm(Tag, string?, bool)"/> for explicit hash algorithm selection.
         /// </remarks>
         public static TagToJwaDelegate DefaultTagToJwaConverter => tag =>
         {
             ArgumentNullException.ThrowIfNull(tag);
 
             CryptoAlgorithm algorithm = tag.Get<CryptoAlgorithm>();
-            if(algorithm.Equals(CryptoAlgorithm.P256))
+            return algorithm switch
             {
-                return WellKnownJwaValues.Es256;
-            }
-
-            if(algorithm.Equals(CryptoAlgorithm.P384))
-            {
-                return WellKnownJwaValues.Es384;
-            }
-
-            if(algorithm.Equals(CryptoAlgorithm.P521))
-            {
-                return WellKnownJwaValues.Es512;
-            }
-
-            if(algorithm.Equals(CryptoAlgorithm.Secp256k1))
-            {
-                return WellKnownJwaValues.Es256k1;
-            }
-
-            if(algorithm.Equals(CryptoAlgorithm.Ed25519))
-            {
-                return WellKnownJwaValues.EdDsa;
-            }
-
-            if(algorithm.Equals(CryptoAlgorithm.Rsa2048) || algorithm.Equals(CryptoAlgorithm.Rsa4096))
-            {
-                //Default to RS256 for RSA. Use GetJwaAlgorithm for explicit hash selection.
-                return WellKnownJwaValues.Rs256;
-            }
-
-            throw new NotSupportedException($"CryptoAlgorithm '{algorithm}' does not have a JWA mapping.");
+                var a when a.Equals(CryptoAlgorithm.P256) => WellKnownJwaValues.Es256,
+                var a when a.Equals(CryptoAlgorithm.P384) => WellKnownJwaValues.Es384,
+                var a when a.Equals(CryptoAlgorithm.P521) => WellKnownJwaValues.Es512,
+                var a when a.Equals(CryptoAlgorithm.Secp256k1) => WellKnownJwaValues.Es256k1,
+                var a when a.Equals(CryptoAlgorithm.Ed25519) => WellKnownJwaValues.EdDsa,
+                var a when a.Equals(CryptoAlgorithm.Rsa2048) || a.Equals(CryptoAlgorithm.Rsa4096) => WellKnownJwaValues.Rs256,
+                var a when a.Equals(CryptoAlgorithm.MlDsa44) => WellKnownJwaValues.MlDsa44,
+                var a when a.Equals(CryptoAlgorithm.MlDsa65) => WellKnownJwaValues.MlDsa65,
+                var a when a.Equals(CryptoAlgorithm.MlDsa87) => WellKnownJwaValues.MlDsa87,
+                _ => throw new NotSupportedException($"CryptoAlgorithm '{algorithm}' does not have a JWA mapping.")
+            };
         };
 
 
@@ -201,6 +207,84 @@ namespace Verifiable.Jose
 
             throw new NotSupportedException($"CryptoAlgorithm '{algorithm}' does not have a JWA mapping.");
         }
+
+
+        /// <summary>
+        /// Default converter from <see cref="Tag"/> to COSE algorithm identifier.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Maps internal <see cref="CryptoAlgorithm"/> values to COSE integer algorithm identifiers
+        /// as defined in <see href="https://www.iana.org/assignments/cose/cose.xhtml#algorithms">IANA COSE Algorithms</see>.
+        /// </para>
+        /// <para>
+        /// For RSA algorithms, this returns the SHA-256 PSS variant (PS256 / -37) by default.
+        /// </para>
+        /// </remarks>
+        public static TagToCoseDelegate DefaultTagToCoseConverter => tag =>
+        {
+            ArgumentNullException.ThrowIfNull(tag);
+
+            CryptoAlgorithm algorithm = tag.Get<CryptoAlgorithm>();
+            return algorithm switch
+            {
+                var a when a.Equals(CryptoAlgorithm.P256) => WellKnownCoseAlgorithms.Es256,
+                var a when a.Equals(CryptoAlgorithm.P384) => WellKnownCoseAlgorithms.Es384,
+                var a when a.Equals(CryptoAlgorithm.P521) => WellKnownCoseAlgorithms.Es512,
+                var a when a.Equals(CryptoAlgorithm.Ed25519) => WellKnownCoseAlgorithms.EdDsa,
+                var a when a.Equals(CryptoAlgorithm.Rsa2048) || a.Equals(CryptoAlgorithm.Rsa4096) => WellKnownCoseAlgorithms.Ps256,
+                var a when a.Equals(CryptoAlgorithm.MlDsa44) => WellKnownCoseAlgorithms.MlDsa44,
+                var a when a.Equals(CryptoAlgorithm.MlDsa65) => WellKnownCoseAlgorithms.MlDsa65,
+                var a when a.Equals(CryptoAlgorithm.MlDsa87) => WellKnownCoseAlgorithms.MlDsa87,
+                _ => throw new NotSupportedException($"CryptoAlgorithm '{algorithm}' does not have a COSE algorithm mapping.")
+            };
+        };
+
+
+        /// <summary>
+        /// Default converter from COSE algorithm identifier to <see cref="Tag"/>.
+        /// </summary>
+        public static CoseToTagDelegate DefaultCoseToTagConverter => (coseAlgorithm, purpose) =>
+        {
+            return (coseAlgorithm, purpose) switch
+            {
+                //ECDSA signing.
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEs256(alg) && p.Equals(Purpose.Signing) => CryptoTags.P256PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEs384(alg) && p.Equals(Purpose.Signing) => CryptoTags.P384PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEs512(alg) && p.Equals(Purpose.Signing) => CryptoTags.P521PrivateKey,
+
+                //ECDSA verification.
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEs256(alg) && p.Equals(Purpose.Verification) => CryptoTags.P256PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEs384(alg) && p.Equals(Purpose.Verification) => CryptoTags.P384PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEs512(alg) && p.Equals(Purpose.Verification) => CryptoTags.P521PublicKey,
+
+                //EdDSA signing and verification.
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEdDsa(alg) && p.Equals(Purpose.Signing) => CryptoTags.Ed25519PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEdDsa(alg) && p.Equals(Purpose.Verification) => CryptoTags.Ed25519PublicKey,
+
+                //RSA PSS signing.
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsPs256(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsPs384(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsPs512(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
+
+                //RSA PSS verification.
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsPs256(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsPs384(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsPs512(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
+
+                //ML-DSA signing.
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsMlDsa44(alg) && p.Equals(Purpose.Signing) => CryptoTags.MlDsa44PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsMlDsa65(alg) && p.Equals(Purpose.Signing) => CryptoTags.MlDsa65PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsMlDsa87(alg) && p.Equals(Purpose.Signing) => CryptoTags.MlDsa87PrivateKey,
+
+                //ML-DSA verification.
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsMlDsa44(alg) && p.Equals(Purpose.Verification) => CryptoTags.MlDsa44PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsMlDsa65(alg) && p.Equals(Purpose.Verification) => CryptoTags.MlDsa65PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsMlDsa87(alg) && p.Equals(Purpose.Verification) => CryptoTags.MlDsa87PublicKey,
+
+                _ => throw new NotSupportedException($"COSE algorithm '{coseAlgorithm}' with purpose '{purpose}' is not supported.")
+            };
+        };
 
 
         /// <summary>

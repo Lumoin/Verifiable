@@ -175,8 +175,8 @@ internal class SdCwtEndToEndTests
         VerifyRoundTrip(salt, "bool_false", false);
 
         //Numbers.
-        VerifyRoundTrip(salt, "int_positive", 42L);
-        VerifyRoundTrip(salt, "int_negative", -123L);
+        VerifyRoundTrip(salt, "int_positive", 42);
+        VerifyRoundTrip(salt, "int_negative", -123);
         VerifyRoundTrip(salt, "double_value", 3.14159);
 
         //Strings.
@@ -200,7 +200,7 @@ internal class SdCwtEndToEndTests
         var disclosures = new List<SdDisclosure>
         {
             SdDisclosure.CreateProperty(RandomNumberGenerator.GetBytes(16), "name", "Alice"),
-            SdDisclosure.CreateProperty(RandomNumberGenerator.GetBytes(16), "age", 30L),
+            SdDisclosure.CreateProperty(RandomNumberGenerator.GetBytes(16), "age", 30),
             SdDisclosure.CreateArrayElement(RandomNumberGenerator.GetBytes(16), "admin")
         };
 

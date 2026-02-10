@@ -267,4 +267,76 @@ public static class CryptoTags
         (typeof(CryptoAlgorithm), CryptoAlgorithm.WindowsPlatformEncrypted),
         (typeof(Purpose), Purpose.Encryption),
         (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-DSA-44 public keys (post-quantum, NIST security level 2).
+    /// </summary>
+    public static Tag MlDsa44PublicKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlDsa44),
+        (typeof(Purpose), Purpose.Verification),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-DSA-44 private keys (post-quantum, NIST security level 2).
+    /// </summary>
+    public static Tag MlDsa44PrivateKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlDsa44),
+        (typeof(Purpose), Purpose.Signing),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-DSA-44 signatures.
+    /// </summary>
+    public static Tag MlDsa44Signature { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlDsa44),
+        (typeof(Purpose), Purpose.Signature),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-DSA-65 public keys (post-quantum, NIST security level 3).
+    /// </summary>
+    public static Tag MlDsa65PublicKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlDsa65),
+        (typeof(Purpose), Purpose.Verification),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-DSA-65 private keys (post-quantum, NIST security level 3).
+    /// </summary>
+    public static Tag MlDsa65PrivateKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlDsa65),
+        (typeof(Purpose), Purpose.Signing),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-DSA-65 signatures.
+    /// </summary>
+    public static Tag MlDsa65Signature { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlDsa65),
+        (typeof(Purpose), Purpose.Signature),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-DSA-87 public keys (post-quantum, NIST security level 5).
+    /// </summary>
+    public static Tag MlDsa87PublicKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlDsa87),
+        (typeof(Purpose), Purpose.Verification),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-DSA-87 private keys (post-quantum, NIST security level 5).
+    /// </summary>
+    public static Tag MlDsa87PrivateKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlDsa87),
+        (typeof(Purpose), Purpose.Signing),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-DSA-87 signatures.
+    /// </summary>
+    public static Tag MlDsa87Signature { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlDsa87),
+        (typeof(Purpose), Purpose.Signature),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
 }

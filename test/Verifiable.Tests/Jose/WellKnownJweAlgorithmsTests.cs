@@ -1,4 +1,4 @@
-﻿using Verifiable.Jose;
+﻿using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Jwt

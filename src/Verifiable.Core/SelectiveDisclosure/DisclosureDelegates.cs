@@ -17,11 +17,22 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// <remarks>
 /// <para>
 /// This delegate abstracts the format-specific logic for extracting paths from
-/// credential payloads. Implementations exist in format-specific libraries:
+/// credential payloads (Layer 5 of the DCQL Disclosure Architecture). The path
+/// extraction bridges between format-specific token structures and the
+/// format-neutral <see cref="CredentialPath"/>-based lattice operations in
+/// <see cref="DisclosureComputation{TCredential}"/> (Layer 3).
+/// </para>
+/// <para>
+/// Implementations exist in format-specific libraries:
 /// </para>
 /// <list type="bullet">
-/// <item><description>Verifiable.Json provides JSON/SD-JWT implementation.</description></item>
-/// <item><description>Verifiable.Cbor provides CBOR/SD-CWT implementation.</description></item>
+/// <item><description>
+/// <c>Verifiable.Json</c>: <c>SdJwtPathExtraction.ExtractPaths</c> for SD-JWT tokens.
+/// Walks JSON payloads, matches <c>_sd</c> digests to disclosures, and produces paths.
+/// </description></item>
+/// <item><description>
+/// <c>Verifiable.Cbor</c>: Equivalent for SD-CWT tokens. Walks CBOR maps and produces paths.
+/// </description></item>
 /// </list>
 /// </remarks>
 public delegate IReadOnlyDictionary<TDisclosure, CredentialPath> ExtractDisclosurePathsDelegate<TDisclosure>(
@@ -35,9 +46,16 @@ public delegate IReadOnlyDictionary<TDisclosure, CredentialPath> ExtractDisclosu
 /// Delegate for computing disclosure digests.
 /// </summary>
 /// <param name="encodedDisclosure">The encoded disclosure string.</param>
+/// <param name="algorithmName">The hash algorithm name in IANA format (e.g., <c>"sha-256"</c>).</param>
 /// <param name="encoder">Delegate for encoding the hash result.</param>
 /// <returns>The computed digest as a string.</returns>
 /// <remarks>
+/// <para>
+/// This delegate is used in both issuance (computing digests for the <c>_sd</c> array)
+/// and verification (recomputing digests to match against the signed payload). The
+/// two-phase pipeline — serialize then digest — enables the verifier to reuse only
+/// this delegate since it already has the encoded disclosure strings from the wire format.
+/// </para>
 /// <para>
 /// The digest computation typically involves:
 /// </para>
@@ -49,6 +67,7 @@ public delegate IReadOnlyDictionary<TDisclosure, CredentialPath> ExtractDisclosu
 /// </remarks>
 public delegate string ComputeDisclosureDigestDelegate(
     string encodedDisclosure,
+    string algorithmName,
     EncodeDelegate encoder);
 
 
@@ -59,6 +78,15 @@ public delegate string ComputeDisclosureDigestDelegate(
 /// <param name="disclosure">The disclosure to serialize.</param>
 /// <param name="encoder">Delegate for Base64Url encoding.</param>
 /// <returns>The encoded disclosure string.</returns>
+/// <remarks>
+/// <para>
+/// This is the first phase of the two-phase digest pipeline used during issuance.
+/// The output of this delegate is passed to <see cref="ComputeDisclosureDigestDelegate"/>
+/// to produce the digest that goes into the <c>_sd</c> array. Format-specific
+/// implementations serialize the <c>[salt, name, value]</c> triple (for SD-JWT) or
+/// the equivalent CBOR structure (for SD-CWT) into their Base64Url-encoded wire form.
+/// </para>
+/// </remarks>
 public delegate string SerializeDisclosureDelegate<TDisclosure>(
     TDisclosure disclosure,
     EncodeDelegate encoder);

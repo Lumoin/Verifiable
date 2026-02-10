@@ -34,11 +34,11 @@ public static class SdJwtPathExtraction
     /// <param name="hashAlgorithm">The hash algorithm name (default: "sha-256").</param>
     /// <returns>A dictionary mapping each disclosure to its credential path.</returns>
     public static IReadOnlyDictionary<SdDisclosure, CredentialPath> ExtractPaths(
-        SdJwtToken token,
+        SdToken<string> token,
         DecodeDelegate decoder,
         EncodeDelegate encoder,
         MemoryPool<byte> pool,
-        string hashAlgorithm = SdConstants.DefaultHashAlgorithm)
+        string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana)
     {
         ArgumentNullException.ThrowIfNull(token);
         ArgumentNullException.ThrowIfNull(decoder);
@@ -71,7 +71,7 @@ public static class SdJwtPathExtraction
     /// <param name="pool">Memory pool for allocations.</param>
     /// <returns>All paths present in the credential structure.</returns>
     public static IReadOnlySet<CredentialPath> ExtractAllPaths(
-        SdJwtToken token,
+        SdToken<string> token,
         DecodeDelegate decoder,
         MemoryPool<byte> pool)
     {
@@ -96,7 +96,7 @@ public static class SdJwtPathExtraction
     /// <param name="pool">Memory pool for allocations.</param>
     /// <returns>Paths that are always disclosed (not redacted).</returns>
     public static IReadOnlySet<CredentialPath> ExtractMandatoryPaths(
-        SdJwtToken token,
+        SdToken<string> token,
         DecodeDelegate decoder,
         MemoryPool<byte> pool)
     {
@@ -123,11 +123,11 @@ public static class SdJwtPathExtraction
     /// <param name="hashAlgorithm">The hash algorithm name.</param>
     /// <returns>A <see cref="PathLattice"/> configured for this token.</returns>
     public static PathLattice CreateLattice(
-        SdJwtToken token,
+        SdToken<string> token,
         DecodeDelegate decoder,
         EncodeDelegate encoder,
         MemoryPool<byte> pool,
-        string hashAlgorithm = SdConstants.DefaultHashAlgorithm)
+        string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana)
     {
         ArgumentNullException.ThrowIfNull(token);
 

@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Jose
+﻿namespace Verifiable.JCose
 {
     /// <summary>
     /// Well-known names of JSON Web Key (JWK) Elliptic Curve "crv" (Curve) parameter values
