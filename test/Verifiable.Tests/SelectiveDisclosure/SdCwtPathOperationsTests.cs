@@ -6,10 +6,9 @@ using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Sd;
-using Verifiable.Tests.SelectiveDisclosure;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.Serialization;
+namespace Verifiable.Tests.SelectiveDisclosure;
 
 /// <summary>
 /// Tests for <see cref="SdCwtPathExtraction"/> utility.
@@ -18,12 +17,12 @@ namespace Verifiable.Tests.Serialization;
 /// <para>
 /// These tests use CBOR-native value types (strings, integers) for disclosure values
 /// rather than <see cref="System.Text.Json.JsonElement"/> because CBOR serialization
-/// does not support JsonElement. The JSON counterpart tests in <see cref="SdJwtPathExtractionTests"/>
+/// does not support JsonElement. The JSON counterpart tests in <see cref="SdJwtPathOperationsTests"/>
 /// use JsonElement values which are appropriate for JSON serialization.
 /// </para>
 /// </remarks>
 [TestClass]
-internal sealed class SdCwtPathExtractionTests
+internal sealed class SdCwtPathOperationsTests
 {
     /// <summary>
     /// The test context.

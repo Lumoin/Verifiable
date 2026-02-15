@@ -112,7 +112,7 @@ public static class SdJwtSerializer
 
                 if(length == 2)
                 {
-                    object? value = ConvertJsonElement(root[1]);
+                    object? value = JsonElementConversion.Convert(root[1]);
                     return SdDisclosure.CreateArrayElement(salt, value);
                 }
                 else
@@ -120,7 +120,7 @@ public static class SdJwtSerializer
                     string claimName = root[1].GetString()
                         ?? throw new FormatException("Claim name cannot be null.");
 
-                    object? value = ConvertJsonElement(root[2]);
+                    object? value = JsonElementConversion.Convert(root[2]);
                     return SdDisclosure.CreateProperty(salt, claimName, value);
                 }
             }
@@ -183,7 +183,7 @@ public static class SdJwtSerializer
 
         string issuerJwt = parts[0];
 
-        if(!IsValidJwtStructure(issuerJwt))
+        if(!IsCompactJws(issuerJwt))
         {
             throw new FormatException("Invalid issuer JWT structure.");
         }
@@ -200,7 +200,7 @@ public static class SdJwtSerializer
                 continue;
             }
 
-            if(IsValidJwtStructure(part))
+            if(IsCompactJws(part))
             {
                 keyBindingJwt = part;
             }
@@ -270,11 +270,11 @@ public static class SdJwtSerializer
 
 
     /// <summary>
-    /// Checks if a string has valid JWT structure (three dot-separated non-empty Base64Url parts).
+    /// Checks if a string has compact JWS structure (three dot-separated non-empty Base64Url parts).
     /// </summary>
     /// <param name="value">The string to check.</param>
-    /// <returns><c>true</c> if the string has valid JWT structure; otherwise, <c>false</c>.</returns>
-    public static bool IsValidJwtStructure(string value)
+    /// <returns><c>true</c> if the string has compact JWS structure; otherwise, <c>false</c>.</returns>
+    public static bool IsCompactJws(string value)
     {
         if(string.IsNullOrEmpty(value))
         {
@@ -322,42 +322,61 @@ public static class SdJwtSerializer
         switch(value)
         {
             case null:
+            {
                 writer.WriteNullValue();
                 break;
+            }
 
             case string stringValue:
+            {
                 writer.WriteStringValue(stringValue);
                 break;
+            }
 
             case bool boolValue:
+            {
                 writer.WriteBooleanValue(boolValue);
                 break;
+            }
 
             case int intValue:
+            {
                 writer.WriteNumberValue(intValue);
                 break;
+            }
 
             case long longValue:
+            {
                 writer.WriteNumberValue(longValue);
                 break;
+            }
 
             case float floatValue:
+            {
                 writer.WriteNumberValue(floatValue);
                 break;
+            }
 
             case double doubleValue:
+            {
                 writer.WriteNumberValue(doubleValue);
                 break;
+            }
 
             case decimal decimalValue:
+            {
                 writer.WriteNumberValue(decimalValue);
                 break;
+            }
 
             case JsonElement jsonElement:
+            {
                 jsonElement.WriteTo(writer);
                 break;
+            }
 
             case IDictionary<string, object?> dictValue:
+            {
                 writer.WriteStartObject();
                 foreach(KeyValuePair<string, object?> kvp in dictValue)
                 {
@@ -366,8 +385,10 @@ public static class SdJwtSerializer
                 }
                 writer.WriteEndObject();
                 break;
+            }
 
             case IEnumerable<object?> listValue:
+            {
                 writer.WriteStartArray();
                 foreach(object? item in listValue)
                 {
@@ -375,47 +396,12 @@ public static class SdJwtSerializer
                 }
                 writer.WriteEndArray();
                 break;
+            }
 
             default:
+            {
                 throw new NotSupportedException($"Type '{value.GetType()}' is not supported.");
+            }
         }
-    }
-
-
-    private static object? ConvertJsonElement(JsonElement element)
-    {
-        return element.ValueKind switch
-        {
-            JsonValueKind.String => element.GetString(),
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.Null => null,
-            JsonValueKind.Number => element.TryGetInt64(out long l) ? l : element.GetDecimal(),
-            JsonValueKind.Object => ConvertJsonObject(element),
-            JsonValueKind.Array => ConvertJsonArray(element),
-            _ => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}")
-        };
-    }
-
-
-    private static Dictionary<string, object?> ConvertJsonObject(JsonElement element)
-    {
-        var dict = new Dictionary<string, object?>();
-        foreach(JsonProperty prop in element.EnumerateObject())
-        {
-            dict[prop.Name] = ConvertJsonElement(prop.Value);
-        }
-        return dict;
-    }
-
-
-    private static List<object?> ConvertJsonArray(JsonElement element)
-    {
-        var list = new List<object?>();
-        foreach(JsonElement item in element.EnumerateArray())
-        {
-            list.Add(ConvertJsonElement(item));
-        }
-        return list;
     }
 }

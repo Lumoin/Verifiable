@@ -1,7 +1,6 @@
 ﻿<Project Sdk="MSTest.Sdk">
   <PropertyGroup>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>    
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!--
       Displays error on console in addition to the log file. Note that this feature comes with a performance impact.
@@ -14,13 +13,10 @@
     <MSTestAnalysisMode>Recommended</MSTestAnalysisMode>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Remove="Cose\**" />
     <Compile Remove="test\VerificationResultResolution\**" />
     <Compile Remove="Utilities\**" />
-    <EmbeddedResource Remove="Cose\**" />
     <EmbeddedResource Remove="test\VerificationResultResolution\**" />
     <EmbeddedResource Remove="Utilities\**" />
-    <None Remove="Cose\**" />
     <None Remove="test\VerificationResultResolution\**" />
     <None Remove="Utilities\**" />
   </ItemGroup>

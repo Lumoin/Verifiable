@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
@@ -10,10 +11,108 @@ using Verifiable.JCose;
 namespace Verifiable.Core.Model.Credentials;
 
 /// <summary>
-/// Verification methods for COSE-secured Verifiable Credentials.
+/// Extension methods for securing and verifying Verifiable Credentials using COSE_Sign1.
 /// </summary>
-public static class CoseCredentialVerification
+/// <remarks>
+/// <para>
+/// These extensions provide the credential-level API for COSE enveloping as defined by
+/// <see href="https://www.w3.org/TR/vc-jose-cose/">Securing Verifiable Credentials using JOSE and COSE</see>.
+/// </para>
+/// <para>
+/// Per the W3C specification, the unsecured verifiable credential is the COSE payload.
+/// The credential is CBOR-serialized and placed directly as the payload of a COSE_Sign1
+/// structure, parallel to how the JWS envelope uses the JSON-serialized credential as
+/// the raw JWT payload.
+/// </para>
+/// <list type="bullet">
+/// <item><description>
+/// <strong>Signing</strong>: Serializes a <see cref="VerifiableCredential"/> to CBOR bytes,
+/// constructs a protected header with algorithm and content type parameters, signs via
+/// <see cref="Cose.SignAsync"/>, and returns a <see cref="CoseSign1Message"/> POCO.
+/// </description></item>
+/// <item><description>
+/// <strong>Verification</strong>: Verifies a COSE_Sign1-secured credential and
+/// returns a <see cref="CoseCredentialVerificationResult"/> with validity status,
+/// the decoded credential, and extracted header parameters.
+/// </description></item>
+/// </list>
+/// <para>
+/// CBOR wire format serialization is a separate concern handled by <c>CoseSerialization</c>
+/// in <c>Verifiable.Cbor</c>.
+/// </para>
+/// </remarks>
+public static class CredentialCoseExtensions
 {
+    /// <summary>
+    /// Signs the credential as a COSE_Sign1 message.
+    /// </summary>
+    /// <param name="credential">The credential to sign.</param>
+    /// <param name="privateKey">The private key for signing.</param>
+    /// <param name="verificationMethodId">
+    /// The identifier for the <c>kid</c> (key ID) header parameter. Per the W3C specification,
+    /// this is typically a DID URL pointing to the public key material used for verification.
+    /// </param>
+    /// <param name="credentialSerializer">Delegate for serializing the credential to CBOR bytes.</param>
+    /// <param name="headerSerializer">Delegate for serializing the protected header to CBOR bytes.</param>
+    /// <param name="buildSigStructure">Delegate to build the Sig_structure for signing.</param>
+    /// <param name="signaturePool">Memory pool for signature allocation.</param>
+    /// <param name="contentType">
+    /// Optional content type for the protected header. Defaults to
+    /// <see cref="WellKnownMediaTypes.Application.ApplicationVc"/> (<c>application/vc</c>)
+    /// as recommended by the W3C VC-JOSE-COSE specification.
+    /// </param>
+    /// <param name="mediaType">
+    /// Optional <c>typ</c> (type) header parameter. Defaults to
+    /// <see cref="WellKnownMediaTypes.Application.VcCose"/> (<c>application/vc+cose</c>)
+    /// as recommended by the W3C VC-JOSE-COSE specification.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The COSE_Sign1 message containing the signed credential.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller takes ownership of the returned CoseSign1Message.")]
+    public static async ValueTask<CoseSign1Message> SignCoseAsync(
+        this VerifiableCredential credential,
+        PrivateKeyMemory privateKey,
+        string verificationMethodId,
+        CredentialToCborBytesDelegate credentialSerializer,
+        CoseProtectedHeaderSerializer headerSerializer,
+        BuildSigStructureDelegate buildSigStructure,
+        MemoryPool<byte> signaturePool,
+        string? contentType = null,
+        string? mediaType = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(credential);
+        ArgumentNullException.ThrowIfNull(privateKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(verificationMethodId);
+        ArgumentNullException.ThrowIfNull(credentialSerializer);
+        ArgumentNullException.ThrowIfNull(headerSerializer);
+        ArgumentNullException.ThrowIfNull(buildSigStructure);
+        ArgumentNullException.ThrowIfNull(signaturePool);
+
+        int coseAlgorithm = CryptoFormatConversions.DefaultTagToCoseConverter(privateKey.Tag);
+
+        var protectedHeader = new Dictionary<int, object>
+        {
+            [CoseHeaderParameters.Alg] = coseAlgorithm,
+            [CoseHeaderParameters.Kid] = verificationMethodId,
+            [CoseHeaderParameters.ContentType] = contentType ?? WellKnownMediaTypes.Application.ApplicationVc,
+            [CoseHeaderParameters.Typ] = mediaType ?? WellKnownMediaTypes.Application.VcCose
+        };
+
+        //Copy to arrays since spans cannot cross await boundaries.
+        byte[] protectedHeaderBytes = headerSerializer(protectedHeader).ToArray();
+        byte[] payloadBytes = credentialSerializer(credential).ToArray();
+
+        return await Cose.SignAsync(
+            protectedHeaderBytes,
+            unprotectedHeader: null,
+            payloadBytes,
+            buildSigStructure,
+            privateKey,
+            signaturePool).ConfigureAwait(false);
+    }
+
+
     /// <summary>
     /// Verifies a COSE_Sign1-secured credential.
     /// </summary>
@@ -24,7 +123,7 @@ public static class CoseCredentialVerification
     /// <param name="headerParser">Delegate for parsing the protected header bytes.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result containing validity status and decoded credential.</returns>
-    public static async ValueTask<CoseCredentialVerificationResult> VerifyAsync(
+    public static async ValueTask<CoseCredentialVerificationResult> VerifyCoseAsync(
         CoseSign1Message message,
         BuildSigStructureDelegate buildSigStructure,
         PublicKeyMemory publicKey,
@@ -79,7 +178,7 @@ public static class CoseCredentialVerification
     /// <param name="headerParser">Delegate for parsing the protected header bytes.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result containing validity status and decoded credential.</returns>
-    public static async ValueTask<CoseCredentialVerificationResult> VerifyAsync(
+    public static async ValueTask<CoseCredentialVerificationResult> VerifyCoseAsync(
         CoseSign1Message message,
         BuildSigStructureDelegate buildSigStructure,
         PublicKeyMemory publicKey,

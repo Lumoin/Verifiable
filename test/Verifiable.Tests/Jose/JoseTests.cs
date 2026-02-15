@@ -274,7 +274,7 @@ internal sealed class JoseTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await Jws.SignAsync<Dictionary<string, object>, int, int>(
+            await Jws.SignAsync(
                 header,
                 payload,
                 EncodeJwtPart,

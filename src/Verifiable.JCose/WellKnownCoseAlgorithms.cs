@@ -1,7 +1,4 @@
-﻿using Verifiable.Cryptography;
-using Verifiable.Jose;
-
-namespace Verifiable.JCose;
+﻿namespace Verifiable.JCose;
 
 /// <summary>
 /// COSE algorithm identifiers as defined in

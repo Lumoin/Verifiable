@@ -1,5 +1,4 @@
-﻿using System.Buffers;
-using System.Text.Json;
+﻿using System.Text.Json;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -97,12 +96,13 @@ internal sealed class JwsMessageTests
         Assert.HasCount(3, parts);
 
         using PublicKeyMemory publicKeyMemory = CreateEd25519PublicKey();
-        var verificationResult = await JwsCredentialVerification.VerifyAsync(
+        var verificationResult = await CredentialJwsExtensions.VerifyJwsAsync(
             compact,
             publicKeyMemory,
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
+            SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid, "JWS signature verification must succeed.");
@@ -117,7 +117,7 @@ internal sealed class JwsMessageTests
         var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
         using PrivateKeyMemory privateKeyMemory = CreateEd25519PrivateKey();
 
-        using JwsMessage jwsMessage = await credential. SignJwsAsync(
+        using JwsMessage jwsMessage = await credential.SignJwsAsync(
             privateKeyMemory,
             Ed25519VerificationMethodId,
             CredentialSerializer,
@@ -127,11 +127,12 @@ internal sealed class JwsMessageTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using PublicKeyMemory publicKeyMemory = CreateEd25519PublicKey();
-        var verificationResult = await JwsCredentialVerification.VerifyAsync(
+        var verificationResult = await CredentialJwsExtensions.VerifyJwsAsync(
             jwsMessage,
             publicKeyMemory,
             TestSetup.Base64UrlEncoder,
             CredentialDeserializer,
+            SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid, "JWS message verification must succeed.");
@@ -263,7 +264,7 @@ internal sealed class JwsMessageTests
     private static ReadOnlySpan<byte> CredentialSerializer(VerifiableCredential credential) => JsonSerializer.SerializeToUtf8Bytes(credential, JsonOptions);
 
     private static ReadOnlySpan<byte> HeaderSerializer(Dictionary<string, object> header) => JsonSerializer.SerializeToUtf8Bytes(header);
-    
+
     private static Dictionary<string, object>? HeaderDeserializer(ReadOnlySpan<byte> headerBytes) => JsonSerializer.Deserialize<Dictionary<string, object>>(headerBytes);
 
     private static VerifiableCredential CredentialDeserializer(ReadOnlySpan<byte> credentialBytes) => JsonSerializer.Deserialize<VerifiableCredential>(credentialBytes, JsonOptions)!;

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Rfc6901JsonPointer = Verifiable.JsonPointer.JsonPointer;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -32,12 +34,19 @@ public delegate string SelectJsonLdFragmentsDelegate(string document, IEnumerabl
 /// </summary>
 /// <param name="document">The compact JSON-LD document.</param>
 /// <param name="mandatoryPointers">JSON Pointers identifying mandatory claims.</param>
-/// <param name="canonicalize">The canonicalization function (JSON-LD → N-Quads).</param>
-/// <returns>The partition result containing statements and their indexes.</returns>
-public delegate StatementPartitionResult PartitionStatementsDelegate(
+/// <param name="canonicalize">The canonicalization delegate (JSON-LD → N-Quads).</param>
+/// <param name="contextResolver">
+/// Optional delegate for resolving JSON-LD contexts during canonicalization.
+/// Required for RDFC canonicalization, ignored by JCS canonicalization.
+/// </param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>A task that resolves to the partition result containing statements and their indexes.</returns>
+public delegate ValueTask<StatementPartitionResult> PartitionStatementsDelegate(
     string document,
     IReadOnlyList<Rfc6901JsonPointer> mandatoryPointers,
-    Func<string, string> canonicalize);
+    CanonicalizationDelegate canonicalize,
+    ContextResolverDelegate? contextResolver,
+    CancellationToken cancellationToken = default);
 
 
 /// <summary>

@@ -6,8 +6,7 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Jose;
 using Verifiable.Json.Converters;
-using Verifiable.Microsoft;
-using Verifiable.Tests.DataProviders;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Jose;

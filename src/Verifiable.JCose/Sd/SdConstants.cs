@@ -38,20 +38,10 @@ public static class SdConstants
     public const string ArrayDigestKey = "...";
 
     /// <summary>
-    /// The default hash algorithm for disclosure digests.
-    /// </summary>
-    public const string DefaultHashAlgorithm = "sha-256";
-
-    /// <summary>
     /// The separator character used in SD-JWT wire format.
     /// </summary>
     public const char JwtSeparator = '~';
-
-    /// <summary>
-    /// The typ header value for key binding JWTs.
-    /// </summary>
-    public const string KeyBindingJwtType = "kb+jwt";
-
+    
     /// <summary>
     /// The claim name for the nonce in key binding.
     /// </summary>

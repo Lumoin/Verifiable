@@ -62,7 +62,7 @@ public delegate byte[] HmacKeyGeneratorDelegate();
 /// </remarks>
 [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with the latest syntax.")]
 public static class CredentialEcdsaSd2023Extensions
-{    
+{
     extension(VerifiableCredential credential)
     {
         /// <summary>
@@ -256,15 +256,7 @@ public static class CredentialEcdsaSd2023Extensions
                 .Select(p => p.JsonPointer)
                 .ToList();
 
-            string canonicalizeSync(string json)
-            {
-                return canonicalize(json, contextResolver, cancellationToken)
-                    .AsTask()
-                    .GetAwaiter()
-                    .GetResult();
-            }
-
-            var partition = partitionStatements(credentialJson, mandatoryPointers, canonicalizeSync);
+            var partition = await partitionStatements(credentialJson, mandatoryPointers, canonicalize, contextResolver, cancellationToken).ConfigureAwait(false);
             var canonicalStatements = partition.AllStatements.ToList();
 
             //Generate HMAC key using the provided delegate.
@@ -288,7 +280,7 @@ public static class CredentialEcdsaSd2023Extensions
                 ephemeralKeyPair.PublicKey,
                 memoryPool);
 
-            var canonicalProofOptions = canonicalizeSync(proofOptionsJson);
+            var canonicalProofOptions = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
             var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalProofOptions));
 
             int signatureDataLength = proofOptionsHash.Length + ephemeralPublicKeyWithHeader.Memory.Length + mandatoryHash.Length;
@@ -483,15 +475,7 @@ public static class CredentialEcdsaSd2023Extensions
             var credentialWithoutProof = CloneCredentialWithoutProof(credential);
             var credentialJson = serialize(credentialWithoutProof);
 
-            string canonicalizeSync(string json)
-            {
-                return canonicalize(json, contextResolver, cancellationToken)
-                    .AsTask()
-                    .GetAwaiter()
-                    .GetResult();
-            }
-
-            var partition = partitionStatements(credentialJson, parsedProof.MandatoryPointers.ToList(), canonicalizeSync);
+            var partition = await partitionStatements(credentialJson, parsedProof.MandatoryPointers.ToList(), canonicalize, contextResolver, cancellationToken).ConfigureAwait(false);
             var canonicalStatements = partition.AllStatements.ToList();
 
             var prepared = NQuadStatementPreparation.Prepare(
@@ -516,7 +500,7 @@ public static class CredentialEcdsaSd2023Extensions
                 proof.ProofPurpose ?? AssertionMethod.Purpose,
                 credential.Context);
 
-            var canonicalProofOptions = canonicalizeSync(proofOptionsJson);
+            var canonicalProofOptions = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
             var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalProofOptions));
 
             using var ephemeralKeyWithHeader = MultibaseSerializer.PrependHeader(
@@ -703,7 +687,7 @@ public static class CredentialEcdsaSd2023Extensions
             ArgumentNullException.ThrowIfNull(encoder);
             ArgumentNullException.ThrowIfNull(decoder);
             ArgumentNullException.ThrowIfNull(memoryPool);
-            
+
             var proof = credential.Proof?.FirstOrDefault() ?? throw new InvalidOperationException("Credential must have a proof to derive from.");
 
             if(proof.Cryptosuite?.CryptosuiteName != CredentialConstants.Cryptosuites.EcdsaSd2023)
@@ -718,16 +702,8 @@ public static class CredentialEcdsaSd2023Extensions
             var credentialWithoutProof = CloneCredentialWithoutProof(credential);
             var fullCredentialJson = serialize(credentialWithoutProof);
 
-            string canonicalizeSync(string json)
-            {
-                return canonicalize(json, contextResolver, cancellationToken)
-                    .AsTask()
-                    .GetAwaiter()
-                    .GetResult();
-            }
-
             //Prepare full credential statements to determine which signatures to include.
-            var fullPartition = partitionStatements(fullCredentialJson, parsedProof.MandatoryPointers.ToList(), canonicalizeSync);
+            var fullPartition = await partitionStatements(fullCredentialJson, parsedProof.MandatoryPointers.ToList(), canonicalize, contextResolver, cancellationToken).ConfigureAwait(false);
 
             var fullPrepared = NQuadStatementPreparation.Prepare(
                 fullPartition.AllStatements,
@@ -743,7 +719,7 @@ public static class CredentialEcdsaSd2023Extensions
                 .ToList();
 
             //Map verifier requested paths to statement indexes in the full credential.
-            var requestedPartition = partitionStatements(fullCredentialJson, requestedPointers, canonicalizeSync);
+            var requestedPartition = await partitionStatements(fullCredentialJson, requestedPointers, canonicalize, contextResolver, cancellationToken).ConfigureAwait(false);
             var requestedPrepared = NQuadStatementPreparation.Prepare(
                 requestedPartition.AllStatements,
                 requestedPartition.MandatoryIndexes,
@@ -761,7 +737,7 @@ public static class CredentialEcdsaSd2023Extensions
                     .Select(p => p.JsonPointer)
                     .ToList();
 
-                var excludedPartition = partitionStatements(fullCredentialJson, excludedPointers, canonicalizeSync);
+                var excludedPartition = await partitionStatements(fullCredentialJson, excludedPointers, canonicalize, contextResolver, cancellationToken).ConfigureAwait(false);
                 var excludedPrepared = NQuadStatementPreparation.Prepare(
                     excludedPartition.AllStatements,
                     excludedPartition.MandatoryIndexes,
@@ -793,7 +769,7 @@ public static class CredentialEcdsaSd2023Extensions
             var reducedCredentialJson = selectFragments(fullCredentialJson, disclosedPointers);
 
             //Canonicalize reduced credential to get statements verifier will see.
-            var reducedPartition = partitionStatements(reducedCredentialJson, [], canonicalizeSync);
+            var reducedPartition = await partitionStatements(reducedCredentialJson, [], canonicalize, contextResolver, cancellationToken).ConfigureAwait(false);
 
             //Compute the correct label map for the reduced credential.
             //The reduced credential has different canonical blank node assignments than the full credential
@@ -991,15 +967,7 @@ public static class CredentialEcdsaSd2023Extensions
             var credentialWithoutProof = CloneCredentialWithoutProof(credential);
             var credentialJson = serialize(credentialWithoutProof);
 
-            string canonicalizeSync(string json)
-            {
-                return canonicalize(json, contextResolver, cancellationToken)
-                    .AsTask()
-                    .GetAwaiter()
-                    .GetResult();
-            }
-
-            var canonicalNQuads = canonicalizeSync(credentialJson);
+            var canonicalNQuads = await canonicalize(credentialJson, contextResolver, cancellationToken).ConfigureAwait(false);
             var canonicalStatements = SplitIntoStatements(canonicalNQuads);
 
             var relabeledStatements = BlankNodeRelabelingExtensions.ApplyLabelMap(
@@ -1024,7 +992,7 @@ public static class CredentialEcdsaSd2023Extensions
                 proof.ProofPurpose ?? AssertionMethod.Purpose,
                 credential.Context);
 
-            var canonicalProofOptions = canonicalizeSync(proofOptionsJson);
+            var canonicalProofOptions = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
             var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalProofOptions));
 
             using var ephemeralKeyWithHeader = MultibaseSerializer.PrependHeader(

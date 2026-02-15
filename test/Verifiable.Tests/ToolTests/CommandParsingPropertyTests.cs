@@ -123,10 +123,12 @@ internal class CommandParsingPropertyTests
     {
         //Exclude strings containing whitespace because System.CommandLine splits on whitespace,
         //so a string like "2 abc" would have "2" parsed as a valid integer id.
-        //Also exclude strings starting with -? or -h which trigger help display without errors.
+        //Also exclude strings with CLI special characters (like @) which trigger parser features
+        //such as response files, and built-in options like -h which display help without errors.
         Gen.String[1, 20].Where(s => !int.TryParse(s, out _) &&
                                      !string.IsNullOrWhiteSpace(s) &&
                                      !s.Any(char.IsWhiteSpace) &&
+                                     !VerifiableCliTestHelpers.ContainsCliSpecialCharacters(s) &&
                                      !VerifiableCliTestHelpers.StartsWithSystemCommandLineBuiltInOption(s))
             .Sample(invalidId =>
             {

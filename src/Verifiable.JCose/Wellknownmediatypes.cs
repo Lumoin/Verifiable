@@ -24,6 +24,62 @@ namespace Verifiable.JCose
         public static class Application
         {
             /// <summary>
+            /// Verifiable Credential content type for use in JOSE <c>cty</c> and COSE content type (3) headers.
+            /// </summary>
+            /// <remarks>
+            /// <para>
+            /// Per the W3C VC-JOSE-COSE specification, the <c>cty</c> header parameter SHOULD be <c>vc</c>.
+            /// Per RFC 7515 §4.1.10, values without a <c>/</c> are interpreted as <c>application/[value]</c>.
+            /// </para>
+            /// <para>
+            /// See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vcs-with-jose">VC-JOSE-COSE §3.1</see>.
+            /// </para>
+            /// </remarks>
+            public static readonly string Vc = "vc";
+
+            /// <summary>
+            /// Verifiable Presentation content type for use in JOSE <c>cty</c> and COSE content type (3) headers.
+            /// </summary>
+            /// <remarks>
+            /// <para>
+            /// Per the W3C VC-JOSE-COSE specification, the <c>cty</c> header parameter SHOULD be <c>vp</c>.
+            /// Per RFC 7515 §4.1.10, values without a <c>/</c> are interpreted as <c>application/[value]</c>.
+            /// </para>
+            /// <para>
+            /// See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vps-with-jose">VC-JOSE-COSE §3.2</see>.
+            /// </para>
+            /// </remarks>
+            public static readonly string Vp = "vp";
+
+            /// <summary>
+            /// Full media type for an unsecured Verifiable Credential (<c>application/vc</c>).
+            /// </summary>
+            /// <remarks>
+            /// <para>
+            /// Used as the COSE content type (3) header parameter value, which unlike JOSE <c>cty</c>
+            /// requires the full media type string rather than a short form.
+            /// </para>
+            /// <para>
+            /// See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vcs-with-cose">VC-JOSE-COSE §4.1</see>.
+            /// </para>
+            /// </remarks>
+            public static readonly string ApplicationVc = "application/vc";
+
+            /// <summary>
+            /// Full media type for an unsecured Verifiable Presentation (<c>application/vp</c>).
+            /// </summary>
+            /// <remarks>
+            /// <para>
+            /// Used as the COSE content type (3) header parameter value, which unlike JOSE <c>cty</c>
+            /// requires the full media type string rather than a short form.
+            /// </para>
+            /// <para>
+            /// See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vps-with-cose">VC-JOSE-COSE §4.2</see>.
+            /// </para>
+            /// </remarks>
+            public static readonly string ApplicationVp = "application/vp";
+
+            /// <summary>
             /// Verifiable Credential secured as a JWT using JSON-LD.
             /// </summary>
             /// <remarks>See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vcs-with-jose">VC-JOSE-COSE §3.1</see>.</remarks>
@@ -70,6 +126,34 @@ namespace Verifiable.JCose
             /// </summary>
             /// <remarks>See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vps-with-cose">VC-JOSE-COSE §4.2</see>.</remarks>
             public static readonly string VpCose = "application/vp+cose";
+
+            /// <summary>
+            /// SD-JWT Verifiable Credential.
+            /// </summary>
+            /// <remarks>See <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-sd-jwt-vc-08.html#section-4.2.1.1">SD-JWT VC §4.2.1.1</see>.</remarks>
+            public static readonly string VcSdJwt = "application/vc+sd-jwt";
+
+            /// <summary>
+            /// SD-JWT Key Binding JWT.
+            /// </summary>
+            /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9901.html#section-5.3">RFC 9901 §5.3</see>.</remarks>
+            public static readonly string KbJwt = "application/kb+jwt";
+
+
+            /// <summary>
+            /// If <paramref name="mediaType"/> is <see cref="VcSdJwt"/> or not.
+            /// </summary>
+            /// <param name="mediaType">The media type.</param>
+            /// <returns><see langword="true"/> if <paramref name="mediaType"/> is <see cref="VcSdJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsVcSdJwt(string mediaType) => Equals(mediaType, VcSdJwt);
+
+
+            /// <summary>
+            /// If <paramref name="mediaType"/> is <see cref="KbJwt"/> or not.
+            /// </summary>
+            /// <param name="mediaType">The media type.</param>
+            /// <returns><see langword="true"/> if <paramref name="mediaType"/> is <see cref="KbJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsKbJwt(string mediaType) => Equals(mediaType, KbJwt);
 
 
             /// <summary>
@@ -152,6 +236,8 @@ namespace Verifiable.JCose
                 _ when IsVpLdCose(mediaType) => VpLdCose,
                 _ when IsVcCose(mediaType) => VcCose,
                 _ when IsVpCose(mediaType) => VpCose,
+                _ when IsVcSdJwt(mediaType) => VcSdJwt,
+                _ when IsKbJwt(mediaType) => KbJwt,
                 _ => mediaType
             };
 
@@ -205,6 +291,33 @@ namespace Verifiable.JCose
             /// </summary>
             public static readonly string VpJwt = "vp+jwt";
 
+            /// <summary>
+            /// SD-JWT Verifiable Credential (short form for <c>typ</c> header).
+            /// </summary>
+            /// <remarks>See <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-sd-jwt-vc-08.html#section-4.2.1.1">SD-JWT VC §4.2.1.1</see>.</remarks>
+            public static readonly string VcSdJwt = "vc+sd-jwt";
+
+            /// <summary>
+            /// Key Binding JWT (short form for <c>typ</c> header).
+            /// </summary>
+            /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9901.html#section-5.3">RFC 9901 §5.3</see>.</remarks>
+            public static readonly string KbJwt = "kb+jwt";
+
+            /// <summary>
+            /// If <paramref name="typ"/> is <see cref="VcSdJwt"/> or not.
+            /// </summary>
+            /// <param name="typ">The JWT typ header value.</param>
+            /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="VcSdJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsVcSdJwt(string typ) => Equals(typ, VcSdJwt);
+
+
+            /// <summary>
+            /// If <paramref name="typ"/> is <see cref="KbJwt"/> or not.
+            /// </summary>
+            /// <param name="typ">The JWT typ header value.</param>
+            /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="KbJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsKbJwt(string typ) => Equals(typ, KbJwt);
+
 
             /// <summary>
             /// If <paramref name="typ"/> is <see cref="VcLdJwt"/> or not.
@@ -250,6 +363,8 @@ namespace Verifiable.JCose
                 _ when IsVpLdJwt(typ) => VpLdJwt,
                 _ when IsVcJwt(typ) => VcJwt,
                 _ when IsVpJwt(typ) => VpJwt,
+                _ when IsVcSdJwt(typ) => VcSdJwt,
+                _ when IsKbJwt(typ) => KbJwt,
                 _ => typ
             };
 
