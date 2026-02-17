@@ -10,10 +10,10 @@ using PublicKey = NSec.Cryptography.PublicKey;
 namespace Verifiable.NSec;
 
 /// <summary>
-/// Adapter functions for NSec cryptographic operations matching <see cref="SigningDelegate"/> 
+/// Adapter functions for NSec cryptographic operations matching <see cref="SigningDelegate"/>
 /// and <see cref="VerificationDelegate"/> signatures.
 /// </summary>
-public static class NSecAlgorithms
+public static class NSecCryptographicFunctions
 {
     /// <summary>
     /// Signs data using Ed25519 via NSec.

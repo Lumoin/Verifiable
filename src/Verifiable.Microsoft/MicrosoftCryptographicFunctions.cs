@@ -170,7 +170,7 @@ namespace Verifiable.Microsoft
             return ValueTask.FromResult(false);
         }
 
-        
+
         private static ValueTask<Signature> SignECDsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, MemoryPool<byte> signaturePool, ECCurve curve, HashAlgorithmName hashAlgorithmName, Tag signatureTag)
         {
             var key = ECDsa.Create(new ECParameters
