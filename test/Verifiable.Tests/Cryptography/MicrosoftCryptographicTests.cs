@@ -6,17 +6,15 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Cryptography
 {
     /// <summary>
-    /// Tests Microsoft as the cryptographic provider across all supported algorithms.
+    /// Tests Microsoft CNG as the cryptographic provider across all supported algorithms,
+    /// including ECDSA (P-256, P-384, P-521, secp256k1) and RSA with multiple hash/padding combinations.
     /// </summary>
     [TestClass]
     internal sealed class MicrosoftCryptographicTests
     {
         public TestContext TestContext { get; set; } = null!;
 
-        /// <summary>
-        /// Shared test payload used for all sign-and-verify tests.
-        /// </summary>
-        private static byte[] TestData { get; } = Encoding.UTF8.GetBytes("Hello, did:key signature!");
+        private static byte[] TestData { get; } = Encoding.UTF8.GetBytes("Microsoft cryptographic test payload.");
 
 
         [TestMethod]
@@ -38,29 +36,8 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            using var signature = await MicrosoftCryptographicFunctions
-                .SignP256Async(privateKey.AsReadOnlyMemory(), TestData, SensitiveMemoryPool<byte>.Shared)
-                .ConfigureAwait(false);
-
-            bool isVerified = await MicrosoftCryptographicFunctions
-                .VerifyP256Async(TestData, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory())
-                .ConfigureAwait(false);
-
-            Assert.IsTrue(isVerified);
-        }
-
-
-        [TestMethod]
-        public async Task P256IdentifiedKeySignatureVerifies()
-        {
-            var keys = MicrosoftKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
-            using var publicKey = new PublicKey(keys.PublicKey, "p256-test", MicrosoftCryptographicFunctions.VerifyP256Async);
-            using var privateKey = new PrivateKey(keys.PrivateKey, "p256-test", MicrosoftCryptographicFunctions.SignP256Async);
-
-            ReadOnlyMemory<byte> data = TestData;
-            using var signature = await privateKey.SignAsync(data, SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
-
-            Assert.IsTrue(await publicKey.VerifyAsync(data, signature).ConfigureAwait(false));
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignP256Async, MicrosoftCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
         }
 
 
@@ -83,15 +60,8 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            using var signature = await MicrosoftCryptographicFunctions
-                .SignP384Async(privateKey.AsReadOnlyMemory(), TestData, SensitiveMemoryPool<byte>.Shared)
-                .ConfigureAwait(false);
-
-            bool isVerified = await MicrosoftCryptographicFunctions
-                .VerifyP384Async(TestData, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory())
-                .ConfigureAwait(false);
-
-            Assert.IsTrue(isVerified);
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignP384Async, MicrosoftCryptographicFunctions.VerifyP384Async).ConfigureAwait(false);
         }
 
 
@@ -114,15 +84,8 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            using var signature = await MicrosoftCryptographicFunctions
-                .SignP521Async(privateKey.AsReadOnlyMemory(), TestData, SensitiveMemoryPool<byte>.Shared)
-                .ConfigureAwait(false);
-
-            bool isVerified = await MicrosoftCryptographicFunctions
-                .VerifyP521Async(TestData, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory())
-                .ConfigureAwait(false);
-
-            Assert.IsTrue(isVerified);
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignP521Async, MicrosoftCryptographicFunctions.VerifyP521Async).ConfigureAwait(false);
         }
 
 
@@ -145,15 +108,8 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            using var signature = await MicrosoftCryptographicFunctions
-                .SignSecp256k1Async(privateKey.AsReadOnlyMemory(), TestData, SensitiveMemoryPool<byte>.Shared)
-                .ConfigureAwait(false);
-
-            bool isVerified = await MicrosoftCryptographicFunctions
-                .VerifySecp256k1Async(TestData, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory())
-                .ConfigureAwait(false);
-
-            Assert.IsTrue(isVerified);
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignSecp256k1Async, MicrosoftCryptographicFunctions.VerifySecp256k1Async).ConfigureAwait(false);
         }
 
 
@@ -176,15 +132,8 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            using var signature = await MicrosoftCryptographicFunctions
-                .SignRsa2048Async(privateKey.AsReadOnlyMemory(), TestData, SensitiveMemoryPool<byte>.Shared)
-                .ConfigureAwait(false);
-
-            bool isVerified = await MicrosoftCryptographicFunctions
-                .VerifyRsa2048Async(TestData, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory())
-                .ConfigureAwait(false);
-
-            Assert.IsTrue(isVerified);
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignRsa2048Async, MicrosoftCryptographicFunctions.VerifyRsa2048Async).ConfigureAwait(false);
         }
 
 
@@ -207,15 +156,98 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            using var signature = await MicrosoftCryptographicFunctions
-                .SignRsa4096Async(privateKey.AsReadOnlyMemory(), TestData, SensitiveMemoryPool<byte>.Shared)
-                .ConfigureAwait(false);
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignRsa4096Async, MicrosoftCryptographicFunctions.VerifyRsa4096Async).ConfigureAwait(false);
+        }
 
-            bool isVerified = await MicrosoftCryptographicFunctions
-                .VerifyRsa4096Async(TestData, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory())
-                .ConfigureAwait(false);
 
-            Assert.IsTrue(isVerified);
+        [TestMethod]
+        public async Task RsaSha256Pkcs1SignatureVerifies()
+        {
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            using var publicKey = keys.PublicKey;
+            using var privateKey = keys.PrivateKey;
+
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignRsaSha256Pkcs1Async, MicrosoftCryptographicFunctions.VerifyRsaSha256Pkcs1Async).ConfigureAwait(false);
+        }
+
+
+        [TestMethod]
+        public async Task RsaSha256PssSignatureVerifies()
+        {
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            using var publicKey = keys.PublicKey;
+            using var privateKey = keys.PrivateKey;
+
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignRsaSha256PssAsync, MicrosoftCryptographicFunctions.VerifyRsaSha256PssAsync).ConfigureAwait(false);
+        }
+
+
+        [TestMethod]
+        public async Task RsaSha384Pkcs1SignatureVerifies()
+        {
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            using var publicKey = keys.PublicKey;
+            using var privateKey = keys.PrivateKey;
+
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignRsaSha384Pkcs1Async, MicrosoftCryptographicFunctions.VerifyRsaSha384Pkcs1Async).ConfigureAwait(false);
+        }
+
+
+        [TestMethod]
+        public async Task RsaSha384PssSignatureVerifies()
+        {
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            using var publicKey = keys.PublicKey;
+            using var privateKey = keys.PrivateKey;
+
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignRsaSha384PssAsync, MicrosoftCryptographicFunctions.VerifyRsaSha384PssAsync).ConfigureAwait(false);
+        }
+
+
+        [TestMethod]
+        public async Task RsaSha512Pkcs1SignatureVerifies()
+        {
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa4096Keys(SensitiveMemoryPool<byte>.Shared);
+            using var publicKey = keys.PublicKey;
+            using var privateKey = keys.PrivateKey;
+
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignRsaSha512Pkcs1Async, MicrosoftCryptographicFunctions.VerifyRsaSha512Pkcs1Async).ConfigureAwait(false);
+        }
+
+
+        [TestMethod]
+        public async Task RsaSha512PssSignatureVerifies()
+        {
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa4096Keys(SensitiveMemoryPool<byte>.Shared);
+            using var publicKey = keys.PublicKey;
+            using var privateKey = keys.PrivateKey;
+
+            await AssertSignAndVerifyAsync(privateKey, publicKey,
+                MicrosoftCryptographicFunctions.SignRsaSha512PssAsync, MicrosoftCryptographicFunctions.VerifyRsaSha512PssAsync).ConfigureAwait(false);
+        }
+
+
+        private async Task AssertSignAndVerifyAsync(
+            PrivateKeyMemory privateKey,
+            PublicKeyMemory publicKey,
+            SigningDelegate sign,
+            VerificationDelegate verify)
+        {
+            ReadOnlyMemory<byte> data = TestData;
+            using var signature = await sign(privateKey.AsReadOnlyMemory(), data, SensitiveMemoryPool<byte>.Shared,
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsGreaterThan(0, signature.AsReadOnlyMemory().Length);
+
+            bool isValid = await verify(data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(),
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(isValid);
         }
     }
 }

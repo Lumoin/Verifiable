@@ -46,7 +46,7 @@ internal sealed class JwsTestsWithPredefinedData
 
         using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(parameters.D!, privateKeyTag);
 
-        SigningDelegate signingDelegate = (privateKeyBytes, dataToSign, signaturePool, context) =>
+        SigningDelegate signingDelegate = (privateKeyBytes, dataToSign, signaturePool, context, cancellationToken) =>
         {
             using ECDsa key = ECDsa.Create(new ECParameters { Curve = curve, D = privateKeyBytes.ToArray() });
             byte[] signatureBytes = key.SignData(dataToSign.Span, hashAlgorithm);
@@ -78,7 +78,7 @@ internal sealed class JwsTestsWithPredefinedData
         Tag publicKeyTag = GetEcdsaPublicKeyTag(testData.Header);
         using PublicKeyMemory publicKey = CreatePublicKeyMemory(publicKeyBytes, publicKeyTag);
 
-        VerificationDelegate verificationDelegate = (dataToVerify, signature, publicKeyBytes, context) =>
+        VerificationDelegate verificationDelegate = (dataToVerify, signature, publicKeyBytes, context, cancellationToken) =>
         {
             using ECDsa key = ECDsa.Create();
             key.ImportSubjectPublicKeyInfo(publicKeyBytes.Span, out _);
@@ -109,7 +109,7 @@ internal sealed class JwsTestsWithPredefinedData
 
         using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(privateKeyBytes, CryptoTags.Rsa2048PrivateKey);
 
-        SigningDelegate signingDelegate = (privKey, dataToSign, signaturePool, context) =>
+        SigningDelegate signingDelegate = (privKey, dataToSign, signaturePool, context, cancellationToken) =>
         {
             using RSA key = RSA.Create();
             key.ImportPkcs8PrivateKey(privKey.Span, out _);
@@ -148,7 +148,7 @@ internal sealed class JwsTestsWithPredefinedData
 
         using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(privateKeyBytes, CryptoTags.Rsa2048PrivateKey);
 
-        SigningDelegate signingDelegate = (privKey, dataToSign, signaturePool, context) =>
+        SigningDelegate signingDelegate = (privKey, dataToSign, signaturePool, context, cancellationToken) =>
         {
             using RSA key = RSA.Create();
             key.ImportPkcs8PrivateKey(privKey.Span, out _);
@@ -176,7 +176,7 @@ internal sealed class JwsTestsWithPredefinedData
         //Verify the signature since PSS uses random padding.
         using PublicKeyMemory publicKey = CreatePublicKeyMemory(publicKeyBytes, CryptoTags.Rsa2048PublicKey);
 
-        VerificationDelegate verificationDelegate = (dataToVerify, signature, pubKey, context) =>
+        VerificationDelegate verificationDelegate = (dataToVerify, signature, pubKey, context, cancellationToken) =>
         {
             using RSA key = RSA.Create();
             key.ImportSubjectPublicKeyInfo(pubKey.Span, out _);

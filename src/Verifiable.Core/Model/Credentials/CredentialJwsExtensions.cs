@@ -122,7 +122,9 @@ public static class CredentialJwsExtensions
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             signingInputMemory,
-            memoryPool).ConfigureAwait(false);
+            memoryPool,
+            context: null,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         var signatureComponent = new JwsSignatureComponent(
             headerSegment,
@@ -195,7 +197,9 @@ public static class CredentialJwsExtensions
         bool isValid = await verificationDelegate(
             verifyInputMemory,
             signatureBytesOwner.Memory,
-            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+            publicKey.AsReadOnlyMemory(),
+            context: null,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return new JwsCredentialVerificationResult(isValid, header, credential);
     }
@@ -255,7 +259,9 @@ public static class CredentialJwsExtensions
         bool isValid = await verificationDelegate(
             verifyInputMemory,
             signature.Signature.AsReadOnlyMemory(),
-            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+            publicKey.AsReadOnlyMemory(),
+            context: null,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         VerifiableCredential credential = credentialDeserializer(message.Payload.Span);
         var header = new Dictionary<string, object>(signature.ProtectedHeader);

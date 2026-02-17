@@ -3,6 +3,7 @@ using System;
 using System.Buffers;
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using PublicKey = NSec.Cryptography.PublicKey;
@@ -28,7 +29,7 @@ public static class NSecCryptographicFunctions
         ReadOnlyMemory<byte> privateKeyBytes,
         ReadOnlyMemory<byte> dataToSign,
         MemoryPool<byte> signaturePool,
-        FrozenDictionary<string, object>? context = null)
+        FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signaturePool);
 
@@ -55,7 +56,7 @@ public static class NSecCryptographicFunctions
         ReadOnlyMemory<byte> dataToVerify,
         ReadOnlyMemory<byte> signature,
         ReadOnlyMemory<byte> publicKeyMaterial,
-        FrozenDictionary<string, object>? context = null)
+        FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
     {
         var publicKey = PublicKey.Import(SignatureAlgorithm.Ed25519, publicKeyMaterial.Span, KeyBlobFormat.RawPublicKey);
         return ValueTask.FromResult(SignatureAlgorithm.Ed25519.Verify(publicKey, dataToVerify.Span, signature.Span));

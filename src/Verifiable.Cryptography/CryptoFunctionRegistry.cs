@@ -10,6 +10,7 @@ namespace Verifiable.Cryptography;
 /// <param name="dataToSign">The data to sign.</param>
 /// <param name="signaturePool">Memory pool for allocating the signature buffer.</param>
 /// <param name="context">Optional context parameters for the signing operation.</param>
+/// <param name="cancellationToken">Cancellation token for async operations.</param>
 /// <returns>The signature as pooled memory that the caller must dispose.</returns>
 /// <remarks>
 /// <para>
@@ -69,7 +70,8 @@ public delegate ValueTask<Signature> SigningDelegate(
     ReadOnlyMemory<byte> privateKeyBytes,
     ReadOnlyMemory<byte> dataToSign,
     MemoryPool<byte> signaturePool,
-    FrozenDictionary<string, object>? context = null);
+    FrozenDictionary<string, object>? context = null,
+    CancellationToken cancellationToken = default);
 
 
 /// <summary>
@@ -79,12 +81,14 @@ public delegate ValueTask<Signature> SigningDelegate(
 /// <param name="signature">The signature to verify.</param>
 /// <param name="publicKeyMaterial">The public key material.</param>
 /// <param name="context">Optional context parameters for the verification operation.</param>
+/// <param name="cancellationToken">Cancellation token for async operations.</param>
 /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
 public delegate ValueTask<bool> VerificationDelegate(
     ReadOnlyMemory<byte> dataToVerify,
     ReadOnlyMemory<byte> signature,
     ReadOnlyMemory<byte> publicKeyMaterial,
-    FrozenDictionary<string, object>? context = null);
+    FrozenDictionary<string, object>? context = null,
+    CancellationToken cancellationToken = default);
 
 
 /// <summary>
@@ -113,133 +117,6 @@ public delegate T PatternMatcher<T, TDiscriminator1, TDiscriminator2>(
 /// code can work with different backends (BouncyCastle, Microsoft CNG, NSec, TPM) based on
 /// runtime configuration.
 /// </para>
-///
-/// <para>
-/// <strong>Architecture Overview</strong>
-/// </para>
-/// <code>
-/// +-----------------------------------------------------------------------+
-/// |                         Application Code                              |
-/// |            (Jws.SignAsync, CredentialJwsExtensions, etc.)             |
-/// +----------------------------------+------------------------------------+
-///                                    |
-///                                    | ResolveSigning(algorithm, purpose)
-///                                    | ResolveVerification(algorithm, purpose)
-///                                    v
-/// +-----------------------------------------------------------------------+
-/// |                      CryptoFunctionRegistry                           |
-/// |                                                                       |
-/// |   PatternMatcher selects appropriate delegate based on:               |
-/// |   - CryptoAlgorithm (P256, P384, P521, Ed25519, RSA, etc.)            |
-/// |   - Purpose (Signing, Verification, KeyAgreement, etc.)               |
-/// |   - Optional qualifier (backend preference, key format, etc.)         |
-/// +----------------------------------+------------------------------------+
-///                                    |
-///                                    | Returns SigningDelegate or
-///                                    | VerificationDelegate
-///                                    v
-/// +---------------+---------------+---------------+---------------+
-/// |  BouncyCastle |   Microsoft   |     NSec      |      TPM      |
-/// |    Backend    |     CNG       |    Backend    |    Backend    |
-/// +---------------+---------------+---------------+---------------+
-/// </code>
-///
-/// <para>
-/// <strong>Discriminator Design</strong>
-/// </para>
-/// <para>
-/// The registry uses two primary discriminators for function selection:
-/// </para>
-/// <list type="bullet">
-/// <item><description>
-/// <strong>CryptoAlgorithm</strong>: Identifies the cryptographic algorithm (P-256, P-384,
-/// Ed25519, RSA-2048, etc.). This determines which mathematical operations are performed.
-/// </description></item>
-/// <item><description>
-/// <strong>Purpose</strong>: Identifies the operation type (Signing, Verification, KeyAgreement,
-/// Encryption, Decryption). This allows the same key material to be used for different operations
-/// with appropriate function routing.
-/// </description></item>
-/// </list>
-///
-/// <para>
-/// <strong>Future: MaterialSemantics as Third Discriminator</strong>
-/// </para>
-/// <para>
-/// A future enhancement may add <c>MaterialSemantics</c> as a third routing parameter to
-/// distinguish how key bytes should be interpreted:
-/// </para>
-/// <code>
-/// +------------------+--------------------------------------------------------+
-/// | MaterialSemantics| Meaning                                                |
-/// +------------------+--------------------------------------------------------+
-/// | Direct           | Bytes are the actual cryptographic key material.       |
-/// |                  | Route to software backends (CNG, BouncyCastle, NSec).  |
-/// +------------------+--------------------------------------------------------+
-/// | TpmHandle        | Bytes are a TPM handle reference, not extractable key. |
-/// |                  | Route to TPM backend for hardware-bound operations.    |
-/// +------------------+--------------------------------------------------------+
-/// | HsmReference     | Bytes are an HSM key identifier or session reference.  |
-/// |                  | Route to HSM backend (PKCS#11, cloud KMS, etc.).       |
-/// +------------------+--------------------------------------------------------+
-/// </code>
-/// <para>
-/// This would enable the same high-level signing code to transparently work with both
-/// software keys and hardware-protected keys without caller awareness of the distinction.
-/// </para>
-///
-/// <para>
-/// <strong>Initialization</strong>
-/// </para>
-/// <para>
-/// Call <see cref="Initialize"/> during application startup before any concurrent access.
-/// This method is not thread-safe by design to avoid synchronization overhead in the
-/// hot path. Typical initialization occurs in <c>Program.cs</c> or a static constructor.
-/// </para>
-/// <code>
-/// // During application startup:
-/// CryptoFunctionRegistry&lt;CryptoAlgorithm, Purpose&gt;.Initialize(
-///     signingMatcher: (algorithm, purpose, qualifier) =&gt; algorithm switch
-///     {
-///         var a when a == CryptoAlgorithm.P256 =&gt; EcdsaP256SigningDelegate,
-///         var a when a == CryptoAlgorithm.Ed25519 =&gt; Ed25519SigningDelegate,
-///         _ =&gt; throw new NotSupportedException($"Algorithm {algorithm} not supported.")
-///     },
-///     verificationMatcher: (algorithm, purpose, qualifier) =&gt; ...
-/// );
-/// </code>
-///
-/// <para>
-/// <strong>Relationship to Other Components</strong>
-/// </para>
-/// <code>
-/// +---------------------------+       +---------------------------+
-/// |   CryptoFunctionRegistry  | &lt;---- |  CryptographicKeyFactory  |
-/// |   (Function dispatch)     |       |  (Creates bound keys)     |
-/// +---------------------------+       +---------------------------+
-///              ^
-///              |
-/// +---------------------------+
-/// |   KeyMaterialResolver /   |
-/// |   KeyMaterialBinder       |
-/// |   (Three-step key flow)   |
-/// +---------------------------+
-/// </code>
-/// <list type="bullet">
-/// <item><description>
-/// <see cref="CryptographicKeyFactory"/> creates bound key objects (<see cref="PublicKey"/>,
-/// <see cref="PrivateKey"/>) by combining key material with functions resolved from this registry.
-/// </description></item>
-/// <item><description>
-/// <c>KeyMaterialResolver</c> and <c>KeyMaterialBinder</c> delegates handle the three-step
-/// key resolution flow (identify, load, bind) for complex scenarios like DID resolution or
-/// database-backed key storage.
-/// </description></item>
-/// <item><description>
-/// <see cref="DefaultCoderSelector"/> handles encoding/decoding of key formats but is
-/// independent of this registry's function dispatch.
-/// </description></item>
-/// </list>
 /// </remarks>
 /// <typeparam name="TDiscriminator1">First discriminator type, typically <see cref="Context.CryptoAlgorithm"/>.</typeparam>
 /// <typeparam name="TDiscriminator2">Second discriminator type, typically <see cref="Context.Purpose"/>.</typeparam>
@@ -277,17 +154,6 @@ public static class CryptoFunctionRegistry<TDiscriminator1, TDiscriminator2>
     /// </summary>
     /// <param name="signingMatcher">Pattern matcher that selects signing functions with transformation support.</param>
     /// <param name="verificationMatcher">Pattern matcher that selects verification functions with transformation support.</param>
-    /// <remarks>
-    /// <para>
-    /// This is a specialized version of <see cref="Initialize"/> for delegates that need to
-    /// transform key material formats before performing cryptographic operations. For example,
-    /// converting compressed elliptic curve points to uncompressed format, or extracting raw
-    /// key bytes from a PKCS#8 container.
-    /// </para>
-    /// <para>
-    /// This method is not thread-safe. Call it only during application startup.
-    /// </para>
-    /// </remarks>
     public static void InitializeWithTransformers(
         PatternMatcher<SigningDelegate, TDiscriminator1, TDiscriminator2> signingMatcher,
         PatternMatcher<VerificationDelegate, TDiscriminator1, TDiscriminator2> verificationMatcher)

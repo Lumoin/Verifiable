@@ -922,7 +922,7 @@
       "verifiable.bouncycastle": {
         "type": "Project",
         "dependencies": {
-          "Portable.BouncyCastle": "[1.9.0, )",
+          "BouncyCastle.Cryptography": "[2.6.2, )",
           "Verifiable.Core": "[0.0.0, )"
         }
       },
@@ -954,7 +954,6 @@
         "type": "Project",
         "dependencies": {
           "Verifiable.Core": "[0.0.0, )",
-          "Verifiable.Cryptography": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )"
         }
@@ -995,6 +994,12 @@
           "Verifiable.Cryptography": "[0.0.0, )"
         }
       },
+      "BouncyCastle.Cryptography": {
+        "type": "CentralTransitive",
+        "requested": "[2.6.2, )",
+        "resolved": "2.6.2",
+        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
+      },
       "NSec.Cryptography": {
         "type": "CentralTransitive",
         "requested": "[25.4.0, )",
@@ -1003,12 +1008,6 @@
         "dependencies": {
           "libsodium": "[1.0.20.1, 1.0.21)"
         }
-      },
-      "Portable.BouncyCastle": {
-        "type": "CentralTransitive",
-        "requested": "[1.9.0, )",
-        "resolved": "1.9.0",
-        "contentHash": "eZZBCABzVOek+id9Xy04HhmgykF0wZg9wpByzrWN7q8qEI0Qen9b7tfd7w8VA3dOeesumMG7C5ZPy0jk7PSRHw=="
       },
       "System.Formats.Cbor": {
         "type": "CentralTransitive",

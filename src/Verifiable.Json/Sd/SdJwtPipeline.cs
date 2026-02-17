@@ -103,7 +103,9 @@ internal static class SdJwtPipeline
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             signingInputMemory,
-            memoryPool).ConfigureAwait(false);
+            memoryPool,
+            context: null,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         string signatureSegment = encoder(signature.AsReadOnlyMemory().Span);
         string compactJws = $"{headerSegment}.{payloadSegment}.{signatureSegment}";

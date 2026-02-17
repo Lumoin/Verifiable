@@ -339,4 +339,52 @@ public static class CryptoTags
         (typeof(CryptoAlgorithm), CryptoAlgorithm.MlDsa87),
         (typeof(Purpose), Purpose.Signature),
         (typeof(EncodingScheme), EncodingScheme.Raw));
+    
+    /// <summary>
+    /// Tag for ML-KEM-512 public keys (post-quantum, NIST security level 1).
+    /// </summary>
+    public static Tag MlKem512PublicKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlKem512),
+        (typeof(Purpose), Purpose.Encryption),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-KEM-512 private keys (post-quantum, NIST security level 1).
+    /// </summary>
+    public static Tag MlKem512PrivateKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlKem512),
+        (typeof(Purpose), Purpose.Exchange),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-KEM-768 public keys (post-quantum, NIST security level 3).
+    /// </summary>
+    public static Tag MlKem768PublicKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlKem768),
+        (typeof(Purpose), Purpose.Encryption),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-KEM-768 private keys (post-quantum, NIST security level 3).
+    /// </summary>
+    public static Tag MlKem768PrivateKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlKem768),
+        (typeof(Purpose), Purpose.Exchange),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-KEM-1024 public keys (post-quantum, NIST security level 5).
+    /// </summary>
+    public static Tag MlKem1024PublicKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlKem1024),
+        (typeof(Purpose), Purpose.Encryption),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ML-KEM-1024 private keys (post-quantum, NIST security level 5).
+    /// </summary>
+    public static Tag MlKem1024PrivateKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.MlKem1024),
+        (typeof(Purpose), Purpose.Exchange),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
 }

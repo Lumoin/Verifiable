@@ -26,7 +26,7 @@ internal class FakeTpmHandleTests
     {
         //Create TPM verification delegate that matches the VerificationDelegate signature.
         VerificationDelegate tpmVerificationDelegate =
-            async (dataToVerify, signature, verificationContext, context) =>
+            async (dataToVerify, signature, verificationContext, context, cancellationToken) =>
             {
                 //Decode handle from verificationContext bytes.
                 string handle = Encoding.UTF8.GetString(verificationContext.Span);

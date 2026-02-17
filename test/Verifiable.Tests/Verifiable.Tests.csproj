@@ -21,7 +21,7 @@
     <None Remove="Utilities\**" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup>    
     <PackageReference Include="dotNetRdf" />
     <PackageReference Include="CsCheck" />
     <PackageReference Include="LiquidTestReports.Markdown" />
