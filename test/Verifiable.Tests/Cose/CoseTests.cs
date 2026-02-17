@@ -168,7 +168,7 @@ internal sealed class CoseTests
         using var signingPublicKey = signingKeyPair.PublicKey;
         using var signingPrivateKey = signingKeyPair.PrivateKey;
 
-        var wrongKeyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        var wrongKeyPair = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         using var wrongPublicKey = wrongKeyPair.PublicKey;
         using var wrongPrivateKey = wrongKeyPair.PrivateKey;
 

@@ -71,7 +71,9 @@ internal static class SdCwtPipeline
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             sigStructure,
-            memoryPool).ConfigureAwait(false);
+            memoryPool,
+            context: null,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         //Serialize COSE_Sign1 = #6.18([protected, unprotected, payload, signature]).
         byte[] coseSign1 = SerializeCoseSign1(

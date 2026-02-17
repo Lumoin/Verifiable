@@ -15,7 +15,7 @@
     <PackageVersion Include="Microsoft.Sbom.Targets" Version="4.1.5" />
     <PackageVersion Include="ModelContextProtocol" Version="0.5.0-preview.1" />
     <PackageVersion Include="NSec.Cryptography" Version="25.4.0" />
-    <PackageVersion Include="Portable.BouncyCastle" Version="1.9.0" />
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
     <PackageVersion Include="SIL.ReleaseTasks" Version="3.2.0" />
     <PackageVersion Include="System.Collections.Immutable" Version="10.0.1" />
     <PackageVersion Include="System.Formats.Cbor" Version="10.0.3" />

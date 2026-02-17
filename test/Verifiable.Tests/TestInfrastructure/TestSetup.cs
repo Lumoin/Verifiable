@@ -174,6 +174,9 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignRsa2048Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignRsa4096Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignEd25519Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa44) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignMlDsa44Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa65) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignMlDsa65Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa87) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignMlDsa87Async,
                     _ => throw new ArgumentException($"No signing function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
                 };
             },
@@ -188,6 +191,9 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyRsa2048Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyRsa4096Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyEd25519Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa44) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyMlDsa44Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa65) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyMlDsa65Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa87) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyMlDsa87Async,
                     _ => throw new ArgumentException($"No verification function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
                 };
             });

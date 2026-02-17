@@ -195,7 +195,7 @@ internal sealed class JoseTests
         using var signingPrivateKey = signingKeyPair.PrivateKey;
 
         //Create a different key pair for verification (wrong key).
-        var wrongKeyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        var wrongKeyPair = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         using var wrongPublicKey = wrongKeyPair.PublicKey;
         using var wrongPrivateKey = wrongKeyPair.PrivateKey;
 

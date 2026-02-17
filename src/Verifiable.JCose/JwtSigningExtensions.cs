@@ -107,7 +107,9 @@ public static class JwtSigningExtensions
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             dataToSignOwner.Memory,
-            memoryPool).ConfigureAwait(false);
+            memoryPool,
+            context: null,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         var signatureComponent = new JwsSignatureComponent(
             headerSegment,

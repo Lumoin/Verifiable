@@ -149,7 +149,9 @@ public static class CredentialCoseExtensions
         bool isValid = await verificationDelegate(
             toBeSigned,
             message.Signature,
-            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+            publicKey.AsReadOnlyMemory(),
+            context: null,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if(!isValid)
         {

@@ -93,6 +93,84 @@ namespace Verifiable.BouncyCastle
         }
 
 
+        /// <summary>
+        /// Creates ML-DSA-44 key material (NIST FIPS 204, security level 2).
+        /// Public key: 1312 bytes. Private key: 2560 bytes (seed-expanded).
+        /// </summary>
+        /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+        /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa44Keys(MemoryPool<byte> memoryPool)
+        {
+            ArgumentNullException.ThrowIfNull(memoryPool);
+            return CreateMlDsaKeys(MLDsaParameters.ml_dsa_44, memoryPool, CryptoTags.MlDsa44PublicKey, CryptoTags.MlDsa44PrivateKey);
+        }
+
+
+        /// <summary>
+        /// Creates ML-DSA-65 key material (NIST FIPS 204, security level 3).
+        /// Public key: 1952 bytes. Private key: 4032 bytes (seed-expanded).
+        /// </summary>
+        /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+        /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa65Keys(MemoryPool<byte> memoryPool)
+        {
+            ArgumentNullException.ThrowIfNull(memoryPool);
+            return CreateMlDsaKeys(MLDsaParameters.ml_dsa_65, memoryPool, CryptoTags.MlDsa65PublicKey, CryptoTags.MlDsa65PrivateKey);
+        }
+
+
+        /// <summary>
+        /// Creates ML-DSA-87 key material (NIST FIPS 204, security level 5).
+        /// Public key: 2592 bytes. Private key: 4896 bytes (seed-expanded).
+        /// </summary>
+        /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+        /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa87Keys(MemoryPool<byte> memoryPool)
+        {
+            ArgumentNullException.ThrowIfNull(memoryPool);
+            return CreateMlDsaKeys(MLDsaParameters.ml_dsa_87, memoryPool, CryptoTags.MlDsa87PublicKey, CryptoTags.MlDsa87PrivateKey);
+        }
+
+
+        /// <summary>
+        /// Creates ML-KEM-512 key material (NIST FIPS 203, security level 1).
+        /// Public key: 800 bytes. Ciphertext: 768 bytes. Shared secret: 32 bytes.
+        /// </summary>
+        /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+        /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem512Keys(MemoryPool<byte> memoryPool)
+        {
+            ArgumentNullException.ThrowIfNull(memoryPool);
+            return CreateMlKemKeys(MLKemParameters.ml_kem_512, memoryPool, CryptoTags.MlKem512PublicKey, CryptoTags.MlKem512PrivateKey);
+        }
+
+
+        /// <summary>
+        /// Creates ML-KEM-768 key material (NIST FIPS 203, security level 3).
+        /// Public key: 1184 bytes. Ciphertext: 1088 bytes. Shared secret: 32 bytes.
+        /// </summary>
+        /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+        /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem768Keys(MemoryPool<byte> memoryPool)
+        {
+            ArgumentNullException.ThrowIfNull(memoryPool);
+            return CreateMlKemKeys(MLKemParameters.ml_kem_768, memoryPool, CryptoTags.MlKem768PublicKey, CryptoTags.MlKem768PrivateKey);
+        }
+
+
+        /// <summary>
+        /// Creates ML-KEM-1024 key material (NIST FIPS 203, security level 5).
+        /// Public key: 1568 bytes. Ciphertext: 1568 bytes. Shared secret: 32 bytes.
+        /// </summary>
+        /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+        /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem1024Keys(MemoryPool<byte> memoryPool)
+        {
+            ArgumentNullException.ThrowIfNull(memoryPool);
+            return CreateMlKemKeys(MLKemParameters.ml_kem_1024, memoryPool, CryptoTags.MlKem1024PublicKey, CryptoTags.MlKem1024PrivateKey);
+        }
+
+
         private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEcKeys(
             string secCurveName,
             Tag publicKeyTag,
@@ -182,6 +260,62 @@ namespace Verifiable.BouncyCastle
 
             Array.Clear(modulusBytes, 0, modulusBytes.Length);
             Array.Clear(derEncodedPublicKey, 0, derEncodedPublicKey.Length);
+            Array.Clear(privateKeyBytes, 0, privateKeyBytes.Length);
+
+            return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
+        }
+
+
+        /// <summary>
+        /// Creates ML-DSA key material for the given parameter set. The keys are serialized
+        /// as raw encoded bytes via <c>GetEncoded()</c>.
+        /// </summary>
+        private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsaKeys(
+            MLDsaParameters parameters,
+            MemoryPool<byte> memoryPool,
+            Tag publicKeyTag,
+            Tag privateKeyTag)
+        {
+            var keyGenParameters = new MLDsaKeyGenerationParameters(random, parameters);
+            var keyPairGen = new MLDsaKeyPairGenerator();
+            keyPairGen.Init(keyGenParameters);
+
+            AsymmetricCipherKeyPair keyPair = keyPairGen.GenerateKeyPair();
+            byte[] publicKeyBytes = ((MLDsaPublicKeyParameters)keyPair.Public).GetEncoded();
+            byte[] privateKeyBytes = ((MLDsaPrivateKeyParameters)keyPair.Private).GetEncoded();
+
+            var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKeyBytes, memoryPool), publicKeyTag);
+            var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool), privateKeyTag);
+
+            Array.Clear(publicKeyBytes, 0, publicKeyBytes.Length);
+            Array.Clear(privateKeyBytes, 0, privateKeyBytes.Length);
+
+            return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
+        }
+
+
+        /// <summary>
+        /// Creates ML-KEM key material for the given parameter set. The keys are serialized
+        /// as raw encoded bytes via <c>GetEncoded()</c>.
+        /// </summary>
+        private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKemKeys(
+            MLKemParameters parameters,
+            MemoryPool<byte> memoryPool,
+            Tag publicKeyTag,
+            Tag privateKeyTag)
+        {
+            var keyGenParameters = new MLKemKeyGenerationParameters(random, parameters);
+            var keyPairGen = new MLKemKeyPairGenerator();
+            keyPairGen.Init(keyGenParameters);
+
+            AsymmetricCipherKeyPair keyPair = keyPairGen.GenerateKeyPair();
+            byte[] publicKeyBytes = ((MLKemPublicKeyParameters)keyPair.Public).GetEncoded();
+            byte[] privateKeyBytes = ((MLKemPrivateKeyParameters)keyPair.Private).GetEncoded();
+
+            var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKeyBytes, memoryPool), publicKeyTag);
+            var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool), privateKeyTag);
+
+            Array.Clear(publicKeyBytes, 0, publicKeyBytes.Length);
             Array.Clear(privateKeyBytes, 0, privateKeyBytes.Length);
 
             return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
