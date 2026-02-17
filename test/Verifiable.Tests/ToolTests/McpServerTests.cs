@@ -1,5 +1,6 @@
 ﻿using ModelContextProtocol.Client;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -249,7 +250,8 @@ internal sealed class McpServerTests
 
 
     /// <summary>
-    /// Tests that the MCP server process starts correctly with -mcp argument via stdio.
+    /// Smoke test that the MCP server process starts and responds to a raw JSON-RPC
+    /// initialize request. Validates the wire format without the SDK abstraction layer.
     /// </summary>
     [TestMethod]
     public async Task McpServerStartsSuccessfullyViaStdio()
@@ -260,11 +262,20 @@ internal sealed class McpServerTests
             Assert.Inconclusive("Executable not found. Build the project first.");
         }
 
+        var stderrCapture = new StringBuilder();
         using var process = VerifiableCliTestHelpers.CreateMcpServerProcess(executablePath);
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if(e.Data is not null)
+            {
+                stderrCapture.AppendLine(e.Data);
+            }
+        };
 
         try
         {
             process.Start();
+            process.BeginErrorReadLine();
 
             string initializeJson = JsonSerializer.Serialize(new
             {
@@ -282,10 +293,7 @@ internal sealed class McpServerTests
             await SendMessageAsync(process, initializeJson, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
-            cts.CancelAfter(TimeSpan.FromSeconds(5));
-
-            string response = await ReadResponseByIdAsync(process, 1, cts.Token)
+            string response = await ReadResponseByIdAsync(process, 1, stderrCapture, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             using var responseDoc = JsonDocument.Parse(response);
@@ -308,108 +316,12 @@ internal sealed class McpServerTests
 
 
     /// <summary>
-    /// Tests MCP server lists available tools via stdio.
-    /// </summary>
-    [TestMethod]
-    public async Task McpServerListsToolsViaStdio()
-    {
-        string? executablePath = VerifiableCliTestHelpers.GetExecutablePath();
-        if(executablePath is null)
-        {
-            Assert.Inconclusive("Executable not found.");
-        }
-
-        using var process = VerifiableCliTestHelpers.CreateMcpServerProcess(executablePath);
-
-        try
-        {
-            process.Start();
-
-            //Send initialize request.
-            string initRequest = JsonSerializer.Serialize(new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "initialize",
-                @params = new
-                {
-                    protocolVersion = "2025-11-25",
-                    capabilities = new { },
-                    clientInfo = new { name = "test", version = "1.0" }
-                }
-            });
-
-            await SendMessageAsync(process, initRequest, TestContext.CancellationToken)
-                .ConfigureAwait(false);
-
-            using var cts1 = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
-            cts1.CancelAfter(TimeSpan.FromSeconds(5));
-            await ReadResponseByIdAsync(process, 1, cts1.Token)
-                .ConfigureAwait(false);
-
-            //Send initialized notification.
-            string initializedNotification = JsonSerializer.Serialize(new
-            {
-                jsonrpc = "2.0",
-                method = "notifications/initialized"
-            });
-
-            await SendMessageAsync(process, initializedNotification, TestContext.CancellationToken)
-                .ConfigureAwait(false);
-
-            //Send tools/list request.
-            string toolsRequest = JsonSerializer.Serialize(new
-            {
-                jsonrpc = "2.0",
-                id = 2,
-                method = "tools/list"
-            });
-
-            await SendMessageAsync(process, toolsRequest, TestContext.CancellationToken)
-                .ConfigureAwait(false);
-
-            using var cts2 = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
-            cts2.CancelAfter(TimeSpan.FromSeconds(5));
-            string response = await ReadResponseByIdAsync(process, 2, cts2.Token)
-                .ConfigureAwait(false);
-
-            using var responseDoc = JsonDocument.Parse(response);
-            var root = responseDoc.RootElement;
-
-            Assert.IsTrue(root.TryGetProperty("result", out var result));
-            Assert.IsTrue(result.TryGetProperty("tools", out var tools));
-            Assert.IsGreaterThan(0, tools.GetArrayLength());
-
-            var toolNames = new List<string>();
-            foreach(var tool in tools.EnumerateArray())
-            {
-                if(tool.TryGetProperty("name", out var name))
-                {
-                    toolNames.Add(name.GetString() ?? "");
-                }
-            }
-
-            Assert.IsGreaterThan(0, toolNames.Count, "Should have at least one tool registered.");
-
-            Assert.Contains(McpToolNames.GetTpmInfo, toolNames);
-            Assert.Contains(McpToolNames.CheckTpmSupport, toolNames);
-            Assert.Contains(McpToolNames.CreateDid, toolNames);
-            Assert.Contains(McpToolNames.ListDids, toolNames);
-        }
-        finally
-        {
-            await VerifiableCliTestHelpers.EnsureProcessTerminatedAsync(process, TestContext.CancellationToken)
-                .ConfigureAwait(false);
-        }
-    }
-
-
-    /// <summary>
-    /// Tests connecting to the MCP server using the official client SDK via stdio.
+    /// Connects to the MCP server using the official client SDK, validates that all expected
+    /// tools are registered, and exercises a tool call to confirm end-to-end functionality.
     /// </summary>
     [TestMethod]
     [TestCategory("McpClient")]
-    public async Task McpClientConnectsToServerViaStdio()
+    public async Task McpClientConnectsAndListsToolsViaStdio()
     {
         string? executablePath = VerifiableCliTestHelpers.GetExecutablePath();
         if(executablePath is null)
@@ -433,7 +345,9 @@ internal sealed class McpServerTests
             var toolNames = tools.Select(t => t.Name).ToList();
 
             Assert.IsGreaterThan(0, tools.Count);
+            Assert.Contains(McpToolNames.GetTpmInfo, toolNames);
             Assert.Contains(McpToolNames.CheckTpmSupport, toolNames);
+            Assert.Contains(McpToolNames.CreateDid, toolNames);
             Assert.Contains(McpToolNames.ListDids, toolNames);
 
             var result = await client.CallToolAsync(
@@ -463,11 +377,14 @@ internal sealed class McpServerTests
 
     /// <summary>
     /// Reads lines from the MCP server stdout until a JSON-RPC response with the
-    /// expected id is found. Notifications and other messages are skipped.
+    /// expected id is found. Notifications and other messages are skipped. If the
+    /// server closes stdout prematurely, captured stderr output is included in the
+    /// exception message for diagnostics.
     /// </summary>
     /// <param name="process">The MCP server process.</param>
     /// <param name="expectedId">The JSON-RPC request id to match.</param>
-    /// <param name="cancellationToken">Cancellation token that should include a timeout.</param>
+    /// <param name="stderrCapture">Captured stderr output for diagnostic reporting.</param>
+    /// <param name="cancellationToken">Cancellation token for the read operation.</param>
     /// <returns>The raw JSON string of the matching response.</returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the server closes stdout before sending the expected response.
@@ -475,6 +392,7 @@ internal sealed class McpServerTests
     private static async Task<string> ReadResponseByIdAsync(
         System.Diagnostics.Process process,
         int expectedId,
+        StringBuilder stderrCapture,
         CancellationToken cancellationToken)
     {
         while(true)
@@ -485,8 +403,13 @@ internal sealed class McpServerTests
 
             if(line is null)
             {
+                string stderr = stderrCapture.ToString();
+                string diagnostic = string.IsNullOrWhiteSpace(stderr)
+                    ? "No stderr output captured."
+                    : $"Server stderr:\n{stderr}";
+
                 throw new InvalidOperationException(
-                    $"Server closed stdout before responding to request id {expectedId}.");
+                    $"Server closed stdout before responding to request id {expectedId}. {diagnostic}");
             }
 
             //Try to parse and match the id. Skip notifications and other messages.

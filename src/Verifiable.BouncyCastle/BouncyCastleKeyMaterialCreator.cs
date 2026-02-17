@@ -1,4 +1,5 @@
-﻿using Org.BouncyCastle.Asn1.Sec;
+﻿using Org.BouncyCastle.Asn1.Pkcs;
+using Org.BouncyCastle.Asn1.Sec;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Parameters;
@@ -91,7 +92,7 @@ namespace Verifiable.BouncyCastle
             return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
         }
 
-        
+
         private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEcKeys(
             string secCurveName,
             Tag publicKeyTag,
@@ -157,25 +158,31 @@ namespace Verifiable.BouncyCastle
             generator.Init(keyGenParam);
             var keyPair = generator.GenerateKeyPair();
 
-            // Cast to RsaPublic/PrivateKeyParameters
             var publicKeyParam = (RsaKeyParameters)keyPair.Public;
             var privateKeyParam = (RsaPrivateCrtKeyParameters)keyPair.Private;
 
-            // Get public key modulus and private key 'D' bytes
-            byte[] modulusBytes = publicKeyParam.Modulus.ToByteArray();
-            byte[] privateKeyBytes = privateKeyParam.Exponent.ToByteArray();
-
-            // Encode public key modulus
+            //Encode the public key modulus in the DID-compatible format.
+            byte[] modulusBytes = publicKeyParam.Modulus.ToByteArrayUnsigned();
             byte[] derEncodedPublicKey = RsaUtilities.Encode(modulusBytes);
+
+            //Serialize the private key as PKCS#1 DER, compatible with both backends.
+            byte[] privateKeyBytes = RsaPrivateKeyStructure.GetInstance(new RsaPrivateKeyStructure(
+                privateKeyParam.Modulus,
+                privateKeyParam.PublicExponent,
+                privateKeyParam.Exponent,
+                privateKeyParam.P,
+                privateKeyParam.Q,
+                privateKeyParam.DP,
+                privateKeyParam.DQ,
+                privateKeyParam.QInv)).GetDerEncoded();
 
             var (publicKeyTag, privateKeyTag) = GetTags(keySizeInBits);
             var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(derEncodedPublicKey, memoryPool), publicKeyTag);
             var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool), privateKeyTag);
 
-            // Clear sensitive data from memory
             Array.Clear(modulusBytes, 0, modulusBytes.Length);
-            Array.Clear(privateKeyBytes, 0, privateKeyBytes.Length);
             Array.Clear(derEncodedPublicKey, 0, derEncodedPublicKey.Length);
+            Array.Clear(privateKeyBytes, 0, privateKeyBytes.Length);
 
             return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
         }

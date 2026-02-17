@@ -178,19 +178,19 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void Ed25519WithMultibaseBtc58Succeeds()
         {
-            var keys = NSecKeyCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
-            var publicKeyEd25519 = keys.PublicKey.AsReadOnlySpan();
-            var privateKeyEd25519 = keys.PrivateKey.AsReadOnlySpan();
+            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            using var publicKey = keys.PublicKey;
+            using var privateKey = keys.PrivateKey;
 
             //Use high-level API for public key encoding.
             var multibaseEncodedPublicKey = MultibaseSerializer.EncodeKey(
-                publicKeyEd25519,
+                publicKey.AsReadOnlySpan(),
                 CryptoAlgorithm.Ed25519,
                 Base58.Bitcoin.Encode);
 
             //Private keys require manual encoding with appropriate header.
             var multibaseEncodedPrivateKey = MultibaseSerializer.Encode(
-                privateKeyEd25519,
+                privateKey.AsReadOnlySpan(),
                 MulticodecHeaders.Ed25519PrivateKey,
                 MultibaseAlgorithms.Base58Btc,
                 Base58.Bitcoin.Encode);
@@ -206,12 +206,12 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void X25519WithMultibaseBtc58Succeeds()
         {
-            var keys = NSecKeyCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
-            var publicKeyEd25519 = keys.PublicKey.AsReadOnlySpan();
-            var privateKeyEd25519 = keys.PrivateKey.AsReadOnlySpan();
+            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            using var publicKeyEd25519 = keys.PublicKey;
+            using var privateKeyEd25519 = keys.PrivateKey;
 
-            var x25519PublicKeyOwner = Sodium.ConvertEd25519PublicKeyToCurve25519PublicKey(publicKeyEd25519, SensitiveMemoryPool<byte>.Shared);
-            var x25519PrivateKey = Sodium.ConvertEd25519PrivateKeyToCurve25519PrivateKey(privateKeyEd25519.ToArray());
+            using var x25519PublicKeyOwner = Sodium.ConvertEd25519PublicKeyToCurve25519PublicKey(publicKeyEd25519.AsReadOnlySpan(), SensitiveMemoryPool<byte>.Shared);
+            var x25519PrivateKey = Sodium.ConvertEd25519PrivateKeyToCurve25519PrivateKey(privateKeyEd25519.AsReadOnlySpan().ToArray());
 
             //Use high-level API for public key encoding.
             var multibaseEncodedPublicKey = MultibaseSerializer.EncodeKey(
@@ -226,8 +226,6 @@ namespace Verifiable.Tests.Cryptography
                 MultibaseAlgorithms.Base58Btc,
                 Base58.Bitcoin.Encode);
 
-            x25519PublicKeyOwner.Dispose();
-
             Assert.StartsWith(Base58BtcEncodedMulticodecHeaders.X25519PublicKey.ToString(), multibaseEncodedPublicKey, StringComparison.InvariantCulture);
             Assert.StartsWith(Base58BtcEncodedMulticodecHeaders.X25519PrivateKey.ToString(), multibaseEncodedPrivateKey, StringComparison.InvariantCulture);
         }
@@ -240,10 +238,12 @@ namespace Verifiable.Tests.Cryptography
         public void P256KeyCreationTest()
         {
             var keys = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, MicrosoftKeyMaterialCreator.CreateP256Keys);
+            using var publicKey = keys.PublicKey;
+            using var privateKey = keys.PrivateKey;
 
             //Use high-level API for encoding.
             var multibaseEncodedPublicKey = MultibaseSerializer.EncodeKey(
-                keys.PublicKey.AsReadOnlySpan(),
+                publicKey.AsReadOnlySpan(),
                 CryptoAlgorithm.P256,
                 Base58.Bitcoin.Encode);
 

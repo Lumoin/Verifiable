@@ -15,7 +15,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// Initializes structures needed in tests. This is basically the same as any program setup for this library.
 /// </summary>
 internal static class TestSetup
-{   
+{
     /// <summary>
     /// Base58 BTC encoder using SimpleBase.
     /// </summary>
@@ -170,9 +170,9 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP256Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP384Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignP521Async,
-                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignSecp256k1Async,
-                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsa2048Async,
-                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsa4096Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignSecp256k1Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignRsa2048Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignRsa4096Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignEd25519Async,
                     _ => throw new ArgumentException($"No signing function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
                 };
@@ -184,9 +184,9 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP256Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP384Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP521Async,
-                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifySecp256k1Async,
-                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsa2048Async,
-                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsa4096Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifySecp256k1Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyRsa2048Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyRsa4096Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyEd25519Async,
                     _ => throw new ArgumentException($"No verification function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
                 };
