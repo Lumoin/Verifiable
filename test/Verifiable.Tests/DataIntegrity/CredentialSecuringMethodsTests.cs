@@ -4,8 +4,6 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using VDS.RDF;
-using VDS.RDF.Parsing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core.Model.Credentials;
@@ -41,27 +39,27 @@ internal sealed class CredentialSecuringMethodsTests
     private const string Ed25519VerificationMethodId = "did:key:z6MkrJVnaZkeFzdQyMZu1cgjg7k1pZZ6pvBQ7XJPt4swbTQ2#z6MkrJVnaZkeFzdQyMZu1cgjg7k1pZZ6pvBQ7XJPt4swbTQ2";
 
     private const string UnsignedCredentialJson = /*lang=json,strict*/ """
-        {
-            "@context": [
-                "https://www.w3.org/ns/credentials/v2",
-                "https://www.w3.org/ns/credentials/examples/v2"
-            ],
-            "id": "http://university.example/credentials/3732",
-            "type": ["VerifiableCredential", "ExampleDegreeCredential"],
-            "issuer": {
-                "id": "did:example:76e12ec712ebc6f1c221ebfeb1f",
-                "name": "Example University"
-            },
-            "validFrom": "2010-01-01T19:23:24Z",
-            "credentialSubject": {
-                "id": "did:example:ebfeb1f712ebc6f1c276e12ec21",
-                "degree": {
-                    "type": "ExampleBachelorDegree",
-                    "name": "Bachelor of Science and Arts"
-                }
+    {
+        "@context": [
+            "https://www.w3.org/ns/credentials/v2",
+            "https://www.w3.org/ns/credentials/examples/v2"
+        ],
+        "id": "http://university.example/credentials/3732",
+        "type": ["VerifiableCredential", "ExampleDegreeCredential"],
+        "issuer": {
+            "id": "did:example:76e12ec712ebc6f1c221ebfeb1f",
+            "name": "Example University"
+        },
+        "validFrom": "2010-01-01T19:23:24Z",
+        "credentialSubject": {
+            "id": "did:example:ebfeb1f712ebc6f1c276e12ec21",
+            "degree": {
+                "type": "ExampleBachelorDegree",
+                "name": "Bachelor of Science and Arts"
             }
         }
-        """;
+    }
+    """;
 
     private static readonly DateTime ProofCreated = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
@@ -89,7 +87,7 @@ internal sealed class CredentialSecuringMethodsTests
             EddsaRdfc2022CryptosuiteInfo.Instance,
             ProofCreated,
             RdfcCanonicalizer,
-            contextResolver: null,
+            ContextResolver,
             ProofValueCodecs.EncodeBase58Btc,
             SerializeCredential,
             DeserializeCredential,
@@ -109,7 +107,7 @@ internal sealed class CredentialSecuringMethodsTests
         var verificationResult = await signedCredential.VerifyAsync(
             didDocument,
             RdfcCanonicalizer,
-            contextResolver: null,
+            ContextResolver,
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
             DeserializeCredential,
@@ -150,9 +148,6 @@ internal sealed class CredentialSecuringMethodsTests
             CredentialPath.FromJsonPointer("/type")
         };
 
-        var rdfcCanonicalizer = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
-        var contextResolver = CanonicalizationTestUtilities.CreateTestContextResolver();
-
         //Issuer creates base proof containing all claims with selective disclosure capability.
         const string SelectedVerificationMethodId = "did:example:issuer#key-1";
         var signedCredential = await credential.CreateBaseProofAsync(
@@ -162,9 +157,9 @@ internal sealed class CredentialSecuringMethodsTests
             ProofCreated,
             mandatoryPaths,
             () => RandomNumberGenerator.GetBytes(32),
-            JsonLdSelection.PartitionStatements,            
-            rdfcCanonicalizer,
-            contextResolver,
+            JsonLdSelection.PartitionStatements,
+            RdfcCanonicalizer,
+            ContextResolver,
             SerializeCredential,
             DeserializeCredential,
             SerializeProofOptions,
@@ -185,8 +180,8 @@ internal sealed class CredentialSecuringMethodsTests
             BouncyCastleCryptographicFunctions.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseBaseProof,
             JsonLdSelection.PartitionStatements,
-            rdfcCanonicalizer,
-            contextResolver,
+            RdfcCanonicalizer,
+            ContextResolver,
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -214,8 +209,8 @@ internal sealed class CredentialSecuringMethodsTests
             userExclusions,
             JsonLdSelection.PartitionStatements,
             JsonLdSelection.SelectFragments,
-            rdfcCanonicalizer,
-            contextResolver,
+            RdfcCanonicalizer,
+            ContextResolver,
             SerializeCredential,
             DeserializeCredential,
             EcdsaSd2023CborSerializer.ParseBaseProof,
@@ -236,8 +231,8 @@ internal sealed class CredentialSecuringMethodsTests
             P256IssuerKeys.PublicKey,
             BouncyCastleCryptographicFunctions.VerifyP256Async,
             EcdsaSd2023CborSerializer.ParseDerivedProof,
-            rdfcCanonicalizer,
-            contextResolver,
+            RdfcCanonicalizer,
+            ContextResolver,
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
@@ -332,8 +327,9 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519PublicKeyMultibase, MulticodecHeaders.Ed25519PublicKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
         using PublicKeyMemory publicKeyMemory = new(publicKeyBytes, CryptoTags.Ed25519PublicKey);
 
-        var verificationResult = await JwsCredentialVerification.VerifyAsync(
+        var verificationResult = await CredentialJwsExtensions.VerifyJwsAsync(
             jws, publicKeyMemory, TestSetup.Base64UrlDecoder, HeaderDeserializer, CredentialDeserializer,
+            SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid, "JWT signature verification must succeed.");
@@ -430,8 +426,8 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
-        byte[] salt1 = SdSaltGenerator.Generate();
-        byte[] salt2 = SdSaltGenerator.Generate();
+        byte[] salt1 = SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes);
+        byte[] salt2 = SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes);
 
         var disclosure1 = SdDisclosure.CreateProperty(salt1, "degree",
             new Dictionary<string, object> { ["type"] = "ExampleBachelorDegree", ["name"] = "Bachelor of Science and Arts" });
@@ -451,7 +447,7 @@ internal sealed class CredentialSecuringMethodsTests
             ["issuer"] = new Dictionary<string, object> { ["id"] = credential.Issuer!.Id!, [SdConstants.SdClaimName] = new[] { digest2 } },
             ["validFrom"] = credential.ValidFrom!,
             ["credentialSubject"] = new Dictionary<string, object> { ["id"] = credential.CredentialSubject![0].Id!, [SdConstants.SdClaimName] = new[] { digest1 } },
-            [SdConstants.SdAlgorithmClaimName] = SdConstants.DefaultHashAlgorithm
+            [SdConstants.SdAlgorithmClaimName] = WellKnownHashAlgorithms.Sha256Iana
         };
 
         var header = new Dictionary<string, object>
@@ -509,9 +505,9 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
-        var disclosure1 = SdDisclosure.CreateProperty(SdSaltGenerator.Generate(), "degree",
+        var disclosure1 = SdDisclosure.CreateProperty(SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes), "degree",
             new Dictionary<string, object?> { ["type"] = "ExampleBachelorDegree", ["name"] = "Bachelor of Science and Arts" });
-        var disclosure2 = SdDisclosure.CreateProperty(SdSaltGenerator.Generate(), "name", "Example University");
+        var disclosure2 = SdDisclosure.CreateProperty(SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes), "name", "Example University");
 
         var protectedHeader = BuildSdCwtProtectedHeader();
         byte[] payload = BuildCwtPayload(credential);
@@ -557,15 +553,9 @@ internal sealed class CredentialSecuringMethodsTests
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, cancellationToken) =>
         ValueTask.FromResult(Jcs.Canonicalize(json));
 
-    private static CanonicalizationDelegate RdfcCanonicalizer { get; } = (json, contextResolver, cancellationToken) =>
-    {
-        var store = new TripleStore();
-        var parser = new JsonLdParser();
-        using var reader = new StringReader(json);
-        parser.Load(store, reader);
-        var canonicalizer = new RdfCanonicalizer();
-        return ValueTask.FromResult(canonicalizer.Canonicalize(store).SerializedNQuads);
-    };
+    private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
+
+    private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
 
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
         JsonSerializer.Serialize(credential, JsonOptions);
@@ -611,7 +601,7 @@ internal sealed class CredentialSecuringMethodsTests
         };
     }
 
-        
+
     private static string EncodeDisclosure(SdDisclosure disclosure, EncodeDelegate base64UrlEncoder)
     {
         string saltBase64Url = base64UrlEncoder(disclosure.Salt.Span);

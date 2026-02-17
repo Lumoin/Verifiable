@@ -1,7 +1,7 @@
 ﻿using SimpleBase;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Verifiable.Jose;
+using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography

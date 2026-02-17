@@ -3,7 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Verifiable.Jose;
+using Verifiable.JCose;
 
 namespace Verifiable.Core.Model.Did
 {

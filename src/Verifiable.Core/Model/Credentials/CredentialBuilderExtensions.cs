@@ -149,6 +149,7 @@ public static class CredentialBuilderExtensions
         /// <param name="base64UrlEncoder">Delegate for Base64Url encoding.</param>
         /// <param name="memoryPool">Memory pool for signature allocation.</param>
         /// <param name="mediaType">Optional media type for the <c>typ</c> header.</param>
+        /// <param name="contentType">Optional content type for the <c>cty</c> header.</param>
         /// <returns>A function that builds and signs credentials as JWS.</returns>
         /// <remarks>
         /// <para>
@@ -178,7 +179,8 @@ public static class CredentialBuilderExtensions
             JwtHeaderSerializer headerSerializer,
             EncodeDelegate base64UrlEncoder,
             MemoryPool<byte> memoryPool,
-            string? mediaType = null)
+            string? mediaType = null,
+            string? contentType = null)
         {
             ArgumentNullException.ThrowIfNull(privateKey, nameof(privateKey));
             ArgumentException.ThrowIfNullOrWhiteSpace(verificationMethodId, nameof(verificationMethodId));
@@ -199,8 +201,9 @@ public static class CredentialBuilderExtensions
                     headerSerializer,
                     base64UrlEncoder,
                     memoryPool,
-                    mediaType,
-                    cancellationToken).ConfigureAwait(false);
+                    mediaType: mediaType,
+                    contentType: contentType,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
             };
         }
 
@@ -215,6 +218,7 @@ public static class CredentialBuilderExtensions
         /// <param name="base64UrlEncoder">Delegate for Base64Url encoding.</param>
         /// <param name="memoryPool">Memory pool for signature allocation.</param>
         /// <param name="mediaType">Optional media type for the <c>typ</c> header.</param>
+        /// <param name="contentType">Optional content type for the <c>cty</c> header.</param>
         /// <returns>A function that builds and signs credentials as JWS with full options.</returns>
         public Func<Issuer, CredentialSubjectInput, DateTime, IEnumerable<string>?, DateTime?, CancellationToken, ValueTask<JwsMessage>> WithJoseSigningFull(
             PrivateKeyMemory privateKey,
@@ -223,7 +227,8 @@ public static class CredentialBuilderExtensions
             JwtHeaderSerializer headerSerializer,
             EncodeDelegate base64UrlEncoder,
             MemoryPool<byte> memoryPool,
-            string? mediaType = null)
+            string? mediaType = null,
+            string? contentType = null)
         {
             ArgumentNullException.ThrowIfNull(privateKey, nameof(privateKey));
             ArgumentException.ThrowIfNullOrWhiteSpace(verificationMethodId, nameof(verificationMethodId));
@@ -249,8 +254,9 @@ public static class CredentialBuilderExtensions
                     headerSerializer,
                     base64UrlEncoder,
                     memoryPool,
-                    mediaType,
-                    cancellationToken).ConfigureAwait(false);
+                    mediaType: mediaType,
+                    contentType: contentType,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
             };
         }
     }

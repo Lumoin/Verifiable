@@ -1,8 +1,6 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using VDS.RDF;
-using VDS.RDF.Parsing;
 using Verifiable.BouncyCastle;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
@@ -24,11 +22,23 @@ namespace Verifiable.Tests.DataIntegrity;
 [TestClass]
 internal sealed class DataIntegrityTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     /// <summary>
     /// JSON serialization options with all required converters for Verifiable Credentials.
     /// Uses the library's default configuration to ensure proper JSON-LD serialization.
     /// </summary>
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
+
+    /// <summary>
+    /// Offline RDFC-1.0 canonicalizer using embedded W3C context documents.
+    /// </summary>
+    private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
+
+    /// <summary>
+    /// Offline context resolver using embedded W3C context documents.
+    /// </summary>
+    private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
 
     /// <summary>
     /// Ed25519 public key in Multikey format.
@@ -111,20 +121,10 @@ internal sealed class DataIntegrityTests
     public const string ExpectedProofValue = "z2YwC8z3ap7yx1nZYCg4L3j3ApHsF8kgPdSb5xoS1VR7vPG3F561B52hYnQF9iseabecm3ijx4K1FBTQsCZahKZme";
 
     /// <summary>
-    /// Canonicalizes a JSON-LD document using RDFC-1.0 via dotNetRdf.
+    /// Canonicalizes a JSON-LD document using RDFC-1.0 with offline embedded contexts.
     /// </summary>
-    private static string Canonicalize(string jsonLdDocument)
-    {
-        using var store = new TripleStore();
-        var parser = new JsonLdParser();
-        using var reader = new StringReader(jsonLdDocument);
-        parser.Load(store, reader);
-
-        var canonicalizer = new RdfCanonicalizer();
-        var canonicalizedResult = canonicalizer.Canonicalize(store);
-
-        return canonicalizedResult.SerializedNQuads;
-    }
+    private static ValueTask<string> CanonicalizeAsync(string jsonLdDocument, CancellationToken cancellationToken) =>
+        RdfcCanonicalizer(jsonLdDocument, ContextResolver, cancellationToken);
 
 
     /// <summary>
@@ -145,11 +145,11 @@ internal sealed class DataIntegrityTests
         var credentialJson = JsonSerializer.Serialize(UnsignedCredential, JsonOptions);
 
         //Canonicalize credential via dotNetRdf and verify against test vector.
-        var canonicalCredential = Canonicalize(credentialJson);
+        var canonicalCredential = await CanonicalizeAsync(credentialJson, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(ExpectedCanonicalCredential, canonicalCredential, "Canonical credential must match W3C test vector.");
 
         //Canonicalize proof options and verify against test vector.
-        var canonicalProofOptions = Canonicalize(ProofOptionsJson);
+        var canonicalProofOptions = await CanonicalizeAsync(ProofOptionsJson, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(ExpectedCanonicalProofOptions, canonicalProofOptions, "Canonical proof options must match W3C test vector.");
 
         //Hash credential and verify.
@@ -206,7 +206,7 @@ internal sealed class DataIntegrityTests
 
         //Verify tamper detection.
         var tamperedCredentialJson = credentialJson.Replace("The School of Examples", "Tampered School", StringComparison.Ordinal);
-        var tamperedCanonical = Canonicalize(tamperedCredentialJson);
+        var tamperedCanonical = await CanonicalizeAsync(tamperedCredentialJson, TestContext.CancellationToken).ConfigureAwait(false);
         var tamperedHash = SHA256.HashData(Encoding.UTF8.GetBytes(tamperedCanonical));
         var tamperedHashData = proofOptionsHash.Concat(tamperedHash).ToArray();
 

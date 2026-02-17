@@ -214,21 +214,21 @@ public static class WellKnownCwtClaims
 
 
     /// <summary>
-    /// Gets the claim name for a CWT claim key.
+    /// Gets the JWT claim name for a CWT claim key.
     /// </summary>
     /// <param name="claimKey">The CWT claim key.</param>
-    /// <returns>The claim name, or null if unknown.</returns>
+    /// <returns>The JWT claim name, or <see langword="null"/> if unknown.</returns>
     public static string? GetClaimName(int claimKey) => claimKey switch
     {
-        Iss => "iss",
-        Sub => "sub",
-        Aud => "aud",
-        Exp => "exp",
-        Nbf => "nbf",
-        Iat => "iat",
-        Cti => "cti",
-        Cnf => "cnf",
-        Vct => "vct",
+        Iss => WellKnownJwtClaims.Iss,
+        Sub => WellKnownJwtClaims.Sub,
+        Aud => WellKnownJwtClaims.Aud,
+        Exp => WellKnownJwtClaims.Exp,
+        Nbf => WellKnownJwtClaims.Nbf,
+        Iat => WellKnownJwtClaims.Iat,
+        Cti => WellKnownJwtClaims.Jti,
+        Cnf => WellKnownJwtClaims.Cnf,
+        Vct => WellKnownJwtClaims.Vct,
         Cnonce => "cnonce",
         _ => null
     };
@@ -238,19 +238,18 @@ public static class WellKnownCwtClaims
     /// Gets the CWT claim key for a JWT claim name.
     /// </summary>
     /// <param name="jwtClaimName">The JWT claim name.</param>
-    /// <returns>The CWT claim key, or null if unknown.</returns>
+    /// <returns>The CWT claim key, or <see langword="null"/> if unknown.</returns>
     public static int? GetClaimKey(string jwtClaimName) => jwtClaimName switch
     {
-        "iss" => Iss,
-        "sub" => Sub,
-        "aud" => Aud,
-        "exp" => Exp,
-        "nbf" => Nbf,
-        "iat" => Iat,
-        "jti" => Cti,
-        "cnf" => Cnf,
-        "vct" => Vct,
-        "cnonce" => Cnonce,
+        var c when WellKnownJwtClaims.IsIssuer(c) => Iss,
+        var c when WellKnownJwtClaims.IsSub(c) => Sub,
+        var c when WellKnownJwtClaims.IsAud(c) => Aud,
+        var c when WellKnownJwtClaims.IsExp(c) => Exp,
+        var c when WellKnownJwtClaims.IsNbf(c) => Nbf,
+        var c when WellKnownJwtClaims.IsIat(c) => Iat,
+        var c when WellKnownJwtClaims.IsJti(c) => Cti,
+        var c when WellKnownJwtClaims.IsCnf(c) => Cnf,
+        var c when WellKnownJwtClaims.IsVct(c) => Vct,
         _ => null
     };
 }

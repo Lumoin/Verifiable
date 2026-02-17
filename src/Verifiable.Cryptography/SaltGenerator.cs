@@ -3,10 +3,17 @@
 namespace Verifiable.Cryptography;
 
 /// <summary>
-/// Delegate for generating cryptographically secure salt values.
+/// Delegate for generating cryptographically secure salt values as encoded strings.
 /// </summary>
 /// <returns>A base64url-encoded salt string with sufficient entropy.</returns>
 public delegate string SaltGeneratorDelegate();
+
+
+/// <summary>
+/// Delegate for generating cryptographically secure raw salt bytes.
+/// </summary>
+/// <returns>A new byte array containing the salt.</returns>
+public delegate byte[] SaltFactoryDelegate();
 
 
 /// <summary>
@@ -39,6 +46,7 @@ public static class SaltGenerator
         {
             byte[] saltBytes = new byte[saltLengthBytes];
             RandomNumberGenerator.Fill(saltBytes);
+
             return base64UrlEncoder(saltBytes);
         };
     }
@@ -71,6 +79,38 @@ public static class SaltGenerator
 
             return saltQueue.Dequeue();
         };
+    }
+
+
+    /// <summary>
+    /// Generates cryptographically secure random salt bytes using the default length (128 bits).
+    /// </summary>
+    /// <returns>A new byte array containing the salt.</returns>
+    /// <remarks>
+    /// <para>
+    /// This parameterless overload is compatible with <see cref="SaltFactoryDelegate"/> for
+    /// direct method group usage:
+    /// </para>
+    /// <code>
+    /// SdJwtIssuance.IssueAsync(payload, paths, SaltGenerator.Create, ...);
+    /// </code>
+    /// </remarks>
+    public static byte[] Create()
+    {
+        return RandomNumberGenerator.GetBytes(DefaultSaltLengthBytes);
+    }
+
+
+    /// <summary>
+    /// Generates cryptographically secure random salt bytes.
+    /// </summary>
+    /// <param name="lengthBytes">The salt length in bytes. Defaults to 16 (128 bits).</param>
+    /// <returns>A new byte array containing the salt.</returns>
+    public static byte[] Create(int lengthBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(lengthBytes, 1, nameof(lengthBytes));
+
+        return RandomNumberGenerator.GetBytes(lengthBytes);
     }
 
 

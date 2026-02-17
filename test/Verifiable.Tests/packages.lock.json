@@ -954,6 +954,7 @@
         "type": "Project",
         "dependencies": {
           "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Cryptography": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )"
         }

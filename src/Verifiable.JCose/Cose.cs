@@ -57,7 +57,7 @@ public static class Cose
         byte[] toBeSigned = buildSigStructure(
             protectedHeaderBytes.Span,
             payload.Span,
-            ReadOnlySpan<byte>.Empty);
+            []);
 
         CryptoAlgorithm algorithm = privateKey.Tag.Get<CryptoAlgorithm>();
         Purpose purpose = privateKey.Tag.Get<Purpose>();
@@ -77,14 +77,57 @@ public static class Cose
 
 
     /// <summary>
-    /// Creates a COSE_Sign1 message using an explicit signing function.
+    /// Creates a COSE_Sign1 message using an explicit signing delegate.
     /// </summary>
     /// <param name="protectedHeaderBytes">The serialized protected header.</param>
     /// <param name="unprotectedHeader">The unprotected header map (optional).</param>
     /// <param name="payload">The payload bytes.</param>
     /// <param name="buildSigStructure">Delegate to build the Sig_structure for signing.</param>
     /// <param name="privateKey">The private key for signing.</param>
-    /// <param name="signingFunction">The signing function to use.</param>
+    /// <param name="signingDelegate">The signing delegate to use.</param>
+    /// <param name="signaturePool">Memory pool for signature allocation.</param>
+    /// <returns>The COSE_Sign1 message containing the signature.</returns>
+    public static async ValueTask<CoseSign1Message> SignAsync(
+        ReadOnlyMemory<byte> protectedHeaderBytes,
+        IReadOnlyDictionary<int, object>? unprotectedHeader,
+        ReadOnlyMemory<byte> payload,
+        BuildSigStructureDelegate buildSigStructure,
+        PrivateKeyMemory privateKey,
+        SigningDelegate signingDelegate,
+        MemoryPool<byte> signaturePool)
+    {
+        ArgumentNullException.ThrowIfNull(buildSigStructure);
+        ArgumentNullException.ThrowIfNull(privateKey);
+        ArgumentNullException.ThrowIfNull(signingDelegate);
+        ArgumentNullException.ThrowIfNull(signaturePool);
+
+        byte[] toBeSigned = buildSigStructure(
+            protectedHeaderBytes.Span,
+            payload.Span,
+            []);
+
+        Signature signature = await signingDelegate(
+            privateKey.AsReadOnlyMemory(),
+            toBeSigned,
+            signaturePool).ConfigureAwait(false);
+
+        return new CoseSign1Message(
+            protectedHeaderBytes,
+            unprotectedHeader,
+            payload,
+            signature.AsReadOnlyMemory());
+    }
+
+
+    /// <summary>
+    /// Creates a COSE_Sign1 message using an explicit bound signing function.
+    /// </summary>
+    /// <param name="protectedHeaderBytes">The serialized protected header.</param>
+    /// <param name="unprotectedHeader">The unprotected header map (optional).</param>
+    /// <param name="payload">The payload bytes.</param>
+    /// <param name="buildSigStructure">Delegate to build the Sig_structure for signing.</param>
+    /// <param name="privateKey">The private key for signing.</param>
+    /// <param name="signingFunction">The bound signing function to use.</param>
     /// <param name="signaturePool">Memory pool for signature allocation.</param>
     /// <returns>The COSE_Sign1 message containing the signature.</returns>
     public static async ValueTask<CoseSign1Message> SignAsync(
@@ -104,7 +147,7 @@ public static class Cose
         byte[] toBeSigned = buildSigStructure(
             protectedHeaderBytes.Span,
             payload.Span,
-            ReadOnlySpan<byte>.Empty);
+            []);
 
         using Signature signature = await privateKey.SignWithKeyBytesAsync(signingFunction, toBeSigned, signaturePool).ConfigureAwait(false);
 
@@ -135,7 +178,7 @@ public static class Cose
         byte[] toBeSigned = buildSigStructure(
             message.ProtectedHeaderBytes.Span,
             message.Payload.Span,
-            ReadOnlySpan<byte>.Empty);
+            []);
 
         CryptoAlgorithm algorithm = publicKey.Tag.Get<CryptoAlgorithm>();
         Purpose purpose = publicKey.Tag.Get<Purpose>();
@@ -149,7 +192,38 @@ public static class Cose
 
 
     /// <summary>
-    /// Verifies a COSE_Sign1 message using an explicit verification function.
+    /// Verifies a COSE_Sign1 message using an explicit verification delegate.
+    /// </summary>
+    /// <param name="message">The COSE_Sign1 message to verify.</param>
+    /// <param name="buildSigStructure">Delegate to build the Sig_structure for verification.</param>
+    /// <param name="publicKey">The public key for verification.</param>
+    /// <param name="verificationDelegate">The verification delegate to use.</param>
+    /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
+    public static async ValueTask<bool> VerifyAsync(
+        CoseSign1Message message,
+        BuildSigStructureDelegate buildSigStructure,
+        PublicKeyMemory publicKey,
+        VerificationDelegate verificationDelegate)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(buildSigStructure);
+        ArgumentNullException.ThrowIfNull(publicKey);
+        ArgumentNullException.ThrowIfNull(verificationDelegate);
+
+        byte[] toBeSigned = buildSigStructure(
+            message.ProtectedHeaderBytes.Span,
+            message.Payload.Span,
+            ReadOnlySpan<byte>.Empty);
+
+        return await verificationDelegate(
+            toBeSigned,
+            message.Signature,
+            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Verifies a COSE_Sign1 message using an explicit bound verification function.
     /// </summary>
     /// <param name="message">The COSE_Sign1 message to verify.</param>
     /// <param name="buildSigStructure">Delegate to build the Sig_structure for verification.</param>
@@ -221,7 +295,7 @@ public static class Cose
         byte[] toBeSigned = buildSigStructure(
             protectedHeaderBytes.Span,
             payload.Span,
-            ReadOnlySpan<byte>.Empty);
+            []);
 
         var context = new CoseKeyContext(protectedHeaderBytes, unprotectedHeader, payload);
 
@@ -285,13 +359,7 @@ public static class Cose
             message.UnprotectedHeader,
             message.Payload);
 
-        PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken).ConfigureAwait(false);
-
-        if(material is null)
-        {
-            throw new InvalidOperationException("Key material resolution failed.");
-        }
-
+        PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException("Key material resolution failed.");
         Tag signatureTag = material.Tag;
         using PublicKey publicKey = await binder(material, binderState, cancellationToken).ConfigureAwait(false);
 

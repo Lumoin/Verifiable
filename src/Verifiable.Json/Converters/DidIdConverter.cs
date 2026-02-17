@@ -41,8 +41,9 @@ namespace Verifiable.Json.Converters
 
         public override void Write(Utf8JsonWriter writer, GenericDidMethod value, JsonSerializerOptions options)
         {
-    ArgumentNullException.ThrowIfNull(writer);
-    ArgumentNullException.ThrowIfNull(value);
+            ArgumentNullException.ThrowIfNull(writer);
+            ArgumentNullException.ThrowIfNull(value);
+
             writer.WriteStringValue((string)value);
         }
     }
