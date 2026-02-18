@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
+using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Tests.Resolver;

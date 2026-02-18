@@ -10,6 +10,7 @@ using Verifiable.Tests.Resolver;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using VDS.RDF.JsonLd;
+using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Tests.DataIntegrity;
 
