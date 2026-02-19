@@ -11,7 +11,7 @@ namespace Verifiable.Tests.SensitiveMemoryPool
     [TestClass]
     internal sealed class SensitiveMemoryPoolPropertyTests
     {
-        public TestContext TestContext { get; set; }
+        public TestContext TestContext { get; set; } = null!;
 
 
         [TestMethod]
@@ -22,7 +22,8 @@ namespace Verifiable.Tests.SensitiveMemoryPool
                 using var pool = new SensitiveMemoryPool<byte>();
                 using var buffer = pool.Rent(bufferSize);
 
-                Assert.AreEqual(bufferSize, buffer.Memory.Length, $"Buffer size {bufferSize} should return exactly {bufferSize} elements.");
+                Assert.AreEqual(bufferSize, buffer.Memory.Length,
+                    $"Buffer size {bufferSize} should return exactly {bufferSize} elements.");
             });
         }
 
@@ -36,12 +37,11 @@ namespace Verifiable.Tests.SensitiveMemoryPool
 
                 for(int i = 0; i < cycleCount; i++)
                 {
-                    var bufferSize = (i % 10) + 1; //Small range to test slab reuse.
+                    int bufferSize = (i % 10) + 1;
                     using var buffer = pool.Rent(bufferSize);
 
                     Assert.AreEqual(bufferSize, buffer.Memory.Length);
 
-                    //Write some data to verify buffer is writable.
                     if(buffer.Memory.Length > 0)
                     {
                         buffer.Memory.Span[0] = (byte)(i % 256);
@@ -69,12 +69,11 @@ namespace Verifiable.Tests.SensitiveMemoryPool
                         {
                             for(int j = 0; j < 100; j++)
                             {
-                                var size = (j % 50) + 1;
+                                int size = (j % 50) + 1;
                                 using var buffer = pool.Rent(size);
 
                                 Assert.AreEqual(size, buffer.Memory.Length);
 
-                                //Simulate some work.
                                 if(buffer.Memory.Length > 0)
                                 {
                                     buffer.Memory.Span.Fill((byte)(threadId % 256));
@@ -90,7 +89,8 @@ namespace Verifiable.Tests.SensitiveMemoryPool
 
                 Task.WaitAll(tasks, TestContext.CancellationToken);
 
-                Assert.IsTrue(exceptions.IsEmpty, $"No exceptions should occur during concurrent operations. Found: {string.Join(", ", exceptions)}.");
+                Assert.IsTrue(exceptions.IsEmpty,
+                    $"No exceptions should occur during concurrent operations. Found: {string.Join(", ", exceptions)}.");
             });
         }
 
@@ -102,18 +102,12 @@ namespace Verifiable.Tests.SensitiveMemoryPool
             {
                 using var pool = new SensitiveMemoryPool<byte>();
 
-                //The underlying array can't be accessed after disposal. So, the test checks indirectly via
-                //disposal and attempting to access the disposed buffer.
                 var buffer = pool.Rent(bufferSize);
-
-                //Fill with non-zero pattern.
                 buffer.Memory.Span.Fill(0xAA);
-
-                //Dispose should clear the memory and make the buffer inaccessible.
                 buffer.Dispose();
 
-                //Accessing disposed buffer should throw.
-                Assert.ThrowsExactly<ObjectDisposedException>(() => _ = buffer.Memory, "Accessing disposed buffer should throw ObjectDisposedException.");
+                Assert.ThrowsExactly<ObjectDisposedException>(() => _ = buffer.Memory,
+                    "Accessing disposed buffer should throw ObjectDisposedException.");
             });
         }
 
@@ -121,8 +115,7 @@ namespace Verifiable.Tests.SensitiveMemoryPool
         [TestMethod]
         public void PropertyHandlesVariousBufferSizeDistributions()
         {
-            //Test common cryptographic buffer sizes.
-            var cryptoSizes = new[] { 16, 20, 32, 48, 64, 128, 256, 384, 512, 1024 };
+            int[] cryptoSizes = [16, 20, 32, 48, 64, 128, 256, 384, 512, 1024];
 
             Gen.Int[0, cryptoSizes.Length - 1].Array[1, 100].Sample(sizeIndices =>
             {
@@ -142,6 +135,52 @@ namespace Verifiable.Tests.SensitiveMemoryPool
                 finally
                 {
                     foreach(var buffer in buffers)
+                    {
+                        buffer.Dispose();
+                    }
+                }
+            });
+        }
+
+
+        [TestMethod]
+        public void PropertyTrimExcessNeverBreaksActiveRentals()
+        {
+            Gen.Int[1, 50].Sample(operationCount =>
+            {
+                using var meter = new System.Diagnostics.Metrics.Meter("PropertyTest", "1.0.0");
+                using var pool = new SensitiveMemoryPool<byte>(
+                    meter,
+                    capacityStrategy: _ => 2);
+
+                var activeBuffers = new List<IMemoryOwner<byte>>();
+
+                try
+                {
+                    for(int i = 0; i < operationCount; i++)
+                    {
+                        int size = (i % 5 + 1) * 32;
+                        activeBuffers.Add(pool.Rent(size));
+
+                        //Periodically return some buffers and trim.
+                        if(i % 7 == 0 && activeBuffers.Count > 1)
+                        {
+                            activeBuffers[0].Dispose();
+                            activeBuffers.RemoveAt(0);
+                            pool.TrimExcess();
+                        }
+                    }
+
+                    //All remaining active buffers should still be accessible.
+                    foreach(var buffer in activeBuffers)
+                    {
+                        Assert.IsGreaterThan(0, buffer.Memory.Length,
+                            "Active buffers must remain accessible after TrimExcess.");
+                    }
+                }
+                finally
+                {
+                    foreach(var buffer in activeBuffers)
                     {
                         buffer.Dispose();
                     }

@@ -2,6 +2,7 @@
 using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.Metrics;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
@@ -16,13 +17,21 @@ namespace Verifiable.Benchmarks
     [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "Cleanup handled in GlobalCleanup.")]
     internal class SensitiveMemoryPoolBenchmarks
     {
+        private Meter meter = null!;
+        private Meter coldMeter = null!;
         private SensitiveMemoryPool<byte> sensitivePool = null!;
+        private SensitiveMemoryPool<byte> sensitivePoolNoTracing = null!;
         private ArrayPool<byte> arrayPool = null!;
 
         [GlobalSetup]
         public void Setup()
         {
+            meter = new Meter("Bench", "1.0.0");
+            coldMeter = new Meter("BenchCold", "1.0.0");
             sensitivePool = new SensitiveMemoryPool<byte>();
+            sensitivePoolNoTracing = new SensitiveMemoryPool<byte>(
+                meter,
+                tracingEnabled: false);
             arrayPool = ArrayPool<byte>.Shared;
         }
 
@@ -30,41 +39,92 @@ namespace Verifiable.Benchmarks
         public void Cleanup()
         {
             sensitivePool?.Dispose();
+            sensitivePoolNoTracing?.Dispose();
+            meter?.Dispose();
+            coldMeter?.Dispose();
         }
 
 
-        /// <summary>
-        /// Benchmark single allocation and immediate disposal pattern.
-        /// Common in cryptographic operations that need temporary buffers.
-        /// </summary>
-        [Benchmark]
-        [Arguments(32)]   //AES block size
-        [Arguments(64)]   //SHA-512 hash size
-        [Arguments(256)]  //RSA-2048 key material
-        [Arguments(512)]  //Larger crypto operations
-        public void SensitivePoolSingleAllocation(int bufferSize)
+        [Benchmark(Baseline = true)]
+        [Arguments(32)]
+        [Arguments(64)]
+        [Arguments(256)]
+        [Arguments(512)]
+        public void SensitivePoolRentReturn(int bufferSize)
         {
             using var buffer = sensitivePool.Rent(bufferSize);
-            //Simulate some work.
-            buffer.Memory.Span.Fill(0x42);
+            buffer.Memory.Span[0] = 0x42;
         }
 
 
         /// <summary>
-        /// Benchmark standard ArrayPool for comparison.
+        /// Quantifies the tracing overhead by comparing against a pool with tracing disabled.
         /// </summary>
         [Benchmark]
         [Arguments(32)]
         [Arguments(64)]
         [Arguments(256)]
         [Arguments(512)]
-        public void ArrayPoolSingleAllocation(int bufferSize)
+        public void SensitivePoolRentReturnNoTracing(int bufferSize)
+        {
+            using var buffer = sensitivePoolNoTracing.Rent(bufferSize);
+            buffer.Memory.Span[0] = 0x42;
+        }
+
+
+        /// <summary>
+        /// Standard MemoryPool comparison. This is the natural baseline since SensitiveMemoryPool
+        /// extends MemoryPool. Note that MemoryPool may return buffers larger than requested.
+        /// </summary>
+        [Benchmark]
+        [Arguments(32)]
+        [Arguments(64)]
+        [Arguments(256)]
+        [Arguments(512)]
+        public static void MemoryPoolSharedRentReturn(int bufferSize)
+        {
+            using var buffer = MemoryPool<byte>.Shared.Rent(bufferSize);
+            buffer.Memory.Span[0] = 0x42;
+        }
+
+
+        /// <summary>
+        /// ArrayPool comparison with explicit clearing to match SensitiveMemoryPool's
+        /// security guarantee of zeroing memory on return.
+        /// </summary>
+        [Benchmark]
+        [Arguments(32)]
+        [Arguments(64)]
+        [Arguments(256)]
+        [Arguments(512)]
+        public void ArrayPoolRentReturnWithClear(int bufferSize)
         {
             var buffer = arrayPool.Rent(bufferSize);
             try
             {
-                //Simulate some work.
-                new Span<byte>(buffer, 0, bufferSize).Fill(0x42);
+                buffer[0] = 0x42;
+            }
+            finally
+            {
+                arrayPool.Return(buffer, clearArray: true);
+            }
+        }
+
+
+        /// <summary>
+        /// ArrayPool without clearing. Shows the cost of the security guarantee.
+        /// </summary>
+        [Benchmark]
+        [Arguments(32)]
+        [Arguments(64)]
+        [Arguments(256)]
+        [Arguments(512)]
+        public void ArrayPoolRentReturnNoClear(int bufferSize)
+        {
+            var buffer = arrayPool.Rent(bufferSize);
+            try
+            {
+                buffer[0] = 0x42;
             }
             finally
             {
@@ -74,128 +134,92 @@ namespace Verifiable.Benchmarks
 
 
         /// <summary>
-        /// Benchmark standard byte array allocation for comparison.
+        /// Raw byte array allocation as a GC-pressure baseline.
+        /// Includes explicit clearing to match the security guarantee.
         /// </summary>
         [Benchmark]
         [Arguments(32)]
         [Arguments(64)]
         [Arguments(256)]
         [Arguments(512)]
-        public static void ByteArraySingleAllocation(int bufferSize)
+        public static void ByteArrayAllocateAndClear(int bufferSize)
         {
             var buffer = new byte[bufferSize];
-            //Simulate some work.
-            buffer.AsSpan().Fill(0x42);
-            //No explicit cleanup needed.
+            buffer[0] = 0x42;
+            Array.Clear(buffer);
         }
 
 
         /// <summary>
-        /// Benchmark multiple allocations of the same size.
-        /// Tests slab reuse efficiency in SensitiveMemoryPool.
+        /// Tests slab reuse efficiency. After warmup, the pool should serve
+        /// all requests from existing slabs with zero new allocations.
         /// </summary>
         [Benchmark]
         [Arguments(64, 100)]
         [Arguments(256, 50)]
-        public void SensitivePoolMultipleAllocations(int bufferSize, int count)
+        public void SensitivePoolSteadyStateReuse(int bufferSize, int count)
         {
             for(int i = 0; i < count; i++)
             {
                 using var buffer = sensitivePool.Rent(bufferSize);
-                buffer.Memory.Span.Fill((byte)(i % 256));
+                buffer.Memory.Span[0] = (byte)(i % 256);
             }
         }
 
 
         /// <summary>
-        /// Benchmark ArrayPool with multiple allocations for comparison.
+        /// Cold path: first allocation for a new size forces slab creation.
+        /// Uses a fresh pool per iteration to measure the cold-start cost.
         /// </summary>
         [Benchmark]
-        [Arguments(64, 100)]
-        [Arguments(256, 50)]
-        public void ArrayPoolMultipleAllocations(int bufferSize, int count)
+        public void SensitivePoolColdSlabCreation()
         {
-            for(int i = 0; i < count; i++)
-            {
-                var buffer = arrayPool.Rent(bufferSize);
-                try
-                {
-                    new Span<byte>(buffer, 0, Math.Min(bufferSize, buffer.Length)).Fill((byte)(i % 256));
-                }
-                finally
-                {
-                    arrayPool.Return(buffer);
-                }
-            }
+            using var pool = new SensitiveMemoryPool<byte>(
+                coldMeter,
+                tracingEnabled: false);
+
+            using var b1 = pool.Rent(32);
+            using var b2 = pool.Rent(64);
+            using var b3 = pool.Rent(128);
+            using var b4 = pool.Rent(256);
         }
 
 
         /// <summary>
-        /// Benchmark multiple concurrent allocations.
-        /// Tests allocation performance under concurrent load.
+        /// Tests contention on the pool lock under parallel load.
+        /// Uses Parallel.For for lower scheduling overhead than Task.Run.
         /// </summary>
         [Benchmark]
         [Arguments(32, 10)]
         [Arguments(64, 20)]
-        public void SensitivePoolConcurrentAllocations(int bufferSize, int concurrency)
+        public void SensitivePoolParallelContention(int bufferSize, int concurrency)
         {
-            var tasks = new Task[concurrency];
-            for(int t = 0; t < concurrency; t++)
+            Parallel.For(0, concurrency, _ =>
             {
-                tasks[t] = Task.Run(() =>
+                for(int i = 0; i < 50; i++)
                 {
-                    for(int i = 0; i < 50; i++)
-                    {
-                        using var buffer = sensitivePool.Rent(bufferSize);
-                        buffer.Memory.Span.Fill(0x33);
-                    }
-                });
-            }
-            Task.WaitAll(tasks);
+                    using var buffer = sensitivePool.Rent(bufferSize);
+                    buffer.Memory.Span[0] = 0x33;
+                }
+            });
         }
 
 
         /// <summary>
-        /// Benchmark mixed size allocation pattern.
-        /// Simulates realistic cryptographic workload with varying buffer sizes.
+        /// Mixed size allocation pattern matching realistic cryptographic workloads.
+        /// Common key, hash, and signature sizes.
         /// </summary>
         [Benchmark]
-        public void SensitivePoolMixedSizePattern()
+        public void SensitivePoolMixedCryptoSizes()
         {
-            var sizes = new[] { 16, 32, 48, 64, 96, 128, 256, 384, 512 };
+            ReadOnlySpan<int> sizes = [16, 32, 48, 64, 96, 128, 256, 384, 512];
 
             for(int round = 0; round < 20; round++)
             {
                 foreach(int size in sizes)
                 {
                     using var buffer = sensitivePool.Rent(size);
-                    buffer.Memory.Span.Fill((byte)(size % 256));
-                }
-            }
-        }
-
-
-        /// <summary>
-        /// Benchmark ArrayPool with mixed sizes for comparison.
-        /// </summary>
-        [Benchmark]
-        public void ArrayPoolMixedSizePattern()
-        {
-            var sizes = new[] { 16, 32, 48, 64, 96, 128, 256, 384, 512 };
-
-            for(int round = 0; round < 20; round++)
-            {
-                foreach(int size in sizes)
-                {
-                    var buffer = arrayPool.Rent(size);
-                    try
-                    {
-                        new Span<byte>(buffer, 0, Math.Min(size, buffer.Length)).Fill((byte)(size % 256));
-                    }
-                    finally
-                    {
-                        arrayPool.Return(buffer);
-                    }
+                    buffer.Memory.Span[0] = (byte)(size % 256);
                 }
             }
         }

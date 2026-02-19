@@ -2,59 +2,103 @@
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.Metrics;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Benchmarks
 {
     /// <summary>
-    /// Benchmarks testing memory pressure and allocation patterns.
+    /// Benchmarks testing memory pressure, capacity strategies, and trim behavior.
     /// </summary>
     [MemoryDiagnoser]
     [SimpleJob]
     [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "Cleanup handled in GlobalCleanup.")]
     internal class SensitiveMemoryPoolMemoryPressureBenchmarks
     {
-        private SensitiveMemoryPool<byte> sensitivePool = null!;
+        private Meter defaultMeter = null!;
+        private Meter flatMeter = null!;
+        private Meter perIterationMeter = null!;
+        private SensitiveMemoryPool<byte> defaultStrategyPool = null!;
+        private SensitiveMemoryPool<byte> flatStrategyPool = null!;
 
         [GlobalSetup]
         public void Setup()
         {
-            sensitivePool = new SensitiveMemoryPool<byte>();
-        }
+            defaultMeter = new Meter("BenchDefault", "1.0.0");
+            flatMeter = new Meter("BenchFlat", "1.0.0");
+            perIterationMeter = new Meter("BenchPerIteration", "1.0.0");
 
+            defaultStrategyPool = new SensitiveMemoryPool<byte>(
+                defaultMeter,
+                tracingEnabled: false);
+
+            flatStrategyPool = new SensitiveMemoryPool<byte>(
+                flatMeter,
+                capacityStrategy: _ => 4,
+                tracingEnabled: false);
+        }
 
         [GlobalCleanup]
         public void Cleanup()
         {
-            sensitivePool?.Dispose();
+            defaultStrategyPool?.Dispose();
+            flatStrategyPool?.Dispose();
+            defaultMeter?.Dispose();
+            flatMeter?.Dispose();
+            perIterationMeter?.Dispose();
         }
 
 
         /// <summary>
-        /// Test allocation efficiency with many small buffers.
+        /// Default capacity strategy: 32 segments for small buffers, fewer for larger ones.
+        /// Measures amortized allocation cost for the most common key sizes.
+        /// </summary>
+        [Benchmark(Baseline = true)]
+        public void DefaultStrategySmallBuffers()
+        {
+            for(int i = 0; i < 500; i++)
+            {
+                using var buffer = defaultStrategyPool.Rent(32);
+                buffer.Memory.Span[0] = (byte)i;
+            }
+        }
+
+
+        /// <summary>
+        /// Flat capacity strategy (always 4 segments per slab) for comparison.
+        /// Forces more frequent slab creation.
         /// </summary>
         [Benchmark]
-        public void SensitivePoolManySmallAllocations()
+        public void FlatStrategySmallBuffers()
         {
-            var buffers = new List<IMemoryOwner<byte>>();
+            for(int i = 0; i < 500; i++)
+            {
+                using var buffer = flatStrategyPool.Rent(32);
+                buffer.Memory.Span[0] = (byte)i;
+            }
+        }
 
+
+        /// <summary>
+        /// Measures the overhead of many simultaneous small allocations.
+        /// This pattern occurs when processing batches of credentials.
+        /// </summary>
+        [Benchmark]
+        [Arguments(100)]
+        [Arguments(500)]
+        [Arguments(1000)]
+        public void SimultaneousSmallAllocations(int count)
+        {
+            var buffers = new List<IMemoryOwner<byte>>(count);
             try
             {
-                //Allocate many small buffers.
-                for(int i = 0; i < 1000; i++)
+                for(int i = 0; i < count; i++)
                 {
-                    buffers.Add(sensitivePool.Rent(16));
-                }
-
-                //Use the buffers.
-                for(int i = 0; i < buffers.Count; i++)
-                {
-                    buffers[i].Memory.Span.Fill((byte)(i % 256));
+                    buffers.Add(defaultStrategyPool.Rent(16));
                 }
             }
             finally
             {
-                //Clean up all buffers.
                 foreach(var buffer in buffers)
                 {
                     buffer.Dispose();
@@ -64,36 +108,86 @@ namespace Verifiable.Benchmarks
 
 
         /// <summary>
-        /// Test allocation pattern with overlapping lifetimes.
+        /// Overlapping lifetimes with a sliding window. Models a pipeline where
+        /// new buffers are rented while older ones are still in flight.
         /// </summary>
         [Benchmark]
-        public void SensitivePoolOverlappingLifetimes()
+        [Arguments(5)]
+        [Arguments(20)]
+        public void SlidingWindowLifetimes(int windowSize)
         {
-            var buffers = new Queue<IMemoryOwner<byte>>();
+            var window = new Queue<IMemoryOwner<byte>>(windowSize);
             try
             {
-                //Build up allocated buffers.
-                for(int i = 0; i < 100; i++)
+                for(int i = 0; i < 200; i++)
                 {
-                    buffers.Enqueue(sensitivePool.Rent(64));
+                    window.Enqueue(defaultStrategyPool.Rent(64));
 
-                    //Periodically dispose some buffers.
-                    if(i > 10 && i % 5 == 0)
+                    if(window.Count > windowSize)
                     {
-                        for(int j = 0; j < 3 && buffers.Count > 0; j++)
-                        {
-                            buffers.Dequeue().Dispose();
-                        }
+                        window.Dequeue().Dispose();
                     }
                 }
             }
             finally
             {
-                //Clean up remaining buffers.
-                while(buffers.Count > 0)
+                while(window.Count > 0)
                 {
-                    buffers.Dequeue().Dispose();
+                    window.Dequeue().Dispose();
                 }
+            }
+        }
+
+
+        /// <summary>
+        /// Measures the cost of TrimExcess after a burst of allocations.
+        /// Models a long-running service that periodically reclaims memory.
+        /// </summary>
+        [Benchmark]
+        public void BurstThenTrim()
+        {
+            using var pool = new SensitiveMemoryPool<byte>(
+                perIterationMeter,
+                capacityStrategy: _ => 4,
+                tracingEnabled: false);
+
+            //Burst: hold many buffers simultaneously to force slab creation.
+            var burst = new List<IMemoryOwner<byte>>(50);
+            for(int i = 0; i < 50; i++)
+            {
+                burst.Add(pool.Rent(32));
+            }
+
+            //Return everything.
+            foreach(var b in burst)
+            {
+                b.Dispose();
+            }
+
+            //Trim the excess slabs.
+            pool.TrimExcess();
+
+            //Re-rent to verify the pool still works after trimming.
+            using var after = pool.Rent(32);
+            after.Memory.Span[0] = 0xFF;
+        }
+
+
+        /// <summary>
+        /// Allocation-heavy scenario with many distinct sizes.
+        /// Worst case for slab segregation: every size creates its own slab list.
+        /// </summary>
+        [Benchmark]
+        public void ManyDistinctSizes()
+        {
+            using var pool = new SensitiveMemoryPool<byte>(
+                perIterationMeter,
+                tracingEnabled: false);
+
+            for(int size = 1; size <= 128; size++)
+            {
+                using var buffer = pool.Rent(size);
+                buffer.Memory.Span[0] = (byte)size;
             }
         }
     }
