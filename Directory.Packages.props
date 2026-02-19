@@ -62,6 +62,14 @@
     <PackageVersion Include="WinSharpFuzz" Version="1.0.0" />
   </ItemGroup>
   <!--
+    Serialization project references that are restricted to Tests and Benchmarks projects only.
+    Verifiable.Json and Verifiable.Cbor are interchangeable serialization layers. Library projects
+    must not depend on them directly, keeping the core stack serialization-agnostic.
+  -->
+  <PropertyGroup>
+    <RestrictedSerializationProjects>Verifiable.Cbor;Verifiable.Json</RestrictedSerializationProjects>
+  </PropertyGroup>
+  <!--
     Validates that labeled packages are only referenced in appropriate projects.
     Runs after package references are collected but before compilation begins.
     Skips validation during design-time builds for better IDE performance.
@@ -79,6 +87,20 @@
       Reads package restrictions directly from Directory.Packages.props ItemGroup labels.
     -->
     <ValidateScopedPackages Condition="'$(_IsLibraryProject)' == 'true' AND '@(PackageReference)' != ''" ProjectName="$(MSBuildProjectName)" PackageReferences="@(PackageReference)" DirectoryPackagesPropsPath="$(MSBuildThisFileFullPath)" />
+  </Target>
+  <!--
+    Validates that serialization projects (Verifiable.Json, Verifiable.Cbor) are only referenced
+    by Tests and Benchmarks projects. This enforces a clean architecture boundary where the core
+    library stack remains serialization-agnostic and consumers choose their serialization layer.
+    Runs after project references are resolved but before compilation begins.
+  -->
+  <Target Name="ValidateProjectReferences" AfterTargets="ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <_IsTestProject Condition="$(MSBuildProjectName.EndsWith('.Tests'))">true</_IsTestProject>
+      <_IsBenchmarkProject Condition="$(MSBuildProjectName.EndsWith('.Benchmarks'))">true</_IsBenchmarkProject>
+      <_IsAllowedToReferenceSerializationProjects Condition="'$(_IsTestProject)' == 'true' OR '$(_IsBenchmarkProject)' == 'true'">true</_IsAllowedToReferenceSerializationProjects>
+    </PropertyGroup>
+    <ValidateSerializationProjectReferences Condition="'$(_IsAllowedToReferenceSerializationProjects)' != 'true' AND '@(ProjectReference)' != ''" ProjectName="$(MSBuildProjectName)" ProjectReferences="@(ProjectReference)" RestrictedProjects="$(RestrictedSerializationProjects)" />
   </Target>
   <!--Inline Roslyn task for validating package references. Compiled once per build session and cached in memory.-->
   <UsingTask TaskName="ValidateScopedPackages" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
@@ -139,6 +161,61 @@
                     $"Restricted package(s) '{string.Join(", ", violations)}' " +
                     $"referenced in library project '{ProjectName}'. " +
                     "These packages should only be used in their designated project types.");
+                return false;
+            }
+
+            return true;
+        }
+        ]]></Code>
+    </Task>
+  </UsingTask>
+  <!--
+    Inline Roslyn task for validating project references to serialization projects.
+    Ensures that only Tests and Benchmarks projects can reference Verifiable.Json and Verifiable.Cbor.
+    Compiled once per build session and cached in memory.
+  -->
+  <UsingTask TaskName="ValidateSerializationProjectReferences" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <ProjectName Required="true" />
+      <ProjectReferences ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <RestrictedProjects Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Code Type="Method" Language="cs"><![CDATA[
+        public override bool Execute()
+        {
+            //Early exit if no project references.
+            if(ProjectReferences == null || ProjectReferences.Length == 0)
+            {
+                return true;
+            }
+
+            //Parse the semicolon-delimited list of restricted project names.
+            var restricted = new HashSet<string>(
+                RestrictedProjects.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries),
+                StringComparer.OrdinalIgnoreCase);
+
+            //Extract project name from each reference path and check against the restricted set.
+            var violations = new List<string>();
+            foreach(var projRef in ProjectReferences)
+            {
+                var referencedProjectName = Path.GetFileNameWithoutExtension(projRef.ItemSpec);
+                if(restricted.Contains(referencedProjectName))
+                {
+                    violations.Add(referencedProjectName);
+                }
+            }
+
+            if(violations.Count > 0)
+            {
+                Log.LogError(
+                    $"Restricted project reference(s) '{string.Join(", ", violations)}' " +
+                    $"found in '{ProjectName}'. " +
+                    "Verifiable.Json and Verifiable.Cbor can only be referenced by Tests and Benchmarks projects.");
                 return false;
             }
 

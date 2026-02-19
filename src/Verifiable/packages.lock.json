@@ -656,13 +656,22 @@
           "Verifiable.Cryptography": "[0.0.0, )"
         }
       },
+      "verifiable.json": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.JCose": "[0.0.0, )",
+          "Verifiable.JsonPointer": "[0.0.0, )"
+        }
+      },
       "verifiable.jsonpointer": {
         "type": "Project"
       },
       "verifiable.tpm": {
         "type": "Project",
         "dependencies": {
-          "Verifiable.Cryptography": "[0.0.0, )"
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Json": "[0.0.0, )"
         }
       },
       "System.Security.Cryptography.ProtectedData": {

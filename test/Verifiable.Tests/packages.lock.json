@@ -991,7 +991,8 @@
       "verifiable.tpm": {
         "type": "Project",
         "dependencies": {
-          "Verifiable.Cryptography": "[0.0.0, )"
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Json": "[0.0.0, )"
         }
       },
       "BouncyCastle.Cryptography": {
