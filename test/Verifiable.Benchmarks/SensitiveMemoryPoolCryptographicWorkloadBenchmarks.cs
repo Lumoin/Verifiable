@@ -1,15 +1,14 @@
 ﻿using BenchmarkDotNet.Attributes;
 using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Benchmarks
 {
     /// <summary>
-    /// Benchmarks specifically focused on cryptographic operation patterns.
-    /// Tests realistic scenarios where SensitiveMemoryPool would be used.
+    /// Benchmarks modelling realistic cryptographic allocation patterns.
+    /// Each benchmark isolates the pool overhead by keeping simulated work minimal.
     /// </summary>
     [MemoryDiagnoser]
     [SimpleJob]
@@ -18,13 +17,12 @@ namespace Verifiable.Benchmarks
     {
         private SensitiveMemoryPool<byte> sensitivePool = null!;
         private ArrayPool<byte> arrayPool = null!;
-        private readonly byte[] testData = new byte[1024];
 
         [GlobalSetup]
         public void Setup()
         {
             sensitivePool = new SensitiveMemoryPool<byte>();
-            arrayPool = ArrayPool<byte>.Shared;            
+            arrayPool = ArrayPool<byte>.Shared;
         }
 
         [GlobalCleanup]
@@ -33,149 +31,158 @@ namespace Verifiable.Benchmarks
             sensitivePool?.Dispose();
         }
 
+
         /// <summary>
-        /// Simulate AES encryption workflow with SensitiveMemoryPool.
-        /// Allocates buffers for key, IV, and result.
+        /// AES-256 workflow: key (32) + IV (16) + plaintext buffer (1024).
+        /// Three concurrent rentals of different sizes.
         /// </summary>
         [Benchmark]
-        public void SensitivePoolAesWorkflow()
+        public void SensitivePoolAesPattern()
         {
-            //Allocate AES key buffer (32 bytes for AES-256).
-            using var keyBuffer = sensitivePool.Rent(32);
-            keyBuffer.Memory.Span.Fill(0x01);
+            using var key = sensitivePool.Rent(32);
+            using var iv = sensitivePool.Rent(16);
+            using var data = sensitivePool.Rent(1024);
 
-            //Allocate IV buffer (16 bytes).
-            using var ivBuffer = sensitivePool.Rent(16);
-            ivBuffer.Memory.Span.Fill(0x02);
-
-            //Allocate result buffer.
-            using var resultBuffer = sensitivePool.Rent(testData.Length);
-            testData.CopyTo(resultBuffer.Memory);
-
-            //Simulate some processing.
-            for(int i = 0; i < resultBuffer.Memory.Length; i++)
-            {
-                resultBuffer.Memory.Span[i] ^= keyBuffer.Memory.Span[i % 32];
-            }
+            key.Memory.Span[0] = 0x01;
+            iv.Memory.Span[0] = 0x02;
+            data.Memory.Span[0] = 0x03;
         }
 
-        /// <summary>
-        /// Simulate AES encryption workflow with ArrayPool for comparison.
-        /// </summary>
         [Benchmark]
-        public void ArrayPoolAesWorkflow()
+        public void ArrayPoolAesPattern()
         {
-            var keyBuffer = arrayPool.Rent(32);
-            var ivBuffer = arrayPool.Rent(16);
-            var resultBuffer = arrayPool.Rent(testData.Length);
-
+            var key = arrayPool.Rent(32);
+            var iv = arrayPool.Rent(16);
+            var data = arrayPool.Rent(1024);
             try
             {
-                new Span<byte>(keyBuffer, 0, 32).Fill(0x01);
-                new Span<byte>(ivBuffer, 0, 16).Fill(0x02);
-                testData.CopyTo(new Span<byte>(resultBuffer, 0, testData.Length));
-
-                //Simulate some processing.
-                for(int i = 0; i < testData.Length; i++)
-                {
-                    resultBuffer[i] ^= keyBuffer[i % 32];
-                }
+                key[0] = 0x01;
+                iv[0] = 0x02;
+                data[0] = 0x03;
             }
             finally
             {
-                arrayPool.Return(keyBuffer, clearArray: true);
-                arrayPool.Return(ivBuffer, clearArray: true);
-                arrayPool.Return(resultBuffer, clearArray: true);
+                arrayPool.Return(data, clearArray: true);
+                arrayPool.Return(iv, clearArray: true);
+                arrayPool.Return(key, clearArray: true);
             }
         }
 
+
         /// <summary>
-        /// Simulate hash computation workflow requiring temporary buffers.
+        /// P-256 ECDSA sign: private key (32) + nonce (32) + hash (32) + signature r (32) + signature s (32).
+        /// Five concurrent rentals of the same size, exercising slab reuse within a single operation.
         /// </summary>
         [Benchmark]
-        public void SensitivePoolHashWorkflow()
+        public void SensitivePoolEcdsaP256SignPattern()
         {
-            //Allocate working buffer for hash computation.
-            using var workBuffer = sensitivePool.Rent(64); //SHA-512 block size
-            using var hashBuffer = sensitivePool.Rent(64); //SHA-512 output size
+            using var privateKey = sensitivePool.Rent(32);
+            using var nonce = sensitivePool.Rent(32);
+            using var hash = sensitivePool.Rent(32);
+            using var r = sensitivePool.Rent(32);
+            using var s = sensitivePool.Rent(32);
 
-            //Simulate hash rounds.
-            for(int round = 0; round < 10; round++)
+            privateKey.Memory.Span[0] = 0x04;
+            nonce.Memory.Span[0] = 0x05;
+            hash.Memory.Span[0] = 0x06;
+            r.Memory.Span[0] = 0x07;
+            s.Memory.Span[0] = 0x08;
+        }
+
+        [Benchmark]
+        public void ArrayPoolEcdsaP256SignPattern()
+        {
+            var privateKey = arrayPool.Rent(32);
+            var nonce = arrayPool.Rent(32);
+            var hash = arrayPool.Rent(32);
+            var r = arrayPool.Rent(32);
+            var s = arrayPool.Rent(32);
+            try
             {
-                //Copy data to working buffer.
-                testData.AsSpan(0, Math.Min(64, testData.Length)).CopyTo(workBuffer.Memory.Span);
+                privateKey[0] = 0x04;
+                nonce[0] = 0x05;
+                hash[0] = 0x06;
+                r[0] = 0x07;
+                s[0] = 0x08;
+            }
+            finally
+            {
+                arrayPool.Return(s, clearArray: true);
+                arrayPool.Return(r, clearArray: true);
+                arrayPool.Return(hash, clearArray: true);
+                arrayPool.Return(nonce, clearArray: true);
+                arrayPool.Return(privateKey, clearArray: true);
+            }
+        }
 
-                //Simulate hash computation.
-                for(int i = 0; i < 64; i++)
+
+        /// <summary>
+        /// Batch signature verification: 100 iterations of rent-verify-return for a 64-byte signature.
+        /// Models a verifier processing a stream of credentials.
+        /// </summary>
+        [Benchmark]
+        public void SensitivePoolBatchVerify100()
+        {
+            for(int i = 0; i < 100; i++)
+            {
+                using var sig = sensitivePool.Rent(64);
+                using var pubKey = sensitivePool.Rent(65);
+                using var hash = sensitivePool.Rent(32);
+
+                sig.Memory.Span[0] = (byte)i;
+            }
+        }
+
+        [Benchmark]
+        public void ArrayPoolBatchVerify100()
+        {
+            for(int i = 0; i < 100; i++)
+            {
+                var sig = arrayPool.Rent(64);
+                var pubKey = arrayPool.Rent(65);
+                var hash = arrayPool.Rent(32);
+                try
                 {
-                    hashBuffer.Memory.Span[i] = (byte)(workBuffer.Memory.Span[i] + round);
+                    sig[0] = (byte)i;
+                }
+                finally
+                {
+                    arrayPool.Return(hash, clearArray: true);
+                    arrayPool.Return(pubKey, clearArray: true);
+                    arrayPool.Return(sig, clearArray: true);
                 }
             }
         }
 
-        /// <summary>
-        /// Simulate RSA key generation requiring large temporary buffers.
-        /// </summary>
-        [Benchmark]
-        public void SensitivePoolRsaKeyGenWorkflow()
-        {
-            //Allocate buffers for RSA-2048 key generation.
-            using var primeBuffer = sensitivePool.Rent(128); //1024-bit prime
-            using var keyBuffer = sensitivePool.Rent(256);   //2048-bit key
-            using var tempBuffer = sensitivePool.Rent(512);  //Working space
-
-            //Simulate key generation steps.
-            primeBuffer.Memory.Span.Fill(0x03);
-
-            //Simulate modular arithmetic operations.
-            for(int i = 0; i < 256; i++)
-            {
-                keyBuffer.Memory.Span[i] = (byte)(primeBuffer.Memory.Span[i % 128] * 2);
-            }
-
-            //Simulate additional computations.
-            keyBuffer.Memory.CopyTo(tempBuffer.Memory.Slice(0, 256));
-        }
 
         /// <summary>
-        /// Simulate ECDSA signature workflow with multiple small allocations.
+        /// High-frequency single-size allocation. Models a hot loop processing
+        /// many HMAC operations with the same key size.
         /// </summary>
         [Benchmark]
-        public void SensitivePoolEcdsaWorkflow()
-        {
-            //Allocate buffers for P-256 ECDSA.
-            using var privateKeyBuffer = sensitivePool.Rent(32); //256-bit private key
-            using var nonceBuffer = sensitivePool.Rent(32);      //256-bit nonce
-            using var rBuffer = sensitivePool.Rent(32);          //r component
-            using var sBuffer = sensitivePool.Rent(32);          //s component
-            using var hashBuffer = sensitivePool.Rent(32);       //SHA-256 hash
-
-            //Simulate signature generation.
-            privateKeyBuffer.Memory.Span.Fill(0x04);
-            nonceBuffer.Memory.Span.Fill(0x05);
-            testData.AsSpan(0, 32).CopyTo(hashBuffer.Memory.Span);
-
-            //Simulate elliptic curve operations.
-            for(int i = 0; i < 32; i++)
-            {
-                rBuffer.Memory.Span[i] = (byte)(nonceBuffer.Memory.Span[i] ^ hashBuffer.Memory.Span[i]);
-                sBuffer.Memory.Span[i] = (byte)(privateKeyBuffer.Memory.Span[i] + rBuffer.Memory.Span[i]);
-            }
-        }
-
-        /// <summary>
-        /// Simulate high-frequency cryptographic operations.
-        /// Tests performance under sustained load.
-        /// </summary>
-        [Benchmark]
-        public void SensitivePoolHighFrequencyOperations()
+        public void SensitivePoolHmacHotLoop1000()
         {
             for(int i = 0; i < 1000; i++)
             {
                 using var buffer = sensitivePool.Rent(32);
-                //Simulate quick cryptographic operation.
                 buffer.Memory.Span[0] = (byte)(i % 256);
-                buffer.Memory.Span[31] = (byte)((i * 2) % 256);
+            }
+        }
+
+        [Benchmark]
+        public void ArrayPoolHmacHotLoop1000()
+        {
+            for(int i = 0; i < 1000; i++)
+            {
+                var buffer = arrayPool.Rent(32);
+                try
+                {
+                    buffer[0] = (byte)(i % 256);
+                }
+                finally
+                {
+                    arrayPool.Return(buffer, clearArray: true);
+                }
             }
         }
     }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -9,6 +10,14 @@ using System.Threading;
 
 namespace Verifiable.Cryptography
 {
+    /// <summary>
+    /// Determines the number of segments to allocate per slab based on segment size.
+    /// </summary>
+    /// <param name="segmentSize">The size of each segment in elements.</param>
+    /// <returns>The number of segments to allocate in the new slab.</returns>
+    public delegate int SlabCapacityStrategy(int segmentSize);
+
+
     /// <summary>
     /// A thread-safe memory pool designed for cryptographic operations that returns memory
     /// of exactly the requested size. The pool automatically creates size-specific internal
@@ -22,27 +31,33 @@ namespace Verifiable.Cryptography
     /// </para>
     /// <list type="bullet">
     /// <item>
-    /// <description>Exact buffer sizes are required (no over-allocation)</description>
+    /// <description>Exact buffer sizes are required (no over-allocation).</description>
     /// </item>
     /// <item>
-    /// <description>Memory is automatically cleared on disposal for security</description>
+    /// <description>Memory is automatically cleared on disposal for security.</description>
     /// </item>
     /// <item>
-    /// <description>Size-specific pooling optimizes for common crypto buffer sizes</description>
+    /// <description>Size-specific pooling optimizes for common crypto buffer sizes.</description>
     /// </item>
     /// <item>
-    /// <description>Comprehensive metrics and tracing support operational monitoring</description>
+    /// <description>Comprehensive metrics and tracing support operational monitoring.</description>
     /// </item>
     /// <item>
-    /// <description>Thread-safe operations support concurrent cryptographic operations</description>
+    /// <description>Thread-safe operations support concurrent cryptographic operations.</description>
     /// </item>
     /// </list>
     /// <para>
     /// The pool maintains separate collections of slabs for each requested buffer size,
     /// ensuring that buffers of different sizes never interfere with each other and
-    /// allowing for size-specific optimization strategies in the future.
+    /// allowing for size-specific optimization strategies.
+    /// </para>
+    /// <para>
+    /// Slab capacity is determined by a <see cref="SlabCapacityStrategy"/> delegate,
+    /// allowing callers to tune amortization. The default strategy allocates more segments
+    /// for smaller buffers (common key/hash sizes) and fewer for larger buffers.
     /// </para>
     /// </remarks>
+    [DebuggerDisplay("SensitiveMemoryPool<{typeof(T).Name,nq}>: Slabs={totalSlabs}, Active={activeRentals}, Allocated={totalMemoryAllocated} bytes")]
     public class SensitiveMemoryPool<T>: MemoryPool<T>
     {
         /// <summary>
@@ -54,167 +69,200 @@ namespace Verifiable.Cryptography
 
         /// <summary>
         /// Indicates whether this memory pool instance has been disposed.
-        /// Used to prevent operations on disposed instances.
         /// </summary>
         private bool IsDisposed { get; set; }
 
         /// <summary>
         /// Lock object for synchronizing access to the slabs dictionary and metrics.
-        /// Uses the new Lock type for improved performance and explicit locking semantics.
         /// </summary>
         private Lock LockObject { get; } = new();
 
         /// <summary>
         /// Activity source for distributed tracing of memory operations.
-        /// Enables tracking of rent and return operations across service boundaries.
         /// </summary>
         private static ActivitySource ActivitySource { get; } = new("SensitiveMemoryPool");
 
         /// <summary>
         /// Diagnostic source for detailed operational logging and debugging.
-        /// Provides fine-grained insights into memory pool operations.
         /// </summary>
         private static DiagnosticSource DiagnosticSource { get; } = new DiagnosticListener("SensitiveMemoryPool");
 
         /// <summary>
         /// Meter instance for collecting and reporting memory pool metrics.
-        /// Provides operational insights for monitoring and alerting.
         /// </summary>
         private Meter PoolMeter { get; }
 
         /// <summary>
         /// Histogram tracking the distribution of requested buffer sizes.
-        /// Helps identify optimization opportunities for common sizes.
         /// </summary>
         private Histogram<int> BufferSizeHistogram { get; }
 
         /// <summary>
         /// Counter tracking successful rent operations.
-        /// Used for calculating allocation rates and success metrics.
         /// </summary>
         private Counter<long> RentSuccessCounter { get; }
 
         /// <summary>
         /// Counter tracking memory return operations.
-        /// Should correlate with rent operations for proper resource management.
         /// </summary>
         private Counter<long> ReturnCounter { get; }
 
         /// <summary>
+        /// Strategy for determining slab capacity based on segment size.
+        /// </summary>
+        private SlabCapacityStrategy CapacityStrategy { get; }
+
+        /// <summary>
+        /// Controls whether distributed tracing activities are created for memory operations.
+        /// Disable for high-frequency cryptographic workloads where tracing overhead is unacceptable.
+        /// </summary>
+        public bool TracingEnabled { get; }
+
+        /// <summary>
         /// Thread-safe counter for the total number of slabs created.
-        /// Updated atomically to ensure accuracy in multi-threaded scenarios.
         /// </summary>
         private int totalSlabs;
 
         /// <summary>
         /// Thread-safe counter for the total memory allocated in bytes.
-        /// Includes all memory in all slabs, both used and available.
         /// </summary>
         private long totalMemoryAllocated;
 
         /// <summary>
         /// Thread-safe counter for the number of currently active rentals.
-        /// Decremented when memory is returned to the pool.
         /// </summary>
         private int activeRentals;
 
         /// <summary>
         /// Thread-safe counter for the total number of segments across all slabs.
-        /// Used for calculating allocation efficiency metrics.
         /// </summary>
         private int totalSegments;
 
         /// <summary>
         /// Default initial capacity for new slabs when no allocation strategy is specified.
-        /// This value represents a balance between memory usage and allocation overhead
-        /// for typical cryptographic operations.
         /// </summary>
-        public const int InitialSlabCapacity = 4;
+        public const int DefaultInitialSlabCapacity = 4;
+
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SensitiveMemoryPool{T}"/> class
-        /// with default meter configuration.
+        /// Default strategy that allocates more segments for smaller buffers
+        /// and fewer for larger ones, tuned for common cryptographic material sizes.
         /// </summary>
-        public SensitiveMemoryPool() : this(new Meter(CryptographyMetrics.MeterName, "1.0.0"))
+        /// <param name="segmentSize">The size of each segment in elements.</param>
+        /// <returns>The number of segments to allocate in the new slab.</returns>
+        /// <example>
+        /// <code>
+        /// //Use the default strategy explicitly.
+        /// var pool = new SensitiveMemoryPool&lt;byte&gt;(
+        ///     capacityStrategy: SensitiveMemoryPool&lt;byte&gt;.DefaultCapacityStrategy);
+        /// </code>
+        /// </example>
+        public static int DefaultCapacityStrategy(int segmentSize) => segmentSize switch
+        {
+            <= 64 => 32,
+            <= 256 => 16,
+            <= 4096 => 8,
+            _ => 4
+        };
+
+
+        /// <summary>
+        /// Lazy singleton backing the <see cref="Shared"/> property.
+        /// </summary>
+        private static readonly Lazy<SensitiveMemoryPool<T>> SharedInstance =
+            new(() => new SensitiveMemoryPool<T>());
+
+        /// <summary>
+        /// Gets a shared singleton instance of the memory pool.
+        /// </summary>
+        /// <value>A singleton instance of memory pool for cryptographic material.</value>
+        /// <remarks>
+        /// Unlike the base <see cref="MemoryPool{T}.Shared"/>, this returns a lazily-initialized
+        /// singleton so that callers who expect shared-state semantics get correct behavior.
+        /// The shared instance uses the default capacity strategy and has tracing enabled.
+        /// </remarks>
+        public static new SensitiveMemoryPool<T> Shared => SharedInstance.Value;
+
+
+        /// <summary>
+        /// Initializes a new instance with default settings.
+        /// </summary>
+        public SensitiveMemoryPool()
+            : this(new Meter(CryptographyMetrics.MeterName, "1.0.0"))
         {
         }
 
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SensitiveMemoryPool{T}"/> class
-        /// with the specified meter for metrics collection.
+        /// Initializes a new instance with the specified meter.
         /// </summary>
         /// <param name="meter">The meter instance for collecting operational metrics.</param>
+        /// <param name="capacityStrategy">
+        /// Optional strategy for determining slab capacity. When <see langword="null"/>,
+        /// <see cref="DefaultCapacityStrategy"/> is used.
+        /// </param>
+        /// <param name="tracingEnabled">
+        /// When <see langword="true"/>, distributed tracing activities are created for
+        /// rent and return operations. Disable for high-frequency workloads.
+        /// </param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="meter"/> is null.</exception>
-        public SensitiveMemoryPool(Meter meter)
+        public SensitiveMemoryPool(
+            Meter meter,
+            SlabCapacityStrategy? capacityStrategy = null,
+            bool tracingEnabled = true)
         {
             ArgumentNullException.ThrowIfNull(meter);
 
             PoolMeter = meter;
+            CapacityStrategy = capacityStrategy ?? DefaultCapacityStrategy;
+            TracingEnabled = tracingEnabled;
             IsDisposed = false;
 
             //Initialize observable counters for automatic metric collection.
-            ObservableUpDownCounter<int> observableUpDownCounter3 = meter.CreateObservableUpDownCounter(
+            meter.CreateObservableUpDownCounter(
                 CryptographyMetrics.SensitiveMemoryPoolTotalSlabs,
                 () => totalSlabs,
                 "slabs",
-                "Total number of memory slabs created across all buffer sizes");
+                "Total number of memory slabs created across all buffer sizes.");
 
-            ObservableUpDownCounter<long> observableUpDownCounter2 = meter.CreateObservableUpDownCounter(
+            meter.CreateObservableUpDownCounter(
                 CryptographyMetrics.SensitiveMemoryPoolTotalMemoryAllocated,
                 () => totalMemoryAllocated,
                 "bytes",
-                "Total memory allocated across all slabs including available segments");
+                "Total memory allocated across all slabs including available segments.");
 
-            ObservableUpDownCounter<int> observableUpDownCounter1 = meter.CreateObservableUpDownCounter(
+            meter.CreateObservableUpDownCounter(
                 CryptographyMetrics.SensitiveMemoryPoolActiveRentals,
                 () => activeRentals,
                 "segments",
-                "Number of currently rented memory segments");
+                "Number of currently rented memory segments.");
 
-            ObservableUpDownCounter<double> observableUpDownCounter = meter.CreateObservableUpDownCounter(
+            meter.CreateObservableUpDownCounter(
                 CryptographyMetrics.SensitiveMemoryPoolAllocationEfficiency,
                 CalculateAllocationEfficiency,
                 "percent",
-                "Percentage of allocated memory currently in use");
+                "Percentage of allocated memory currently in use.");
 
-            //Initialize counters and histograms that we actively use.
             BufferSizeHistogram = meter.CreateHistogram<int>(
                 CryptographyMetrics.SensitiveMemoryPoolBufferSizeDistribution,
                 "bytes",
-                "Distribution of requested buffer sizes");
+                "Distribution of requested buffer sizes.");
 
             RentSuccessCounter = meter.CreateCounter<long>(
                 CryptographyMetrics.SensitiveMemoryPoolRentOperationsTotal,
                 "operations",
-                "Total number of successful rent operations");
+                "Total number of successful rent operations.");
 
             ReturnCounter = meter.CreateCounter<long>(
                 CryptographyMetrics.SensitiveMemoryPoolReturnOperationsTotal,
                 "operations",
-                "Total number of memory return operations");
+                "Total number of memory return operations.");
         }
 
 
         /// <summary>
-        /// Gets a singleton instance of a memory pool based on arrays.
-        /// </summary>
-        /// <value>A singleton instance of memory pool for cryptographic material.</value>
-        /// <remarks>
-        /// This property creates a new instance each time it's accessed, which is intentional
-        /// to avoid sharing state between different parts of an application. For shared usage,
-        /// consider creating and managing a single instance explicitly.
-        /// </remarks>
-        public static new SensitiveMemoryPool<T> Shared => new();
-
-        /// <summary>
         /// Gets the maximum buffer size that this pool can allocate.
         /// </summary>
-        /// <value>The maximum buffer size in elements, which is <see cref="int.MaxValue"/>.</value>
-        /// <remarks>
-        /// While the theoretical maximum is <see cref="int.MaxValue"/>, practical limitations
-        /// may apply based on available system memory and the specific allocation strategy.
-        /// </remarks>
         public override int MaxBufferSize => int.MaxValue;
 
 
@@ -229,17 +277,20 @@ namespace Verifiable.Cryptography
         /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="bufferSize"/> is less than or equal to zero.</exception>
         /// <remarks>
+        /// <para>
         /// This method is thread-safe and will automatically create size-specific slabs
         /// as needed. The returned memory is guaranteed to be exactly the requested size,
         /// unlike some memory pools that may return larger buffers for efficiency.
-        ///
-        /// The rented memory will be automatically cleared when disposed, ensuring that
-        /// sensitive cryptographic material does not remain in memory.
+        /// </para>
+        /// <para>
+        /// A single tracing activity spans the full rental lifecycle from rent to return.
+        /// The activity records buffer size tags and a return event upon disposal.
+        /// Tracing can be disabled via <see cref="TracingEnabled"/> for hot paths.
+        /// </para>
         /// </remarks>
-        [SuppressMessage("Naming", "CA1725:Parameter names should match base declaration", Justification = "This memorypool returns buffers on the specificed size.")]
+        [SuppressMessage("Naming", "CA1725:Parameter names should match base declaration", Justification = "This memory pool returns buffers of the specified size.")]
         public override IMemoryOwner<T> Rent(int bufferSize)
         {
-            //Validate preconditions before proceeding with allocation.
             ObjectDisposedException.ThrowIf(IsDisposed, this);
 
             if(bufferSize <= 0)
@@ -248,30 +299,37 @@ namespace Verifiable.Cryptography
                     "Buffer size must be greater than zero.");
             }
 
-            //Create tracing activity for this rent operation.
-            //IMPORTANT: Do NOT use 'using' here - the activity ownership is transferred to ExactSizeMemoryOwner.
-            var activity = ActivitySource.StartActivity("Rent", ActivityKind.Internal,
-                Activity.Current?.Context ?? default);
+            //Single activity spans the entire rental lifecycle from rent to return.
+            //Ownership is transferred to ExactSizeMemoryOwner which disposes it on return.
+            //StartActivity sets Activity.Current to the new activity. This is the intended
+            //behavior: the lifecycle activity is the ambient context during the rental scope.
+            //When ExactSizeMemoryOwner.Dispose calls LifecycleActivity.Dispose, Activity.Stop
+            //automatically restores Activity.Current to its parent.
+            Activity? activity = TracingEnabled
+                ? ActivitySource.StartActivity("Rent", ActivityKind.Internal,
+                    Activity.Current?.Context ?? default)
+                : null;
+
             activity?.AddTag("bufferSize", bufferSize.ToString(CultureInfo.InvariantCulture));
             activity?.AddTag("poolType", typeof(T).Name);
 
-            DiagnosticSource.Write("Rent.Start", new { bufferSize, poolType = typeof(T).Name });
+            if(DiagnosticSource.IsEnabled("Rent.Start"))
+            {
+                DiagnosticSource.Write("Rent.Start", new { bufferSize, poolType = typeof(T).Name });
+            }
 
-            //Record buffer size distribution for optimization insights.
             BufferSizeHistogram.Record(bufferSize);
 
             IMemoryOwner<T> result;
 
             using(LockObject.EnterScope())
             {
-                //Get or create the slab list for this specific buffer size.
                 if(!Slabs.TryGetValue(bufferSize, out List<Slab<T>>? slabList))
                 {
                     slabList = new List<Slab<T>>();
                     Slabs.Add(bufferSize, slabList);
                 }
 
-                //Try to find an existing slab with available capacity.
                 Slab<T>? availableSlab = null;
                 ArraySegment<T> rentedSegment = default;
 
@@ -284,52 +342,85 @@ namespace Verifiable.Cryptography
                     }
                 }
 
-                //Create a new slab if no existing slab has capacity.
-                if(availableSlab == null)
+                if(availableSlab is null)
                 {
-                    availableSlab = new Slab<T>(bufferSize, InitialSlabCapacity);
+                    int capacity = CapacityStrategy(bufferSize);
+                    availableSlab = new Slab<T>(bufferSize, capacity);
                     slabList.Add(availableSlab);
 
-                    //Update metrics for the new slab.
                     Interlocked.Increment(ref totalSlabs);
-                    Interlocked.Add(ref totalMemoryAllocated, bufferSize * InitialSlabCapacity);
-                    Interlocked.Add(ref totalSegments, InitialSlabCapacity);
+                    Interlocked.Add(ref totalMemoryAllocated, bufferSize * capacity);
+                    Interlocked.Add(ref totalSegments, capacity);
 
-                    //Rent from the newly created slab.
                     bool rentSuccess = availableSlab.TryRent(out rentedSegment);
-                    Debug.Assert(rentSuccess, "New slab should always have available capacity");
+                    Debug.Assert(rentSuccess, "New slab should always have available capacity.");
                 }
 
-                //Update active rental metrics.
                 Interlocked.Increment(ref activeRentals);
 
-                //Create the memory owner wrapper, passing the activity for proper lifecycle management.
                 result = new ExactSizeMemoryOwner<T>(rentedSegment, availableSlab, this, activity);
             }
 
-            //Record successful rent operation.
             RentSuccessCounter.Add(1, new KeyValuePair<string, object?>("bufferSize", bufferSize));
 
-            DiagnosticSource.Write("Rent.Stop", new { bufferSize, success = true });
-            activity?.SetStatus(ActivityStatusCode.Ok);
+            if(DiagnosticSource.IsEnabled("Rent.Stop"))
+            {
+                DiagnosticSource.Write("Rent.Stop", new { bufferSize, success = true });
+            }
 
             return result;
         }
 
 
         /// <summary>
-        /// Releases the unmanaged resources used by the <see cref="SensitiveMemoryPool{T}"/>
-        /// and optionally releases the managed resources.
+        /// Releases all slabs that have no active rentals, reclaiming their memory.
         /// </summary>
-        /// <param name="disposing">
-        /// <see langword="true"/> to release both managed and unmanaged resources;
-        /// <see langword="false"/> to release only unmanaged resources.
-        /// </param>
+        /// <returns>The number of slabs reclaimed.</returns>
         /// <remarks>
-        /// When disposing, this method clears all slabs and their associated memory,
-        /// ensuring that any sensitive cryptographic material is properly zeroed.
-        /// The pool becomes unusable after disposal.
+        /// <para>
+        /// Call this method periodically in long-running services to return unused memory
+        /// to the operating system. Slabs that still have rented segments are left untouched.
+        /// </para>
+        /// <para>
+        /// This operation acquires the pool lock for the duration of the trim. Avoid
+        /// calling it on hot paths.
+        /// </para>
         /// </remarks>
+        public int TrimExcess()
+        {
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
+
+            int reclaimed = 0;
+
+            using(LockObject.EnterScope())
+            {
+                foreach(var slabList in Slabs.Values)
+                {
+                    for(int i = slabList.Count - 1; i >= 0; i--)
+                    {
+                        var slab = slabList[i];
+                        if(slab.IsFull)
+                        {
+                            int segmentCount = slab.SegmentCount;
+                            int segmentSize = slab.SegmentSize;
+
+                            slab.Dispose();
+                            slabList.RemoveAt(i);
+
+                            Interlocked.Decrement(ref totalSlabs);
+                            Interlocked.Add(ref totalMemoryAllocated, -(long)(segmentSize * segmentCount));
+                            Interlocked.Add(ref totalSegments, -segmentCount);
+                            reclaimed++;
+                        }
+                    }
+                }
+            }
+
+            return reclaimed;
+        }
+
+
+        /// <inheritdoc/>
         protected override void Dispose(bool disposing)
         {
             if(!IsDisposed)
@@ -338,7 +429,6 @@ namespace Verifiable.Cryptography
                 {
                     using(LockObject.EnterScope())
                     {
-                        //Clear all slabs to ensure sensitive memory is zeroed.
                         foreach(var slabList in Slabs.Values)
                         {
                             foreach(var slab in slabList)
@@ -348,14 +438,12 @@ namespace Verifiable.Cryptography
                         }
                         Slabs.Clear();
 
-                        //Reset metrics to reflect disposal.
                         totalSlabs = 0;
                         totalMemoryAllocated = 0;
                         activeRentals = 0;
                         totalSegments = 0;
                     }
 
-                    //Dispose of metrics resources.
                     PoolMeter?.Dispose();
                 }
 
@@ -366,15 +454,10 @@ namespace Verifiable.Cryptography
 
         /// <summary>
         /// Returns a previously rented memory segment to its originating slab.
-        /// This method is called internally by <see cref="ExactSizeMemoryOwner{T}"/> during disposal.
         /// </summary>
         /// <param name="segment">The memory segment to return to the pool.</param>
         /// <param name="slab">The slab that originally provided the segment.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="slab"/> is null.</exception>
-        /// <remarks>
-        /// This method is thread-safe and automatically updates rental metrics.
-        /// The memory segment is cleared before being returned to ensure security.
-        /// </remarks>
         internal void Return(ArraySegment<T> segment, Slab<T> slab)
         {
             ArgumentNullException.ThrowIfNull(slab);
@@ -383,34 +466,25 @@ namespace Verifiable.Cryptography
             {
                 //Clear the memory segment for security before returning.
                 segment.AsSpan().Clear();
-
-                //Return the segment to its originating slab.
                 slab.Return(segment);
-
-                //Update metrics.
                 Interlocked.Decrement(ref activeRentals);
                 ReturnCounter.Add(1);
             }
 
-            DiagnosticSource.Write("Return.Complete", new
+            if(DiagnosticSource.IsEnabled("Return.Complete"))
             {
-                segmentOffset = segment.Offset,
-                segmentCount = segment.Count
-            });
+                DiagnosticSource.Write("Return.Complete", new
+                {
+                    segmentOffset = segment.Offset,
+                    segmentCount = segment.Count
+                });
+            }
         }
 
 
         /// <summary>
         /// Calculates the current allocation efficiency as a percentage.
         /// </summary>
-        /// <returns>
-        /// The allocation efficiency as a percentage (0-100), or 0 if no segments are allocated.
-        /// </returns>
-        /// <remarks>
-        /// Allocation efficiency indicates how well the pool is utilizing its allocated memory.
-        /// Higher values indicate better efficiency, while lower values may suggest fragmentation
-        /// or over-allocation relative to current usage patterns.
-        /// </remarks>
         private double CalculateAllocationEfficiency()
         {
             int currentTotalSegments = totalSegments;
@@ -427,24 +501,22 @@ namespace Verifiable.Cryptography
 
         /// <summary>
         /// Represents a contiguous block of memory divided into fixed-size segments.
-        /// Each slab manages segments of a specific size and tracks their availability.
+        /// Each slab manages segments of a specific size and tracks their availability
+        /// using a <see cref="BitArray"/> to prevent double-return vulnerabilities.
         /// </summary>
         /// <typeparam name="TElement">The type of elements stored in the slab.</typeparam>
-        /// <remarks>
-        /// Slabs use a stack-based allocation strategy for O(1) rent and return operations.
-        /// All segments within a slab are the same size, ensuring no fragmentation within the slab.
-        /// </remarks>
+        [DebuggerDisplay("Slab<{typeof(TElement).Name,nq}>: SegmentSize={SegmentSize}, Available={AvailableSegments.Count}/{SegmentCount}")]
         internal class Slab<TElement>: IDisposable
         {
             /// <summary>
             /// The size of each segment in this slab, measured in number of elements.
             /// </summary>
-            private int SegmentSize { get; }
+            public int SegmentSize { get; }
 
             /// <summary>
             /// The total number of segments that this slab can provide.
             /// </summary>
-            private int SegmentCount { get; }
+            public int SegmentCount { get; }
 
             /// <summary>
             /// The underlying memory buffer that contains all segments.
@@ -452,10 +524,15 @@ namespace Verifiable.Cryptography
             private TElement[] Buffer { get; }
 
             /// <summary>
-            /// Stack tracking the indices of available segments.
-            /// Using a stack provides O(1) allocation and deallocation.
+            /// Stack tracking the indices of available segments for O(1) allocation.
             /// </summary>
             private Stack<int> AvailableSegments { get; }
+
+            /// <summary>
+            /// Tracks which segments are currently rented. A set bit at position N means
+            /// segment N is rented. This prevents double-return corruption of the stack.
+            /// </summary>
+            private BitArray RentedSegments { get; }
 
             /// <summary>
             /// Indicates whether this slab has been disposed.
@@ -486,11 +563,9 @@ namespace Verifiable.Cryptography
 
                 SegmentSize = segmentSize;
                 SegmentCount = segmentCount;
-
-                //Allocate the backing buffer for all segments.
                 Buffer = new TElement[segmentSize * segmentCount];
+                RentedSegments = new BitArray(segmentCount, false);
 
-                //Initialize the stack with all segment indices.
                 AvailableSegments = new Stack<int>(segmentCount);
                 for(int i = 0; i < segmentCount; i++)
                 {
@@ -501,20 +576,14 @@ namespace Verifiable.Cryptography
             }
 
             /// <summary>
-            /// Gets a value indicating whether all segments in this slab are available.
+            /// Gets a value indicating whether all segments in this slab are available
+            /// (none are currently rented).
             /// </summary>
-            /// <value><see langword="true"/> if all segments are available; otherwise, <see langword="false"/>.</value>
-            /// <remarks>
-            /// A full slab has no rented segments and all segments are available for allocation.
-            /// This property can be used to identify slabs that could potentially be deallocated
-            /// during memory pressure scenarios.
-            /// </remarks>
             public bool IsFull => AvailableSegments.Count == SegmentCount;
 
             /// <summary>
             /// Gets a value indicating whether any segments are available for rent.
             /// </summary>
-            /// <value><see langword="true"/> if segments are available; otherwise, <see langword="false"/>.</value>
             public bool HasAvailableSegments => AvailableSegments.Count > 0;
 
 
@@ -529,10 +598,6 @@ namespace Verifiable.Cryptography
             /// <see langword="true"/> if a segment was successfully rented;
             /// otherwise, <see langword="false"/>.
             /// </returns>
-            /// <remarks>
-            /// This method is thread-safe when called from within appropriate synchronization context.
-            /// The caller is responsible for external synchronization across multiple slabs.
-            /// </remarks>
             public bool TryRent(out ArraySegment<TElement> segment)
             {
                 if(IsDisposed)
@@ -543,15 +608,17 @@ namespace Verifiable.Cryptography
 
                 if(AvailableSegments.TryPop(out int segmentIndex))
                 {
+                    Debug.Assert(!RentedSegments[segmentIndex],
+                        "Segment popped from available stack should not already be marked as rented.");
+
+                    RentedSegments[segmentIndex] = true;
                     int offset = segmentIndex * SegmentSize;
                     segment = new ArraySegment<TElement>(Buffer, offset, SegmentSize);
                     return true;
                 }
-                else
-                {
-                    segment = default;
-                    return false;
-                }
+
+                segment = default;
+                return false;
             }
 
 
@@ -560,18 +627,14 @@ namespace Verifiable.Cryptography
             /// </summary>
             /// <param name="segment">The segment to return.</param>
             /// <exception cref="ArgumentException">
-            /// Thrown when the segment does not belong to this slab or has invalid parameters.
+            /// Thrown when the segment does not belong to this slab, has invalid parameters,
+            /// or was not currently rented (double-return protection).
             /// </exception>
             /// <exception cref="ObjectDisposedException">Thrown when the slab has been disposed.</exception>
-            /// <remarks>
-            /// This method validates that the segment belongs to this slab before returning it.
-            /// The segment must have been previously rented from this specific slab instance.
-            /// </remarks>
             public void Return(ArraySegment<TElement> segment)
             {
                 ObjectDisposedException.ThrowIf(IsDisposed, nameof(Slab<TElement>));
 
-                //Validate that the segment belongs to this slab.
                 if(segment.Array != Buffer)
                 {
                     throw new ArgumentException("Segment does not belong to this slab.", nameof(segment));
@@ -584,12 +647,19 @@ namespace Verifiable.Cryptography
 
                 int segmentIndex = segment.Offset / SegmentSize;
 
-                //Validate segment alignment.
                 if(segment.Offset % SegmentSize != 0 || segmentIndex >= SegmentCount)
                 {
                     throw new ArgumentException("Invalid segment offset for this slab.", nameof(segment));
                 }
 
+                //Double-return protection: verify the segment is actually rented.
+                if(!RentedSegments[segmentIndex])
+                {
+                    throw new InvalidOperationException(
+                        "Segment was not rented or has already been returned.");
+                }
+
+                RentedSegments[segmentIndex] = false;
                 AvailableSegments.Push(segmentIndex);
             }
 
@@ -597,15 +667,10 @@ namespace Verifiable.Cryptography
             /// <summary>
             /// Releases all resources used by this slab and clears its memory.
             /// </summary>
-            /// <remarks>
-            /// This method clears the entire backing buffer to ensure that sensitive
-            /// cryptographic material does not remain in memory.
-            /// </remarks>
             public void Dispose()
             {
                 if(!IsDisposed)
                 {
-                    //Clear the entire buffer for security.
                     Array.Clear(Buffer);
                     AvailableSegments.Clear();
                     IsDisposed = true;
@@ -620,56 +685,53 @@ namespace Verifiable.Cryptography
         /// </summary>
         /// <typeparam name="TOwner">The type of elements in the memory segment.</typeparam>
         /// <remarks>
-        /// This class ensures that rented memory is properly returned to the pool and cleared
-        /// for security purposes. It integrates with distributed tracing to track memory usage
-        /// across service boundaries.
+        /// <para>
+        /// A single tracing activity spans the full rental lifecycle. On disposal, a return
+        /// event is recorded on the activity and then the activity is stopped and disposed.
+        /// This eliminates the need to manipulate <see cref="Activity.Current"/> and avoids
+        /// async context pollution.
+        /// </para>
         /// </remarks>
+        [DebuggerDisplay("ExactSizeMemoryOwner<{typeof(TOwner).Name,nq}>: Size={Segment.Count}, Disposed={Disposed}")]
         private class ExactSizeMemoryOwner<TOwner>: IMemoryOwner<TOwner>
         {
             /// <summary>
-            /// The activity that tracks the entire rental lifecycle.
-            /// This activity is owned by this instance and disposed when the memory is returned.
+            /// Activity tracking the full rental lifecycle from rent to return.
+            /// Null when tracing is disabled or no listener is attached.
             /// </summary>
-            private Activity? RentActivity { get; }
+            private Activity? LifecycleActivity { get; }
 
-            /// <summary>
-            /// The memory segment managed by this owner.
-            /// </summary>
             private ArraySegment<TOwner> Segment { get; }
 
-            /// <summary>
-            /// The slab that provided this memory segment.
-            /// </summary>
             private SensitiveMemoryPool<TOwner>.Slab<TOwner> Slab { get; }
 
-            /// <summary>
-            /// The memory pool that owns the slab.
-            /// </summary>
             private SensitiveMemoryPool<TOwner> Pool { get; }
 
-            /// <summary>
-            /// Indicates whether this memory owner has been disposed.
-            /// </summary>
             private bool Disposed { get; set; }
 
 
             /// <summary>
-            /// Initializes a new instance of the <see cref="ExactSizeMemoryOwner{TOwner}"/> class.
+            /// Initializes a new instance managing the given segment.
             /// </summary>
             /// <param name="segment">The memory segment to manage.</param>
             /// <param name="slab">The slab that provided the segment.</param>
             /// <param name="pool">The memory pool that owns the slab.</param>
-            /// <param name="rentActivity">The activity tracking this rental, ownership is transferred to this instance.</param>
+            /// <param name="lifecycleActivity">
+            /// The activity tracking this rental. Ownership is transferred to this instance.
+            /// </param>
             /// <exception cref="InvalidOperationException">
             /// Thrown when the segment is invalid or has no backing array.
             /// </exception>
             /// <exception cref="ArgumentNullException">
             /// Thrown when <paramref name="slab"/> or <paramref name="pool"/> is null.
             /// </exception>
-            public ExactSizeMemoryOwner(ArraySegment<TOwner> segment, SensitiveMemoryPool<TOwner>.Slab<TOwner> slab,
-                SensitiveMemoryPool<TOwner> pool, Activity? rentActivity)
+            public ExactSizeMemoryOwner(
+                ArraySegment<TOwner> segment,
+                SensitiveMemoryPool<TOwner>.Slab<TOwner> slab,
+                SensitiveMemoryPool<TOwner> pool,
+                Activity? lifecycleActivity)
             {
-                if(segment.Array == null || segment.Count == 0)
+                if(segment.Array is null || segment.Count == 0)
                 {
                     throw new InvalidOperationException("Failed to rent a valid memory segment.");
                 }
@@ -677,10 +739,10 @@ namespace Verifiable.Cryptography
                 ArgumentNullException.ThrowIfNull(slab);
                 ArgumentNullException.ThrowIfNull(pool);
 
-                RentActivity = rentActivity;  //Take ownership of the activity.
                 Segment = segment;
                 Slab = slab;
                 Pool = pool;
+                LifecycleActivity = lifecycleActivity;
                 Disposed = false;
             }
 
@@ -688,18 +750,12 @@ namespace Verifiable.Cryptography
             /// <summary>
             /// Gets the memory managed by this owner.
             /// </summary>
-            /// <value>The memory segment of exactly the requested size.</value>
             /// <exception cref="ObjectDisposedException">Thrown when this owner has been disposed.</exception>
-            /// <remarks>
-            /// The returned memory is guaranteed to be exactly the size that was originally
-            /// requested from the memory pool, ensuring no over-allocation for security-sensitive scenarios.
-            /// </remarks>
             public Memory<TOwner> Memory
             {
                 get
                 {
                     ObjectDisposedException.ThrowIf(Disposed, nameof(ExactSizeMemoryOwner<TOwner>));
-
                     return Segment;
                 }
             }
@@ -707,64 +763,44 @@ namespace Verifiable.Cryptography
 
             /// <summary>
             /// Returns the managed memory to the pool and clears it for security.
+            /// The lifecycle activity is finalized with a return event and then disposed.
             /// </summary>
             /// <remarks>
-            /// This method is thread-safe and can be called multiple times safely.
-            /// The memory is automatically cleared before being returned to the pool
-            /// to ensure that sensitive cryptographic material does not persist.
+            /// If the pool or slab has already been disposed (e.g. during application shutdown),
+            /// the return operation fails gracefully. The lifecycle activity records an error
+            /// status but no exception propagates, since throwing from Dispose causes cascading
+            /// failures in <see langword="finally"/> blocks.
             /// </remarks>
             public void Dispose()
             {
                 if(!Disposed)
                 {
-                    //Create dispose activity as a child of the rent activity.
-                    //We set the rent activity as current to ensure proper parent-child relationship.
-                    Activity? disposeActivity = null;
-                    var previousCurrent = Activity.Current;
-
                     try
                     {
-                        //Set rent activity as current so dispose becomes its child.
-                        if(RentActivity != null)
+                        LifecycleActivity?.AddEvent(new ActivityEvent("Return", tags: new ActivityTagsCollection
                         {
-                            Activity.Current = RentActivity;
-                        }
+                            { "segmentSize", Segment.Count },
+                            { "segmentOffset", Segment.Offset }
+                        }));
 
-                        //Create the dispose activity which will automatically use Activity.Current as parent.
-                        disposeActivity = ActivitySource.StartActivity("Dispose", ActivityKind.Internal);
-
-                        disposeActivity?.AddTag("segmentSize", Segment.Count.ToString(CultureInfo.InvariantCulture));
-                        disposeActivity?.AddTag("segmentOffset", Segment.Offset.ToString(CultureInfo.InvariantCulture));
-
-                        DiagnosticSource.Write("Dispose.Start", new
-                        {
-                            segmentOffset = Segment.Offset,
-                            segmentCount = Segment.Count
-                        });
-
-                        //Return the segment to the pool (which will clear it).
                         Pool.Return(Segment, Slab);
-
-                        DiagnosticSource.Write("Dispose.Stop", new
-                        {
-                            segmentOffset = Segment.Offset,
-                            segmentCount = Segment.Count
-                        });
-
-                        disposeActivity?.SetStatus(ActivityStatusCode.Ok);
+                        LifecycleActivity?.SetStatus(ActivityStatusCode.Ok);
+                    }
+                    catch(ObjectDisposedException ex)
+                    {
+                        //The pool or slab was disposed before this rental was returned.
+                        //This is expected during shutdown or when the pool is disposed
+                        //while rentals are still outstanding.
+                        LifecycleActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                    }
+                    catch(Exception ex)
+                    {
+                        LifecycleActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                        throw;
                     }
                     finally
                     {
-                        //Stop and dispose activities in correct order.
-                        disposeActivity?.Stop();
-                        disposeActivity?.Dispose();
-
-                        //Restore previous current before stopping rent activity.
-                        Activity.Current = previousCurrent;
-
-                        RentActivity?.Stop();
-                        RentActivity?.Dispose();
-
+                        LifecycleActivity?.Dispose();
                         Disposed = true;
                     }
                 }
