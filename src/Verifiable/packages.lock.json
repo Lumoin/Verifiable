@@ -66,12 +66,13 @@
       },
       "ModelContextProtocol": {
         "type": "Direct",
-        "requested": "[0.5.0-preview.1, )",
-        "resolved": "0.5.0-preview.1",
-        "contentHash": "QJpuNEnMZLJmvASbZ2nvMqENTZk3HYF83IihoHs3EJ5vTlz4sYjji9bXh2HP5UxpXIdHGn0iuHu0X2Tpq2zilw==",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "W7UX8AQ1qMjXyCDcpP25u/L1W2vIIgfhLX/B2ZtTU1VUyILXdmVbdRjkQesKVPT/wPMpYXIHUcZJTPdsGfKSfQ==",
         "dependencies": {
-          "Microsoft.Extensions.Hosting.Abstractions": "10.0.0",
-          "ModelContextProtocol.Core": "0.5.0-preview.1"
+          "Microsoft.Extensions.Caching.Abstractions": "10.0.3",
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.3",
+          "ModelContextProtocol.Core": "1.0.0"
         }
       },
       "SIL.ReleaseTasks": {
@@ -303,8 +304,16 @@
       },
       "Microsoft.Extensions.AI.Abstractions": {
         "type": "Transitive",
-        "resolved": "10.0.0",
-        "contentHash": "PHeuDm2tC6wJPEQvleUr2kNQaIMNqSf3aEbzkIPlZyQ0+0SYI9SwXVLdGD1NPBI+xB+Vb2lxZKhrFlIf9kP9WA=="
+        "resolved": "10.3.0",
+        "contentHash": "hDjDvUERvUH3HBMs2MDusOcGJBjAHOG5pJIU2x/HZEa4e1UthNKt89cwMi3B+ogJo6skki1XFjfgGN3ksnVqvQ=="
+      },
+      "Microsoft.Extensions.Caching.Abstractions": {
+        "type": "Transitive",
+        "resolved": "10.0.3",
+        "contentHash": "5dtXBvI8t3z8pF4tB38JYgi/enCL/DwSXxpqShgFz3SHJ7IzqFIMs6Gu5ik8sNZzcO9qQs3xIDpB3vDamkYG+Q==",
+        "dependencies": {
+          "Microsoft.Extensions.Primitives": "10.0.3"
+        }
       },
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
@@ -563,11 +572,11 @@
       },
       "ModelContextProtocol.Core": {
         "type": "Transitive",
-        "resolved": "0.5.0-preview.1",
-        "contentHash": "33V1Druluweou6x2LN6MSMbhiwHOYZxTUEJ1okFKjYDRIthctTVe0EJi//nifl4MRld2b5D5LnuV9sezz54p6g==",
+        "resolved": "1.0.0",
+        "contentHash": "QKboiQEq2MJMGeQ029Gy6xqge88abm0Px9lnG7hueOyf+EDCxi5SUATV+Df7GwT+NwWzkEsYG271bUQD+LGhEg==",
         "dependencies": {
-          "Microsoft.Extensions.AI.Abstractions": "10.0.0",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
+          "Microsoft.Extensions.AI.Abstractions": "10.3.0",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.3"
         }
       },
       "Newtonsoft.Json": {
@@ -656,22 +665,13 @@
           "Verifiable.Cryptography": "[0.0.0, )"
         }
       },
-      "verifiable.json": {
-        "type": "Project",
-        "dependencies": {
-          "Verifiable.Core": "[0.0.0, )",
-          "Verifiable.JCose": "[0.0.0, )",
-          "Verifiable.JsonPointer": "[0.0.0, )"
-        }
-      },
       "verifiable.jsonpointer": {
         "type": "Project"
       },
       "verifiable.tpm": {
         "type": "Project",
         "dependencies": {
-          "Verifiable.Cryptography": "[0.0.0, )",
-          "Verifiable.Json": "[0.0.0, )"
+          "Verifiable.Cryptography": "[0.0.0, )"
         }
       },
       "System.Security.Cryptography.ProtectedData": {

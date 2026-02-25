@@ -4,9 +4,9 @@
     "net10.0": {
       "CsCheck": {
         "type": "Direct",
-        "requested": "[4.5.0, )",
-        "resolved": "4.5.0",
-        "contentHash": "yr4KUycAY+6Hx8r7BYyLjymHiFFOVoOTokS54f9y0tRrKdbQUEc+i1ojwdr/gjme8ZeZnRGP68XgfUFZfYO/MQ=="
+        "requested": "[4.6.0, )",
+        "resolved": "4.6.0",
+        "contentHash": "KJVZdk3DeNFmWnrvIdtoj5aeqvumph4KX3dt6Hca2kH1Dp937/TlhMPcMHCIUFX9dHKSJGpGp9IHd0jhsP3ChA=="
       },
       "dotNetRdf": {
         "type": "Direct",
@@ -179,12 +179,13 @@
       },
       "ModelContextProtocol": {
         "type": "Direct",
-        "requested": "[0.5.0-preview.1, )",
-        "resolved": "0.5.0-preview.1",
-        "contentHash": "QJpuNEnMZLJmvASbZ2nvMqENTZk3HYF83IihoHs3EJ5vTlz4sYjji9bXh2HP5UxpXIdHGn0iuHu0X2Tpq2zilw==",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "W7UX8AQ1qMjXyCDcpP25u/L1W2vIIgfhLX/B2ZtTU1VUyILXdmVbdRjkQesKVPT/wPMpYXIHUcZJTPdsGfKSfQ==",
         "dependencies": {
-          "Microsoft.Extensions.Hosting.Abstractions": "10.0.0",
-          "ModelContextProtocol.Core": "0.5.0-preview.1"
+          "Microsoft.Extensions.Caching.Abstractions": "10.0.3",
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.3",
+          "ModelContextProtocol.Core": "1.0.0"
         }
       },
       "MSTest.TestAdapter": {
@@ -480,8 +481,8 @@
       },
       "Microsoft.Extensions.AI.Abstractions": {
         "type": "Transitive",
-        "resolved": "10.0.0",
-        "contentHash": "PHeuDm2tC6wJPEQvleUr2kNQaIMNqSf3aEbzkIPlZyQ0+0SYI9SwXVLdGD1NPBI+xB+Vb2lxZKhrFlIf9kP9WA=="
+        "resolved": "10.3.0",
+        "contentHash": "hDjDvUERvUH3HBMs2MDusOcGJBjAHOG5pJIU2x/HZEa4e1UthNKt89cwMi3B+ogJo6skki1XFjfgGN3ksnVqvQ=="
       },
       "Microsoft.Extensions.Caching.Abstractions": {
         "type": "Transitive",
@@ -807,11 +808,11 @@
       },
       "ModelContextProtocol.Core": {
         "type": "Transitive",
-        "resolved": "0.5.0-preview.1",
-        "contentHash": "33V1Druluweou6x2LN6MSMbhiwHOYZxTUEJ1okFKjYDRIthctTVe0EJi//nifl4MRld2b5D5LnuV9sezz54p6g==",
+        "resolved": "1.0.0",
+        "contentHash": "QKboiQEq2MJMGeQ029Gy6xqge88abm0Px9lnG7hueOyf+EDCxi5SUATV+Df7GwT+NwWzkEsYG271bUQD+LGhEg==",
         "dependencies": {
-          "Microsoft.Extensions.AI.Abstractions": "10.0.0",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
+          "Microsoft.Extensions.AI.Abstractions": "10.3.0",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.3"
         }
       },
       "MSTest.Analyzers": {
@@ -911,7 +912,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.Hosting": "[10.0.3, )",
-          "ModelContextProtocol": "[0.5.0-preview.1, )",
+          "ModelContextProtocol": "[1.0.0, )",
           "SimpleBase": "[5.6.0, )",
           "System.CommandLine": "[2.0.3, )",
           "Verifiable.Core": "[0.0.0, )",
@@ -991,8 +992,7 @@
       "verifiable.tpm": {
         "type": "Project",
         "dependencies": {
-          "Verifiable.Cryptography": "[0.0.0, )",
-          "Verifiable.Json": "[0.0.0, )"
+          "Verifiable.Cryptography": "[0.0.0, )"
         }
       },
       "BouncyCastle.Cryptography": {
