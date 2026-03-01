@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
+using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Did
@@ -12,7 +14,23 @@ namespace Verifiable.Tests.Did
     {
         /// <summary>
         /// The reader should be able to deserialize all these test files correctly.
+        /// This test also demonstrates how library users extend the serialization
+        /// infrastructure with their own types.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The preferred AOT-compatible approach for library users is to create their
+        /// own source-generated context and combine it with the library's context:
+        /// </para>
+        /// <code>
+        /// [JsonSerializable(typeof(MyExtendedDidDocument))]
+        /// internal partial class MyAppJsonContext : JsonSerializerContext { }
+        ///
+        /// options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
+        ///     VerifiableJsonContext.Default,
+        ///     MyAppJsonContext.Default);
+        /// </code>
+        /// </remarks>
         /// <param name="didDocumentFilename">The DID document data file under test.</param>
         /// <param name="didDocumentFileContents">The DID document data file contents.</param>
         [TestMethod]
@@ -21,7 +39,13 @@ namespace Verifiable.Tests.Did
         {
             TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
 
-            var options = TestSetup.DefaultSerializationOptions;
+            //Combine the library's source-generated context with a reflection fallback
+            //for the test-only TestExtendedDidDocument type. In production, library users
+            //would create their own source-generated context instead of DefaultJsonTypeInfoResolver.
+            var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+            options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
+                VerifiableJsonContext.Default,
+                new DefaultJsonTypeInfoResolver());
 
             TestExtendedDidDocument? deseserializedDidDocument = JsonSerializer.Deserialize<TestExtendedDidDocument>(didDocumentFileContents, options);
             string reserializedDidDocument = JsonSerializer.Serialize(deseserializedDidDocument, options);

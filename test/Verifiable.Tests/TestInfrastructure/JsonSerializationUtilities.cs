@@ -6,7 +6,7 @@ namespace Verifiable.Tests.TestInfrastructure
     /// <summary>
     /// Provides utility methods for testing JSON serialization and deserialization.
     /// </summary>
-    internal static class JsonTestingUtilities
+    internal static class JsonSerializationUtilities
     {
         /// <summary>
         /// Performs a serialization and deserialization cycle on the provided JSON string.

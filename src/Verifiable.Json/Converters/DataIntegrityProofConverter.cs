@@ -1,42 +1,25 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Json.Converters;
 
 /// <summary>
 /// Converts <see cref="DataIntegrityProof"/> to and from JSON with proper handling
-/// of the <c>verificationMethod</c> property based on <c>proofPurpose</c> and
-/// the <c>cryptosuite</c> property to <see cref="CryptosuiteInfo"/> instances.
+/// of the <c>verificationMethod</c> property based on <c>proofPurpose</c>,
+/// the <c>cryptosuite</c> property to <see cref="CryptosuiteInfo"/> instances,
+/// and verification method subclass dispatch for embedded methods.
 /// </summary>
 /// <remarks>
 /// <para>
-/// In Data Integrity proofs, the verification purpose is expressed via the <c>proofPurpose</c>
-/// property rather than the property name (as in DID documents). This converter reads
-/// <c>proofPurpose</c> first to determine which <see cref="VerificationMethodReference"/>
-/// subclass to instantiate for the <c>verificationMethod</c> property.
+/// This converter shares the same <see cref="VerificationMethodTypeSelector"/> as
+/// <see cref="VerificationMethodConverter"/>, ensuring that embedded verification
+/// methods in proofs are deserialized to the same subclass types as those in
+/// DID documents. This is critical for round-tripping: a proof's embedded
+/// verification method with additional properties (e.g., <c>blockchainAccountId</c>)
+/// must preserve those properties through serialization and deserialization.
 /// </para>
-/// <para>
-/// The <c>cryptosuite</c> property is deserialized to a <see cref="CryptosuiteInfo"/> instance
-/// using a factory delegate. Known cryptosuites are resolved to their singleton instances,
-/// while unknown cryptosuites are wrapped in <see cref="UnknownCryptosuiteInfo"/>.
-/// </para>
-/// <para>
-/// <strong>Extensibility:</strong>
-/// </para>
-/// <para>
-/// To support custom cryptosuites, provide a factory delegate that chains to
-/// <see cref="CryptosuiteInfo.FromName"/> for built-in types:
-/// </para>
-/// <code>
-/// var converter = new DataIntegrityProofConverter(name =>
-///     name == CryptosuiteInfo.MyCustomSuite.CryptosuiteName
-///         ? CryptosuiteInfo.MyCustomSuite
-///         : CryptosuiteInfo.FromName(name));
-///
-/// options.Converters.Add(converter);
-/// </code>
 /// <para>
 /// See <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">VC Data Integrity §4 Proofs</see>.
 /// </para>
@@ -44,27 +27,49 @@ namespace Verifiable.Json.Converters;
 public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
 {
     private CryptosuiteInfoFactoryDelegate CryptosuiteFactory { get; }
+    private VerificationMethodTypeSelector VmTypeSelector { get; }
 
 
     /// <summary>
-    /// Creates a converter using the default cryptosuite factory.
+    /// Creates a converter using the default cryptosuite factory and verification method type selector.
     /// </summary>
-    public DataIntegrityProofConverter() : this(CryptosuiteInfoFactory.Default)
+    public DataIntegrityProofConverter()
+        : this(VerificationMethodTypeSelectors.Default, CryptosuiteInfoFactory.Default)
     {
     }
 
 
     /// <summary>
-    /// Creates a converter using a custom cryptosuite factory.
+    /// Creates a converter using a custom cryptosuite factory and default VM type selector.
     /// </summary>
     /// <param name="cryptosuiteFactory">The factory for resolving cryptosuite names to instances.</param>
     public DataIntegrityProofConverter(CryptosuiteInfoFactoryDelegate cryptosuiteFactory)
+        : this(VerificationMethodTypeSelectors.Default, cryptosuiteFactory)
     {
-        CryptosuiteFactory = cryptosuiteFactory ?? throw new ArgumentNullException(nameof(cryptosuiteFactory));
     }
 
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Creates a converter with full control over both dispatch mechanisms.
+    /// </summary>
+    /// <param name="vmTypeSelector">
+    /// The delegate that maps verification method <c>type</c> strings to .NET types.
+    /// Should be the same instance used by <see cref="VerificationMethodConverter"/>
+    /// to ensure consistent type dispatch across DID documents and proofs.
+    /// </param>
+    /// <param name="cryptosuiteFactory">The factory for resolving cryptosuite names to instances.</param>
+    public DataIntegrityProofConverter(
+        VerificationMethodTypeSelector vmTypeSelector,
+        CryptosuiteInfoFactoryDelegate cryptosuiteFactory)
+    {
+        ArgumentNullException.ThrowIfNull(vmTypeSelector);
+        ArgumentNullException.ThrowIfNull(cryptosuiteFactory);
+        VmTypeSelector = vmTypeSelector;
+        CryptosuiteFactory = cryptosuiteFactory;
+    }
+
+
+    /// <inheritdoc />
     public override DataIntegrityProof Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if(reader.TokenType != JsonTokenType.StartObject)
@@ -72,13 +77,12 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
             throw new JsonException($"Expected StartObject for DataIntegrityProof, but got {reader.TokenType}.");
         }
 
-        //Parse the entire object to access proofPurpose before verificationMethod.
         using var document = JsonDocument.ParseValue(ref reader);
         var root = document.RootElement;
 
         var proof = new DataIntegrityProof();
 
-        //Extract proofPurpose first since we need it to determine VerificationMethod type.
+        //Extract proofPurpose first since it determines the VerificationMethodReference subclass.
         string? proofPurpose = null;
         if(root.TryGetProperty("proofPurpose", out var proofPurposeElement))
         {
@@ -86,19 +90,16 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
             proof.ProofPurpose = proofPurpose;
         }
 
-        //Process id.
         if(root.TryGetProperty("id", out var idElement))
         {
             proof.Id = idElement.GetString();
         }
 
-        //Process type.
         if(root.TryGetProperty("type", out var typeElement))
         {
             proof.Type = typeElement.GetString() ?? DataIntegrityProof.DataIntegrityProofType;
         }
 
-        //Process cryptosuite to CryptosuiteInfo using the factory.
         if(root.TryGetProperty("cryptosuite", out var cryptosuiteElement))
         {
             var cryptosuiteName = cryptosuiteElement.GetString();
@@ -108,19 +109,16 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
             }
         }
 
-        //Process created as XMLSCHEMA11-2 dateTimeStamp string.
         if(root.TryGetProperty("created", out var createdElement))
         {
             proof.Created = createdElement.GetString();
         }
 
-        //Process expires as XMLSCHEMA11-2 dateTimeStamp string.
         if(root.TryGetProperty("expires", out var expiresElement))
         {
             proof.Expires = expiresElement.GetString();
         }
 
-        //Process verificationMethod using proofPurpose to determine the concrete type.
         if(root.TryGetProperty("verificationMethod", out var verificationMethodElement))
         {
             proof.VerificationMethod = CreateVerificationMethodReference(
@@ -129,31 +127,26 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
                 options);
         }
 
-        //Process proofValue.
         if(root.TryGetProperty("proofValue", out var proofValueElement))
         {
             proof.ProofValue = proofValueElement.GetString();
         }
 
-        //Process domain.
         if(root.TryGetProperty("domain", out var domainElement))
         {
             proof.Domain = domainElement.GetString();
         }
 
-        //Process challenge.
         if(root.TryGetProperty("challenge", out var challengeElement))
         {
             proof.Challenge = challengeElement.GetString();
         }
 
-        //Process nonce.
         if(root.TryGetProperty("nonce", out var nonceElement))
         {
             proof.Nonce = nonceElement.GetString();
         }
 
-        //Process previousProof.
         if(root.TryGetProperty("previousProof", out var previousProofElement))
         {
             proof.PreviousProof = previousProofElement.GetString();
@@ -163,7 +156,7 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
     }
 
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override void Write(Utf8JsonWriter writer, DataIntegrityProof value, JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -241,13 +234,10 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
 
     /// <summary>
     /// Creates the appropriate <see cref="VerificationMethodReference"/> subclass based on proof purpose.
+    /// For embedded verification methods, uses the shared <see cref="VerificationMethodTypeSelector"/>
+    /// to ensure consistent subclass dispatch with DID document deserialization.
     /// </summary>
-    /// <param name="element">The JSON element containing the verification method value.</param>
-    /// <param name="proofPurpose">The proof purpose determining which subclass to create.</param>
-    /// <param name="options">The serializer options for deserializing embedded methods.</param>
-    /// <returns>The appropriate verification method reference subclass, or null.</returns>
-    /// <exception cref="JsonException">Thrown when proofPurpose is missing or unknown.</exception>
-    private static VerificationMethodReference? CreateVerificationMethodReference(
+    private VerificationMethodReference? CreateVerificationMethodReference(
         JsonElement element,
         string? proofPurpose,
         JsonSerializerOptions options)
@@ -257,7 +247,6 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
             return null;
         }
 
-        //Determine if this is a string reference or embedded object.
         string? referenceId = null;
         VerificationMethod? embedded = null;
 
@@ -267,15 +256,27 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
         }
         else if(element.ValueKind == JsonValueKind.Object)
         {
-            var embeddedJson = element.GetRawText();
-            embedded = JsonSerializer.Deserialize<VerificationMethod>(embeddedJson, options);
+            //Use the shared VM type selector for embedded verification methods.
+            //This ensures the same subclass is instantiated whether the verification
+            //method appears in a DID document or in a Data Integrity proof.
+            if(element.TryGetProperty("type", out var typeElement))
+            {
+                var vmTypeString = typeElement.GetString();
+                if(vmTypeString is not null)
+                {
+                    Type targetType = VmTypeSelector(vmTypeString);
+                    embedded = (VerificationMethod?)element.Deserialize(targetType, options);
+                }
+            }
+
+            //Fallback if no type property found.
+            embedded ??= element.Deserialize<VerificationMethod>(options);
         }
         else
         {
             throw new JsonException($"Expected string or object for verificationMethod, but got {element.ValueKind}.");
         }
 
-        //Create the appropriate subclass based on proofPurpose.
         return proofPurpose switch
         {
             AuthenticationMethod.Purpose => referenceId is not null

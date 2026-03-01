@@ -63,7 +63,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
     private const string ClaimAlumniOf = "alumniOf";
     private const string ClaimValueUniversityName = "Example University";
     private const string ClaimValueFakeUniversity = "Fake University";
-   
+
     /// <summary>
     /// JSON serialization options with all required converters for Verifiable Credentials.
     /// </summary>
@@ -103,7 +103,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, cancellationToken) =>
     {
         var canonical = Jcs.Canonicalize(json);
-        return ValueTask.FromResult(canonical);
+        return ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = canonical });
     };
 
     /// <summary>
@@ -148,32 +148,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
     /// Proof options serialization delegate using System.Text.Json.
     /// </summary>
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
-        (type, cryptosuiteName, created, verificationMethodId, proofPurpose, context) =>
-        {
-            if(context != null)
-            {
-                return JsonSerializer.Serialize(new
-                {
-                    type,
-                    cryptosuite = cryptosuiteName,
-                    created,
-                    verificationMethod = verificationMethodId,
-                    proofPurpose,
-                    context
-                }, JsonOptions);
-            }
-            else
-            {
-                return JsonSerializer.Serialize(new
-                {
-                    type,
-                    cryptosuite = cryptosuiteName,
-                    created,
-                    verificationMethod = verificationMethodId,
-                    proofPurpose
-                }, JsonOptions);
-            }
-        };
+        ProofOptionsSerializer.Create(JsonOptions);
 
 
     /// <summary>
@@ -202,12 +177,12 @@ internal sealed class DataIntegrityIssuanceFlowTests
 
         //Canonicalize without examples context. The alumniOf claim should be dropped.
         var canonicalFormWithoutContext = await RdfcCanonicalizer(credentialJson, ContextResolver, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        var alumniOfInCanonicalWithoutContext = canonicalFormWithoutContext.Contains(ClaimValueUniversityName, StringComparison.Ordinal);
+        var alumniOfInCanonicalWithoutContext = canonicalFormWithoutContext.CanonicalForm.Contains(ClaimValueUniversityName, StringComparison.Ordinal);
 
         //Add examples context and canonicalize again. The alumniOf claim should now be included.
         var credentialWithContext = AddContextToCredential(credentialJson, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl);
         var canonicalFormWithContext = await RdfcCanonicalizer(credentialWithContext, ContextResolver, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        var alumniOfInCanonicalWithContext = canonicalFormWithContext.Contains(ClaimValueUniversityName, StringComparison.Ordinal);
+        var alumniOfInCanonicalWithContext = canonicalFormWithContext.CanonicalForm.Contains(ClaimValueUniversityName, StringComparison.Ordinal);
 
         Assert.IsFalse(alumniOfInCanonicalWithoutContext, "Claim should NOT be in canonical form without examples context.");
         Assert.IsTrue(alumniOfInCanonicalWithContext, "Claim should be in canonical form with examples context.");

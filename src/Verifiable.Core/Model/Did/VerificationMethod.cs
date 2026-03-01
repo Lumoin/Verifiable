@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -34,7 +34,7 @@ namespace Verifiable.Core.Model.Did
     /// </description></item>
     /// </list>
     /// <para>
-    /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 §2.2 Verification Methods</see>.
+    /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 2.2 Verification Methods</see>.
     /// </para>
     /// </remarks>
     [DebuggerDisplay("VerificationMethod(Id = {Id}, Type = {Type}, Controller = {Controller})")]
@@ -58,7 +58,7 @@ namespace Verifiable.Core.Model.Did
         /// </description></item>
         /// </list>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 §2.2 Verification Methods</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 ï¿½2.2 Verification Methods</see>.
         /// </para>
         /// </remarks>
         public string? Id { get; set; }
@@ -78,7 +78,7 @@ namespace Verifiable.Core.Model.Did
         /// own controlled identifier document and confirm it references this verification method.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 §2.2 Verification Methods</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 ï¿½2.2 Verification Methods</see>.
         /// </para>
         /// </remarks>
         public string? Controller { get; set; }
@@ -93,11 +93,11 @@ namespace Verifiable.Core.Model.Did
         /// <list type="bullet">
         /// <item><description>
         /// <c>Multikey</c>: Uses <c>publicKeyMultibase</c> for key material encoding.
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#Multikey">CID 1.0 §2.2.2 Multikey</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#Multikey">CID 1.0 ï¿½2.2.2 Multikey</see>.
         /// </description></item>
         /// <item><description>
         /// <c>JsonWebKey</c>: Uses <c>publicKeyJwk</c> for key material in JWK format.
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#JsonWebKey">CID 1.0 §2.2.3 JsonWebKey</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#JsonWebKey">CID 1.0 ï¿½2.2.3 JsonWebKey</see>.
         /// </description></item>
         /// </list>
         /// <para>
@@ -123,7 +123,7 @@ namespace Verifiable.Core.Model.Did
         /// Use <see cref="Verifiable.Core.Model.Common.DateTimeStampFormat"/> for parsing and formatting.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 §2.2 Verification Methods</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 ï¿½2.2 Verification Methods</see>.
         /// </para>
         /// </remarks>
         public string? Expires { get; set; }
@@ -145,7 +145,7 @@ namespace Verifiable.Core.Model.Did
         /// Use <see cref="Verifiable.Core.Model.Common.DateTimeStampFormat"/> for parsing and formatting.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 §2.2 Verification Methods</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 ï¿½2.2 Verification Methods</see>.
         /// </para>
         /// </remarks>
         public string? Revoked { get; set; }
@@ -173,7 +173,7 @@ namespace Verifiable.Core.Model.Did
         /// and <c>publicKeyMultibase</c> simultaneously is prohibited.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-material">CID 1.0 §2.2.1 Verification Material</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-material">CID 1.0 ï¿½2.2.1 Verification Material</see>.
         /// </para>
         /// </remarks>
         public KeyFormat? KeyFormat { get; set; }

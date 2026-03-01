@@ -59,7 +59,7 @@ internal class JsonLdSelectionTests
         }
         """;
 
-   
+
     [TestMethod]
     public void SelectFragmentWithRootPointerReturnsMinimalDocument()
     {
@@ -152,7 +152,7 @@ internal class JsonLdSelectionTests
             "Invalid pointer must throw ArgumentException.");
     }
 
-       
+
     [TestMethod]
     public void SelectFragmentsMergesMultipleSelections()
     {
@@ -376,7 +376,7 @@ internal class JsonLdSelectionTests
         }
     }
 
-        
+
     [TestMethod]
     public async ValueTask FullSelectionAndPartitionFlowProducesConsistentResults()
     {
@@ -402,7 +402,7 @@ internal class JsonLdSelectionTests
         //The mandatory statements from the original should match what we'd get
         //from canonicalizing the selection document.
         var selectionCanonical = await RdfcCanonicalizer(selection, ContextResolver, TestContext.CancellationToken).ConfigureAwait(false);
-        var selectionStatements = selectionCanonical.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var selectionStatements = selectionCanonical.CanonicalForm.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         //Selection canonical should be a subset of mandatory statements (approximately).
         //Note: Due to blank node differences, exact matching isn't possible,

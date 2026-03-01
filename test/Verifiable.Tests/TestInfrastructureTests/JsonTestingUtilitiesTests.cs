@@ -4,7 +4,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.TestInfrastructureTests;
 
 /// <summary>
-/// Tests for <see cref="JsonTestingUtilities"/> to ensure the test infrastructure itself is correct.
+/// Tests for <see cref="JsonSerializationUtilities"/> to ensure the test infrastructure itself is correct.
 /// </summary>
 [TestClass]
 internal sealed class JsonTestingUtilitiesTests
@@ -20,7 +20,7 @@ internal sealed class JsonTestingUtilitiesTests
     {
         const string json = /*lang=json,strict*/ """{"name":"test","value":42}""";
 
-        var result = JsonTestingUtilities.CompareJsonElements(json, json);
+        var result = JsonSerializationUtilities.CompareJsonElements(json, json);
 
         Assert.IsTrue(result);
     }
@@ -37,7 +37,7 @@ internal sealed class JsonTestingUtilitiesTests
             }
             """;
 
-        var result = JsonTestingUtilities.CompareJsonElements(compact, formatted);
+        var result = JsonSerializationUtilities.CompareJsonElements(compact, formatted);
 
         Assert.IsTrue(result);
     }
@@ -49,7 +49,7 @@ internal sealed class JsonTestingUtilitiesTests
         const string order1 = /*lang=json,strict*/ """{"name":"test","value":42}""";
         const string order2 = /*lang=json,strict*/ """{"value":42,"name":"test"}""";
 
-        var result = JsonTestingUtilities.CompareJsonElements(order1, order2);
+        var result = JsonSerializationUtilities.CompareJsonElements(order1, order2);
 
         Assert.IsTrue(result);
     }
@@ -61,7 +61,7 @@ internal sealed class JsonTestingUtilitiesTests
         const string json1 = /*lang=json,strict*/ """{"name":"test","value":42}""";
         const string json2 = /*lang=json,strict*/ """{"name":"test","value":43}""";
 
-        var result = JsonTestingUtilities.CompareJsonElements(json1, json2);
+        var result = JsonSerializationUtilities.CompareJsonElements(json1, json2);
 
         Assert.IsFalse(result);
     }
@@ -73,7 +73,7 @@ internal sealed class JsonTestingUtilitiesTests
         const string json1 = /*lang=json,strict*/ """{"name":"test"}""";
         const string json2 = /*lang=json,strict*/ """{"title":"test"}""";
 
-        var result = JsonTestingUtilities.CompareJsonElements(json1, json2);
+        var result = JsonSerializationUtilities.CompareJsonElements(json1, json2);
 
         Assert.IsFalse(result);
     }
@@ -85,7 +85,7 @@ internal sealed class JsonTestingUtilitiesTests
         const string json1 = /*lang=json,strict*/ """{"items":[1,2,3]}""";
         const string json2 = /*lang=json,strict*/ """{"items":[1,2]}""";
 
-        var result = JsonTestingUtilities.CompareJsonElements(json1, json2);
+        var result = JsonSerializationUtilities.CompareJsonElements(json1, json2);
 
         Assert.IsFalse(result);
     }
@@ -98,7 +98,7 @@ internal sealed class JsonTestingUtilitiesTests
         const string json1 = /*lang=json,strict*/ """{"items":[1,2,3]}""";
         const string json2 = /*lang=json,strict*/ """{"items":[3,2,1]}""";
 
-        var result = JsonTestingUtilities.CompareJsonElements(json1, json2);
+        var result = JsonSerializationUtilities.CompareJsonElements(json1, json2);
 
         Assert.IsFalse(result);
     }
@@ -110,7 +110,7 @@ internal sealed class JsonTestingUtilitiesTests
         const string json1 = /*lang=json,strict*/ """{"outer":{"a":1,"b":2},"name":"test"}""";
         const string json2 = /*lang=json,strict*/ """{"name":"test","outer":{"b":2,"a":1}}""";
 
-        var result = JsonTestingUtilities.CompareJsonElements(json1, json2);
+        var result = JsonSerializationUtilities.CompareJsonElements(json1, json2);
 
         Assert.IsTrue(result);
     }
@@ -122,7 +122,7 @@ internal sealed class JsonTestingUtilitiesTests
         const string json1 = /*lang=json,strict*/ """{"value":null}""";
         const string json2 = /*lang=json,strict*/ """{"value":null}""";
 
-        var result = JsonTestingUtilities.CompareJsonElements(json1, json2);
+        var result = JsonSerializationUtilities.CompareJsonElements(json1, json2);
 
         Assert.IsTrue(result);
     }
@@ -134,7 +134,7 @@ internal sealed class JsonTestingUtilitiesTests
         const string json1 = /*lang=json,strict*/ """{"value":null}""";
         const string json2 = /*lang=json,strict*/ """{"value":"text"}""";
 
-        var result = JsonTestingUtilities.CompareJsonElements(json1, json2);
+        var result = JsonSerializationUtilities.CompareJsonElements(json1, json2);
 
         Assert.IsFalse(result);
     }
@@ -145,7 +145,7 @@ internal sealed class JsonTestingUtilitiesTests
     {
         const string inputJson = /*lang=json,strict*/ """{"name":"test","value":42}""";
 
-        var (deserializedObject, reserializedString) = JsonTestingUtilities.PerformSerializationCycle<TestDocument>(inputJson, DefaultOptions);
+        var (deserializedObject, reserializedString) = JsonSerializationUtilities.PerformSerializationCycle<TestDocument>(inputJson, DefaultOptions);
 
         Assert.IsNotNull(deserializedObject);
         Assert.AreEqual("test", deserializedObject.Name);
@@ -153,7 +153,7 @@ internal sealed class JsonTestingUtilitiesTests
         Assert.IsNotNull(reserializedString);
 
         //Verify round-trip produces equivalent JSON.
-        var isEquivalent = JsonTestingUtilities.CompareJsonElements(inputJson, reserializedString);
+        var isEquivalent = JsonSerializationUtilities.CompareJsonElements(inputJson, reserializedString);
         Assert.IsTrue(isEquivalent);
     }
 
@@ -164,7 +164,7 @@ internal sealed class JsonTestingUtilitiesTests
         const string inputJson = /*lang=json,strict*/ """{"name":"test","value":42,"extra":"data"}""";
 
         var (obj1, obj2, reserializedString1, reserializedString2) =
-            JsonTestingUtilities.PerformExtendedSerializationCycle<TestDocument, TestDocumentExtended>(inputJson, DefaultOptions);
+            JsonSerializationUtilities.PerformExtendedSerializationCycle<TestDocument, TestDocumentExtended>(inputJson, DefaultOptions);
 
         Assert.IsNotNull(obj1);
         Assert.IsNotNull(obj2);

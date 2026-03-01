@@ -90,12 +90,18 @@ public sealed class EcdsaSdDerivedProof: IEquatable<EcdsaSdDerivedProof>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Keys are canonical identifiers (e.g., "c14n0", "c14n1") that the verifier
-    /// will produce when canonicalizing the reveal document.
+    /// Keys are canonical identifiers (e.g., <c>"c14n0"</c>, <c>"c14n1"</c>) that the verifier
+    /// will produce when canonicalizing the reveal document. Values are HMAC-based identifiers
+    /// (e.g., <c>"uXYZ..."</c> base64url strings) that correspond to the blank node labels in
+    /// the originally signed statements.
     /// </para>
     /// <para>
-    /// Values are HMAC-based identifiers (e.g., "u..." base64url strings) that
-    /// correspond to the blank node labels in the originally signed statements.
+    /// Both keys and values use bare identifiers without the <c>"_:"</c> prefix, matching
+    /// the compressed label map format defined in
+    /// <see href="https://www.w3.org/TR/vc-di-ecdsa/#compresslabelmap">
+    /// VC Data Integrity ECDSA §3.5.5 compressLabelMap</see>. The compress algorithm
+    /// strips the <c>"c14n"</c> prefix from keys (storing integers) and base64url-decodes
+    /// values; the decompress algorithm reverses this.
     /// </para>
     /// </remarks>
     public required IReadOnlyDictionary<string, string> LabelMap { get; init; }

@@ -47,7 +47,7 @@ public sealed class TrustedAuthoritiesQueryConverter: JsonConverter<TrustedAutho
                 }
                 case TrustedAuthoritiesQuery.ValuesPropertyName:
                 {
-                    values = JsonSerializer.Deserialize<List<string>>(ref reader, options);
+                    values = ReadStringArray(ref reader);
                     break;
                 }
                 default:
@@ -81,8 +81,44 @@ public sealed class TrustedAuthoritiesQueryConverter: JsonConverter<TrustedAutho
         writer.WriteString(TrustedAuthoritiesQuery.TypePropertyName, value.Type);
 
         writer.WritePropertyName(TrustedAuthoritiesQuery.ValuesPropertyName);
-        JsonSerializer.Serialize(writer, value.Values, options);
+        writer.WriteStartArray();
+        foreach(var item in value.Values)
+        {
+            writer.WriteStringValue(item);
+        }
+
+        writer.WriteEndArray();
 
         writer.WriteEndObject();
+    }
+
+
+    /// <summary>
+    /// Reads a JSON array of strings manually without calling into <see cref="JsonSerializer"/>.
+    /// </summary>
+    private static List<string> ReadStringArray(ref Utf8JsonReader reader)
+    {
+        if(reader.TokenType != JsonTokenType.StartArray)
+        {
+            throw new JsonException("Expected StartArray for string array.");
+        }
+
+        var list = new List<string>();
+        while(reader.Read())
+        {
+            if(reader.TokenType == JsonTokenType.EndArray)
+            {
+                break;
+            }
+
+            if(reader.TokenType != JsonTokenType.String)
+            {
+                throw new JsonException($"Expected String but got {reader.TokenType}.");
+            }
+
+            list.Add(reader.GetString()!);
+        }
+
+        return list;
     }
 }

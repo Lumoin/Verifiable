@@ -221,7 +221,7 @@ internal sealed class SdJwtClaimRedactionTests
             () => SaltGenerator.Create());
 
         Assert.HasCount(1, disclosures);
-        Assert.AreEqual(42L, disclosures[0].ClaimValue);
+        Assert.AreEqual(42, disclosures[0].ClaimValue);
     }
 
 

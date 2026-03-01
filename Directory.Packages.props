@@ -39,10 +39,10 @@
     can use also any other packages in other projects.
   -->
   <ItemGroup Label="Test">
-    <PackageVersion Include="CsCheck" Version="4.6.0" />
+    <PackageVersion Include="CsCheck" Version="4.6.1" />
     <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.3.0" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.4.1" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.5.1" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.0.1" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.0.1" />
   </ItemGroup>

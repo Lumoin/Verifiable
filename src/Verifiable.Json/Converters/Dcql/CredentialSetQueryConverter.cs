@@ -43,7 +43,7 @@ public sealed class CredentialSetQueryConverter: JsonConverter<CredentialSetQuer
             {
                 case CredentialSetQuery.OptionsPropertyName:
                 {
-                    queryOptions = ReadNestedStringArrays(ref reader, options);
+                    queryOptions = ReadNestedStringArrays(ref reader);
                     break;
                 }
                 case CredentialSetQuery.RequiredPropertyName:
@@ -89,7 +89,13 @@ public sealed class CredentialSetQueryConverter: JsonConverter<CredentialSetQuer
         writer.WriteStartArray();
         foreach(var option in value.Options)
         {
-            JsonSerializer.Serialize(writer, option, options);
+            writer.WriteStartArray();
+            foreach(var item in option)
+            {
+                writer.WriteStringValue(item);
+            }
+
+            writer.WriteEndArray();
         }
 
         writer.WriteEndArray();
@@ -107,10 +113,11 @@ public sealed class CredentialSetQueryConverter: JsonConverter<CredentialSetQuer
         writer.WriteEndObject();
     }
 
+
     /// <summary>
-    /// Reads a JSON array of string arrays into a list of read-only string lists.
+    /// Reads a JSON array of string arrays manually without calling into <see cref="JsonSerializer"/>.
     /// </summary>
-    private static List<IReadOnlyList<string>> ReadNestedStringArrays(ref Utf8JsonReader reader, JsonSerializerOptions options)
+    private static List<IReadOnlyList<string>> ReadNestedStringArrays(ref Utf8JsonReader reader)
     {
         if(reader.TokenType != JsonTokenType.StartArray)
         {
@@ -125,13 +132,39 @@ public sealed class CredentialSetQueryConverter: JsonConverter<CredentialSetQuer
                 break;
             }
 
-            var innerList = JsonSerializer.Deserialize<List<string>>(ref reader, options);
-            if(innerList is not null)
-            {
-                result.Add(innerList);
-            }
+            result.Add(ReadStringArray(ref reader));
         }
 
         return result;
+    }
+
+
+    /// <summary>
+    /// Reads a JSON array of strings manually without calling into <see cref="JsonSerializer"/>.
+    /// </summary>
+    private static List<string> ReadStringArray(ref Utf8JsonReader reader)
+    {
+        if(reader.TokenType != JsonTokenType.StartArray)
+        {
+            throw new JsonException("Expected StartArray for string array.");
+        }
+
+        var list = new List<string>();
+        while(reader.Read())
+        {
+            if(reader.TokenType == JsonTokenType.EndArray)
+            {
+                break;
+            }
+
+            if(reader.TokenType != JsonTokenType.String)
+            {
+                throw new JsonException($"Expected String but got {reader.TokenType}.");
+            }
+
+            list.Add(reader.GetString()!);
+        }
+
+        return list;
     }
 }

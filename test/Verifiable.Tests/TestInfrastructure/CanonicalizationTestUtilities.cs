@@ -92,7 +92,7 @@ internal static class CanonicalizationTestUtilities
     /// </remarks>
     public const string CitizenshipV4Rc1ContextUrl = "https://w3id.org/citizenship/v4rc1";
 
-    
+
 
     /// <summary>
     /// W3C Verifiable Credentials Examples v2 context document.
@@ -140,7 +140,7 @@ internal static class CanonicalizationTestUtilities
     /// </remarks>
     public static string CredentialsExamplesV2ContextSha256 { get; } = ComputeContextHash(CredentialsExamplesV2ContextJson);
 
-    
+
     /// <summary>
     /// Pre-warms the context cache by fetching and verifying all known contexts asynchronously.
     /// </summary>
@@ -292,7 +292,32 @@ internal static class CanonicalizationTestUtilities
             var canonicalizer = new RdfCanonicalizer();
             var canonicalizedResult = canonicalizer.Canonicalize(store);
 
-            return ValueTask.FromResult(canonicalizedResult.SerializedNQuads);
+            //Extract the RDFC label map (canonical_id → original_bnode_id).
+            //dotNetRdf's IssuedIdentifiersMap maps input → canonical (original → c14n).
+            //We invert it for our convention: canonical → original.
+            //
+            //dotNetRdf may include the "_:" prefix in identifier strings. We strip it
+            //to match the format used by BlankNodeRelabeling.LabelMap (bare identifiers
+            //like "c14n0", not "_:c14n0").
+            Dictionary<string, string>? labelMap = null;
+            if(canonicalizedResult.IssuedIdentifiersMap is { Count: > 0 } issuedMap)
+            {
+                labelMap = new Dictionary<string, string>(issuedMap.Count, StringComparer.Ordinal);
+                foreach(var (originalId, canonicalId) in issuedMap)
+                {
+                    var bareOriginal = StripBlankNodePrefix(originalId);
+                    var bareCanonical = StripBlankNodePrefix(canonicalId);
+                    labelMap[bareCanonical] = bareOriginal;
+                }
+            }
+
+            var result = new CanonicalizationResult
+            {
+                CanonicalForm = canonicalizedResult.SerializedNQuads,
+                LabelMap = labelMap
+            };
+
+            return ValueTask.FromResult(result);
         };
     }
 
@@ -534,4 +559,15 @@ internal static class CanonicalizationTestUtilities
             };
         };
     }
+
+
+    /// <summary>
+    /// Strips the <c>"_:"</c> prefix from a blank node identifier if present.
+    /// </summary>
+    /// <param name="identifier">The blank node identifier, possibly with <c>"_:"</c> prefix.</param>
+    /// <returns>The bare identifier (e.g., <c>"c14n0"</c> or <c>"b0"</c>).</returns>
+    private static string StripBlankNodePrefix(string identifier) =>
+        identifier.StartsWith("_:", StringComparison.Ordinal)
+            ? identifier[2..]
+            : identifier;
 }

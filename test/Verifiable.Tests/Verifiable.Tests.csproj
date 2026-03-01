@@ -33,7 +33,7 @@
     <PackageReference Include="SimpleBase" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage">      
-      <VersionOverride>18.4.1</VersionOverride>
+      <VersionOverride>18.5.1</VersionOverride>
     </PackageReference>
   </ItemGroup>
 

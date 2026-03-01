@@ -53,7 +53,7 @@ internal sealed class SdJwtVcIssuanceTests
 
         string[] jwtParts = token.IssuerSigned.Split('.');
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(jwtParts[0], Pool);
-        Dictionary<string, object>? header = JsonSerializer.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span);
+        Dictionary<string, object>? header = JsonSerializer.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span, CredentialSecuringMaterial.JsonOptions);
 
         Assert.IsNotNull(header);
         Assert.AreEqual("EdDSA", header[JwkProperties.Alg].ToString());

@@ -131,8 +131,8 @@ namespace Verifiable.Tests.Builders
                 .Aggregate("Assessment failed. Failed claims: ", (acc, claim) => $"{acc}{claim.Id}, ").TrimEnd(',', '.'));
 
             string serializedDidDocument = JsonSerializer.Serialize(webDidDocument, TestSetup.DefaultSerializationOptions);
-            var (deserializedDidDocument, reserializedDidDocument) = JsonTestingUtilities.PerformSerializationCycle<DidDocument>(serializedDidDocument, TestSetup.DefaultSerializationOptions);
-            bool areJsonElementsEqual = JsonTestingUtilities.CompareJsonElements(serializedDidDocument, reserializedDidDocument);
+            var (deserializedDidDocument, reserializedDidDocument) = JsonSerializationUtilities.PerformSerializationCycle<DidDocument>(serializedDidDocument, TestSetup.DefaultSerializationOptions);
+            bool areJsonElementsEqual = JsonSerializationUtilities.CompareJsonElements(serializedDidDocument, reserializedDidDocument);
             Assert.IsTrue(areJsonElementsEqual, $"JSON string '{serializedDidDocument}' did not pass roundtrip test.");
             Assert.IsNotNull(deserializedDidDocument);
             Assert.IsNotNull(deserializedDidDocument.Id);

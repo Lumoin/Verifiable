@@ -215,7 +215,7 @@ internal sealed class JcsPropertyTests
             var jsonString = json.ToJsonString();
             var canonical = Jcs.Canonicalize(jsonString);
 
-            var isEqual = JsonTestingUtilities.CompareJsonElements(jsonString, canonical);
+            var isEqual = JsonSerializationUtilities.CompareJsonElements(jsonString, canonical);
 
             Assert.IsTrue(isEqual, "Canonicalization must preserve JSON semantic equality.");
         });
@@ -328,7 +328,7 @@ internal sealed class JcsPropertyTests
             var viaCanonicalizeString = Jcs.Canonicalize(jsonString);
 
             //Both approaches should yield semantically equivalent canonical JSON.
-            var isEqual = JsonTestingUtilities.CompareJsonElements(viaSerialize, viaCanonicalizeString);
+            var isEqual = JsonSerializationUtilities.CompareJsonElements(viaSerialize, viaCanonicalizeString);
             Assert.IsTrue(isEqual, "Jcs.Serialize and Jcs.Canonicalize should produce semantically equivalent output.");
         });
     }
@@ -394,11 +394,11 @@ internal sealed class JcsPropertyTests
 
     /// <summary>
     /// Asserts that all object properties in the JSON tree are lexicographically sorted.
-    /// Uses <see cref="JsonTestingUtilities.EnumerateObjects"/> for iterative traversal.
+    /// Uses <see cref="JsonSerializationUtilities.EnumerateObjects"/> for iterative traversal.
     /// </summary>
     private static void AssertObjectPropertiesAreSorted(JsonNode? root)
     {
-        foreach(var obj in JsonTestingUtilities.EnumerateObjects(root))
+        foreach(var obj in JsonSerializationUtilities.EnumerateObjects(root))
         {
             var propertyNames = obj.Select(kvp => kvp.Key).ToList();
             for(int i = 1; i < propertyNames.Count; i++)
