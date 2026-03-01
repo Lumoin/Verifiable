@@ -551,7 +551,7 @@ internal sealed class CredentialSecuringMethodsTests
 
 
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, cancellationToken) =>
-        ValueTask.FromResult(Jcs.Canonicalize(json));
+        ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
 
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
@@ -564,10 +564,7 @@ internal sealed class CredentialSecuringMethodsTests
         JsonSerializer.Deserialize<VerifiableCredential>(serialized, JsonOptions)!;
 
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
-        (type, cryptosuiteName, created, verificationMethodId, proofPurpose, context) =>
-            context != null
-                ? JsonSerializer.Serialize(new { type, cryptosuite = cryptosuiteName, created, verificationMethod = verificationMethodId, proofPurpose, context }, JsonOptions)
-                : JsonSerializer.Serialize(new { type, cryptosuite = cryptosuiteName, created, verificationMethod = verificationMethodId, proofPurpose }, JsonOptions);
+        ProofOptionsSerializer.Create(JsonOptions);
 
     private static ReadOnlySpan<byte> CredentialSerializer(VerifiableCredential credential) =>
         JsonSerializer.SerializeToUtf8Bytes(credential, JsonOptions);

@@ -5,10 +5,9 @@ using Verifiable.Core.Model.Credentials;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Jose;
-using Verifiable.Tests.DataIntegrity;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.Jose;
+namespace Verifiable.Tests.DataIntegrity;
 
 /// <summary>
 /// Tests for JWS credential envelope securing and verification.
@@ -282,10 +281,10 @@ internal sealed class JwsCredentialSecuringTests
         JsonSerializer.SerializeToUtf8Bytes(credential, CredentialSecuringMaterial.JsonOptions);
 
     private static ReadOnlySpan<byte> HeaderSerializer(Dictionary<string, object> header) =>
-        JsonSerializer.SerializeToUtf8Bytes(header);
+        JsonSerializer.SerializeToUtf8Bytes(header, CredentialSecuringMaterial.JsonOptions);
 
     private static Dictionary<string, object>? HeaderDeserializer(ReadOnlySpan<byte> headerBytes) =>
-        JsonSerializer.Deserialize<Dictionary<string, object>>(headerBytes);
+        JsonSerializer.Deserialize<Dictionary<string, object>>(headerBytes, CredentialSecuringMaterial.JsonOptions);
 
     private static VerifiableCredential CredentialDeserializer(ReadOnlySpan<byte> credentialBytes) =>
         JsonSerializer.Deserialize<VerifiableCredential>(credentialBytes, CredentialSecuringMaterial.JsonOptions)!;

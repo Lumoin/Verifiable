@@ -113,6 +113,9 @@ public static class CredentialEcdsaSd2023Extensions
             MemoryPool<byte> memoryPool,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(serialize);
+            ArgumentNullException.ThrowIfNull(deserialize);
+
             using var result = await credential.CreateBaseProofVerboseAsync(
                 issuerPrivateKey,
                 ephemeralKeyPair,
@@ -242,13 +245,14 @@ public static class CredentialEcdsaSd2023Extensions
             var proofCreatedString = DateTimeStampFormat.Format(proofCreated);
             var credentialJson = serialize(credential);
 
-            var proofOptionsJson = serializeProofOptions(
-                CredentialConstants.DataIntegrityProofType,
-                CredentialConstants.Cryptosuites.EcdsaSd2023,
+            //ECDSA-SD always uses RDFC canonicalization, so context is always included.
+            var proofOptions = ProofOptionsDocument.ForSigning(
+                EcdsaSd2023CryptosuiteInfo.Instance,
                 proofCreatedString,
                 verificationMethodId,
                 AssertionMethod.Purpose,
                 credential.Context);
+            var proofOptionsJson = serializeProofOptions(proofOptions);
 
             //Convert CredentialPath to JsonPointer for partitioning.
             var mandatoryPointers = mandatoryPaths
@@ -280,8 +284,8 @@ public static class CredentialEcdsaSd2023Extensions
                 ephemeralKeyPair.PublicKey,
                 memoryPool);
 
-            var canonicalProofOptions = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
-            var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalProofOptions));
+            var proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
+            var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm));
 
             int signatureDataLength = proofOptionsHash.Length + ephemeralPublicKeyWithHeader.Memory.Length + mandatoryHash.Length;
             var baseSignatureData = memoryPool.Rent(signatureDataLength);
@@ -327,7 +331,7 @@ public static class CredentialEcdsaSd2023Extensions
                 encoder);
 
             return new BaseProofResult(
-                canonicalProofOptions,
+                proofOptionsCanonicalization.CanonicalForm,
                 proofValue,
                 canonicalStatements,
                 prepared.SortedStatements.ToList(),
@@ -492,16 +496,11 @@ public static class CredentialEcdsaSd2023Extensions
 
             var mandatoryHash = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("", sortedMandatoryStatements)));
 
-            var proofOptionsJson = serializeProofOptions(
-                proof.Type ?? CredentialConstants.DataIntegrityProofType,
-                CredentialConstants.Cryptosuites.EcdsaSd2023,
-                proof.Created ?? "",
-                proof.VerificationMethod?.Id ?? "",
-                proof.ProofPurpose ?? AssertionMethod.Purpose,
-                credential.Context);
+            var proofOptions = ProofOptionsDocument.FromProof(proof, credential.Context);
+            var proofOptionsJson = serializeProofOptions(proofOptions);
 
-            var canonicalProofOptions = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
-            var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalProofOptions));
+            var proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
+            var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm));
 
             using var ephemeralKeyWithHeader = MultibaseSerializer.PrependHeader(
                 parsedProof.EphemeralPublicKey,
@@ -771,12 +770,17 @@ public static class CredentialEcdsaSd2023Extensions
             //Canonicalize reduced credential to get statements verifier will see.
             var reducedPartition = await partitionStatements(reducedCredentialJson, [], canonicalize, contextResolver, cancellationToken).ConfigureAwait(false);
 
-            //Compute the correct label map for the reduced credential.
-            //The reduced credential has different canonical blank node assignments than the full credential
-            //(RDFC canonicalization assigns c14n IDs based on graph structure, which changes when statements are removed).
+            //Compute the correct label map for the reduced credential by joining through
+            //original blank node identifiers. The reduced credential gets different canonical
+            //IDs from RDFC because the graph structure changed when statements were removed.
+            //
+            //Chain: reduced_c14n_id → original_bnode_id → full_c14n_id → hmac_label
+            //  - reducedPartition.LabelMap: reduced_c14n_id → original_bnode_id
+            //  - fullPartition.LabelMap:    full_c14n_id    → original_bnode_id
+            //  - fullPrepared.LabelMap:     full_c14n_id    → hmac_label
             var reducedLabelMap = ComputeReducedLabelMap(
-                reducedPartition.AllStatements,
-                fullPrepared.SortedStatements,
+                reducedPartition.LabelMap,
+                fullPartition.LabelMap,
                 fullPrepared.LabelMap);
 
             //Prepare the reduced credential statements with the computed label map.
@@ -967,8 +971,8 @@ public static class CredentialEcdsaSd2023Extensions
             var credentialWithoutProof = CloneCredentialWithoutProof(credential);
             var credentialJson = serialize(credentialWithoutProof);
 
-            var canonicalNQuads = await canonicalize(credentialJson, contextResolver, cancellationToken).ConfigureAwait(false);
-            var canonicalStatements = SplitIntoStatements(canonicalNQuads);
+            var credentialCanonicalization = await canonicalize(credentialJson, contextResolver, cancellationToken).ConfigureAwait(false);
+            var canonicalStatements = SplitIntoStatements(credentialCanonicalization.CanonicalForm);
 
             var relabeledStatements = BlankNodeRelabelingExtensions.ApplyLabelMap(
                 canonicalStatements,
@@ -984,16 +988,11 @@ public static class CredentialEcdsaSd2023Extensions
 
             var mandatoryHash = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("", mandatoryStatements)));
 
-            var proofOptionsJson = serializeProofOptions(
-                proof.Type ?? CredentialConstants.DataIntegrityProofType,
-                CredentialConstants.Cryptosuites.EcdsaSd2023,
-                proof.Created ?? "",
-                proof.VerificationMethod?.Id ?? "",
-                proof.ProofPurpose ?? AssertionMethod.Purpose,
-                credential.Context);
+            var proofOptions = ProofOptionsDocument.FromProof(proof, credential.Context);
+            var proofOptionsJson = serializeProofOptions(proofOptions);
 
-            var canonicalProofOptions = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
-            var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(canonicalProofOptions));
+            var proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
+            var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm));
 
             using var ephemeralKeyWithHeader = MultibaseSerializer.PrependHeader(
                 parsedProof.EphemeralPublicKey,
@@ -1136,94 +1135,89 @@ public static class CredentialEcdsaSd2023Extensions
 
 
     /// <summary>
-    /// Computes the correct label map for a reduced credential by matching statement content.
+    /// Computes the correct HMAC label map for a reduced credential by joining through
+    /// original blank node identifiers.
     /// </summary>
-    /// <param name="reducedCanonicalStatements">Canonical statements from the reduced credential.</param>
-    /// <param name="fullHmacSortedStatements">HMAC-relabeled and sorted statements from the full credential.</param>
-    /// <param name="fullLabelMap">Label map from the full credential (canonical ID to HMAC label).</param>
+    /// <param name="reducedRdfcLabelMap">
+    /// RDFC label map from canonicalizing the reduced credential (<c>"_:c14n0" → "_:b0"</c>).
+    /// Uses <c>"_:"</c>-prefixed identifiers per the RDFC specification (W3C Recommendation §4.3).
+    /// </param>
+    /// <param name="fullRdfcLabelMap">
+    /// RDFC label map from canonicalizing the full credential (<c>"_:c14n0" → "_:b0"</c>).
+    /// Uses <c>"_:"</c>-prefixed identifiers per the RDFC specification.
+    /// </param>
+    /// <param name="fullHmacLabelMap">
+    /// HMAC label map from the full credential (<c>"c14n0" → "uXYZ"</c>).
+    /// Uses bare identifiers per the VC DI ECDSA specification's compressed label map format.
+    /// </param>
     /// <returns>
-    /// A label map that correctly maps the reduced credential's canonical IDs to HMAC labels.
+    /// A label map in bare identifier format (<c>"c14n0" → "uXYZ"</c>) that correctly maps the
+    /// reduced credential's canonical IDs to HMAC labels.
     /// </returns>
     /// <remarks>
     /// <para>
-    /// The reduced credential, when canonicalized, may assign different canonical IDs (c14n0, c14n1, etc.)
-    /// to blank nodes than the full credential did. This is because RDFC-1.0 canonicalization assigns
-    /// identifiers based on the graph structure, which changes when statements are removed.
+    /// When a credential is reduced (non-disclosed claims removed), RDFC canonicalization assigns
+    /// different canonical identifiers (<c>c14n0</c>, <c>c14n1</c>, etc.) because the graph structure
+    /// has changed. However, the original blank node identifiers are the same in both the full and
+    /// reduced graphs. This method exploits that invariant by joining through the shared original
+    /// identifiers:
     /// </para>
     /// <para>
-    /// This method determines the correct mapping by finding statements in the reduced credential
-    /// that have non-blank-node content matching statements in the full credential, then extracting
-    /// the HMAC label from the matched full statement.
+    /// <c>reduced_c14n_id → original_bnode_id → full_c14n_id → hmac_label</c>
+    /// </para>
+    /// <para>
+    /// The RDFC label maps use <c>"_:"</c>-prefixed identifiers per the RDF Dataset Canonicalization
+    /// specification, while the HMAC label map uses bare identifiers per the VC Data Integrity ECDSA
+    /// compressed label map format (§3.5.5). This method normalizes at the boundary between these
+    /// two conventions.
     /// </para>
     /// </remarks>
     private static Dictionary<string, string> ComputeReducedLabelMap(
-        IReadOnlyList<string> reducedCanonicalStatements,
-        IReadOnlyList<string> fullHmacSortedStatements,
-        IReadOnlyDictionary<string, string> fullLabelMap)
+        IReadOnlyDictionary<string, string>? reducedRdfcLabelMap,
+        IReadOnlyDictionary<string, string>? fullRdfcLabelMap,
+        IReadOnlyDictionary<string, string> fullHmacLabelMap)
     {
         var reducedLabelMap = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        //Extract all HMAC labels from the full label map for quick lookup.
-        var hmacLabels = new HashSet<string>(fullLabelMap.Values, StringComparer.Ordinal);
-
-        //For each reduced canonical statement containing a blank node, find the matching
-        //statement in the full HMAC-relabeled statements and extract the HMAC label.
-        var blankNodePattern = new System.Text.RegularExpressions.Regex(
-            @"_:(c14n\d+)",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
-
-        foreach(var reducedStatement in reducedCanonicalStatements)
+        if(reducedRdfcLabelMap is null || fullRdfcLabelMap is null)
         {
-            var matches = blankNodePattern.Matches(reducedStatement);
-            if(matches.Count == 0)
+            return reducedLabelMap;
+        }
+
+        //The RDFC label maps use "_:"-prefixed identifiers per the W3C RDFC spec (§4.3),
+        //e.g., "_:c14n0" → "_:b0". The HMAC label map from BlankNodeRelabeling uses bare
+        //identifiers, e.g., "c14n0" → "uXYZ". We strip the "_:" prefix from RDFC
+        //identifiers to join with the HMAC label map.
+
+        //Invert the full RDFC label map: original_bnode_id → full_c14n_id (bare).
+        var originalToFullCanonical = new Dictionary<string, string>(fullRdfcLabelMap.Count, StringComparer.Ordinal);
+        foreach(var (fullCanonical, original) in fullRdfcLabelMap)
+        {
+            originalToFullCanonical[StripBlankNodePrefix(original)] = StripBlankNodePrefix(fullCanonical);
+        }
+
+        //Chain: reduced_c14n_id → original_bnode_id → full_c14n_id → hmac_label.
+        foreach(var (reducedCanonical, original) in reducedRdfcLabelMap)
+        {
+            var bareOriginal = StripBlankNodePrefix(original);
+            if(originalToFullCanonical.TryGetValue(bareOriginal, out var fullCanonical)
+                && fullHmacLabelMap.TryGetValue(fullCanonical, out var hmacLabel))
             {
-                continue;
-            }
-
-            //For each blank node in this statement, try to find its HMAC label.
-            foreach(System.Text.RegularExpressions.Match match in matches)
-            {
-                var canonicalId = match.Groups[1].Value;
-                if(reducedLabelMap.ContainsKey(canonicalId))
-                {
-                    continue;
-                }
-
-                //Try each possible HMAC label and see if replacing the canonical ID produces
-                //a statement that exists in the full HMAC-relabeled statements.
-                foreach(var hmacLabel in hmacLabels)
-                {
-                    if(reducedLabelMap.ContainsValue(hmacLabel))
-                    {
-                        //Already assigned to another canonical ID.
-                        continue;
-                    }
-
-                    //Create test statement with this HMAC label.
-                    var testStatement = reducedStatement.Replace(
-                        $"_:{canonicalId}",
-                        $"_:{hmacLabel}",
-                        StringComparison.Ordinal);
-
-                    //Also replace any already-mapped canonical IDs.
-                    foreach(var (mappedCanonical, mappedHmac) in reducedLabelMap)
-                    {
-                        testStatement = testStatement.Replace(
-                            $"_:{mappedCanonical}",
-                            $"_:{mappedHmac}",
-                            StringComparison.Ordinal);
-                    }
-
-                    //Check if this statement exists in the full HMAC statements.
-                    if(fullHmacSortedStatements.Contains(testStatement))
-                    {
-                        reducedLabelMap[canonicalId] = hmacLabel;
-                        break;
-                    }
-                }
+                reducedLabelMap[StripBlankNodePrefix(reducedCanonical)] = hmacLabel;
             }
         }
 
         return reducedLabelMap;
     }
+
+
+    /// <summary>
+    /// Strips the <c>"_:"</c> blank node prefix if present. The RDFC spec uses
+    /// <c>"_:"</c>-prefixed identifiers while <see cref="BlankNodeRelabeling"/>
+    /// uses bare identifiers.
+    /// </summary>
+    private static string StripBlankNodePrefix(string identifier) =>
+        identifier.StartsWith("_:", StringComparison.Ordinal)
+            ? identifier[2..]
+            : identifier;
 }

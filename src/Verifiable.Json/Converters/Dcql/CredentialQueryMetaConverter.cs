@@ -47,7 +47,7 @@ public sealed class CredentialQueryMetaConverter: JsonConverter<CredentialQueryM
                 }
                 case CredentialQueryMeta.VctValuesPropertyName:
                 {
-                    vctValues = JsonSerializer.Deserialize<List<string>>(ref reader, options);
+                    vctValues = ReadStringArray(ref reader);
                     break;
                 }
                 default:
@@ -81,9 +81,45 @@ public sealed class CredentialQueryMetaConverter: JsonConverter<CredentialQueryM
         if(value.VctValues is not null)
         {
             writer.WritePropertyName(CredentialQueryMeta.VctValuesPropertyName);
-            JsonSerializer.Serialize(writer, value.VctValues, options);
+            writer.WriteStartArray();
+            foreach(var vct in value.VctValues)
+            {
+                writer.WriteStringValue(vct);
+            }
+
+            writer.WriteEndArray();
         }
 
         writer.WriteEndObject();
+    }
+
+
+    /// <summary>
+    /// Reads a JSON array of strings manually without calling into <see cref="JsonSerializer"/>.
+    /// </summary>
+    private static List<string> ReadStringArray(ref Utf8JsonReader reader)
+    {
+        if(reader.TokenType != JsonTokenType.StartArray)
+        {
+            throw new JsonException("Expected StartArray for string array.");
+        }
+
+        var list = new List<string>();
+        while(reader.Read())
+        {
+            if(reader.TokenType == JsonTokenType.EndArray)
+            {
+                break;
+            }
+
+            if(reader.TokenType != JsonTokenType.String)
+            {
+                throw new JsonException($"Expected String but got {reader.TokenType}.");
+            }
+
+            list.Add(reader.GetString()!);
+        }
+
+        return list;
     }
 }

@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Model.Dcql;
 
 namespace Verifiable.Json.Converters.Dcql;
@@ -15,6 +16,8 @@ public sealed class DcqlQueryConverter: JsonConverter<DcqlQuery>
     [return: NotNull]
     public override DcqlQuery Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
+        ArgumentNullException.ThrowIfNull(options);
+
         if(reader.TokenType != JsonTokenType.StartObject)
         {
             JsonThrowHelper.ThrowJsonException();
@@ -42,12 +45,12 @@ public sealed class DcqlQueryConverter: JsonConverter<DcqlQuery>
             {
                 case DcqlQuery.CredentialsPropertyName:
                 {
-                    credentials = JsonSerializer.Deserialize<List<CredentialQuery>>(ref reader, options);
+                    credentials = ReadArray<CredentialQuery>(ref reader, options);
                     break;
                 }
                 case DcqlQuery.CredentialSetsPropertyName:
                 {
-                    credentialSets = JsonSerializer.Deserialize<List<CredentialSetQuery>>(ref reader, options);
+                    credentialSets = ReadArray<CredentialSetQuery>(ref reader, options);
                     break;
                 }
                 default:
@@ -75,18 +78,73 @@ public sealed class DcqlQueryConverter: JsonConverter<DcqlQuery>
     {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(options);
 
         writer.WriteStartObject();
 
-        writer.WritePropertyName(DcqlQuery.CredentialsPropertyName);
-        JsonSerializer.Serialize(writer, value.Credentials, options);
+        if(value.Credentials is not null)
+        {
+            writer.WritePropertyName(DcqlQuery.CredentialsPropertyName);
+            WriteArray(writer, value.Credentials, options);
+        }
 
         if(value.CredentialSets is not null)
         {
             writer.WritePropertyName(DcqlQuery.CredentialSetsPropertyName);
-            JsonSerializer.Serialize(writer, value.CredentialSets, options);
+            WriteArray(writer, value.CredentialSets, options);
         }
 
         writer.WriteEndObject();
+    }
+
+
+    /// <summary>
+    /// Reads a JSON array by deserializing each element individually via
+    /// <see cref="JsonSerializerOptions.GetTypeInfo"/>. This avoids needing
+    /// <c>List&lt;T&gt;</c> in the source-generated context.
+    /// </summary>
+    private static List<T> ReadArray<T>(ref Utf8JsonReader reader, JsonSerializerOptions options)
+    {
+        if(reader.TokenType != JsonTokenType.StartArray)
+        {
+            throw new JsonException($"Expected StartArray but got {reader.TokenType}.");
+        }
+
+        var typeInfo = (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
+        var list = new List<T>();
+
+        while(reader.Read())
+        {
+            if(reader.TokenType == JsonTokenType.EndArray)
+            {
+                break;
+            }
+
+            var item = JsonSerializer.Deserialize(ref reader, typeInfo);
+            if(item is not null)
+            {
+                list.Add(item);
+            }
+        }
+
+        return list;
+    }
+
+
+    /// <summary>
+    /// Writes a list as a JSON array by serializing each element individually via
+    /// <see cref="JsonSerializerOptions.GetTypeInfo"/>.
+    /// </summary>
+    private static void WriteArray<T>(Utf8JsonWriter writer, IReadOnlyList<T> items, JsonSerializerOptions options)
+    {
+        var typeInfo = (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
+
+        writer.WriteStartArray();
+        foreach(var item in items)
+        {
+            JsonSerializer.Serialize(writer, item, typeInfo);
+        }
+
+        writer.WriteEndArray();
     }
 }

@@ -55,16 +55,28 @@ public delegate ValueTask<StatementPartitionResult> PartitionStatementsDelegate(
 /// <param name="AllStatements">All canonical N-Quad statements.</param>
 /// <param name="MandatoryIndexes">Indexes of mandatory statements.</param>
 /// <param name="NonMandatoryIndexes">Indexes of non-mandatory statements.</param>
+/// <param name="LabelMap">
+/// The RDFC label map from canonicalization, mapping canonical blank node identifiers
+/// (e.g., <c>"c14n0"</c>) to original blank node identifiers. This is <see langword="null"/>
+/// when JCS canonicalization was used.
+/// </param>
 /// <remarks>
 /// <para>
 /// The indexes can be applied to HMAC-relabeled statements since relabeling
 /// preserves statement order.
 /// </para>
+/// <para>
+/// The <paramref name="LabelMap"/> is passed through from the
+/// <see cref="CanonicalizationResult.LabelMap"/> produced during canonicalization.
+/// Selective disclosure cryptosuites use this to compute correct blank node mappings
+/// when the reduced credential is canonicalized independently of the full credential.
+/// </para>
 /// </remarks>
 public readonly record struct StatementPartitionResult(
     IReadOnlyList<string> AllStatements,
     IReadOnlyList<int> MandatoryIndexes,
-    IReadOnlyList<int> NonMandatoryIndexes)
+    IReadOnlyList<int> NonMandatoryIndexes,
+    IReadOnlyDictionary<string, string>? LabelMap = null)
 {
     /// <summary>
     /// Gets the mandatory statements.

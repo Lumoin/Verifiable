@@ -4,9 +4,9 @@
     "net10.0": {
       "CsCheck": {
         "type": "Direct",
-        "requested": "[4.6.0, )",
-        "resolved": "4.6.0",
-        "contentHash": "KJVZdk3DeNFmWnrvIdtoj5aeqvumph4KX3dt6Hca2kH1Dp937/TlhMPcMHCIUFX9dHKSJGpGp9IHd0jhsP3ChA=="
+        "requested": "[4.6.1, )",
+        "resolved": "4.6.1",
+        "contentHash": "eTI6cFFnTvYz8hSCf71KjXjIUAjVrz5pPRlrC2iDbuftYyAt3jtD+mpryPQ7wLk9TRNGYMNm1V1hPs3IsdiE2A=="
       },
       "dotNetRdf": {
         "type": "Direct",

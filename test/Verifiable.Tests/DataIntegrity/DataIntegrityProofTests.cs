@@ -263,7 +263,7 @@ internal sealed class DataIntegrityProofTests
 
 
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, cancellationToken) =>
-        ValueTask.FromResult(Jcs.Canonicalize(json));
+        ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
 
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
@@ -276,10 +276,7 @@ internal sealed class DataIntegrityProofTests
         JsonSerializer.Deserialize<VerifiableCredential>(serialized, CredentialSecuringMaterial.JsonOptions)!;
 
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
-        (type, cryptosuiteName, created, verificationMethodId, proofPurpose, context) =>
-            context != null
-                ? JsonSerializer.Serialize(new { type, cryptosuite = cryptosuiteName, created, verificationMethod = verificationMethodId, proofPurpose, context }, CredentialSecuringMaterial.JsonOptions)
-                : JsonSerializer.Serialize(new { type, cryptosuite = cryptosuiteName, created, verificationMethod = verificationMethodId, proofPurpose }, CredentialSecuringMaterial.JsonOptions);
+        ProofOptionsSerializer.Create(CredentialSecuringMaterial.JsonOptions);
 
     private static DidDocument CreateDidDocument(string verificationMethodId, string publicKeyMultibase)
     {

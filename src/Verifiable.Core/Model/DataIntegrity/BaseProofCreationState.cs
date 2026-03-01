@@ -58,6 +58,15 @@ public sealed class BaseProofCreationState: IDisposable
     /// <summary>
     /// Gets the HMAC label map for blank node relabeling.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Maps canonical identifiers (e.g., <c>"c14n0"</c>) to HMAC-derived identifiers
+    /// (e.g., <c>"uXYZ..."</c>) using bare format without the <c>"_:"</c> prefix, per
+    /// the compressed label map format in
+    /// <see href="https://www.w3.org/TR/vc-di-ecdsa/#compresslabelmap">
+    /// VC Data Integrity ECDSA §3.5.5 compressLabelMap</see>.
+    /// </para>
+    /// </remarks>
     public IReadOnlyDictionary<string, string> LabelMap { get; }
 
     /// <summary>

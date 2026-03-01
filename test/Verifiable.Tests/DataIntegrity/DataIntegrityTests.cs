@@ -123,8 +123,11 @@ internal sealed class DataIntegrityTests
     /// <summary>
     /// Canonicalizes a JSON-LD document using RDFC-1.0 with offline embedded contexts.
     /// </summary>
-    private static ValueTask<string> CanonicalizeAsync(string jsonLdDocument, CancellationToken cancellationToken) =>
-        RdfcCanonicalizer(jsonLdDocument, ContextResolver, cancellationToken);
+    private static async ValueTask<string> CanonicalizeAsync(string jsonLdDocument, CancellationToken cancellationToken)
+    {
+        var result = await RdfcCanonicalizer(jsonLdDocument, ContextResolver, cancellationToken).ConfigureAwait(false);
+        return result.CanonicalForm;
+    }
 
 
     /// <summary>

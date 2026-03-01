@@ -245,8 +245,8 @@ public static class JsonLdSelection
         ArgumentNullException.ThrowIfNull(canonicalize);
 
         //Canonicalize the full document.
-        string fullNQuads = await canonicalize(document, contextResolver, cancellationToken).ConfigureAwait(false);
-        string[] rawStatements = fullNQuads.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var fullResult = await canonicalize(document, contextResolver, cancellationToken).ConfigureAwait(false);
+        string[] rawStatements = fullResult.CanonicalForm.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         //Each N-Quad statement must end with newline per W3C spec for correct hashing.
         string[] allStatements = [.. rawStatements.Select(s => s + "\n")];
@@ -263,13 +263,14 @@ public static class JsonLdSelection
             return new StatementPartitionResult(
                 allStatements,
                 MandatoryIndexes: [],
-                NonMandatoryIndexes: allNonMandatoryIndexes);
+                NonMandatoryIndexes: allNonMandatoryIndexes,
+                LabelMap: fullResult.LabelMap);
         }
 
         //Select and canonicalize the mandatory fragments.
         string mandatorySelection = SelectFragments(document, mandatoryPointers);
-        string mandatoryNQuads = await canonicalize(mandatorySelection, contextResolver, cancellationToken).ConfigureAwait(false);
-        string[] rawMandatoryStatements = mandatoryNQuads.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var mandatoryResult = await canonicalize(mandatorySelection, contextResolver, cancellationToken).ConfigureAwait(false);
+        string[] rawMandatoryStatements = mandatoryResult.CanonicalForm.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         string[] mandatoryStatements = [.. rawMandatoryStatements.Select(s => s + "\n")];
 
         //Build a set of mandatory statements for O(1) lookup.
@@ -294,7 +295,8 @@ public static class JsonLdSelection
         return new StatementPartitionResult(
             allStatements,
             mandatoryIndexes,
-            nonMandatoryIndexes);
+            nonMandatoryIndexes,
+            LabelMap: fullResult.LabelMap);
     }
 
 

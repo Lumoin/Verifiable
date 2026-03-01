@@ -463,7 +463,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             MultibaseAlgorithms.Base64Url.ToString(),
             baseProofResult.ProofValue,
             "Base proof must use base64url-no-pad multibase encoding.");
-        
+
         //Cleanup.
         baseProofResult.Dispose();
     }
@@ -716,7 +716,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
                 verifierMandatoryIndexes[i],
                 $"Verifier adjusted mandatory index {i} must match expected derived indexes.");
         }
-        
+
         verifierContext.Dispose();
     }
 
@@ -724,21 +724,9 @@ internal sealed class EcdsaSd2023W3cVectorTests
 
     private static VerifiableCredential DeserializeCredential(string json) => JsonSerializer.Deserialize<VerifiableCredential>(json, TestSetup.DefaultSerializationOptions)!;
 
-    
-    private static string SerializeProofOptions(
-        string type,
-        string cryptosuiteName,
-        string created,
-        string verificationMethodId,
-        string proofPurpose,
-        object? context) =>
-        context is not null
-            ? JsonSerializer.Serialize(
-                new { type, cryptosuite = cryptosuiteName, created, verificationMethod = verificationMethodId, proofPurpose, context },
-                TestSetup.DefaultSerializationOptions)
-            : JsonSerializer.Serialize(
-                new { type, cryptosuite = cryptosuiteName, created, verificationMethod = verificationMethodId, proofPurpose },
-                TestSetup.DefaultSerializationOptions);
+
+    private static string SerializeProofOptions(ProofOptionsDocument proofOptions) =>
+        ProofOptionsSerializer.Serialize(proofOptions, TestSetup.DefaultSerializationOptions);
 
     private static PublicKeyMemory DecodeP256PublicKey(string multibaseKey)
     {

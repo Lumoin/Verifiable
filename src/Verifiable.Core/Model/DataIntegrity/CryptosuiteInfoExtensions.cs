@@ -22,8 +22,11 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// //Instead of: EddsaJcs2022CryptosuiteInfo.Instance
 /// var jcsSuite = CryptosuiteInfo.EddsaJcs2022;
 ///
+/// //Instead of: EcdsaSd2023CryptosuiteInfo.Instance
+/// var sdSuite = CryptosuiteInfo.EcdsaSd2023;
+///
 /// //Resolve by name at runtime.
-/// var suite = CryptosuiteInfo.FromName("eddsa-rdfc-2022");
+/// var suite = CryptosuiteInfo.FromName("ecdsa-sd-2023");
 /// </code>
 /// <para>
 /// <strong>Extensibility:</strong>
@@ -91,6 +94,12 @@ public static class CryptosuiteInfoExtensions
         public static EddsaJcs2022CryptosuiteInfo EddsaJcs2022 => EddsaJcs2022CryptosuiteInfo.Instance;
 
         /// <summary>
+        /// ECDSA cryptosuite with selective disclosure using P-256 signatures and RDFC-1.0 canonicalization.
+        /// See <see href="https://www.w3.org/TR/vc-di-ecdsa/#ecdsa-sd-2023">ECDSA Cryptosuites §3.4</see>.
+        /// </summary>
+        public static EcdsaSd2023CryptosuiteInfo EcdsaSd2023 => EcdsaSd2023CryptosuiteInfo.Instance;
+
+        /// <summary>
         /// Resolves a cryptosuite name to its corresponding <see cref="CryptosuiteInfo"/> instance.
         /// </summary>
         /// <param name="cryptosuiteName">The cryptosuite identifier from a proof's <c>cryptosuite</c> property.</param>
@@ -119,6 +128,7 @@ public static class CryptosuiteInfoExtensions
         {
             var n when n == EddsaRdfc2022CryptosuiteInfo.Instance.CryptosuiteName => EddsaRdfc2022CryptosuiteInfo.Instance,
             var n when n == EddsaJcs2022CryptosuiteInfo.Instance.CryptosuiteName => EddsaJcs2022CryptosuiteInfo.Instance,
+            var n when n == EcdsaSd2023CryptosuiteInfo.Instance.CryptosuiteName => EcdsaSd2023CryptosuiteInfo.Instance,
             _ => new UnknownCryptosuiteInfo(cryptosuiteName)
         };
     }

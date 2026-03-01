@@ -83,7 +83,12 @@ public sealed class BaseProofResult: IDisposable
     /// The label map from canonical to HMAC-derived blank node identifiers.
     /// </summary>
     /// <remarks>
-    /// Corresponds to W3C Example 77. Maps <c>c14nN</c> to <c>uXXX</c> identifiers.
+    /// <para>
+    /// Corresponds to W3C Example 77. Maps <c>"c14n0"</c> to <c>"uXYZ..."</c> identifiers
+    /// using bare format without the <c>"_:"</c> prefix, per the compressed label map format
+    /// in <see href="https://www.w3.org/TR/vc-di-ecdsa/#compresslabelmap">
+    /// VC Data Integrity ECDSA §3.5.5 compressLabelMap</see>.
+    /// </para>
     /// </remarks>
     public IReadOnlyDictionary<string, string> LabelMap { get; }
 
@@ -199,7 +204,7 @@ public sealed class BaseProofResult: IDisposable
         ArgumentNullException.ThrowIfNull(baseSignatureData);
 
         CanonicalProofOptions = canonicalProofOptions;
-        ProofValue = proofValue;        
+        ProofValue = proofValue;
         CanonicalStatements = canonicalStatements;
         RelabeledStatements = relabeledStatements;
         LabelMap = labelMap;

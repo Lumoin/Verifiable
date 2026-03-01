@@ -1,212 +1,364 @@
-using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 
-namespace Verifiable.Json.Converters
+namespace Verifiable.Json.Converters;
+
+/// <summary>
+/// Converts <see cref="VerificationMethod"/> to and from JSON.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This converter handles three distinct dispatch mechanisms:
+/// </para>
+/// <list type="number">
+/// <item>
+/// <description>
+/// <strong>Subclass dispatch</strong> via <see cref="VerificationMethodTypeSelector"/>:
+/// determines which .NET type to instantiate based on the <c>type</c> discriminator.
+/// Enables subclasses that carry additional properties as permitted by CID 1.1.
+/// </description>
+/// </item>
+/// <item>
+/// <description>
+/// <strong>Crypto suite metadata</strong> via <see cref="VerificationMethodTypeInfoFactoryDelegate"/>:
+/// maps the <c>type</c> string to <see cref="VerificationMethodTypeInfo"/> for suite-specific behavior.
+/// </description>
+/// </item>
+/// <item>
+/// <description>
+/// <strong>Key format dispatch</strong> via <see cref="KeyFormatReaderDelegate"/> and
+/// <see cref="KeyFormatWriterDelegate"/>: the JSON property name determines the
+/// <see cref="KeyFormat"/> subclass on read, and the runtime type determines the
+/// property name on write. Both delegates use pattern matching and support
+/// chaining for user-defined key formats.
+/// </description>
+/// </item>
+/// </list>
+/// <para>
+/// When the type selector returns <c>typeof(VerificationMethod)</c> (the default for all
+/// known suite types), the converter manually parses the JSON object. This avoids
+/// re-entrant serialization and keeps the converter fully AOT-compatible. When the selector
+/// returns a derived type, the converter uses <see cref="JsonSerializerOptions.GetTypeInfo"/>
+/// for AOT-friendly deserialization. Since <see cref="CanConvert"/> only matches the base
+/// <see cref="VerificationMethod"/> type, STJ handles derived types without re-entering.
+/// </para>
+/// <para>
+/// <strong>Extensibility:</strong>
+/// </para>
+/// <code>
+/// var baseReader = KeyFormatDefaults.Reader;
+/// KeyFormatReaderDelegate myReader = (property, options) =>
+/// {
+///     if(property.NameEquals("publicKeyBase64Url"u8))
+///     {
+///         return new PublicKeyBase64Url(property.Value.GetString()!);
+///     }
+///
+///     return baseReader(property, options);
+/// };
+///
+/// var baseWriter = KeyFormatDefaults.Writer;
+/// KeyFormatWriterDelegate myWriter = (writer, keyFormat) =>
+/// {
+///     if(keyFormat is PublicKeyBase64Url b64)
+///     {
+///         writer.WriteString("publicKeyBase64Url"u8, b64.Key);
+///         return true;
+///     }
+///
+///     return baseWriter(writer, keyFormat);
+/// };
+///
+/// options.Converters.Add(new VerificationMethodConverter(
+///     VerificationMethodTypeSelectors.Default,
+///     myReader,
+///     myWriter));
+/// </code>
+/// </remarks>
+public class VerificationMethodConverter: JsonConverter<VerificationMethod>
 {
-    /// <summary>
-    /// Converts DID verifications methods to and from JSON.
-    /// </summary>
-    public class VerificationMethodConverter: JsonConverter<VerificationMethod>
+    private static VerificationMethodTypeInfoFactoryDelegate DefaultTypeInfoFactory { get; } = typeName => typeName switch
     {
-        public override bool CanConvert(Type typeToConvert)
+        _ when typeName == VerificationMethodTypeInfo.JsonWebKey2020.TypeName => VerificationMethodTypeInfo.JsonWebKey2020, "JsonWebKey" => VerificationMethodTypeInfo.JsonWebKey2020,
+        _ when typeName == VerificationMethodTypeInfo.Ed25519VerificationKey2020.TypeName => VerificationMethodTypeInfo.Ed25519VerificationKey2020,
+        _ when typeName == VerificationMethodTypeInfo.Secp256k1VerificationKey2018.TypeName => VerificationMethodTypeInfo.Secp256k1VerificationKey2018,
+        _ when typeName == VerificationMethodTypeInfo.Multikey.TypeName => VerificationMethodTypeInfo.Multikey,
+        _ when typeName == VerificationMethodTypeInfo.RsaVerificationKey2018.TypeName => VerificationMethodTypeInfo.RsaVerificationKey2018,
+        _ when typeName == VerificationMethodTypeInfo.JwsVerificationKey2020.TypeName => VerificationMethodTypeInfo.JwsVerificationKey2020,
+        _ when typeName == VerificationMethodTypeInfo.Ed25519VerificationKey2018.TypeName => VerificationMethodTypeInfo.Ed25519VerificationKey2018,
+        _ when typeName == VerificationMethodTypeInfo.X25519KeyAgreementKey2020.TypeName => VerificationMethodTypeInfo.X25519KeyAgreementKey2020,
+        _ when typeName == VerificationMethodTypeInfo.X25519KeyAgreementKey2019.TypeName => VerificationMethodTypeInfo.X25519KeyAgreementKey2019,
+        _ => throw new ArgumentException($"Unknown verification method type: '{typeName}'.")
+    };
+
+    private VerificationMethodTypeSelector TypeSelector { get; }
+    private VerificationMethodTypeInfoFactoryDelegate TypeInfoFactory { get; }
+    private KeyFormatReaderDelegate KeyFormatReader { get; }
+    private KeyFormatWriterDelegate KeyFormatWriter { get; }
+
+
+    /// <summary>
+    /// Creates a converter with all default settings.
+    /// </summary>
+    public VerificationMethodConverter()
+        : this(VerificationMethodTypeSelectors.Default, DefaultTypeInfoFactory, KeyFormatDefaults.Reader, KeyFormatDefaults.Writer)
+    {
+    }
+
+
+    /// <summary>
+    /// Creates a converter with a custom type selector and default handling for
+    /// crypto suites and key formats.
+    /// </summary>
+    /// <param name="typeSelector">
+    /// The delegate that maps verification method <c>type</c> strings to .NET types.
+    /// </param>
+    public VerificationMethodConverter(VerificationMethodTypeSelector typeSelector): this(typeSelector, DefaultTypeInfoFactory, KeyFormatDefaults.Reader, KeyFormatDefaults.Writer)
+    {
+    }
+
+
+    /// <summary>
+    /// Creates a converter with custom type selector and key format delegates.
+    /// </summary>
+    /// <param name="typeSelector">
+    /// The delegate that maps verification method <c>type</c> strings to .NET types.
+    /// </param>
+    /// <param name="keyFormatReader">
+    /// The delegate that reads key format from a JSON property by matching the property name.
+    /// </param>
+    /// <param name="keyFormatWriter">
+    /// The delegate that writes key format to JSON by matching the runtime type.
+    /// </param>
+    public VerificationMethodConverter(
+        VerificationMethodTypeSelector typeSelector,
+        KeyFormatReaderDelegate keyFormatReader,
+        KeyFormatWriterDelegate keyFormatWriter)
+        : this(typeSelector, DefaultTypeInfoFactory, keyFormatReader, keyFormatWriter)
+    {
+    }
+
+
+    /// <summary>
+    /// Creates a converter with full control over all dispatch mechanisms.
+    /// </summary>
+    /// <param name="typeSelector">
+    /// The delegate that maps verification method <c>type</c> strings to .NET types.
+    /// </param>
+    /// <param name="typeInfoFactory">
+    /// The delegate that maps type strings to <see cref="VerificationMethodTypeInfo"/> for
+    /// crypto suite metadata.
+    /// </param>
+    /// <param name="keyFormatReader">
+    /// The delegate that reads key format from a JSON property by matching the property name.
+    /// </param>
+    /// <param name="keyFormatWriter">
+    /// The delegate that writes key format to JSON by matching the runtime type.
+    /// </param>
+    public VerificationMethodConverter(
+        VerificationMethodTypeSelector typeSelector,
+        VerificationMethodTypeInfoFactoryDelegate typeInfoFactory,
+        KeyFormatReaderDelegate keyFormatReader,
+        KeyFormatWriterDelegate keyFormatWriter)
+    {
+        ArgumentNullException.ThrowIfNull(typeSelector);
+        ArgumentNullException.ThrowIfNull(typeInfoFactory);
+        ArgumentNullException.ThrowIfNull(keyFormatReader);
+        ArgumentNullException.ThrowIfNull(keyFormatWriter);
+        TypeSelector = typeSelector;
+        TypeInfoFactory = typeInfoFactory;
+        KeyFormatReader = keyFormatReader;
+        KeyFormatWriter = keyFormatWriter;
+    }
+
+
+    /// <inheritdoc />
+    public override bool CanConvert(Type typeToConvert)
+    {
+        return typeToConvert == typeof(VerificationMethod);
+    }
+
+
+    /// <inheritdoc />
+    public override VerificationMethod Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        if(reader.TokenType != JsonTokenType.StartObject)
         {
-            return typeToConvert == typeof(VerificationMethod);
-            //var canConvert = typeToConvert == typeof(VerificationMethod) || typeToConvert == typeof(VerificationMethod[]);
-            //return typeToConvert == typeof(VerificationMethod) || typeToConvert == typeof(VerificationMethod[]);
+            JsonThrowHelper.ThrowJsonException();
         }
 
-
-        /// <summary>
-        /// Default converters for the verification key types and formats.
-        /// This can be used as a basis for an extened type map that is
-        /// given as a constructor parameter. For for standard defined
-        /// verification types and key formats see at
-        /// https://w3c.github.io/did-core/#key-types-and-formats.
-        /// </summary>
-#pragma warning disable CS0618 // Type or member is obsolete
-        public static ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> DefaultTypeMap =>
-            new Dictionary<string, Func<string, JsonSerializerOptions, KeyFormat>>(StringComparer.OrdinalIgnoreCase)
+        using(var document = JsonDocument.ParseValue(ref reader))
         {
+            var element = document.RootElement;
 
-            { "publicKeyMultibase", new Func<string, JsonSerializerOptions, PublicKeyMultibase>((json, _) => new PublicKeyMultibase(json)) },
-            { "publicKeyBase58", new Func<string, JsonSerializerOptions, PublicKeyBase58>((json, _) => new PublicKeyBase58(json)) },
-            { "publicKeyPem", new Func<string, JsonSerializerOptions, PublicKeyPem>((json, _) => new PublicKeyPem(json)) },
-            { "publicKeyHex", new Func<string, JsonSerializerOptions, PublicKeyHex>((json, _) => new PublicKeyHex(json)) },
-            { "publicKeyJwk", new Func<string, JsonSerializerOptions, PublicKeyJwk>((json, options) =>
+            if(!element.TryGetProperty("type", out var typeElement))
             {
-                var headers = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options)!;
-                return new PublicKeyJwk { Header = headers };
-            })}
-        }.ToImmutableDictionary();
-#pragma warning restore CS0618 // Type or member is obsolete
-
-
-        private static VerificationMethodTypeInfoFactoryDelegate DefaultVerificationMethodTypeInfoFactory { get; } = typeName =>
-        {
-            return typeName switch
-            {
-                "JsonWebKey2020" => VerificationMethodTypeInfo.JsonWebKey2020,
-                "Ed25519VerificationKey2020" => VerificationMethodTypeInfo.Ed25519VerificationKey2020,
-                "Secp256k1VerificationKey2018" => VerificationMethodTypeInfo.Secp256k1VerificationKey2018,
-                "Multikey" => VerificationMethodTypeInfo.Multikey,
-                "RsaVerificationKey2018" => VerificationMethodTypeInfo.RsaVerificationKey2018,
-                "JwsVerificationKey2020" => VerificationMethodTypeInfo.JwsVerificationKey2020,
-                "Ed25519VerificationKey2018" => VerificationMethodTypeInfo.Ed25519VerificationKey2018,
-                "X25519KeyAgreementKey2020" => VerificationMethodTypeInfo.X25519KeyAgreementKey2020,
-                "X25519KeyAgreementKey2019" => VerificationMethodTypeInfo.X25519KeyAgreementKey2019,
-
-                _ => throw new ArgumentException($"Unknown verification method type: '{typeName}'.")
-            };
-        };
-
-        /// <summary>
-        /// Xyz.
-        /// </summary>
-        private ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> TypeMap { get; }
-
-        private VerificationMethodTypeInfoFactoryDelegate VerificationMethodTypeInfoFactory { get; }
-
-
-        /// <summary>
-        /// A default constructor that maps <see cref="DefaultTypeMap"/> to be used.
-        /// </summary>
-        public VerificationMethodConverter() : this(DefaultVerificationMethodTypeInfoFactory, DefaultTypeMap) { }
-
-
-        /// <summary>
-        /// A default constructor for <see cref="VerificationMethod"/> and sub-type conversions.
-        /// </summary>
-        /// <param name="typeMap">A runtime map of <see cref="Service"/> and sub-types.</param>
-        public VerificationMethodConverter(VerificationMethodTypeInfoFactoryDelegate cryptoSuiteFactory, ImmutableDictionary<string, Func<string, JsonSerializerOptions, KeyFormat>> typeMap)
-        {
-            TypeMap = typeMap;
-            VerificationMethodTypeInfoFactory = cryptoSuiteFactory;
-        }
-
-
-        /// <inheritdoc/>
-        public override VerificationMethod Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            if(reader.TokenType != JsonTokenType.StartObject)
-            {
-                JsonThrowHelper.ThrowJsonException();
+                JsonThrowHelper.ThrowJsonException("Verification method is missing the required 'type' property.");
             }
 
-            //TODO: There can be also other properties. So there likely needs to be a simlar construct to
-            //as ServiceConverter, e.g. "public class SocialWebInboxService: Service".
-
-            //Parsing the document forwards moves the index. The element start position
-            //is stored to a temporary variable here so it can be given directly to JsonSerializer.
-            var verificationMethod = new VerificationMethod();
-            using(var jsonDocument = JsonDocument.ParseValue(ref reader))
+            var typeString = typeElement.GetString();
+            if(string.IsNullOrEmpty(typeString))
             {
-                var element = jsonDocument.RootElement;
+                JsonThrowHelper.ThrowJsonException("Verification method 'type' property must not be null or empty.");
+            }
 
-                //First the values are filled to the object.
-                verificationMethod.Id = element.GetProperty("id").GetString()!;
-                verificationMethod.Controller = element.GetProperty("controller").GetString();
-                verificationMethod.Type = VerificationMethodTypeInfoFactory(element.GetProperty("type").GetString()!).TypeName;
+            Type targetType = TypeSelector(typeString);
 
-                //Read optional expires property as XMLSCHEMA11-2 dateTimeStamp string.
-                if(element.TryGetProperty("expires", out JsonElement expiresElement))
+            //Base type: manual parse to avoid re-entering this converter.
+            if(targetType == typeof(VerificationMethod))
+            {
+                return ReadBaseVerificationMethod(element, typeString, options);
+            }
+
+            //Derived type: AOT-friendly deserialization. Since CanConvert only
+            //matches typeof(VerificationMethod), STJ won't re-enter this converter.
+            var typeInfo = options.GetTypeInfo(targetType);
+            var derived = (VerificationMethod)JsonSerializer.Deserialize(element, typeInfo)!;
+            derived.Type = TypeInfoFactory(typeString).TypeName;
+
+            //Key format dispatch for derived types too.
+            foreach(var property in element.EnumerateObject())
+            {
+                var keyFormat = KeyFormatReader(property, options);
+                if(keyFormat is not null)
                 {
-                    verificationMethod.Expires = expiresElement.GetString();
-                }
-
-                //Read optional revoked property as XMLSCHEMA11-2 dateTimeStamp string.
-                if(element.TryGetProperty("revoked", out JsonElement revokedElement))
-                {
-                    verificationMethod.Revoked = revokedElement.GetString();
-                }
-
-                //Then the known key format tags are tested and its corresponding transformation
-                //function is used. This is done like this because JSON can contain any format tags
-                //supported by DID Core or registry or extended in custom build. So they need to
-                //be tried one-by-one.
-                //
-                //N.B.! Or find a way to read the next property directly!
-                foreach(string serviceTypeDiscriminator in TypeMap.Keys)
-                {
-                    Func<string, JsonSerializerOptions, KeyFormat> keyFunc;
-                    if(element.TryGetProperty(serviceTypeDiscriminator, out JsonElement serviceTypeElement)
-                        && TypeMap.TryGetValue(serviceTypeDiscriminator, out keyFunc!))
-                    {
-                        verificationMethod.KeyFormat = keyFunc(serviceTypeElement.ToString()!, options);
-                        return verificationMethod;
-                    }
+                    derived.KeyFormat = keyFormat;
+                    return derived;
                 }
             }
 
-            JsonThrowHelper.ThrowJsonException($"{nameof(Read)} could not find a converter for \"{verificationMethod.Type}\".");
+            JsonThrowHelper.ThrowJsonException($"Could not find a key format for verification method type '{typeString}'.");
             return null!;
         }
+    }
 
 
-        /// <inheritdoc/>
-        public override void Write(Utf8JsonWriter writer, VerificationMethod value, JsonSerializerOptions options)
+    /// <inheritdoc />
+    public override void Write(Utf8JsonWriter writer, VerificationMethod value, JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(options);
+
+        //Derived type: AOT-friendly serialization. Since CanConvert only matches
+        //typeof(VerificationMethod), STJ won't re-enter this converter.
+        if(value.GetType() != typeof(VerificationMethod))
         {
-            ArgumentNullException.ThrowIfNull(writer);
-            ArgumentNullException.ThrowIfNull(value);
-
-            //TODO: Write use TypeMap as KeyFormat Converter so that these need not to be hardcoded like this.
-            //See also ServiceConverter for using options.
-            writer.WriteStartObject();
-            writer.WriteString("id", value?.Id?.ToString());
-            writer.WriteString("controller", value?.Controller);
-            writer.WriteString("type", value?.Type!);
-
-            //Write optional expires property as XMLSCHEMA11-2 dateTimeStamp string.
-            if(value?.Expires is not null)
-            {
-                writer.WriteString("expires", value.Expires);
-            }
-
-            //Write optional revoked property as XMLSCHEMA11-2 dateTimeStamp string.
-            if(value?.Revoked is not null)
-            {
-                writer.WriteString("revoked", value.Revoked);
-            }
-
-#pragma warning disable CS0618 // Type or member is obsolete
-            if(value?.KeyFormat is PublicKeyHex hex)
-            {
-                writer.WriteString("publicKeyHex", hex.Key);
-            }
-
-            if(value?.KeyFormat is PublicKeyBase58 base58)
-            {
-                writer.WriteString("publicKeyBase58", base58.Key);
-            }
-
-            if(value?.KeyFormat is PublicKeyPem pem)
-            {
-                writer.WriteString("publicKeyPem", pem.Key);
-            }
-#pragma warning restore CS0618 // Type or member is obsolete
-
-            if(value?.KeyFormat is PublicKeyMultibase multibase)
-            {
-                writer.WriteString("publicKeyMultibase", multibase.Key);
-            }
-
-            if(value?.KeyFormat is PublicKeyJwk jwk)
-            {
-                writer.WriteStartObject("publicKeyJwk");
-
-                foreach(var header in jwk.Header)
-                {
-                    writer.WriteString(header.Key, (string)header.Value);
-                }
-
-                writer.WriteEndObject();
-            }
-
-
-
-            writer.WriteEndObject();
+            var typeInfo = options.GetTypeInfo(value.GetType());
+            JsonSerializer.Serialize(writer, value, typeInfo);
+            return;
         }
+
+        //Base type: manual write to avoid re-entering this converter.
+        WriteBaseVerificationMethod(writer, value);
+    }
+
+
+    /// <summary>
+    /// Manually parses a <see cref="VerificationMethod"/> from a JSON object. Reads
+    /// known properties, resolves crypto suite metadata via <see cref="TypeInfoFactory"/>,
+    /// and dispatches key format via <see cref="KeyFormatReader"/>.
+    /// </summary>
+    private VerificationMethod ReadBaseVerificationMethod(
+        JsonElement element,
+        string typeString,
+        JsonSerializerOptions options)
+    {
+        //Convert the type string to the canonical type name via the factory.
+        var vm = new VerificationMethod
+        {
+            Type = TypeInfoFactory(typeString).TypeName
+        };
+
+        KeyFormat? keyFormat = null;
+
+        foreach(var property in element.EnumerateObject())
+        {
+            if(property.NameEquals("id"u8))
+            {
+                vm.Id = property.Value.GetString();
+            }
+            else if(property.NameEquals("type"u8))
+            {
+                //Already handled via TypeInfoFactory above.
+            }
+            else if(property.NameEquals("controller"u8))
+            {
+                vm.Controller = property.Value.GetString();
+            }
+            else if(property.NameEquals("expires"u8))
+            {
+                vm.Expires = property.Value.GetString();
+            }
+            else if(property.NameEquals("revoked"u8))
+            {
+                vm.Revoked = property.Value.GetString();
+            }
+            else
+            {
+                //Try key format delegate for any unrecognized property.
+                var kf = KeyFormatReader(property, options);
+                if(kf is not null)
+                {
+                    keyFormat = kf;
+                }
+            }
+        }
+
+        if(keyFormat is not null)
+        {
+            vm.KeyFormat = keyFormat;
+        }
+
+        return vm;
+    }
+
+
+    /// <summary>
+    /// Manually writes a base <see cref="VerificationMethod"/> to JSON, including the
+    /// key format via <see cref="KeyFormatWriter"/>.
+    /// </summary>
+    private void WriteBaseVerificationMethod(Utf8JsonWriter writer, VerificationMethod vm)
+    {
+        writer.WriteStartObject();
+
+        if(vm.Id is not null)
+        {
+            writer.WriteString("id"u8, vm.Id);
+        }
+
+        if(vm.Type is not null)
+        {
+            writer.WriteString("type"u8, vm.Type);
+        }
+
+        if(vm.Controller is not null)
+        {
+            writer.WriteString("controller"u8, vm.Controller);
+        }
+
+        if(vm.Expires is not null)
+        {
+            writer.WriteString("expires"u8, vm.Expires);
+        }
+
+        if(vm.Revoked is not null)
+        {
+            writer.WriteString("revoked"u8, vm.Revoked);
+        }
+
+        if(vm.KeyFormat is not null)
+        {
+            if(!KeyFormatWriter(writer, vm.KeyFormat))
+            {
+                JsonThrowHelper.ThrowJsonException($"No handler for key format type '{vm.KeyFormat.GetType().Name}'.");
+            }
+        }
+
+        writer.WriteEndObject();
     }
 }

@@ -17,11 +17,17 @@ internal static class JsonElementConversion
     /// <list type="bullet">
     /// <item><description><see cref="JsonValueKind.String"/> -> <see cref="string"/>.</description></item>
     /// <item><description><see cref="JsonValueKind.True"/> and <see cref="JsonValueKind.False"/> -> <see cref="bool"/>.</description></item>
-    /// <item><description><see cref="JsonValueKind.Number"/> -> <see cref="long"/> if representable, otherwise <see cref="decimal"/>.</description></item>
+    /// <item><description><see cref="JsonValueKind.Number"/> -> <see cref="int"/> if representable, then <see cref="long"/>, otherwise <see cref="decimal"/>.</description></item>
     /// <item><description><see cref="JsonValueKind.Null"/> -> <see langword="null"/>.</description></item>
     /// <item><description><see cref="JsonValueKind.Object"/> -> <see cref="Dictionary{TKey,TValue}"/> of string to object.</description></item>
     /// <item><description><see cref="JsonValueKind.Array"/> -> <see cref="List{T}"/> of object.</description></item>
     /// </list>
+    /// <para>
+    /// Collection types use non-nullable generic parameters (<c>Dictionary&lt;string, object&gt;</c>
+    /// and <c>List&lt;object&gt;</c>) to match the shapes used by POCO types such as
+    /// <c>Service.AdditionalData</c>. Null values are stored as null references within the
+    /// collections, which <see cref="object"/> permits.
+    /// </para>
     /// </remarks>
     internal static object? Convert(JsonElement element)
     {
@@ -31,7 +37,7 @@ internal static class JsonElementConversion
             JsonValueKind.True => true,
             JsonValueKind.False => false,
             JsonValueKind.Null => null,
-            JsonValueKind.Number => element.TryGetInt64(out long l) ? (object)l : element.GetDecimal(),
+            JsonValueKind.Number => NarrowNumber(element),
             JsonValueKind.Object => ConvertObject(element),
             JsonValueKind.Array => ConvertArray(element),
             _ => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}.")
@@ -39,24 +45,47 @@ internal static class JsonElementConversion
     }
 
 
-    private static Dictionary<string, object?> ConvertObject(JsonElement element)
+    /// <summary>
+    /// Narrows a JSON number to the smallest fitting CLR integer type,
+    /// falling back to <see cref="decimal"/> for non-integer values.
+    /// The narrowing order is <see cref="int"/> then <see cref="long"/>
+    /// then <see cref="decimal"/>, matching the behavior of
+    /// <see cref="ManualJsonReader.ReadNumber"/>.
+    /// </summary>
+    internal static object NarrowNumber(JsonElement element)
     {
-        var dict = new Dictionary<string, object?>();
+        if(element.TryGetInt32(out int i))
+        {
+            return i;
+        }
+
+        if(element.TryGetInt64(out long l))
+        {
+            return l;
+        }
+
+        return element.GetDecimal();
+    }
+
+
+    private static Dictionary<string, object> ConvertObject(JsonElement element)
+    {
+        var dict = new Dictionary<string, object>();
         foreach(JsonProperty prop in element.EnumerateObject())
         {
-            dict[prop.Name] = Convert(prop.Value);
+            dict[prop.Name] = Convert(prop.Value)!;
         }
 
         return dict;
     }
 
 
-    private static List<object?> ConvertArray(JsonElement element)
+    private static List<object> ConvertArray(JsonElement element)
     {
-        var list = new List<object?>();
+        var list = new List<object>();
         foreach(JsonElement item in element.EnumerateArray())
         {
-            list.Add(Convert(item));
+            list.Add(Convert(item)!);
         }
 
         return list;

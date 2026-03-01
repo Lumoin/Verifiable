@@ -47,7 +47,7 @@ internal static class SdJwtPipeline
             encoder,
             hashAlgorithm);
 
-        byte[] redactedBytes = JsonSerializer.SerializeToUtf8Bytes(jwtPayload);
+        byte[] redactedBytes = SerializeDictionaryToUtf8(jwtPayload);
         return (redactedBytes, disclosures);
     }
 
@@ -77,7 +77,7 @@ internal static class SdJwtPipeline
             [JwkProperties.Kid] = keyId
         };
 
-        byte[] headerBytes = JsonSerializer.SerializeToUtf8Bytes(header);
+        byte[] headerBytes = SerializeDictionaryToUtf8(header);
         EncodeDelegate encoder = DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyJwk);
 
         string headerSegment = encoder(headerBytes);
@@ -111,5 +111,22 @@ internal static class SdJwtPipeline
         string compactJws = $"{headerSegment}.{payloadSegment}.{signatureSegment}";
 
         return Encoding.UTF8.GetBytes(compactJws);
+    }
+
+
+    /// <summary>
+    /// Serializes a string-keyed dictionary to UTF-8 JSON bytes using
+    /// <see cref="ManualJsonWriter"/>, avoiding <see cref="JsonSerializer"/>
+    /// and its type metadata resolution.
+    /// </summary>
+    private static byte[] SerializeDictionaryToUtf8(IDictionary<string, object> dictionary)
+    {
+        using var stream = new MemoryStream();
+        using(var writer = new Utf8JsonWriter(stream))
+        {
+            ManualJsonWriter.WriteObject(writer, dictionary);
+        }
+
+        return stream.ToArray();
     }
 }
