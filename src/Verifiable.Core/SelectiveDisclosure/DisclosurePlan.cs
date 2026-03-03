@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using Verifiable.Core.SelectiveDisclosure.Strategy;
 
 namespace Verifiable.Core.SelectiveDisclosure;
 
@@ -7,9 +8,14 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A disclosure plan is the output of Layers 3–4 of the DCQL Disclosure Architecture
-/// and the primary input for Layer 5 (format-specific encoding). It contains per-credential
-/// decisions and metadata about the overall computation:
+/// A disclosure plan is a <em>view</em> into the <see cref="StrategyGraph"/>: the selected
+/// strategy's decisions projected into the flat format downstream consumers expect. Protocol
+/// handlers (SD-JWT, ECDSA-SD, mso_mdoc) consume the flat <see cref="Decisions"/>; wallets,
+/// AI agents, and debugging tools navigate the full <see cref="StrategyGraph"/> to inspect
+/// alternatives, entropy trade-offs, and the Pareto frontier.
+/// </para>
+/// <para>
+/// The plan is the primary input for Layer 5 (format-specific encoding) and downstream builders:
 /// </para>
 /// <list type="bullet">
 /// <item><description>
@@ -28,9 +34,10 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// <see cref="DecisionRecord"/>.
 /// </description></item>
 /// <item><description>
-/// <strong>Issuance builders</strong> that use the plan to determine which claims
-/// become mandatory versus selectively disclosable when constructing SD-JWT or
-/// SD-CWT tokens.
+/// <strong>Wallet UI / AI agent</strong> that presents the Pareto frontier from
+/// <see cref="StrategyGraph"/> to the holder, explaining trade-offs between entropy,
+/// credential count, and ZKP utilization. The holder selects a strategy; the plan's
+/// <see cref="Decisions"/> reflect that selection.
 /// </description></item>
 /// </list>
 /// <para>
@@ -51,7 +58,7 @@ public sealed class DisclosurePlan<TCredential>
     public required bool Satisfied { get; init; }
 
     /// <summary>
-    /// Per-credential disclosure decisions.
+    /// Per-credential disclosure decisions from the selected strategy.
     /// </summary>
     public required IReadOnlyList<CredentialDisclosureDecision<TCredential>> Decisions { get; init; }
 
@@ -81,4 +88,23 @@ public sealed class DisclosurePlan<TCredential>
     /// </para>
     /// </remarks>
     public required DisclosureDecisionRecord<TCredential> DecisionRecord { get; init; }
+
+    /// <summary>
+    /// The full strategy graph from which this plan was projected.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The graph contains all enumerated strategies (feasible, pruned, dominated),
+    /// the Pareto frontier, entropy scores, and the selected strategy. Callers who
+    /// need only the flat decisions can ignore this property. Callers who need to
+    /// present alternatives (wallet UI), reason over trade-offs (AI agents), or
+    /// log the full decision space (audit) use the graph directly.
+    /// </para>
+    /// <para>
+    /// <see langword="null"/> when no strategy enumeration was performed (e.g., when
+    /// all matches failed lattice construction or policy assessment, leaving zero
+    /// surviving decisions).
+    /// </para>
+    /// </remarks>
+    public DisclosureStrategyGraph<TCredential>? StrategyGraph { get; init; }
 }

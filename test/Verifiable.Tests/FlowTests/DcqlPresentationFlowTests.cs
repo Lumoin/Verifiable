@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.SelectiveDisclosure.Strategy;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
@@ -45,7 +46,7 @@ namespace Verifiable.Tests.FlowTests;
 /// </description></item>
 /// <item><description>
 /// <strong>Wallet</strong> selects disclosures from the <see cref="SdToken{TEnvelope}"/>
-/// based on the disclosure plan and constructs the VP Token response.
+/// based on the disclosure graph and constructs the VP Token response.
 /// </description></item>
 /// <item><description>
 /// <strong>Verifier</strong> validates the issuer JWT signature on the presented token
@@ -73,12 +74,6 @@ internal sealed class DcqlPresentationFlowTests
 
     private static FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(
         new DateTimeOffset(2024, 6, 15, 12, 0, 0, TimeSpan.Zero));
-
-    private static JwtHeaderSerializer HeaderSerializer => header =>
-        JsonSerializer.SerializeToUtf8Bytes(header);
-
-    private static JwtPayloadSerializer PayloadSerializer => payload =>
-        JsonSerializer.SerializeToUtf8Bytes(payload);
 
 
     /// <summary>
@@ -127,14 +122,14 @@ internal sealed class DcqlPresentationFlowTests
 
         //Disclosure engine computes optimal disclosure via lattice.
         var computation = new DisclosureComputation<SdToken<string>>();
-        var plan = await computation.ComputeAsync(
+        var graph = await computation.ComputeAsync(
             [match],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(plan.Satisfied, "The disclosure plan must be satisfied.");
-        Assert.HasCount(1, plan.Decisions);
+        Assert.IsTrue(graph.Satisfied, "The disclosure graph must be satisfied.");
+        Assert.HasCount(1, graph.Decisions);
 
-        var decision = plan.Decisions[0];
+        var decision = graph.Decisions[0];
         Assert.IsTrue(decision.SatisfiesRequirements, "The decision must satisfy verifier requirements.");
 
         //Verify minimum disclosure: mandatory + requested, nothing extra.
@@ -155,7 +150,7 @@ internal sealed class DcqlPresentationFlowTests
         Assert.DoesNotContain(
             CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.Birthdate}"), decision.SelectedPaths);
 
-        //Wallet selects disclosures from the SD-JWT token based on the plan.
+        //Wallet selects disclosures from the SD-JWT token based on the graph.
         var selectedClaimNames = decision.SelectedPaths
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
@@ -183,10 +178,10 @@ internal sealed class DcqlPresentationFlowTests
         Assert.IsTrue(presentationValid, "Presented issuer JWT signature must be cryptographically valid.");
 
         //Verify the decision record captured all phases.
-        Assert.IsNotNull(plan.DecisionRecord);
-        Assert.IsTrue(plan.DecisionRecord.Satisfied);
-        Assert.HasCount(1, plan.DecisionRecord.LatticeComputations);
-        Assert.HasCount(1, plan.DecisionRecord.FinalDecisions);
+        Assert.IsNotNull(graph.DecisionRecord);
+        Assert.IsTrue(graph.DecisionRecord!.Satisfied);
+        Assert.HasCount(1, graph.DecisionRecord!.LatticeComputations);
+        Assert.HasCount(1, graph.DecisionRecord!.FinalDecisions);
     }
 
 
@@ -195,7 +190,7 @@ internal sealed class DcqlPresentationFlowTests
     /// The issuer JWT signature remains valid on the restricted presentation.
     /// </summary>
     [TestMethod]
-    public async Task UserExclusionCreatesConflictInDisclosurePlan()
+    public async Task UserExclusionCreatesConflictInDisclosureGraph()
     {
         var keyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using var publicKey = keyMaterial.PublicKey;
@@ -243,15 +238,15 @@ internal sealed class DcqlPresentationFlowTests
         };
 
         var computation = new DisclosureComputation<SdToken<string>>();
-        var plan = await computation.ComputeAsync(
+        var graph = await computation.ComputeAsync(
             [match],
             userExclusions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(plan.Satisfied, "Plan is satisfied even with conflict, the credential was still processed.");
-        Assert.HasCount(1, plan.Decisions);
+        Assert.IsTrue(graph.Satisfied, "Graph is satisfied even with conflict, the credential was still processed.");
+        Assert.HasCount(1, graph.Decisions);
 
-        var decision = plan.Decisions[0];
+        var decision = graph.Decisions[0];
         Assert.IsFalse(decision.SatisfiesRequirements, "Verifier requirements are not fully met due to user exclusion.");
         Assert.IsNotNull(decision.ConflictingPaths, "Conflicting paths must be reported.");
         Assert.Contains(emailPath, decision.ConflictingPaths!);
@@ -343,20 +338,20 @@ internal sealed class DcqlPresentationFlowTests
         };
 
         var computation = new DisclosureComputation<string>();
-        var plan = await computation.ComputeAsync(
+        var graph = await computation.ComputeAsync(
             [pidMatch, mdlMatch],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(plan.Satisfied, "Both credential queries must be satisfied.");
-        Assert.HasCount(2, plan.Decisions);
-        Assert.IsTrue(plan.Decisions[0].SatisfiesRequirements);
-        Assert.IsTrue(plan.Decisions[1].SatisfiesRequirements);
+        Assert.IsTrue(graph.Satisfied, "Both credential queries must be satisfied.");
+        Assert.HasCount(2, graph.Decisions);
+        Assert.IsTrue(graph.Decisions[0].SatisfiesRequirements);
+        Assert.IsTrue(graph.Decisions[1].SatisfiesRequirements);
 
         //Construct VP Token with both entries.
         var vpToken = new Dictionary<string, string>
         {
-            [plan.Decisions[0].QueryRequirementId] = plan.Decisions[0].Credential,
-            [plan.Decisions[1].QueryRequirementId] = plan.Decisions[1].Credential
+            [graph.Decisions[0].QueryRequirementId] = graph.Decisions[0].Credential,
+            [graph.Decisions[1].QueryRequirementId] = graph.Decisions[1].Credential
         };
 
         Assert.HasCount(2, vpToken);
@@ -370,8 +365,9 @@ internal sealed class DcqlPresentationFlowTests
             publicKey).ConfigureAwait(false);
         Assert.IsTrue(pidSignatureValid, "PID issuer JWT signature must be valid in the VP Token.");
 
-        Assert.HasCount(2, plan.DecisionRecord.Evaluations);
-        Assert.HasCount(2, plan.DecisionRecord.LatticeComputations);
+        var multiRecord = graph.DecisionRecord!;
+        Assert.HasCount(2, multiRecord.Evaluations);
+        Assert.HasCount(2, multiRecord.LatticeComputations);
     }
 
 
@@ -453,23 +449,24 @@ internal sealed class DcqlPresentationFlowTests
             Format = DcqlCredentialFormats.SdJwt
         };
 
-        var plan = await computation.ComputeAsync(
+        var graph = await computation.ComputeAsync(
             [match],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(plan.Satisfied);
-        Assert.HasCount(1, plan.Decisions);
+        Assert.IsTrue(graph.Satisfied);
+        Assert.HasCount(1, graph.Decisions);
 
-        var decision = plan.Decisions[0];
+        var decision = graph.Decisions[0];
 
         //Policy narrowed the disclosure, so verifier requirements are not fully met.
         Assert.IsFalse(decision.SatisfiesRequirements);
         Assert.Contains(givenNamePath, decision.SelectedPaths);
         Assert.DoesNotContain(familyNamePath, decision.SelectedPaths);
 
-        Assert.IsNotNull(plan.DecisionRecord.PolicyAssessments);
-        Assert.HasCount(1, plan.DecisionRecord.PolicyAssessments!);
-        Assert.AreEqual("OrganizationPolicy", plan.DecisionRecord.PolicyAssessments[0].AssessorName);
+        Assert.IsNotNull(graph.DecisionRecord!.PolicyAssessments);
+        var policyAssessments = graph.DecisionRecord!.PolicyAssessments!;
+        Assert.HasCount(1, policyAssessments);
+        Assert.AreEqual("OrganizationPolicy", policyAssessments[0].AssessorName);
 
         //Issuer JWT signature is still valid after policy narrowing.
         bool signatureValid = await Jws.VerifyAsync(
@@ -608,16 +605,16 @@ internal sealed class DcqlPresentationFlowTests
         };
 
         var computation = new DisclosureComputation<SdToken<string>>();
-        var plan = await computation.ComputeAsync(
+        var graph = await computation.ComputeAsync(
             [match],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(plan.Satisfied);
-        Assert.IsTrue(plan.Decisions[0].SatisfiesRequirements);
+        Assert.IsTrue(graph.Satisfied);
+        Assert.IsTrue(graph.Decisions[0].SatisfiesRequirements);
         Assert.Contains(
-            CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.Birthdate}"), plan.Decisions[0].SelectedPaths);
+            CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.Birthdate}"), graph.Decisions[0].SelectedPaths);
 
-        var selectedClaimNames = plan.Decisions[0].SelectedPaths
+        var selectedClaimNames = graph.Decisions[0].SelectedPaths
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
 

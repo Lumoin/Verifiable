@@ -3,40 +3,6 @@ using System.Collections.Generic;
 
 namespace Verifiable.Core.SelectiveDisclosure;
 
-/// <summary>
-/// Result of a disclosure selection operation.
-/// </summary>
-/// <typeparam name="TClaim">The type representing individual claims.</typeparam>
-/// <param name="SelectedClaims">The claims selected for disclosure.</param>
-/// <param name="SatisfiesRequirements">Whether all verifier requirements are satisfied.</param>
-/// <param name="UnavailableClaims">Claims requested but not available in the credential.</param>
-/// <param name="ConflictingClaims">Claims that conflict with user exclusions.</param>
-public readonly record struct DisclosureSelectionResult<TClaim>(
-    IReadOnlySet<TClaim> SelectedClaims,
-    bool SatisfiesRequirements,
-    IReadOnlySet<TClaim>? UnavailableClaims = null,
-    IReadOnlySet<TClaim>? ConflictingClaims = null)
-{
-    /// <summary>
-    /// Gets whether the selection has any issues (unavailable or conflicting claims).
-    /// </summary>
-    public bool HasIssues => (UnavailableClaims?.Count ?? 0) > 0 || (ConflictingClaims?.Count ?? 0) > 0;
-}
-
-
-/// <summary>
-/// Result of multi-credential selection.
-/// </summary>
-/// <typeparam name="TCredential">The type representing credentials.</typeparam>
-/// <typeparam name="TClaim">The type representing individual claims.</typeparam>
-/// <param name="Selections">The selected credentials with their disclosure sets.</param>
-/// <param name="SatisfiesAllRequirements">Whether all requirements are satisfied.</param>
-/// <param name="UnsatisfiedRequirements">Requirements that could not be satisfied, if any.</param>
-public readonly record struct MultiCredentialSelectionResult<TCredential, TClaim>(
-    IReadOnlyList<(TCredential Credential, IReadOnlySet<TClaim> Disclosures)> Selections,
-    bool SatisfiesAllRequirements,
-    IReadOnlySet<TClaim>? UnsatisfiedRequirements = null);
-
 
 /// <summary>
 /// Selective disclosure operations using lattice theory.
@@ -94,7 +60,7 @@ public static class SelectiveDisclosure
     /// </para>
     /// </remarks>
     public static (IReadOnlySet<TClaim> Disclosures, IReadOnlySet<TClaim> Unavailable) ComputeMinimumDisclosure<TClaim>(
-        IBoundedDisclosureLattice<TClaim> lattice,
+        SetDisclosureLattice<TClaim> lattice,
         IReadOnlySet<TClaim>? verifierRequested = null,
         IReadOnlySet<TClaim>? regulatoryMandated = null,
         IReadOnlySet<TClaim>? structurallyRequired = null)
@@ -153,7 +119,7 @@ public static class SelectiveDisclosure
     /// </para>
     /// </remarks>
     public static IReadOnlySet<TClaim> ComputeMaximumDisclosure<TClaim>(
-        IBoundedDisclosureLattice<TClaim> lattice,
+        SetDisclosureLattice<TClaim> lattice,
         IReadOnlySet<TClaim>? userExclusions = null)
     {
         ArgumentNullException.ThrowIfNull(lattice);
@@ -207,7 +173,7 @@ public static class SelectiveDisclosure
     /// </para>
     /// </remarks>
     public static DisclosureSelectionResult<TClaim> ComputeOptimalDisclosure<TClaim>(
-        IBoundedDisclosureLattice<TClaim> lattice,
+        SetDisclosureLattice<TClaim> lattice,
         IReadOnlySet<TClaim>? verifierRequested = null,
         IReadOnlySet<TClaim>? userExclusions = null,
         IReadOnlySet<TClaim>? regulatoryMandated = null,
@@ -280,7 +246,7 @@ public static class SelectiveDisclosure
     /// </para>
     /// </remarks>
     public static MultiCredentialSelectionResult<TCredential, TClaim> SelectCredentials<TCredential, TClaim>(
-        IReadOnlyList<(TCredential Credential, IBoundedDisclosureLattice<TClaim> Lattice)> credentials,
+        IReadOnlyList<(TCredential Credential, SetDisclosureLattice<TClaim> Lattice)> credentials,
         IReadOnlySet<TClaim> requirements,
         IReadOnlyDictionary<TCredential, IReadOnlySet<TClaim>>? userExclusions = null)
         where TCredential : notnull
@@ -295,7 +261,7 @@ public static class SelectiveDisclosure
         while(unsatisfied.Count > 0)
         {
             //Find the best credential to satisfy remaining requirements.
-            (TCredential Credential, IBoundedDisclosureLattice<TClaim> Lattice)? bestCandidate = null;
+            (TCredential Credential, SetDisclosureLattice<TClaim> Lattice)? bestCandidate = null;
             IReadOnlySet<TClaim>? bestDisclosure = null;
             int bestCoverage = 0;
 
@@ -365,7 +331,7 @@ public static class SelectiveDisclosure
     /// <param name="requirements">The requirements to check against.</param>
     /// <returns><see langword="true"/> if all requirements are satisfied; otherwise <see langword="false"/>.</returns>
     public static bool ValidateDisclosure<TClaim>(
-        IBoundedDisclosureLattice<TClaim> lattice,
+        SetDisclosureLattice<TClaim> lattice,
         IReadOnlySet<TClaim> disclosures,
         IReadOnlySet<TClaim> requirements)
     {

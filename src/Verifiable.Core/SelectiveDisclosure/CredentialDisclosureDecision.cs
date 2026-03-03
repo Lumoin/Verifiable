@@ -122,5 +122,5 @@ public sealed class CredentialDisclosureDecision<TCredential>
     /// constraint optimization).
     /// </para>
     /// </remarks>
-    public IBoundedDisclosureLattice<CredentialPath>? Lattice { get; init; }
+    public SetDisclosureLattice<CredentialPath>? Lattice { get; init; }
 }

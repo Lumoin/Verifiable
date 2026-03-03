@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Verifiable.Core.SelectiveDisclosure;
 
@@ -16,7 +17,7 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// <para>
 /// <strong>Assessor contract:</strong> Assessors may narrow <see cref="ProposedPaths"/>
 /// (remove paths) but must not widen it beyond the lattice maximum. Adding paths not
-/// in <see cref="IBoundedDisclosureLattice{TClaim}.Top"/> would violate the structural
+/// in <see cref="SetDisclosureLattice{TClaim}.Top"/> would violate the structural
 /// invariant. Assessors can query the lattice to check bounds, compute alternative
 /// disclosure sets, or verify that removing a path would not violate mandatory requirements.
 /// </para>
@@ -48,9 +49,8 @@ public sealed class PolicyAssessmentContext<TCredential>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The assessor may narrow this set (remove paths) but must not widen it
-    /// beyond the lattice maximum. Adding paths not in the lattice top
-    /// would violate the structural invariant.
+    /// The assessor may narrow this set (remove paths) or expand it (add paths within
+    /// the lattice top). The assessor must not remove mandatory paths (lattice bottom).
     /// </para>
     /// </remarks>
     public required IReadOnlySet<CredentialPath> ProposedPaths { get; init; }
@@ -61,7 +61,7 @@ public sealed class PolicyAssessmentContext<TCredential>
     /// <remarks>
     /// <para>
     /// Assessors can use the lattice to check whether removing a path would
-    /// violate mandatory requirements (<see cref="IBoundedDisclosureLattice{TClaim}.Bottom"/>),
+    /// violate mandatory requirements (<see cref="SetDisclosureLattice{TClaim}.Bottom"/>),
     /// whether alternative paths exist in the selectable set, or to compute
     /// minimum and maximum disclosure bounds for constraint solving.
     /// </para>
@@ -71,7 +71,7 @@ public sealed class PolicyAssessmentContext<TCredential>
     /// the privacy cost of each additional path disclosure.
     /// </para>
     /// </remarks>
-    public required IBoundedDisclosureLattice<CredentialPath> Lattice { get; init; }
+    public required SetDisclosureLattice<CredentialPath> Lattice { get; init; }
 
     /// <summary>
     /// Whether the proposed paths satisfy all verifier requirements.
@@ -94,4 +94,18 @@ public sealed class PolicyAssessmentContext<TCredential>
     /// </para>
     /// </remarks>
     public string? Format { get; init; }
+
+    /// <summary>
+    /// Contextual signals from the requesting party, the attestation, and the environment.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Keyed by well-known types. Assessors retrieve signals by type, enabling
+    /// compile-time safety for common signal types while remaining extensible for
+    /// application-specific signals. The computation merges requesting party signals
+    /// with per-credential attestation metadata, with attestation metadata taking
+    /// precedence when both contain the same type key.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyDictionary<Type, object>? Signals { get; init; }
 }

@@ -6,7 +6,7 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// <summary>
 /// Captures the outcome of a policy assessor for a single credential.
 /// </summary>
-[DebuggerDisplay("Policy(QueryId={QueryRequirementId}, Assessor={AssessorName}, Approved={Approved})")]
+[DebuggerDisplay("Policy(QueryId={QueryRequirementId}, Assessor={AssessorName}, Approved={Approved}, Effect={Effect})")]
 public sealed class PolicyAssessmentRecord
 {
     /// <summary>
@@ -25,9 +25,19 @@ public sealed class PolicyAssessmentRecord
     public required bool Approved { get; init; }
 
     /// <summary>
+    /// The effect this assessment had on the disclosure set.
+    /// </summary>
+    public required PolicyAssessmentEffect Effect { get; init; }
+
+    /// <summary>
     /// Paths the assessor removed from the disclosure set, if any.
     /// </summary>
     public IReadOnlySet<CredentialPath>? RemovedPaths { get; init; }
+
+    /// <summary>
+    /// Paths the assessor added to the disclosure set, if any.
+    /// </summary>
+    public IReadOnlySet<CredentialPath>? AddedPaths { get; init; }
 
     /// <summary>
     /// Human-readable reason for the decision.
