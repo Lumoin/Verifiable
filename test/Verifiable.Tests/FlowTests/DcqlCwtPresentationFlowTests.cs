@@ -6,6 +6,7 @@ using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.SelectiveDisclosure.Strategy;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Sd;
@@ -126,14 +127,14 @@ internal sealed class DcqlCwtPresentationFlowTests
 
         //Disclosure engine computes optimal disclosure via lattice.
         var computation = new DisclosureComputation<SdToken<ReadOnlyMemory<byte>>>();
-        var plan = await computation.ComputeAsync(
+        var graph = await computation.ComputeAsync(
             [match],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(plan.Satisfied, "The disclosure plan must be satisfied.");
-        Assert.HasCount(1, plan.Decisions);
+        Assert.IsTrue(graph.Satisfied, "The disclosure graph must be satisfied.");
+        Assert.HasCount(1, graph.Decisions);
 
-        var decision = plan.Decisions[0];
+        var decision = graph.Decisions[0];
         Assert.IsTrue(decision.SatisfiesRequirements, "The decision must satisfy verifier requirements.");
 
         //Verify minimum disclosure: mandatory + requested, nothing extra.
@@ -152,7 +153,7 @@ internal sealed class DcqlCwtPresentationFlowTests
         Assert.DoesNotContain(
             CredentialPath.FromJsonPointer(BirthdatePath), decision.SelectedPaths);
 
-        //Wallet selects disclosures from the SD-CWT token based on the plan.
+        //Wallet selects disclosures from the SD-CWT token based on the graph.
         var selectedClaimNames = decision.SelectedPaths
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
@@ -185,10 +186,10 @@ internal sealed class DcqlCwtPresentationFlowTests
         Assert.IsTrue(signatureValid, "Presented COSE_Sign1 issuer signature must be cryptographically valid.");
 
         //Verify the decision record captured all phases.
-        Assert.IsNotNull(plan.DecisionRecord);
-        Assert.IsTrue(plan.DecisionRecord.Satisfied);
-        Assert.HasCount(1, plan.DecisionRecord.LatticeComputations);
-        Assert.HasCount(1, plan.DecisionRecord.FinalDecisions);
+        Assert.IsNotNull(graph.DecisionRecord);
+        Assert.IsTrue(graph.DecisionRecord!.Satisfied);
+        Assert.HasCount(1, graph.DecisionRecord!.LatticeComputations);
+        Assert.HasCount(1, graph.DecisionRecord!.FinalDecisions);
     }
 
 
@@ -197,7 +198,7 @@ internal sealed class DcqlCwtPresentationFlowTests
     /// The COSE_Sign1 signature remains valid regardless of disclosure decisions.
     /// </summary>
     [TestMethod]
-    public async Task UserExclusionCreatesConflictInCwtDisclosurePlan()
+    public async Task UserExclusionCreatesConflictInCwtDisclosureGraph()
     {
         var keyMaterial = TestKeyMaterialProvider.CreateEd25519KeyMaterial();
         using var publicKey = keyMaterial.PublicKey;
@@ -234,17 +235,17 @@ internal sealed class DcqlCwtPresentationFlowTests
         };
 
         var computation = new DisclosureComputation<SdToken<ReadOnlyMemory<byte>>>();
-        var plan = await computation.ComputeAsync(
+        var graph = await computation.ComputeAsync(
             [match],
             userExclusions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(plan.Satisfied,
-            "Plan is satisfied even with conflict, the credential was still processed.");
-        Assert.HasCount(1, plan.Decisions);
+        Assert.IsTrue(graph.Satisfied,
+            "Graph is satisfied even with conflict, the credential was still processed.");
+        Assert.HasCount(1, graph.Decisions);
 
         //The decision should reflect the conflict.
-        var decision = plan.Decisions[0];
+        var decision = graph.Decisions[0];
         Assert.DoesNotContain(emailPath, decision.SelectedPaths);
 
         //Even with an exclusion conflict, the token itself is still cryptographically sound.
@@ -300,17 +301,17 @@ internal sealed class DcqlCwtPresentationFlowTests
         };
 
         var computation = new DisclosureComputation<SdToken<ReadOnlyMemory<byte>>>();
-        var plan = await computation.ComputeAsync(
+        var graph = await computation.ComputeAsync(
             [match],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(plan.Satisfied);
-        Assert.IsTrue(plan.Decisions[0].SatisfiesRequirements);
+        Assert.IsTrue(graph.Satisfied);
+        Assert.IsTrue(graph.Decisions[0].SatisfiesRequirements);
         Assert.Contains(
-            CredentialPath.FromJsonPointer(BirthdatePath), plan.Decisions[0].SelectedPaths);
+            CredentialPath.FromJsonPointer(BirthdatePath), graph.Decisions[0].SelectedPaths);
 
         //Wallet selects and verifier validates the presented subset.
-        var selectedClaimNames = plan.Decisions[0].SelectedPaths
+        var selectedClaimNames = graph.Decisions[0].SelectedPaths
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
 

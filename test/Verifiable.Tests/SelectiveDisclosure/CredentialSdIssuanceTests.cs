@@ -3,10 +3,8 @@ using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.JCose.Sd;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.DataIntegrity;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 

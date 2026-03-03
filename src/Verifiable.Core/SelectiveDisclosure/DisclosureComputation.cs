@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Core.SelectiveDisclosure.Strategy;
+
 
 namespace Verifiable.Core.SelectiveDisclosure;
 
@@ -16,7 +19,7 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// minimum/maximum/optimal disclosure computation, and policy assessment.
 /// It is query-language-neutral and format-neutral — it consumes
 /// <see cref="DisclosureMatch{TCredential}"/> instances produced by any evaluator
-/// and produces a <see cref="DisclosurePlan{TCredential}"/>.
+/// and produces a <see cref="DisclosureStrategyGraph{TCredential}"/>.
 /// </para>
 /// <para>
 /// Evaluators that can feed matches into this pipeline include DCQL (Digital
@@ -51,10 +54,13 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// computed. The lattice defines M ⊆ S ⊆ A and enforces upward closure.
 /// </description></item>
 /// <item><description>
-/// <strong>Layer 4 — Policy decision (this class):</strong> The
-/// <see cref="PolicyAssessorDelegate{TCredential}"/> pipeline runs in sequence over the
-/// lattice result. Each assessor receives the full <see cref="PolicyAssessmentContext{TCredential}"/>
-/// and can narrow or reject. Assessor implementations include:
+/// <strong>Layer 4 — Policy decision (this class):</strong> A two-level pipeline.
+/// Layer 4a runs per-credential <see cref="PolicyAssessorDelegate{TCredential}"/> assessors
+/// in sequence; each can narrow, expand (within lattice bounds), or reject.
+/// Layer 4b runs <see cref="CrossCredentialOptimizerDelegate{TCredential}"/> instances
+/// that receive all per-credential decisions and can redistribute paths across credentials
+/// for global optimization (SAT solvers, ILP, LLM-based reasoners).
+/// Assessor implementations include:
 /// <list type="bullet">
 /// <item><description>Rule-based engines enforcing organizational or regulatory policies
 /// (GDPR data minimization, eIDAS attribute requirements, issuer-mandated disclosure rules).</description></item>
@@ -69,7 +75,7 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// </list>
 /// </description></item>
 /// <item><description>
-/// <strong>Layer 5 — Format encoding:</strong> The <see cref="DisclosurePlan{TCredential}"/>
+/// <strong>Layer 5 — Format encoding:</strong> The <see cref="DisclosureStrategyGraph{TCredential}"/>
 /// is consumed by format-specific encoders — <c>SdJwtIssuance</c>, <c>SdCwtIssuance</c>,
 /// <c>CredentialJwsExtensions</c>, <c>CredentialCoseExtensions</c> — that produce the
 /// wire-format tokens. This layer is downstream and not handled by this class.
@@ -117,7 +123,7 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// │                         │                                            │
 /// │                         ▼                                            │
 /// │  ┌─────────────────────────────────────────────────────┐             │
-/// │  │  Layer 6   DisclosurePlan + DecisionRecord         │             │
+/// │  │  Layer 6   DisclosureStrategyGraph + DecisionRecord         │             │
 /// │  │            (audit, ISO 27560 consent, OTel trace)  │             │
 /// │  └──────────────────────┬──────────────────────────────┘             │
 /// │                         │                                            │
@@ -148,8 +154,10 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// </description></item>
 /// <item><description>
 /// Run <see cref="PolicyAssessorDelegate{TCredential}"/> pipeline in sequence. Each assessor
-/// can narrow the set or reject entirely; rejection stops the pipeline for that credential
-/// (Layer 4).
+/// can narrow, expand (within lattice bounds), or reject entirely; rejection stops the
+/// pipeline for that credential (Layer 4a). Then run
+/// <see cref="CrossCredentialOptimizerDelegate{TCredential}"/> instances that optimize
+/// across all credential decisions (Layer 4b).
 /// </description></item>
 /// <item><description>
 /// Capture all intermediate results into <see cref="DisclosureDecisionRecord{TCredential}"/>
@@ -226,16 +234,23 @@ public sealed class DisclosureComputation<TCredential>
     private static ActivitySource ActivitySourceInstance { get; } = new("Verifiable.SelectiveDisclosure.DisclosureComputation");
 
     /// <summary>
-    /// Policy assessors executed in sequence after lattice computation. Each assessor
-    /// can narrow or reject the proposed disclosure set. An empty list means no policy
-    /// enforcement — the lattice result is used directly.
+    /// Per-credential policy assessors executed in sequence after lattice computation.
     /// </summary>
     private IReadOnlyList<PolicyAssessorDelegate<TCredential>> PolicyAssessors { get; }
 
     /// <summary>
-    /// Time provider for decision record timestamps. Injected for testability —
-    /// production uses <see cref="TimeProvider.System"/>, tests can supply a
-    /// fixed or controllable provider.
+    /// Cross-credential optimizers executed after per-credential assessment completes.
+    /// </summary>
+    private IReadOnlyList<CrossCredentialOptimizerDelegate<TCredential>> CrossCredentialOptimizers { get; }
+
+    /// <summary>
+    /// Entropy computation delegate for strategy scoring. When <see langword="null"/>,
+    /// <see cref="DisclosureStrategyGraph{TCredential}.AdditiveEntropy"/> is used.
+    /// </summary>
+    private EntropyComputeDelegate<TCredential>? EntropyCompute { get; }
+
+    /// <summary>
+    /// Time provider for decision record timestamps.
     /// </summary>
     private TimeProvider TimeProvider { get; }
 
@@ -243,26 +258,35 @@ public sealed class DisclosureComputation<TCredential>
     /// Creates a new disclosure computation with the specified configuration.
     /// </summary>
     /// <param name="policyAssessors">
-    /// Policy assessors to run in order after lattice computation. Pass an empty
-    /// list for no policy enforcement. See <see cref="PolicyAssessorDelegate{TCredential}"/>
-    /// for the range of assessor types, including rule-based engines, SAT solvers,
-    /// AI risk scorers, and consent mediators.
+    /// Per-credential policy assessors to run in order after lattice computation.
+    /// Pass an empty list for no per-credential policy enforcement.
+    /// </param>
+    /// <param name="crossCredentialOptimizers">
+    /// Cross-credential optimizers to run after per-credential assessment. Pass an
+    /// empty list or <see langword="null"/> for no cross-credential optimization.
+    /// </param>
+    /// <param name="entropyCompute">
+    /// Custom entropy computation delegate for strategy scoring. If <see langword="null"/>,
+    /// the default additive model sums per-path entropy weights.
     /// </param>
     /// <param name="timeProvider">
     /// Time provider for timestamps. Defaults to <see cref="TimeProvider.System"/>.
-    /// Inject a <c>FakeTimeProvider</c> for deterministic testing.
     /// </param>
     public DisclosureComputation(
         IReadOnlyList<PolicyAssessorDelegate<TCredential>> policyAssessors,
+        IReadOnlyList<CrossCredentialOptimizerDelegate<TCredential>>? crossCredentialOptimizers = null,
+        EntropyComputeDelegate<TCredential>? entropyCompute = null,
         TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(policyAssessors);
         PolicyAssessors = policyAssessors;
+        CrossCredentialOptimizers = crossCredentialOptimizers ?? [];
+        EntropyCompute = entropyCompute;
         TimeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <summary>
-    /// Creates a new disclosure computation with no policy assessors.
+    /// Creates a new disclosure computation with no policy assessors or optimizers.
     /// </summary>
     public DisclosureComputation() : this([])
     {
@@ -282,11 +306,30 @@ public sealed class DisclosureComputation<TCredential>
     /// Per-requirement user exclusions. Keyed by <see cref="DisclosureMatch{TCredential}.QueryRequirementId"/>.
     /// Exclusions of mandatory paths are silently ignored by the lattice.
     /// </param>
+    /// <param name="requestingPartySignals">
+    /// Contextual signals from the requesting party and environment. Merged with
+    /// per-credential attestation metadata and provided to policy assessors and
+    /// cross-credential optimizers.
+    /// </param>
+    /// <param name="entropyWeights">
+    /// Per-path entropy weights for strategy scoring. Maps credential paths to their
+    /// identifying power (higher values indicate more identifying information). Paths
+    /// not in the dictionary default to zero entropy weight. When <see langword="null"/>,
+    /// all paths are treated as having zero entropy weight and strategy selection falls
+    /// back to minimizing credential count.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The disclosure plan with per-credential decisions and decision record.</returns>
-    public async Task<DisclosurePlan<TCredential>> ComputeAsync(
+    /// <returns>
+    /// The disclosure strategy graph with the lowest-entropy strategy selected by default.
+    /// Access <c>Satisfied</c>, <c>Decisions</c>, and <c>DecisionRecord</c> for the flat
+    /// projection. Access <c>Frontier</c>, <c>SelectedStrategy</c>, and
+    /// <c>EnumerateStrategies()</c> for the full trade-off space.
+    /// </returns>
+    public async Task<DisclosureStrategyGraph<TCredential>> ComputeAsync(
         IReadOnlyList<DisclosureMatch<TCredential>> matches,
         IReadOnlyDictionary<string, IReadOnlySet<CredentialPath>>? userExclusions = null,
+        IReadOnlyDictionary<Type, object>? requestingPartySignals = null,
+        IReadOnlyDictionary<CredentialPath, double>? entropyWeights = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(matches);
@@ -345,7 +388,11 @@ public sealed class DisclosureComputation<TCredential>
                 SelectedPaths = latticeResult.SelectedClaims
             });
 
-            //Layer 4: Run policy assessor pipeline.
+            //Merge requesting party signals with attestation metadata for this credential.
+            IReadOnlyDictionary<Type, object>? mergedSignals = MergeSignals(
+                requestingPartySignals, match.AttestationMetadata);
+
+            //Layer 4a: Run per-credential policy assessor pipeline.
             var currentPaths = latticeResult.SelectedClaims;
             bool currentSatisfies = latticeResult.SatisfiesRequirements;
             IReadOnlySet<CredentialPath>? currentConflicts = latticeResult.ConflictingClaims;
@@ -363,20 +410,50 @@ public sealed class DisclosureComputation<TCredential>
                     Lattice = lattice,
                     SatisfiesRequirements = currentSatisfies,
                     ConflictingPaths = currentConflicts,
-                    Format = match.Format
+                    Format = match.Format,
+                    Signals = mergedSignals
                 };
 
                 var outcome = await assessor(context, cancellationToken).ConfigureAwait(false);
 
-                //Layer 6: Record the assessment for the audit trail.
+                //Layer 6: Compute effect by diffing input versus output paths.
                 IReadOnlySet<CredentialPath>? removedPaths = null;
-                if(outcome.ApprovedPaths is not null)
+                IReadOnlySet<CredentialPath>? addedPaths = null;
+                PolicyAssessmentEffect computedEffect = PolicyAssessmentEffect.Unchanged;
+
+                if(!outcome.Approved)
+                {
+                    computedEffect = PolicyAssessmentEffect.Rejected;
+                }
+                else if(outcome.ApprovedPaths is not null)
                 {
                     var removed = new HashSet<CredentialPath>(currentPaths);
                     removed.ExceptWith(outcome.ApprovedPaths);
+
+                    var added = new HashSet<CredentialPath>(outcome.ApprovedPaths);
+                    added.ExceptWith(currentPaths);
+
                     if(removed.Count > 0)
                     {
                         removedPaths = removed;
+                    }
+
+                    if(added.Count > 0)
+                    {
+                        addedPaths = added;
+                    }
+
+                    if(removed.Count > 0 && added.Count > 0)
+                    {
+                        computedEffect = PolicyAssessmentEffect.Modified;
+                    }
+                    else if(removed.Count > 0)
+                    {
+                        computedEffect = PolicyAssessmentEffect.Narrowed;
+                    }
+                    else if(added.Count > 0)
+                    {
+                        computedEffect = PolicyAssessmentEffect.Expanded;
                     }
                 }
 
@@ -385,7 +462,9 @@ public sealed class DisclosureComputation<TCredential>
                     QueryRequirementId = match.QueryRequirementId,
                     AssessorName = outcome.AssessorName,
                     Approved = outcome.Approved,
+                    Effect = computedEffect,
                     RemovedPaths = removedPaths,
+                    AddedPaths = addedPaths,
                     Reason = outcome.Reason
                 });
 
@@ -421,6 +500,15 @@ public sealed class DisclosureComputation<TCredential>
 
             decisions.Add(decision);
             satisfiedRequirements.Add(match.QueryRequirementId);
+        }
+
+        //Layer 4b: Run cross-credential optimizer pipeline.
+        IReadOnlyList<CredentialDisclosureDecision<TCredential>> optimizedDecisions = decisions;
+        foreach(var optimizer in CrossCredentialOptimizers)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            optimizedDecisions = await optimizer(optimizedDecisions, requestingPartySignals, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         //Determine unsatisfied requirements.
@@ -469,16 +557,161 @@ public sealed class DisclosureComputation<TCredential>
             Evaluations = evaluationRecords,
             LatticeComputations = latticeRecords,
             PolicyAssessments = policyRecords.Count > 0 ? policyRecords : null,
-            FinalDecisions = decisions,
+            FinalDecisions = optimizedDecisions,
             Satisfied = unsatisfied.Count == 0
         };
 
-        return new DisclosurePlan<TCredential>
+        //Layer 5: Build the strategy graph from optimized decisions.
+        IReadOnlyList<CredentialContribution<TCredential>>[] candidateArrays = [];
+
+        if(optimizedDecisions.Count > 0)
+        {
+            //Group decisions by requirement to form per-requirement candidate arrays.
+            var candidatesByRequirement = new Dictionary<string, List<CredentialContribution<TCredential>>>();
+
+            foreach(var decision in optimizedDecisions)
+            {
+                if(!candidatesByRequirement.TryGetValue(decision.QueryRequirementId, out var candidates))
+                {
+                    candidates = [];
+                    candidatesByRequirement[decision.QueryRequirementId] = candidates;
+                }
+
+                candidates.Add(BuildContribution(decision, entropyWeights));
+            }
+
+            candidateArrays = candidatesByRequirement.Values
+                .Select(list => (IReadOnlyList<CredentialContribution<TCredential>>)list)
+                .ToArray();
+        }
+
+        var graph = new DisclosureStrategyGraph<TCredential>(
+            candidateArrays,
+            entropyCompute: EntropyCompute,
+            signals: requestingPartySignals)
         {
             Satisfied = unsatisfied.Count == 0,
-            Decisions = decisions,
+            Decisions = optimizedDecisions,
             UnsatisfiedRequirements = unsatisfied.Count > 0 ? unsatisfied : null,
             DecisionRecord = decisionRecord
         };
+
+        //Select the lowest-entropy strategy and project its decisions.
+        var selectedStrategy = graph.SelectLowestEntropy();
+        if(selectedStrategy is not null)
+        {
+            graph.Decisions = ProjectStrategyToDecisions(selectedStrategy, optimizedDecisions);
+        }
+
+        return graph;
+    }
+
+
+    /// <summary>
+    /// Builds a <see cref="CredentialContribution{TCredential}"/> from a per-credential
+    /// decision. All selected paths become disclosures with entropy weights from the
+    /// provided weight dictionary.
+    /// </summary>
+    private static CredentialContribution<TCredential> BuildContribution(
+        CredentialDisclosureDecision<TCredential> decision,
+        IReadOnlyDictionary<CredentialPath, double>? entropyWeights)
+    {
+        Debug.Assert(decision.SelectedPaths.Count > 0, "Decision must have at least one selected path.");
+
+        var disclosures = new List<PathContribution>();
+        foreach(var path in decision.SelectedPaths)
+        {
+            double weight = 0.0;
+            entropyWeights?.TryGetValue(path, out weight);
+
+            disclosures.Add(new PathContribution
+            {
+                Path = path,
+                Mode = SatisfactionMode.Disclosure,
+                EntropyWeight = weight
+            });
+        }
+
+        Debug.Assert(disclosures.Count == decision.SelectedPaths.Count,
+            "Every selected path must produce a disclosure contribution.");
+
+        return new CredentialContribution<TCredential>
+        {
+            Credential = decision.Credential,
+            QueryRequirementId = decision.QueryRequirementId,
+            Disclosures = disclosures,
+            Predicates = [],
+            Lattice = decision.Lattice
+        };
+    }
+
+
+    /// <summary>
+    /// Projects a selected strategy's contributions back to the original decision list.
+    /// Returns the original decisions filtered and reordered to match the strategy.
+    /// Each contribution must find exactly one matching original decision.
+    /// </summary>
+    private static List<CredentialDisclosureDecision<TCredential>> ProjectStrategyToDecisions(
+        ScoredStrategy<TCredential> strategy,
+        IReadOnlyList<CredentialDisclosureDecision<TCredential>> originalDecisions)
+    {
+        Debug.Assert(strategy.Contributions.Count > 0,
+            "Strategy must have at least one contribution to project.");
+
+        //The strategy's contributions map 1:1 to requirement IDs + credentials.
+        //Find the matching original decision for each contribution.
+        var projected = new List<CredentialDisclosureDecision<TCredential>>();
+
+        foreach(var contribution in strategy.Contributions)
+        {
+            foreach(var decision in originalDecisions)
+            {
+                if(decision.QueryRequirementId == contribution.QueryRequirementId &&
+                   EqualityComparer<TCredential>.Default.Equals(decision.Credential, contribution.Credential))
+                {
+                    projected.Add(decision);
+                    break;
+                }
+            }
+        }
+
+        Debug.Assert(projected.Count == strategy.Contributions.Count,
+            "Every contribution must project to exactly one original decision.");
+
+        return projected;
+    }
+
+
+    /// <summary>
+    /// Merges requesting party signals with per-credential attestation metadata.
+    /// Attestation metadata takes precedence when both contain the same type key.
+    /// </summary>
+    private static IReadOnlyDictionary<Type, object>? MergeSignals(
+        IReadOnlyDictionary<Type, object>? requestingPartySignals,
+        IReadOnlyDictionary<Type, object>? attestationMetadata)
+    {
+        if(requestingPartySignals is null && attestationMetadata is null)
+        {
+            return null;
+        }
+
+        if(requestingPartySignals is null)
+        {
+            return attestationMetadata;
+        }
+
+        if(attestationMetadata is null)
+        {
+            return requestingPartySignals;
+        }
+
+        //Both present: merge with attestation metadata taking precedence.
+        var merged = new Dictionary<Type, object>(requestingPartySignals);
+        foreach(var kvp in attestationMetadata)
+        {
+            merged[kvp.Key] = kvp.Value;
+        }
+
+        return merged;
     }
 }

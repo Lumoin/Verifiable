@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Core.SelectiveDisclosure;
@@ -14,6 +15,14 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// Evaluators resolve query patterns (which may contain wildcards or abstract
 /// references) into concrete <see cref="CredentialPath"/> values that the lattice
 /// can operate on directly.
+/// </para>
+/// <para>
+/// <strong>Attestation metadata:</strong> The <see cref="AttestationMetadata"/>
+/// dictionary carries issuer-embedded metadata such as Embedded Disclosure Policy
+/// (EDP) indicators and data sensitivity classifications. This metadata originates
+/// from the attestation itself, not from the requesting party. Policy assessors use
+/// it to enforce issuer-declared access control policies before user approval and to
+/// determine whether enhanced consent requirements apply for special category data.
 /// </para>
 /// <para>
 /// <strong>Storage agnosticism:</strong> The <typeparamref name="TCredential"/> type
@@ -124,4 +133,18 @@ public sealed class DisclosureMatch<TCredential>
     /// </para>
     /// </remarks>
     public string? Format { get; init; }
+
+    /// <summary>
+    /// Issuer-declared metadata about the attestation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Keyed by well-known types. Policy assessors retrieve metadata by type to
+    /// enforce issuer-declared policies. The metadata originates from the attestation
+    /// itself, not from the requesting party registration data. The distinction matters:
+    /// the issuer flags what the credential <em>contains</em>; the requesting party
+    /// declares what it <em>wants</em> and under which legal basis.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyDictionary<Type, object>? AttestationMetadata { get; init; }
 }

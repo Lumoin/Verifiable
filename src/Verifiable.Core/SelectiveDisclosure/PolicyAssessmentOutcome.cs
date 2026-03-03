@@ -11,7 +11,13 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// for full audit traceability. The <see cref="AssessorName"/> and <see cref="Reason"/>
 /// fields enable reconstruction of the decision chain — which assessor made what decision
 /// and why — supporting ISO 27560 consent records, GDPR Article 30 processing records,
-/// and AI accountability requirements (e.g., SHAP-style explanations for AI-driven decisions).
+/// and AI accountability requirements.
+/// </para>
+/// <para>
+/// <strong>Expansion and narrowing:</strong> Assessors can both narrow (remove paths)
+/// and expand (add paths within lattice bounds). The <see cref="Effect"/> field records
+/// which direction the assessment moved the disclosure set, enabling downstream builders
+/// to distinguish verifier-initiated disclosures from regulatory expansions.
 /// </para>
 /// </remarks>
 public sealed class PolicyAssessmentOutcome
@@ -29,18 +35,32 @@ public sealed class PolicyAssessmentOutcome
     public required bool Approved { get; init; }
 
     /// <summary>
-    /// The approved set of paths, potentially narrowed from the proposed set.
+    /// The approved set of paths, potentially narrowed or expanded from the proposed set.
     /// </summary>
     /// <remarks>
     /// <para>
     /// When <see langword="null"/> and <see cref="Approved"/> is <see langword="true"/>,
-    /// the proposed paths are used as-is. When non-null, this set replaces
-    /// the proposed paths for subsequent assessors in the pipeline. This enables
-    /// assessors to progressively narrow the disclosure: each assessor in the
-    /// chain sees the output of the previous one.
+    /// the proposed paths are used as-is. When non-null, this set replaces the proposed
+    /// paths for subsequent assessors in the pipeline.
+    /// </para>
+    /// <para>
+    /// Expansion (adding paths not in the proposed set) is valid when the added paths
+    /// are within the lattice top. The computation validates this postcondition.
     /// </para>
     /// </remarks>
     public IReadOnlySet<CredentialPath>? ApprovedPaths { get; init; }
+
+    /// <summary>
+    /// The effect this assessment had on the disclosure set.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The <see cref="DisclosureComputation{TCredential}"/> computes this by diffing the
+    /// proposed paths against <see cref="ApprovedPaths"/>. When <see cref="ApprovedPaths"/>
+    /// is <see langword="null"/>, the effect is <see cref="PolicyAssessmentEffect.Unchanged"/>.
+    /// </para>
+    /// </remarks>
+    public PolicyAssessmentEffect Effect { get; init; }
 
     /// <summary>
     /// The name or identifier of the assessor, for the decision record.
@@ -48,7 +68,7 @@ public sealed class PolicyAssessmentOutcome
     /// <remarks>
     /// <para>
     /// Used in audit logs and consent receipts to attribute the decision.
-    /// Examples: <c>"GdprComplianceFilter"</c>, <c>"OrganizationPolicy"</c>,
+    /// Examples: <c>"GdprDataMinimization"</c>, <c>"EdpEnforcement"</c>,
     /// <c>"AiRiskScorer"</c>, <c>"SatConstraintSolver"</c>.
     /// </para>
     /// </remarks>
@@ -60,10 +80,8 @@ public sealed class PolicyAssessmentOutcome
     /// <remarks>
     /// <para>
     /// For rule-based assessors, this describes which rule triggered. For AI assessors,
-    /// this may contain a SHAP-style explanation of the decision factors. For SAT solvers,
-    /// this may describe which constraint was unsatisfiable. The reason is included in
-    /// both the <see cref="DisclosureDecisionRecord{TCredential}"/> and any downstream
-    /// consent receipts.
+    /// this may contain feature importance explanations. For SAT solvers, this may
+    /// describe which constraint was binding or unsatisfiable.
     /// </para>
     /// </remarks>
     public string? Reason { get; init; }

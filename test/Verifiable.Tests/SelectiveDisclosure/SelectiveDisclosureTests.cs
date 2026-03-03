@@ -189,11 +189,11 @@ internal sealed class SelectiveDisclosureTests
         var lattice1 = new SetDisclosureLattice<string>(["name", "email"], ["name"]);
         var lattice2 = new SetDisclosureLattice<string>(["phone", "address"], []);
 
-        var credentials = new List<(string Credential, IBoundedDisclosureLattice<string> Lattice)>
-    {
-        ("cred1", lattice1),
-        ("cred2", lattice2)
-    };
+        var credentials = new List<(string Credential, SetDisclosureLattice<string> Lattice)>
+        {
+            ("cred1", lattice1),
+            ("cred2", lattice2)
+        };
 
         var requirements = new HashSet<string> { "email", "phone" };
 
@@ -209,7 +209,7 @@ internal sealed class SelectiveDisclosureTests
     {
         var lattice1 = new SetDisclosureLattice<string>(["name", "email"], ["name"]);
 
-        var credentials = new List<(string Credential, IBoundedDisclosureLattice<string> Lattice)>
+        var credentials = new List<(string Credential, SetDisclosureLattice<string> Lattice)>
     {
         ("cred1", lattice1)
     };
