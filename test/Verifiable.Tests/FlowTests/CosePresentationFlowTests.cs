@@ -7,7 +7,7 @@ namespace Verifiable.Tests.FlowTests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// These tests will demonstrate the holder constructing a <see cref="Verifiable.Core.Credentials.VerifiablePresentation"/>
+/// These tests will demonstrate the holder constructing a <see cref="Verifiable.Core.Model.Credentials.VerifiablePresentation"/>
 /// containing one or more COSE_Sign1-secured Verifiable Credentials, signing the VP envelope
 /// to prove holder binding, and verifier validation of both the VP signature and the
 /// embedded VC signatures.

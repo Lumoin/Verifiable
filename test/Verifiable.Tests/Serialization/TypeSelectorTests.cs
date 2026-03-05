@@ -1,5 +1,4 @@
-﻿using System;
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did;
 using Verifiable.Json.Converters;
@@ -47,9 +46,11 @@ internal sealed class TypeSelectorTests
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
 
+        options.Converters.Add(new DidUrlConverter());
         options.Converters.Add(new ServiceConverter(serviceSelector ?? ServiceTypeSelectors.Default));
         return options;
     }
+
 
     private static ServiceTypeSelector CreateIdentityResolverSelector()
     {

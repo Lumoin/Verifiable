@@ -202,14 +202,23 @@ public static class CredentialDataIntegrityExtensions
                 .ConfigureAwait(false);
 
             //Hash using the cryptosuite's hash algorithm.
-            var hashAlgorithm = NormalizeHashAlgorithmName(cryptosuite.HashAlgorithm);
+            var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(cryptosuite.HashAlgorithm);
             var hashFunction = DefaultHashFunctionSelector.Select(hashAlgorithm);
 
-            var credentialBytes = Encoding.UTF8.GetBytes(credentialCanonicalization.CanonicalForm);
-            var proofOptionsBytes = Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm);
+            var credentialByteCount = Encoding.UTF8.GetByteCount(credentialCanonicalization.CanonicalForm);
+            var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
 
-            var credentialHash = hashFunction(credentialBytes);
-            var proofOptionsHash = hashFunction(proofOptionsBytes);
+            using var credentialBytesOwner = memoryPool.Rent(credentialByteCount);
+            using var proofOptionsBytesOwner = memoryPool.Rent(proofOptionsByteCount);
+
+            var credentialBytesWritten = Encoding.UTF8.GetBytes(credentialCanonicalization.CanonicalForm, credentialBytesOwner.Memory.Span);
+            var proofOptionsBytesWritten = Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm, proofOptionsBytesOwner.Memory.Span);
+
+            System.Diagnostics.Debug.Assert(credentialBytesWritten == credentialByteCount, "Encoded byte count must match the pre-computed count.");
+            System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
+
+            var credentialHash = hashFunction(credentialBytesOwner.Memory.Span[..credentialBytesWritten].ToArray());
+            var proofOptionsHash = hashFunction(proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten].ToArray());
 
             //Combine hashes using memory pool: proofOptionsHash || credentialHash.
             var combinedLength = proofOptionsHash.Length + credentialHash.Length;
@@ -354,14 +363,23 @@ public static class CredentialDataIntegrityExtensions
             var proofOptionsCanonicalization = await canonicalize(proofOptionsSerialized, contextResolver, cancellationToken)
                 .ConfigureAwait(false);
 
-            var hashAlgorithm = NormalizeHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
+            var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
             var hashFunction = DefaultHashFunctionSelector.Select(hashAlgorithm);
 
-            var credentialBytes = Encoding.UTF8.GetBytes(credentialCanonicalization.CanonicalForm);
-            var proofOptionsBytes = Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm);
+            var credentialByteCount = Encoding.UTF8.GetByteCount(credentialCanonicalization.CanonicalForm);
+            var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
 
-            var credentialHash = hashFunction(credentialBytes);
-            var proofOptionsHash = hashFunction(proofOptionsBytes);
+            using var credentialBytesOwner = memoryPool.Rent(credentialByteCount);
+            using var proofOptionsBytesOwner = memoryPool.Rent(proofOptionsByteCount);
+
+            var credentialBytesWritten = Encoding.UTF8.GetBytes(credentialCanonicalization.CanonicalForm, credentialBytesOwner.Memory.Span);
+            var proofOptionsBytesWritten = Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm, proofOptionsBytesOwner.Memory.Span);
+
+            System.Diagnostics.Debug.Assert(credentialBytesWritten == credentialByteCount, "Encoded byte count must match the pre-computed count.");
+            System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
+
+            var credentialHash = hashFunction(credentialBytesOwner.Memory.Span[..credentialBytesWritten].ToArray());
+            var proofOptionsHash = hashFunction(proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten].ToArray());
 
             //Combine hashes using memory pool: proofOptionsHash || credentialHash.
             var combinedLength = proofOptionsHash.Length + credentialHash.Length;
@@ -392,20 +410,4 @@ public static class CredentialDataIntegrityExtensions
         }
     }
 
-
-    /// <summary>
-    /// Normalizes hash algorithm name from specification format to .NET format.
-    /// </summary>
-    /// <param name="specName">The hash algorithm name from the specification (e.g., "SHA-256").</param>
-    /// <returns>The normalized <see cref="HashAlgorithmName"/>.</returns>
-    /// <remarks>
-    /// Specifications use hyphenated names like "SHA-256", "SHA-384", while .NET uses
-    /// non-hyphenated names like "SHA256", "SHA384". This method bridges that gap.
-    /// TODO: Refactor to use a proper matcher/registry pattern.
-    /// </remarks>
-    private static HashAlgorithmName NormalizeHashAlgorithmName(string specName)
-    {
-        var normalized = specName.Replace("-", string.Empty, StringComparison.Ordinal);
-        return new HashAlgorithmName(normalized);
-    }
 }

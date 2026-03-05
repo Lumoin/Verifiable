@@ -38,6 +38,7 @@ internal static class JsonSerializerOptionsExtensions
         options.Converters.Add(new ServiceConverter());
         options.Converters.Add(new JsonLdContextConverter());
         options.Converters.Add(new DataIntegrityProofConverter());
+        options.Converters.Add(new DidUrlConverter());
         options.Converters.Add(new DidIdConverter(DefaultDidIdFactory));
 
         //Verifiable Credential converters.

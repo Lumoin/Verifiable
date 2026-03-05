@@ -1,6 +1,13 @@
 # Remove the line below if you want to inherit .editorconfig settings from higher directories
 root = true
 
+# Global settings for all text files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
 # C# files
 [*.cs]
 
@@ -11,8 +18,6 @@ spelling_checkable_types = strings,identifiers,comments
 spelling_error_severity = information
 spelling_exclusion_path = ./spellcheckerexclusion.dic
 spelling_use_default_exclusion_dictionary = true
-
-MSTest
 
 # MSTEST0030: Type containing '[TestMethod]' should be marked with '[TestClass]'
 dotnet_diagnostic.MSTEST0030.severity = error

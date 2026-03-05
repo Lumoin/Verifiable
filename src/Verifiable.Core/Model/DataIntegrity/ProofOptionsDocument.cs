@@ -25,6 +25,12 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// while <c>cryptosuite</c> carries the full <see cref="CryptosuiteInfo"/> for type safety.</description></item>
 /// </list>
 /// <para>
+/// <strong>Challenge and domain:</strong> When present, <see cref="Challenge"/> and <see cref="Domain"/>
+/// are included in the canonicalized proof options and are therefore covered by the signature.
+/// This binds the proof to a specific verifier and interaction, preventing replay attacks.
+/// Both fields are required for presentation proofs using <c>proofPurpose: authentication</c>.
+/// </para>
+/// <para>
 /// <strong>Context handling:</strong> The <see cref="Context"/> property carries the secured
 /// document's <c>@context</c> for cryptosuites that require JSON-LD processing (e.g., RDFC-based
 /// suites). For JCS-based suites, this is <see langword="null"/>. Implementations SHOULD
@@ -82,6 +88,30 @@ public sealed class ProofOptionsDocument
     /// </remarks>
     public object? Context { get; init; }
 
+    /// <summary>
+    /// The security domain binding for this proof, or <see langword="null"/> if not domain-bound.
+    /// </summary>
+    /// <remarks>
+    /// When present, this value is included in the canonicalized proof options and is therefore
+    /// covered by the signature. Verifiers must check that the domain matches their own identifier
+    /// to prevent cross-domain replay attacks. See
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity 00a72.1 Proofs</see>.
+    /// </remarks>
+    public string? Domain { get; init; }
+
+    /// <summary>
+    /// The challenge value binding this proof to a specific verifier interaction,
+    /// or <see langword="null"/> if not challenge-bound.
+    /// </summary>
+    /// <remarks>
+    /// When present, this value is included in the canonicalized proof options and is therefore
+    /// covered by the signature. Verifiers must check that the challenge matches the value they
+    /// issued to prevent replay attacks. Required for presentation proofs where
+    /// <see cref="ProofPurpose"/> is <c>"authentication"</c>. See
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity 00a72.1 Proofs</see>.
+    /// </remarks>
+    public string? Challenge { get; init; }
+
 
     /// <summary>
     /// Creates a <see cref="ProofOptionsDocument"/> from an existing <see cref="DataIntegrityProof"/>
@@ -113,7 +143,9 @@ public sealed class ProofOptionsDocument
             Created = proof.Created ?? string.Empty,
             VerificationMethod = proof.VerificationMethod?.Id ?? string.Empty,
             ProofPurpose = proof.ProofPurpose ?? string.Empty,
-            Context = context
+            Context = context,
+            Domain = proof.Domain,
+            Challenge = proof.Challenge
         };
     }
 
@@ -132,7 +164,9 @@ public sealed class ProofOptionsDocument
         string created,
         string verificationMethodId,
         string proofPurpose,
-        object? context)
+        object? context,
+        string? domain = null,
+        string? challenge = null)
     {
         ArgumentNullException.ThrowIfNull(cryptosuite);
         ArgumentException.ThrowIfNullOrWhiteSpace(created);
@@ -146,7 +180,9 @@ public sealed class ProofOptionsDocument
             Created = created,
             VerificationMethod = verificationMethodId,
             ProofPurpose = proofPurpose,
-            Context = context
+            Context = context,
+            Domain = domain,
+            Challenge = challenge
         };
     }
 }
