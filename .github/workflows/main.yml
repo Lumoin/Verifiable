@@ -189,7 +189,7 @@ jobs:
 
     #- name: Upload Stryker output artefacts
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
     #  with:
     #    name: 'Stryker output artefacts'
     #    path: ${{ github.workspace }}/StrykerOutput/
@@ -198,7 +198,7 @@ jobs:
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
 
     # - name: Archive publish results
-    #  uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
     #  with:
     #    name: Verifiable.Benchmarks
     #    path: ./publish/*
@@ -207,7 +207,7 @@ jobs:
     #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
 
     # - name: Upload benchmark results
-    #  uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
@@ -268,7 +268,7 @@ jobs:
 
     - name: Upload Verifiable NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
-      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
       with:
         name: nupkg
         path: ./nupkgs/*.*
