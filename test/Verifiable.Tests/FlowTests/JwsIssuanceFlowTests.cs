@@ -77,7 +77,7 @@ internal sealed class JwsIssuanceFlowTests
     /// <summary>
     /// Serializes a JWT header dictionary to UTF-8 JSON bytes.
     /// </summary>
-    private static Core.Model.Credentials.JwtHeaderSerializer HeaderSerializer => header =>
+    private static Verifiable.Core.Model.Credentials.JwtHeaderSerializer HeaderSerializer => header =>
         JsonSerializer.SerializeToUtf8Bytes(header);
 
 

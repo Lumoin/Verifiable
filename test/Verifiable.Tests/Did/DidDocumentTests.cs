@@ -132,6 +132,7 @@ internal sealed class DidDocumentTests
                 new ServiceConverter(serviceSelector),
                 new JsonLdContextConverter(),
                 new DictionaryStringObjectJsonConverter(),
+                new DidUrlConverter(),
                 new DidIdConverter(did =>
                 {
                     return did switch

@@ -1,5 +1,4 @@
 ﻿using System.Text.Json.Serialization;
-using Verifiable.Core.Credentials;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Dcql;

@@ -1,9 +1,8 @@
 ﻿using System.Collections.Generic;
 using Verifiable.Core.Model.Common;
-using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 
-namespace Verifiable.Core.Credentials
+namespace Verifiable.Core.Model.Credentials
 {
     /// <summary>
     /// Represents a Verifiable Presentation as defined in the W3C Verifiable Credentials

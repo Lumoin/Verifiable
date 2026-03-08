@@ -36,7 +36,17 @@ public enum VerificationFailureReason
     /// <summary>
     /// The cryptographic signature is invalid.
     /// </summary>
-    SignatureInvalid
+    SignatureInvalid,
+
+    /// <summary>
+    /// The challenge in the proof does not match the expected challenge issued by the verifier.
+    /// </summary>
+    ChallengeMismatch,
+
+    /// <summary>
+    /// The domain in the proof does not match the expected domain of the verifier.
+    /// </summary>
+    DomainMismatch
 }
 
 

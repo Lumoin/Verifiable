@@ -149,7 +149,10 @@ public static class DidBuilderExtensions
         {
             var purpose = publicKey.Tag.Get<Purpose>();
 
-            return purpose == Purpose.Signing;
+            //Both Purpose.Signing (private key) and Purpose.Verification (public key) belong to
+            //the signing key family and must be registered under assertionMethod and authentication.
+            //Purpose.Exchange is the only key purpose that belongs exclusively to keyAgreement.
+            return purpose == Purpose.Signing || purpose == Purpose.Verification;
         }
     }
 

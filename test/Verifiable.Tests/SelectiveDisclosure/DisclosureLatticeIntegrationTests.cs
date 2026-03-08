@@ -1,5 +1,7 @@
 ﻿using Verifiable.Core.SelectiveDisclosure;
 
+using SelectiveDisclosureCore = Verifiable.Core.SelectiveDisclosure.SelectiveDisclosure;
+
 namespace Verifiable.Tests.SelectiveDisclosure;
 
 
@@ -28,7 +30,7 @@ internal sealed class DisclosureLatticeIntegrationTests
         //Some of these might be mandatory, some selective.
         var verifierRequest = new HashSet<int> { 0, 5, 7, 12, 18, 19 };
 
-        var result = Core.SelectiveDisclosure.SelectiveDisclosure.ComputeOptimalDisclosure(lattice, verifierRequest);
+        var result = SelectiveDisclosureCore.ComputeOptimalDisclosure(lattice, verifierRequest);
 
         Assert.IsTrue(result.SatisfiesRequirements, "All requested claims are available.");
 
@@ -63,7 +65,7 @@ internal sealed class DisclosureLatticeIntegrationTests
         //User excludes phone number.
         var userExclusions = new HashSet<string> { "phone_number", "address" };
 
-        var result = Core.SelectiveDisclosure.SelectiveDisclosure.ComputeOptimalDisclosure(
+        var result = SelectiveDisclosureCore.ComputeOptimalDisclosure(
             lattice,
             verifierRequest,
             userExclusions);
@@ -89,7 +91,7 @@ internal sealed class DisclosureLatticeIntegrationTests
         //User excludes email.
         var userExclusions = new HashSet<string> { "email" };
 
-        var result = Core.SelectiveDisclosure.SelectiveDisclosure.ComputeOptimalDisclosure(
+        var result = SelectiveDisclosureCore.ComputeOptimalDisclosure(
             lattice,
             verifierRequest,
             userExclusions);
@@ -111,7 +113,7 @@ internal sealed class DisclosureLatticeIntegrationTests
         //User tries to exclude mandatory claim.
         var userExclusions = new HashSet<string> { "iss", "email" };
 
-        var result = Core.SelectiveDisclosure.SelectiveDisclosure.ComputeOptimalDisclosure(
+        var result = SelectiveDisclosureCore.ComputeOptimalDisclosure(
             lattice,
             verifierRequested: null,
             userExclusions: userExclusions);

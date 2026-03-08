@@ -60,12 +60,13 @@ internal static class VerifiableCliTestHelpers
     /// </summary>
     public static bool StartsWithSystemCommandLineBuiltInOption(string input)
     {
-        return input.StartsWith("-h", StringComparison.OrdinalIgnoreCase) ||
-               input.StartsWith("-?", StringComparison.Ordinal) ||
-               input.StartsWith("--help", StringComparison.OrdinalIgnoreCase) ||
-               input.StartsWith("--version", StringComparison.OrdinalIgnoreCase) ||
-               input.StartsWith("/h", StringComparison.OrdinalIgnoreCase) ||
-               input.StartsWith("/?", StringComparison.Ordinal);
+        return input == "--"
+            || input.StartsWith("-h", StringComparison.OrdinalIgnoreCase)
+            || input.StartsWith("-?", StringComparison.Ordinal)
+            || input.StartsWith("--help", StringComparison.OrdinalIgnoreCase)
+            || input.StartsWith("--version", StringComparison.OrdinalIgnoreCase)
+            || input.StartsWith("/h", StringComparison.OrdinalIgnoreCase)
+            || input.StartsWith("/?", StringComparison.Ordinal);
     }
 
 

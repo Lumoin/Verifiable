@@ -1,16 +1,15 @@
 ﻿using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using VDS.RDF.JsonLd;
 using Verifiable.Core.Model.Credentials;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Core.Model.Did;
+using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Json;
-using Verifiable.Tests.Resolver;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using VDS.RDF.JsonLd;
-using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Tests.DataIntegrity;
 

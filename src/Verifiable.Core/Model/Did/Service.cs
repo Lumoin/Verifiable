@@ -41,7 +41,7 @@ namespace Verifiable.Core.Model.Did
         /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 §2.1.4 Services</see>.
         /// </para>
         /// </remarks>
-        public Uri? Id { get; set; }
+        public DidUrl? Id { get; set; }
 
         /// <summary>
         /// The type of service being offered.

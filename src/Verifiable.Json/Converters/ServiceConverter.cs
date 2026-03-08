@@ -152,7 +152,9 @@ public class ServiceConverter: JsonConverter<Service>
                 var idString = property.Value.GetString();
                 if(idString is not null)
                 {
-                    service.Id = new Uri(idString, UriKind.RelativeOrAbsolute);
+                    //Parses directly without DidUrlConverter to avoid re-entering STJ
+                    //for the base Service type.
+                    service.Id = DidUrl.Parse(idString);
                 }
             }
             else if(property.NameEquals("type"u8))
@@ -185,8 +187,7 @@ public class ServiceConverter: JsonConverter<Service>
                     }
                     case JsonValueKind.Object:
                     {
-                        service.ServiceEndpointMap =
-                            (IDictionary<string, object>?)JsonElementConversion.Convert(property.Value);
+                        service.ServiceEndpointMap = (IDictionary<string, object>?)JsonElementConversion.Convert(property.Value);
                         break;
                     }
                     case JsonValueKind.Array:
@@ -237,7 +238,9 @@ public class ServiceConverter: JsonConverter<Service>
 
         if(service.Id is not null)
         {
-            writer.WriteString("id"u8, service.Id.OriginalString);
+            //Writes directly without DidUrlConverter to avoid re-entering STJ
+            //for the base Service type.
+            writer.WriteString("id"u8, service.Id.ToString());
         }
 
         if(service.Types is { Count: > 1 })

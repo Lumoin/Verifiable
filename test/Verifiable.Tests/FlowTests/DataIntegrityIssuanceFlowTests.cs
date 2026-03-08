@@ -7,7 +7,6 @@ using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Json;
-using Verifiable.Tests.Resolver;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
