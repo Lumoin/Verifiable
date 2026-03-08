@@ -21,6 +21,17 @@ namespace Verifiable.Core.EventLogs;
 /// <see cref="ClassifyOperationDelegate{TOperation,TProof}"/> injected into
 /// <see cref="LogReplayContext{TState,TOperation,TProof,TContext}"/>.
 /// </para>
+/// <para>
+/// <strong>Why a value-typed dynamic enum rather than a sealed class hierarchy.</strong>
+/// A class hierarchy would require the infrastructure to be modified each time
+/// a new log method defines a new entry kind. A string-backed value type allows
+/// method-specific classifications to be defined in the caller's namespace and
+/// compared by value without casting, reflection, or infrastructure changes.
+/// The infrastructure treats all classifications as opaque tokens; only the
+/// caller's <see cref="ClassifyOperationDelegate{TOperation,TProof}"/> and
+/// <see cref="ApplyDelegate{TState,TOperation,TProof}"/> need to know what the
+/// token means.
+/// </para>
 /// </remarks>
 public readonly struct LogEntryClassification
     : IEquatable<LogEntryClassification>
@@ -29,6 +40,13 @@ public readonly struct LogEntryClassification
     /// The genesis entry — the first entry in a log that establishes the
     /// initial state. Exactly one genesis entry exists per log, at index zero.
     /// </summary>
+    /// <remarks>
+    /// The genesis entry represents the maximum information contribution of the
+    /// entire log: it establishes the initial domain state from which all
+    /// subsequent entries derive. A log whose genesis entry cannot be validated
+    /// cannot be replayed at all, regardless of how many subsequent entries are
+    /// well-formed.
+    /// </remarks>
     public static readonly LogEntryClassification Genesis = new("genesis");
 
     /// <summary>
@@ -49,6 +67,16 @@ public readonly struct LogEntryClassification
     /// <see cref="LogEntry{TOperation,TProof}.Operation"/> of a heartbeat
     /// entry is <see langword="null"/>.
     /// </summary>
+    /// <remarks>
+    /// A heartbeat entry contributes no new domain information — the state is
+    /// unchanged and uncertainty about the subject's current condition does not
+    /// decrease. What it does contribute is a verified extension of the chain:
+    /// evidence that the log controller remains in possession of their key material
+    /// and has not repudiated the current state since the preceding mutating entry.
+    /// In information-theoretic terms, the heartbeat preserves the entropy reduction
+    /// already achieved by prior entries rather than adding new reduction. It keeps
+    /// the chain alive without advancing its content.
+    /// </remarks>
     public static readonly LogEntryClassification Heartbeat = new("heartbeat");
 
 
