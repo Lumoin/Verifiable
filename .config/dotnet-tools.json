@@ -3,7 +3,7 @@
   "isRoot": true,
   "tools": {
     "dotnet-stryker": {
-      "version": "4.12.0",
+      "version": "4.13.0",
       "commands": [
         "dotnet-stryker"
       ],
@@ -17,7 +17,7 @@
       "rollForward": false
     },
     "dotnet-reportgenerator-globaltool": {
-      "version": "5.5.1",
+      "version": "5.5.3",
       "commands": [
         "reportgenerator"
       ],
@@ -38,7 +38,7 @@
       "rollForward": false
     },
     "dotnet-coverage": {
-      "version": "18.4.1",
+      "version": "18.5.2",
       "commands": [
         "dotnet-coverage"
       ],
@@ -53,3 +53,4 @@
     }
   }
 }
+

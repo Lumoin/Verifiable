@@ -95,7 +95,7 @@ jobs:
     steps:
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e
+      uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc
       with:
         disable-sudo: true
         egress-policy: block
@@ -108,7 +108,7 @@ jobs:
         fetch-tags: true
 
     - name: Set up .NET SDK
-      uses: actions/setup-dotnet@baa11fbfe1d6520db94683bd5c7a3818018e4309
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
@@ -189,7 +189,7 @@ jobs:
 
     #- name: Upload Stryker output artefacts
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
     #  with:
     #    name: 'Stryker output artefacts'
     #    path: ${{ github.workspace }}/StrykerOutput/
@@ -198,7 +198,7 @@ jobs:
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
 
     # - name: Archive publish results
-    #  uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
     #  with:
     #    name: Verifiable.Benchmarks
     #    path: ./publish/*
@@ -207,7 +207,7 @@ jobs:
     #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
 
     # - name: Upload benchmark results
-    #  uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
@@ -219,7 +219,7 @@ jobs:
 
     - name: Create test summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: EnricoMi/publish-unit-test-result-action@27d65e188ec43221b20d26de30f4892fad91df2f
+      uses: EnricoMi/publish-unit-test-result-action@c950f6fb443cb5af20a377fd0dfaa78838901040
       with:
         trx_files: '${{ github.workspace }}/reports/**/*.trx'
 
@@ -268,7 +268,7 @@ jobs:
 
     - name: Upload Verifiable NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
-      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
       with:
         name: nupkg
         path: ./nupkgs/*.*
@@ -284,14 +284,14 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - name: Harden Runner
-          uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e
+          uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc
           with:
             disable-sudo: true
             egress-policy: block
             allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
         - name: Download NuGet artifacts
-          uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+          uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
           with:
             name: nupkg
 
@@ -308,14 +308,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc
         with:
           disable-sudo: true
           egress-policy: audit
           allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
       - name: Download NuGet artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         with:
           name: nupkg
 
