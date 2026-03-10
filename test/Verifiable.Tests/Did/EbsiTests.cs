@@ -47,8 +47,8 @@ namespace Verifiable.Tests.Did
                 VerifiableJsonContext.Default,
                 new DefaultJsonTypeInfoResolver());
 
-            TestExtendedDidDocument? deseserializedDidDocument = JsonSerializer.Deserialize<TestExtendedDidDocument>(didDocumentFileContents, options);
-            string reserializedDidDocument = JsonSerializer.Serialize(deseserializedDidDocument, options);
+            TestExtendedDidDocument? deseserializedDidDocument = JsonSerializerExtensions.Deserialize<TestExtendedDidDocument>(didDocumentFileContents, options);
+            string reserializedDidDocument = JsonSerializerExtensions.Serialize(deseserializedDidDocument, options);
 
             //All the DID documents need to have an ID and a context.
             Assert.IsNotNull(deseserializedDidDocument?.Id);

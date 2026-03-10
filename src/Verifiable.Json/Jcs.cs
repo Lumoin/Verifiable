@@ -1,6 +1,7 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Verifiable.Json;
 
@@ -129,6 +130,10 @@ namespace Verifiable.Json;
 /// <item><description>Uses immutable <see cref="JsonDocument"/> for efficient read-only traversal.</description></item>
 /// </list>
 /// <para>
+/// Callers who manage their own serialization can serialize to a JSON string first and pass it
+/// directly to <see cref="Canonicalize(string)"/>, avoiding the typed entry points entirely.
+/// </para>
+/// <para>
 /// If future versions of System.Text.Json add a post-serialization transformation hook,
 /// output stream wrapper, or native lexicographic property sorting option that handles
 /// dynamic keys, this implementation could be optimized to avoid the reparse step.
@@ -136,11 +141,6 @@ namespace Verifiable.Json;
 /// </remarks>
 public static class Jcs
 {
-    private static readonly JsonSerializerOptions DefaultSerializerOptions = new()
-    {
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
-
     private static readonly JsonWriterOptions CanonicalWriterOptions = new()
     {
         Indented = false,
@@ -153,14 +153,14 @@ public static class Jcs
     /// </summary>
     /// <typeparam name="T">The type of the object to serialize.</typeparam>
     /// <param name="value">The object to serialize.</param>
-    /// <param name="options">Optional serializer options. Only encoder settings are used; output is always unindented.</param>
+    /// <param name="typeInfo">The <see cref="JsonTypeInfo{T}"/> for AOT-safe serialization.</param>
     /// <returns>The canonical JSON string.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
-    public static string Serialize<T>(T value, JsonSerializerOptions? options = null)
+    public static string Serialize<T>(T value, JsonTypeInfo<T> typeInfo)
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        var json = JsonSerializer.Serialize(value, options ?? DefaultSerializerOptions);
+        var json = JsonSerializer.Serialize(value, typeInfo);
 
         return Canonicalize(json);
     }
@@ -171,14 +171,14 @@ public static class Jcs
     /// </summary>
     /// <typeparam name="T">The type of the object to serialize.</typeparam>
     /// <param name="value">The object to serialize.</param>
-    /// <param name="options">Optional serializer options. Only encoder settings are used; output is always unindented.</param>
+    /// <param name="typeInfo">The <see cref="JsonTypeInfo{T}"/> for AOT-safe serialization.</param>
     /// <returns>The canonical JSON as UTF-8 bytes.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
-    public static byte[] SerializeToUtf8Bytes<T>(T value, JsonSerializerOptions? options = null)
+    public static byte[] SerializeToUtf8Bytes<T>(T value, JsonTypeInfo<T> typeInfo)
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        var json = JsonSerializer.Serialize(value, options ?? DefaultSerializerOptions);
+        var json = JsonSerializer.Serialize(value, typeInfo);
 
         return CanonicalizeToUtf8Bytes(json);
     }

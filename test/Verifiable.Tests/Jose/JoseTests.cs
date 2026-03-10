@@ -1,12 +1,11 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Jose;
-using Verifiable.Json.Converters;
+using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -23,14 +22,6 @@ internal sealed class JoseTests
     /// Test context for accessing test information and cancellation token.
     /// </summary>
     public TestContext TestContext { get; set; } = null!;
-
-    /// <summary>
-    /// JSON serializer options with dictionary converter.
-    /// </summary>
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        Converters = { new DictionaryStringObjectJsonConverter() }
-    };
 
 
     [TestMethod]
@@ -385,7 +376,7 @@ internal sealed class JoseTests
     /// </summary>
     private static TaggedMemory<byte> EncodeJwtPart(Dictionary<string, object> part)
     {
-        byte[] bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(part));
+        byte[] bytes = Encoding.UTF8.GetBytes(JsonSerializerExtensions.Serialize(part, TestSetup.DefaultSerializationOptions));
         return new TaggedMemory<byte>(bytes, BufferTags.Json);
     }
 
@@ -396,6 +387,6 @@ internal sealed class JoseTests
     private static Dictionary<string, object> DecodeJwtPart(ReadOnlySpan<byte> bytes)
     {
         string json = Encoding.UTF8.GetString(bytes);
-        return JsonSerializer.Deserialize<Dictionary<string, object>>(json, JsonOptions)!;
+        return JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, TestSetup.DefaultSerializationOptions)!;
     }
 }

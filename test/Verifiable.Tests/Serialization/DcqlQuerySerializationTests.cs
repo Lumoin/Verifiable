@@ -1,5 +1,6 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Verifiable.Core.Model.Dcql;
+using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Serialization;
@@ -75,8 +76,8 @@ internal sealed class DcqlQuerySerializationTests
         };
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
-        string json = JsonSerializer.Serialize(original, options);
-        var deserialized = JsonSerializer.Deserialize<DcqlQuery>(json, options)!;
+        string json = JsonSerializerExtensions.Serialize(original, options);
+        var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
         Assert.IsNotNull(deserialized.Credentials);
         Assert.HasCount(2, deserialized.Credentials);
@@ -115,8 +116,8 @@ internal sealed class DcqlQuerySerializationTests
         };
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
-        string json = JsonSerializer.Serialize(original, options);
-        var deserialized = JsonSerializer.Deserialize<DcqlQuery>(json, options)!;
+        string json = JsonSerializerExtensions.Serialize(original, options);
+        var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
         Assert.IsNotNull(deserialized.Credentials);
         Assert.HasCount(1, deserialized.Credentials);
@@ -156,7 +157,7 @@ internal sealed class DcqlQuerySerializationTests
         };
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
-        string json = JsonSerializer.Serialize(original, options);
+        string json = JsonSerializerExtensions.Serialize(original, options);
 
         //Verify the JSON wire format contains the expected mixed-type array.
         using var doc = JsonDocument.Parse(json);
@@ -174,7 +175,7 @@ internal sealed class DcqlQuerySerializationTests
         Assert.AreEqual("name", pathArray[3].GetString());
 
         //Verify roundtrip produces equivalent DcqlClaimPattern.
-        var deserialized = JsonSerializer.Deserialize<DcqlQuery>(json, options)!;
+        var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
         Assert.IsNotNull(deserialized.Credentials);
         Assert.IsNotNull(deserialized.Credentials[0].Claims);
         var path = deserialized.Credentials[0].Claims![0].Path;
@@ -211,8 +212,8 @@ internal sealed class DcqlQuerySerializationTests
         };
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
-        string json = JsonSerializer.Serialize(original, options);
-        var deserialized = JsonSerializer.Deserialize<DcqlQuery>(json, options)!;
+        string json = JsonSerializerExtensions.Serialize(original, options);
+        var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
         Assert.IsNotNull(deserialized.CredentialSets);
         Assert.HasCount(1, deserialized.CredentialSets!);
@@ -260,8 +261,8 @@ internal sealed class DcqlQuerySerializationTests
         };
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
-        string json = JsonSerializer.Serialize(original, options);
-        var deserialized = JsonSerializer.Deserialize<DcqlQuery>(json, options)!;
+        string json = JsonSerializerExtensions.Serialize(original, options);
+        var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
         Assert.IsNotNull(deserialized.Credentials);
         Assert.IsNotNull(deserialized.Credentials[0].Claims);
@@ -309,7 +310,7 @@ internal sealed class DcqlQuerySerializationTests
         };
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
-        string json = JsonSerializer.Serialize(original, options);
+        string json = JsonSerializerExtensions.Serialize(original, options);
 
         //Verify wire format is a flat array of arrays.
         using var doc = JsonDocument.Parse(json);
@@ -323,7 +324,7 @@ internal sealed class DcqlQuerySerializationTests
         Assert.AreEqual("display_name", claimSetsArray[1][0].GetString());
 
         //Verify roundtrip.
-        var deserialized = JsonSerializer.Deserialize<DcqlQuery>(json, options)!;
+        var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
         Assert.IsNotNull(deserialized.Credentials);
         Assert.IsNotNull(deserialized.Credentials[0].ClaimSets);
         var claimSets = deserialized.Credentials[0].ClaimSets!;
@@ -374,8 +375,8 @@ internal sealed class DcqlQuerySerializationTests
         };
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
-        string json = JsonSerializer.Serialize(original, options);
-        var deserialized = JsonSerializer.Deserialize<DcqlQuery>(json, options)!;
+        string json = JsonSerializerExtensions.Serialize(original, options);
+        var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
         Assert.IsNotNull(deserialized.Credentials);
         Assert.IsNotNull(deserialized.Credentials[0].Claims);
@@ -465,7 +466,7 @@ internal sealed class DcqlQuerySerializationTests
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
         Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<DcqlQuery>(json, options));
+            JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
 
     [TestMethod]
@@ -483,7 +484,7 @@ internal sealed class DcqlQuerySerializationTests
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
         Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<DcqlQuery>(json, options));
+            JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
 
     [TestMethod]
@@ -507,7 +508,7 @@ internal sealed class DcqlQuerySerializationTests
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
         Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<DcqlQuery>(json, options));
+            JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
 
     [TestMethod]
@@ -568,7 +569,7 @@ internal sealed class DcqlQuerySerializationTests
             """;
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
-        var deserialized = JsonSerializer.Deserialize<DcqlQuery>(json, options)!;
+        var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
         Assert.IsNotNull(deserialized.Credentials);
         Assert.HasCount(1, deserialized.Credentials);

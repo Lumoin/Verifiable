@@ -1,5 +1,7 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
+using Verifiable.Json;
 
 namespace Verifiable.Tests.TestInfrastructure
 {
@@ -16,9 +18,13 @@ namespace Verifiable.Tests.TestInfrastructure
         /// <param name="options">The JSON serializer options.</param>
         /// <returns>A tuple containing the deserialized object and the re-serialized string.</returns>
         public static (TDocument? DeserializedObject, string ReserializedString) PerformSerializationCycle<TDocument>(string inputJson, JsonSerializerOptions options)
+            where TDocument : notnull
         {
-            var deserializedObject = JsonSerializer.Deserialize<TDocument>(inputJson, options);
-            var reserializedString = JsonSerializer.Serialize(deserializedObject, options);
+            ArgumentNullException.ThrowIfNull(inputJson, nameof(inputJson));
+            ArgumentNullException.ThrowIfNull(options, nameof(options));
+
+            var deserializedObject = JsonSerializerExtensions.Deserialize<TDocument>(inputJson, options);
+            var reserializedString = JsonSerializerExtensions.Serialize(deserializedObject, options);
 
             return (deserializedObject, reserializedString);
         }
@@ -49,11 +55,13 @@ namespace Verifiable.Tests.TestInfrastructure
         /// <returns>A tuple containing the deserialized objects and the re-serialized strings for both document types.</returns>
         public static (TDocument1? DeserializedObject1, TDocument2? DeserializedObject2, string ReserializedString1, string ReserializedString2)
             PerformExtendedSerializationCycle<TDocument1, TDocument2>(string inputJson, JsonSerializerOptions options)
+            where TDocument1 : notnull
+            where TDocument2 : notnull
         {
-            var deserializedObject1 = JsonSerializer.Deserialize<TDocument1>(inputJson, options);
-            var deserializedObject2 = JsonSerializer.Deserialize<TDocument2>(inputJson, options);
-            var reserializedString1 = JsonSerializer.Serialize(deserializedObject1, options);
-            var reserializedString2 = JsonSerializer.Serialize(deserializedObject2, options);
+            var deserializedObject1 = JsonSerializerExtensions.Deserialize<TDocument1>(inputJson, options);
+            var deserializedObject2 = JsonSerializerExtensions.Deserialize<TDocument2>(inputJson, options);
+            var reserializedString1 = JsonSerializerExtensions.Serialize(deserializedObject1, options);
+            var reserializedString2 = JsonSerializerExtensions.Serialize(deserializedObject2, options);
 
             return (deserializedObject1, deserializedObject2, reserializedString1, reserializedString2);
         }

@@ -1,10 +1,18 @@
-﻿using CsCheck;
+using CsCheck;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Serialization;
+
+
+[JsonSerializable(typeof(decimal))]
+internal partial class JcsPropertyTestsJsonContext: JsonSerializerContext
+{
+}
 
 /// <summary>
 /// Property-based tests for <see cref="Jcs"/> JSON Canonicalization Scheme implementation.
@@ -312,22 +320,28 @@ internal sealed class JcsPropertyTests
     [TestMethod]
     public void CanonicalizeSerializeProducesSameResultAsCanonicalizeString()
     {
-        //Jcs.Serialize<T> and Jcs.Canonicalize(JsonSerializer.Serialize<T>) should produce the same result.
+        var options = new JsonSerializerOptions(TestSetup.DefaultSerializationOptions)
+        {
+            TypeInfoResolver = JsonTypeInfoResolver.Combine(
+                VerifiableJsonContext.Default,
+                JcsPropertyTestsJsonContext.Default)
+        };
+
+        var dictTypeInfo = (JsonTypeInfo<Dictionary<string, object?>>)options.GetTypeInfo(typeof(Dictionary<string, object?>));
+
         JsonObjectGen(2).Sample(json =>
         {
             var jsonString = json.ToJsonString();
 
-            //Deserialize to a dictionary and serialize via Jcs.Serialize.
-            var dict = JsonSerializer.Deserialize<Dictionary<string, object?>>(jsonString);
+            var dict = JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(jsonString, options);
             if(dict is null)
             {
                 return;
             }
 
-            var viaSerialize = Jcs.Serialize(dict);
+            var viaSerialize = Jcs.Serialize(dict, dictTypeInfo);
             var viaCanonicalizeString = Jcs.Canonicalize(jsonString);
 
-            //Both approaches should yield semantically equivalent canonical JSON.
             var isEqual = JsonSerializationUtilities.CompareJsonElements(viaSerialize, viaCanonicalizeString);
             Assert.IsTrue(isEqual, "Jcs.Serialize and Jcs.Canonicalize should produce semantically equivalent output.");
         });

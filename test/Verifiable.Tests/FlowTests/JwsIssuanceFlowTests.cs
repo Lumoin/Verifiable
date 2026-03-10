@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Text.Json;
 using Verifiable.Core.Model.Credentials;
@@ -6,6 +6,7 @@ using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Jose;
+using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -64,28 +65,28 @@ internal sealed class JwsIssuanceFlowTests
     /// Serializes a credential to UTF-8 JSON bytes.
     /// </summary>
     private static CredentialToJsonBytesDelegate CredentialSerializer => credential =>
-        JsonSerializer.SerializeToUtf8Bytes(credential, JsonOptions);
+        JsonSerializerExtensions.SerializeToUtf8Bytes(credential, JsonOptions);
 
 
     /// <summary>
     /// Deserializes a credential from UTF-8 JSON bytes.
     /// </summary>
     private static CredentialFromJsonBytesDelegate CredentialDeserializer => jsonBytes =>
-        JsonSerializer.Deserialize<VerifiableCredential>(jsonBytes, JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<VerifiableCredential>(jsonBytes, JsonOptions)!;
 
 
     /// <summary>
     /// Serializes a JWT header dictionary to UTF-8 JSON bytes.
     /// </summary>
     private static Verifiable.Core.Model.Credentials.JwtHeaderSerializer HeaderSerializer => header =>
-        JsonSerializer.SerializeToUtf8Bytes(header);
+        JsonSerializerExtensions.SerializeToUtf8Bytes(header, JsonOptions);
 
 
     /// <summary>
     /// Deserializes a JWT header from UTF-8 JSON bytes.
     /// </summary>
     private static JwtHeaderDeserializer HeaderDeserializer => headerBytes =>
-        JsonSerializer.Deserialize<Dictionary<string, object>>(headerBytes);
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, JsonOptions)!;
 
 
     /// <summary>
@@ -281,7 +282,7 @@ internal sealed class JwsIssuanceFlowTests
         //Decode and verify header.
         string[] parts = jws.Split('.');
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], SensitiveMemoryPool<byte>.Shared);
-        var header = JsonSerializer.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span);
+        var header = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span, JsonOptions);
 
         Assert.IsNotNull(header);
         Assert.IsTrue(header.ContainsKey(JwkProperties.Alg));
@@ -347,7 +348,7 @@ internal sealed class JwsIssuanceFlowTests
         //Decode and verify header has the custom media type.
         string[] parts = jws.Split('.');
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], SensitiveMemoryPool<byte>.Shared);
-        var header = JsonSerializer.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span);
+        var header = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span, JsonOptions);
 
         Assert.IsNotNull(header);
         Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[JwkProperties.Typ].ToString());

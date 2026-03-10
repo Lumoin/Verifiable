@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
@@ -310,7 +310,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
         var ephemeralKeyPair = new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(ephemeralPublicKey, ephemeralPrivateKey);
 
         //Parse the unsigned credential.
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredential, TestSetup.DefaultSerializationOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredential, TestSetup.DefaultSerializationOptions)!;
 
         //Mandatory paths from Example 73.
         var mandatoryPaths = MandatoryPointers.Select(CredentialPath.FromJsonPointer).ToArray();
@@ -499,12 +499,12 @@ internal sealed class EcdsaSd2023W3cVectorTests
 
         var ephemeralKeyPair = new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(ephemeralPublicKey, ephemeralPrivateKey);
 
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(
             UnsignedCredential,
             TestSetup.DefaultSerializationOptions)!;
 
         var mandatoryPaths = MandatoryPointers
-            .Select(p => CredentialPath.FromJsonPointer(p))
+            .Select(CredentialPath.FromJsonPointer)
             .ToArray();
 
         var rdfcCanonicalizer = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
@@ -720,9 +720,9 @@ internal sealed class EcdsaSd2023W3cVectorTests
         verifierContext.Dispose();
     }
 
-    private static string SerializeCredential(VerifiableCredential credential) => JsonSerializer.Serialize(credential, TestSetup.DefaultSerializationOptions);
+    private static string SerializeCredential(VerifiableCredential credential) => JsonSerializerExtensions.Serialize(credential, TestSetup.DefaultSerializationOptions);
 
-    private static VerifiableCredential DeserializeCredential(string json) => JsonSerializer.Deserialize<VerifiableCredential>(json, TestSetup.DefaultSerializationOptions)!;
+    private static VerifiableCredential DeserializeCredential(string json) => JsonSerializerExtensions.Deserialize<VerifiableCredential>(json, TestSetup.DefaultSerializationOptions)!;
 
 
     private static string SerializeProofOptions(ProofOptionsDocument proofOptions) =>

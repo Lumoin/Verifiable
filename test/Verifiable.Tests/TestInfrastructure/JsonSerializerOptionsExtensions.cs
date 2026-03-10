@@ -1,9 +1,11 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Json.Converters;
 using Verifiable.Json.Converters.Dcql;
+using Verifiable.Json.StatusList;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -31,7 +33,7 @@ internal static class JsonSerializerOptionsExtensions
         options.TypeInfoResolver = VerifiableJsonContext.Default;
 
         //DID document converters.
-        options.Converters.Add(new DictionaryStringObjectJsonConverter());
+        options.Converters.Add(new DictionaryStringObjectJsonConverter(VerifiableJsonContext.Default));
         options.Converters.Add(new SingleOrArrayControllerConverter());
         options.Converters.Add(new VerificationMethodReferenceConverterFactory());
         options.Converters.Add(new VerificationMethodConverter());
@@ -52,6 +54,12 @@ internal static class JsonSerializerOptionsExtensions
         options.Converters.Add(new ClaimsQueryConverter());
         options.Converters.Add(new TrustedAuthoritiesQueryConverter());
         options.Converters.Add(new CredentialSetQueryConverter());
+
+        //Status list converters.
+        options.Converters.Add(new StatusListJsonConverter(SensitiveMemoryPool<byte>.Shared));
+        options.Converters.Add(new StatusListReferenceJsonConverter());
+        options.Converters.Add(new StatusClaimJsonConverter());
+        options.Converters.Add(new StatusListAggregationJsonConverter());
 
         return options;
     }

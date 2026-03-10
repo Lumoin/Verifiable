@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.SelectiveDisclosure;
@@ -45,9 +45,12 @@ internal sealed class CredentialSdIssuanceTests
         };
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
-            disclosablePaths, SaltGenerator.Create,
-            privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
-            jsonOptions: CredentialSecuringMaterial.JsonOptions,
+            disclosablePaths,
+            SaltGenerator.Create,
+            privateKey,
+            CredentialSecuringMaterial.VerificationMethodId,
+            Pool,
+            CredentialSecuringMaterial.JsonOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsGreaterThan(0, result.SignedToken.Length, "Signed token must not be empty.");
@@ -66,9 +69,12 @@ internal sealed class CredentialSdIssuanceTests
         };
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
-            disclosablePaths, SaltGenerator.Create,
-            privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
-            jsonOptions: CredentialSecuringMaterial.JsonOptions,
+            disclosablePaths,
+            SaltGenerator.Create,
+            privateKey,
+            CredentialSecuringMaterial.VerificationMethodId,
+            Pool,
+            CredentialSecuringMaterial.JsonOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(1, result.Disclosures);
@@ -87,9 +93,12 @@ internal sealed class CredentialSdIssuanceTests
         };
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
-            disclosablePaths, SaltGenerator.Create,
-            privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
-            jsonOptions: CredentialSecuringMaterial.JsonOptions,
+            disclosablePaths,
+            SaltGenerator.Create,
+            privateKey,
+            CredentialSecuringMaterial.VerificationMethodId,
+            Pool,
+            CredentialSecuringMaterial.JsonOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(1, result.Disclosures);

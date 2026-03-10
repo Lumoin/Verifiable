@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.TestInfrastructureTests;
@@ -11,7 +11,8 @@ internal sealed class JsonTestingUtilitiesTests
 {
     private static JsonSerializerOptions DefaultOptions { get; } = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()
     };
 
 

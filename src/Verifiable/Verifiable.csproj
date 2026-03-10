@@ -10,25 +10,21 @@
     <Description>A command line tool for system security elements, decentralized identifiers and verifiable credentials.</Description>
     <PackageTags>ssi wallet tpm2 trusted-platform-module eidas did self-sovereign-identity verifiable-credentials decentralized-identifiers</PackageTags>
     <ApplicationIcon>resources/verifiable-nuget-logo.ico</ApplicationIcon>
-
-    <PublishTrimmed>true</PublishTrimmed>
-    <TrimMode>full</TrimMode>
-    <IsAotCompatible>true</IsAotCompatible>
-    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
-
-    <!-- Allow build to succeed despite TSS.Net trim warnings. -->
-    <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
 
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- PublishAot=true drives native AOT compilation when dotnet pack -r <rid>
+         is invoked in CI. TrimMode and PublishTrimmed are implied by AOT and
+         are not set here to avoid conflicting with Directory.Build.props.
+    -->
+    <PublishAot>true</PublishAot>
+    <RuntimeIdentifiers>linux-x64;linux-arm64;win-x64;win-arm64;osx-x64;osx-arm64;any</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
     <None Include=".mcp\server.json" Pack="true" PackagePath=".mcp" />
-  </ItemGroup>
-
-  <!-- TSS.Net is not trim-compatible; exclude from trimming until replaced. -->
-  <ItemGroup>
-    <TrimmerRootAssembly Include="TSS.Net" />
   </ItemGroup>
 
   <ItemGroup>

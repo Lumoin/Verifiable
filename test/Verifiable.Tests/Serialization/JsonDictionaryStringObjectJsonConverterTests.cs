@@ -1,17 +1,23 @@
-﻿using System.Text.Json;
+using System.Text.Json;
+using Verifiable.Json;
 using Verifiable.Json.Converters;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Serialization;
 
 [TestClass]
 internal sealed class JsonDictionaryStringObjectJsonConverterTests
 {
-    private static JsonSerializerOptions CreateOptions()
-    {
-        var options = new JsonSerializerOptions();
-        options.Converters.Add(new DictionaryStringObjectJsonConverter());
-        return options;
-    }
+    /// <summary>
+    /// Creates a new instance of <see cref="JsonSerializerOptions"/> configured with verifiable default settings.
+    /// </summary>
+    /// <remarks>Use this method to obtain serializer options that ensure consistent and predictable
+    /// serialization behavior. The returned options may include settings that enforce stricter validation or
+    /// compatibility for verifiable data exchange.</remarks>
+    /// <returns>A <see cref="JsonSerializerOptions"/> object initialized with default values suitable for verifiable
+    /// serialization scenarios.</returns>
+    private static JsonSerializerOptions CreateOptions() => new JsonSerializerOptions().ApplyVerifiableDefaults();
+
 
     [TestMethod]
     public void DeserializeEmptyObjectSucceeds()
@@ -19,7 +25,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ "{}";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         Assert.IsEmpty(result);
@@ -31,7 +37,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"name":"Alice"}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         Assert.AreEqual("Alice", result["name"]);
@@ -43,7 +49,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"active":true,"deleted":false}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         Assert.IsTrue((bool)result["active"]);
@@ -56,7 +62,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"value":null}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         Assert.IsNull(result["value"]);
@@ -68,7 +74,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"count":42}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         Assert.AreEqual(42m, result["count"]);
@@ -80,7 +86,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"price":19.99}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         Assert.AreEqual(19.99m, result["price"]);
@@ -92,7 +98,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"bigNumber":9223372036854775807}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         Assert.AreEqual(9223372036854775807m, result["bigNumber"]);
@@ -104,7 +110,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"timestamp":"2024-01-15T10:30:00Z"}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         Assert.IsInstanceOfType<DateTime>(result["timestamp"]);
@@ -120,7 +126,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"text":"not-a-date"}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         Assert.AreEqual("not-a-date", result["text"]);
@@ -132,7 +138,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"outer":{"inner":"value"}}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         var outer = result["outer"] as Dictionary<string, object>;
@@ -146,7 +152,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"items":["a","b","c"]}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         var items = result["items"] as List<object>;
@@ -163,7 +169,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"mixed":[1,"two",true,null]}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         var mixed = result["mixed"] as List<object>;
@@ -181,7 +187,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"people":[{"name":"Alice"},{"name":"Bob"}]}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         var people = result["people"] as List<object>;
@@ -203,7 +209,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object>();
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual("{}", json);
     }
@@ -214,7 +220,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["name"] = "Alice" };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"name":"Alice"}""", json);
     }
@@ -229,7 +235,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.Contains("\"active\":true", json, StringComparison.Ordinal);
         Assert.Contains("\"deleted\":false", json, StringComparison.Ordinal);
@@ -241,7 +247,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["value"] = null! };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"value":null}""", json);
     }
@@ -252,7 +258,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["count"] = 42 };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"count":42}""", json);
     }
@@ -263,7 +269,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["bigNumber"] = 9223372036854775807L };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"bigNumber":9223372036854775807}""", json);
     }
@@ -274,7 +280,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["value"] = 3.14f };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.Contains("3.14", json, StringComparison.Ordinal);
     }
@@ -285,7 +291,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["value"] = 3.14159265359 };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.Contains("3.14159265359", json, StringComparison.Ordinal);
     }
@@ -296,7 +302,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["price"] = 19.99m };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"price":19.99}""", json);
     }
@@ -308,7 +314,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["timestamp"] = dateTime };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.Contains("2024-01-15", json, StringComparison.Ordinal);
     }
@@ -322,7 +328,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"outer":{"inner":"value"}}""", json);
     }
@@ -336,7 +342,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"items":["a","b","c"]}""", json);
     }
@@ -350,7 +356,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"mixed":[1,"two",true,null]}""", json);
     }
@@ -379,12 +385,11 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
             """;
         var options = CreateOptions();
 
-        var dictionary = JsonSerializer.Deserialize<Dictionary<string, object>>(originalJson, options);
+        var dictionary = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(originalJson, options);
         Assert.IsNotNull(dictionary);
 
-        string serializedJson = JsonSerializer.Serialize(dictionary, options);
-        var roundtrippedDictionary = JsonSerializer.Deserialize<Dictionary<string, object>>(serializedJson, options);
-
+        string serializedJson = JsonSerializerExtensions.Serialize(dictionary, options);
+        var roundtrippedDictionary = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(serializedJson, options);
         Assert.IsNotNull(roundtrippedDictionary);
         Assert.AreEqual("http://example.org/credentials/123", roundtrippedDictionary["id"]);
 
@@ -406,7 +411,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["data"] = nestedElement };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"data":{"key":"value"}}""", json);
     }
@@ -421,7 +426,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["numbers"] = arrayElement };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"numbers":[1,2,3]}""", json);
     }
@@ -436,7 +441,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["message"] = stringElement };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"message":"hello"}""", json);
     }
@@ -451,7 +456,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["amount"] = numberElement };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"amount":42.5}""", json);
     }
@@ -466,7 +471,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["enabled"] = boolElement };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"enabled":true}""", json);
     }
@@ -481,7 +486,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var dictionary = new Dictionary<string, object> { ["empty"] = nullElement };
         var options = CreateOptions();
 
-        string json = JsonSerializer.Serialize(dictionary, options);
+        string json = JsonSerializerExtensions.Serialize(dictionary, options);
 
         Assert.AreEqual(/*lang=json,strict*/ """{"empty":null}""", json);
     }
@@ -493,14 +498,14 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var options = CreateOptions();
 
         _ = Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<Dictionary<string, object>>(json, options));
+            JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options));
     }
 
     [TestMethod]
     public void SerializeNullDictionaryThrowsArgumentNullException()
     {
         var options = CreateOptions();
-        var converter = new DictionaryStringObjectJsonConverter();
+        var converter = new DictionaryStringObjectJsonConverter(VerifiableJsonContext.Default);
 
         using var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream);
@@ -516,7 +521,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var options = CreateOptions();
 
         _ = Assert.Throws<NotSupportedException>(() =>
-            JsonSerializer.Serialize(dictionary, options));
+            JsonSerializerExtensions.Serialize(dictionary, options));
     }
 
     [TestMethod]
@@ -537,7 +542,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
             """;
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         var level1 = result["level1"] as Dictionary<string, object>;
@@ -557,12 +562,11 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"integer":42,"decimal":3.14159265358979}""";
         var options = CreateOptions();
 
-        var dictionary = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var dictionary = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
         Assert.IsNotNull(dictionary);
 
-        string serialized = JsonSerializer.Serialize(dictionary, options);
-        var roundtripped = JsonSerializer.Deserialize<Dictionary<string, object>>(serialized, options);
-
+        string serialized = JsonSerializerExtensions.Serialize(dictionary, options);
+        var roundtripped = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(serialized, options);
         Assert.IsNotNull(roundtripped);
         Assert.AreEqual(42m, roundtripped["integer"]);
         Assert.AreEqual(3.14159265358979m, roundtripped["decimal"]);
@@ -574,7 +578,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"items":[]}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         var items = result["items"] as List<object>;
@@ -588,7 +592,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         const string json = /*lang=json,strict*/ """{"matrix":[[1,2],[3,4]]}""";
         var options = CreateOptions();
 
-        var result = JsonSerializer.Deserialize<Dictionary<string, object>>(json, options);
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
         var matrix = result["matrix"] as List<object>;

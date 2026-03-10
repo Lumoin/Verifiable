@@ -1,8 +1,9 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Json;
 
 namespace Verifiable.Tests.Builders;
 
@@ -465,8 +466,8 @@ internal sealed class CredentialBuilderTests
             additionalTypes: [UniversityDegreeCredentialType],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        var json = JsonSerializer.Serialize(originalCredential, TestSetup.DefaultSerializationOptions);
-        var deserializedCredential = JsonSerializer.Deserialize<VerifiableCredential>(json, TestSetup.DefaultSerializationOptions);
+        var json = JsonSerializerExtensions.Serialize(originalCredential, TestSetup.DefaultSerializationOptions);
+        var deserializedCredential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(json, TestSetup.DefaultSerializationOptions);
 
         Assert.IsNotNull(deserializedCredential);
         Assert.AreEqual(originalCredential.Id, deserializedCredential.Id);
@@ -582,8 +583,8 @@ internal sealed class CredentialBuilderTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Serialize and deserialize to simulate storage/transmission.
-        var json = JsonSerializer.Serialize(credential, TestSetup.DefaultSerializationOptions);
-        var deserializedCredential = JsonSerializer.Deserialize<VerifiableCredential>(json, TestSetup.DefaultSerializationOptions);
+        var json = JsonSerializerExtensions.Serialize(credential, TestSetup.DefaultSerializationOptions);
+        var deserializedCredential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(json, TestSetup.DefaultSerializationOptions);
 
         //Verify the AdditionalData contains expected keys.
         var additionalData = deserializedCredential!.CredentialSubject![0].AdditionalData;

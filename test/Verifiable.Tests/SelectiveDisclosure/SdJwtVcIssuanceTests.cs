@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Model.Credentials;
@@ -7,6 +7,7 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Sd;
 using Verifiable.Jose;
+using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.DataIntegrity;
 using Verifiable.Tests.TestInfrastructure;
@@ -53,7 +54,7 @@ internal sealed class SdJwtVcIssuanceTests
 
         string[] jwtParts = token.IssuerSigned.Split('.');
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(jwtParts[0], Pool);
-        Dictionary<string, object>? header = JsonSerializer.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span, CredentialSecuringMaterial.JsonOptions);
+        Dictionary<string, object>? header = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span, CredentialSecuringMaterial.JsonOptions);
 
         Assert.IsNotNull(header);
         Assert.AreEqual("EdDSA", header[JwkProperties.Alg].ToString());
@@ -105,11 +106,11 @@ internal sealed class SdJwtVcIssuanceTests
     /// </summary>
     private async ValueTask<SdToken<string>> SignCredentialAsync(PrivateKeyMemory privateKey)
     {
-        VerifiableCredential credential = JsonSerializer.Deserialize<VerifiableCredential>(
+        VerifiableCredential credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(
             CredentialSecuringMaterial.UnsignedCredentialJson,
             CredentialSecuringMaterial.JsonOptions)!;
 
-        string json = JsonSerializer.Serialize(credential, CredentialSecuringMaterial.JsonOptions);
+        string json = JsonSerializerExtensions.Serialize(credential, CredentialSecuringMaterial.JsonOptions);
         int byteCount = Encoding.UTF8.GetByteCount(json);
         using IMemoryOwner<byte> rental = Pool.Rent(byteCount);
         int written = Encoding.UTF8.GetBytes(json, rental.Memory.Span);

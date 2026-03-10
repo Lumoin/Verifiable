@@ -49,8 +49,8 @@ namespace Verifiable.Json.Converters
 
         public override void Write(Utf8JsonWriter writer, Controller[] controller, JsonSerializerOptions options)
         {
-        ArgumentNullException.ThrowIfNull(writer);
-        ArgumentNullException.ThrowIfNull(controller);
+            ArgumentNullException.ThrowIfNull(writer);
+            ArgumentNullException.ThrowIfNull(controller);
             if(controller.Length == 1)
             {
                 writer.WriteStringValue(controller[0].Did);
@@ -96,12 +96,16 @@ namespace Verifiable.Json.Converters
                         break;
                     }
 
-                    list.Add(JsonSerializer.Deserialize<VerificationMethod>(ref reader, options)!);
+                    list.Add(JsonSerializer.Deserialize(
+                        ref reader,
+                        VerifiableJsonContext.Default.VerificationMethod)!);
                 }
             }
             else if(reader.TokenType == JsonTokenType.String)
             {
-                list.Add(JsonSerializer.Deserialize<VerificationMethod>(ref reader, options)!);
+                list.Add(JsonSerializer.Deserialize(
+                    ref reader,
+                    VerifiableJsonContext.Default.VerificationMethod)!);
             }
             else
             {
@@ -118,14 +122,20 @@ namespace Verifiable.Json.Converters
             ArgumentNullException.ThrowIfNull(verificationMethod);
             if(verificationMethod.Length == 1)
             {
-                JsonSerializer.Serialize(writer, verificationMethod[0]);
+                JsonSerializer.Serialize(
+                    writer,
+                    verificationMethod[0],
+                    VerifiableJsonContext.Default.VerificationMethod);
             }
             else
             {
                 writer.WriteStartArray();
                 for(int i = 0; i < verificationMethod.Length; ++i)
                 {
-                    JsonSerializer.Serialize(writer, verificationMethod[i], options);
+                    JsonSerializer.Serialize(
+                        writer,
+                        verificationMethod[i],
+                        VerifiableJsonContext.Default.VerificationMethod);
                 }
                 writer.WriteEndArray();
             }

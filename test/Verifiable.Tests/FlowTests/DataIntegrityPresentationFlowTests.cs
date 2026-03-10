@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
@@ -65,16 +65,16 @@ internal sealed class DataIntegrityPresentationFlowTests
     private static ProofValueDecoderDelegate ProofValueDecoder { get; } = ProofValueCodecs.DecodeBase58Btc;
 
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
-        JsonSerializer.Serialize(credential, JsonOptions);
+        JsonSerializerExtensions.Serialize(credential, JsonOptions);
 
     private static CredentialDeserializeDelegate DeserializeCredential { get; } = serialized =>
-        JsonSerializer.Deserialize<VerifiableCredential>(serialized, JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<VerifiableCredential>(serialized, JsonOptions)!;
 
     private static PresentationSerializeDelegate SerializePresentation { get; } = presentation =>
-        JsonSerializer.Serialize(presentation, JsonOptions);
+        JsonSerializerExtensions.Serialize(presentation, JsonOptions);
 
     private static PresentationDeserializeDelegate DeserializePresentation { get; } = serialized =>
-        JsonSerializer.Deserialize<VerifiablePresentation>(serialized, JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<VerifiablePresentation>(serialized, JsonOptions)!;
 
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);

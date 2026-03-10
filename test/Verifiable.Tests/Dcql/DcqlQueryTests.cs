@@ -1,6 +1,7 @@
-﻿using Verifiable.Core.Dcql;
+using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.JCose;
 
 namespace Verifiable.Tests.Dcql;
 
@@ -9,13 +10,19 @@ internal sealed class DcqlQueryTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private const string IdentityCredentialId = "identity_credential";
-    private const string SdJwtFormat = "vc+sd-jwt";
-    private const string IdentityVct = "https://example.com/identity";
-    private const string GivenNameClaim = "given_name";
-    private const string FamilyNameClaim = "family_name";
-    private const string EmailClaim = "email";
-    private const string BirthdateClaim = "birthdate";
+    private static string IdentityCredentialId { get; } = "identity_credential";
+
+    private static string SdJwtFormat { get; } = WellKnownMediaTypes.Application.VcSdJwt;
+
+    private static string IdentityVct { get; } = "https://example.com/identity";
+
+    private static string GivenNameClaim { get; } = "given_name";
+
+    private static string FamilyNameClaim { get; } = "family_name";
+
+    private static string EmailClaim { get; } = "email";
+
+    private static string BirthdateClaim { get; } = "birthdate";
 
 
     [TestMethod]

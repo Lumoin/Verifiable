@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Verifiable.Core.Model.Credentials;
@@ -17,6 +17,14 @@ namespace Verifiable.Json.Sd;
 /// for callers to pre-serialize to <c>byte[]</c>. The existing <see cref="SdJwtIssuance"/>
 /// byte-level API remains available for callers who manage their own serialization.
 /// </para>
+/// <para>
+/// Serialization uses <see cref="JsonSerializerOptions"/> rather than bare
+/// <see cref="System.Text.Json.Serialization.Metadata.JsonTypeInfo{T}"/> so that
+/// registered <see cref="System.Text.Json.Serialization.JsonConverter{T}"/> instances
+/// (such as <c>CredentialSubjectConverter</c>) are invoked during serialization.
+/// AOT safety is preserved because the options must carry a source-generated
+/// <see cref="JsonSerializerOptions.TypeInfoResolver"/>.
+/// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "Analyzer is not yet up to date with new extension syntax.")]
 public static class SdJwtExtensions
@@ -24,25 +32,23 @@ public static class SdJwtExtensions
     private const string CredentialSubjectPrefix = "/credentialSubject";
 
     /// <summary>
-    /// Generic extension for any claims type. Serialized via
-    /// <see cref="JsonSerializer.SerializeToUtf8Bytes{TValue}(TValue, JsonSerializerOptions?)"/>.
+    /// Generic extension for any claims type.
     /// </summary>
     extension<T>(T claims)
     {
         /// <summary>
-        /// Issues an SD-JWT by serializing the claims object to JSON, redacting the specified
-        /// paths, and signing the result.
+        /// Issues an SD-JWT by serializing the claims object to JSON using the provided
+        /// <see cref="JsonSerializerOptions"/>.
         /// </summary>
-        /// <param name="disclosablePaths">
-        /// Paths identifying claims that should be selectively disclosable.
-        /// </param>
+        /// <param name="disclosablePaths">Paths identifying claims that should be selectively disclosable.</param>
         /// <param name="saltFactory">Factory for generating cryptographic salt for each disclosure.</param>
         /// <param name="privateKey">The issuer's signing key.</param>
         /// <param name="keyId">The key identifier for the JWS <c>kid</c> header.</param>
         /// <param name="memoryPool">Memory pool for cryptographic allocations.</param>
-        /// <param name="jsonOptions">
-        /// Optional <see cref="JsonSerializerOptions"/> for controlling serialization.
-        /// When <see langword="null"/>, uses the default options.
+        /// <param name="options">
+        /// Serializer options whose <see cref="JsonSerializerOptions.TypeInfoResolver"/> provides
+        /// AOT-safe metadata and whose <see cref="JsonSerializerOptions.Converters"/> are applied
+        /// during serialization.
         /// </param>
         /// <param name="hashAlgorithm">
         /// The hash algorithm identifier in IANA format. Defaults to <c>"sha-256"</c>.
@@ -59,14 +65,14 @@ public static class SdJwtExtensions
             PrivateKeyMemory privateKey,
             string keyId,
             MemoryPool<byte> memoryPool,
-            JsonSerializerOptions? jsonOptions = null,
+            JsonSerializerOptions options,
             string? hashAlgorithm = null,
             string? mediaType = null,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(claims);
 
-            byte[] jsonBytes = JsonSerializer.SerializeToUtf8Bytes(claims, jsonOptions);
+            byte[] jsonBytes = JsonSerializerExtensions.SerializeToUtf8Bytes(claims, options);
 
             return SdJwtIssuance.IssueAsync(
                 jsonBytes, disclosablePaths, saltFactory,
@@ -83,8 +89,9 @@ public static class SdJwtExtensions
     extension(VerifiableCredential credential)
     {
         /// <summary>
-        /// Issues an SD-JWT from a <see cref="VerifiableCredential"/>, validating that all
-        /// disclosable paths are under <c>/credentialSubject</c>.
+        /// Issues an SD-JWT from a <see cref="VerifiableCredential"/>, serializing via
+        /// <see cref="JsonSerializerOptions"/> so that registered converters are applied.
+        /// Validates that all disclosable paths are under <c>/credentialSubject</c>.
         /// </summary>
         /// <param name="disclosablePaths">
         /// Paths identifying claims that should be selectively disclosable.
@@ -94,9 +101,10 @@ public static class SdJwtExtensions
         /// <param name="privateKey">The issuer's signing key.</param>
         /// <param name="keyId">The key identifier for the JWS <c>kid</c> header.</param>
         /// <param name="memoryPool">Memory pool for cryptographic allocations.</param>
-        /// <param name="jsonOptions">
-        /// Optional <see cref="JsonSerializerOptions"/> for controlling serialization.
-        /// When <see langword="null"/>, uses the default options.
+        /// <param name="options">
+        /// Serializer options whose <see cref="JsonSerializerOptions.TypeInfoResolver"/> provides
+        /// AOT-safe metadata and whose <see cref="JsonSerializerOptions.Converters"/> are applied
+        /// during serialization.
         /// </param>
         /// <param name="hashAlgorithm">
         /// The hash algorithm identifier in IANA format. Defaults to <c>"sha-256"</c>.
@@ -116,7 +124,7 @@ public static class SdJwtExtensions
             PrivateKeyMemory privateKey,
             string keyId,
             MemoryPool<byte> memoryPool,
-            JsonSerializerOptions? jsonOptions = null,
+            JsonSerializerOptions options,
             string? hashAlgorithm = null,
             string? mediaType = null,
             CancellationToken cancellationToken = default)
@@ -126,7 +134,7 @@ public static class SdJwtExtensions
 
             ValidateCredentialPaths(disclosablePaths);
 
-            byte[] jsonBytes = JsonSerializer.SerializeToUtf8Bytes(credential, jsonOptions);
+            byte[] jsonBytes = JsonSerializerExtensions.SerializeToUtf8Bytes(credential, options);
 
             return SdJwtIssuance.IssueAsync(
                 jsonBytes, disclosablePaths, saltFactory,

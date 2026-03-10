@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
@@ -6,6 +6,7 @@ using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -314,11 +315,11 @@ internal sealed class CoseIssuanceFlowTests
 
 
     private static ReadOnlySpan<byte> CredentialToCborBytes(VerifiableCredential credential) =>
-        JsonSerializer.SerializeToUtf8Bytes(credential, JsonOptions);
+        JsonSerializerExtensions.SerializeToUtf8Bytes(credential, JsonOptions);
 
     private static ReadOnlySpan<byte> CoseProtectedHeaderToCborBytes(IReadOnlyDictionary<int, object> header) =>
         CoseSerialization.SerializeProtectedHeader(header);
 
     private static VerifiableCredential CredentialFromJsonBytes(ReadOnlySpan<byte> bytes) =>
-        JsonSerializer.Deserialize<VerifiableCredential>(bytes, JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<VerifiableCredential>(bytes, JsonOptions)!;
 }

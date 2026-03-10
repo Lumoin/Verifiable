@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Json.Converters;
@@ -101,7 +101,11 @@ public static class KeyFormatDefaults
 
         if(property.NameEquals("publicKeyJwk"u8))
         {
-            var headers = JsonSerializer.Deserialize<Dictionary<string, object>>(property.Value.GetRawText(), options)!;
+            var headers = new Dictionary<string, object>();
+            foreach(var jwkProperty in property.Value.EnumerateObject())
+            {
+                headers[jwkProperty.Name] = jwkProperty.Value.GetString()!;
+            }
             return new PublicKeyJwk { Header = headers };
         }
 
@@ -141,7 +145,13 @@ public static class KeyFormatDefaults
                 writer.WriteStartObject("publicKeyJwk"u8);
                 foreach(var header in jwk.Header)
                 {
-                    writer.WriteString(header.Key, (string)header.Value);
+                    string value = header.Value switch
+                    {
+                        string s => s,
+                        JsonElement e => e.GetString()!,
+                        _ => header.Value.ToString()!
+                    };
+                    writer.WriteString(header.Key, value);
                 }
 
                 writer.WriteEndObject();

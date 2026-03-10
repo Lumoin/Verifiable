@@ -1,10 +1,11 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Jose;
+using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DataIntegrity;
@@ -33,7 +34,7 @@ internal sealed class JwsCredentialSecuringTests
     [TestMethod]
     public async Task SignJwsAndVerifyFromCompactSerializationSucceeds()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         using var publicKey = CredentialSecuringMaterial.DecodeEd25519PublicKey();
@@ -71,7 +72,7 @@ internal sealed class JwsCredentialSecuringTests
     [TestMethod]
     public async Task SignJwsAndVerifyFromMessageSucceeds()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         using var publicKey = CredentialSecuringMaterial.DecodeEd25519PublicKey();
@@ -102,7 +103,7 @@ internal sealed class JwsCredentialSecuringTests
     [TestMethod]
     public async Task SignJwsContainsCorrectHeaderMetadata()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
 
@@ -132,7 +133,7 @@ internal sealed class JwsCredentialSecuringTests
     [TestMethod]
     public async Task SignJwsPayloadDeserializesToOriginalCredential()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
 
@@ -156,7 +157,7 @@ internal sealed class JwsCredentialSecuringTests
     [TestMethod]
     public async Task CompactSerializationRoundTripPreservesSignature()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         using var publicKey = CredentialSecuringMaterial.DecodeEd25519PublicKey();
@@ -188,7 +189,7 @@ internal sealed class JwsCredentialSecuringTests
     [TestMethod]
     public async Task VerifyWithWrongKeyFails()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
 
@@ -224,7 +225,7 @@ internal sealed class JwsCredentialSecuringTests
     [TestMethod]
     public async Task CustomMediaTypeAppearsInHeader()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
 
@@ -252,7 +253,7 @@ internal sealed class JwsCredentialSecuringTests
     [TestMethod]
     public async Task CustomContentTypeAppearsInHeader()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
 
@@ -278,14 +279,14 @@ internal sealed class JwsCredentialSecuringTests
 
 
     private static ReadOnlySpan<byte> CredentialSerializer(VerifiableCredential credential) =>
-        JsonSerializer.SerializeToUtf8Bytes(credential, CredentialSecuringMaterial.JsonOptions);
+        JsonSerializerExtensions.SerializeToUtf8Bytes(credential, CredentialSecuringMaterial.JsonOptions);
 
     private static ReadOnlySpan<byte> HeaderSerializer(Dictionary<string, object> header) =>
-        JsonSerializer.SerializeToUtf8Bytes(header, CredentialSecuringMaterial.JsonOptions);
+        JsonSerializerExtensions.SerializeToUtf8Bytes(header, CredentialSecuringMaterial.JsonOptions);
 
     private static Dictionary<string, object>? HeaderDeserializer(ReadOnlySpan<byte> headerBytes) =>
-        JsonSerializer.Deserialize<Dictionary<string, object>>(headerBytes, CredentialSecuringMaterial.JsonOptions);
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, CredentialSecuringMaterial.JsonOptions);
 
     private static VerifiableCredential CredentialDeserializer(ReadOnlySpan<byte> credentialBytes) =>
-        JsonSerializer.Deserialize<VerifiableCredential>(credentialBytes, CredentialSecuringMaterial.JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<VerifiableCredential>(credentialBytes, CredentialSecuringMaterial.JsonOptions)!;
 }

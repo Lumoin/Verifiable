@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verifiable.Core.Model.Credentials;
@@ -130,7 +130,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
     /// </summary>
     private static CredentialSerializeDelegate SerializeCredential { get; } = (credential) =>
     {
-        return JsonSerializer.Serialize(credential, JsonOptions);
+        return JsonSerializerExtensions.Serialize(credential, JsonOptions);
     };
 
 
@@ -139,7 +139,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
     /// </summary>
     private static CredentialDeserializeDelegate DeserializeCredential { get; } = (serialized) =>
     {
-        return JsonSerializer.Deserialize<VerifiableCredential>(serialized, JsonOptions)!;
+        return JsonSerializerExtensions.Deserialize<VerifiableCredential>(serialized, JsonOptions)!;
     };
 
 
@@ -172,7 +172,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
             validFrom,
             additionalTypes: [AlumniCredentialType],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        var credentialJson = JsonSerializer.Serialize(credential, JsonOptions);
+        var credentialJson = JsonSerializerExtensions.Serialize(credential, JsonOptions);
 
         //Canonicalize without examples context. The alumniOf claim should be dropped.
         var canonicalFormWithoutContext = await RdfcCanonicalizer(credentialJson, ContextResolver, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -234,9 +234,9 @@ internal sealed class DataIntegrityIssuanceFlowTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Add examples context so alumniOf is protected by signature.
-        var credentialJson = JsonSerializer.Serialize(unsignedCredential, JsonOptions);
+        var credentialJson = JsonSerializerExtensions.Serialize(unsignedCredential, JsonOptions);
         var credentialWithContext = AddContextToCredential(credentialJson, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl);
-        var credentialWithContextObj = JsonSerializer.Deserialize<VerifiableCredential>(credentialWithContext, JsonOptions)!;
+        var credentialWithContextObj = JsonSerializerExtensions.Deserialize<VerifiableCredential>(credentialWithContext, JsonOptions)!;
 
         var signedCredential = await credentialWithContextObj.SignAsync(
             privateKey,
@@ -387,9 +387,9 @@ internal sealed class DataIntegrityIssuanceFlowTests
             additionalTypes: [AlumniCredentialType],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        var credentialJson = JsonSerializer.Serialize(unsignedCredential, JsonOptions);
+        var credentialJson = JsonSerializerExtensions.Serialize(unsignedCredential, JsonOptions);
         var credentialWithContext = AddContextToCredential(credentialJson, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl);
-        var credentialWithContextObj = JsonSerializer.Deserialize<VerifiableCredential>(credentialWithContext, JsonOptions)!;
+        var credentialWithContextObj = JsonSerializerExtensions.Deserialize<VerifiableCredential>(credentialWithContext, JsonOptions)!;
 
         var signedCredential = await credentialWithContextObj.SignAsync(
             privateKey,
@@ -407,9 +407,9 @@ internal sealed class DataIntegrityIssuanceFlowTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Tamper by modifying the JSON string directly.
-        var signedCredentialJson = JsonSerializer.Serialize(signedCredential, JsonOptions);
+        var signedCredentialJson = JsonSerializerExtensions.Serialize(signedCredential, JsonOptions);
         var tamperedJson = signedCredentialJson.Replace(ClaimValueUniversityName, ClaimValueFakeUniversity, StringComparison.Ordinal);
-        var tamperedCredential = JsonSerializer.Deserialize<VerifiableCredential>(tamperedJson, JsonOptions)!;
+        var tamperedCredential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(tamperedJson, JsonOptions)!;
 
         var verificationResult = await tamperedCredential.VerifyAsync(
             issuerDidDocument,
@@ -479,9 +479,9 @@ internal sealed class DataIntegrityIssuanceFlowTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Tamper by modifying the JSON string directly.
-        var signedCredentialJson = JsonSerializer.Serialize(signedCredential, JsonOptions);
+        var signedCredentialJson = JsonSerializerExtensions.Serialize(signedCredential, JsonOptions);
         var tamperedJson = signedCredentialJson.Replace(ClaimValueUniversityName, ClaimValueFakeUniversity, StringComparison.Ordinal);
-        var tamperedCredential = JsonSerializer.Deserialize<VerifiableCredential>(tamperedJson, JsonOptions)!;
+        var tamperedCredential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(tamperedJson, JsonOptions)!;
 
         var verificationResult = await tamperedCredential.VerifyAsync(
             issuerDidDocument,

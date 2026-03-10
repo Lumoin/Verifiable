@@ -34,9 +34,9 @@ env:
   GITHUB_USER: ${{ github.repository_owner }}
   GITHUB_FEED: https://nuget.pkg.github.com/lumoin/
 
-  # These are the Nuget packages that will be packed and uploaded.
-  PROJECTS: >
-    Verifiable
+  # These are the library NuGet packages that will be packed and uploaded.
+  # The Verifiable CLI tool is handled separately with native AOT per-platform packaging.
+  LIBRARY_PROJECTS: >
     Verifiable.BouncyCastle
     Verifiable.Cbor
     Verifiable.Core
@@ -81,6 +81,12 @@ jobs:
   build:
     name: Build Verifiable packages
     permissions:
+      # contents: read is the only permission needed on Windows and macOS.
+      # The ubuntu leg additionally needs checks/pull-requests (test summary/
+      # coverage comment) and id-token + attestations (artifact signing via
+      # Sigstore). GitHub does not support per-matrix-leg permission blocks,
+      # so all three runners carry these. The ubuntu-only step guards prevent
+      # the elevated permissions from being exercised on Windows or macOS.
       checks: write
       pull-requests: write
       id-token: write
@@ -238,10 +244,10 @@ jobs:
         echo "Updated server.json version to: ${VERSION%%+*}"
         cat src/Verifiable/.mcp/server.json
 
-    - name: Pack NuGet packages
+    - name: Pack library NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' }}
       run: |
-        for project in $PROJECTS; do
+        for project in $LIBRARY_PROJECTS; do
           path="src/$project/$project.csproj"
           echo "Packing $path"
           dotnet pack --verbosity normal \
@@ -266,44 +272,349 @@ jobs:
       with:
         subject-path: './nupkgs/*.nupkg'
 
-    - name: Upload Verifiable NuGet packages
+    - name: Upload library NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
       with:
-        name: nupkg
+        name: nupkg-libraries
         path: ./nupkgs/*.*
+
+  # ---------------------------------------------------------------------------
+  # Native AOT CLI tool packaging
+  #
+  # The .NET 10 multi-platform tool packaging model (hybrid AOT + CoreCLR):
+  #   1. Per-RID native AOT packages: dotnet pack -r <rid>, built on the matching
+  #      OS because AOT produces native binaries (linux on ubuntu, osx on macos,
+  #      win on windows). Cross-arch within the same OS (e.g. win-arm64 from a
+  #      win-x64 runner) works because the AOT compiler cross-compiles the IL.
+  #   2. CoreCLR "any" fallback: dotnet pack -r any --property:PublishAot=false,
+  #      framework-dependent and portable, for consumers on pre-.NET 10 SDKs or
+  #      platforms not covered by the AOT matrix.
+  #   3. Top-level pointer package: dotnet pack (no -r), produces only a
+  #      DotnetToolSettings.xml listing all RID packages. Must run after all RID
+  #      packages are in ./nupkgs so the SDK enumerates them for the manifest.
+  #   4. All RID packages must be published to the feed BEFORE the pointer package,
+  #      otherwise dotnet tool install fails to resolve them.
+  #
+  # References:
+  #   https://learn.microsoft.com/dotnet/core/tools/rid-specific-tools
+  #   https://andrewlock.net/exploring-dotnet-10-preview-features-7-packaging-self-contained-and-native-aot-dotnet-tools-for-nuget/
+  #   https://github.com/baronfel/multi-rid-tool
+  # ---------------------------------------------------------------------------
+
+  pack-cli-aot:
+    name: Pack Verifiable CLI (native AOT, ${{ matrix.os }})
+    # Only run native AOT packing on main, develop, and release events.
+    # On all other branches the build job already provides the AOT compatibility
+    # signal: IsAotCompatible=true and ILLinkTreatWarningsAsErrors=true in
+    # Directory.Build.props mean trim/AOT warnings are errors during the normal
+    # managed dotnet build, and the test suite exercises the CLI via process
+    # invocation. Native packing is expensive (cross-compiler toolchain installs,
+    # multi-platform runners) and adds no further signal on feature branches.
+    needs: build
+    if: |
+      github.repository_owner == 'lumoin' && (
+        github.event_name == 'release' ||
+        github.ref == 'refs/heads/main' ||
+        github.ref == 'refs/heads/develop'
+      )
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rids: linux-x64 linux-arm64
+          - os: macos-latest
+            rids: osx-x64 osx-arm64
+          - os: windows-latest
+            rids: win-x64 win-arm64
+
+    steps:
+    - name: Harden Runner
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      # Note: disable-sudo is intentionally omitted here because apt-get is
+      # needed below to install native AOT prerequisites (clang, zlib1g-dev).
+      uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc
+      with:
+        egress-policy: block
+        allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
+
+    - name: Checkout code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Set up .NET SDK
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+      with:
+        cache: true
+        cache-dependency-path: '**/packages.lock.json'
+        global-json-file: global.json
+
+    - name: Install dependencies
+      run: dotnet restore --locked-mode
+
+    - name: Set version
+      run: |
+        latestTag=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.1)
+        if [[ $GITHUB_EVENT_NAME == 'release' ]]; then
+          arrTag=(${GITHUB_REF//\// })
+          VERSION="${arrTag[2]}"
+          VERSION="${VERSION//v}"
+          echo "PACKAGE_VERSION=${VERSION}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${VERSION}" >> "$GITHUB_ENV"
+        elif [[ $GITHUB_REF == 'refs/heads/develop' ]]; then
+          echo "PACKAGE_VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
+        else
+          echo "PACKAGE_VERSION=${latestTag//v}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${latestTag//v}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
+        fi
+      shell: bash
+
+    # Native AOT on Linux requires clang, zlib headers, and — for cross-
+    # compiling linux-arm64 from the x86_64 runner — the aarch64 binutils
+    # cross-linker. The system ld.bfd is x86_64-only and cannot emit aarch64
+    # ELF objects; binutils-aarch64-linux-gnu provides ld.bfd.aarch64.
+    # macOS and Windows runners have their native toolchains pre-installed.
+    - name: Install native AOT prerequisites (Linux)
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: sudo apt-get install -y clang zlib1g-dev binutils-aarch64-linux-gnu
+
+    # Build one native AOT RID package per RID on the matching host OS.
+    # dotnet pack -r <rid> with PublishAot=true in the csproj produces a
+    # DotnetToolRidPackage containing a fully native self-contained binary.
+    - name: Pack native AOT RID packages
+      run: |
+        for rid in ${{ matrix.rids }}; do
+          echo "Packing native AOT RID package for $rid"
+          dotnet pack src/Verifiable/Verifiable.csproj \
+            --configuration "$BUILD_CONFIGURATION" \
+            --output nupkgs \
+            -r "$rid" \
+            --property:PackageVersion="${PACKAGE_VERSION%%+*}" \
+            --property:Version="$VERSION" \
+            --property:InformationalVersion="$PACKAGE_VERSION" \
+            --property:AssemblyVersion="$TAG_VERSION" \
+            --property:FileVersion="$TAG_VERSION" \
+            --property:ContinuousIntegrationBuild=true
+        done
+      shell: bash
+
+    - name: Upload AOT RID packages (${{ matrix.os }})
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      with:
+        name: nupkg-cli-aot-${{ matrix.os }}
+        path: ./nupkgs/*.nupkg
+        # Intermediate artifacts consumed by pack-cli-pointer only.
+        # One day retention is sufficient; final nupkg-cli has normal retention.
+        retention-days: 1
+
+  pack-cli-pointer:
+    name: Pack Verifiable CLI (pointer + CoreCLR any fallback)
+    needs: pack-cli-aot
+    if: ${{ github.repository_owner == 'lumoin' }}
+    permissions:
+      checks: write
+      id-token: write
+      attestations: write
+      contents: read
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc
+      with:
+        disable-sudo: true
+        egress-policy: block
+        allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
+
+    - name: Checkout code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Set up .NET SDK
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+      with:
+        cache: true
+        cache-dependency-path: '**/packages.lock.json'
+        global-json-file: global.json
+
+    - name: Install dependencies
+      run: dotnet restore --locked-mode
+
+    - name: Set version
+      run: |
+        latestTag=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.1)
+        if [[ $GITHUB_EVENT_NAME == 'release' ]]; then
+          arrTag=(${GITHUB_REF//\// })
+          VERSION="${arrTag[2]}"
+          VERSION="${VERSION//v}"
+          echo "PACKAGE_VERSION=${VERSION}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${VERSION}" >> "$GITHUB_ENV"
+        elif [[ $GITHUB_REF == 'refs/heads/develop' ]]; then
+          echo "PACKAGE_VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${latestTag//v}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
+        else
+          echo "PACKAGE_VERSION=${latestTag//v}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${latestTag//v}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${latestTag//v}" >> "$GITHUB_ENV"
+        fi
+      shell: bash
+
+    # Download all native AOT RID packages produced by pack-cli-aot across all
+    # three OS runners so the SDK can enumerate them when building the pointer.
+    - name: Download AOT RID packages (Linux)
+      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: nupkg-cli-aot-ubuntu-latest
+        path: ./nupkgs
+
+    - name: Download AOT RID packages (macOS)
+      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: nupkg-cli-aot-macos-latest
+        path: ./nupkgs
+
+    - name: Download AOT RID packages (Windows)
+      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: nupkg-cli-aot-windows-latest
+        path: ./nupkgs
+
+    # The CoreCLR "any" fallback is a framework-dependent portable package for
+    # platforms not covered by AOT builds or consumers on pre-.NET 10 SDKs.
+    # PublishAot=false and PublishSelfContained=false produce managed IL only.
+    # RuntimeIdentifiers is cleared so the SDK does not iterate all RIDs from
+    # the csproj — we only want the single "any" RID package here.
+    - name: Pack CoreCLR "any" fallback package
+      run: |
+        dotnet pack src/Verifiable/Verifiable.csproj \
+          --configuration "$BUILD_CONFIGURATION" \
+          --output nupkgs \
+          -r any \
+          --property:PublishAot=false \
+          --property:PublishSelfContained=false \
+          --property:RuntimeIdentifiers= \
+          --property:PackageVersion="${PACKAGE_VERSION%%+*}" \
+          --property:Version="$VERSION" \
+          --property:InformationalVersion="$PACKAGE_VERSION" \
+          --property:AssemblyVersion="$TAG_VERSION" \
+          --property:FileVersion="$TAG_VERSION" \
+          --property:ContinuousIntegrationBuild=true
+
+    # The top-level pointer package (no -r) contains only a DotnetToolSettings.xml
+    # listing all RID packages. The .NET 10 CLI reads this at install time to
+    # select the correct RID package. Must run after all RID packages exist.
+    # RuntimeIdentifiers is cleared so the SDK does not re-build all RIDs from
+    # the csproj — the pointer pack itself produces no binaries.
+    - name: Pack top-level pointer package
+      run: |
+        dotnet pack src/Verifiable/Verifiable.csproj \
+          --configuration "$BUILD_CONFIGURATION" \
+          --output nupkgs \
+          --property:PublishAot=false \
+          --property:PublishSelfContained=false \
+          --property:RuntimeIdentifiers= \
+          --property:PackageVersion="${PACKAGE_VERSION%%+*}" \
+          --property:Version="$VERSION" \
+          --property:InformationalVersion="$PACKAGE_VERSION" \
+          --property:AssemblyVersion="$TAG_VERSION" \
+          --property:FileVersion="$TAG_VERSION" \
+          --property:ContinuousIntegrationBuild=true
+
+    - name: Validate CLI NuGet packages
+      if: ${{ github.actor != 'dependabot[bot]' }}
+      run: |
+        for file in ./nupkgs/*.nupkg; do
+          dotnet dotnet-validate package local "$file"
+        done
+
+    - name: Generate artifact attestation for CLI packages
+      if: ${{ github.actor != 'dependabot[bot]' }}
+      uses: lumoin/trusted-devsecops/.github/actions/sign-artifact@bd2b7f91e73d758f3126562d6a569fc0f31814ee
+      with:
+        subject-path: './nupkgs/*.nupkg'
+
+    - name: Upload CLI NuGet packages
+      if: ${{ github.actor != 'dependabot[bot]' }}
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      with:
+        name: nupkg-cli
+        path: ./nupkgs/*.*
+
+  # ---------------------------------------------------------------------------
+  # Pre-release and release publishing
+  # ---------------------------------------------------------------------------
 
   # The release idea is inspired by https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
   prerelease:
-      name: Create and upload Verifiable pre-release packages to GitHub
-      permissions:
-         # For setup-dotnet to create package.
-        packages: write
-      needs: build
-      if: ${{ github.ref == 'refs/heads/develop' && github.repository_owner == 'lumoin' }}
-      runs-on: ubuntu-latest
-      steps:
-        - name: Harden Runner
-          uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc
-          with:
-            disable-sudo: true
-            egress-policy: block
-            allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
+    name: Create and upload Verifiable pre-release packages to GitHub
+    permissions:
+      packages: write
+    needs: [ build, pack-cli-pointer ]
+    if: ${{ github.ref == 'refs/heads/develop' && github.repository_owner == 'lumoin' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
-        - name: Download NuGet artifacts
-          uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-          with:
-            name: nupkg
+      - name: Download library NuGet packages
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          name: nupkg-libraries
+          path: ./nupkgs
 
-        - name: Push to GitHub developer feed
-          run: dotnet nuget push "**/*.nupkg" --source $GITHUB_FEED --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+      - name: Download CLI NuGet packages
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          name: nupkg-cli
+          path: ./nupkgs
+
+      # Push RID-specific packages before the pointer package. The pointer package
+      # filename matches Verifiable.<version>.nupkg where the first char after
+      # "Verifiable." is a digit. All other *.nupkg files are RID or library
+      # packages and are safe to push first.
+      - name: Push RID and library packages to GitHub feed
+        run: |
+          for file in ./nupkgs/*.nupkg; do
+            name=$(basename "$file")
+            if [[ "$name" =~ ^Verifiable\.[0-9] ]]; then
+              continue
+            fi
+            dotnet nuget push "$file" --source "$GITHUB_FEED" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+          done
+
+      - name: Push top-level pointer package to GitHub feed
+        run: |
+          for file in ./nupkgs/*.nupkg; do
+            name=$(basename "$file")
+            if [[ "$name" =~ ^Verifiable\.[0-9] ]]; then
+              dotnet nuget push "$file" --source "$GITHUB_FEED" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+            fi
+          done
 
   deploy:
-    name: Create and upload Verifiable pre-release packages to NuGet.org
+    name: Create and upload Verifiable release packages to NuGet.org
     permissions:
-        # For setup-dotnet to create package.
       packages: write
-    needs: build
+      id-token: write  # Required for NuGet trusted publishing (OIDC) and Sigstore attestation.
+    needs: [ build, pack-cli-pointer ]
     if: ${{ github.event_name == 'release' && github.repository_owner == 'lumoin' }}
     runs-on: ubuntu-latest
     steps:
@@ -311,16 +622,75 @@ jobs:
         uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc
         with:
           disable-sudo: true
-          egress-policy: audit
+          egress-policy: block
           allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
-      - name: Download NuGet artifacts
+      - name: Download library NuGet packages
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         with:
-          name: nupkg
+          name: nupkg-libraries
+          path: ./nupkgs
 
-      - name: Push to GitHub developer feed
-        run: dotnet nuget push "**/*.nupkg" --source $GITHUB_FEED --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+      - name: Download CLI NuGet packages
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          name: nupkg-cli
+          path: ./nupkgs
 
-      - name: Push to NuGet feed
-        run: dotnet nuget push "**/*.nupkg" --source $NUGET_FEED --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+      # RID-specific packages must arrive at the feed before the pointer package.
+      # The pointer package filename matches Verifiable.<version>.nupkg where the
+      # character after "Verifiable." is a digit. All other Verifiable.*.nupkg
+      # files (RID packages, library packages) are safe to push first.
+      - name: Push RID and library packages to GitHub feed
+        run: |
+          for file in ./nupkgs/*.nupkg; do
+            name=$(basename "$file")
+            if [[ "$name" =~ ^Verifiable\.[0-9] ]]; then
+              continue
+            fi
+            dotnet nuget push "$file" --source "$GITHUB_FEED" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+          done
+
+      - name: Push top-level pointer package to GitHub feed
+        run: |
+          for file in ./nupkgs/*.nupkg; do
+            name=$(basename "$file")
+            if [[ "$name" =~ ^Verifiable\.[0-9] ]]; then
+              dotnet nuget push "$file" --source "$GITHUB_FEED" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+            fi
+          done
+
+      # NuGet trusted publishing: exchange the GitHub OIDC token for a
+      # short-lived API key. No long-lived NUGET_API_KEY secret required.
+      # Prerequisites: configure a Trusted Publishing policy on nuget.org
+      # pointing at lumoin/Verifiable and workflow file main.yml.
+      # See: https://learn.microsoft.com/nuget/nuget-org/trusted-publishing
+      #
+      # NuGet/login is the official Microsoft action. Pin to a SHA once the
+      # v1 tag has stabilised; track https://github.com/NuGet/login/releases.
+      - name: NuGet trusted publishing login (OIDC)
+        id: nuget_login
+        uses: NuGet/login@v1
+        with:
+          # nuget.org profile name (not email). Store as a secret to avoid
+          # hardcoding an account name in the workflow file.
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push RID and library packages to NuGet.org
+        run: |
+          for file in ./nupkgs/*.nupkg; do
+            name=$(basename "$file")
+            if [[ "$name" =~ ^Verifiable\.[0-9] ]]; then
+              continue
+            fi
+            dotnet nuget push "$file" --source "$NUGET_FEED" --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" --skip-duplicate
+          done
+
+      - name: Push top-level pointer package to NuGet.org
+        run: |
+          for file in ./nupkgs/*.nupkg; do
+            name=$(basename "$file")
+            if [[ "$name" =~ ^Verifiable\.[0-9] ]]; then
+              dotnet nuget push "$file" --source "$NUGET_FEED" --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" --skip-duplicate
+            fi
+          done

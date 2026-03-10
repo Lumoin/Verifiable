@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using CsCheck;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
@@ -64,7 +64,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
          select (claims, disclosable))
         .Sample((claims, disclosable) =>
         {
-            string json = JsonSerializer.Serialize(claims);
+            string json = JsonSerializerExtensions.Serialize(claims, TestSetup.DefaultSerializationOptions);
             HashSet<CredentialPath> paths = ToCredentialPaths(disclosable);
 
             var (_, disclosures) = SdJwtClaimRedaction.Redact(json, paths, () => SaltGenerator.Create());
@@ -82,7 +82,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
          select (claims, disclosable))
         .Sample((claims, disclosable) =>
         {
-            string json = JsonSerializer.Serialize(claims);
+            string json = JsonSerializerExtensions.Serialize(claims, TestSetup.DefaultSerializationOptions);
             HashSet<CredentialPath> paths = ToCredentialPaths(disclosable);
 
             var (mandatory, disclosures) = SdJwtClaimRedaction.Redact(json, paths, () => SaltGenerator.Create());
@@ -111,7 +111,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
          select (claims, disclosable))
         .Sample((claims, disclosable) =>
         {
-            string json = JsonSerializer.Serialize(claims);
+            string json = JsonSerializerExtensions.Serialize(claims, TestSetup.DefaultSerializationOptions);
             var disclosableSet = new HashSet<string>(disclosable);
             HashSet<CredentialPath> paths = ToCredentialPaths(disclosable);
 
@@ -134,7 +134,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
     {
         GenFlatClaims.Sample(claims =>
         {
-            string json = JsonSerializer.Serialize(claims);
+            string json = JsonSerializerExtensions.Serialize(claims, TestSetup.DefaultSerializationOptions);
 
             var (mandatory, disclosures) = SdJwtClaimRedaction.Redact(
                 json, new HashSet<CredentialPath>(), () => SaltGenerator.Create());
@@ -152,7 +152,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
         .Where(claims => claims.Count > 0)
         .Sample(claims =>
         {
-            string json = JsonSerializer.Serialize(claims);
+            string json = JsonSerializerExtensions.Serialize(claims, TestSetup.DefaultSerializationOptions);
             HashSet<CredentialPath> paths = ToCredentialPaths(new HashSet<string>(claims.Keys));
 
             var (mandatory, disclosures) = SdJwtClaimRedaction.Redact(json, paths, () => SaltGenerator.Create());
@@ -179,7 +179,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
                 [shortName] = "short-value",
                 [longName] = "long-value"
             };
-            string json = JsonSerializer.Serialize(obj);
+            string json = JsonSerializerExtensions.Serialize(obj, TestSetup.DefaultSerializationOptions );
 
             var paths = new HashSet<CredentialPath>
             {
@@ -206,7 +206,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
         .Sample((parentName, leaves, disclosable) =>
         {
             var nested = new Dictionary<string, object> { [parentName] = leaves };
-            string json = JsonSerializer.Serialize(nested);
+            string json = JsonSerializerExtensions.Serialize(nested, TestSetup.DefaultSerializationOptions);
 
             var paths = new HashSet<CredentialPath>(
                 disclosable.Select(k => CredentialPath.FromJsonPointer(
@@ -239,7 +239,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
          select (claims, disclosable))
         .Sample((claims, disclosable) =>
         {
-            string json = JsonSerializer.Serialize(claims);
+            string json = JsonSerializerExtensions.Serialize(claims, TestSetup.DefaultSerializationOptions);
             HashSet<CredentialPath> paths = ToCredentialPaths(disclosable);
 
             var (_, disclosures) = SdJwtClaimRedaction.Redact(json, paths, () => SaltGenerator.Create());
@@ -260,7 +260,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
          select (claims, disclosable))
         .Sample((claims, disclosable) =>
         {
-            string json = JsonSerializer.Serialize(claims);
+            string json = JsonSerializerExtensions.Serialize(claims, TestSetup.DefaultSerializationOptions);
             HashSet<CredentialPath> paths = ToCredentialPaths(disclosable);
 
             var (_, disclosures) = SdJwtClaimRedaction.Redact(json, paths, () => SaltGenerator.Create());
