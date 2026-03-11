@@ -226,9 +226,9 @@
       },
       "System.CommandLine": {
         "type": "Direct",
-        "requested": "[2.0.3, )",
-        "resolved": "2.0.3",
-        "contentHash": "5nY9hlrGGFEmyecNUux58sohD2Q16U6jlFBYwH57b2IVUs+u7LfMFaHwOtw2tuIi8CUl6jKXw5s4FuIt9aLtug=="
+        "requested": "[2.0.4, )",
+        "resolved": "2.0.4",
+        "contentHash": "L5qskg+CB8T40PhVUGFDI9M9GiRhLf9jjQq7UCB1EGGb07oT9/SyS2Q7PCZh7l8yyd41yEnlI6T2ZrkGBxRPkg=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Direct",
@@ -914,7 +914,7 @@
           "Microsoft.Extensions.Hosting": "[10.0.3, )",
           "ModelContextProtocol": "[1.1.0, )",
           "SimpleBase": "[5.6.0, )",
-          "System.CommandLine": "[2.0.3, )",
+          "System.CommandLine": "[2.0.4, )",
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Tpm": "[0.0.0, )",
           "dotNetRdf": "[3.5.1, )"
