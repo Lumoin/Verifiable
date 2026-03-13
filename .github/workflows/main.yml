@@ -476,19 +476,19 @@ jobs:
     # Download all native AOT RID packages produced by pack-cli-aot across all
     # three OS runners so the SDK can enumerate them when building the pointer.
     - name: Download AOT RID packages (Linux)
-      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: nupkg-cli-aot-ubuntu-latest
         path: ./nupkgs
 
     - name: Download AOT RID packages (macOS)
-      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: nupkg-cli-aot-macos-latest
         path: ./nupkgs
 
     - name: Download AOT RID packages (Windows)
-      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: nupkg-cli-aot-windows-latest
         path: ./nupkgs
@@ -575,13 +575,13 @@ jobs:
           allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
       - name: Download library NuGet packages
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: nupkg-libraries
           path: ./nupkgs
 
       - name: Download CLI NuGet packages
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: nupkg-cli
           path: ./nupkgs
@@ -626,13 +626,13 @@ jobs:
           allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
       - name: Download library NuGet packages
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: nupkg-libraries
           path: ./nupkgs
 
       - name: Download CLI NuGet packages
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: nupkg-cli
           path: ./nupkgs
