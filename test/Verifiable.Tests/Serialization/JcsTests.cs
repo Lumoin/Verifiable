@@ -1,9 +1,28 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Verifiable.Core.Model.Credentials;
 using Verifiable.Json;
 
 namespace Verifiable.Tests.Serialization;
+
+
+internal sealed class TestObject
+{
+    [JsonPropertyName("zebra")]
+    public string? Zebra { get; set; }
+
+    [JsonPropertyName("alpha")]
+    public string? Alpha { get; set; }
+
+    [JsonPropertyName("middle")]
+    public string? Middle { get; set; }
+}
+
+
+[JsonSerializable(typeof(TestObject))]
+internal sealed partial class JcsTestsContext: JsonSerializerContext { }
+
 
 /// <summary>
 /// Tests for <see cref="Jcs"/> JSON Canonicalization Scheme implementation.
@@ -275,7 +294,6 @@ internal sealed class JcsTests
         Assert.IsLessThan(typeIndex, issuerIndex, "issuer should come before type in nested object.");
     }
 
-
     [TestMethod]
     public void SerializeObjectProducesCanonicalOutput()
     {
@@ -286,48 +304,24 @@ internal sealed class JcsTests
             Middle = "middle"
         };
 
-        var result = Jcs.Serialize(obj);
+        var result = Jcs.Serialize(obj, JcsTestsContext.Default.TestObject);
 
         //Properties should be sorted alphabetically regardless of declaration order.
         Assert.AreEqual(/*lang=json,strict*/ """{"alpha":"first","middle":"middle","zebra":"last"}""", result);
     }
 
-
-    [TestMethod]
-    public void SerializeToUtf8BytesProducesCanonicalOutput()
-    {
-        var obj = new TestObject
-        {
-            Zebra = "last",
-            Alpha = "first",
-            Middle = "middle"
-        };
-
-        var result = Jcs.SerializeToUtf8Bytes(obj);
-
-        var expected = Encoding.UTF8.GetBytes(/*lang=json,strict*/ """{"alpha":"first","middle":"middle","zebra":"last"}""");
-        CollectionAssert.AreEqual(expected, result);
-    }
-
-
+        
     [TestMethod]
     public void SerializeThrowsForNullValue()
     {
-        Assert.Throws<ArgumentNullException>(() => Jcs.Serialize<object>(null!));
+        Assert.Throws<ArgumentNullException>(() => Jcs.Serialize(null!, VerifiableJsonContext.Default.VerifiableCredential));
     }
 
 
     [TestMethod]
-    public void SerializeWithCustomOptionsPreservesEncoder()
+    public void CanonicalizePreservesUnicodeWithRelaxedEncoding()
     {
-        var obj = new { text = "Hello, 世界" };
-        var options = new JsonSerializerOptions
-        {
-            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-        };
-
-        var result = Jcs.Serialize(obj, options);
-
+        var result = Jcs.Canonicalize(/*lang=json,strict*/ """{"text":"Hello, 世界"}""");
         Assert.AreEqual(/*lang=json,strict*/ """{"text":"Hello, 世界"}""", result);
     }
 
@@ -335,32 +329,10 @@ internal sealed class JcsTests
     [TestMethod]
     public void SerializeNestedObjectsSortsAllLevels()
     {
-        var obj = new
-        {
-            outer = new
-            {
-                z = "last",
-                a = "first"
-            },
-            inner = "value"
-        };
+        const string input = /*lang=json,strict*/ """{"outer":{"z":"last","a":"first"},"inner":"value"}""";
 
-        var result = Jcs.Serialize(obj);
+        var result = Jcs.Canonicalize(input);
 
-        //Both outer properties and nested properties should be sorted.
         Assert.AreEqual(/*lang=json,strict*/ """{"inner":"value","outer":{"a":"first","z":"last"}}""", result);
-    }
-
-
-    private sealed class TestObject
-    {
-        [JsonPropertyName("zebra")]
-        public string? Zebra { get; set; }
-
-        [JsonPropertyName("alpha")]
-        public string? Alpha { get; set; }
-
-        [JsonPropertyName("middle")]
-        public string? Middle { get; set; }
     }
 }

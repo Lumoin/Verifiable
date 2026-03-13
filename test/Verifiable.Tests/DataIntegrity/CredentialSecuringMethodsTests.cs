@@ -1,4 +1,5 @@
-﻿using System.Buffers;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Formats.Cbor;
 using System.Globalization;
 using System.Security.Cryptography;
@@ -17,6 +18,7 @@ using Verifiable.JCose.Sd;
 using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
+using static Verifiable.JCose.Eudi.EudiPid;
 
 namespace Verifiable.Tests.DataIntegrity;
 
@@ -70,7 +72,7 @@ internal sealed class CredentialSecuringMethodsTests
     [TestMethod]
     public async ValueTask EddsaRdfc2022DataIntegrityProofSucceeds()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         var privateKeyBytes = MultibaseSerializer.Decode(
             Ed25519SecretKeyMultibase,
@@ -139,7 +141,7 @@ internal sealed class CredentialSecuringMethodsTests
     public async ValueTask EcdsaSd2023BaseAndDerivedProofSucceeds()
     {
         var cancellationToken = TestContext.CancellationToken;
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         //Mandatory paths are always disclosed regardless of verifier request or user preference.
         var mandatoryPaths = new List<CredentialPath>
@@ -251,7 +253,7 @@ internal sealed class CredentialSecuringMethodsTests
     [TestMethod]
     public async ValueTask EddsaJcs2022DataIntegrityProofSucceeds()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         var privateKeyBytes = MultibaseSerializer.Decode(
             Ed25519SecretKeyMultibase,
@@ -307,7 +309,7 @@ internal sealed class CredentialSecuringMethodsTests
     [TestMethod]
     public async ValueTask JoseJwtEnvelopeSucceeds()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         var privateKeyBytes = MultibaseSerializer.Decode(
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
@@ -343,7 +345,7 @@ internal sealed class CredentialSecuringMethodsTests
     [TestMethod]
     public async ValueTask CoseEnvelopeSucceeds()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         var privateKeyBytes = MultibaseSerializer.Decode(
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
@@ -358,7 +360,7 @@ internal sealed class CredentialSecuringMethodsTests
         protectedHeader.WriteEndMap();
         var protectedHeaderBytes = protectedHeader.Encode();
 
-        var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(credential, JsonOptions);
+        var payloadBytes = JsonSerializerExtensions.SerializeToUtf8Bytes(credential, JsonOptions);
 
         var sigStructure = new CborWriter(CborConformanceMode.Canonical);
         sigStructure.WriteStartArray(4);
@@ -420,7 +422,7 @@ internal sealed class CredentialSecuringMethodsTests
     [TestMethod]
     public async ValueTask SdJwtEnvelopeSucceeds()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         var privateKeyBytes = MultibaseSerializer.Decode(
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
@@ -453,12 +455,12 @@ internal sealed class CredentialSecuringMethodsTests
         var header = new Dictionary<string, object>
         {
             [JwkProperties.Alg] = WellKnownJwaValues.EdDsa,
-            [JwkProperties.Typ] = "vc+sd-jwt",
+            [JwkProperties.Typ] = WellKnownMediaTypes.Application.VcSdJwt,
             [JwkProperties.Kid] = Ed25519VerificationMethodId
         };
 
-        var headerJson = JsonSerializer.SerializeToUtf8Bytes(header);
-        var payloadJson = JsonSerializer.SerializeToUtf8Bytes(sdPayload);
+        var headerJson = JsonSerializerExtensions.SerializeToUtf8Bytes(header, JsonOptions);
+        var payloadJson = JsonSerializerExtensions.SerializeToUtf8Bytes(sdPayload, JsonOptions);
 
         var headerBase64Url = TestSetup.Base64UrlEncoder(headerJson);
         var payloadBase64Url = TestSetup.Base64UrlEncoder(payloadJson);
@@ -499,7 +501,7 @@ internal sealed class CredentialSecuringMethodsTests
     [TestMethod]
     public async ValueTask SdCwtEnvelopeSucceeds()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         var privateKeyBytes = MultibaseSerializer.Decode(
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
@@ -558,25 +560,25 @@ internal sealed class CredentialSecuringMethodsTests
     private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
 
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
-        JsonSerializer.Serialize(credential, JsonOptions);
+        JsonSerializerExtensions.Serialize(credential, JsonOptions);
 
     private static CredentialDeserializeDelegate DeserializeCredential { get; } = serialized =>
-        JsonSerializer.Deserialize<VerifiableCredential>(serialized, JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<VerifiableCredential>(serialized, JsonOptions)!;
 
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
     private static ReadOnlySpan<byte> CredentialSerializer(VerifiableCredential credential) =>
-        JsonSerializer.SerializeToUtf8Bytes(credential, JsonOptions);
+        JsonSerializerExtensions.SerializeToUtf8Bytes(credential, JsonOptions);
 
     private static ReadOnlySpan<byte> HeaderSerializer(Dictionary<string, object> header) =>
-        JsonSerializer.SerializeToUtf8Bytes(header);
+        JsonSerializerExtensions.SerializeToUtf8Bytes(header, JsonOptions);
 
     private static Dictionary<string, object>? HeaderDeserializer(ReadOnlySpan<byte> headerBytes) =>
-        JsonSerializer.Deserialize<Dictionary<string, object>>(headerBytes);
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, JsonOptions);
 
     private static VerifiableCredential CredentialDeserializer(ReadOnlySpan<byte> credentialBytes) =>
-        JsonSerializer.Deserialize<VerifiableCredential>(credentialBytes, JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<VerifiableCredential>(credentialBytes, JsonOptions)!;
 
     private static DidDocument CreateDidDocument(string verificationMethodId, string publicKeyMultibase)
     {
@@ -599,6 +601,12 @@ internal sealed class CredentialSecuringMethodsTests
     }
 
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification =
+        """
+        ClaimValue is object? — the concrete runtime type is unknown at compile time.
+        SD-JWT claim values are primitive JSON types (string, number, bool, null) in practice,
+        which are handled by the built-in serializer without reflection on user types.
+        """)]
     private static string EncodeDisclosure(SdDisclosure disclosure, EncodeDelegate base64UrlEncoder)
     {
         string saltBase64Url = base64UrlEncoder(disclosure.Salt.Span);

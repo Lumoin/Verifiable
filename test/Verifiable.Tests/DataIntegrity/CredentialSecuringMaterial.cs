@@ -1,6 +1,7 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Cryptography;
+using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DataIntegrity
@@ -32,7 +33,7 @@ namespace Verifiable.Tests.DataIntegrity
         }
         """;
 
-        public static VerifiableCredential Credential { get; } = JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
+        public static VerifiableCredential Credential { get; } = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         public static string Ed25519PublicKeyMultibase { get; } = "z6MkrJVnaZkeFzdQyMZu1cgjg7k1pZZ6pvBQ7XJPt4swbTQ2";
         public static string Ed25519SecretKeyMultibase { get; } = "z3u2en7t5LR2WtQH5PfFqMqwVHBeXouLzo6haApm8XHqvjxq";

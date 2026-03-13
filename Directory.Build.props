@@ -8,7 +8,7 @@
     <RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditLevel>low</NuGetAuditLevel>
-    <NugetAuditMode>all</NugetAuditMode>    
+    <NugetAuditMode>all</NugetAuditMode>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <EnablePackageValidation>true</EnablePackageValidation>
@@ -17,11 +17,9 @@
     <PackageValidationBaselineVersion>0.0.1</PackageValidationBaselineVersion>
     -->
 
-    <!--
-    TODO: https://docs.microsoft.com/en-us/dotnet/core/deploying/trimming/prepare-libraries-for-trimming
-    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
-    -->
+    <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
   </PropertyGroup>
 
   <!-- Settings for all tests projects specifically. -->
@@ -43,7 +41,7 @@
       CA2225: Named alternatives for operators. Only consumed from C# and F#, both support operators natively.
       CA2227: Read-only collection properties. POCOs require settable properties for deserialization.
     -->
-    <NoWarn>$(NoWarn);CA1000;CA1002;CA1031;CA1711;CA1716;CA1720;CA1724;CA1819;CA2225;CA2227</NoWarn>    
+    <NoWarn>$(NoWarn);CA1000;CA1002;CA1031;CA1711;CA1716;CA1720;CA1724;CA1819;CA2225;CA2227</NoWarn>
   </PropertyGroup>
 
   <!-- Common nuget package parameters and resources. -->
@@ -76,11 +74,11 @@
 See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.md.]]>
     </AppendToReleaseNotesProperty>
     <ChangelogFile>../../CHANGELOG.md</ChangelogFile>
-    
+
 
     <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>All</AnalysisMode>
-        
+
   </PropertyGroup>
 
   <ItemGroup>
@@ -104,6 +102,6 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
   <ItemGroup>
     <InternalsVisibleTo Include="Verifiable.Tests" />
     <InternalsVisibleTo Include="Verifiable.Benchmarks" />
-</ItemGroup>
+  </ItemGroup>
 
 </Project>

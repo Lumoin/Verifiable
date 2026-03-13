@@ -1,5 +1,6 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Model.DataIntegrity;
 
 namespace Verifiable.Json;
@@ -86,7 +87,11 @@ public static class ProofOptionsSerializer
         {
             //Serialize the context through the registered converters (e.g., JsonLdContextConverter),
             //then parse as a JsonNode to embed in the proof options document.
-            string contextJson = JsonSerializer.Serialize(proofOptions.Context, proofOptions.Context.GetType(), options);
+            //options.GetTypeInfo retrieves the JsonTypeInfo registered for this concrete type,
+            //routing through the configured IJsonTypeInfoResolver (e.g. VerifiableJsonContext)
+            //without requiring reflection-based serialization.
+            JsonTypeInfo contextTypeInfo = options.GetTypeInfo(proofOptions.Context.GetType());
+            string contextJson = JsonSerializer.Serialize(proofOptions.Context, contextTypeInfo);
             obj["@context"] = JsonNode.Parse(contextJson);
         }
 

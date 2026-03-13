@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
@@ -8,8 +8,15 @@ using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.JCose;
+using Verifiable.Json;
 
 namespace Verifiable.Tests.DataIntegrity;
+
+/// <summary>JWT header fields for test JWT construction.</summary>
+internal sealed record JwtTestHeader(string Alg, string Typ, string Kid);
+
+[System.Text.Json.Serialization.JsonSerializable(typeof(JwtTestHeader))]
+internal partial class DataIntegrityTestsJsonContext: System.Text.Json.Serialization.JsonSerializerContext { }
 
 /// <summary>
 /// Tests for W3C Data Integrity proofs using the eddsa-rdfc-2022 cryptosuite.
@@ -101,13 +108,13 @@ internal sealed class DataIntegrityTests
     /// Deserialized unsigned credential using library converters.
     /// </summary>
     public static VerifiableCredential UnsignedCredential { get; } =
-        JsonSerializer.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
     /// <summary>
     /// Deserialized proof options using library converters.
     /// </summary>
     public static DataIntegrityProof ProofOptions { get; } =
-        JsonSerializer.Deserialize<DataIntegrityProof>(ProofOptionsJson, JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<DataIntegrityProof>(ProofOptionsJson, JsonOptions)!;
 
     /// <summary>
     /// Expected W3C test vector values.
@@ -145,7 +152,7 @@ internal sealed class DataIntegrityTests
         Assert.Contains("AlumniCredential", UnsignedCredential.Type);
 
         //Serialize credential back to JSON for canonicalization (round-trip test).
-        var credentialJson = JsonSerializer.Serialize(UnsignedCredential, JsonOptions);
+        var credentialJson = JsonSerializerExtensions.Serialize(UnsignedCredential, JsonOptions);
 
         //Canonicalize credential via dotNetRdf and verify against test vector.
         var canonicalCredential = await CanonicalizeAsync(credentialJson, TestContext.CancellationToken).ConfigureAwait(false);
@@ -179,7 +186,7 @@ internal sealed class DataIntegrityTests
         Assert.AreEqual(ExpectedProofValue, proofValue, "ProofValue must match W3C test vector.");
 
         //Build the signed credential with proof by deserializing a fresh copy.
-        var signedCredential = JsonSerializer.Deserialize<VerifiableCredential>(credentialJson, JsonOptions)!;
+        var signedCredential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(credentialJson, JsonOptions)!;
         signedCredential.Proof =
         [
             new DataIntegrityProof
@@ -232,11 +239,12 @@ internal sealed class DataIntegrityTests
         using PublicKeyMemory publicKeyMemory = new(publicKeyBytes, CryptoTags.Ed25519PublicKey);
 
         //Serialize credential to JSON for JWT payload.
-        var credentialJson = JsonSerializer.Serialize(UnsignedCredential, JsonOptions);
+        var credentialJson = JsonSerializerExtensions.Serialize(UnsignedCredential, JsonOptions);
 
-        //Build and sign JWT.
-        var header = new { alg = WellKnownJwaValues.EdDsa, typ = WellKnownMediaTypes.Jwt.VcLdJwt, kid = VerificationMethodId };
-        var headerJson = JsonSerializer.Serialize(header);
+        //Build and sign JWT. Anonymous types cannot be registered in a source-gen context,
+        //so JwtTestHeader is a named record with its own JsonSerializerContext.
+        var header = new JwtTestHeader(WellKnownJwaValues.EdDsa, WellKnownMediaTypes.Jwt.VcLdJwt, VerificationMethodId);
+        var headerJson = System.Text.Json.JsonSerializer.Serialize(header, DataIntegrityTestsJsonContext.Default.JwtTestHeader);
         var headerBase64Url = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
         var payloadBase64Url = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(credentialJson));
 
@@ -258,7 +266,7 @@ internal sealed class DataIntegrityTests
         //Verify payload round-trips through VerifiableCredential model.
         using var decodedPayloadBytes = TestSetup.Base64UrlDecoder(parts[1], SensitiveMemoryPool<byte>.Shared);
         var decodedPayload = Encoding.UTF8.GetString(decodedPayloadBytes.Memory.Span);
-        var decodedCredential = JsonSerializer.Deserialize<VerifiableCredential>(decodedPayload, JsonOptions);
+        var decodedCredential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(decodedPayload, JsonOptions);
         Assert.IsNotNull(decodedCredential);
         Assert.AreEqual(UnsignedCredential.Id, decodedCredential.Id);
     }

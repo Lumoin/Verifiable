@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
@@ -44,7 +44,7 @@ internal sealed class DataIntegrityProofTests
     [TestMethod]
     public async ValueTask EddsaRdfc2022DataIntegrityProofSucceeds()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var didDocument = CreateDidDocument(CredentialSecuringMaterial.VerificationMethodId, CredentialSecuringMaterial.Ed25519PublicKeyMultibase);
@@ -94,7 +94,7 @@ internal sealed class DataIntegrityProofTests
     [TestMethod]
     public async ValueTask EddsaJcs2022DataIntegrityProofSucceeds()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var didDocument = CreateDidDocument(CredentialSecuringMaterial.VerificationMethodId, CredentialSecuringMaterial.Ed25519PublicKeyMultibase);
@@ -157,7 +157,7 @@ internal sealed class DataIntegrityProofTests
     public async ValueTask EcdsaSd2023BaseAndDerivedProofSucceeds()
     {
         var cancellationToken = TestContext.CancellationToken;
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         //Mandatory paths are always disclosed regardless of verifier request or user preference.
         var mandatoryPaths = new List<CredentialPath>
@@ -270,10 +270,10 @@ internal sealed class DataIntegrityProofTests
     private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
 
     private static CredentialSerializeDelegate SerializeCredential { get; } = credential =>
-        JsonSerializer.Serialize(credential, CredentialSecuringMaterial.JsonOptions);
+        JsonSerializerExtensions.Serialize(credential, CredentialSecuringMaterial.JsonOptions);
 
     private static CredentialDeserializeDelegate DeserializeCredential { get; } = serialized =>
-        JsonSerializer.Deserialize<VerifiableCredential>(serialized, CredentialSecuringMaterial.JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<VerifiableCredential>(serialized, CredentialSecuringMaterial.JsonOptions)!;
 
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(CredentialSecuringMaterial.JsonOptions);

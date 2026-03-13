@@ -1,9 +1,10 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.Tests.DataIntegrity;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -33,7 +34,7 @@ internal sealed class CoseCredentialSecuringTests
     [TestMethod]
     public async Task SignCoseAndVerifyWithRegistrySucceeds()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         using var publicKey = CredentialSecuringMaterial.DecodeEd25519PublicKey();
@@ -69,7 +70,7 @@ internal sealed class CoseCredentialSecuringTests
     [TestMethod]
     public async Task SignCoseContainsCorrectProtectedHeaderMetadata()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
 
@@ -94,7 +95,7 @@ internal sealed class CoseCredentialSecuringTests
     [TestMethod]
     public async Task SignCosePayloadDeserializesToOriginalCredential()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
 
@@ -118,7 +119,7 @@ internal sealed class CoseCredentialSecuringTests
     [TestMethod]
     public async Task CborWireFormatRoundTripPreservesSignature()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         using var publicKey = CredentialSecuringMaterial.DecodeEd25519PublicKey();
@@ -154,7 +155,7 @@ internal sealed class CoseCredentialSecuringTests
     [TestMethod]
     public async Task VerifyWithWrongKeyFails()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
 
@@ -188,7 +189,7 @@ internal sealed class CoseCredentialSecuringTests
     [TestMethod]
     public async Task CustomContentTypeAppearsInHeader()
     {
-        var credential = JsonSerializer.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
 
@@ -211,11 +212,11 @@ internal sealed class CoseCredentialSecuringTests
 
 
     private static ReadOnlySpan<byte> CredentialToCborBytes(VerifiableCredential credential) =>
-        JsonSerializer.SerializeToUtf8Bytes(credential, CredentialSecuringMaterial.JsonOptions);
+        JsonSerializerExtensions.SerializeToUtf8Bytes(credential, CredentialSecuringMaterial.JsonOptions);
 
     private static ReadOnlySpan<byte> CoseProtectedHeaderToCborBytes(IReadOnlyDictionary<int, object> header) =>
         CoseSerialization.SerializeProtectedHeader(header);
 
     private static VerifiableCredential CredentialFromJsonBytes(ReadOnlySpan<byte> bytes) =>
-        JsonSerializer.Deserialize<VerifiableCredential>(bytes, CredentialSecuringMaterial.JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<VerifiableCredential>(bytes, CredentialSecuringMaterial.JsonOptions)!;
 }

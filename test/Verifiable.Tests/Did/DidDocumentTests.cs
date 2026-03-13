@@ -1,12 +1,22 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Jose;
+using Verifiable.Json;
 using Verifiable.Json.Converters;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Did;
+
+[JsonSerializable(typeof(TestExtendedDidDocument))]
+[JsonSerializable(typeof(Dictionary<string, JsonElement>))]
+[JsonSerializable(typeof(OpenIdConnectVersion1))]
+[JsonSerializable(typeof(SocialWebInboxService))]
+[JsonSerializable(typeof(VerifiableCredentialService))]
+[JsonSerializable(typeof(SpamCost))]
+internal partial class DidDocumentTestsJsonContext: JsonSerializerContext { }
 
 /// <summary>
 /// General DID tests.
@@ -118,32 +128,17 @@ internal sealed class DidDocumentTests
             _ => defaultSelector(serviceType)
         };
 
-        var options = new JsonSerializerOptions
-        {
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            PropertyNamingPolicy = new DefaultNamingNamingPolicy(Array.AsReadOnly([JsonNamingPolicy.CamelCase])),
-            PropertyNameCaseInsensitive = true,
-            Converters =
-            {
-                new SingleOrArrayControllerConverter(),
-                new SingleOrArrayVerificationMethodConverter(),
-                new VerificationMethodReferenceConverterFactory(),
-                new VerificationMethodConverter(),
-                new ServiceConverter(serviceSelector),
-                new JsonLdContextConverter(),
-                new DictionaryStringObjectJsonConverter(),
-                new DidUrlConverter(),
-                new DidIdConverter(did =>
-                {
-                    return did switch
-                    {
-                        "did:key:" => new KeyDidMethod(did),
-                        "did:ebsi:" => new EbsiDidMethod(did),
-                        _ => new GenericDidMethod(did)
-                    };
-                })
-            }
-        };
+        //The custom ServiceConverter must be inserted before ApplyVerifiableDefaults
+        //adds the default one — STJ uses first-match order for converters.
+        var options = new JsonSerializerOptions();
+        options.Converters.Insert(0, new ServiceConverter(serviceSelector));
+        options.ApplyVerifiableDefaults();
+        //ServiceConverter.Read calls options.GetTypeInfo for derived service types.
+        //The test-internal types (OpenIdConnectVersion1 etc.) must be reachable via
+        //the resolver — combine the library context with the test context.
+        options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            VerifiableJsonContext.Default,
+            DidDocumentTestsJsonContext.Default);
 
         var (deserializedDidDocument, reserializedDidDocument) = JsonSerializationUtilities.PerformSerializationCycle<DidDocument>(MultiServiceTestDocument, options);
         Assert.IsNotNull(deserializedDidDocument?.Id);
@@ -182,27 +177,7 @@ internal sealed class DidDocumentTests
     {
         TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
 
-        var options = new JsonSerializerOptions
-        {
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            PropertyNamingPolicy = new DefaultNamingNamingPolicy(Array.AsReadOnly([JsonNamingPolicy.CamelCase])),
-            Converters =
-            {
-                new VerificationMethodReferenceConverterFactory(),
-                new VerificationMethodConverter(),
-                new ServiceConverter(),
-                new JsonLdContextConverter(),
-                new DidIdConverter(did =>
-                {
-                    return did switch
-                    {
-                        "did:key:" => new KeyDidMethod(did),
-                        "did:ebsi:" => new EbsiDidMethod(did),
-                        _ => new GenericDidMethod(did)
-                    };
-                })
-            }
-        };
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
 
         var (deserializedDidDocument, reserializedDidDocument) = JsonSerializationUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
         Assert.IsNotNull(deserializedDidDocument?.Id);
@@ -229,28 +204,10 @@ internal sealed class DidDocumentTests
     {
         TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
 
-        var options = new JsonSerializerOptions
-        {
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            PropertyNamingPolicy = new DefaultNamingNamingPolicy(Array.AsReadOnly([JsonNamingPolicy.CamelCase])),
-            Converters =
-            {
-                new VerificationMethodReferenceConverterFactory(),
-                new VerificationMethodConverter(),
-                new ServiceConverter(),
-                new JsonLdContextConverter(),
-                new DictionaryStringObjectJsonConverter(),
-                new DidIdConverter(did =>
-                {
-                    return did switch
-                    {
-                        "did:key:" => new KeyDidMethod(did),
-                        "did:ebsi:" => new EbsiDidMethod(did),
-                        _ => new GenericDidMethod(did)
-                    };
-                })
-            }
-        };
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            VerifiableJsonContext.Default,
+            DidDocumentTestsJsonContext.Default);
 
         var (deserializedDidDocumentNonExtended, deserializedDidDocumentExtended, reserializedDidDocumentNonExtended, reserializedDidDocumentExtended) =
             JsonSerializationUtilities.PerformExtendedSerializationCycle<DidDocument, TestExtendedDidDocument>(didDocumentFileContents, options);
@@ -283,29 +240,7 @@ internal sealed class DidDocumentTests
     {
         TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
 
-        var options = new JsonSerializerOptions
-        {
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            PropertyNamingPolicy = new DefaultNamingNamingPolicy(Array.AsReadOnly([JsonNamingPolicy.CamelCase])),
-            Converters =
-            {
-                new SingleOrArrayControllerConverter(),
-                new VerificationMethodReferenceConverterFactory(),
-                new VerificationMethodConverter(),
-                new ServiceConverter(),
-                new JsonLdContextConverter(),
-                new DictionaryStringObjectJsonConverter(),
-                new DidIdConverter(did =>
-                {
-                    return did switch
-                    {
-                        "did:key:" => new KeyDidMethod(did),
-                        "did:ebsi:" => new EbsiDidMethod(did),
-                        _ => new GenericDidMethod(did)
-                    };
-                })
-            }
-        };
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
 
         var (deserializedDidDocument, reserializedDidDocument) = JsonSerializationUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
 

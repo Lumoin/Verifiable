@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
@@ -10,6 +10,7 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Json;
 
 
 namespace Verifiable.Tests.Builders
@@ -65,7 +66,7 @@ namespace Verifiable.Tests.Builders
 
             //The builder produced DID identifier type should match KeyDidId, as the type of the document is key DID.
             Assert.IsInstanceOfType<KeyDidMethod>(keyDidDocument.Id);
-            string serializedDidDocumentx = JsonSerializer.Serialize(keyDidDocument, TestSetup.DefaultSerializationOptions);
+            string serializedDidDocumentx = JsonSerializerExtensions.Serialize(keyDidDocument, TestSetup.DefaultSerializationOptions);
 
             //This catches if there is a mismatch in generated tag for the key format
             //AND if the identifier does not match the used crypto algorithm. In
@@ -84,7 +85,7 @@ namespace Verifiable.Tests.Builders
                 .Claims.Where(c => c.Outcome == ClaimOutcome.Failure)
                 .Aggregate("Assessment failed. Failed claims: ", (acc, claim) => $"{acc}{claim.Id}, ").TrimEnd(',', '.'));
 
-            string serializedDidDocument = JsonSerializer.Serialize(keyDidDocument, TestSetup.DefaultSerializationOptions);
+            string serializedDidDocument = JsonSerializerExtensions.Serialize(keyDidDocument, TestSetup.DefaultSerializationOptions);
             var (deserializedDidDocument, reserializedDidDocument) = JsonSerializationUtilities.PerformSerializationCycle<DidDocument>(serializedDidDocument, TestSetup.DefaultSerializationOptions);
             bool areJsonElementsEqual = JsonSerializationUtilities.CompareJsonElements(serializedDidDocument, reserializedDidDocument);
             Assert.IsTrue(areJsonElementsEqual, $"JSON string '{serializedDidDocument}' did not pass roundtrip test.");

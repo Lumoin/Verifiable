@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.StatusList;
+using Verifiable.Json;
 
 namespace Verifiable.Json.StatusList;
 
@@ -319,7 +320,7 @@ public sealed class StatusListAggregationJsonConverter: JsonConverter<StatusList
 
             if(propertyName == StatusListJsonConstants.StatusLists)
             {
-                statusLists = JsonSerializer.Deserialize<string[]>(ref reader, options);
+                statusLists = JsonSerializer.Deserialize(ref reader, VerifiableJsonContext.Default.StringArray);
             }
             else
             {

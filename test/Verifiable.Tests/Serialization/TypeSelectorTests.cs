@@ -1,9 +1,18 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Model.Did;
+using Verifiable.Json;
 using Verifiable.Json.Converters;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Serialization;
+
+[JsonSerializable(typeof(Service))]
+[JsonSerializable(typeof(Service[]))]
+[JsonSerializable(typeof(TypeSelectorTests.TestIdentityResolverService))]
+[JsonSerializable(typeof(TypeSelectorTests.TestBlockchainVerificationMethod))]
+internal partial class TypeSelectorTestsJsonContext: JsonSerializerContext { }
 
 /// <summary>
 /// Tests for the unified type selector pattern across <see cref="ServiceConverter"/>,
@@ -39,15 +48,15 @@ internal sealed class TypeSelectorTests
 
     private static JsonSerializerOptions CreateOptions(ServiceTypeSelector? serviceSelector = null)
     {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            PropertyNameCaseInsensitive = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        };
-
-        options.Converters.Add(new DidUrlConverter());
-        options.Converters.Add(new ServiceConverter(serviceSelector ?? ServiceTypeSelectors.Default));
+        //Insert custom ServiceConverter before ApplyVerifiableDefaults adds the default one.
+        var customServiceConverter = new ServiceConverter(serviceSelector ?? ServiceTypeSelectors.Default);
+        var options = new JsonSerializerOptions();
+        options.Converters.Insert(0, customServiceConverter);
+        options.ApplyVerifiableDefaults();
+        //Combine so ServiceConverter.GetTypeInfo can resolve both library and test-internal types.
+        options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            VerifiableJsonContext.Default,
+            TypeSelectorTestsJsonContext.Default);
         return options;
     }
 
@@ -125,7 +134,7 @@ internal sealed class TypeSelectorTests
             }
             """;
 
-        var service = JsonSerializer.Deserialize<Service>(json, options);
+        var service = JsonSerializerExtensions.Deserialize<Service>(json, options);
 
         Assert.IsNotNull(service);
         Assert.IsInstanceOfType<TestIdentityResolverService>(service);
@@ -149,8 +158,8 @@ internal sealed class TypeSelectorTests
             }
             """;
 
-        var deserialized = JsonSerializer.Deserialize<Service>(json, options);
-        var reserialized = JsonSerializer.Serialize(deserialized, options);
+        var deserialized = JsonSerializerExtensions.Deserialize<Service>(json, options);
+        var reserialized = JsonSerializerExtensions.Serialize(deserialized, options);
 
         //Verify the custom property survived round-trip.
         using var doc = JsonDocument.Parse(reserialized);
@@ -171,7 +180,7 @@ internal sealed class TypeSelectorTests
             }
             """;
 
-        var service = JsonSerializer.Deserialize<Service>(json, options);
+        var service = JsonSerializerExtensions.Deserialize<Service>(json, options);
 
         Assert.IsNotNull(service);
         Assert.AreEqual(typeof(Service), service.GetType());
@@ -221,7 +230,7 @@ internal sealed class TypeSelectorTests
             ]
             """;
 
-        var services = JsonSerializer.Deserialize<Service[]>(json, options);
+        var services = JsonSerializerExtensions.Deserialize<Service[]>(json, options);
 
         Assert.IsNotNull(services);
         Assert.HasCount(2, services);

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 
 namespace Verifiable.JCose.Sd;
@@ -204,6 +204,7 @@ public sealed class SdDisclosure: IEquatable<SdDisclosure>
     {
         var hash = new HashCode();
         hash.AddBytes(Salt.Span);
+
         return hash.ToHashCode();
     }
 
@@ -216,8 +217,7 @@ public sealed class SdDisclosure: IEquatable<SdDisclosure>
 
     /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public static bool operator ==(SdDisclosure? left, SdDisclosure? right) =>
-        left is null ? right is null : left.Equals(right);
+    public static bool operator ==(SdDisclosure? left, SdDisclosure? right) => left is null ? right is null : left.Equals(right);
 
 
     /// <inheritdoc/>

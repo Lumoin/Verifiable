@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Verifiable.Json;
 using Verifiable.Json.Converters;
 using Verifiable.Sidetree;
 using Verifiable.Tests.TestInfrastructure;
@@ -38,8 +39,8 @@ internal sealed class SidetreeTests
             }
         };
 
-        SideTreeDocument? deseserializedDidDocument = JsonSerializer.Deserialize<SideTreeDocument>(didDocumentFileContents, options);
-        string reserializedDidDocument = JsonSerializer.Serialize(deseserializedDidDocument, options);
+        SideTreeDocument? deseserializedDidDocument = JsonSerializerExtensions.Deserialize<SideTreeDocument>(didDocumentFileContents, options);
+        string reserializedDidDocument = JsonSerializerExtensions.Serialize(deseserializedDidDocument, options);
 
         //All the DID documents need to have an ID and a context.
         Assert.IsNotNull(deseserializedDidDocument?.Context);

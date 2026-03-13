@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
@@ -190,7 +190,10 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
             writer.WritePropertyName("verificationMethod");
             if(value.VerificationMethod.IsEmbeddedVerification)
             {
-                JsonSerializer.Serialize(writer, value.VerificationMethod.EmbeddedVerification, options);
+                JsonSerializer.Serialize(
+                    writer,
+                    value.VerificationMethod.EmbeddedVerification,
+                    VerifiableJsonContext.Default.VerificationMethod);
             }
             else
             {
@@ -233,11 +236,13 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
 
 
     /// <summary>
-    /// Creates the appropriate <see cref="VerificationMethodReference"/> subclass based on proof purpose.
-    /// For embedded verification methods, uses the shared <see cref="VerificationMethodTypeSelector"/>
-    /// to ensure consistent subclass dispatch with DID document deserialization.
+    /// Creates the appropriate <see cref="VerificationMethodReference"/> subclass based on
+    /// <c>proofPurpose</c>. For embedded verification methods, uses
+    /// <see cref="VerifiableJsonContext.Default"/> for AOT-safe deserialization, which
+    /// re-enters <see cref="VerificationMethodConverter"/> via <paramref name="options"/>
+    /// to apply the shared <see cref="VerificationMethodTypeSelector"/>.
     /// </summary>
-    private VerificationMethodReference? CreateVerificationMethodReference(
+    private static VerificationMethodReference? CreateVerificationMethodReference(
         JsonElement element,
         string? proofPurpose,
         JsonSerializerOptions options)
@@ -256,21 +261,11 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
         }
         else if(element.ValueKind == JsonValueKind.Object)
         {
-            //Use the shared VM type selector for embedded verification methods.
-            //This ensures the same subclass is instantiated whether the verification
-            //method appears in a DID document or in a Data Integrity proof.
-            if(element.TryGetProperty("type", out var typeElement))
-            {
-                var vmTypeString = typeElement.GetString();
-                if(vmTypeString is not null)
-                {
-                    Type targetType = VmTypeSelector(vmTypeString);
-                    embedded = (VerificationMethod?)element.Deserialize(targetType, options);
-                }
-            }
-
-            //Fallback if no type property found.
-            embedded ??= element.Deserialize<VerificationMethod>(options);
+            //Deserialize through options so VerificationMethodConverter applies
+            //VmTypeSelector for subclass dispatch. AOT-safe via registered JsonTypeInfo.
+            embedded = JsonSerializer.Deserialize(
+                element.GetRawText(),
+                VerifiableJsonContext.Default.VerificationMethod)!;
         }
         else
         {

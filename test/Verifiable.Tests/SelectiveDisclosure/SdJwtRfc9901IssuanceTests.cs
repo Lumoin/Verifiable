@@ -1,10 +1,7 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Text;
-using System.Text.Json;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.JCose.Sd;
-using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.DataIntegrity;
 using Verifiable.Tests.TestInfrastructure;
@@ -53,8 +50,12 @@ internal sealed class SdJwtRfc9901IssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            disclosablePaths, SaltGenerator.Create,
-            privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
+            disclosablePaths,
+            SaltGenerator.Create,
+            privateKey,
+            CredentialSecuringMaterial.VerificationMethodId,
+            Pool,
+            TestSetup.DefaultSerializationOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsGreaterThan(0, result.SignedToken.Length, "Signed token must not be empty.");
@@ -88,8 +89,12 @@ internal sealed class SdJwtRfc9901IssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            disclosablePaths, SaltGenerator.Create,
-            privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
+            disclosablePaths,
+            SaltGenerator.Create,
+            privateKey,
+            CredentialSecuringMaterial.VerificationMethodId,
+            Pool,
+            TestSetup.DefaultSerializationOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(2, result.Disclosures);
@@ -110,8 +115,12 @@ internal sealed class SdJwtRfc9901IssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            new HashSet<CredentialPath>(), SaltGenerator.Create,
-            privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
+            new HashSet<CredentialPath>(),
+            SaltGenerator.Create,
+            privateKey,
+            CredentialSecuringMaterial.VerificationMethodId,
+            Pool,
+            TestSetup.DefaultSerializationOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(0, result.Disclosures);
@@ -138,8 +147,12 @@ internal sealed class SdJwtRfc9901IssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            disclosablePaths, SaltGenerator.Create,
-            privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
+            disclosablePaths,
+            SaltGenerator.Create,
+            privateKey,
+            CredentialSecuringMaterial.VerificationMethodId,
+            Pool,
+            TestSetup.DefaultSerializationOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(1, result.Disclosures);

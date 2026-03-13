@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
@@ -81,11 +81,6 @@ namespace Verifiable.Cryptography
         /// Activity source for distributed tracing of memory operations.
         /// </summary>
         private static ActivitySource ActivitySource { get; } = new("SensitiveMemoryPool");
-
-        /// <summary>
-        /// Diagnostic source for detailed operational logging and debugging.
-        /// </summary>
-        private static DiagnosticSource DiagnosticSource { get; } = new DiagnosticListener("SensitiveMemoryPool");
 
         /// <summary>
         /// Meter instance for collecting and reporting memory pool metrics.
@@ -313,11 +308,6 @@ namespace Verifiable.Cryptography
             activity?.AddTag("bufferSize", bufferSize.ToString(CultureInfo.InvariantCulture));
             activity?.AddTag("poolType", typeof(T).Name);
 
-            if(DiagnosticSource.IsEnabled("Rent.Start"))
-            {
-                DiagnosticSource.Write("Rent.Start", new { bufferSize, poolType = typeof(T).Name });
-            }
-
             BufferSizeHistogram.Record(bufferSize);
 
             IMemoryOwner<T> result;
@@ -362,11 +352,6 @@ namespace Verifiable.Cryptography
             }
 
             RentSuccessCounter.Add(1, new KeyValuePair<string, object?>("bufferSize", bufferSize));
-
-            if(DiagnosticSource.IsEnabled("Rent.Stop"))
-            {
-                DiagnosticSource.Write("Rent.Stop", new { bufferSize, success = true });
-            }
 
             return result;
         }
@@ -469,15 +454,6 @@ namespace Verifiable.Cryptography
                 slab.Return(segment);
                 Interlocked.Decrement(ref activeRentals);
                 ReturnCounter.Add(1);
-            }
-
-            if(DiagnosticSource.IsEnabled("Return.Complete"))
-            {
-                DiagnosticSource.Write("Return.Complete", new
-                {
-                    segmentOffset = segment.Offset,
-                    segmentCount = segment.Count
-                });
             }
         }
 

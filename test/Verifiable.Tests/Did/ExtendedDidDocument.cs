@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did;
 
@@ -9,7 +10,7 @@ namespace Verifiable.Tests.Did
     /// </summary>
     [DebuggerDisplay("Service(Id = {Id})")]
     internal class ExtendedService: Service
-    {        
+    {
     }
 
     /// <summary>
@@ -25,6 +26,6 @@ namespace Verifiable.Tests.Did
         public new ExtendedService[]? Service { get; set; }
 
         [JsonExtensionData]
-        public IDictionary<string, object>? AdditionalData { get; set; }
+        public IDictionary<string, JsonElement>? AdditionalData { get; set; }
     }
 }
