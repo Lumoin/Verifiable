@@ -231,7 +231,7 @@ jobs:
 
     - name: Publish coverage summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: marocchino/sticky-pull-request-comment@773744901bac0e8cbb5a0dc842800d45e9b2b405
+      uses: marocchino/sticky-pull-request-comment@447031a6bb83f7438d890bb0136932be78342022
       with:
         header: Report
         path: '${{ github.workspace }}/reports/coverage/Summary.md'
@@ -315,6 +315,7 @@ jobs:
     if: |
       github.repository_owner == 'lumoin' && (
         github.event_name == 'release' ||
+        github.event_name == 'workflow_dispatch' ||
         github.ref == 'refs/heads/main' ||
         github.ref == 'refs/heads/develop'
       )
@@ -326,15 +327,19 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            rids: linux-x64 linux-arm64
+            rids: linux-x64
+          - os: ubuntu-24.04-arm
+            rids: linux-arm64
           - os: macos-latest
             rids: osx-x64 osx-arm64
           - os: windows-latest
-            rids: win-x64 win-arm64
+            rids: win-x64
+          - os: windows-11-arm
+            rids: win-arm64
 
     steps:
     - name: Harden Runner
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm' }}
       # Note: disable-sudo is intentionally omitted here because apt-get is
       # needed below to install native AOT prerequisites (clang, zlib1g-dev).
       uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc
@@ -358,6 +363,17 @@ jobs:
     - name: Install dependencies
       run: dotnet restore --locked-mode
 
+    - name: Cache local .NET tools
+      uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306
+      with:
+        path: ~/.dotnet/tools
+        key: dotnet-tools-${{ runner.os }}-${{ hashFiles('.config/dotnet-tools.json') }}
+        restore-keys: |
+          dotnet-tools-${{ runner.os }}-
+
+    - name: Restore local .NET tools
+      run: dotnet tool restore
+
     - name: Set version
       run: |
         latestTag=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.1)
@@ -379,18 +395,25 @@ jobs:
         fi
       shell: bash
 
-    # Native AOT on Linux requires clang, zlib headers, and — for cross-
-    # compiling linux-arm64 from the x86_64 runner — the aarch64 binutils
-    # cross-linker. The system ld.bfd is x86_64-only and cannot emit aarch64
-    # ELF objects; binutils-aarch64-linux-gnu provides ld.bfd.aarch64.
+    # Native AOT on Linux requires clang and zlib headers for x64, plus the
+    # full aarch64 cross-compilation toolchain for linux-arm64 cross-compilation
+    # from the x86_64 runner.
+    # The multiarch approach (dpkg --add-architecture arm64 + libc6-dev:arm64)
+    # installs the aarch64 runtime libraries directly into /usr/aarch64-linux-gnu/
+    # where the cross linker expects them, rather than the cross-dev packages
+    # which put them in the wrong location for sysroot-based linking.
     # macOS and Windows runners have their native toolchains pre-installed.
     - name: Install native AOT prerequisites (Linux)
-      if: ${{ matrix.os == 'ubuntu-latest' }}
-      run: sudo apt-get install -y clang zlib1g-dev binutils-aarch64-linux-gnu
+      if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm' }}
+      # Each Linux runner compiles only its native RID so no cross-compilation
+      # toolchain is needed. clang and zlib1g-dev are sufficient for both
+      # linux-x64 (ubuntu-latest) and linux-arm64 (ubuntu-24.04-arm).
+      run: sudo apt-get install -y clang zlib1g-dev
 
     # Build one native AOT RID package per RID on the matching host OS.
     # dotnet pack -r <rid> with PublishAot=true in the csproj produces a
     # DotnetToolRidPackage containing a fully native self-contained binary.
+    # Each runner compiles only its native RID — no cross-compilation needed.
     - name: Pack native AOT RID packages
       run: |
         for rid in ${{ matrix.rids }}; do
@@ -416,6 +439,16 @@ jobs:
         # Intermediate artifacts consumed by pack-cli-pointer only.
         # One day retention is sufficient; final nupkg-cli has normal retention.
         retention-days: 1
+
+    # The native binary is already produced as a side effect of dotnet pack -r
+    # <rid> with PublishAot=true — no extra build work. Upload it so people
+    # without a .NET SDK can download and run the tool directly.
+    - name: Upload native CLI binaries (${{ matrix.os }})
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      with:
+        name: cli-binaries-${{ matrix.os }}
+        path: src/Verifiable/bin/Release/net10.0/*/publish/Verifiable*
+        retention-days: 30
 
   pack-cli-pointer:
     name: Pack Verifiable CLI (pointer + CoreCLR any fallback)
@@ -452,6 +485,17 @@ jobs:
     - name: Install dependencies
       run: dotnet restore --locked-mode
 
+    - name: Cache local .NET tools
+      uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306
+      with:
+        path: ~/.dotnet/tools
+        key: dotnet-tools-${{ runner.os }}-${{ hashFiles('.config/dotnet-tools.json') }}
+        restore-keys: |
+          dotnet-tools-${{ runner.os }}-
+
+    - name: Restore local .NET tools
+      run: dotnet tool restore
+
     - name: Set version
       run: |
         latestTag=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.1)
@@ -475,22 +519,34 @@ jobs:
 
     # Download all native AOT RID packages produced by pack-cli-aot across all
     # three OS runners so the SDK can enumerate them when building the pointer.
-    - name: Download AOT RID packages (Linux)
-      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+    - name: Download AOT RID packages (Linux x64)
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: nupkg-cli-aot-ubuntu-latest
         path: ./nupkgs
 
+    - name: Download AOT RID packages (Linux arm64)
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: nupkg-cli-aot-ubuntu-24.04-arm
+        path: ./nupkgs
+
     - name: Download AOT RID packages (macOS)
-      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: nupkg-cli-aot-macos-latest
         path: ./nupkgs
 
-    - name: Download AOT RID packages (Windows)
-      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+    - name: Download AOT RID packages (Windows x64)
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: nupkg-cli-aot-windows-latest
+        path: ./nupkgs
+
+    - name: Download AOT RID packages (Windows arm64)
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: nupkg-cli-aot-windows-11-arm
         path: ./nupkgs
 
     # The CoreCLR "any" fallback is a framework-dependent portable package for
@@ -555,7 +611,7 @@ jobs:
         path: ./nupkgs/*.*
 
   # ---------------------------------------------------------------------------
-  # Pre-release and release publishing
+  # Pre-release and release publishing.
   # ---------------------------------------------------------------------------
 
   # The release idea is inspired by https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
@@ -575,13 +631,13 @@ jobs:
           allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
       - name: Download library NuGet packages
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: nupkg-libraries
           path: ./nupkgs
 
       - name: Download CLI NuGet packages
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: nupkg-cli
           path: ./nupkgs
@@ -626,13 +682,13 @@ jobs:
           allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
       - name: Download library NuGet packages
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: nupkg-libraries
           path: ./nupkgs
 
       - name: Download CLI NuGet packages
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: nupkg-cli
           path: ./nupkgs
@@ -661,16 +717,10 @@ jobs:
           done
 
       # NuGet trusted publishing: exchange the GitHub OIDC token for a
-      # short-lived API key. No long-lived NUGET_API_KEY secret required.
-      # Prerequisites: configure a Trusted Publishing policy on nuget.org
-      # pointing at lumoin/Verifiable and workflow file main.yml.
-      # See: https://learn.microsoft.com/nuget/nuget-org/trusted-publishing
-      #
-      # NuGet/login is the official Microsoft action. Pin to a SHA once the
-      # v1 tag has stabilised; track https://github.com/NuGet/login/releases.
+      # short-lived API key.
       - name: NuGet trusted publishing login (OIDC)
         id: nuget_login
-        uses: NuGet/login@v1
+        uses: NuGet/login@d22cc5f58ff5b88bf9bd452535b4335137e24544
         with:
           # nuget.org profile name (not email). Store as a secret to avoid
           # hardcoding an account name in the workflow file.
