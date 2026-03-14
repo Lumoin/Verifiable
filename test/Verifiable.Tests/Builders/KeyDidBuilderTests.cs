@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Text;
-using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Did;
@@ -8,9 +7,9 @@ using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Json;
 
 
 namespace Verifiable.Tests.Builders
