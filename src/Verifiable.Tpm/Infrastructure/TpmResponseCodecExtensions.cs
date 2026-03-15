@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
 
@@ -146,5 +146,55 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec PcrRead => TpmResponseCodec.Create(PcrReadResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_Sign response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>signature (TPMT_SIGNATURE) - the signature: sigAlg (2) + hashAlg (2) + TPM2B_ECC_PARAMETER(r) + TPM2B_ECC_PARAMETER(s).</description></item>
+        /// </list>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 20.2 - TPM2_Sign.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec Sign => TpmResponseCodec.Create(SignResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_ECDH_ZGen response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>outPoint (TPM2B_ECC_POINT) - outer size (2) + TPM2B_ECC_PARAMETER(x) + TPM2B_ECC_PARAMETER(y).</description></item>
+        /// </list>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 14.5 - TPM2_ECDH_ZGen.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec EcdhZGen => TpmResponseCodec.Create(EcdhZGenResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_ReadPublic response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>outPublic (TPM2B_PUBLIC) - the public area of the object.</description></item>
+        ///   <item><description>name (TPM2B_NAME) - the object name.</description></item>
+        ///   <item><description>qualifiedName (TPM2B_NAME) - the qualified name.</description></item>
+        /// </list>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 12.4 - TPM2_ReadPublic.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec ReadPublic => TpmResponseCodec.Create(ReadPublicResponse.Parse);
     }
 }

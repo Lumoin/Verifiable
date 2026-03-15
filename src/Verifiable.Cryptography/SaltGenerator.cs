@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 
 namespace Verifiable.Cryptography;
 
@@ -69,7 +69,6 @@ public static class SaltGenerator
         ArgumentNullException.ThrowIfNull(salts, nameof(salts));
 
         var saltQueue = new Queue<string>(salts);
-
         return () =>
         {
             if(saltQueue.Count == 0)
