@@ -5,7 +5,7 @@ namespace Verifiable.Cryptography.Secdsa;
 
 /// <summary>
 /// Schnorr non-interactive zero-knowledge proof for equality of discrete logarithms
-/// (Algorithms 19 and 20 of the SECDSA specification at https://wellet.nl/SECDSA-EUDI-wallet-latest.pdf).
+/// (Algorithms 19 and 20 of the SECDSA specification).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -21,7 +21,10 @@ namespace Verifiable.Cryptography.Secdsa;
 /// The challenge hash binds all generators, commitments, and public keys,
 /// plus an optional challenge binding for domain separation.
 /// </para>
-/// </remarks>
+/// <para>
+/// Not yet implemented: deterministic nonce derivation for the commitment scalar k.
+/// See <see href="https://github.com/Lumoin/Verifiable/issues/529"/>.
+/// </para>
 public static class SchnorrZkp
 {
     /// <summary>
@@ -42,25 +45,8 @@ public static class SchnorrZkp
         ArgumentNullException.ThrowIfNull(generators);
         ArgumentNullException.ThrowIfNull(publicKeys);
 
-        //TODO: Replace with a call to a deterministic nonce derivation utility
-        //(RFC 6979 Section 3.2) once implemented in Verifiable.Cryptography.
-        //
-        //The current RandomScalar is correct and safe -- RandomNumberGenerator.Fill
-        //provides cryptographically strong randomness and the 256-bit scalar makes
-        //k reuse negligible (~2^-128 birthday bound). A TPM-sourced random would be
-        //equivalent, not stronger.
-        //
-        //Deterministic derivation would additionally remove the RNG as a dependency:
-        //k = HMAC-SHA256(witness || challenge_binding) is fully determined by the
-        //secret inputs, guaranteeing uniqueness per (witness, binding) pair and making
-        //proofs reproducible for testing and audit.
-        //
-        //The derivation belongs in Verifiable.Cryptography as a standalone utility
-        //(e.g. Rfc6979.DeriveScalar) rather than in EcMath, because RFC 6979 nonce
-        //derivation is a general cryptographic primitive reusable across ECDSA, EdDSA,
-        //BBS+, and any other scheme that requires a deterministic per-message scalar.
-        //RandomScalar itself must remain unchanged -- its contract is randomness, and
-        //other callers (key generation, ECDSA signing, test data) depend on that.
+        //TODO: Replace with Rfc6979.DeriveScalar once implemented in Verifiable.Cryptography.
+        //https://github.com/Lumoin/Verifiable/issues/529
         BigInteger k = EcMath.RandomScalar();
         EcPoint[] commitments = new EcPoint[generators.Length];
         for(int i = 0; i < generators.Length; i++)
