@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Infrastructure.Spec.Attributes;
@@ -169,6 +169,20 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     {
         var publicArea = TpmtPublic.CreateRsaSigningTemplate(nameAlg, objectAttributes, keyBits, scheme);
         return FromTemplate(publicArea);
+    }
+
+
+    /// <summary>
+    /// Creates a sized public buffer template for an ECC ECDH key agreement key.
+    /// </summary>
+    /// <param name="nameAlg">The hash algorithm for Name computation.</param>
+    /// <param name="curve">The ECC curve.</param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateEccKeyAgreementTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmEccCurveConstants curve)
+    {
+        return FromTemplate(TpmtPublic.CreateEccKeyAgreementTemplate(nameAlg, curve));
     }
 
     /// <summary>

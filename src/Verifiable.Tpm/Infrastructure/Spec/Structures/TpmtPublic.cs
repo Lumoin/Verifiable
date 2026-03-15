@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Infrastructure.Spec.Attributes;
@@ -189,6 +189,47 @@ public sealed class TpmtPublic: IDisposable
             Tpm2bDigest.Empty,
             parameters,
             unique);
+    }
+
+    
+    /// <summary>
+    /// Creates a public area template for an ECC ECDH key agreement key.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The key attributes are:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description><see cref="TpmaObject.FIXED_TPM"/>: Key hierarchy is fixed.</description></item>
+    ///   <item><description><see cref="TpmaObject.FIXED_PARENT"/>: Parent is fixed.</description></item>
+    ///   <item><description><see cref="TpmaObject.SENSITIVE_DATA_ORIGIN"/>: TPM generates all sensitive data.</description></item>
+    ///   <item><description><see cref="TpmaObject.USER_WITH_AUTH"/>: USER role actions may be approved with password.</description></item>
+    ///   <item><description><see cref="TpmaObject.DECRYPT"/>: Key is used for ECDH key agreement (TPM's term for key agreement).</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="nameAlg">The hash algorithm for Name computation.</param>
+    /// <param name="curve">The ECC curve.</param>
+    /// <returns>The public area template.</returns>
+    public static TpmtPublic CreateEccKeyAgreementTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmEccCurveConstants curve)
+    {
+        TpmaObject objectAttributes =
+            TpmaObject.FIXED_TPM |
+            TpmaObject.FIXED_PARENT |
+            TpmaObject.SENSITIVE_DATA_ORIGIN |
+            TpmaObject.USER_WITH_AUTH |
+            TpmaObject.DECRYPT;
+
+        TpmuPublicParms parameters = TpmuPublicParms.Ecc(TpmsEccParms.ForKeyAgreement(curve));
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_ECC,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Empty,
+            parameters,
+            TpmuPublicId.EmptyEcc());
     }
 
     /// <summary>

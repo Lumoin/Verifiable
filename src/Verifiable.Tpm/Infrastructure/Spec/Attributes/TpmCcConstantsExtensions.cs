@@ -1,7 +1,6 @@
-﻿using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 
-namespace Verifiable.Tpm.Infrastructure;
+namespace Verifiable.Tpm.Infrastructure.Spec.Attributes;
 
 /// <summary>
 /// Extension methods for <see cref="TpmCcConstants"/>.
@@ -97,6 +96,25 @@ public static partial class TpmCcConstantsExtensions
         //Response: no handles.
         TpmCcConstants.TPM_CC_PCR_Read
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 0),
+
+
+        //Section 20.2 - TPM2_Sign.
+        //Handle area: @keyHandle (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_Sign
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 14.5 - TPM2_ECDH_ZGen.
+        //Handle area: @keyHandle (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_ECDH_ZGen
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 12.4 - TPM2_ReadPublic.
+        //Handle area: objectHandle (1 handle, no auth required).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_ReadPublic
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
 
         _ => throw new System.NotSupportedException($"TPMA_CC mapping missing for '{commandCode}'.")
     };

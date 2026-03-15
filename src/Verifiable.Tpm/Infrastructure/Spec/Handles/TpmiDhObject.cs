@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Handles;
@@ -63,6 +63,7 @@ public readonly record struct TpmiDhObject(uint Value)
 
         return new TpmiDhObject(value);
     }
+
 
     /// <summary>
     /// Creates an object handle from a raw value without validation.

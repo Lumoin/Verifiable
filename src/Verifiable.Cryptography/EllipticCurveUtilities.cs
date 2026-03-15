@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using static Verifiable.Cryptography.EllipticCurveConstants;
 
 namespace Verifiable.Cryptography
@@ -40,7 +40,7 @@ namespace Verifiable.Cryptography
         /// All NIST curves.
         /// </summary>
         NistCurves = P256 | P384 | P521,
-        
+
         /// <summary>
         /// Curve25519. More at <see href="https://safecurves.cr.yp.to/">SafeCurves: choosing safe curves for elliptic-curve cryptography</see>.
         /// </summary>
@@ -141,7 +141,7 @@ namespace Verifiable.Cryptography
                     return BigInteger.ModPow(BigInteger.Pow(x, 3) - x * 3 + coefficientB, pIdentity, prime);
                 }
             }
-            
+
             static bool CalculateIsPositiveSign(ReadOnlySpan<byte> compressedXPoint, BigInteger calculatedYPoint)
             {
                 int isPositiveY = compressedXPoint[0] - 2;
@@ -168,7 +168,7 @@ namespace Verifiable.Cryptography
             BigInteger pIdent;
             BigInteger prime;
             int pointArrayLength;
-            if(compressedPoint.Length == P256CompressedByteCount || compressedPoint.Length == Secp256k1CompressedByteCount)                
+            if(compressedPoint.Length == P256CompressedByteCount || compressedPoint.Length == Secp256k1CompressedByteCount)
             {
                 if(curveType.HasFlag(EllipticCurveTypes.P256) || curveType.HasFlag(EllipticCurveTypes.NistCurves))
                 {
@@ -228,7 +228,7 @@ namespace Verifiable.Cryptography
         /// <remarks>Also see <see href="https://datatracker.ietf.org/doc/html/rfc5480">RFC 5480:
         /// Elliptic Curve Cryptography Subject Public Key Information</see>.</remarks>        
         public static byte[] Compress(ReadOnlySpan<byte> xPoint, ReadOnlySpan<byte> yPoint)
-        {                                    
+        {
             if(!(xPoint.Length == P256.PointArrayLength
                 || xPoint.Length == P384.PointArrayLength
                 || xPoint.Length == P521.PointArrayLength))
@@ -300,14 +300,15 @@ namespace Verifiable.Cryptography
                 throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), "This method supports only uncompressed coordinates (must start with 0x04).");
             }
 
-            if(!(uncompressedCoordinates.Length == P256CompressedByteCount
-                || uncompressedCoordinates.Length == P384CompressedByteCount
-                || uncompressedCoordinates.Length == P521CompressedByteCount))
+            if(!(uncompressedCoordinates.Length == P256.UncompressedPointByteCount
+                || uncompressedCoordinates.Length == P384.UncompressedPointByteCount
+                || uncompressedCoordinates.Length == P521.UncompressedPointByteCount))
             {
-                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256CompressedByteCount}, {P384CompressedByteCount} or {P521CompressedByteCount}.");
+                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256.UncompressedPointByteCount}, {P384.UncompressedPointByteCount} or {P521.UncompressedPointByteCount}.");
             }
 
-            return uncompressedCoordinates.Slice(1, uncompressedCoordinates.Length / 2);
+            int coordinateLength = (uncompressedCoordinates.Length - 1) / 2;
+            return uncompressedCoordinates.Slice(1, coordinateLength);
         }
 
 
@@ -318,14 +319,15 @@ namespace Verifiable.Cryptography
                 throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), "This method supports only uncompressed coordinates (must start with 0x04).");
             }
 
-            if(!(uncompressedCoordinates.Length == P256CompressedByteCount
-                || uncompressedCoordinates.Length == P384CompressedByteCount
-                || uncompressedCoordinates.Length == P521CompressedByteCount))
+            if(!(uncompressedCoordinates.Length == P256.UncompressedPointByteCount
+                || uncompressedCoordinates.Length == P384.UncompressedPointByteCount
+                || uncompressedCoordinates.Length == P521.UncompressedPointByteCount))
             {
-                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256CompressedByteCount}, {P384CompressedByteCount} or {P521CompressedByteCount}.");
+                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256.UncompressedPointByteCount}, {P384.UncompressedPointByteCount} or {P521.UncompressedPointByteCount}.");
             }
 
-            return uncompressedCoordinates.Slice(uncompressedCoordinates.Length / 2, uncompressedCoordinates.Length);
+            int coordinateLength = (uncompressedCoordinates.Length - 1) / 2;
+            return uncompressedCoordinates.Slice(1 + coordinateLength, coordinateLength);
         }
 
 
@@ -360,12 +362,12 @@ namespace Verifiable.Cryptography
         /// Recommendations for Discrete Logarithm-Based Cryptography: Elliptic Curve Domain Parameters</see>
         /// D.1.1.1. Partial Public Key Validation (Short-Weierstrass Form) page 42. This holds also for secp256k1.</remarks>
         public static bool CheckPointOnCurve(ReadOnlySpan<byte> publicKeyX, ReadOnlySpan<byte> publicKeyY, EllipticCurveTypes curveType)
-        {            
+        {
             static bool ValiteParametersInRange(BigInteger x, BigInteger y, BigInteger prime)
             {
                 return !(x < BigInteger.Zero || x >= prime || y < BigInteger.Zero || y >= prime);
             }
-            
+
             static bool ValidateCurve(BigInteger x, BigInteger y, BigInteger coefficientA, BigInteger coefficientB, BigInteger prime)
             {
                 //Verify that y ^ 2 == x ^ 3 + ax + b(mod p).
@@ -402,12 +404,12 @@ namespace Verifiable.Cryptography
                 _ => false
             };
 
-            // According to the specification there would still be Step 4 for secp256k1.
-            // Verify that nQ = 0, where n is the order of the curve and Q is the public key.
-            // As per http://www.secg.org/sec1-v2.pdf section 3.2.2:
-            // "In Step 4, it may not be necessary to compute the point nQ. For example, if h = 1, then nQ = O is implied
-            // by the checks in Steps 2 and 3, because this property holds for all points Q belonging to E"
-            // All the NIST curves used here define h = 1.
+            //According to the specification there would still be Step 4 for secp256k1.
+            //Verify that nQ = 0, where n is the order of the curve and Q is the public key.
+            //As per http://www.secg.org/sec1-v2.pdf section 3.2.2:
+            //"In Step 4, it may not be necessary to compute the point nQ. For example, if h = 1, then nQ = O is implied
+            //by the checks in Steps 2 and 3, because this property holds for all points Q belonging to E"
+            //All the NIST curves used here define h = 1.
             /*if(new BigInteger(curve.Cofactor!) != 1)
             {
                 throw new NotSupportedException("Only curves with cofactor 1 are supported.");

@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
+using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
@@ -91,6 +92,32 @@ public readonly record struct TpmsEccParms
         CurveId = curve,
         Kdf = TpmtKdfScheme.Null
     };
+
+
+    /// <summary>
+    /// Creates ECC parameters for an ECDH key agreement key.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Configures TPMS_ECC_PARMS for use with TPM2_ECDH_ZGen (TPM 2.0 Part 3, Section 14.5):
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description>symmetric: TPM_ALG_NULL — no symmetric scheme.</description></item>
+    ///   <item><description>scheme: TPM_ALG_ECDH with TPM_ALG_SHA256.</description></item>
+    ///   <item><description>curveID: as specified.</description></item>
+    ///   <item><description>kdf: TPM_ALG_NULL — no key derivation function applied; raw EC point output.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="curve">The ECC curve.</param>
+    /// <returns>The ECC parameters configured for ECDH key agreement.</returns>
+    public static TpmsEccParms ForKeyAgreement(TpmEccCurveConstants curve) => new()
+    {
+        Symmetric = TpmtSymDefObject.Null,
+        Scheme = TpmtEccScheme.Ecdh(TpmAlgIdConstants.TPM_ALG_SHA256),
+        CurveId = curve,
+        Kdf = TpmtKdfScheme.Null
+    };
+
 
     /// <summary>
     /// Gets the serialized size of this structure.

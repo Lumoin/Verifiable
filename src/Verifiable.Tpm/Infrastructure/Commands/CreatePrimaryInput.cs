@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Infrastructure.Spec.Attributes;
@@ -200,6 +200,47 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
         var creationPcr = TpmlPcrSelection.Empty;
 
         return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, outsideInfo, creationPcr);
+    }
+
+
+    /// <summary>
+    /// Creates a <see cref="CreatePrimaryInput"/> for generating an ECC ECDH key agreement key.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Creates a key suitable for use as the SECDSA blinding key aU held by the WSCA.
+    /// The key uses a null scheme with the DECRYPT attribute, producing a raw EC point
+    /// when TPM2_ECDH_ZGen is called.
+    /// </para>
+    /// <para>
+    /// Key differences from <see cref="ForEccSigningKey"/>:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description>Object attributes include <see cref="TpmaObject.DECRYPT"/> instead of <see cref="TpmaObject.SIGN_ENCRYPT"/>.</description></item>
+    ///   <item><description>Scheme is TPM_ALG_NULL — unrestricted decryption key per TPM 2.0 Part 2, Section 12.2.3.5.</description></item>
+    ///   <item><description>KDF is TPM_ALG_NULL — raw point output required for SECDSA protocol math.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="hierarchy">The hierarchy under which to create the primary key.</param>
+    /// <param name="authPassword">The authorization password, or <see langword="null"/> for no password.</param>
+    /// <param name="curve">The ECC curve. Use <see cref="TpmEccCurveConstants.TPM_ECC_NIST_P256"/> for SECDSA.</param>
+    /// <param name="pool">The memory pool for password buffer allocation.</param>
+    /// <returns>A <see cref="CreatePrimaryInput"/> configured for ECDH key agreement.</returns>
+    public static CreatePrimaryInput ForEccKeyAgreementKey(
+        TpmRh hierarchy,
+        string? authPassword,
+        TpmEccCurveConstants curve,
+        MemoryPool<byte> pool)
+    {
+        var inSensitive = string.IsNullOrEmpty(authPassword)
+            ? Tpm2bSensitiveCreate.CreateEmpty(pool)
+            : Tpm2bSensitiveCreate.WithPassword(authPassword, pool);
+
+        var inPublic = Tpm2bPublic.CreateEccKeyAgreementTemplate(
+            TpmAlgIdConstants.TPM_ALG_SHA256,
+            curve);
+
+        return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
     }
 
     /// <summary>
