@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using static Verifiable.Cryptography.EllipticCurveConstants;
 
 namespace Verifiable.Cryptography
@@ -40,7 +40,7 @@ namespace Verifiable.Cryptography
         /// All NIST curves.
         /// </summary>
         NistCurves = P256 | P384 | P521,
-        
+
         /// <summary>
         /// Curve25519. More at <see href="https://safecurves.cr.yp.to/">SafeCurves: choosing safe curves for elliptic-curve cryptography</see>.
         /// </summary>
@@ -141,7 +141,7 @@ namespace Verifiable.Cryptography
                     return BigInteger.ModPow(BigInteger.Pow(x, 3) - x * 3 + coefficientB, pIdentity, prime);
                 }
             }
-            
+
             static bool CalculateIsPositiveSign(ReadOnlySpan<byte> compressedXPoint, BigInteger calculatedYPoint)
             {
                 int isPositiveY = compressedXPoint[0] - 2;
@@ -168,7 +168,7 @@ namespace Verifiable.Cryptography
             BigInteger pIdent;
             BigInteger prime;
             int pointArrayLength;
-            if(compressedPoint.Length == P256CompressedByteCount || compressedPoint.Length == Secp256k1CompressedByteCount)                
+            if(compressedPoint.Length == P256CompressedByteCount || compressedPoint.Length == Secp256k1CompressedByteCount)
             {
                 if(curveType.HasFlag(EllipticCurveTypes.P256) || curveType.HasFlag(EllipticCurveTypes.NistCurves))
                 {
@@ -228,7 +228,7 @@ namespace Verifiable.Cryptography
         /// <remarks>Also see <see href="https://datatracker.ietf.org/doc/html/rfc5480">RFC 5480:
         /// Elliptic Curve Cryptography Subject Public Key Information</see>.</remarks>        
         public static byte[] Compress(ReadOnlySpan<byte> xPoint, ReadOnlySpan<byte> yPoint)
-        {                                    
+        {
             if(!(xPoint.Length == P256.PointArrayLength
                 || xPoint.Length == P384.PointArrayLength
                 || xPoint.Length == P521.PointArrayLength))
@@ -293,6 +293,37 @@ namespace Verifiable.Cryptography
         }
 
 
+        /// <summary>
+        /// Combines separate X and Y coordinate byte spans into an uncompressed point encoding
+        /// (0x04 || X || Y). Both spans must be the same length and correspond to a supported curve.
+        /// </summary>
+        /// <param name="x">The X coordinate bytes, big-endian, zero-padded to the field element length.</param>
+        /// <param name="y">The Y coordinate bytes, big-endian, zero-padded to the field element length.</param>
+        /// <returns>A new byte array containing the uncompressed point encoding.</returns>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="x"/> and <paramref name="y"/> have different lengths.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the length does not correspond to a supported curve.</exception>
+        public static byte[] CombineToUncompressedPoint(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y)
+        {
+            if(x.Length != y.Length)
+            {
+                throw new ArgumentException($"Parameters '{nameof(x)}' and '{nameof(y)}' must have the same length.");
+            }
+
+            if(!(x.Length == P256.PointArrayLength
+                || x.Length == P384.PointArrayLength
+                || x.Length == P521.PointArrayLength))
+            {
+                throw new ArgumentOutOfRangeException(nameof(x), $"Length must be {P256.PointArrayLength}, {P384.PointArrayLength} or {P521.PointArrayLength}.");
+            }
+
+            byte[] result = new byte[1 + x.Length + y.Length];
+            result[0] = UncompressedCoordinateFormat;
+            x.CopyTo(result.AsSpan(1));
+            y.CopyTo(result.AsSpan(1 + x.Length));
+            return result;
+        }
+
+
         public static ReadOnlySpan<byte> SliceXCoordinate(ReadOnlySpan<byte> uncompressedCoordinates)
         {
             if(uncompressedCoordinates[0] != UncompressedCoordinateFormat)
@@ -300,14 +331,15 @@ namespace Verifiable.Cryptography
                 throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), "This method supports only uncompressed coordinates (must start with 0x04).");
             }
 
-            if(!(uncompressedCoordinates.Length == P256CompressedByteCount
-                || uncompressedCoordinates.Length == P384CompressedByteCount
-                || uncompressedCoordinates.Length == P521CompressedByteCount))
+            if(!(uncompressedCoordinates.Length == P256.UncompressedPointByteCount
+                || uncompressedCoordinates.Length == P384.UncompressedPointByteCount
+                || uncompressedCoordinates.Length == P521.UncompressedPointByteCount))
             {
-                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256CompressedByteCount}, {P384CompressedByteCount} or {P521CompressedByteCount}.");
+                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256.UncompressedPointByteCount}, {P384.UncompressedPointByteCount} or {P521.UncompressedPointByteCount}.");
             }
 
-            return uncompressedCoordinates.Slice(1, uncompressedCoordinates.Length / 2);
+            int coordinateLength = (uncompressedCoordinates.Length - 1) / 2;
+            return uncompressedCoordinates.Slice(1, coordinateLength);
         }
 
 
@@ -318,14 +350,15 @@ namespace Verifiable.Cryptography
                 throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), "This method supports only uncompressed coordinates (must start with 0x04).");
             }
 
-            if(!(uncompressedCoordinates.Length == P256CompressedByteCount
-                || uncompressedCoordinates.Length == P384CompressedByteCount
-                || uncompressedCoordinates.Length == P521CompressedByteCount))
+            if(!(uncompressedCoordinates.Length == P256.UncompressedPointByteCount
+                || uncompressedCoordinates.Length == P384.UncompressedPointByteCount
+                || uncompressedCoordinates.Length == P521.UncompressedPointByteCount))
             {
-                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256CompressedByteCount}, {P384CompressedByteCount} or {P521CompressedByteCount}.");
+                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256.UncompressedPointByteCount}, {P384.UncompressedPointByteCount} or {P521.UncompressedPointByteCount}.");
             }
 
-            return uncompressedCoordinates.Slice(uncompressedCoordinates.Length / 2, uncompressedCoordinates.Length);
+            int coordinateLength = (uncompressedCoordinates.Length - 1) / 2;
+            return uncompressedCoordinates.Slice(1 + coordinateLength, coordinateLength);
         }
 
 
@@ -360,12 +393,12 @@ namespace Verifiable.Cryptography
         /// Recommendations for Discrete Logarithm-Based Cryptography: Elliptic Curve Domain Parameters</see>
         /// D.1.1.1. Partial Public Key Validation (Short-Weierstrass Form) page 42. This holds also for secp256k1.</remarks>
         public static bool CheckPointOnCurve(ReadOnlySpan<byte> publicKeyX, ReadOnlySpan<byte> publicKeyY, EllipticCurveTypes curveType)
-        {            
+        {
             static bool ValiteParametersInRange(BigInteger x, BigInteger y, BigInteger prime)
             {
                 return !(x < BigInteger.Zero || x >= prime || y < BigInteger.Zero || y >= prime);
             }
-            
+
             static bool ValidateCurve(BigInteger x, BigInteger y, BigInteger coefficientA, BigInteger coefficientB, BigInteger prime)
             {
                 //Verify that y ^ 2 == x ^ 3 + ax + b(mod p).
