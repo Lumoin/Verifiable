@@ -42,12 +42,16 @@ namespace Verifiable.Cryptography.Secdsa;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class InstructionTranscript: IDisposable
 {
+    /// <summary>Tracks whether this instance has been disposed.</summary>
     private bool Disposed { get; set; }
 
+    /// <summary>Owns the memory backing <see cref="InnerTranscript"/>.</summary>
     private IMemoryOwner<byte> InnerTranscriptOwner { get; }
 
+    /// <summary>Owns the memory backing <see cref="WscaSignature"/>.</summary>
     private IMemoryOwner<byte> WscaSignatureOwner { get; }
 
+    /// <summary>Owns the memory backing <see cref="ExecutionResult"/>.</summary>
     private IMemoryOwner<byte> ExecutionResultOwner { get; }
 
     /// <summary>
@@ -56,12 +60,14 @@ public sealed class InstructionTranscript: IDisposable
     public ReadOnlyMemory<byte> InnerTranscript { get; }
 
     /// <summary>
-    /// Gets the WSCA signature Sig over <see cref="InnerTranscript"/>.
+    /// Gets the Wallet Secure Cryptographic Application (WSCA) signature Sig over
+    /// <see cref="InnerTranscript"/>.
     /// </summary>
     public ReadOnlyMemory<byte> WscaSignature { get; }
 
     /// <summary>
-    /// Gets the instruction execution result bytes returned by the HSM.
+    /// Gets the instruction execution result bytes returned by the Wallet Secure
+    /// Cryptographic Device (WSCD).
     /// </summary>
     public ReadOnlyMemory<byte> ExecutionResult { get; }
 
@@ -69,6 +75,12 @@ public sealed class InstructionTranscript: IDisposable
     /// Gets the sequence number from the instruction that produced this transcript.
     /// </summary>
     public ulong SequenceNumber { get; }
+
+    //TODO: Add PreviousTranscriptHash: a SHA-256 hash of the canonical bytes of the
+    //preceding InstructionTranscript, making the log tamper-evident. Each entry would
+    //then commit to its predecessor, forming a hash chain where altering any entry
+    //invalidates all subsequent entries. The Create method and the private constructor
+    //would need a corresponding ReadOnlySpan<byte> previousTranscriptHash parameter.
 
 
     /// <summary>
