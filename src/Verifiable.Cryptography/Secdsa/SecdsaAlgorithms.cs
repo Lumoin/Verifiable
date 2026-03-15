@@ -77,79 +77,8 @@ public static class SecdsaAlgorithms
 
 
     /// <summary>
-    /// Generates an attestation key pair from an HSM base public key and a wallet key-share
-    /// (Algorithm 11, Option I of the SECDSA split key architecture, Section 4).
+    /// Verifies a SECDSA signature using standard ECDSA verification (Algorithm 14).
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// In the split key architecture the wallet provider's HSM manages a single base
-    /// attestation key pair per user: base private key bU (non-exportable, HSM-bound)
-    /// and base public key B = bU*G. All actual attestation signing keys are derived
-    /// outside the HSM, eliminating the per-attestation key management overhead.
-    /// </para>
-    /// <para>
-    /// Option I (wallet-managed key-share): the wallet generates a random key-share
-    /// scalar zU and forms the attestation public key as Y = zU * B. The combined
-    /// private key is zU * bU, so neither the wallet nor the HSM alone can sign.
-    /// The wallet holds zU; the HSM holds bU. Both are required for every signature.
-    /// </para>
-    /// <para>
-    /// The PIN key P from the standard SECDSA construction is not used here. The
-    /// PIN factor can be layered on top by replacing zU with P*zU in the same way
-    /// that Algorithm 2 layers P over the NCH key u.
-    /// </para>
-    /// </remarks>
-    /// <param name="basePublicKey">The HSM base public key B = bU*G.</param>
-    /// <param name="keyShare">The wallet key-share scalar zU.</param>
-    /// <returns>The attestation public key Y = zU*B and the key-share scalar.</returns>
-    public static (EcPoint AttestationPublicKey, BigInteger KeyShare) GenerateKeyPairFromBaseKey(
-        EcPoint basePublicKey,
-        BigInteger keyShare)
-    {
-        ArgumentNullException.ThrowIfNull(basePublicKey);
-        EcPoint attestationPublicKey = EcMath.Multiply(basePublicKey, keyShare);
-        return (attestationPublicKey, keyShare);
-    }
-
-    /// <summary>
-    /// Signs a message hash using the split key architecture (Algorithm 11, Option I).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Signing proceeds in three steps mirroring Algorithm 2:
-    /// </para>
-    /// <list type="bullet">
-    ///   <item><description>Wallet computes e' = e * zU^(-1) mod q (adjusts hash with key-share).</description></item>
-    ///   <item><description>HSM raw-signs e' with base private key bU, producing (r, s0). In production this is
-    ///   a call to the PKCS#11 HSM or TPM; here the <paramref name="nchBasePrivateKey"/> scalar stands in.</description></item>
-    ///   <item><description>Wallet computes final s = zU * s0 mod q (re-scales with key-share).</description></item>
-    /// </list>
-    /// <para>
-    /// The result (r, s) is a valid ECDSA signature under attestation public key Y = zU*bU*G.
-    /// This is structurally identical to Algorithm 2 with zU playing the role of P and bU
-    /// playing the role of u. The same verification path (Algorithms 14 and 15) applies.
-    /// </para>
-    /// </remarks>
-    /// <param name="messageHash">The SHA-256 hash of the message to sign.</param>
-    /// <param name="nchBasePrivateKey">The HSM base private key bU. In production this is an HSM key handle.</param>
-    /// <param name="keyShare">The wallet key-share scalar zU.</param>
-    /// <returns>The ECDSA signature (r, s).</returns>
-    public static EcdsaSignature SignWithKeyShare(
-        ReadOnlySpan<byte> messageHash,
-        BigInteger nchBasePrivateKey,
-        BigInteger keyShare)
-    {
-        BigInteger e = EcMath.HashToInteger(messageHash);
-        BigInteger keyShareInverse = EcMath.ModInverse(keyShare);
-        BigInteger adjustedHash = e * keyShareInverse % EcMath.Q;
-
-        (BigInteger r, BigInteger s0) = RawEcdsaSign(adjustedHash, nchBasePrivateKey);
-        BigInteger s = keyShare * s0 % EcMath.Q;
-
-        return new EcdsaSignature(r, s);
-    }
-
-
     /// <param name="messageHash">The SHA-256 hash of the signed message.</param>
     /// <param name="signature">The signature to verify.</param>
     /// <param name="publicKey">The SECDSA public key Y = P*u*G.</param>
@@ -205,13 +134,66 @@ public static class SecdsaAlgorithms
     }
 
 
+
+    /// <summary>
+    /// Derives an attestation key pair from an HSM base public key and a wallet
+    /// key-share (Algorithm 11, Option I of the SECDSA split key architecture).
+    /// </summary>
+    /// <remarks>
+    /// In the split key architecture the Wallet Secure Cryptographic Device (WSCD)
+    /// manages one base attestation key per user: base private key bU (non-exportable)
+    /// and base public key B = bU*G. All attestation signing keys are derived outside
+    /// the WSCD using a wallet-managed key-share scalar zU: Y = zU * B = zU*bU*G.
+    /// This is algebraically identical to Algorithm 2 with zU playing the role of P
+    /// and bU playing the role of u.
+    /// </remarks>
+    /// <param name="basePublicKey">The WSCD base public key B = bU*G.</param>
+    /// <param name="keyShare">The wallet key-share scalar zU.</param>
+    /// <returns>The attestation public key Y = zU*B and the key-share scalar.</returns>
+    public static (EcPoint AttestationPublicKey, BigInteger KeyShare) GenerateKeyPairFromBaseKey(
+        EcPoint basePublicKey,
+        BigInteger keyShare)
+    {
+        ArgumentNullException.ThrowIfNull(basePublicKey);
+        EcPoint attestationPublicKey = EcMath.Multiply(basePublicKey, keyShare);
+        return (attestationPublicKey, keyShare);
+    }
+
+
+    /// <summary>
+    /// Signs a message hash using the split key architecture (Algorithm 11, Option I).
+    /// </summary>
+    /// <remarks>
+    /// Structurally identical to <see cref="Sign"/> with the wallet key-share zU
+    /// playing the role of P and the WSCD base private key bU playing the role of u.
+    /// The result (r, s) verifies under the attestation public key Y = zU*bU*G.
+    /// </remarks>
+    /// <param name="messageHash">The SHA-256 hash of the message to sign.</param>
+    /// <param name="nchBasePrivateKey">The WSCD base private key bU.</param>
+    /// <param name="keyShare">The wallet key-share scalar zU.</param>
+    /// <returns>The ECDSA signature (r, s).</returns>
+    public static EcdsaSignature SignWithKeyShare(
+        ReadOnlySpan<byte> messageHash,
+        BigInteger nchBasePrivateKey,
+        BigInteger keyShare)
+    {
+        BigInteger e = EcMath.HashToInteger(messageHash);
+        BigInteger keyShareInverse = EcMath.ModInverse(keyShare);
+        BigInteger adjustedHash = e * keyShareInverse % EcMath.Q;
+
+        (BigInteger r, BigInteger s0) = RawEcdsaSign(adjustedHash, nchBasePrivateKey);
+        BigInteger s = keyShare * s0 % EcMath.Q;
+
+        return new EcdsaSignature(r, s);
+    }
+
+
     /// <summary>
     /// Performs raw ECDSA signing of a pre-computed integer hash with a private key scalar.
     /// </summary>
     /// <remarks>
-    /// In Phase 2 this is replaced by a delegate backed by TPM2_Sign, where the
-    /// adjusted hash is passed directly and the NCH key handle is captured by the
-    /// delegate implementation.
+    /// Software reference implementation. The hardware equivalent using TPM2_Sign
+    /// is in Verifiable.Tpm.
     /// </remarks>
     /// <param name="adjustedHash">The pre-adjusted hash integer e' = P^(-1)*e mod q.</param>
     /// <param name="nchPrivateKey">The NCH-bound private key u.</param>
@@ -223,6 +205,8 @@ public static class SecdsaAlgorithms
 
         do
         {
+            //TODO: Replace with Rfc6979.DeriveScalar once implemented in Verifiable.Cryptography.
+            //https://github.com/Lumoin/Verifiable/issues/529
             BigInteger k = EcMath.RandomScalar();
             EcPoint kG = EcMath.BasePointMultiply(k);
             r = kG.X % EcMath.Q;
