@@ -1,37 +1,36 @@
-﻿using Verifiable.Tpm;
+using Verifiable.Tpm;
 
-namespace Verifiable.Tests.Tpm
+namespace Verifiable.Tests.Tpm;
+
+/// <summary>
+/// Assertion helpers for TPM command results.
+/// </summary>
+internal static class AssertUtilities
 {
     /// <summary>
-    /// TPM testing utilities for assertions.
+    /// Fails the test if the result is not a success, including the error code in the failure message.
     /// </summary>
-    internal static class AssertUtilities
+    /// <typeparam name="T">The result value type.</typeparam>
+    /// <param name="result">The TPM command result to assert.</param>
+    /// <param name="operation">A description of the operation, used in the failure message.</param>
+    public static void AssertSuccess<T>(TpmResult<T> result, string operation)
     {
-        /// <summary>
-        /// Asserts the TPM call was a success.
-        /// </summary>
-        /// <typeparam name="T">The call type.</typeparam>
-        /// <param name="result">The result.</param>
-        /// <param name="operation">The operation description.</param>
-        public static void AssertSuccess<T>(TpmResult<T> result, string operation) where T : class
+        if(result.IsSuccess)
         {
-            if(result.IsSuccess)
-            {
-                return;
-            }
+            return;
+        }
 
-            if(result.IsTpmError)
-            {
-                Assert.Fail($"{operation} failed with TPM error: {result.ResponseCode}");
-            }
-            else if(result.IsTransportError)
-            {
-                Assert.Fail($"{operation} failed with transport error: {result.TransportErrorCode}");
-            }
-            else
-            {
-                Assert.Fail($"{operation} failed with unknown error.");
-            }
+        if(result.IsTpmError)
+        {
+            Assert.Fail($"{operation} failed with TPM error: {result.ResponseCode} (0x{(uint)result.ResponseCode:X8}).");
+        }
+        else if(result.IsTransportError)
+        {
+            Assert.Fail($"{operation} failed with transport error: 0x{result.TransportErrorCode:X8}.");
+        }
+        else
+        {
+            Assert.Fail($"{operation} failed with unknown error.");
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -115,6 +115,182 @@ namespace Verifiable.Tests.Cryptography
             CheckPointOnCurveForEvenAndOdd(td.PublicKeyMaterialX, td.PublicKeyMaterialY, curveType, primeBytes, isEven: td.IsEven);
         }
 
+
+        [TestMethod]
+        public void SliceXCoordinateReturnsCorrectBytesForP256()
+        {
+            byte[] point = new byte[EllipticCurveConstants.P256.UncompressedPointByteCount];
+            point[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
+            for(int i = 1; i <= EllipticCurveConstants.P256.PointArrayLength; i++)
+            {
+                point[i] = (byte)i;
+            }
+
+            ReadOnlySpan<byte> x = EllipticCurveUtilities.SliceXCoordinate(point);
+
+            Assert.AreEqual(EllipticCurveConstants.P256.PointArrayLength, x.Length,
+                "X coordinate length must match P-256 point array length.");
+            Assert.IsTrue(x.SequenceEqual(point.AsSpan(1, EllipticCurveConstants.P256.PointArrayLength)),
+                "X coordinate bytes must match bytes 1 to 32.");
+        }
+
+        [TestMethod]
+        public void SliceYCoordinateReturnsCorrectBytesForP256()
+        {
+            byte[] point = new byte[EllipticCurveConstants.P256.UncompressedPointByteCount];
+            point[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
+            for(int i = 1 + EllipticCurveConstants.P256.PointArrayLength; i < point.Length; i++)
+            {
+                point[i] = (byte)i;
+            }
+
+            ReadOnlySpan<byte> y = EllipticCurveUtilities.SliceYCoordinate(point);
+
+            Assert.AreEqual(EllipticCurveConstants.P256.PointArrayLength, y.Length,
+                "Y coordinate length must match P-256 point array length.");
+            Assert.IsTrue(y.SequenceEqual(point.AsSpan(1 + EllipticCurveConstants.P256.PointArrayLength, EllipticCurveConstants.P256.PointArrayLength)),
+                "Y coordinate bytes must match bytes 33 to 64.");
+        }
+
+        [TestMethod]
+        public void SliceXCoordinateReturnsCorrectBytesForP384()
+        {
+            byte[] point = new byte[EllipticCurveConstants.P384.UncompressedPointByteCount];
+            point[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
+            for(int i = 1; i <= EllipticCurveConstants.P384.PointArrayLength; i++)
+            {
+                point[i] = (byte)i;
+            }
+
+            ReadOnlySpan<byte> x = EllipticCurveUtilities.SliceXCoordinate(point);
+
+            Assert.AreEqual(EllipticCurveConstants.P384.PointArrayLength, x.Length,
+                "X coordinate length must match P-384 point array length.");
+            Assert.IsTrue(x.SequenceEqual(point.AsSpan(1, EllipticCurveConstants.P384.PointArrayLength)),
+                "X coordinate bytes must match bytes 1 to 48.");
+        }
+
+        [TestMethod]
+        public void SliceYCoordinateReturnsCorrectBytesForP384()
+        {
+            byte[] point = new byte[EllipticCurveConstants.P384.UncompressedPointByteCount];
+            point[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
+            for(int i = 1 + EllipticCurveConstants.P384.PointArrayLength; i < point.Length; i++)
+            {
+                point[i] = (byte)i;
+            }
+
+            ReadOnlySpan<byte> y = EllipticCurveUtilities.SliceYCoordinate(point);
+
+            Assert.AreEqual(EllipticCurveConstants.P384.PointArrayLength, y.Length,
+                "Y coordinate length must match P-384 point array length.");
+            Assert.IsTrue(y.SequenceEqual(point.AsSpan(1 + EllipticCurveConstants.P384.PointArrayLength, EllipticCurveConstants.P384.PointArrayLength)),
+                "Y coordinate bytes must match bytes 49 to 96.");
+        }
+
+        [TestMethod]
+        public void SliceXCoordinateThrowsForCompressedPoint()
+        {
+            byte[] compressedPoint = new byte[EllipticCurveConstants.P256.CompressedPointByteCount];
+            compressedPoint[0] = EllipticCurveUtilities.EvenYCoordinate;
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceXCoordinate(compressedPoint));
+        }
+
+        [TestMethod]
+        public void SliceYCoordinateThrowsForCompressedPoint()
+        {
+            byte[] compressedPoint = new byte[EllipticCurveConstants.P256.CompressedPointByteCount];
+            compressedPoint[0] = EllipticCurveUtilities.EvenYCoordinate;
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceYCoordinate(compressedPoint));
+        }
+
+        [TestMethod]
+        public void SliceXCoordinateThrowsForWrongLength()
+        {
+            byte[] point = new byte[10];
+            point[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceXCoordinate(point));
+        }
+
+        [TestMethod]
+        public void SliceYCoordinateThrowsForWrongLength()
+        {
+            byte[] point = new byte[10];
+            point[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceYCoordinate(point));
+        }
+
+        [TestMethod]
+        public void CombineToUncompressedPointProducesCorrectEncodingForP256()
+        {
+            byte[] x = new byte[EllipticCurveConstants.P256.PointArrayLength];
+            byte[] y = new byte[EllipticCurveConstants.P256.PointArrayLength];
+            x[0] = 0xAB;
+            y[0] = 0xCD;
+
+            byte[] result = EllipticCurveUtilities.CombineToUncompressedPoint(x, y);
+
+            Assert.HasCount(EllipticCurveConstants.P256.UncompressedPointByteCount, result,
+                "Combined P-256 point must be 65 bytes.");
+            Assert.AreEqual(EllipticCurveUtilities.UncompressedCoordinateFormat, result[0],
+                "First byte must be the uncompressed coordinate format prefix 0x04.");
+            Assert.IsTrue(result.AsSpan(1, EllipticCurveConstants.P256.PointArrayLength).SequenceEqual(x),
+                "X coordinate bytes must appear at offset 1.");
+            Assert.IsTrue(result.AsSpan(1 + EllipticCurveConstants.P256.PointArrayLength, EllipticCurveConstants.P256.PointArrayLength).SequenceEqual(y),
+                "Y coordinate bytes must appear after X.");
+        }
+
+        [TestMethod]
+        public void CombineToUncompressedPointProducesCorrectEncodingForP384()
+        {
+            byte[] x = new byte[EllipticCurveConstants.P384.PointArrayLength];
+            byte[] y = new byte[EllipticCurveConstants.P384.PointArrayLength];
+            x[0] = 0x11;
+            y[0] = 0x22;
+
+            byte[] result = EllipticCurveUtilities.CombineToUncompressedPoint(x, y);
+
+            Assert.HasCount(EllipticCurveConstants.P384.UncompressedPointByteCount, result,
+                "Combined P-384 point must be 97 bytes.");
+            Assert.AreEqual(EllipticCurveUtilities.UncompressedCoordinateFormat, result[0],
+                "First byte must be the uncompressed coordinate format prefix 0x04.");
+        }
+
+        [TestMethod]
+        public void CombineToUncompressedPointIsInverseOfSliceCoordinates()
+        {
+            byte[] x = new byte[EllipticCurveConstants.P256.PointArrayLength];
+            byte[] y = new byte[EllipticCurveConstants.P256.PointArrayLength];
+            RandomNumberGenerator.Fill(x);
+            RandomNumberGenerator.Fill(y);
+
+            byte[] combined = EllipticCurveUtilities.CombineToUncompressedPoint(x, y);
+            ReadOnlySpan<byte> slicedX = EllipticCurveUtilities.SliceXCoordinate(combined);
+            ReadOnlySpan<byte> slicedY = EllipticCurveUtilities.SliceYCoordinate(combined);
+
+            Assert.IsTrue(slicedX.SequenceEqual(x),
+                "SliceXCoordinate must recover the original X after CombineToUncompressedPoint.");
+            Assert.IsTrue(slicedY.SequenceEqual(y),
+                "SliceYCoordinate must recover the original Y after CombineToUncompressedPoint.");
+        }
+
+        [TestMethod]
+        public void CombineToUncompressedPointThrowsWhenLengthsDiffer()
+        {
+            byte[] x = new byte[EllipticCurveConstants.P256.PointArrayLength];
+            byte[] y = new byte[EllipticCurveConstants.P384.PointArrayLength];
+            Assert.ThrowsExactly<ArgumentException>(() =>
+                EllipticCurveUtilities.CombineToUncompressedPoint(x, y));
+        }
+
+        [TestMethod]
+        public void CombineToUncompressedPointThrowsWhenLengthIsUnsupported()
+        {
+            byte[] x = new byte[10];
+            byte[] y = new byte[10];
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+                EllipticCurveUtilities.CombineToUncompressedPoint(x, y));
+        }
 
         private static void CheckPointOnCurveForEvenAndOdd(
             ReadOnlySpan<byte> publicKeyX,
