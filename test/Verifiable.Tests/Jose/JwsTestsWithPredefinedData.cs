@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -210,7 +209,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static Tag GetEcdsaPrivateKeyTag(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkValues.Alg];
 
         if(WellKnownJwaValues.IsEs256(alg))
         {
@@ -233,7 +232,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static Tag GetEcdsaPublicKeyTag(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkValues.Alg];
 
         if(WellKnownJwaValues.IsEs256(alg))
         {
@@ -256,7 +255,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static Tag GetEcdsaSignatureTag(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkValues.Alg];
 
         if(WellKnownJwaValues.IsEs256(alg))
         {
@@ -279,7 +278,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static HashAlgorithmName GetEcdsaHashAlgorithm(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkValues.Alg];
 
         if(WellKnownJwaValues.IsEs256(alg))
         {
@@ -302,7 +301,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static ECCurve GetEcdsaCurve(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkValues.Alg];
 
         if(WellKnownJwaValues.IsEs256(alg))
         {
@@ -325,7 +324,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static HashAlgorithmName GetRsaHashAlgorithm(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkValues.Alg];
 
         if(WellKnownJwaValues.IsRs256(alg))
         {
@@ -348,7 +347,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static HashAlgorithmName GetRsaPsHashAlgorithm(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkValues.Alg];
 
         if(WellKnownJwaValues.IsPs256(alg))
         {

@@ -10,9 +10,5 @@
   <ItemGroup>
     <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    
-  </ItemGroup>
-  
+   
 </Project>

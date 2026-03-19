@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;

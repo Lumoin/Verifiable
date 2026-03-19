@@ -3,6 +3,7 @@ using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Validation;
 using Verifiable.Cryptography.Context;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;

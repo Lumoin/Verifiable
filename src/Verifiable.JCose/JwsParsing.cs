@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Cryptography;
@@ -54,7 +54,7 @@ public static class JwsParsing
         }
 
         using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(protectedEncoded, pool);
-        IReadOnlyDictionary<string, object> protectedHeader = headerDeserializer(headerBytesOwner.Memory.Span);
+        var protectedHeader = new UnverifiedJwtHeader(headerDeserializer(headerBytesOwner.Memory.Span));
 
         bool isDetached = string.IsNullOrEmpty(payloadEncoded);
         IMemoryOwner<byte>? payloadOwner = null;
@@ -115,7 +115,7 @@ public static class JwsParsing
         }
 
         using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(protectedEncoded, pool);
-        IReadOnlyDictionary<string, object> protectedHeader = headerDeserializer(headerBytesOwner.Memory.Span);
+        var protectedHeader = new UnverifiedJwtHeader(headerDeserializer(headerBytesOwner.Memory.Span));
 
         bool isDetached = !jsonObject.TryGetValue("payload", out object? payloadObj);
         IMemoryOwner<byte>? payloadOwner = null;
@@ -132,11 +132,11 @@ public static class JwsParsing
             payload = payloadOwner.Memory;
         }
 
-        IReadOnlyDictionary<string, object>? unprotectedHeader = null;
+        UnverifiedJwtHeader? unprotectedHeader = null;
 
         if(jsonObject.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object> headerDict)
         {
-            unprotectedHeader = headerDict;
+            unprotectedHeader = new UnverifiedJwtHeader(headerDict);
         }
 
         IMemoryOwner<byte> signatureOwner = base64UrlDecoder(signatureEncoded, pool);
@@ -221,13 +221,13 @@ public static class JwsParsing
             }
 
             using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(protectedEncoded, pool);
-            IReadOnlyDictionary<string, object> protectedHeader = headerDeserializer(headerBytesOwner.Memory.Span);
+            var protectedHeader = new UnverifiedJwtHeader(headerDeserializer(headerBytesOwner.Memory.Span));
 
-            IReadOnlyDictionary<string, object>? unprotectedHeader = null;
+            UnverifiedJwtHeader? unprotectedHeader = null;
 
             if(sigDict.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object> headerDict)
             {
-                unprotectedHeader = headerDict;
+                unprotectedHeader = new UnverifiedJwtHeader(headerDict);
             }
 
             IMemoryOwner<byte> signatureOwner = base64UrlDecoder(signatureEncoded, pool);

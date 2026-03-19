@@ -25,6 +25,7 @@ public static class JsonSerializerExtensions
     private static JsonTypeInfo<T> GetTypeInfo<T>(JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+
         return (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
     }
 
@@ -36,6 +37,7 @@ public static class JsonSerializerExtensions
     public static string Serialize<T>(T value, JsonSerializerOptions options)
     {
         JsonTypeInfo<T> typeInfo = GetTypeInfo<T>(options);
+
         return JsonSerializer.Serialize(value, typeInfo);
     }
 
@@ -47,6 +49,7 @@ public static class JsonSerializerExtensions
     public static byte[] SerializeToUtf8Bytes<T>(T value, JsonSerializerOptions options)
     {
         JsonTypeInfo<T> typeInfo = GetTypeInfo<T>(options);
+
         return JsonSerializer.SerializeToUtf8Bytes(value, typeInfo);
     }
 
@@ -58,6 +61,7 @@ public static class JsonSerializerExtensions
     public static T? Deserialize<T>(string json, JsonSerializerOptions options)
     {
         JsonTypeInfo<T> typeInfo = GetTypeInfo<T>(options);
+
         return JsonSerializer.Deserialize(json, typeInfo);
     }
 
@@ -69,6 +73,7 @@ public static class JsonSerializerExtensions
     public static T? Deserialize<T>(ReadOnlySpan<byte> utf8Json, JsonSerializerOptions options)
     {
         JsonTypeInfo<T> typeInfo = GetTypeInfo<T>(options);
+
         return JsonSerializer.Deserialize(utf8Json, typeInfo);
     }
 }

@@ -1,8 +1,7 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
-using Verifiable.Jose;
 
 namespace Verifiable.JCose;
 
@@ -91,9 +90,9 @@ public sealed class UnsignedJwt: IEquatable<UnsignedJwt>
 
         var header = new JwtHeader
         {
-            [JwkProperties.Alg] = algorithm,
-            [JwkProperties.Typ] = mediaType ?? WellKnownMediaTypes.Jwt.VcLdJwt,
-            [JwkProperties.Kid] = keyId
+            [WellKnownJwkValues.Alg] = algorithm,
+            [WellKnownJwkValues.Typ] = mediaType ?? WellKnownMediaTypes.Jwt.VcLdJwt,
+            [WellKnownJwkValues.Kid] = keyId
         };
 
         return new UnsignedJwt(header, payload);

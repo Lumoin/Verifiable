@@ -1,4 +1,4 @@
-﻿using Verifiable.Cryptography;
+using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tpm.Infrastructure;
@@ -47,7 +47,7 @@ public static class TpmTags
     /// See TPM 2.0 Part 1, Section 17.6.4 - Authorization Values.
     /// </remarks>
     public static Tag Auth { get; } = Tag.Create(
-        (typeof(Purpose), Purpose.Auth),
+        (typeof(Purpose), Purpose.Hmac),
         (typeof(MaterialSemantics), MaterialSemantics.Direct));
 
     /// <summary>

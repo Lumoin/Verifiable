@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did;
@@ -29,13 +30,12 @@ namespace Verifiable.Json.Converters;
 /// </remarks>
 public class VerificationMethodReferenceConverterFactory: JsonConverterFactory
 {
-    private readonly VerificationMethodConverter _vmConverter;
+    private readonly VerificationMethodConverter vmConverter;
 
     /// <summary>
     /// Initializes the factory with the default <see cref="VerificationMethodConverter"/>.
     /// </summary>
-    public VerificationMethodReferenceConverterFactory()
-        : this(new VerificationMethodConverter()) { }
+    public VerificationMethodReferenceConverterFactory(): this(new VerificationMethodConverter()) { }
 
     /// <summary>
     /// Initializes the factory with a specific <see cref="VerificationMethodConverter"/>.
@@ -47,7 +47,7 @@ public class VerificationMethodReferenceConverterFactory: JsonConverterFactory
     public VerificationMethodReferenceConverterFactory(VerificationMethodConverter vmConverter)
     {
         ArgumentNullException.ThrowIfNull(vmConverter);
-        _vmConverter = vmConverter;
+        this.vmConverter = vmConverter;
     }
 
 
@@ -67,15 +67,15 @@ public class VerificationMethodReferenceConverterFactory: JsonConverterFactory
     public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options) => typeToConvert switch
     {
         var t when t == typeof(AuthenticationMethod) =>
-            new VerificationMethodReferenceConverter<AuthenticationMethod>(_vmConverter),
+            new VerificationMethodReferenceConverter<AuthenticationMethod>(vmConverter),
         var t when t == typeof(AssertionMethod) =>
-            new VerificationMethodReferenceConverter<AssertionMethod>(_vmConverter),
+            new VerificationMethodReferenceConverter<AssertionMethod>(vmConverter),
         var t when t == typeof(KeyAgreementMethod) =>
-            new VerificationMethodReferenceConverter<KeyAgreementMethod>(_vmConverter),
+            new VerificationMethodReferenceConverter<KeyAgreementMethod>(vmConverter),
         var t when t == typeof(CapabilityInvocationMethod) =>
-            new VerificationMethodReferenceConverter<CapabilityInvocationMethod>(_vmConverter),
+            new VerificationMethodReferenceConverter<CapabilityInvocationMethod>(vmConverter),
         var t when t == typeof(CapabilityDelegationMethod) =>
-            new VerificationMethodReferenceConverter<CapabilityDelegationMethod>(_vmConverter),
+            new VerificationMethodReferenceConverter<CapabilityDelegationMethod>(vmConverter),
         _ => throw new JsonException($"No converter for verification method reference type '{typeToConvert}'.")
     };
 }

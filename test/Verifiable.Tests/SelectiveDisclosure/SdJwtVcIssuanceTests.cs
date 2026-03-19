@@ -6,7 +6,6 @@ using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Sd;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.DataIntegrity;
@@ -57,10 +56,10 @@ internal sealed class SdJwtVcIssuanceTests
         Dictionary<string, object>? header = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span, CredentialSecuringMaterial.JsonOptions);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual("EdDSA", header[JwkProperties.Alg].ToString());
-        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcSdJwt, header[JwkProperties.Typ].ToString(),
+        Assert.AreEqual("EdDSA", header[WellKnownJwkValues.Alg].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcSdJwt, header[WellKnownJwkValues.Typ].ToString(),
             "VC SD-JWT must use vc+sd-jwt media type per VC-JOSE-COSE Section 6.1.3.");
-        Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, header[JwkProperties.Kid].ToString());
+        Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, header[WellKnownJwkValues.Kid].ToString());
     }
 
 

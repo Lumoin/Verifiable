@@ -1,4 +1,6 @@
-﻿using System.Text.Json;
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;

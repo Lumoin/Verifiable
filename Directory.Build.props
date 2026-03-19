@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>
     <NuGetAudit>true</NuGetAudit>
@@ -22,6 +23,32 @@
     <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
   </PropertyGroup>
 
+  <ItemGroup Condition="
+    !$(MSBuildProjectName.EndsWith('.Tests'))
+    AND !$(MSBuildProjectName.EndsWith('.Benchmarks'))
+    AND $(MSBuildProjectName) != 'Verifiable'
+    AND $(MSBuildProjectName) != 'Verifiable.BouncyCastle'
+    AND $(MSBuildProjectName) != 'Verifiable.Microsoft'
+    AND $(MSBuildProjectName) != 'Verifiable.NSec'">
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup Condition="
+             $(MSBuildProjectName) != 'Verifiable.Json'
+             AND $(MSBuildProjectName) != 'Verifiable.Cbor'
+             AND $(MSBuildProjectName) != 'Verifiable'
+             AND !$(MSBuildProjectName.StartsWith('Verifiable.Tests'))">
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Serialization.txt" Visible="false" />
+  </ItemGroup>
+  
   <!-- Settings for all tests projects specifically. -->
   <PropertyGroup>
     <EnableMSTestRunner>true</EnableMSTestRunner>

@@ -1,8 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using Verifiable.Core.SelectiveDisclosure;
 
 namespace Verifiable.Core.SelectiveDisclosure.Strategy;
 

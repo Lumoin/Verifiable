@@ -1,10 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
-  
-  <ItemGroup>
-    <SupportedPlatform Include="browser" />
-  </ItemGroup>
-
+    
   <PropertyGroup>
     <Title>Core data types and algorithms for DIDs and VCs</Title>
     <Description>Includes and implements core data types and algorithms for decentralized identifiers and verifiable credentials.</Description>
@@ -15,14 +11,5 @@
     <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
     <ProjectReference Include="..\Verifiable.JsonPointer\Verifiable.JsonPointer.csproj" />    
   </ItemGroup>
-
-  <ItemGroup>    
-    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-    <AdditionalFiles Include="..\..\BannedSymbols.Serialization.txt" Visible="false" />
-    <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
-  </ItemGroup>
-  
+    
 </Project>

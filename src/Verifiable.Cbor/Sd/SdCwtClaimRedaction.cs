@@ -1,4 +1,6 @@
-﻿using System.Formats.Cbor;
+using System;
+using System.Collections.Generic;
+using System.Formats.Cbor;
 using System.Globalization;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;

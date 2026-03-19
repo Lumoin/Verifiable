@@ -1,4 +1,4 @@
-ï»¿using System;
+using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -28,7 +28,7 @@ namespace Verifiable.Core.Model.Did
     /// <item><description>Service endpoints for interacting with the subject</description></item>
     /// </list>
     /// <para>
-    /// See <see href="https://www.w3.org/TR/did-1.0/#did-documents">DID Core §4 DID Documents</see>
+    /// See <see href="https://www.w3.org/TR/did-1.0/#did-documents">DID Core ï¿½4 DID Documents</see>
     /// and <see href="https://www.w3.org/TR/cid-1.0/">Controlled Identifiers (CID) 1.0</see>.
     /// </para>
     /// </remarks>
@@ -46,7 +46,7 @@ namespace Verifiable.Core.Model.Did
         /// may be added for verification method types, service types, or other extensions.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/did-1.0/#production-0">DID Core §4.1 @context</see>.
+        /// See <see href="https://www.w3.org/TR/did-1.0/#production-0">DID Core ï¿½4.1 @context</see>.
         /// </para>
         /// </remarks>
         public Context? Context { get; set; }
@@ -64,7 +64,7 @@ namespace Verifiable.Core.Model.Did
         /// DID method is recognized.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/did-1.0/#did-subject">DID Core §4.2 DID Subject</see>.
+        /// See <see href="https://www.w3.org/TR/did-1.0/#did-subject">DID Core ï¿½4.2 DID Subject</see>.
         /// </para>
         /// </remarks>
         public GenericDidMethod? Id { get; set; }
@@ -79,7 +79,7 @@ namespace Verifiable.Core.Model.Did
         /// known by. These can be other DIDs or any conformant URI per RFC 3986.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#also-known-as">CID 1.0 §2.1.3 Also Known As</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#also-known-as">CID 1.0 ï¿½2.1.3 Also Known As</see>.
         /// </para>
         /// </remarks>
         public string[]? AlsoKnownAs { get; set; }
@@ -95,7 +95,7 @@ namespace Verifiable.Core.Model.Did
         /// by a DID.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#controller">CID 1.0 §2.1.2 Controller</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#controller">CID 1.0 ï¿½2.1.2 Controller</see>.
         /// </para>
         /// </remarks>
         public Controller[]? Controller { get; set; }
@@ -112,7 +112,7 @@ namespace Verifiable.Core.Model.Did
         /// referenced by a verification relationship.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 §2.2 Verification Methods</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 ï¿½2.2 Verification Methods</see>.
         /// </para>
         /// </remarks>
         public VerificationMethod[]? VerificationMethod { get; set; }
@@ -129,7 +129,7 @@ namespace Verifiable.Core.Model.Did
         /// </para>
         /// <para>
         /// See <see cref="AuthenticationMethod"/> and
-        /// <see href="https://www.w3.org/TR/cid-1.0/#authentication">CID 1.0 §2.3.1 Authentication</see>.
+        /// <see href="https://www.w3.org/TR/cid-1.0/#authentication">CID 1.0 ï¿½2.3.1 Authentication</see>.
         /// </para>
         /// </remarks>
         public AuthenticationMethod[]? Authentication { get; set; }
@@ -146,7 +146,7 @@ namespace Verifiable.Core.Model.Did
         /// </para>
         /// <para>
         /// See <see cref="AssertionMethod"/> and
-        /// <see href="https://www.w3.org/TR/cid-1.0/#assertion">CID 1.0 §2.3.2 Assertion</see>.
+        /// <see href="https://www.w3.org/TR/cid-1.0/#assertion">CID 1.0 ï¿½2.3.2 Assertion</see>.
         /// </para>
         /// </remarks>
         public AssertionMethod[]? AssertionMethod { get; set; }
@@ -163,7 +163,7 @@ namespace Verifiable.Core.Model.Did
         /// </para>
         /// <para>
         /// See <see cref="KeyAgreementMethod"/> and
-        /// <see href="https://www.w3.org/TR/cid-1.0/#key-agreement">CID 1.0 §2.3.3 Key Agreement</see>.
+        /// <see href="https://www.w3.org/TR/cid-1.0/#key-agreement">CID 1.0 ï¿½2.3.3 Key Agreement</see>.
         /// </para>
         /// </remarks>
         public KeyAgreementMethod[]? KeyAgreement { get; set; }
@@ -180,7 +180,7 @@ namespace Verifiable.Core.Model.Did
         /// </para>
         /// <para>
         /// See <see cref="CapabilityInvocationMethod"/> and
-        /// <see href="https://www.w3.org/TR/cid-1.0/#capability-invocation">CID 1.0 §2.3.4 Capability Invocation</see>.
+        /// <see href="https://www.w3.org/TR/cid-1.0/#capability-invocation">CID 1.0 ï¿½2.3.4 Capability Invocation</see>.
         /// </para>
         /// </remarks>
         public CapabilityInvocationMethod[]? CapabilityInvocation { get; set; }
@@ -197,7 +197,7 @@ namespace Verifiable.Core.Model.Did
         /// </para>
         /// <para>
         /// See <see cref="CapabilityDelegationMethod"/> and
-        /// <see href="https://www.w3.org/TR/cid-1.0/#capability-delegation">CID 1.0 §2.3.5 Capability Delegation</see>.
+        /// <see href="https://www.w3.org/TR/cid-1.0/#capability-delegation">CID 1.0 ï¿½2.3.5 Capability Delegation</see>.
         /// </para>
         /// </remarks>
         public CapabilityDelegationMethod[]? CapabilityDelegation { get; set; }
@@ -214,7 +214,7 @@ namespace Verifiable.Core.Model.Did
         /// type of service.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 §2.1.4 Services</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 ï¿½2.1.4 Services</see>.
         /// </para>
         /// </remarks>
         public Service[]? Service { get; set; }

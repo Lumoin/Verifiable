@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did;
@@ -22,8 +23,9 @@ namespace Verifiable.Json.Converters
 
         public override void Write(Utf8JsonWriter writer, Controller controller, JsonSerializerOptions options)
         {
-        ArgumentNullException.ThrowIfNull(writer);
-        ArgumentNullException.ThrowIfNull(controller);
+            ArgumentNullException.ThrowIfNull(writer);
+            ArgumentNullException.ThrowIfNull(controller);
+
             writer.WriteStringValue(controller.Did);
         }
     }

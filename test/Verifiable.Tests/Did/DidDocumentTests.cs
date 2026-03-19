@@ -2,8 +2,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Model.Did.Methods;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Json.Converters;
 using Verifiable.Tests.TestInfrastructure;

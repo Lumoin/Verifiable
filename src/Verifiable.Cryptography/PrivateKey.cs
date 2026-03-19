@@ -49,7 +49,7 @@ namespace Verifiable.Cryptography
         /// <param name="id">The identifier for this private key.</param>
         /// <param name="signingDelegate">The delegate this key uses for signing.</param>
         /// <param name="context">Optional default context for signing operations.</param>
-        public PrivateKey(PrivateKeyMemory privateKeyMaterial, string id, SigningDelegate signingDelegate, FrozenDictionary<string, object>? context = null): base(privateKeyMaterial, id)
+        public PrivateKey(PrivateKeyMemory privateKeyMaterial, string id, SigningDelegate signingDelegate, FrozenDictionary<string, object>? context = null) : base(privateKeyMaterial, id)
         {
             ArgumentNullException.ThrowIfNull(privateKeyMaterial, nameof(privateKeyMaterial));
             ArgumentException.ThrowIfNullOrEmpty(id, nameof(id));
@@ -77,8 +77,11 @@ namespace Verifiable.Cryptography
         /// <returns>The signature of the data.</returns>
         public ValueTask<Signature> SignAsync(ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
-            return KeyMaterial.SignWithKeyBytesAsync(async (privateKeyBytes, dataToSign, signaturePool) =>
-                await signingDelegate(privateKeyBytes, dataToSign, signaturePool, context ?? defaultContext).ConfigureAwait(false), dataToSign, signaturePool);
+            return KeyMaterial.WithKeyBytesAsync(
+                (privateKeyBytes, dataToSign, signaturePool) =>
+                    signingDelegate(privateKeyBytes, dataToSign, signaturePool, context ?? defaultContext),
+                dataToSign,
+                signaturePool);
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.Jose;
 
 namespace Verifiable.Core.Model.Credentials;
 
@@ -90,10 +89,10 @@ public static class CredentialJwsExtensions
 
         var header = new JwtHeader
         {
-            [JwkProperties.Alg] = algorithm,
-            [JwkProperties.Typ] = mediaType ?? WellKnownMediaTypes.Jwt.VcJwt,
-            [JwkProperties.Kid] = verificationMethodId,
-            [JwkProperties.Cty] = contentType ?? WellKnownMediaTypes.Application.Vc
+            [WellKnownJwkValues.Alg] = algorithm,
+            [WellKnownJwkValues.Typ] = mediaType ?? WellKnownMediaTypes.Jwt.VcJwt,
+            [WellKnownJwkValues.Kid] = verificationMethodId,
+            [WellKnownJwkValues.Cty] = contentType ?? WellKnownMediaTypes.Application.Vc
         };
 
         string headerSegment = base64UrlEncoder(headerSerializer(header));

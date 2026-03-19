@@ -1,8 +1,7 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
-using Verifiable.Jose;
 
 namespace Verifiable.JCose;
 
@@ -161,17 +160,17 @@ public static class JwkThumbprintUtilities
 
         using var tempBuffer = pool.Rent(exactLength);
         var buffer = tempBuffer.Memory.Span;
-        var writer = new JsonWriter(buffer);
+        JwkJsonWriter writer = new(buffer);
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(JwkProperties.Crv, crv);
+        writer.WriteProperty(WellKnownJwkValues.Crv, crv);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.Kty, kty);
+        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.X, x);
+        writer.WriteProperty(WellKnownJwkValues.X, x);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.Y, y);
+        writer.WriteProperty(WellKnownJwkValues.Y, y);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -205,15 +204,15 @@ public static class JwkThumbprintUtilities
 
         using var tempBuffer = pool.Rent(exactLength);
         var buffer = tempBuffer.Memory.Span;
-        var writer = new JsonWriter(buffer);
+        JwkJsonWriter writer = new(buffer);
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(JwkProperties.Crv, crv);
+        writer.WriteProperty(WellKnownJwkValues.Crv, crv);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.Kty, kty);
+        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.X, x);
+        writer.WriteProperty(WellKnownJwkValues.X, x);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -247,15 +246,15 @@ public static class JwkThumbprintUtilities
 
         using var tempBuffer = pool.Rent(exactLength);
         var buffer = tempBuffer.Memory.Span;
-        var writer = new JsonWriter(buffer);
+        JwkJsonWriter writer = new(buffer);
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(JwkProperties.Crv, crv);
+        writer.WriteProperty(WellKnownJwkValues.Crv, crv);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.Kty, kty);
+        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.X, x);
+        writer.WriteProperty(WellKnownJwkValues.X, x);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -289,15 +288,15 @@ public static class JwkThumbprintUtilities
 
         using var tempBuffer = pool.Rent(exactLength);
         var buffer = tempBuffer.Memory.Span;
-        var writer = new JsonWriter(buffer);
+        JwkJsonWriter writer = new(buffer);
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(JwkProperties.E, e);
+        writer.WriteProperty(WellKnownJwkValues.E, e);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.Kty, kty);
+        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.N, n);
+        writer.WriteProperty(WellKnownJwkValues.N, n);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -328,13 +327,13 @@ public static class JwkThumbprintUtilities
 
         using var tempBuffer = pool.Rent(exactLength);
         var buffer = tempBuffer.Memory.Span;
-        var writer = new JsonWriter(buffer);
+        JwkJsonWriter writer = new(buffer);
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(JwkProperties.K, k);
+        writer.WriteProperty(WellKnownJwkValues.K, k);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.Kty, kty);
+        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -367,15 +366,15 @@ public static class JwkThumbprintUtilities
 
         using var tempBuffer = pool.Rent(exactLength);
         var buffer = tempBuffer.Memory.Span;
-        var writer = new JsonWriter(buffer);
+        JwkJsonWriter writer = new(buffer);
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(JwkProperties.Alg, alg);
+        writer.WriteProperty(WellKnownJwkValues.Alg, alg);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.Kty, kty);
+        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.X, x);
+        writer.WriteProperty(WellKnownJwkValues.X, x);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -408,15 +407,15 @@ public static class JwkThumbprintUtilities
 
         using var tempBuffer = pool.Rent(exactLength);
         var buffer = tempBuffer.Memory.Span;
-        var writer = new JsonWriter(buffer);
+        JwkJsonWriter writer = new(buffer);
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(JwkProperties.Alg, alg);
+        writer.WriteProperty(WellKnownJwkValues.Alg, alg);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.Kty, kty);
+        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.X, x);
+        writer.WriteProperty(WellKnownJwkValues.X, x);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -449,15 +448,15 @@ public static class JwkThumbprintUtilities
 
         using var tempBuffer = pool.Rent(exactLength);
         var buffer = tempBuffer.Memory.Span;
-        var writer = new JsonWriter(buffer);
+        JwkJsonWriter writer = new(buffer);
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(JwkProperties.Alg, alg);
+        writer.WriteProperty(WellKnownJwkValues.Alg, alg);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.Kty, kty);
+        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(JwkProperties.X, x);
+        writer.WriteProperty(WellKnownJwkValues.X, x);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -492,7 +491,7 @@ public static class JwkThumbprintUtilities
 
         using var tempBuffer = pool.Rent(exactLength);
         var buffer = tempBuffer.Memory.Span;
-        var writer = new JsonWriter(buffer);
+        JwkJsonWriter writer = new(buffer);
 
         //Build canonical JSON representation.
         writer.WriteObjectStart();
@@ -549,167 +548,5 @@ public static class JwkThumbprintUtilities
         }
 
         return length;
-    }
-
-    /// <summary>
-    /// Lightweight JSON writer for constructing canonical JWK representations.
-    /// Optimized for minimal allocations and precise control over output format.
-    /// </summary>
-    private ref struct JsonWriter
-    {
-        /// <summary>
-        /// The buffer to write JSON output to.
-        /// </summary>
-        private readonly Span<byte> buffer;
-
-        /// <summary>
-        /// The current write position in the buffer.
-        /// </summary>
-        private int position;
-
-        /// <summary>
-        /// Gets the current write position in the buffer.
-        /// </summary>
-        public readonly int Position => position;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="JsonWriter"/> struct with the specified buffer.
-        /// </summary>
-        /// <param name="buffer">The buffer to write JSON output to.</param>
-        public JsonWriter(Span<byte> buffer)
-        {
-            this.buffer = buffer;
-            position = 0;
-        }
-
-        /// <summary>
-        /// Writes the JSON object start character ('{') to the buffer.
-        /// </summary>
-        public void WriteObjectStart() => WriteLiteral("{"u8);
-
-        /// <summary>
-        /// Writes the JSON object end character ('}') to the buffer.
-        /// </summary>
-        public void WriteObjectEnd() => WriteLiteral("}"u8);
-
-        /// <summary>
-        /// Writes the JSON property separator character (',') to the buffer.
-        /// </summary>
-        public void WritePropertySeparator() => WriteLiteral(","u8);
-
-        /// <summary>
-        /// Writes a JSON property (key-value pair) to the buffer in the format "key":"value".
-        /// </summary>
-        /// <param name="key">The property key.</param>
-        /// <param name="value">The property value.</param>
-        public void WriteProperty(string key, string value)
-        {
-            WriteLiteral("\""u8);
-            WriteString(key);
-            WriteLiteral("\":\""u8);
-            WriteString(value);
-            WriteLiteral("\""u8);
-        }
-
-        /// <summary>
-        /// Writes a UTF-8 encoded literal byte sequence to the buffer.
-        /// </summary>
-        /// <param name="utf8Literal">The UTF-8 encoded literal to write.</param>
-        private void WriteLiteral(ReadOnlySpan<byte> utf8Literal)
-        {
-            utf8Literal.CopyTo(buffer.Slice(position));
-            position += utf8Literal.Length;
-        }
-
-        /// <summary>
-        /// Writes a UTF-8 encoded string to the buffer.
-        /// </summary>
-        /// <param name="value">The string value to encode and write.</param>
-        private void WriteString(string value)
-        {
-            var bytesWritten = Encoding.UTF8.GetBytes(value, buffer.Slice(position));
-            position += bytesWritten;
-        }
-    }
-
-
-    /// <summary>
-    /// Contains constants for JWK template overhead calculations and standard parameter values.
-    /// These values are used to optimize memory allocation for JWK thumbprint computations.
-    /// All constants align with the well-known values from <see cref="JwkProperties"/>, <see cref="WellKnownKeyTypeValues"/>, and <see cref="WellKnownCurveValues"/>.
-    /// </summary>
-    internal static class JwkTemplateConstants
-    {
-        /// <summary>
-        /// SHA-256 hash output size in bytes as defined by <see href="https://tools.ietf.org/html/rfc6234">RFC 6234</see>.
-        /// Used for JWK thumbprint computation per <see href="https://tools.ietf.org/html/rfc7638">RFC 7638</see>.
-        /// </summary>
-        public const int Sha256HashSizeInBytes = 32;
-
-        /// <summary>
-        /// Template overhead for EC keys: {"crv":"","kty":"","x":"","y":""}.
-        /// Calculated as: 1 ('{') + 7 ('"crv":"') + 7 ('","kty":') + 6 ('","x":') + 6 ('","y":') + 2 ('"}') = 29 base chars + quotes.
-        /// </summary>
-        public const int EcTemplateOverhead = 46;
-
-        /// <summary>
-        /// Template overhead for OKP keys: {"crv":"","kty":"","x":""}.
-        /// Calculated as: 1 ('{') + 7 ('"crv":"') + 7 ('","kty":') + 6 ('","x":') + 2 ('"}') = 23 base chars + quotes.
-        /// </summary>
-        public const int OkpTemplateOverhead = 32;
-
-        /// <summary>
-        /// Template overhead for RSA keys: {"e":"","kty":"","n":""}.
-        /// Calculated as: 1 ('{') + 5 ('"e":"') + 7 ('","kty":') + 6 ('","n":') + 2 ('"}') = 21 base chars + quotes.
-        /// </summary>
-        public const int RsaTemplateOverhead = 32;
-
-        /// <summary>
-        /// Template overhead for oct keys: {"k":"","kty":""}.
-        /// Calculated as: 1 ('{') + 5 ('"k":"') + 7 ('","kty":') + 2 ('"}') = 15 base chars + quotes.
-        /// </summary>
-        public const int OctTemplateOverhead = 20;
-
-        /// <summary>
-        /// Template overhead for post-quantum cryptography keys: {"alg":"","kty":"","x":""}.
-        /// Used for ML-DSA, ML-KEM, and SLH-DSA keys.
-        /// Calculated as: 1 ('{') + 7 ('"alg":"') + 7 ('","kty":') + 6 ('","x":') + 2 ('"}') = 23 base chars + quotes.
-        /// </summary>
-        public const int PqcTemplateOverhead = 32;
-
-        /// <summary>
-        /// Standard RSA public exponent (65537) in base64url encoding.
-        /// </summary>
-        public const string RsaStandardExponent = "AQAB";
-
-        /// <summary>
-        /// Expected coordinate length for P-256 curve (43 base64url characters for 32 bytes).
-        /// </summary>
-        public const int P256CoordinateLength = 43;
-
-        /// <summary>
-        /// Expected coordinate length for P-384 curve (64 base64url characters for 48 bytes).
-        /// </summary>
-        public const int P384CoordinateLength = 64;
-
-        /// <summary>
-        /// Expected coordinate length for P-521 curve (88 base64url characters for 66 bytes).
-        /// </summary>
-        public const int P521CoordinateLength = 88;
-
-        /// <summary>
-        /// Expected coordinate length for secp256k1 curve (43 base64url characters for 32 bytes).
-        /// </summary>
-        public const int Secp256k1CoordinateLength = 43;
-
-        /// <summary>
-        /// Expected key length for Ed25519 (43 base64url characters for 32 bytes).
-        /// </summary>
-        public const int Ed25519KeyLength = 43;
-
-        /// <summary>
-        /// Expected key length for X25519 (43 base64url characters for 32 bytes).
-        /// </summary>
-        public const int X25519KeyLength = 43;
     }
 }

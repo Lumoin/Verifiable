@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.SelectiveDisclosure;
-using Verifiable.Core.SelectiveDisclosure.Strategy;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Eudi;

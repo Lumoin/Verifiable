@@ -1,4 +1,4 @@
-﻿namespace Verifiable.JCose
+namespace Verifiable.JCose
 {
     /// <summary>    
     /// JSON Web Algorithms (JWA) for JSON Web Encryption (JWE) content encryption algorithms
@@ -136,7 +136,7 @@
         /// </returns>
         public static bool Equals(string algorithmA, string algorithmB)
         {
-            return object.ReferenceEquals(algorithmA, algorithmB) || StringComparer.InvariantCulture.Equals(algorithmA, algorithmB);
+            return object.ReferenceEquals(algorithmA, algorithmB) || StringComparer.Ordinal.Equals(algorithmA, algorithmB);
         }
     }
 }

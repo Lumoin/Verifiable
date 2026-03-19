@@ -1,4 +1,4 @@
-﻿<Project Sdk="MSTest.Sdk">
+<Project Sdk="MSTest.Sdk">
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>    
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -34,7 +34,10 @@
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="SimpleBase" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
-    <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage">      
+    <PackageReference Include="System.Reactive" />
+    <PackageReference Include="Microsoft.Reactive.Testing" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
+    <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage">            
       <VersionOverride>18.6.2</VersionOverride>
     </PackageReference>
   </ItemGroup>
@@ -53,61 +56,5 @@
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
     <ProjectReference Include="..\..\src\Verifiable\Verifiable.csproj" />    
   </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>    
-    <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="Microsoft.Testing.Extensions.AzureDevOpsReport">
-      <VersionOverride>2.2.1</VersionOverride>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="Microsoft.Testing.Extensions.CrashDump">
-      <VersionOverride>2.2.1</VersionOverride>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="Microsoft.Testing.Extensions.HangDump">
-      <VersionOverride>2.2.1</VersionOverride>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="Microsoft.Testing.Extensions.HotReload">
-      <VersionOverride>2.2.1</VersionOverride>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="Microsoft.Testing.Extensions.Retry">
-      <VersionOverride>2.2.1</VersionOverride>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="Microsoft.Testing.Extensions.TrxReport">
-      <VersionOverride>2.2.1</VersionOverride>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="MSTest.TestAdapter">
-      <VersionOverride>4.2.1</VersionOverride>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="MSTest.TestFramework">
-      <VersionOverride>4.2.1</VersionOverride>
-    </PackageReference>
-  </ItemGroup>  
-  
+    
 </Project>

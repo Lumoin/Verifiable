@@ -1,7 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Did;
 using Verifiable.JCose;
-using Verifiable.Jose;
 
 namespace Verifiable.Tests.Did
 {
@@ -18,16 +17,16 @@ namespace Verifiable.Tests.Did
         {
             Header = new Dictionary<string, object>
             {
-                [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec,
-                [JwkProperties.Crv] = WellKnownCurveValues.P256,
-                [JwkProperties.X] = "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4",
-                [JwkProperties.Y] = "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM",
-                [JwkProperties.Alg] = WellKnownJwaValues.Es256
+                [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
+                [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
+                [WellKnownJwkValues.X] = "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4",
+                [WellKnownJwkValues.Y] = "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM",
+                [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256
             },
             Payload = new Dictionary<string, object>
             {
-                [JwkProperties.Use] = "sig",
-                [JwkProperties.Kid] = "test-key-1"
+                [WellKnownJwkValues.Use] = "sig",
+                [WellKnownJwkValues.Kid] = "test-key-1"
             }
         };
 
@@ -38,10 +37,10 @@ namespace Verifiable.Tests.Did
         {
             Header = new Dictionary<string, object>
             {
-                [JwkProperties.Kty] = WellKnownKeyTypeValues.Rsa,
-                [JwkProperties.N] = "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISO",
-                [JwkProperties.E] = "AQAB",
-                [JwkProperties.Alg] = WellKnownJwaValues.Rs256
+                [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Rsa,
+                [WellKnownJwkValues.N] = "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISO",
+                [WellKnownJwkValues.E] = "AQAB",
+                [WellKnownJwkValues.Alg] = WellKnownJwaValues.Rs256
             }
         };
 
@@ -52,16 +51,16 @@ namespace Verifiable.Tests.Did
         {
             Header = new Dictionary<string, object>
             {
-                [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec,
-                [JwkProperties.Crv] = WellKnownCurveValues.P256,
-                [JwkProperties.X] = "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4",
-                [JwkProperties.Y] = "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM",
-                [JwkProperties.Alg] = WellKnownJwaValues.Es256
+                [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
+                [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
+                [WellKnownJwkValues.X] = "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4",
+                [WellKnownJwkValues.Y] = "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM",
+                [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256
             },
             Payload = new Dictionary<string, object>
             {
-                [JwkProperties.Use] = "sig",
-                [JwkProperties.Kid] = "test-key-1"
+                [WellKnownJwkValues.Use] = "sig",
+                [WellKnownJwkValues.Kid] = "test-key-1"
             }
         };
 
@@ -190,8 +189,8 @@ namespace Verifiable.Tests.Did
             {
                 Header = new Dictionary<string, object>
                 {
-                    [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec,
-                    [JwkProperties.Crv] = WellKnownCurveValues.P256
+                    [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
+                    [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256
                 }
             };
 
@@ -199,8 +198,8 @@ namespace Verifiable.Tests.Did
             {
                 Header = new Dictionary<string, object>
                 {
-                    [JwkProperties.Kty] = WellKnownKeyTypeValues.Rsa,
-                    [JwkProperties.N] = "abc123"
+                    [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Rsa,
+                    [WellKnownJwkValues.N] = "abc123"
                 }
             };
 
@@ -215,14 +214,14 @@ namespace Verifiable.Tests.Did
         {
             var jwk1 = new PublicKeyJwk
             {
-                Header = new Dictionary<string, object> { [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec },
-                Payload = new Dictionary<string, object> { [JwkProperties.Use] = "sig" }
+                Header = new Dictionary<string, object> { [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec },
+                Payload = new Dictionary<string, object> { [WellKnownJwkValues.Use] = "sig" }
             };
 
             var jwk2 = new PublicKeyJwk
             {
-                Header = new Dictionary<string, object> { [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec },
-                Payload = new Dictionary<string, object> { [JwkProperties.Use] = "enc" }
+                Header = new Dictionary<string, object> { [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec },
+                Payload = new Dictionary<string, object> { [WellKnownJwkValues.Use] = "enc" }
             };
 
             Assert.IsFalse(jwk1.Equals(jwk2));
@@ -236,13 +235,13 @@ namespace Verifiable.Tests.Did
         {
             var jwk1 = new PublicKeyJwk
             {
-                Header = new Dictionary<string, object> { [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec },
+                Header = new Dictionary<string, object> { [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec },
                 Payload = null
             };
 
             var jwk2 = new PublicKeyJwk
             {
-                Header = new Dictionary<string, object> { [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec },
+                Header = new Dictionary<string, object> { [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec },
                 Payload = null
             };
 
@@ -257,14 +256,14 @@ namespace Verifiable.Tests.Did
         {
             var jwk1 = new PublicKeyJwk
             {
-                Header = new Dictionary<string, object> { [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec },
+                Header = new Dictionary<string, object> { [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec },
                 Payload = null
             };
 
             var jwk2 = new PublicKeyJwk
             {
-                Header = new Dictionary<string, object> { [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec },
-                Payload = new Dictionary<string, object> { [JwkProperties.Use] = "sig" }
+                Header = new Dictionary<string, object> { [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec },
+                Payload = new Dictionary<string, object> { [WellKnownJwkValues.Use] = "sig" }
             };
 
             Assert.IsFalse(jwk1.Equals(jwk2));
@@ -304,9 +303,9 @@ namespace Verifiable.Tests.Did
             {
                 Header = new Dictionary<string, object>
                 {
-                    [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec,
-                    [JwkProperties.Crv] = WellKnownCurveValues.P256,
-                    [JwkProperties.X] = "abc"
+                    [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
+                    [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
+                    [WellKnownJwkValues.X] = "abc"
                 }
             };
 
@@ -314,9 +313,9 @@ namespace Verifiable.Tests.Did
             {
                 Header = new Dictionary<string, object>
                 {
-                    [JwkProperties.Crv] = WellKnownCurveValues.P256,
-                    [JwkProperties.X] = "abc",
-                    [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec
+                    [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
+                    [WellKnownJwkValues.X] = "abc",
+                    [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec
                 }
             };
 
@@ -333,10 +332,10 @@ namespace Verifiable.Tests.Did
             {
                 Header = new Dictionary<string, object>
                 {
-                    [JwkProperties.Kty] = WellKnownKeyTypeValues.Okp,
-                    [JwkProperties.Crv] = WellKnownCurveValues.Ed25519,
-                    [JwkProperties.X] = "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-                    [JwkProperties.Alg] = WellKnownJwaValues.EdDsa
+                    [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Okp,
+                    [WellKnownJwkValues.Crv] = WellKnownCurveValues.Ed25519,
+                    [WellKnownJwkValues.X] = "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+                    [WellKnownJwkValues.Alg] = WellKnownJwaValues.EdDsa
                 }
             };
 
@@ -344,10 +343,10 @@ namespace Verifiable.Tests.Did
             {
                 Header = new Dictionary<string, object>
                 {
-                    [JwkProperties.Kty] = WellKnownKeyTypeValues.Okp,
-                    [JwkProperties.Crv] = WellKnownCurveValues.Ed25519,
-                    [JwkProperties.X] = "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-                    [JwkProperties.Alg] = WellKnownJwaValues.EdDsa
+                    [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Okp,
+                    [WellKnownJwkValues.Crv] = WellKnownCurveValues.Ed25519,
+                    [WellKnownJwkValues.X] = "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+                    [WellKnownJwkValues.Alg] = WellKnownJwaValues.EdDsa
                 }
             };
 
@@ -364,11 +363,11 @@ namespace Verifiable.Tests.Did
             {
                 Header = new Dictionary<string, object>
                 {
-                    [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec,
-                    [JwkProperties.Crv] = WellKnownCurveValues.Secp256k1,
-                    [JwkProperties.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGHwHitJBcBmXQ",
-                    [JwkProperties.Y] = "y77As5vbZx_ErFOfGmHV-DIjkA0vyNNw-sDslUt6ld0",
-                    [JwkProperties.Alg] = WellKnownJwaValues.Es256k1
+                    [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
+                    [WellKnownJwkValues.Crv] = WellKnownCurveValues.Secp256k1,
+                    [WellKnownJwkValues.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGHwHitJBcBmXQ",
+                    [WellKnownJwkValues.Y] = "y77As5vbZx_ErFOfGmHV-DIjkA0vyNNw-sDslUt6ld0",
+                    [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256k1
                 }
             };
 
@@ -376,11 +375,11 @@ namespace Verifiable.Tests.Did
             {
                 Header = new Dictionary<string, object>
                 {
-                    [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec,
-                    [JwkProperties.Crv] = WellKnownCurveValues.Secp256k1,
-                    [JwkProperties.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGHwHitJBcBmXQ",
-                    [JwkProperties.Y] = "y77As5vbZx_ErFOfGmHV-DIjkA0vyNNw-sDslUt6ld0",
-                    [JwkProperties.Alg] = WellKnownJwaValues.Es256k1
+                    [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
+                    [WellKnownJwkValues.Crv] = WellKnownCurveValues.Secp256k1,
+                    [WellKnownJwkValues.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGHwHitJBcBmXQ",
+                    [WellKnownJwkValues.Y] = "y77As5vbZx_ErFOfGmHV-DIjkA0vyNNw-sDslUt6ld0",
+                    [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256k1
                 }
             };
 
@@ -397,10 +396,10 @@ namespace Verifiable.Tests.Did
             {
                 Header = new Dictionary<string, object>
                 {
-                    [JwkProperties.Kty] = WellKnownKeyTypeValues.Okp,
-                    [JwkProperties.Crv] = WellKnownCurveValues.X25519,
-                    [JwkProperties.X] = "hSDwCYkwp1R0i33ctD73Wg2_Og0mOBr066SpjqqbTmo",
-                    [JwkProperties.Alg] = WellKnownJwaValues.Ecdha
+                    [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Okp,
+                    [WellKnownJwkValues.Crv] = WellKnownCurveValues.X25519,
+                    [WellKnownJwkValues.X] = "hSDwCYkwp1R0i33ctD73Wg2_Og0mOBr066SpjqqbTmo",
+                    [WellKnownJwkValues.Alg] = WellKnownJwaValues.Ecdha
                 }
             };
 
@@ -408,10 +407,10 @@ namespace Verifiable.Tests.Did
             {
                 Header = new Dictionary<string, object>
                 {
-                    [JwkProperties.Kty] = WellKnownKeyTypeValues.Okp,
-                    [JwkProperties.Crv] = WellKnownCurveValues.X25519,
-                    [JwkProperties.X] = "hSDwCYkwp1R0i33ctD73Wg2_Og0mOBr066SpjqqbTmo",
-                    [JwkProperties.Alg] = WellKnownJwaValues.Ecdha
+                    [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Okp,
+                    [WellKnownJwkValues.Crv] = WellKnownCurveValues.X25519,
+                    [WellKnownJwkValues.X] = "hSDwCYkwp1R0i33ctD73Wg2_Og0mOBr066SpjqqbTmo",
+                    [WellKnownJwkValues.Alg] = WellKnownJwaValues.Ecdha
                 }
             };
 
@@ -426,8 +425,8 @@ namespace Verifiable.Tests.Did
         {
             var complexPayload = new Dictionary<string, object>
             {
-                [JwkProperties.Use] = "sig",
-                [JwkProperties.Kid] = "test-key-1",
+                [WellKnownJwkValues.Use] = "sig",
+                [WellKnownJwkValues.Kid] = "test-key-1",
                 ["custom_claim"] = "custom_value",
                 ["nested"] = new Dictionary<string, object>
                 {
@@ -437,13 +436,13 @@ namespace Verifiable.Tests.Did
 
             var jwk1 = new PublicKeyJwk
             {
-                Header = new Dictionary<string, object> { [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec },
+                Header = new Dictionary<string, object> { [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec },
                 Payload = complexPayload
             };
 
             var jwk2 = new PublicKeyJwk
             {
-                Header = new Dictionary<string, object> { [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec },
+                Header = new Dictionary<string, object> { [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec },
                 Payload = new Dictionary<string, object>(complexPayload)
             };
 

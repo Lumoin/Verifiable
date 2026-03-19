@@ -1,4 +1,6 @@
-﻿using System.Formats.Cbor;
+using System;
+using System.Collections.Generic;
+using System.Formats.Cbor;
 
 namespace Verifiable.Cbor;
 
@@ -119,7 +121,7 @@ public sealed class CborSerializerOptions
     /// Converters are checked in order. The first converter that can handle a type is used.
     /// Add both <see cref="CborConverter{T}"/> and <see cref="CborConverterFactory"/> instances.
     /// </remarks>
-    public IList<object> Converters { get; } = [];
+    public IList<object> Converters { get; } = new List<object>();
 
 
     /// <summary>
