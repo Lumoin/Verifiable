@@ -15,16 +15,21 @@ using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Sd;
-using Verifiable.Jose;
 using Verifiable.Json;
+using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
-using static Verifiable.JCose.Eudi.EudiPid;
 
 namespace Verifiable.Tests.DataIntegrity;
 
 /// <summary>
 /// Tests all W3C VC Data Model 2.0 securing methods using the same unsigned credential.
 /// </summary>
+[SuppressMessage(
+    "Reliability", "CA2000",
+    Justification =
+        "Tests construct Salt instances and pass them to SdDisclosure factory methods " +
+        "which take ownership; the disclosures are explicitly disposed via using " +
+        "declarations. The analyzer cannot see ownership transfer through factory methods.")]
 [TestClass]
 internal sealed class CredentialSecuringMethodsTests
 {
@@ -95,6 +100,7 @@ internal sealed class CredentialSecuringMethodsTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigest,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -115,6 +121,7 @@ internal sealed class CredentialSecuringMethodsTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigest,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -276,6 +283,7 @@ internal sealed class CredentialSecuringMethodsTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigest,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -296,6 +304,7 @@ internal sealed class CredentialSecuringMethodsTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigest,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -428,12 +437,12 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
-        byte[] salt1 = SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes);
-        byte[] salt2 = SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes);
+        byte[] salt1 = RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes);
+        byte[] salt2 = RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes);
 
-        var disclosure1 = SdDisclosure.CreateProperty(salt1, "degree",
+        using SdDisclosure disclosure1 = SdDisclosure.CreateProperty(TestSalts.FromBytes(salt1), "degree",
             new Dictionary<string, object> { ["type"] = "ExampleBachelorDegree", ["name"] = "Bachelor of Science and Arts" });
-        var disclosure2 = SdDisclosure.CreateProperty(salt2, "name", "Example University");
+        using SdDisclosure disclosure2 = SdDisclosure.CreateProperty(TestSalts.FromBytes(salt2), "name", "Example University");
 
         string encodedDisclosure1 = EncodeDisclosure(disclosure1, TestSetup.Base64UrlEncoder);
         string encodedDisclosure2 = EncodeDisclosure(disclosure2, TestSetup.Base64UrlEncoder);
@@ -454,9 +463,9 @@ internal sealed class CredentialSecuringMethodsTests
 
         var header = new Dictionary<string, object>
         {
-            [JwkProperties.Alg] = WellKnownJwaValues.EdDsa,
-            [JwkProperties.Typ] = WellKnownMediaTypes.Application.VcSdJwt,
-            [JwkProperties.Kid] = Ed25519VerificationMethodId
+            [WellKnownJwkValues.Alg] = WellKnownJwaValues.EdDsa,
+            [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Application.VcSdJwt,
+            [WellKnownJwkValues.Kid] = Ed25519VerificationMethodId
         };
 
         var headerJson = JsonSerializerExtensions.SerializeToUtf8Bytes(header, JsonOptions);
@@ -507,9 +516,9 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
-        var disclosure1 = SdDisclosure.CreateProperty(SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes), "degree",
+        using SdDisclosure disclosure1 = SdDisclosure.CreateProperty(TestSalts.FromBytes(RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes)), "degree",
             new Dictionary<string, object?> { ["type"] = "ExampleBachelorDegree", ["name"] = "Bachelor of Science and Arts" });
-        var disclosure2 = SdDisclosure.CreateProperty(SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes), "name", "Example University");
+        using SdDisclosure disclosure2 = SdDisclosure.CreateProperty(TestSalts.FromBytes(RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes)), "name", "Example University");
 
         var protectedHeader = BuildSdCwtProtectedHeader();
         byte[] payload = BuildCwtPayload(credential);
@@ -534,7 +543,7 @@ internal sealed class CredentialSecuringMethodsTests
         Assert.IsNotNull(sdCwtBytes);
         Assert.IsGreaterThan(100, sdCwtBytes.Length, "SD-CWT should have substantial length.");
 
-        var parsedMessage = SdCwtSerializer.Parse(sdCwtBytes);
+        var parsedMessage = SdCwtSerializer.Parse(sdCwtBytes, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
         Assert.IsTrue(payload.AsSpan().SequenceEqual(parsedMessage.Payload.Span), "Payload must round-trip.");
         Assert.HasCount(2, parsedMessage.Disclosures, "Disclosures must round-trip.");
@@ -609,7 +618,7 @@ internal sealed class CredentialSecuringMethodsTests
         """)]
     private static string EncodeDisclosure(SdDisclosure disclosure, EncodeDelegate base64UrlEncoder)
     {
-        string saltBase64Url = base64UrlEncoder(disclosure.Salt.Span);
+        string saltBase64Url = base64UrlEncoder(disclosure.Salt.AsReadOnlySpan());
         string json = disclosure.ClaimName is not null
             ? $"[\"{saltBase64Url}\",\"{disclosure.ClaimName}\",{JsonSerializer.Serialize(disclosure.ClaimValue)}]"
             : $"[\"{saltBase64Url}\",{JsonSerializer.Serialize(disclosure.ClaimValue)}]";

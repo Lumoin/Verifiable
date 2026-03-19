@@ -1,4 +1,5 @@
-﻿using System.Formats.Cbor;
+using System;
+using System.Formats.Cbor;
 
 namespace Verifiable.Cbor;
 

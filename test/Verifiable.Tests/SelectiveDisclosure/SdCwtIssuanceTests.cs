@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Formats.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
@@ -54,7 +54,7 @@ internal sealed class SdCwtIssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdCwtAsync(
-            SerializeCwtClaimMap, disclosablePaths, SaltGenerator.Create,
+            SerializeCwtClaimMap, disclosablePaths, TestSalts.DefaultGenerator(),
             privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -74,7 +74,7 @@ internal sealed class SdCwtIssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdCwtAsync(
-            SerializeCwtClaimMap, new HashSet<CredentialPath>(), SaltGenerator.Create,
+            SerializeCwtClaimMap, new HashSet<CredentialPath>(), TestSalts.DefaultGenerator(),
             privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -102,7 +102,7 @@ internal sealed class SdCwtIssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdCwtAsync(
-            SerializeCwtClaimMap, disclosablePaths, SaltGenerator.Create,
+            SerializeCwtClaimMap, disclosablePaths, TestSalts.DefaultGenerator(),
             privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 

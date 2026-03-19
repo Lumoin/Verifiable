@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
@@ -44,6 +44,9 @@ namespace Verifiable.Tests.TestDataProviders
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> X25519Source = new(() =>
             BouncyCastleKeyMaterialCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared));
+
+        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P256ExchangeSource = new(() =>
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlDsa44Source = new(() =>
             BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(SensitiveMemoryPool<byte>.Shared));
@@ -113,6 +116,20 @@ namespace Verifiable.Tests.TestDataProviders
             => CopyKeyMaterial(X25519Source.Value);
 
         /// <summary>
+        /// Returns a disposable copy of P-256 exchange key material (BouncyCastle backend).
+        /// The public key is tagged with <see cref="CryptoTags.P256ExchangePublicKey"/> and
+        /// the private key with <see cref="CryptoTags.P256ExchangePrivateKey"/>.
+        /// </summary>
+        /// <remarks>
+        /// The cached copy is suitable when any P-256 exchange key will do. When the public
+        /// and private keys must form a matched ephemeral pair — as in OID4VP flows where
+        /// the public key is embedded in the JAR and the private key decrypts the response —
+        /// use <see cref="CreateFreshP256ExchangeKeyMaterial"/> instead.
+        /// </remarks>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256ExchangeKeyMaterial()
+            => CopyKeyMaterial(P256ExchangeSource.Value);
+
+        /// <summary>
         /// Returns a disposable copy of ML-DSA-44 key material (BouncyCastle backend, NIST security level 2).
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa44KeyMaterial()
@@ -155,6 +172,15 @@ namespace Verifiable.Tests.TestDataProviders
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshP256KeyMaterial()
             => MicrosoftKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+
+        /// <summary>
+        /// Generates a brand-new P-256 exchange key pair (BouncyCastle backend).
+        /// Use in OID4VP flows and any scenario where the public and private keys must
+        /// form a matched ephemeral pair — for example when the public key is embedded
+        /// in a JAR and the private key later decrypts the <c>direct_post.jwt</c> response.
+        /// </summary>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshP256ExchangeKeyMaterial()
+            => BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared);
 
         /// <summary>
         /// Generates a brand-new P-384 key pair. Use when tests require distinct keys.

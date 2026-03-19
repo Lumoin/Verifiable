@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+using System.Buffers;
+using System.ComponentModel;
 using System.Diagnostics;
 
 namespace Verifiable.JCose.Sd;
@@ -12,20 +13,11 @@ namespace Verifiable.JCose.Sd;
 /// </typeparam>
 /// <remarks>
 /// <para>
-/// <strong>Token Structure:</strong>
+/// The token owns its <see cref="SdDisclosure"/> instances. Disposing the token
+/// disposes every disclosure (and therefore every salt). Selection and key-binding
+/// operations produce new tokens that own freshly-allocated copies of the disclosures
+/// — the source token remains valid and independently disposable.
 /// </para>
-/// <code>
-/// ┌─────────────────────────────────────────────────────────────────────────┐
-/// │                           SdToken Structure                             │
-/// ├─────────────────────────────────────────────────────────────────────────┤
-/// │                                                                         │
-/// │  ┌──────────────────┐   ┌─────────────┐   ┌─────────────────────────┐  │
-/// │  │  IssuerSigned    │ + │ Disclosures │ + │ KeyBinding (optional)   │  │
-/// │  │  (JWT or CWT)    │   │ [D1,D2,...] │   │ (KB-JWT or KB-CWT)      │  │
-/// │  └──────────────────┘   └─────────────┘   └─────────────────────────┘  │
-/// │                                                                         │
-/// └─────────────────────────────────────────────────────────────────────────┘
-/// </code>
 /// <para>
 /// <strong>Wire Format (SD-JWT):</strong>
 /// </para>
@@ -33,104 +25,58 @@ namespace Verifiable.JCose.Sd;
 /// Without key binding: &lt;issuer-jwt&gt;~&lt;disclosure1&gt;~&lt;disclosure2&gt;~...~
 /// With key binding:    &lt;issuer-jwt&gt;~&lt;disclosure1&gt;~&lt;disclosure2&gt;~...~&lt;kb-jwt&gt;
 /// </code>
-/// <para>
-/// <strong>Selective Disclosure Flow:</strong>
-/// </para>
-/// <code>
-///                        ┌─────────┐
-///                        │ Issuer  │
-///                        └────┬────┘
-///                             │ Issues SD token with all disclosures
-///                             ▼
-///                        ┌─────────┐
-///                        │ Holder  │
-///                        └────┬────┘
-///                             │ Selects subset of disclosures
-///                             │ Optionally adds key binding
-///                             ▼
-///                        ┌─────────┐
-///                        │Verifier │
-///                        └─────────┘
-/// </code>
-/// <para>
-/// <strong>Usage:</strong>
-/// </para>
-/// <list type="bullet">
-/// <item><description>SD-JWT: <c>SdToken&lt;string&gt;</c> where <see cref="IssuerSigned"/> is the compact JWT serialization.</description></item>
-/// <item><description>SD-CWT: <c>SdToken&lt;ReadOnlyMemory&lt;byte&gt;&gt;</c> where <see cref="IssuerSigned"/> is the COSE_Sign1 bytes.</description></item>
-/// </list>
-/// <para>
-/// <strong>Thread Safety:</strong> This class is immutable and thread-safe.
-/// </para>
 /// </remarks>
-/// <example>
-/// <code>
-/// //Create an SD-JWT token.
-/// var disclosures = new[] { givenNameDisclosure, familyNameDisclosure };
-/// var token = new SdToken&lt;string&gt;(issuerJwt, disclosures);
-///
-/// //Create an SD-CWT token.
-/// var cwtToken = new SdToken&lt;ReadOnlyMemory&lt;byte&gt;&gt;(coseSign1Bytes, disclosures);
-///
-/// //Select disclosures for presentation.
-/// var presentation = token.SelectDisclosures(d => d.ClaimName == "given_name");
-///
-/// //Add key binding.
-/// var bound = token.WithKeyBinding(keyBindingJwt);
-/// </code>
-/// </example>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public class SdToken<TEnvelope>: IEquatable<SdToken<TEnvelope>> where TEnvelope : notnull
+public class SdToken<TEnvelope>: IEquatable<SdToken<TEnvelope>>, IDisposable where TEnvelope : notnull
 {
-    /// <summary>
-    /// The issuer-signed payload (JWT string or CWT bytes).
-    /// </summary>
-    /// <remarks>
-    /// For SD-JWT, this is the compact serialization of the JWT (header.payload.signature).
-    /// For SD-CWT, this is the CBOR-encoded COSE_Sign1 bytes.
-    /// </remarks>
+    private bool disposed;
+
+
+    /// <summary>The issuer-signed payload (JWT string or CWT bytes).</summary>
     public TEnvelope IssuerSigned { get; }
 
-    /// <summary>
-    /// The disclosures included in this token.
-    /// </summary>
-    /// <remarks>
-    /// For issuance, this contains all disclosures.
-    /// For presentation, this contains only the selected disclosures.
-    /// </remarks>
+    /// <summary>The disclosures included in this token.</summary>
     public IReadOnlyList<SdDisclosure> Disclosures { get; }
 
-    /// <summary>
-    /// The key binding proof, or <c>null</c> if not present.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Key binding proves possession of a private key corresponding to a public key
-    /// embedded in the issuer-signed payload (in the <c>cnf</c> claim).
-    /// </para>
-    /// <para>
-    /// For SD-JWT, this is a KB-JWT (typ: kb+jwt).
-    /// For SD-CWT, this is a KB-CWT.
-    /// </para>
-    /// </remarks>
+    /// <summary>The key binding proof, or <c>null</c> if not present.</summary>
     public TEnvelope? KeyBinding { get; }
 
-    /// <summary>
-    /// Whether this token has key binding.
-    /// </summary>
+    /// <summary>Whether this token has key binding.</summary>
     public bool HasKeyBinding => KeyBinding is not null;
 
 
     /// <summary>
-    /// Creates a new selective disclosure token.
+    /// Creates a new selective disclosure token, taking ownership of the supplied disclosures.
     /// </summary>
     /// <param name="issuerSigned">The issuer-signed payload.</param>
-    /// <param name="disclosures">The disclosures.</param>
+    /// <param name="disclosures">
+    /// The disclosures. Ownership of each disclosure transfers to the new token —
+    /// callers must not dispose them after calling this constructor. Disposing the
+    /// token disposes every disclosure.
+    /// </param>
     /// <param name="keyBinding">Optional key binding proof.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="issuerSigned"/> or <paramref name="disclosures"/> is null.
+    /// In that case any non-null disclosures already in the list are disposed before the
+    /// exception propagates.
+    /// </exception>
     public SdToken(TEnvelope issuerSigned, IReadOnlyList<SdDisclosure> disclosures, TEnvelope? keyBinding = default)
     {
-        ArgumentNullException.ThrowIfNull(issuerSigned);
-        ArgumentNullException.ThrowIfNull(disclosures);
+        if(issuerSigned is null || disclosures is null)
+        {
+            //Dispose any disclosures the caller handed in before throwing — caller
+            //has already transferred ownership.
+            if(disclosures is not null)
+            {
+                foreach(SdDisclosure d in disclosures)
+                {
+                    d?.Dispose();
+                }
+            }
+
+            ArgumentNullException.ThrowIfNull(issuerSigned);
+            ArgumentNullException.ThrowIfNull(disclosures);
+        }
 
         IssuerSigned = issuerSigned;
         Disclosures = disclosures;
@@ -139,71 +85,208 @@ public class SdToken<TEnvelope>: IEquatable<SdToken<TEnvelope>> where TEnvelope 
 
 
     /// <summary>
-    /// Creates a new token with a subset of disclosures.
+    /// Creates a new token with a subset of disclosures, copying each selected
+    /// disclosure so the new token owns its own independent copies.
     /// </summary>
     /// <param name="selector">Function to select which disclosures to include.</param>
-    /// <returns>A new token with only the selected disclosures.</returns>
-    /// <remarks>
-    /// The issuer-signed payload is preserved. Key binding is removed since
-    /// it would need to be recomputed for the new disclosure set.
-    /// </remarks>
-    public SdToken<TEnvelope> SelectDisclosures(Func<SdDisclosure, bool> selector)
+    /// <param name="pool">Memory pool to allocate the copies' salt buffers from.</param>
+    /// <returns>
+    /// A new token whose disclosures are fresh copies. The source token remains valid.
+    /// Key binding is not carried over — it would need to be recomputed for the new
+    /// disclosure set.
+    /// </returns>
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown when this token has been disposed.
+    /// </exception>
+    public SdToken<TEnvelope> SelectDisclosures(Func<SdDisclosure, bool> selector, MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(selector);
+        ArgumentNullException.ThrowIfNull(pool);
+        ObjectDisposedException.ThrowIf(disposed, this);
 
-        var selected = Disclosures.Where(selector).ToList();
-        return new SdToken<TEnvelope>(IssuerSigned, selected);
+        var copies = new List<SdDisclosure>();
+
+        try
+        {
+            foreach(SdDisclosure d in Disclosures)
+            {
+                if(selector(d))
+                {
+                    copies.Add(d.CopyWithFreshSalt(pool));
+                }
+            }
+
+            return new SdToken<TEnvelope>(IssuerSigned, copies);
+        }
+        catch
+        {
+            //Construction or copy failed — dispose any copies already made.
+            foreach(SdDisclosure copy in copies)
+            {
+                copy.Dispose();
+            }
+            throw;
+        }
     }
 
 
     /// <summary>
-    /// Creates a new token with the specified disclosures.
+    /// Creates a new token with the specified disclosures, copying each so the new
+    /// token owns its own independent copies. Each supplied disclosure must be
+    /// reference-equal to one in this token's <see cref="Disclosures"/> list.
     /// </summary>
-    /// <param name="disclosures">The disclosures to include.</param>
-    /// <returns>A new token with the specified disclosures.</returns>
+    /// <param name="disclosures">The disclosures to include (must be from this token).</param>
+    /// <param name="pool">Memory pool to allocate the copies' salt buffers from.</param>
+    /// <returns>A new token whose disclosures are fresh copies.</returns>
     /// <exception cref="ArgumentException">
-    /// Thrown when a disclosure is not present in this token.
+    /// Thrown when a supplied disclosure is not present in this token.
     /// </exception>
-    public SdToken<TEnvelope> SelectDisclosures(IEnumerable<SdDisclosure> disclosures)
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown when this token has been disposed.
+    /// </exception>
+    public SdToken<TEnvelope> SelectDisclosures(IEnumerable<SdDisclosure> disclosures, MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(disclosures);
+        ArgumentNullException.ThrowIfNull(pool);
+        ObjectDisposedException.ThrowIf(disposed, this);
 
-        var selected = disclosures.ToList();
+        var requested = disclosures.ToList();
 
-        foreach(SdDisclosure disclosure in selected)
+        foreach(SdDisclosure d in requested)
         {
-            if(!Disclosures.Contains(disclosure))
+            if(!Disclosures.Contains(d))
             {
                 throw new ArgumentException(
-                    $"Disclosure not present in token: {disclosure}",
+                    $"Disclosure not present in token: {d}",
                     nameof(disclosures));
             }
         }
 
-        return new SdToken<TEnvelope>(IssuerSigned, selected);
+        var copies = new List<SdDisclosure>();
+
+        try
+        {
+            foreach(SdDisclosure d in requested)
+            {
+                copies.Add(d.CopyWithFreshSalt(pool));
+            }
+
+            return new SdToken<TEnvelope>(IssuerSigned, copies);
+        }
+        catch
+        {
+            foreach(SdDisclosure copy in copies)
+            {
+                copy.Dispose();
+            }
+            throw;
+        }
     }
 
 
     /// <summary>
-    /// Creates a new token with key binding attached.
+    /// Creates a new token with key binding attached. The new token gets fresh copies
+    /// of all disclosures; the source token remains valid.
     /// </summary>
     /// <param name="keyBinding">The key binding proof.</param>
-    /// <returns>A new token with key binding.</returns>
-    public SdToken<TEnvelope> WithKeyBinding(TEnvelope keyBinding)
+    /// <param name="pool">Memory pool to allocate the copies' salt buffers from.</param>
+    /// <returns>A new token with key binding and copied disclosures.</returns>
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown when this token has been disposed.
+    /// </exception>
+    public SdToken<TEnvelope> WithKeyBinding(TEnvelope keyBinding, MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(keyBinding);
+        ArgumentNullException.ThrowIfNull(pool);
+        ObjectDisposedException.ThrowIf(disposed, this);
 
-        return new SdToken<TEnvelope>(IssuerSigned, Disclosures, keyBinding);
+        var copies = new List<SdDisclosure>();
+
+        try
+        {
+            foreach(SdDisclosure d in Disclosures)
+            {
+                copies.Add(d.CopyWithFreshSalt(pool));
+            }
+
+            return new SdToken<TEnvelope>(IssuerSigned, copies, keyBinding);
+        }
+        catch
+        {
+            foreach(SdDisclosure copy in copies)
+            {
+                copy.Dispose();
+            }
+            throw;
+        }
     }
 
 
     /// <summary>
-    /// Creates a new token without key binding.
+    /// Creates a new token without key binding. The new token gets fresh copies of
+    /// all disclosures; the source token remains valid.
     /// </summary>
-    /// <returns>A new token without key binding.</returns>
-    public SdToken<TEnvelope> WithoutKeyBinding()
+    /// <param name="pool">Memory pool to allocate the copies' salt buffers from.</param>
+    /// <returns>A new token without key binding and with copied disclosures.</returns>
+    public SdToken<TEnvelope> WithoutKeyBinding(MemoryPool<byte> pool)
     {
-        return new SdToken<TEnvelope>(IssuerSigned, Disclosures);
+        ArgumentNullException.ThrowIfNull(pool);
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        var copies = new List<SdDisclosure>();
+
+        try
+        {
+            foreach(SdDisclosure d in Disclosures)
+            {
+                copies.Add(d.CopyWithFreshSalt(pool));
+            }
+
+            return new SdToken<TEnvelope>(IssuerSigned, copies);
+        }
+        catch
+        {
+            foreach(SdDisclosure copy in copies)
+            {
+                copy.Dispose();
+            }
+            throw;
+        }
+    }
+
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+
+    /// <summary>
+    /// Releases the disclosures owned by this token.
+    /// </summary>
+    /// <param name="disposing">
+    /// <see langword="true"/> when called from <see cref="Dispose()"/>;
+    /// <see langword="false"/> when called from a finalizer (no finalizer is declared
+    /// on this type, so this path is not taken under normal conditions).
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if(disposed)
+        {
+            return;
+        }
+
+        disposed = true;
+
+        if(disposing)
+        {
+            foreach(SdDisclosure d in Disclosures)
+            {
+                d.Dispose();
+            }
+        }
     }
 
 

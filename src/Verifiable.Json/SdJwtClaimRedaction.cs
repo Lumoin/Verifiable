@@ -1,4 +1,6 @@
-﻿using System.Text.Json;
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -79,18 +81,25 @@ public static class SdJwtClaimRedaction
     /// </remarks>
     /// <param name="credentialJson">The credential as a JSON string.</param>
     /// <param name="disclosablePaths">Paths to claims that should become selectively disclosable.</param>
-    /// <param name="saltFactory">Factory for generating cryptographic salt bytes for each disclosure.</param>
+    /// <param name="generateSalt">
+    /// Delegate that allocates and fills a <see cref="Salt"/> per disclosable claim. Each
+    /// returned <see cref="Salt"/>'s ownership transfers to the disclosure produced from
+    /// it; if redaction fails partway through, the partially-built disclosures are
+    /// disposed before the exception propagates.
+    /// </param>
     /// <returns>
     /// A tuple containing the mandatory claims payload (without <c>_sd</c>) and the disclosures.
+    /// Caller owns the returned disclosures and must dispose each (typically by handing
+    /// them to an <see cref="SdToken{TEnvelope}"/> whose disposal flows to them).
     /// </returns>
     public static (JwtPayload Payload, IReadOnlyList<SdDisclosure> Disclosures) Redact(
         string credentialJson,
         IReadOnlySet<CredentialPath> disclosablePaths,
-        SaltFactoryDelegate saltFactory)
+        GenerateDisclosureSaltDelegate generateSalt)
     {
         ArgumentException.ThrowIfNullOrEmpty(credentialJson);
         ArgumentNullException.ThrowIfNull(disclosablePaths);
-        ArgumentNullException.ThrowIfNull(saltFactory);
+        ArgumentNullException.ThrowIfNull(generateSalt);
 
         using JsonDocument doc = JsonDocument.Parse(credentialJson);
         JsonElement root = doc.RootElement;
@@ -110,18 +119,31 @@ public static class SdJwtClaimRedaction
         var digestsByParent = new Dictionary<CredentialPath, List<string>>();
         var payload = new JwtPayload();
 
-        WalkObject(
-            root,
-            CredentialPath.Root,
-            groupedPaths,
-            saltFactory,
-            serializeDisclosure: null,
-            computeDigest: null,
-            encoder: null,
-            hashAlgorithm: null,
-            payload,
-            allDisclosures,
-            digestsByParent);
+        try
+        {
+            WalkObject(
+                root,
+                CredentialPath.Root,
+                groupedPaths,
+                generateSalt,
+                serializeDisclosure: null,
+                computeDigest: null,
+                encoder: null,
+                hashAlgorithm: null,
+                payload,
+                allDisclosures,
+                digestsByParent);
+        }
+        catch
+        {
+            //If walking fails partway through, dispose every disclosure that was
+            //already added. The caller never received them; we own them here.
+            foreach(SdDisclosure d in allDisclosures)
+            {
+                d.Dispose();
+            }
+            throw;
+        }
 
         //Phase 3 skipped — no _sd or _sd_alg placement.
 
@@ -138,14 +160,13 @@ public static class SdJwtClaimRedaction
     /// and nested (W3C VC with <c>credentialSubject</c>) structures are handled correctly.
     /// </param>
     /// <param name="disclosablePaths">
-    /// Paths to claims that should become selectively disclosable. These are removed from
-    /// the mandatory payload and their digests are placed in the <c>_sd</c> array at the
-    /// appropriate nesting level.
+    /// Paths to claims that should become selectively disclosable.
     /// </param>
-    /// <param name="saltFactory">
-    /// Factory for generating cryptographic salt bytes for each disclosure. For production,
-    /// use <see cref="SaltGenerator.Create(int)"/>. For deterministic testing, provide
-    /// a factory that returns pre-determined byte arrays.
+    /// <param name="generateSalt">
+    /// Delegate that allocates and fills a <see cref="Salt"/> per disclosable claim.
+    /// Each returned <see cref="Salt"/>'s ownership transfers to the disclosure produced
+    /// from it; if redaction fails partway through, the partially-built disclosures are
+    /// disposed before the exception propagates.
     /// </param>
     /// <param name="serializeDisclosure">
     /// Delegate for serializing a disclosure to its Base64Url-encoded form.
@@ -156,22 +177,10 @@ public static class SdJwtClaimRedaction
     /// <param name="encoder">Delegate for Base64Url encoding.</param>
     /// <param name="hashAlgorithm">
     /// The hash algorithm identifier in IANA format (e.g., <c>"sha-256"</c>).
-    /// Stored in the <c>_sd_alg</c> claim at the payload root per
-    /// <see href="https://datatracker.ietf.org/doc/rfc9901/#section-5.1.1">RFC 9901 Section 5.1.1</see>.
     /// </param>
     /// <returns>
-    /// A tuple containing:
-    /// <list type="bullet">
-    /// <item><description>
-    /// <strong>Payload:</strong> A <see cref="JwtPayload"/> with all non-disclosable claims,
-    /// <c>_sd</c> digest arrays embedded at the correct nesting levels, and <c>_sd_alg</c>
-    /// at the root. This payload is ready to sign directly.
-    /// </description></item>
-    /// <item><description>
-    /// <strong>Disclosures:</strong> One <see cref="SdDisclosure"/> per disclosable path,
-    /// each containing a fresh salt, the claim name, and the extracted value.
-    /// </description></item>
-    /// </list>
+    /// A tuple containing the ready-to-sign payload and the disclosures. Caller owns
+    /// the returned disclosures and must dispose each.
     /// </returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="credentialJson"/> is not a JSON object.
@@ -179,7 +188,7 @@ public static class SdJwtClaimRedaction
     public static (JwtPayload Payload, IReadOnlyList<SdDisclosure> Disclosures) Redact(
         string credentialJson,
         IReadOnlySet<CredentialPath> disclosablePaths,
-        SaltFactoryDelegate saltFactory,
+        GenerateDisclosureSaltDelegate generateSalt,
         SerializeDisclosureDelegate<SdDisclosure> serializeDisclosure,
         ComputeDisclosureDigestDelegate computeDigest,
         EncodeDelegate encoder,
@@ -187,7 +196,7 @@ public static class SdJwtClaimRedaction
     {
         ArgumentException.ThrowIfNullOrEmpty(credentialJson);
         ArgumentNullException.ThrowIfNull(disclosablePaths);
-        ArgumentNullException.ThrowIfNull(saltFactory);
+        ArgumentNullException.ThrowIfNull(generateSalt);
         ArgumentNullException.ThrowIfNull(serializeDisclosure);
         ArgumentNullException.ThrowIfNull(computeDigest);
         ArgumentNullException.ThrowIfNull(encoder);
@@ -210,18 +219,31 @@ public static class SdJwtClaimRedaction
         var digestsByParent = new Dictionary<CredentialPath, List<string>>();
         var payload = new JwtPayload();
 
-        WalkObject(
-            root,
-            CredentialPath.Root,
-            groupedPaths,
-            saltFactory,
-            serializeDisclosure,
-            computeDigest,
-            encoder,
-            hashAlgorithm,
-            payload,
-            allDisclosures,
-            digestsByParent);
+        try
+        {
+            WalkObject(
+                root,
+                CredentialPath.Root,
+                groupedPaths,
+                generateSalt,
+                serializeDisclosure,
+                computeDigest,
+                encoder,
+                hashAlgorithm,
+                payload,
+                allDisclosures,
+                digestsByParent);
+        }
+        catch
+        {
+            //If walking fails partway through, dispose every disclosure that was
+            //already added. The caller never received them; we own them here.
+            foreach(SdDisclosure d in allDisclosures)
+            {
+                d.Dispose();
+            }
+            throw;
+        }
 
         //Phase 3: Place _sd arrays at the correct locations and add _sd_alg.
         DigestPlacement.PlaceDigests(payload, digestsByParent, hashAlgorithm);
@@ -237,7 +259,7 @@ public static class SdJwtClaimRedaction
         JsonElement element,
         CredentialPath currentPath,
         IReadOnlyDictionary<CredentialPath, IReadOnlySet<string>> groupedPaths,
-        SaltFactoryDelegate saltFactory,
+        GenerateDisclosureSaltDelegate generateSalt,
         SerializeDisclosureDelegate<SdDisclosure>? serializeDisclosure,
         ComputeDisclosureDigestDelegate? computeDigest,
         EncodeDelegate? encoder,
@@ -253,10 +275,12 @@ public static class SdJwtClaimRedaction
         {
             if(disclosableAtThisLevel is not null && disclosableAtThisLevel.Contains(prop.Name))
             {
-                //This property is disclosable — create disclosure, compute digest.
+                //This property is disclosable — generate salt, create disclosure, compute digest.
+                //Salt ownership transfers into SdDisclosure.CreateProperty; CreateProperty
+                //disposes the salt on construction failure (e.g., null/empty claim name).
                 object? value = JsonElementConversion.Convert(prop.Value);
-                byte[] salt = saltFactory();
-                var disclosure = SdDisclosure.CreateProperty(salt, prop.Name, value);
+                Salt salt = generateSalt();
+                SdDisclosure disclosure = SdDisclosure.CreateProperty(salt, prop.Name, value);
                 allDisclosures.Add(disclosure);
 
                 if(serializeDisclosure is not null && computeDigest is not null && encoder is not null)
@@ -285,7 +309,7 @@ public static class SdJwtClaimRedaction
                         prop.Value,
                         childPath,
                         groupedPaths,
-                        saltFactory,
+                        generateSalt,
                         serializeDisclosure,
                         computeDigest,
                         encoder,

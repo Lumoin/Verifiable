@@ -1,10 +1,8 @@
 using System.Buffers;
-using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -123,10 +121,10 @@ internal sealed class JwsCredentialSecuringTests
         Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual("EdDSA", header[JwkProperties.Alg].ToString());
-        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[JwkProperties.Typ].ToString());
-        Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, header[JwkProperties.Kid].ToString());
-        Assert.AreEqual(WellKnownMediaTypes.Application.Vc, header[JwkProperties.Cty].ToString());
+        Assert.AreEqual("EdDSA", header[WellKnownJwkValues.Alg].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[WellKnownJwkValues.Typ].ToString());
+        Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, header[WellKnownJwkValues.Kid].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Application.Vc, header[WellKnownJwkValues.Cty].ToString());
     }
 
 
@@ -246,7 +244,7 @@ internal sealed class JwsCredentialSecuringTests
         Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcLdJwt, header[JwkProperties.Typ].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcLdJwt, header[WellKnownJwkValues.Typ].ToString());
     }
 
 
@@ -274,7 +272,7 @@ internal sealed class JwsCredentialSecuringTests
         Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual(WellKnownMediaTypes.Application.Vp, header[JwkProperties.Cty].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Application.Vp, header[WellKnownJwkValues.Cty].ToString());
     }
 
 

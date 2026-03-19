@@ -1,5 +1,3 @@
-﻿using System.Security.Cryptography;
-
 namespace Verifiable.Cryptography;
 
 /// <summary>
@@ -29,7 +27,7 @@ public delegate DecodeDelegate DecoderSelector(Type keyFormatType);
 /// </para>
 ///
 /// <para>
-/// <strong>Architecture Context</strong>
+/// <strong>Architecture context.</strong>
 /// </para>
 /// <code>
 /// +------------------------------------------------------------------+
@@ -54,17 +52,30 @@ public delegate DecodeDelegate DecoderSelector(Type keyFormatType);
 /// </code>
 ///
 /// <para>
-/// <strong>Relationship to CryptoFunctionRegistry</strong>
-/// </para>
-/// <para>
+/// <strong>Relationship to other registries.</strong>
 /// While <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> handles
-/// cryptographic operations (signing, verification), this class handles format transformations.
-/// They are independent but complementary: you might decode a Base64Url-encoded key, then
-/// use the registry to sign data with it.
+/// signing and verification, and <see cref="CryptographicKeyFactory"/> holds entropy
+/// and digest delegates, this class handles format transformations only. They are
+/// independent but complementary: a caller might decode a Base64Url-encoded key,
+/// then use the registries to sign data with it.
 /// </para>
 ///
 /// <para>
-/// <strong>Initialization</strong>
+/// <strong>Hashing has moved.</strong> Earlier versions of this class also held a
+/// <c>DefaultHashFunctionSelector</c> exposing a <c>HashFunction</c> delegate
+/// (<c>byte[] → byte[]</c>). That surface has been deleted. Hashing now flows
+/// through <see cref="DigestValue.Compute"/> with a span-based, pool-aware
+/// <see cref="HashFunctionDelegate"/>; the operation-level entry point with
+/// telemetry, CBOM stamping, and event emission is
+/// <see cref="ComputeDigestDelegate"/>, registered by delegate type on
+/// <see cref="CryptographicKeyFactory"/>. Callers that previously called
+/// <c>DefaultHashFunctionSelector.Select(...)</c> directly should accept a
+/// <see cref="ComputeDigestDelegate"/> as a parameter from above instead of
+/// reaching into a global selector.
+/// </para>
+///
+/// <para>
+/// <strong>Initialization.</strong>
 /// </para>
 /// <para>
 /// Initialize using <see cref="CryptoLibrary.InitializeProviders"/> before first use.
@@ -78,9 +89,7 @@ public delegate DecodeDelegate DecoderSelector(Type keyFormatType);
 ///         var t when t == typeof(Base58Btc) => Base58BtcEncode,
 ///         _ => throw new NotSupportedException($"Format {format} not supported.")
 ///     },
-///     decoderSelector: format => ...,
-///     hashFunctionSelector: algorithm => ...
-/// );
+///     decoderSelector: format => ...);
 /// </code>
 /// </remarks>
 public static class DefaultCoderSelector
@@ -121,102 +130,65 @@ public static class DefaultCoderSelector
 
 
 /// <summary>
-/// Delegate that computes a cryptographic hash of the input data.
-/// </summary>
-/// <param name="input">The data to hash.</param>
-/// <returns>The hash digest.</returns>
-public delegate byte[] HashFunction(byte[] input);
-
-
-/// <summary>
-/// Delegate that selects a hash function based on algorithm name.
-/// </summary>
-/// <param name="hashAlgorithm">The hash algorithm to use.</param>
-/// <returns>A hash function for the specified algorithm.</returns>
-public delegate HashFunction HashFunctionSelector(HashAlgorithmName hashAlgorithm);
-
-
-/// <summary>
-/// Provides hash function selection based on algorithm name.
+/// Initialization point for the format-encoder/decoder selectors.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This class follows the same pattern as <see cref="DefaultCoderSelector"/> but for
-/// hash functions. It provides a default implementation for SHA-256 but can be extended
-/// via <see cref="CryptoLibrary.InitializeProviders"/> to support additional algorithms.
-/// </para>
-/// </remarks>
-public static class DefaultHashFunctionSelector
-{
-    /// <summary>
-    /// Gets or sets the delegate that selects a hash function based on algorithm.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The default implementation supports SHA-256. Override via
-    /// <see cref="CryptoLibrary.InitializeProviders"/> to add support for other algorithms.
-    /// </para>
-    /// </remarks>
-    public static HashFunctionSelector Select { get; set; } = (HashAlgorithmName hashAlgorithm) =>
-    {
-        if(hashAlgorithm.Equals(HashAlgorithmName.SHA256))
-        {
-            return SHA256.HashData;
-        }
-
-        throw new ArgumentException($"No hash function available for algorithm: {hashAlgorithm}.");
-    };
-}
-
-
-/// <summary>
-/// Initialization point for cryptographic providers used throughout the library.
-/// </summary>
-/// <remarks>
-/// <para>
-/// This class serves as the central initialization point for all selector-based
-/// cryptographic infrastructure. Call <see cref="InitializeProviders"/> early in
-/// application startup, before any cryptographic operations are performed.
+/// Call <see cref="InitializeProviders"/> early in application startup, before any
+/// code path that needs encoder or decoder selection runs.
 /// </para>
 ///
 /// <para>
-/// <strong>Initialization Order</strong>
+/// <strong>Initialization order.</strong>
 /// </para>
 /// <para>
 /// When setting up the library, initialize in this order:
 /// </para>
 /// <code>
-/// // 1. Initialize format encoders/decoders and hash functions
-/// CryptoLibrary.InitializeProviders(encoderSelector, decoderSelector, hashSelector);
+/// // 1. Format encoders and decoders.
+/// CryptoLibrary.InitializeProviders(encoderSelector, decoderSelector);
 ///
-/// // 2. Initialize cryptographic function registry
+/// // 2. Signing and verification registry.
 /// CryptoFunctionRegistry&lt;CryptoAlgorithm, Purpose&gt;.Initialize(signingMatcher, verificationMatcher);
 ///
-/// // 3. Initialize key factory (optional, if using object-oriented key API)
-/// CryptographicKeyFactory.Initialize(verificationMapping, signingMapping);
+/// // 3. Entropy and digest delegates registered by delegate type.
+/// CryptographicKeyFactory.RegisterFunction(typeof(GenerateNonceDelegate), MicrosoftEntropyFunctions.GenerateNonce);
+/// CryptographicKeyFactory.RegisterFunction(typeof(GenerateSaltDelegate),  MicrosoftEntropyFunctions.GenerateSalt);
+/// CryptographicKeyFactory.RegisterFunction(typeof(ComputeDigestDelegate), MicrosoftEntropyFunctions.ComputeDigest);
+///
+/// // 4. Key agreement registry, where used.
+/// KeyAgreementFunctionRegistry&lt;CryptoAlgorithm, Purpose&gt;.Initialize(...);
 /// </code>
 /// </remarks>
 public static class CryptoLibrary
 {
     /// <summary>
-    /// Initializes the cryptographic providers with the specified selectors.
+    /// Initializes the format-encoder/decoder selectors.
     /// </summary>
     /// <param name="encoderSelector">A delegate that selects encoders based on key format type.</param>
     /// <param name="decoderSelector">A delegate that selects decoders based on key format type.</param>
-    /// <param name="hashFunctionSelector">A delegate that selects hash functions based on algorithm.</param>
     /// <remarks>
     /// <para>
     /// This method is not thread-safe. Call it only during application startup before
     /// concurrent access begins.
     /// </para>
+    /// <para>
+    /// Earlier versions accepted a third <c>hashFunctionSelector</c> parameter wiring a
+    /// global <c>HashFunction</c> delegate (<c>byte[] → byte[]</c>). That surface has been
+    /// deleted; hashing flows through
+    /// <see cref="CryptographicKeyFactory"/>-registered
+    /// <see cref="ComputeDigestDelegate"/> instances, threaded down from the high layer
+    /// that resolves them.
+    /// </para>
     /// </remarks>
     public static void InitializeProviders(
         EncoderSelector encoderSelector,
-        DecoderSelector decoderSelector,
-        HashFunctionSelector hashFunctionSelector)
+        DecoderSelector decoderSelector)
     {
+        ArgumentNullException.ThrowIfNull(encoderSelector);
+        ArgumentNullException.ThrowIfNull(decoderSelector);
+
         DefaultCoderSelector.SelectEncoder = encoderSelector;
         DefaultCoderSelector.SelectDecoder = decoderSelector;
-        DefaultHashFunctionSelector.Select = hashFunctionSelector;
     }
 }

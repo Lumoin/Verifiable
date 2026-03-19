@@ -1,5 +1,4 @@
-﻿using Verifiable.JCose;
-using Verifiable.Jose;
+using Verifiable.JCose;
 
 namespace Verifiable.Tests.TestDataProviders
 {
@@ -21,7 +20,7 @@ namespace Verifiable.Tests.TestDataProviders
 
         public static Dictionary<string, object> AddTypParameter(Dictionary<string, object> header)
         {
-            header.Add(JwkProperties.Typ, "JWT");
+            header.Add(WellKnownJwkValues.Typ, "JWT");
             return header;
         }
 
@@ -104,17 +103,17 @@ namespace Verifiable.Tests.TestDataProviders
     {
         private static Dictionary<string, object> ES256Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Es256 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Es256 }
         };
 
         private static Dictionary<string, object> ES384Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Es384 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Es384 }
         };
 
         private static Dictionary<string, object> ES521Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Es512 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Es512 }
         };
 
         /*
@@ -125,47 +124,47 @@ namespace Verifiable.Tests.TestDataProviders
 
         private static Dictionary<string, object> RsaRS256Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Rs256 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Rs256 }
         };
 
         private static Dictionary<string, object> RsaRS384Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Rs384 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Rs384 }
         };
 
         private static Dictionary<string, object> RsaRS512Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Rs512 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Rs512 }
         };
 
         private static Dictionary<string, object> RsaPS256Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Ps256 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Ps256 }
         };
 
         private static Dictionary<string, object> RsaPS384Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Ps384 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Ps384 }
         };
 
         private static Dictionary<string, object> RsaPS512Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Ps512 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Ps512 }
         };
 
         private static Dictionary<string, object> Hs256Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Hs256 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Hs256 }
         };
 
         private static Dictionary<string, object> Hs384Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Hs384 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Hs384 }
         };
 
         private static Dictionary<string, object> Hs512Header => new(StringComparer.InvariantCultureIgnoreCase)
         {
-            { JwkProperties.Alg, WellKnownJwaValues.Hs512 }
+            { WellKnownJwkValues.Alg, WellKnownJwaValues.Hs512 }
         };
 
 

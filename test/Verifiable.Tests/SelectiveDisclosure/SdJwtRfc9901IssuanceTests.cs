@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Text;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
+using Verifiable.JCose;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.DataIntegrity;
 using Verifiable.Tests.TestInfrastructure;
@@ -37,9 +38,9 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            ["iss"] = "did:example:76e12ec712ebc6f1c221ebfeb1f",
-            ["vct"] = "ExampleDegreeCredential",
-            ["iat"] = 1725244200,
+            [WellKnownJwtClaims.Iss] = "did:example:76e12ec712ebc6f1c221ebfeb1f",
+            [WellKnownJwtClaims.Vct] = "ExampleDegreeCredential",
+            [WellKnownJwtClaims.Iat] = 1725244200,
             ["given_name"] = "Alice",
             ["family_name"] = "Smith"
         };
@@ -51,7 +52,7 @@ internal sealed class SdJwtRfc9901IssuanceTests
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
             disclosablePaths,
-            SaltGenerator.Create,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
@@ -74,7 +75,7 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            ["iss"] = "https://issuer.example.com",
+            [WellKnownJwtClaims.Iss] = "https://issuer.example.com",
             ["address"] = new Dictionary<string, object>
             {
                 ["street"] = "Heidestrasse 17",
@@ -90,7 +91,7 @@ internal sealed class SdJwtRfc9901IssuanceTests
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
             disclosablePaths,
-            SaltGenerator.Create,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
@@ -109,14 +110,14 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            ["iss"] = "https://issuer.example.com",
-            ["vct"] = "IdentityCredential",
-            ["iat"] = 1700000000
+            [WellKnownJwtClaims.Iss] = "https://issuer.example.com",
+            [WellKnownJwtClaims.Vct] = "IdentityCredential",
+            [WellKnownJwtClaims.Iat] = 1700000000
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
             new HashSet<CredentialPath>(),
-            SaltGenerator.Create,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
@@ -134,7 +135,7 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            ["iss"] = "https://issuer.example.com",
+            [WellKnownJwtClaims.Iss] = "https://issuer.example.com",
             ["address"] = new Dictionary<string, object>
             {
                 ["street"] = "Heidestrasse 17",
@@ -148,7 +149,7 @@ internal sealed class SdJwtRfc9901IssuanceTests
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
             disclosablePaths,
-            SaltGenerator.Create,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,

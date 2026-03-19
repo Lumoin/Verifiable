@@ -5,6 +5,7 @@ using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.DataIntegrity;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -46,7 +47,7 @@ internal sealed class CredentialSdIssuanceTests
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
             disclosablePaths,
-            SaltGenerator.Create,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
@@ -70,7 +71,7 @@ internal sealed class CredentialSdIssuanceTests
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
             disclosablePaths,
-            SaltGenerator.Create,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
@@ -94,7 +95,7 @@ internal sealed class CredentialSdIssuanceTests
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
             disclosablePaths,
-            SaltGenerator.Create,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,

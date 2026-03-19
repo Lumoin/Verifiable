@@ -1,71 +1,51 @@
-﻿using Verifiable.Jose;
+using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.Jwt
+namespace Verifiable.Tests.Jose
 {
     /// <summary>
-    /// Tests that canonicalization of JWK properies algorithms works correctly.
+    /// Tests that canonicalization of JWA algorithms works correctly.
     /// </summary>
     [TestClass]
-    internal sealed class JwkPropertiesTests
+    internal sealed class WellKnownJwaValuesTests
     {
         /// <summary>
         /// All of the well-known JWE algorithms should be recognized.
         /// </summary>
         /// <returns></returns>
-        public static IEnumerable<object[]> GetJwkProperties()
+        public static IEnumerable<object[]> GetJwaAlgorithms()
         {
-            yield return new object[] { JwkProperties.Acr, new Func<string, bool>(JwkProperties.IsAcr) };
-            yield return new object[] { JwkProperties.Amr, new Func<string, bool>(JwkProperties.IsAmr) };
-            yield return new object[] { JwkProperties.Aud, new Func<string, bool>(JwkProperties.IsAud) };
-            yield return new object[] { JwkProperties.Azp, new Func<string, bool>(JwkProperties.IsAzp) };
-            yield return new object[] { JwkProperties.Crv, new Func<string, bool>(JwkProperties.IsCrv) };
-            yield return new object[] { JwkProperties.D, new Func<string, bool>(JwkProperties.IsD) };
-            yield return new object[] { JwkProperties.Dp, new Func<string, bool>(JwkProperties.IsDp) };
-            yield return new object[] { JwkProperties.Dq, new Func<string, bool>(JwkProperties.IsDq) };
-            yield return new object[] { JwkProperties.E, new Func<string, bool>(JwkProperties.IsE) };
-            yield return new object[] { JwkProperties.Exp, new Func<string, bool>(JwkProperties.IsExp) };
-            yield return new object[] { JwkProperties.Iat, new Func<string, bool>(JwkProperties.IsIat) };
-            yield return new object[] { JwkProperties.Iss, new Func<string, bool>(JwkProperties.IsIss) };
-            yield return new object[] { JwkProperties.Jti, new Func<string, bool>(JwkProperties.IsJti) };
-            yield return new object[] { JwkProperties.K, new Func<string, bool>(JwkProperties.IsK) };
-            yield return new object[] { JwkProperties.Kty, new Func<string, bool>(JwkProperties.IsKty) };
-            yield return new object[] { JwkProperties.Use, new Func<string, bool>(JwkProperties.IsUse) };
-            yield return new object[] { JwkProperties.KeyOps, new Func<string, bool>(JwkProperties.IsKeyOps) };
-            yield return new object[] { JwkProperties.Alg, new Func<string, bool>(JwkProperties.IsAlg) };
-            yield return new object[] { JwkProperties.Kid, new Func<string, bool>(JwkProperties.IsKid) };
-            yield return new object[] { JwkProperties.X5u, new Func<string, bool>(JwkProperties.IsX5u) };
-            yield return new object[] { JwkProperties.X5c, new Func<string, bool>(JwkProperties.IsX5c) };
-            yield return new object[] { JwkProperties.X5t, new Func<string, bool>(JwkProperties.IsX5t) };
-            yield return new object[] { JwkProperties.X5tHashS256, new Func<string, bool>(JwkProperties.IsX5tHashS256) };
-            yield return new object[] { JwkProperties.Typ, new Func<string, bool>(JwkProperties.IsTyp) };
-            yield return new object[] { JwkProperties.Cty, new Func<string, bool>(JwkProperties.IsCty) };
-            yield return new object[] { JwkProperties.N, new Func<string, bool>(JwkProperties.IsN) };
-            yield return new object[] { JwkProperties.Nbf, new Func<string, bool>(JwkProperties.IsNbf) };
-            yield return new object[] { JwkProperties.P, new Func<string, bool>(JwkProperties.IsP) };
-            yield return new object[] { JwkProperties.Q, new Func<string, bool>(JwkProperties.IsQ) };
-            yield return new object[] { JwkProperties.Qi, new Func<string, bool>(JwkProperties.IsQi) };
-            yield return new object[] { JwkProperties.Roles, new Func<string, bool>(JwkProperties.IsRoles) };
-            yield return new object[] { JwkProperties.Sub, new Func<string, bool>(JwkProperties.IsSub) };
-            yield return new object[] { JwkProperties.Tenant, new Func<string, bool>(JwkProperties.IsTenant) };
-            yield return new object[] { JwkProperties.X, new Func<string, bool>(JwkProperties.IsX) };
-            yield return new object[] { JwkProperties.Y, new Func<string, bool>(JwkProperties.IsY) };
+            yield return new object[] { WellKnownJwaValues.None, new Func<string, bool>(WellKnownJwaValues.IsNone) };
+            yield return new object[] { WellKnownJwaValues.Hs256, new Func<string, bool>(WellKnownJwaValues.IsHs256) };
+            yield return new object[] {WellKnownJwaValues.Hs384, new Func<string, bool>(WellKnownJwaValues.IsHs384) };
+            yield return new object[] {WellKnownJwaValues.Hs512, new Func<string, bool>(WellKnownJwaValues.IsHs512) };
+            yield return new object[] {WellKnownJwaValues.Es256, new Func<string, bool>(WellKnownJwaValues.IsEs256) };
+            yield return new object[] {WellKnownJwaValues.Es384, new Func<string, bool>(WellKnownJwaValues.IsEs384) };
+            yield return new object[] {WellKnownJwaValues.Es512, new Func<string, bool>(WellKnownJwaValues.IsEs512) };
+            yield return new object[] {WellKnownJwaValues.Es256k1, new Func<string, bool>(WellKnownJwaValues.IsEs256k1) };
+            yield return new object[] {WellKnownJwaValues.Ps256, new Func<string, bool>(WellKnownJwaValues.IsPs256) };
+            yield return new object[] {WellKnownJwaValues.Ps384, new Func<string, bool>(WellKnownJwaValues.IsPs384) };
+            yield return new object[] {WellKnownJwaValues.Ps512, new Func<string, bool>(WellKnownJwaValues.IsPs512) };
+            yield return new object[] {WellKnownJwaValues.Rs256, new Func<string, bool>(WellKnownJwaValues.IsRs256) };
+            yield return new object[] {WellKnownJwaValues.Rs384, new Func<string, bool>(WellKnownJwaValues.IsRs384) };
+            yield return new object[] {WellKnownJwaValues.Rs512, new Func<string, bool>(WellKnownJwaValues.IsRs512) };
+            yield return new object[] {WellKnownJwaValues.EdDsa, new Func<string, bool>(WellKnownJwaValues.IsEdDsa) };
         }
 
 
         /// <summary>
-        /// Tests that all well-known JWK properies algorithm values are recognized correctly.
+        /// Tests that all well-known JWA algorithms are recognized.
         /// </summary>
-        /// <param name="correctAlgorithm">The correct to be used in test.</param>
-        /// <param name="isCorrectAlgorithm">The function that checks if the algorithm is recognized.</param>
+        /// <param name="algorithm">The algorithm to test.</param>
+        /// <param name="algorithmCheck">The function that checks if the algorithm is recognized.</param>
         [TestMethod]
-        [DynamicData(nameof(GetJwkProperties))]
+        [DynamicData(nameof(GetJwaAlgorithms))]
         public void JwaAlgorithmComparesCorrectly(string correctAlgorithm, Func<string, bool> isCorrectAlgorithm)
         {
             //A newly created instance should not reference the canonicalized version.
             //This means a different version even with the same case will not reference
             //the same object. This is a a premise check for the implementation of the
-            //JwkProperties.GetCanonicalizedValue that relies on this optimization
+            //WellKnownJwaValues.GetCanonicalizedValue that relies on this optimization
             //to avoid comparing the actual strings if the references are the same.
             string instanceAlgorithm = new(correctAlgorithm);
             Assert.IsFalse(object.ReferenceEquals(correctAlgorithm, instanceAlgorithm), "Instance created from canonical should not reference equal to it.");
@@ -76,7 +56,7 @@ namespace Verifiable.Tests.Jwt
             Assert.IsTrue(isCorrectAlgorithm(instanceAlgorithm), "Is<SomeAlgorithm> should compare correctly to canonicalized version even if instance.");
 
             //The canonicalized version should be the same as the original.
-            string canonicalizedVersion = JwkProperties.GetCanonicalizedValue(instanceAlgorithm);
+            string canonicalizedVersion = WellKnownJwaValues.GetCanonicalizedValue(instanceAlgorithm);
             Assert.IsTrue(object.ReferenceEquals(correctAlgorithm, canonicalizedVersion), "Canonicalized version should be the same as original.");
 
             //A case with a toggled letter should not be the same since it's both a different string

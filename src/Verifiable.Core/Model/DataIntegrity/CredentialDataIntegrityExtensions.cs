@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
@@ -166,6 +166,7 @@ public static class CredentialDataIntegrityExtensions
             CredentialDeserializeDelegate deserialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
+            ComputeDigestDelegate computeDigest,
             MemoryPool<byte> memoryPool,
             CancellationToken cancellationToken = default)
         {
@@ -178,6 +179,7 @@ public static class CredentialDataIntegrityExtensions
             ArgumentNullException.ThrowIfNull(deserialize, nameof(deserialize));
             ArgumentNullException.ThrowIfNull(serializeProofOptions, nameof(serializeProofOptions));
             ArgumentNullException.ThrowIfNull(encoder, nameof(encoder));
+            ArgumentNullException.ThrowIfNull(computeDigest, nameof(computeDigest));
             ArgumentNullException.ThrowIfNull(memoryPool, nameof(memoryPool));
 
             var proofCreatedString = DateTimeStampFormat.Format(proofCreated);
@@ -203,7 +205,12 @@ public static class CredentialDataIntegrityExtensions
 
             //Hash using the cryptosuite's hash algorithm.
             var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(cryptosuite.HashAlgorithm);
-            var hashFunction = DefaultHashFunctionSelector.Select(hashAlgorithm);
+            int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
+            var digestTag = new Tag(new Dictionary<Type, object>
+            {
+                [typeof(HashAlgorithmName)] = hashAlgorithm,
+                [typeof(Purpose)] = Purpose.Digest
+            });
 
             var credentialByteCount = Encoding.UTF8.GetByteCount(credentialCanonicalization.CanonicalForm);
             var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
@@ -217,15 +224,22 @@ public static class CredentialDataIntegrityExtensions
             System.Diagnostics.Debug.Assert(credentialBytesWritten == credentialByteCount, "Encoded byte count must match the pre-computed count.");
             System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
 
-            var credentialHash = hashFunction(credentialBytesOwner.Memory.Span[..credentialBytesWritten].ToArray());
-            var proofOptionsHash = hashFunction(proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten].ToArray());
+            (DigestValue credentialDigestValue, _) = computeDigest(
+                credentialBytesOwner.Memory.Span[..credentialBytesWritten],
+                digestByteLength, digestTag, memoryPool);
+            using DigestValue credentialDigest = credentialDigestValue;
+
+            (DigestValue proofOptionsDigestValue, _) = computeDigest(
+                proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten],
+                digestByteLength, digestTag, memoryPool);
+            using DigestValue proofOptionsDigest = proofOptionsDigestValue;
 
             //Combine hashes using memory pool: proofOptionsHash || credentialHash.
-            var combinedLength = proofOptionsHash.Length + credentialHash.Length;
+            var combinedLength = proofOptionsDigest.Length + credentialDigest.Length;
             using var hashDataOwner = memoryPool.Rent(combinedLength);
             var hashData = hashDataOwner.Memory.Span;
-            proofOptionsHash.CopyTo(hashData);
-            credentialHash.CopyTo(hashData.Slice(proofOptionsHash.Length));
+            proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData);
+            credentialDigest.AsReadOnlySpan().CopyTo(hashData.Slice(proofOptionsDigest.Length));
 
             //Sign using the private key (uses CryptoFunctionRegistry internally via Tag).
             using var signature = await privateKey.SignAsync(hashDataOwner.Memory, memoryPool)
@@ -308,6 +322,7 @@ public static class CredentialDataIntegrityExtensions
             CredentialDeserializeDelegate deserialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
             DecodeDelegate decoder,
+            ComputeDigestDelegate computeDigest,
             MemoryPool<byte> memoryPool,
             CancellationToken cancellationToken = default)
         {
@@ -318,6 +333,7 @@ public static class CredentialDataIntegrityExtensions
             ArgumentNullException.ThrowIfNull(deserialize, nameof(deserialize));
             ArgumentNullException.ThrowIfNull(serializeProofOptions, nameof(serializeProofOptions));
             ArgumentNullException.ThrowIfNull(decoder, nameof(decoder));
+            ArgumentNullException.ThrowIfNull(computeDigest, nameof(computeDigest));
             ArgumentNullException.ThrowIfNull(memoryPool, nameof(memoryPool));
 
             //Extract proof.
@@ -364,7 +380,12 @@ public static class CredentialDataIntegrityExtensions
                 .ConfigureAwait(false);
 
             var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
-            var hashFunction = DefaultHashFunctionSelector.Select(hashAlgorithm);
+            int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
+            var digestTag = new Tag(new Dictionary<Type, object>
+            {
+                [typeof(HashAlgorithmName)] = hashAlgorithm,
+                [typeof(Purpose)] = Purpose.Digest
+            });
 
             var credentialByteCount = Encoding.UTF8.GetByteCount(credentialCanonicalization.CanonicalForm);
             var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
@@ -378,15 +399,22 @@ public static class CredentialDataIntegrityExtensions
             System.Diagnostics.Debug.Assert(credentialBytesWritten == credentialByteCount, "Encoded byte count must match the pre-computed count.");
             System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
 
-            var credentialHash = hashFunction(credentialBytesOwner.Memory.Span[..credentialBytesWritten].ToArray());
-            var proofOptionsHash = hashFunction(proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten].ToArray());
+            (DigestValue credentialDigestValue, _) = computeDigest(
+                credentialBytesOwner.Memory.Span[..credentialBytesWritten],
+                digestByteLength, digestTag, memoryPool);
+            using DigestValue credentialDigest = credentialDigestValue;
+
+            (DigestValue proofOptionsDigestValue, _) = computeDigest(
+                proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten],
+                digestByteLength, digestTag, memoryPool);
+            using DigestValue proofOptionsDigest = proofOptionsDigestValue;
 
             //Combine hashes using memory pool: proofOptionsHash || credentialHash.
-            var combinedLength = proofOptionsHash.Length + credentialHash.Length;
+            var combinedLength = proofOptionsDigest.Length + credentialDigest.Length;
             using var hashDataOwner = memoryPool.Rent(combinedLength);
             var hashData = hashDataOwner.Memory.Span;
-            proofOptionsHash.CopyTo(hashData);
-            credentialHash.CopyTo(hashData[proofOptionsHash.Length..]);
+            proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData);
+            credentialDigest.AsReadOnlySpan().CopyTo(hashData[proofOptionsDigest.Length..]);
 
             //Decode proof value using the provided decoder delegate.
             using var signatureBytes = decodeProofValue(proof.ProofValue!, decoder, memoryPool);

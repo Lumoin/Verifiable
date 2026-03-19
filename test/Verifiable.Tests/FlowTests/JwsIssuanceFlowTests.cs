@@ -5,7 +5,6 @@ using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -285,15 +284,15 @@ internal sealed class JwsIssuanceFlowTests
         var header = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span, JsonOptions);
 
         Assert.IsNotNull(header);
-        Assert.IsTrue(header.ContainsKey(JwkProperties.Alg));
-        Assert.IsTrue(header.ContainsKey(JwkProperties.Typ));
-        Assert.IsTrue(header.ContainsKey(JwkProperties.Kid));
+        Assert.IsTrue(header.ContainsKey(WellKnownJwkValues.Alg));
+        Assert.IsTrue(header.ContainsKey(WellKnownJwkValues.Typ));
+        Assert.IsTrue(header.ContainsKey(WellKnownJwkValues.Kid));
 
         //Verify the typ is the VC+LD+JWT media type.
-        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[JwkProperties.Typ].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[WellKnownJwkValues.Typ].ToString());
 
         //Verify the kid matches the verification method ID.
-        Assert.AreEqual(issuerVerificationMethodId, header[JwkProperties.Kid].ToString());
+        Assert.AreEqual(issuerVerificationMethodId, header[WellKnownJwkValues.Kid].ToString());
     }
 
 
@@ -351,6 +350,6 @@ internal sealed class JwsIssuanceFlowTests
         var header = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span, JsonOptions);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[JwkProperties.Typ].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[WellKnownJwkValues.Typ].ToString());
     }
 }

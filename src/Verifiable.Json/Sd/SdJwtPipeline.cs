@@ -1,6 +1,8 @@
-﻿using System.Buffers;
+using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -11,7 +13,6 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.JCose.Sd;
-using Verifiable.Jose;
 
 namespace Verifiable.Json.Sd;
 
@@ -33,7 +34,7 @@ internal static class SdJwtPipeline
     internal static (ReadOnlyMemory<byte> RedactedPayload, IReadOnlyList<SdDisclosure> Disclosures) Redact(
         ReadOnlyMemory<byte> payload,
         IReadOnlySet<CredentialPath> disclosablePaths,
-        SaltFactoryDelegate saltFactory,
+        GenerateDisclosureSaltDelegate generateSalt,
         string hashAlgorithm)
     {
         string json = Encoding.UTF8.GetString(payload.Span);
@@ -41,7 +42,7 @@ internal static class SdJwtPipeline
         EncodeDelegate encoder = DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyJwk);
 
         var (jwtPayload, disclosures) = SdJwtClaimRedaction.Redact(
-            json, disclosablePaths, saltFactory,
+            json, disclosablePaths, generateSalt,
             SdJwtSerializer.SerializeDisclosure,
             SdJwtPathExtraction.ComputeDisclosureDigest,
             encoder,
@@ -72,9 +73,9 @@ internal static class SdJwtPipeline
 
         var header = new JwtHeader
         {
-            [JwkProperties.Alg] = algorithm,
-            [JwkProperties.Typ] = resolvedMediaType,
-            [JwkProperties.Kid] = keyId
+            [WellKnownJwkValues.Alg] = algorithm,
+            [WellKnownJwkValues.Typ] = resolvedMediaType,
+            [WellKnownJwkValues.Kid] = keyId
         };
 
         byte[] headerBytes = SerializeDictionaryToUtf8(header);

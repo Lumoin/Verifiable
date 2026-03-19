@@ -1,4 +1,4 @@
-﻿namespace Verifiable.JCose
+namespace Verifiable.JCose
 {
     /// <summary>
     /// Well-known names of JSON Web Key (JWK) Elliptic Curve "crv" (Curve) parameter values
@@ -152,7 +152,7 @@
         /// <remarks>This comparison is case-sensitive. See at <see href="https://www.rfc-editor.org/rfc/rfc7517">RFC 7517</see>.</remarks>
         public static bool Equals(string crvA, string crv)
         {
-            return object.ReferenceEquals(crvA, crv) || StringComparer.InvariantCulture.Equals(crvA, crv);
+            return object.ReferenceEquals(crvA, crv) || StringComparer.Ordinal.Equals(crvA, crv);
         }
     }
 }

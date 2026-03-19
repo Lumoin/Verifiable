@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
@@ -149,7 +149,7 @@ public static class Cose
             payload.Span,
             []);
 
-        using Signature signature = await privateKey.SignWithKeyBytesAsync(signingFunction, toBeSigned, signaturePool).ConfigureAwait(false);
+        using Signature signature = await privateKey.WithKeyBytesAsync(signingFunction, toBeSigned, signaturePool).ConfigureAwait(false);
 
         return new CoseSign1Message(
             protectedHeaderBytes,

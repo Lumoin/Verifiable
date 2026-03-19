@@ -1,4 +1,8 @@
-﻿using System.Formats.Cbor;
+using System;
+using System.Buffers;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.Formats.Cbor;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -121,13 +125,22 @@ public static class SdCwtSerializer
 
 
     /// <summary>
-    /// Parses an SD-CWT message from COSE_Sign1 format.
+    /// Parses an SD-CWT message from COSE_Sign1 format. Wire-decoded salt bytes from
+    /// each contained disclosure are wrapped in <see cref="Salt"/> instances using the
+    /// supplied <paramref name="saltTag"/>; the resulting message owns those salts via
+    /// the held disclosures.
     /// </summary>
     /// <param name="coseSign1">The CBOR-encoded COSE_Sign1 bytes.</param>
-    /// <returns>The parsed SD-CWT message.</returns>
+    /// <param name="saltTag">The tag stamped on each wrapped <see cref="Salt"/>.</param>
+    /// <param name="pool">Memory pool for allocating salt buffers.</param>
+    /// <returns>The parsed SD-CWT message. Caller owns and disposes (which disposes
+    /// every contained disclosure and salt).</returns>
     /// <exception cref="CborContentException">Thrown when the format is invalid.</exception>
-    public static SdCwtMessage Parse(ReadOnlyMemory<byte> coseSign1)
+    public static SdCwtMessage Parse(ReadOnlyMemory<byte> coseSign1, Tag saltTag, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(saltTag);
+        ArgumentNullException.ThrowIfNull(pool);
+
         var reader = new CborReader(coseSign1, CborConformanceMode.Lax);
 
         //Read and validate COSE_Sign1 tag.
@@ -150,26 +163,39 @@ public static class SdCwtSerializer
         var disclosures = new List<SdDisclosure>();
         reader.ReadStartMap();
 
-        while(reader.PeekState() != CborReaderState.EndMap)
+        try
         {
-            int label = reader.ReadInt32();
-            if(label == CoseHeaderParameters.SdClaims)
+            while(reader.PeekState() != CborReaderState.EndMap)
             {
-                //Read sd_claims array.
-                reader.ReadStartArray();
-                while(reader.PeekState() != CborReaderState.EndArray)
+                int label = reader.ReadInt32();
+                if(label == CoseHeaderParameters.SdClaims)
                 {
-                    byte[] disclosureCbor = reader.ReadByteString();
-                    SdDisclosure disclosure = ParseDisclosure(disclosureCbor);
-                    disclosures.Add(disclosure);
+                    //Read sd_claims array.
+                    reader.ReadStartArray();
+                    while(reader.PeekState() != CborReaderState.EndArray)
+                    {
+                        byte[] disclosureCbor = reader.ReadByteString();
+                        SdDisclosure disclosure = ParseDisclosure(disclosureCbor, saltTag, pool);
+                        disclosures.Add(disclosure);
+                    }
+                    reader.ReadEndArray();
                 }
-                reader.ReadEndArray();
-            }
-            else
-            {
-                reader.SkipValue();
+                else
+                {
+                    reader.SkipValue();
+                }
             }
         }
+        catch
+        {
+            //Mid-parse failure — dispose every disclosure already constructed.
+            foreach(SdDisclosure d in disclosures)
+            {
+                d.Dispose();
+            }
+            throw;
+        }
+
         reader.ReadEndMap();
 
         //Payload.
@@ -260,7 +286,7 @@ public static class SdCwtSerializer
         {
             //Property disclosure: [salt, name, value].
             writer.WriteStartArray(3);
-            writer.WriteByteString(disclosure.Salt.Span);
+            writer.WriteByteString(disclosure.Salt.AsReadOnlySpan());
             writer.WriteTextString(disclosure.ClaimName);
             CborValueConverter.WriteValue(writer, disclosure.ClaimValue);
             writer.WriteEndArray();
@@ -269,7 +295,7 @@ public static class SdCwtSerializer
         {
             //Array element disclosure: [salt, value].
             writer.WriteStartArray(2);
-            writer.WriteByteString(disclosure.Salt.Span);
+            writer.WriteByteString(disclosure.Salt.AsReadOnlySpan());
             CborValueConverter.WriteValue(writer, disclosure.ClaimValue);
             writer.WriteEndArray();
         }
@@ -279,40 +305,28 @@ public static class SdCwtSerializer
 
 
     /// <summary>
-    /// Parses a disclosure from CBOR format.
+    /// Parses a disclosure from CBOR format. The wire-decoded salt bytes are wrapped in
+    /// a <see cref="Salt"/> with the supplied <paramref name="saltTag"/>; the resulting
+    /// disclosure owns that salt and disposes it on disposal.
     /// </summary>
     /// <param name="disclosureCbor">The CBOR-encoded disclosure bytes.</param>
-    /// <returns>The parsed disclosure.</returns>
+    /// <param name="saltTag">
+    /// The tag stamped on the wrapped <see cref="Salt"/>. Should record that the bytes
+    /// originated from a wire decode (no entropy operation in this process).
+    /// </param>
+    /// <param name="pool">Memory pool for allocating the salt buffer.</param>
+    /// <returns>The parsed disclosure. Caller owns and must dispose.</returns>
     /// <exception cref="CborContentException">Thrown when the format is invalid.</exception>
-    public static SdDisclosure ParseDisclosure(ReadOnlySpan<byte> disclosureCbor)
+    public static SdDisclosure ParseDisclosure(
+        ReadOnlySpan<byte> disclosureCbor,
+        Tag saltTag,
+        MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(saltTag);
+        ArgumentNullException.ThrowIfNull(pool);
+
         var reader = new CborReader(disclosureCbor.ToArray(), CborConformanceMode.Lax);
-
-        int? arrayLength = reader.ReadStartArray();
-        if(arrayLength is not (2 or 3))
-        {
-            throw new CborContentException($"Disclosure must have 2 or 3 elements, got {arrayLength}.");
-        }
-
-        byte[] salt = reader.ReadByteString();
-
-        if(arrayLength == 3)
-        {
-            //Property disclosure: [salt, name, value].
-            string claimName = reader.ReadTextString();
-            object? claimValue = CborValueConverter.ReadValue(reader);
-            reader.ReadEndArray();
-
-            return SdDisclosure.CreateProperty(salt, claimName, claimValue);
-        }
-        else
-        {
-            //Array element disclosure: [salt, value].
-            object? claimValue = CborValueConverter.ReadValue(reader);
-            reader.ReadEndArray();
-
-            return SdDisclosure.CreateArrayElement(salt, claimValue);
-        }
+        return ReadDisclosure(ref reader, saltTag, pool);
     }
 
 
@@ -329,7 +343,7 @@ public static class SdCwtSerializer
         if(disclosure.ClaimName is not null)
         {
             writer.WriteStartArray(3);
-            writer.WriteByteString(disclosure.Salt.Span);
+            writer.WriteByteString(disclosure.Salt.AsReadOnlySpan());
             writer.WriteTextString(disclosure.ClaimName);
             CborValueConverter.WriteValue(writer, disclosure.ClaimValue);
             writer.WriteEndArray();
@@ -337,7 +351,7 @@ public static class SdCwtSerializer
         else
         {
             writer.WriteStartArray(2);
-            writer.WriteByteString(disclosure.Salt.Span);
+            writer.WriteByteString(disclosure.Salt.AsReadOnlySpan());
             CborValueConverter.WriteValue(writer, disclosure.ClaimValue);
             writer.WriteEndArray();
         }
@@ -345,35 +359,78 @@ public static class SdCwtSerializer
 
 
     /// <summary>
-    /// Reads a disclosure from a CBOR reader.
+    /// Reads a disclosure from a CBOR reader. The wire-decoded salt bytes are wrapped
+    /// in a <see cref="Salt"/> with the supplied <paramref name="saltTag"/>; the
+    /// resulting disclosure owns that salt and disposes it on disposal.
     /// </summary>
     /// <param name="reader">The CBOR reader (passed by reference for efficiency).</param>
-    /// <returns>The parsed disclosure.</returns>
-    public static SdDisclosure ReadDisclosure(ref CborReader reader)
+    /// <param name="saltTag">The tag stamped on the wrapped <see cref="Salt"/>.</param>
+    /// <param name="pool">Memory pool for allocating the salt buffer.</param>
+    /// <returns>The parsed disclosure. Caller owns and must dispose.</returns>
+    [SuppressMessage(
+        "Reliability", "CA2000",
+        Justification =
+            "The constructed Salt's ownership is transferred to the SdDisclosure via " +
+            "CreateProperty/CreateArrayElement. Those factories dispose the salt on " +
+            "construction failure. The remaining failure cases (mid-parse) explicitly " +
+            "dispose `salt` before throwing. The analyzer cannot see this ownership " +
+            "transfer through factory methods.")]
+    public static SdDisclosure ReadDisclosure(ref CborReader reader, Tag saltTag, MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(saltTag);
+        ArgumentNullException.ThrowIfNull(pool);
+
         int? arrayLength = reader.ReadStartArray();
         if(arrayLength is not (2 or 3))
         {
             throw new CborContentException($"Disclosure must have 2 or 3 elements, got {arrayLength}.");
         }
 
-        byte[] salt = reader.ReadByteString();
+        byte[] saltBytes = reader.ReadByteString();
 
-        if(arrayLength == 3)
+        //Wrap the wire-decoded salt bytes in a Salt instance. Ownership of the
+        //IMemoryOwner transfers into the Salt; the Salt then transfers into the
+        //SdDisclosure via the factory below. If anything in the wrapping or
+        //subsequent parsing fails, we explicitly dispose to release pool capacity.
+        IMemoryOwner<byte> owner = pool.Rent(saltBytes.Length);
+        Salt salt;
+        try
         {
-            string claimName = reader.ReadTextString();
-            object? claimValue = CborValueConverter.ReadValue(ref reader);
-            reader.ReadEndArray();
-
-            return SdDisclosure.CreateProperty(salt, claimName, claimValue);
+            saltBytes.AsSpan().CopyTo(owner.Memory.Span[..saltBytes.Length]);
+            salt = new Salt(owner, saltTag, lifetime: null);
         }
-        else
+        catch
         {
-            object? claimValue = CborValueConverter.ReadValue(ref reader);
-            reader.ReadEndArray();
+            owner.Dispose();
+            throw;
+        }
 
-            return SdDisclosure.CreateArrayElement(salt, claimValue);
+        //From here, ownership is with `salt`. CreateProperty/CreateArrayElement take
+        //ownership of `salt` and dispose it on construction failure. Failures during
+        //the rest of the parse (before the factory call) are caught here.
+        try
+        {
+            if(arrayLength == 3)
+            {
+                string claimName = reader.ReadTextString();
+                object? claimValue = CborValueConverter.ReadValue(ref reader);
+                reader.ReadEndArray();
+
+                return SdDisclosure.CreateProperty(salt, claimName, claimValue);
+            }
+            else
+            {
+                object? claimValue = CborValueConverter.ReadValue(ref reader);
+                reader.ReadEndArray();
+
+                return SdDisclosure.CreateArrayElement(salt, claimValue);
+            }
+        }
+        catch
+        {
+            salt.Dispose();
+            throw;
         }
     }
 
@@ -382,17 +439,37 @@ public static class SdCwtSerializer
     /// Reads the sd_claims array from the unprotected header.
     /// </summary>
     /// <param name="reader">The CBOR reader positioned at the sd_claims array.</param>
-    /// <returns>The list of disclosures.</returns>
-    public static IReadOnlyList<SdDisclosure> ReadSdClaimsHeader(ref CborReader reader)
+    /// <param name="saltTag">The tag stamped on each wrapped <see cref="Salt"/>.</param>
+    /// <param name="pool">Memory pool for allocating salt buffers.</param>
+    /// <returns>The list of disclosures. Caller owns and must dispose each.</returns>
+    public static IReadOnlyList<SdDisclosure> ReadSdClaimsHeader(
+        ref CborReader reader,
+        Tag saltTag,
+        MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(saltTag);
+        ArgumentNullException.ThrowIfNull(pool);
+
         int? count = reader.ReadStartArray();
         var disclosures = new List<SdDisclosure>(count ?? 4);
 
-        while(reader.PeekState() != CborReaderState.EndArray)
+        try
         {
-            SdDisclosure disclosure = ReadDisclosure(ref reader);
-            disclosures.Add(disclosure);
+            while(reader.PeekState() != CborReaderState.EndArray)
+            {
+                SdDisclosure disclosure = ReadDisclosure(ref reader, saltTag, pool);
+                disclosures.Add(disclosure);
+            }
+        }
+        catch
+        {
+            //Mid-read failure — dispose every disclosure already constructed.
+            foreach(SdDisclosure d in disclosures)
+            {
+                d.Dispose();
+            }
+            throw;
         }
 
         reader.ReadEndArray();

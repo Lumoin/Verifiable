@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Formats.Cbor;
 using System.Globalization;
@@ -158,8 +158,7 @@ internal sealed class DcqlCwtPresentationFlowTests
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
 
-        SdToken<ReadOnlyMemory<byte>> presentationToken = issuedToken.SelectDisclosures(
-            d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName));
+        SdToken<ReadOnlyMemory<byte>> presentationToken = issuedToken.SelectDisclosures(d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName), Pool);
 
         Assert.IsTrue(presentationToken.Disclosures.All(
             d => selectedClaimNames.Contains(d.ClaimName!)),
@@ -315,8 +314,7 @@ internal sealed class DcqlCwtPresentationFlowTests
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
 
-        SdToken<ReadOnlyMemory<byte>> presentationToken = issuedToken.SelectDisclosures(
-            d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName));
+        SdToken<ReadOnlyMemory<byte>> presentationToken = issuedToken.SelectDisclosures(d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName), Pool);
 
         CoseSign1Message presentedCose = CoseSerialization.ParseCoseSign1(
             presentationToken.IssuerSigned);
@@ -359,7 +357,7 @@ internal sealed class DcqlCwtPresentationFlowTests
 
         SdTokenResult result = await SdCwtIssuance.IssueAsync(
             cborBytes, disclosablePaths,
-            SaltGenerator.Create,
+            TestSalts.DefaultGenerator(),
             privateKey, IssuerKeyId, Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 

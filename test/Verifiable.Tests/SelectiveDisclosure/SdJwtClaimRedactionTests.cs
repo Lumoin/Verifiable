@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -186,7 +186,7 @@ internal sealed class SdJwtClaimRedactionTests
             CredentialPath.FromJsonPointer("/family_name")
         };
 
-        var (payload, disclosures) = SdJwtClaimRedaction.Redact(json, disclosablePaths, () => SaltGenerator.Create());
+        var (payload, disclosures) = SdJwtClaimRedaction.Redact(json, disclosablePaths, TestSalts.DefaultGenerator());
 
         Assert.HasCount(2, disclosures);
         Assert.AreEqual("https://issuer.example.com", payload[WellKnownJwtClaims.Iss]);
@@ -203,7 +203,7 @@ internal sealed class SdJwtClaimRedactionTests
 
         var (_, disclosures) = SdJwtClaimRedaction.Redact(
             json, new HashSet<CredentialPath> { CredentialPath.FromJsonPointer("/name") },
-            () => SaltGenerator.Create());
+            TestSalts.DefaultGenerator());
 
         Assert.HasCount(1, disclosures);
         Assert.IsInstanceOfType<string>(disclosures[0].ClaimValue);
@@ -218,7 +218,7 @@ internal sealed class SdJwtClaimRedactionTests
 
         var (_, disclosures) = SdJwtClaimRedaction.Redact(
             json, new HashSet<CredentialPath> { CredentialPath.FromJsonPointer("/age") },
-            () => SaltGenerator.Create());
+            TestSalts.DefaultGenerator());
 
         Assert.HasCount(1, disclosures);
         Assert.AreEqual(42, disclosures[0].ClaimValue);
@@ -232,7 +232,7 @@ internal sealed class SdJwtClaimRedactionTests
 
         var (_, disclosures) = SdJwtClaimRedaction.Redact(
             json, new HashSet<CredentialPath> { CredentialPath.FromJsonPointer("/active") },
-            () => SaltGenerator.Create());
+            TestSalts.DefaultGenerator());
 
         Assert.HasCount(1, disclosures);
         Assert.IsTrue((bool)disclosures[0].ClaimValue!);
@@ -253,7 +253,7 @@ internal sealed class SdJwtClaimRedactionTests
 
         var (_, disclosures) = SdJwtClaimRedaction.Redact(
             json, new HashSet<CredentialPath> { CredentialPath.FromJsonPointer("/address") },
-            () => SaltGenerator.Create());
+            TestSalts.DefaultGenerator());
 
         Assert.HasCount(1, disclosures);
         Assert.IsInstanceOfType<Dictionary<string, object>>(disclosures[0].ClaimValue);
@@ -271,7 +271,7 @@ internal sealed class SdJwtClaimRedactionTests
         string json, HashSet<CredentialPath> disclosablePaths)
     {
         return SdJwtClaimRedaction.Redact(
-            json, disclosablePaths, () => SaltGenerator.Create(),
+            json, disclosablePaths, TestSalts.DefaultGenerator(),
             SerializeDisclosure, ComputeDigest,
             TestSetup.Base64UrlEncoder, WellKnownHashAlgorithms.Sha256Iana);
     }

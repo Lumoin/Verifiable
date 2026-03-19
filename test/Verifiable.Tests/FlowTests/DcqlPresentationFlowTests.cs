@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.SelectiveDisclosure;
-using Verifiable.Core.SelectiveDisclosure.Strategy;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
@@ -155,8 +154,7 @@ internal sealed class DcqlPresentationFlowTests
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
 
-        SdToken<string> presentationToken = issuedToken.SelectDisclosures(
-            d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName));
+        SdToken<string> presentationToken = issuedToken.SelectDisclosures(d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName), Pool);
 
         Assert.IsTrue(presentationToken.Disclosures.All(
             d => selectedClaimNames.Contains(d.ClaimName!)),
@@ -359,7 +357,7 @@ internal sealed class DcqlPresentationFlowTests
         Assert.IsTrue(vpToken.ContainsKey("mdl"));
 
         //Verify the PID issuer signature is still valid from the serialized form.
-        SdToken<string> parsedPid = SdJwtSerializer.ParseToken(vpToken[EudiPid.DefaultCredentialQueryId], Decoder, Pool);
+        SdToken<string> parsedPid = SdJwtSerializer.ParseToken(vpToken[EudiPid.DefaultCredentialQueryId], Decoder, Pool, TestSalts.TestSaltTag);
         bool pidSignatureValid = await Jws.VerifyAsync(
             parsedPid.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
             publicKey).ConfigureAwait(false);
@@ -494,7 +492,7 @@ internal sealed class DcqlPresentationFlowTests
         Assert.EndsWith("~", wireFormat, "SD-JWT without key binding must end with tilde.");
         Assert.Contains("~", wireFormat);
 
-        SdToken<string> parsed = SdJwtSerializer.ParseToken(wireFormat, Decoder, Pool);
+        SdToken<string> parsed = SdJwtSerializer.ParseToken(wireFormat, Decoder, Pool, TestSalts.TestSaltTag);
 
         Assert.AreEqual(issuedToken.IssuerSigned, parsed.IssuerSigned);
         Assert.HasCount(issuedToken.Disclosures.Count, parsed.Disclosures);
@@ -618,8 +616,7 @@ internal sealed class DcqlPresentationFlowTests
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
 
-        SdToken<string> presentationToken = issuedToken.SelectDisclosures(
-            d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName));
+        SdToken<string> presentationToken = issuedToken.SelectDisclosures(d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName), Pool);
 
         bool presentationValid = await Jws.VerifyAsync(
             presentationToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
@@ -669,7 +666,7 @@ internal sealed class DcqlPresentationFlowTests
 
         SdTokenResult result = await SdJwtIssuance.IssueAsync(
             rental.Memory[..written], disclosablePaths,
-            SaltGenerator.Create,
+            TestSalts.DefaultGenerator(),
             privateKey, IssuerKeyId,
             Pool,
             mediaType: WellKnownMediaTypes.Jwt.VcSdJwt,

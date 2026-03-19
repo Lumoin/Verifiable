@@ -1,6 +1,7 @@
-﻿using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Cryptography;
+using Verifiable.JCose;
 
 namespace Verifiable.Tests.Did
 {
@@ -23,7 +24,7 @@ namespace Verifiable.Tests.Did
                 {
                     ["kty"] = "EC",
                     ["crv"] = "P-256",
-                    ["alg"] = "ES256",
+                    ["alg"] = WellKnownJwaValues.Es256,
                     ["x"] = "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4",
                     ["y"] = "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM"
                 }

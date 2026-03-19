@@ -17,6 +17,14 @@ internal sealed class PurposeTests
     private const string WrappedName = nameof(Purpose.Wrapped);
     private const string SignatureName = nameof(Purpose.Signature);
     private const string EncryptionName = nameof(Purpose.Encryption);
+    private const string NonceName = nameof(Purpose.Nonce);
+    private const string HmacName = nameof(Purpose.Hmac);
+    private const string DigestName = nameof(Purpose.Digest);
+    private const string TransportName = nameof(Purpose.Transport);
+    private const string DataName = nameof(Purpose.Data);
+    private const string MacName = nameof(Purpose.Mac);
+    private const string DecryptedName = nameof(Purpose.Decrypted);
+    private const string SaltName = nameof(Purpose.Salt);
 
     private const int NoneCode = 0;
     private const int VerificationCode = 1;
@@ -25,6 +33,14 @@ internal sealed class PurposeTests
     private const int WrappedCode = 4;
     private const int SignatureCode = 5;
     private const int EncryptionCode = 6;
+    private const int NonceCode = 7;
+    private const int HmacCode = 8;
+    private const int DigestCode = 9;
+    private const int TransportCode = 10;
+    private const int DataCode = 11;
+    private const int MacCode = 12;
+    private const int DecryptedCode = 13;
+    private const int SaltCode = 14;
 
     //Arbitrary code that does not conflict with predefined values.
     private const int UnknownCode = 9999;
@@ -45,6 +61,14 @@ internal sealed class PurposeTests
         yield return new object[] { Purpose.Wrapped, WrappedName, WrappedCode };
         yield return new object[] { Purpose.Signature, SignatureName, SignatureCode };
         yield return new object[] { Purpose.Encryption, EncryptionName, EncryptionCode };
+        yield return new object[] { Purpose.Nonce, NonceName, NonceCode };
+        yield return new object[] { Purpose.Hmac, HmacName, HmacCode };
+        yield return new object[] { Purpose.Digest, DigestName, DigestCode };
+        yield return new object[] { Purpose.Transport, TransportName, TransportCode };
+        yield return new object[] { Purpose.Data, DataName, DataCode };
+        yield return new object[] { Purpose.Mac, MacName, MacCode };
+        yield return new object[] { Purpose.Decrypted, DecryptedName, DecryptedCode };
+        yield return new object[] { Purpose.Salt, SaltName, SaltCode };
     }
 
 
@@ -56,6 +80,9 @@ internal sealed class PurposeTests
         yield return new object[] { Purpose.Verification, Purpose.Signing };
         yield return new object[] { Purpose.Exchange, Purpose.Encryption };
         yield return new object[] { Purpose.None, Purpose.Wrapped };
+        yield return new object[] { Purpose.Salt, Purpose.Nonce };
+        yield return new object[] { Purpose.Hmac, Purpose.Mac };
+        yield return new object[] { Purpose.Digest, Purpose.Decrypted };
     }
 
 
@@ -183,14 +210,22 @@ internal sealed class PurposeTests
             Purpose.Exchange,
             Purpose.Wrapped,
             Purpose.Signature,
-            Purpose.Encryption);
+            Purpose.Encryption,
+            Purpose.Nonce,
+            Purpose.Hmac,
+            Purpose.Digest,
+            Purpose.Transport,
+            Purpose.Data,
+            Purpose.Mac,
+            Purpose.Decrypted,
+            Purpose.Salt);
     }
 
 
     [TestMethod]
     public void PurposesCollectionHasExpectedCount()
     {
-        //Seven predefined values.
-        ContextTypeTestHelpers.AssertCollectionHasExpectedCount(Purpose.Purposes, 12);
+        //Fifteen predefined values: codes 0–14.
+        ContextTypeTestHelpers.AssertCollectionHasExpectedCount(Purpose.Purposes, 15);
     }
 }

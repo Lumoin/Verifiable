@@ -9,6 +9,7 @@ using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Json;
+using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DataIntegrity;
@@ -61,6 +62,7 @@ internal sealed class DataIntegrityProofTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigest,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -81,6 +83,7 @@ internal sealed class DataIntegrityProofTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigest,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -111,6 +114,7 @@ internal sealed class DataIntegrityProofTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigest,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -131,6 +135,7 @@ internal sealed class DataIntegrityProofTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigest,
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 

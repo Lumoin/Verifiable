@@ -1,4 +1,5 @@
-﻿using System.Buffers;
+using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Formats.Cbor;
 using System.Threading;
@@ -25,13 +26,13 @@ internal static class SdCwtPipeline
     internal static (ReadOnlyMemory<byte> RedactedPayload, IReadOnlyList<SdDisclosure> Disclosures) Redact(
         ReadOnlyMemory<byte> payload,
         IReadOnlySet<CredentialPath> disclosablePaths,
-        SaltFactoryDelegate saltFactory,
+        GenerateDisclosureSaltDelegate generateSalt,
         string hashAlgorithm)
     {
         byte[] payloadArray = payload.ToArray();
 
         var (cwtPayload, disclosures) = SdCwtClaimRedaction.Redact(
-            payloadArray, disclosablePaths, saltFactory, hashAlgorithm);
+            payloadArray, disclosablePaths, generateSalt, hashAlgorithm);
 
         byte[] redactedBytes = SerializeCwtPayload(cwtPayload);
         return (redactedBytes, disclosures);

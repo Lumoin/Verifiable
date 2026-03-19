@@ -1,4 +1,5 @@
-﻿using System.Buffers;
+using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -39,7 +40,7 @@ public static class SdCwtIssuance
     /// Paths identifying claims that should be selectively disclosable.
     /// For CWT integer keys, use the integer string representation (e.g., <c>/501</c>).
     /// </param>
-    /// <param name="saltFactory">Factory for generating 128-bit cryptographic salt.</param>
+    /// <param name="generateSalt">Factory for generating 128-bit cryptographic salt.</param>
     /// <param name="privateKey">The issuer's signing key.</param>
     /// <param name="keyId">The key identifier for the COSE <c>kid</c> header.</param>
     /// <param name="memoryPool">Memory pool for cryptographic allocations.</param>
@@ -55,7 +56,7 @@ public static class SdCwtIssuance
     public static ValueTask<SdTokenResult> IssueAsync(
         ReadOnlyMemory<byte> payload,
         IReadOnlySet<CredentialPath> disclosablePaths,
-        SaltFactoryDelegate saltFactory,
+        GenerateDisclosureSaltDelegate generateSalt,
         PrivateKeyMemory privateKey,
         string keyId,
         MemoryPool<byte> memoryPool,
@@ -67,7 +68,7 @@ public static class SdCwtIssuance
             payload, disclosablePaths,
             SdCwtPipeline.Redact,
             SdCwtPipeline.Sign,
-            saltFactory, privateKey, keyId, memoryPool,
+            generateSalt, privateKey, keyId, memoryPool,
             hashAlgorithm, mediaType, cancellationToken);
     }
 }

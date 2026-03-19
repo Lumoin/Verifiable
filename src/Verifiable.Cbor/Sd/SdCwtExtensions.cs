@@ -1,5 +1,9 @@
-﻿using System.Buffers;
+using System;
+using System.Buffers;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
+using System.Threading.Tasks;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
@@ -46,7 +50,7 @@ public static class SdCwtExtensions
         /// Paths identifying claims that should be selectively disclosable. For CWT integer
         /// keys, use the string representation (e.g., <c>/501</c>).
         /// </param>
-        /// <param name="saltFactory">Factory for generating cryptographic salt for each disclosure.</param>
+        /// <param name="generateSalt">Factory for generating cryptographic salt for each disclosure.</param>
         /// <param name="privateKey">The issuer's signing key.</param>
         /// <param name="keyId">The key identifier for the COSE <c>kid</c> header.</param>
         /// <param name="memoryPool">Memory pool for cryptographic allocations.</param>
@@ -62,7 +66,7 @@ public static class SdCwtExtensions
         public ValueTask<SdTokenResult> IssueSdCwtAsync(
             Func<T, byte[]> serializer,
             IReadOnlySet<CredentialPath> disclosablePaths,
-            SaltFactoryDelegate saltFactory,
+            GenerateDisclosureSaltDelegate generateSalt,
             PrivateKeyMemory privateKey,
             string keyId,
             MemoryPool<byte> memoryPool,
@@ -76,7 +80,7 @@ public static class SdCwtExtensions
             byte[] cborBytes = serializer(claims);
 
             return SdCwtIssuance.IssueAsync(
-                cborBytes, disclosablePaths, saltFactory,
+                cborBytes, disclosablePaths, generateSalt,
                 privateKey, keyId, memoryPool,
                 hashAlgorithm, mediaType, cancellationToken);
         }
@@ -101,7 +105,7 @@ public static class SdCwtExtensions
         /// Paths identifying claims that should be selectively disclosable.
         /// All paths must begin with <c>/credentialSubject</c>.
         /// </param>
-        /// <param name="saltFactory">Factory for generating cryptographic salt for each disclosure.</param>
+        /// <param name="generateSalt">Factory for generating cryptographic salt for each disclosure.</param>
         /// <param name="privateKey">The issuer's signing key.</param>
         /// <param name="keyId">The key identifier for the COSE <c>kid</c> header.</param>
         /// <param name="memoryPool">Memory pool for cryptographic allocations.</param>
@@ -120,7 +124,7 @@ public static class SdCwtExtensions
         public ValueTask<SdTokenResult> IssueSdCwtAsync(
             Func<VerifiableCredential, byte[]> serializer,
             IReadOnlySet<CredentialPath> disclosablePaths,
-            SaltFactoryDelegate saltFactory,
+            GenerateDisclosureSaltDelegate generateSalt,
             PrivateKeyMemory privateKey,
             string keyId,
             MemoryPool<byte> memoryPool,
@@ -137,7 +141,7 @@ public static class SdCwtExtensions
             byte[] cborBytes = serializer(credential);
 
             return SdCwtIssuance.IssueAsync(
-                cborBytes, disclosablePaths, saltFactory,
+                cborBytes, disclosablePaths, generateSalt,
                 privateKey, keyId, memoryPool,
                 hashAlgorithm, mediaType, cancellationToken);
         }

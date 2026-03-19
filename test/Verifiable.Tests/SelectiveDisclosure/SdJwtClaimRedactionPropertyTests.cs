@@ -1,4 +1,4 @@
-﻿using CsCheck;
+using CsCheck;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -49,7 +49,7 @@ internal sealed class SdJwtClaimRedactionPropertyTests
                 .Select(n => CredentialPath.FromJsonPointer($"/{n}"))
                 .ToHashSet();
 
-            var (payload, disclosures) = SdJwtClaimRedaction.Redact(json, disclosablePaths, () => SaltGenerator.Create());
+            var (payload, disclosures) = SdJwtClaimRedaction.Redact(json, disclosablePaths, TestSalts.DefaultGenerator());
 
             //Every disclosable path must produce a disclosure.
             Assert.HasCount(disclosableCount, disclosures);
@@ -100,7 +100,7 @@ internal sealed class SdJwtClaimRedactionPropertyTests
                 .ToHashSet();
 
             var (payload, disclosures) = SdJwtClaimRedaction.Redact(
-                json, disclosablePaths, () => SaltGenerator.Create(),
+                json, disclosablePaths, TestSalts.DefaultGenerator(),
                 SdJwtSerializer.SerializeDisclosure,
                 SdJwtPathExtraction.ComputeDisclosureDigest,
                 TestSetup.Base64UrlEncoder, WellKnownHashAlgorithms.Sha256Iana);

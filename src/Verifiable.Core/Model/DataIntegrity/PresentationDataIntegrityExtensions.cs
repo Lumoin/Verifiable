@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -108,6 +109,7 @@ public static class PresentationDataIntegrityExtensions
             PresentationDeserializeDelegate deserialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
+            ComputeDigestDelegate computeDigest,
             MemoryPool<byte> memoryPool,
             CancellationToken cancellationToken = default)
         {
@@ -122,6 +124,7 @@ public static class PresentationDataIntegrityExtensions
             ArgumentNullException.ThrowIfNull(deserialize);
             ArgumentNullException.ThrowIfNull(serializeProofOptions);
             ArgumentNullException.ThrowIfNull(encoder);
+            ArgumentNullException.ThrowIfNull(computeDigest);
             ArgumentNullException.ThrowIfNull(memoryPool);
 
             var proofCreatedString = DateTimeStampFormat.Format(proofCreated);
@@ -145,7 +148,12 @@ public static class PresentationDataIntegrityExtensions
                 .ConfigureAwait(false);
 
             var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(cryptosuite.HashAlgorithm);
-            var hashFunction = DefaultHashFunctionSelector.Select(hashAlgorithm);
+            int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
+            var digestTag = new Tag(new Dictionary<Type, object>
+            {
+                [typeof(HashAlgorithmName)] = hashAlgorithm,
+                [typeof(Purpose)] = Purpose.Digest
+            });
 
             var presentationByteCount = Encoding.UTF8.GetByteCount(presentationCanonicalization.CanonicalForm);
             var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
@@ -159,15 +167,22 @@ public static class PresentationDataIntegrityExtensions
             System.Diagnostics.Debug.Assert(presentationBytesWritten == presentationByteCount, "Encoded byte count must match the pre-computed count.");
             System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
 
-            var presentationHash = hashFunction(presentationBytesOwner.Memory.Span[..presentationBytesWritten].ToArray());
-            var proofOptionsHash = hashFunction(proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten].ToArray());
+            (DigestValue presentationDigestValue, _) = computeDigest(
+                presentationBytesOwner.Memory.Span[..presentationBytesWritten],
+                digestByteLength, digestTag, memoryPool);
+            using DigestValue presentationDigest = presentationDigestValue;
+
+            (DigestValue proofOptionsDigestValue, _) = computeDigest(
+                proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten],
+                digestByteLength, digestTag, memoryPool);
+            using DigestValue proofOptionsDigest = proofOptionsDigestValue;
 
             //Combine hashes: proofOptionsHash || presentationHash.
-            var combinedLength = proofOptionsHash.Length + presentationHash.Length;
+            var combinedLength = proofOptionsDigest.Length + presentationDigest.Length;
             using var hashDataOwner = memoryPool.Rent(combinedLength);
             var hashData = hashDataOwner.Memory.Span;
-            proofOptionsHash.CopyTo(hashData);
-            presentationHash.CopyTo(hashData[proofOptionsHash.Length..]);
+            proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData);
+            presentationDigest.AsReadOnlySpan().CopyTo(hashData[proofOptionsDigest.Length..]);
 
             using var signature = await privateKey.SignAsync(hashDataOwner.Memory, memoryPool)
                 .ConfigureAwait(false);
@@ -245,6 +260,7 @@ public static class PresentationDataIntegrityExtensions
             PresentationDeserializeDelegate deserialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
             DecodeDelegate decoder,
+            ComputeDigestDelegate computeDigest,
             MemoryPool<byte> memoryPool,
             CancellationToken cancellationToken = default)
         {
@@ -257,6 +273,7 @@ public static class PresentationDataIntegrityExtensions
             ArgumentNullException.ThrowIfNull(deserialize);
             ArgumentNullException.ThrowIfNull(serializeProofOptions);
             ArgumentNullException.ThrowIfNull(decoder);
+            ArgumentNullException.ThrowIfNull(computeDigest);
             ArgumentNullException.ThrowIfNull(memoryPool);
 
             var proof = presentation.Proof?.FirstOrDefault();
@@ -310,7 +327,12 @@ public static class PresentationDataIntegrityExtensions
                 .ConfigureAwait(false);
 
             var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
-            var hashFunction = DefaultHashFunctionSelector.Select(hashAlgorithm);
+            int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
+            var digestTag = new Tag(new Dictionary<Type, object>
+            {
+                [typeof(HashAlgorithmName)] = hashAlgorithm,
+                [typeof(Purpose)] = Purpose.Digest
+            });
 
             var presentationByteCount = Encoding.UTF8.GetByteCount(presentationCanonicalization.CanonicalForm);
             var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
@@ -324,14 +346,21 @@ public static class PresentationDataIntegrityExtensions
             System.Diagnostics.Debug.Assert(presentationBytesWritten == presentationByteCount, "Encoded byte count must match the pre-computed count.");
             System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
 
-            var presentationHash = hashFunction(presentationBytesOwner.Memory.Span[..presentationBytesWritten].ToArray());
-            var proofOptionsHash = hashFunction(proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten].ToArray());
+            (DigestValue presentationDigestValue, _) = computeDigest(
+                presentationBytesOwner.Memory.Span[..presentationBytesWritten],
+                digestByteLength, digestTag, memoryPool);
+            using DigestValue presentationDigest = presentationDigestValue;
 
-            var combinedLength = proofOptionsHash.Length + presentationHash.Length;
+            (DigestValue proofOptionsDigestValue, _) = computeDigest(
+                proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten],
+                digestByteLength, digestTag, memoryPool);
+            using DigestValue proofOptionsDigest = proofOptionsDigestValue;
+
+            var combinedLength = proofOptionsDigest.Length + presentationDigest.Length;
             using var hashDataOwner = memoryPool.Rent(combinedLength);
             var hashData = hashDataOwner.Memory.Span;
-            proofOptionsHash.CopyTo(hashData);
-            presentationHash.CopyTo(hashData[proofOptionsHash.Length..]);
+            proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData);
+            presentationDigest.AsReadOnlySpan().CopyTo(hashData[proofOptionsDigest.Length..]);
 
             using var signatureBytes = decodeProofValue(proof.ProofValue!, decoder, memoryPool);
 

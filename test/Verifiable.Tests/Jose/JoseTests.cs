@@ -4,11 +4,12 @@ using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+
+using static Verifiable.JCose.CryptoFormatConversionsExtensions;
 
 namespace Verifiable.Tests.Jose;
 
@@ -27,8 +28,8 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task SignAndVerifyWithExplicitFunctionSucceeds()
     {
-        var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
-        var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "1234567890", ["name"] = "Test User" };
+        var header = new Dictionary<string, object> { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256, [WellKnownJwkValues.Typ] = "JWT" };
+        var payload = new Dictionary<string, object> { [WellKnownJwkValues.Sub] = "1234567890", ["name"] = "Test User" };
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using var publicKey = keyPair.PublicKey;
@@ -64,8 +65,8 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task SignAndVerifyWithResolverBinderSucceeds()
     {
-        var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
-        var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "resolver-test", ["name"] = "Resolver Test" };
+        var header = new Dictionary<string, object> { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256, [WellKnownJwkValues.Typ] = "JWT" };
+        var payload = new Dictionary<string, object> { [WellKnownJwkValues.Sub] = "resolver-test", ["name"] = "Resolver Test" };
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using var publicKey = keyPair.PublicKey;
@@ -111,8 +112,8 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task SignAndVerifyWithP384ExplicitFunctionSucceeds()
     {
-        var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es384, [JwkProperties.Typ] = "JWT" };
-        var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "user-384", [JwkProperties.Iat] = 1234567890 };
+        var header = new Dictionary<string, object> { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es384, [WellKnownJwkValues.Typ] = "JWT" };
+        var payload = new Dictionary<string, object> { [WellKnownJwkValues.Sub] = "user-384", [WellKnownJwkValues.Iat] = 1234567890 };
 
         var keyPair = TestKeyMaterialProvider.CreateP384KeyMaterial();
         using var publicKey = keyPair.PublicKey;
@@ -144,8 +145,8 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task SignAndVerifyWithP521ExplicitFunctionSucceeds()
     {
-        var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es512, [JwkProperties.Typ] = "JWT" };
-        var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "user-521", [JwkProperties.Exp] = 9999999999 };
+        var header = new Dictionary<string, object> { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es512, [WellKnownJwkValues.Typ] = "JWT" };
+        var payload = new Dictionary<string, object> { [WellKnownJwkValues.Sub] = "user-521", [WellKnownJwkValues.Exp] = 9999999999 };
 
         var keyPair = TestKeyMaterialProvider.CreateP521KeyMaterial();
         using var publicKey = keyPair.PublicKey;
@@ -177,8 +178,8 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task VerifyWithWrongKeyFails()
     {
-        var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
-        var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "test" };
+        var header = new Dictionary<string, object> { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256, [WellKnownJwkValues.Typ] = "JWT" };
+        var payload = new Dictionary<string, object> { [WellKnownJwkValues.Sub] = "test" };
 
         //Use one key pair for signing.
         var signingKeyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -216,8 +217,8 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task VerifyAndDecodeWithResolverBinderReturnsHeaderAndPayload()
     {
-        var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
-        var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "decode-test", ["custom"] = "value" };
+        var header = new Dictionary<string, object> { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256, [WellKnownJwkValues.Typ] = "JWT" };
+        var payload = new Dictionary<string, object> { [WellKnownJwkValues.Sub] = "decode-test", ["custom"] = "value" };
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using var publicKey = keyPair.PublicKey;
@@ -250,8 +251,8 @@ internal sealed class JoseTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid, "Signature should be valid.");
-        Assert.AreEqual(WellKnownJwaValues.Es256, result.Header[JwkProperties.Alg]?.ToString());
-        Assert.AreEqual("decode-test", result.Payload[JwkProperties.Sub]?.ToString());
+        Assert.AreEqual(WellKnownJwaValues.Es256, result.Header[WellKnownJwkValues.Alg]?.ToString());
+        Assert.AreEqual("decode-test", result.Payload[WellKnownJwkValues.Sub]?.ToString());
         Assert.AreEqual("value", result.Payload["custom"]?.ToString());
     }
 
@@ -259,8 +260,8 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task ResolverReturningNullThrowsInvalidOperationException()
     {
-        var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256, [JwkProperties.Typ] = "JWT" };
-        var payload = new Dictionary<string, object> { [JwkProperties.Sub] = "null-test" };
+        var header = new Dictionary<string, object> { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256, [WellKnownJwkValues.Typ] = "JWT" };
+        var payload = new Dictionary<string, object> { [WellKnownJwkValues.Sub] = "null-test" };
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -283,8 +284,8 @@ internal sealed class JoseTests
     [TestMethod]
     public void CryptoFormatConversionsMapsEs256Correctly()
     {
-        Tag signingTag = CryptoFormatConversions.GetSigningTag(WellKnownJwaValues.Es256);
-        Tag verificationTag = CryptoFormatConversions.GetVerificationTag(WellKnownJwaValues.Es256);
+        Tag signingTag = GetSigningTag(WellKnownJwaValues.Es256);
+        Tag verificationTag = GetVerificationTag(WellKnownJwaValues.Es256);
 
         Assert.AreEqual(CryptoAlgorithm.P256, signingTag.Get<CryptoAlgorithm>());
         Assert.AreEqual(Purpose.Signing, signingTag.Get<Purpose>());
@@ -297,7 +298,7 @@ internal sealed class JoseTests
     [TestMethod]
     public void CryptoFormatConversionsThrowsForUnsupportedAlgorithm()
     {
-        Assert.Throws<NotSupportedException>(() => CryptoFormatConversions.GetSigningTag("UNSUPPORTED"));
+        Assert.Throws<NotSupportedException>(() => GetSigningTag("UNSUPPORTED"));
     }
 
 

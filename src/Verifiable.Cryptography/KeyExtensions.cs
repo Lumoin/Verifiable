@@ -43,13 +43,13 @@ public static class KeyExtensions
     /// This extension is used internally by <see cref="PrivateKey.SignAsync"/> and can also be used
     /// directly when you need to combine different signing functions with the same key material.
     /// </remarks>
-    /// <seealso cref="PrivateKey.SignAsync"/>
     public static ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningFunction<byte, byte, ValueTask<Signature>> signingFunction, MemoryPool<byte> signaturePool)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingFunction);
         ArgumentNullException.ThrowIfNull(signaturePool);
-        return privateKey.SignWithKeyBytesAsync((privateKeyBytes, dataToSign, signaturePool) => signingFunction(privateKeyBytes, dataToSign, signaturePool), dataToSign, signaturePool);
+
+        return privateKey.WithKeyBytesAsync((privateKeyBytes, dataToSign, signaturePool) => signingFunction(privateKeyBytes, dataToSign, signaturePool), dataToSign, signaturePool);
     }
 
 
@@ -65,13 +65,17 @@ public static class KeyExtensions
     /// <param name="signaturePool">The memory pool for allocating the signature buffer.</param>
     /// <param name="context">Optional context parameters for the signing operation.</param>
     /// <returns>The signature of the data.</returns>
-    public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningDelegate signingDelegate, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
+    public static ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningDelegate signingDelegate, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
-        return await privateKey.SignWithKeyBytesAsync(async (privateKeyBytes, dataToSign, signaturePool) => await signingDelegate(privateKeyBytes, dataToSign, signaturePool, context).ConfigureAwait(false), dataToSign, signaturePool)
-            .ConfigureAwait(false);
+
+        return privateKey.WithKeyBytesAsync(
+            (privateKeyBytes, dataToSign, signaturePool) =>
+                signingDelegate(privateKeyBytes, dataToSign, signaturePool, context),
+            dataToSign,
+            signaturePool);
     }
 
 
@@ -85,7 +89,7 @@ public static class KeyExtensions
         var algorithm = privateKey.Tag.Get<CryptoAlgorithm>();
         var purpose = privateKey.Tag.Get<Purpose>();
         var signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose);
-        
+
         return await privateKey.SignAsync(dataToSign, signingDelegate, signaturePool).ConfigureAwait(false);
     }
 
@@ -109,6 +113,7 @@ public static class KeyExtensions
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(signature);
         ArgumentNullException.ThrowIfNull(verificationFunction);
+
         return publicKey.WithKeyBytesAsync((publicKeyBytes, dataToVerify, signature) => verificationFunction(publicKeyBytes, dataToVerify, signature), dataToVerify, signature);
     }
 
@@ -130,6 +135,7 @@ public static class KeyExtensions
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(signature);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
+
         return publicKey.WithKeyBytesAsync((publicKeyBytes, dataToVerify, sig) => verificationDelegate(dataToVerify, sig.AsReadOnlyMemory(), publicKeyBytes, context), dataToVerify, signature);
     }
 }

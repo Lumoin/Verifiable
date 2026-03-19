@@ -25,7 +25,7 @@ namespace Verifiable.JCose;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class UnverifiedJwsSignature : IDisposable, IEquatable<UnverifiedJwsSignature>
+public sealed class UnverifiedJwsSignature: IDisposable, IEquatable<UnverifiedJwsSignature>
 {
     private bool disposed;
 
@@ -35,14 +35,17 @@ public sealed class UnverifiedJwsSignature : IDisposable, IEquatable<UnverifiedJ
     public string Protected { get; }
 
     /// <summary>
-    /// The decoded protected header parameters. UNTRUSTED - claims must be validated.
+    /// The decoded protected header parameters. Attacker-controlled until the
+    /// signature has been verified — use <see cref="JwtHeaderChecks"/> extension
+    /// methods on this value before verification.
     /// </summary>
-    public IReadOnlyDictionary<string, object> ProtectedHeader { get; }
+    public UnverifiedJwtHeader ProtectedHeader { get; }
 
     /// <summary>
-    /// The unprotected header parameters. UNTRUSTED.
+    /// The unprotected header parameters. Attacker-controlled and not
+    /// integrity-protected by the JWS signature.
     /// </summary>
-    public IReadOnlyDictionary<string, object>? UnprotectedHeader { get; }
+    public UnverifiedJwtHeader? UnprotectedHeader { get; }
 
     /// <summary>
     /// Raw signature bytes from untrusted input. Owned by this instance.
@@ -50,17 +53,29 @@ public sealed class UnverifiedJwsSignature : IDisposable, IEquatable<UnverifiedJ
     public IMemoryOwner<byte> SignatureBytes { get; }
 
     /// <summary>
-    /// The claimed algorithm from the <c>alg</c> header. UNTRUSTED - must be validated
-    /// against the expected algorithm from the verification key.
+    /// The claimed algorithm from the <c>alg</c> header. Attacker-controlled until
+    /// verified — never use this value to select a verification algorithm. Always
+    /// resolve the algorithm from the verification key instead.
     /// </summary>
-    public string? ClaimedAlgorithm => ProtectedHeader.TryGetValue("alg", out var alg) ? alg as string : null;
+    public string? ClaimedAlgorithm =>
+        ProtectedHeader.TryGetValue(WellKnownJwkValues.Alg, out object? alg) ? alg as string : null;
 
 
+    /// <summary>
+    /// Creates a new unverified JWS signature component.
+    /// </summary>
+    /// <param name="protectedEncoded">The Base64Url-encoded protected header string.</param>
+    /// <param name="protectedHeader">
+    /// The decoded protected header. Ownership is shared — this instance does not
+    /// dispose the header.
+    /// </param>
+    /// <param name="signatureBytes">The raw signature bytes. Ownership is transferred.</param>
+    /// <param name="unprotectedHeader">Optional unprotected header parameters.</param>
     public UnverifiedJwsSignature(
         string protectedEncoded,
-        IReadOnlyDictionary<string, object> protectedHeader,
+        UnverifiedJwtHeader protectedHeader,
         IMemoryOwner<byte> signatureBytes,
-        IReadOnlyDictionary<string, object>? unprotectedHeader = null)
+        UnverifiedJwtHeader? unprotectedHeader = null)
     {
         ArgumentNullException.ThrowIfNull(protectedEncoded);
         ArgumentNullException.ThrowIfNull(protectedHeader);

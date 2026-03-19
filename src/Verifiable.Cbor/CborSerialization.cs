@@ -1,4 +1,7 @@
-﻿using System.Formats.Cbor;
+using System;
+using System.Collections.Generic;
+using System.Formats.Cbor;
+using System.Linq;
 using Verifiable.JCose;
 
 namespace Verifiable.Cbor;

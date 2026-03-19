@@ -44,6 +44,7 @@ env:
     Verifiable.DecentralizedWebNode
     Verifiable.JCose
     Verifiable.Json
+    Verifiable.JsonPointer
     Verifiable.Microsoft
     Verifiable.NSec
     Verifiable.OAuth

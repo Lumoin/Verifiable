@@ -1,4 +1,4 @@
-﻿using System.Formats.Cbor;
+using System.Formats.Cbor;
 using System.Globalization;
 using CsCheck;
 using Verifiable.Cbor;
@@ -51,7 +51,7 @@ internal sealed class SdCwtIssuancePropertyTests
             HashSet<CredentialPath> paths = ToCwtCredentialPaths(disclosable);
 
             var (_, disclosures) = SdCwtClaimRedaction.Redact(
-                cborBytes, paths, () => SaltGenerator.Create(),
+                cborBytes, paths, TestSalts.DefaultGenerator(),
                 WellKnownHashAlgorithms.Sha256Iana);
 
             Assert.HasCount(disclosable.Count, disclosures);
@@ -71,7 +71,7 @@ internal sealed class SdCwtIssuancePropertyTests
             HashSet<CredentialPath> paths = ToCwtCredentialPaths(disclosable);
 
             var (payload, disclosures) = SdCwtClaimRedaction.Redact(
-                cborBytes, paths, () => SaltGenerator.Create(),
+                cborBytes, paths, TestSalts.DefaultGenerator(),
                 WellKnownHashAlgorithms.Sha256Iana);
 
             var disclosureNames = new HashSet<string>(disclosures.Select(d => d.ClaimName!));
@@ -103,11 +103,11 @@ internal sealed class SdCwtIssuancePropertyTests
             HashSet<CredentialPath> paths = ToCwtCredentialPaths(disclosable);
 
             var (_, disclosures) = SdCwtClaimRedaction.Redact(
-                cborBytes, paths, () => SaltGenerator.Create(),
+                cborBytes, paths, TestSalts.DefaultGenerator(),
                 WellKnownHashAlgorithms.Sha256Iana);
 
             var saltSet = new HashSet<string>(
-                disclosures.Select(d => Convert.ToHexString(d.Salt.Span)));
+                disclosures.Select(d => Convert.ToHexString(d.Salt.AsReadOnlySpan())));
             Assert.HasCount(disclosures.Count, saltSet);
         });
     }
@@ -121,7 +121,7 @@ internal sealed class SdCwtIssuancePropertyTests
             byte[] cborBytes = SerializeIntStringMap(claims);
 
             var (payload, disclosures) = SdCwtClaimRedaction.Redact(
-                cborBytes, new HashSet<CredentialPath>(), () => SaltGenerator.Create(),
+                cborBytes, new HashSet<CredentialPath>(), TestSalts.DefaultGenerator(),
                 WellKnownHashAlgorithms.Sha256Iana);
 
             Assert.HasCount(0, disclosures);
@@ -141,7 +141,7 @@ internal sealed class SdCwtIssuancePropertyTests
             HashSet<CredentialPath> paths = ToCwtCredentialPaths(new HashSet<int>(claims.Keys));
 
             var (payload, disclosures) = SdCwtClaimRedaction.Redact(
-                cborBytes, paths, () => SaltGenerator.Create(),
+                cborBytes, paths, TestSalts.DefaultGenerator(),
                 WellKnownHashAlgorithms.Sha256Iana);
 
             Assert.HasCount(claims.Count, disclosures);

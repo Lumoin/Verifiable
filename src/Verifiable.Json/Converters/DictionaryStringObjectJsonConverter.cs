@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -25,7 +27,7 @@ namespace Verifiable.Json.Converters
     /// </remarks>
     public sealed class DictionaryStringObjectJsonConverter: JsonConverter<Dictionary<string, object>>
     {
-        private readonly IJsonTypeInfoResolver _resolver;
+        private readonly IJsonTypeInfoResolver resolver;
 
         /// <summary>
         /// Initializes a new instance of <see cref="DictionaryStringObjectJsonConverter"/>.
@@ -38,7 +40,7 @@ namespace Verifiable.Json.Converters
         public DictionaryStringObjectJsonConverter(IJsonTypeInfoResolver resolver)
         {
             ArgumentNullException.ThrowIfNull(resolver);
-            _resolver = resolver;
+            this.resolver = resolver;
         }
 
 
@@ -174,7 +176,7 @@ namespace Verifiable.Json.Converters
                 default:
                 {
                     Type runtimeType = value.GetType();
-                    JsonTypeInfo? typeInfo = _resolver.GetTypeInfo(runtimeType, options);
+                    JsonTypeInfo? typeInfo = resolver.GetTypeInfo(runtimeType, options);
                     if(typeInfo is null)
                     {
                         throw new NotSupportedException(

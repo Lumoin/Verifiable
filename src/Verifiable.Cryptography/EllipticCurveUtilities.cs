@@ -320,6 +320,7 @@ namespace Verifiable.Cryptography
             result[0] = UncompressedCoordinateFormat;
             x.CopyTo(result.AsSpan(1));
             y.CopyTo(result.AsSpan(1 + x.Length));
+
             return result;
         }
 
@@ -358,7 +359,59 @@ namespace Verifiable.Cryptography
             }
 
             int coordinateLength = (uncompressedCoordinates.Length - 1) / 2;
+
             return uncompressedCoordinates.Slice(1 + coordinateLength, coordinateLength);
+        }
+
+
+        /// <summary>
+        /// Extracts the X and Y coordinates from an elliptic curve public key point,
+        /// regardless of whether it is stored in compressed or uncompressed SEC1 encoding.
+        /// </summary>
+        /// <param name="point">
+        /// The key material. Either compressed (<c>0x02/0x03 || X</c>) or uncompressed
+        /// (<c>0x04 || X || Y</c>) SEC1 encoding. The encoding is detected from the first byte.
+        /// </param>
+        /// <param name="curveType">
+        /// The elliptic curve type. Required only for the compressed path to recover Y via
+        /// <see cref="Decompress"/>. Ignored for uncompressed input.
+        /// </param>
+        /// <param name="x">
+        /// On return, a span over the X coordinate bytes. When <paramref name="point"/> is
+        /// uncompressed this is a slice into <paramref name="point"/>; when compressed it is
+        /// a slice into <paramref name="point"/> after the prefix byte.
+        /// </param>
+        /// <param name="y">
+        /// On return, a span over the Y coordinate bytes. When <paramref name="point"/> is
+        /// uncompressed this is a slice into <paramref name="point"/>; when compressed it is
+        /// a freshly allocated array returned by <see cref="Decompress"/>.
+        /// </param>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the first byte is not a valid SEC1 prefix (0x02, 0x03, or 0x04).
+        /// </exception>
+        public static void ExtractCoordinates(
+            ReadOnlySpan<byte> point,
+            EllipticCurveTypes curveType,
+            out ReadOnlySpan<byte> x,
+            out ReadOnlySpan<byte> y)
+        {
+            if(point[0] == UncompressedCoordinateFormat)
+            {
+                x = SliceXCoordinate(point);
+                y = SliceYCoordinate(point);
+                return;
+            }
+
+            if(point[0] == EvenYCoordinate || point[0] == OddYCoordinate)
+            {
+                x = point.Slice(1);
+                y = Decompress(point, curveType);
+                return;
+            }
+
+            throw new ArgumentOutOfRangeException(
+                nameof(point),
+                $"First byte 0x{point[0]:X2} is not a valid SEC1 prefix. Expected 0x02, 0x03, or 0x04.");
         }
 
 

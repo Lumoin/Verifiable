@@ -15,16 +15,7 @@
     <EmbeddedResource Remove="Infrastructure\Extensions\**" />
     <None Remove="Infrastructure\Extensions\**" />
   </ItemGroup>
-  
-   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-    <AdditionalFiles Include="..\..\BannedSymbols.Serialization.txt" Visible="false" />
-    <AdditionalFiles Include="..\..\BannedSymbols.txt" Visible="false" />
-  </ItemGroup>
-  
+       
    <ItemGroup>
      <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
    </ItemGroup>

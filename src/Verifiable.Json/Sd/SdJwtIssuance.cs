@@ -1,7 +1,8 @@
-﻿using System.Buffers;
+using System.Buffers;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.JCose.Sd;
 
 namespace Verifiable.Json.Sd;
 
@@ -11,12 +12,14 @@ namespace Verifiable.Json.Sd;
 /// <remarks>
 /// <para>
 /// Wraps <see cref="SdIssuance.IssueAsync"/> with the internal <see cref="SdJwtPipeline"/>
-/// implementation so callers never handle delegates directly:
+/// implementation so callers do not handle redact/sign delegates directly. The
+/// application supplies a <see cref="GenerateDisclosureSaltDelegate"/> bound to its
+/// entropy backend and memory pool:
 /// </para>
 /// <code>
 /// var result = await SdJwtIssuance.IssueAsync(
 ///     jsonBytes, disclosablePaths,
-///     SaltGenerator.Create,
+///     () => Salt.Generate(byteLength: 16, tag, pool),
 ///     privateKey, "did:example:issuer#key-1", pool);
 /// </code>
 /// <para>
@@ -34,7 +37,13 @@ public static class SdJwtIssuance
     /// <param name="disclosablePaths">
     /// Paths identifying claims that should be selectively disclosable.
     /// </param>
-    /// <param name="saltFactory">Factory for generating cryptographic salt for each disclosure.</param>
+    /// <param name="generateSalt">
+    /// Delegate that allocates and fills a <see cref="Salt"/> per disclosable claim.
+    /// Each returned salt's ownership transfers to a new <see cref="SdDisclosure"/>;
+    /// the returned <see cref="SdTokenResult"/> carries the disclosures, and the caller
+    /// owns them (typically by handing them to an <see cref="SdToken{TEnvelope}"/>
+    /// whose disposal flows to them).
+    /// </param>
     /// <param name="privateKey">The issuer's signing key.</param>
     /// <param name="keyId">The key identifier for the JWS <c>kid</c> header.</param>
     /// <param name="memoryPool">Memory pool for cryptographic allocations.</param>
@@ -50,7 +59,7 @@ public static class SdJwtIssuance
     public static ValueTask<SdTokenResult> IssueAsync(
         ReadOnlyMemory<byte> payload,
         IReadOnlySet<CredentialPath> disclosablePaths,
-        SaltFactoryDelegate saltFactory,
+        GenerateDisclosureSaltDelegate generateSalt,
         PrivateKeyMemory privateKey,
         string keyId,
         MemoryPool<byte> memoryPool,
@@ -62,7 +71,7 @@ public static class SdJwtIssuance
             payload, disclosablePaths,
             SdJwtPipeline.Redact,
             SdJwtPipeline.Sign,
-            saltFactory, privateKey, keyId, memoryPool,
+            generateSalt, privateKey, keyId, memoryPool,
             hashAlgorithm, mediaType, cancellationToken);
     }
 }

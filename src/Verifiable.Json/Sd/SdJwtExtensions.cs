@@ -1,9 +1,14 @@
+using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
+using Verifiable.JCose.Sd;
 
 namespace Verifiable.Json.Sd;
 
@@ -41,7 +46,7 @@ public static class SdJwtExtensions
         /// <see cref="JsonSerializerOptions"/>.
         /// </summary>
         /// <param name="disclosablePaths">Paths identifying claims that should be selectively disclosable.</param>
-        /// <param name="saltFactory">Factory for generating cryptographic salt for each disclosure.</param>
+        /// <param name="generateSalt">Delegate that allocates and fills a <see cref="Salt"/> per disclosable claim. Salt ownership transfers to the produced disclosures.</param>
         /// <param name="privateKey">The issuer's signing key.</param>
         /// <param name="keyId">The key identifier for the JWS <c>kid</c> header.</param>
         /// <param name="memoryPool">Memory pool for cryptographic allocations.</param>
@@ -61,7 +66,7 @@ public static class SdJwtExtensions
         /// <returns>An <see cref="SdTokenResult"/> with the compact JWS bytes and disclosures.</returns>
         public ValueTask<SdTokenResult> IssueSdJwtAsync(
             IReadOnlySet<CredentialPath> disclosablePaths,
-            SaltFactoryDelegate saltFactory,
+            GenerateDisclosureSaltDelegate generateSalt,
             PrivateKeyMemory privateKey,
             string keyId,
             MemoryPool<byte> memoryPool,
@@ -75,7 +80,7 @@ public static class SdJwtExtensions
             byte[] jsonBytes = JsonSerializerExtensions.SerializeToUtf8Bytes(claims, options);
 
             return SdJwtIssuance.IssueAsync(
-                jsonBytes, disclosablePaths, saltFactory,
+                jsonBytes, disclosablePaths, generateSalt,
                 privateKey, keyId, memoryPool,
                 hashAlgorithm, mediaType, cancellationToken);
         }
@@ -97,7 +102,7 @@ public static class SdJwtExtensions
         /// Paths identifying claims that should be selectively disclosable.
         /// All paths must begin with <c>/credentialSubject</c>.
         /// </param>
-        /// <param name="saltFactory">Factory for generating cryptographic salt for each disclosure.</param>
+        /// <param name="generateSalt">Delegate that allocates and fills a <see cref="Salt"/> per disclosable claim. Salt ownership transfers to the produced disclosures.</param>
         /// <param name="privateKey">The issuer's signing key.</param>
         /// <param name="keyId">The key identifier for the JWS <c>kid</c> header.</param>
         /// <param name="memoryPool">Memory pool for cryptographic allocations.</param>
@@ -120,7 +125,7 @@ public static class SdJwtExtensions
         /// </exception>
         public ValueTask<SdTokenResult> IssueSdJwtAsync(
             IReadOnlySet<CredentialPath> disclosablePaths,
-            SaltFactoryDelegate saltFactory,
+            GenerateDisclosureSaltDelegate generateSalt,
             PrivateKeyMemory privateKey,
             string keyId,
             MemoryPool<byte> memoryPool,
@@ -137,7 +142,7 @@ public static class SdJwtExtensions
             byte[] jsonBytes = JsonSerializerExtensions.SerializeToUtf8Bytes(credential, options);
 
             return SdJwtIssuance.IssueAsync(
-                jsonBytes, disclosablePaths, saltFactory,
+                jsonBytes, disclosablePaths, generateSalt,
                 privateKey, keyId, memoryPool,
                 hashAlgorithm, mediaType, cancellationToken);
         }

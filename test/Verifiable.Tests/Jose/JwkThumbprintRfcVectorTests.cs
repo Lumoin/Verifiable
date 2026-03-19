@@ -1,7 +1,5 @@
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Tests.TestInfrastructure;
-using static Verifiable.JCose.JwkThumbprintUtilities.JwkTemplateConstants;
 
 namespace Verifiable.Tests.Jose;
 
@@ -19,7 +17,7 @@ internal class JwkThumbprintRfcVectorTests
     [TestMethod]
     public void ComputeRsaThumbprintRfc7638Section3Point1ExampleMatchesExpectedThumbprint()
     {
-        var e = RsaStandardExponent;
+        var e = JwkTemplateConstants.RsaStandardExponent;
         var kty = WellKnownKeyTypeValues.Rsa;
         var n = "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw";
         var expectedThumbprint = "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs";
@@ -61,7 +59,7 @@ internal class JwkThumbprintRfcVectorTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeEcdhThumbprint(crv, kty, x);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>
@@ -78,7 +76,7 @@ internal class JwkThumbprintRfcVectorTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>
@@ -95,7 +93,7 @@ internal class JwkThumbprintRfcVectorTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>
@@ -112,7 +110,7 @@ internal class JwkThumbprintRfcVectorTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>
@@ -127,7 +125,7 @@ internal class JwkThumbprintRfcVectorTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeOctThumbprint(k, kty);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>
@@ -139,14 +137,14 @@ internal class JwkThumbprintRfcVectorTests
     {
         var jwkParams = new Dictionary<string, string>
         {
-            [JwkProperties.Kty] = WellKnownKeyTypeValues.Rsa,
-            [JwkProperties.E] = RsaStandardExponent,
-            [JwkProperties.N] = "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw"
+            [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Rsa,
+            [WellKnownJwkValues.E] = JwkTemplateConstants.RsaStandardExponent,
+            [WellKnownJwkValues.N] = "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw"
         };
 
         using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(jwkParams);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>
@@ -158,18 +156,18 @@ internal class JwkThumbprintRfcVectorTests
     {
         var jwkParams1 = new Dictionary<string, string>
         {
-            [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec,
-            [JwkProperties.Crv] = WellKnownCurveValues.P256,
-            [JwkProperties.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
-            [JwkProperties.Y] = "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE"
+            [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
+            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
+            [WellKnownJwkValues.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
+            [WellKnownJwkValues.Y] = "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE"
         };
 
         var jwkParams2 = new Dictionary<string, string>
         {
-            [JwkProperties.Y] = "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE",
-            [JwkProperties.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
-            [JwkProperties.Crv] = WellKnownCurveValues.P256,
-            [JwkProperties.Kty] = WellKnownKeyTypeValues.Ec
+            [WellKnownJwkValues.Y] = "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE",
+            [WellKnownJwkValues.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
+            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
+            [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec
         };
 
         using var thumbprint1 = JwkThumbprintUtilities.ComputeGenericThumbprint(jwkParams1);

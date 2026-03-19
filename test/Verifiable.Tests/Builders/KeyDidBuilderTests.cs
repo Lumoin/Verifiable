@@ -5,6 +5,7 @@ using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Validation;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Json;

@@ -1,9 +1,12 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.StatusList;
+using Verifiable.JCose;
+using Verifiable.OAuth.Oid4Vp;
 
 namespace Verifiable.Json;
 
@@ -30,10 +33,20 @@ namespace Verifiable.Json;
 //DataIntegrityProofConverter. VerificationMethodReference subclasses are
 //fully handled by manual converters and do not go through source-gen.
 [JsonSerializable(typeof(VerificationMethod))]
-//JOSE header serialization.
+//JOSE header and JWK serialization.
+[JsonSerializable(typeof(JwtHeader))]
+[JsonSerializable(typeof(JwtPayload))]
+[JsonSerializable(typeof(JwksDocument))]
+[JsonSerializable(typeof(JsonWebKey))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
 [JsonSerializable(typeof(Dictionary<string, object?>))]
 [JsonSerializable(typeof(Dictionary<string, object>))]
+//Primitive types that appear as values in Dictionary<string, object> payloads.
+//Required for polymorphic serialization of JWT claims (e.g., iat as long).
+[JsonSerializable(typeof(long))]
+[JsonSerializable(typeof(int))]
+[JsonSerializable(typeof(bool))]
+[JsonSerializable(typeof(double))]
 //Primitive arrays used in manual converters (e.g. StatusListAggregationJsonConverter).
 [JsonSerializable(typeof(string[]))]
 //JSON-LD context serialization for proof options documents.
@@ -43,6 +56,15 @@ namespace Verifiable.Json;
 [JsonSerializable(typeof(StatusListReference))]
 [JsonSerializable(typeof(StatusClaim))]
 [JsonSerializable(typeof(StatusListAggregation))]
-internal partial class VerifiableJsonContext: JsonSerializerContext
+//OID4VP protocol types.
+[JsonSerializable(typeof(VpToken))]
+[JsonSerializable(typeof(VpFormatsSupported))]
+[JsonSerializable(typeof(VerifierClientMetadata))]
+[JsonSerializable(typeof(AuthorizationRequestObject))]
+[JsonSerializable(typeof(WalletMetadata))]
+[JsonSerializable(typeof(DirectPostBody))]
+[JsonSerializable(typeof(DirectPostJwtBody))]
+[JsonSerializable(typeof(DirectPostResult))]
+public partial class VerifiableJsonContext: JsonSerializerContext
 {
 }

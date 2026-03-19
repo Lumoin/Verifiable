@@ -1,8 +1,4 @@
-﻿using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.JCose.Sd;
 
@@ -27,7 +23,10 @@ namespace Verifiable.Core.SelectiveDisclosure;
 /// </remarks>
 /// <param name="payload">The raw payload bytes in the source format.</param>
 /// <param name="disclosablePaths">Paths identifying claims that should be selectively disclosable.</param>
-/// <param name="saltFactory">Factory for generating cryptographic salt for each disclosure.</param>
+/// <param name="generateSalt">
+/// Delegate that allocates and fills a <see cref="Salt"/> per disclosable claim.
+/// Each returned salt's ownership transfers to the disclosure produced from it.
+/// </param>
 /// <param name="hashAlgorithm">The hash algorithm identifier in IANA format (e.g., <c>"sha-256"</c>).</param>
 /// <returns>
 /// A tuple of the redacted payload bytes (ready to sign, in the same format as the input)
@@ -36,7 +35,7 @@ namespace Verifiable.Core.SelectiveDisclosure;
 public delegate (ReadOnlyMemory<byte> RedactedPayload, IReadOnlyList<SdDisclosure> Disclosures) RedactPayloadDelegate(
     ReadOnlyMemory<byte> payload,
     IReadOnlySet<CredentialPath> disclosablePaths,
-    SaltFactoryDelegate saltFactory,
+    GenerateDisclosureSaltDelegate generateSalt,
     string hashAlgorithm);
 
 
@@ -147,7 +146,11 @@ public static class SdIssuance
     /// Format-specific delegate that constructs headers, signs the redacted payload,
     /// and serializes the result.
     /// </param>
-    /// <param name="saltFactory">Factory for generating cryptographic salt for each disclosure.</param>
+    /// <param name="generateSalt">
+    /// Delegate that allocates and fills a <see cref="Salt"/> per disclosable claim.
+    /// Each returned salt's ownership transfers to the disclosure produced from it;
+    /// the disclosures are returned in the result for the caller to own.
+    /// </param>
     /// <param name="privateKey">The issuer's signing key.</param>
     /// <param name="keyId">The key identifier for the token header.</param>
     /// <param name="memoryPool">Memory pool for cryptographic allocations.</param>
@@ -166,7 +169,7 @@ public static class SdIssuance
         IReadOnlySet<CredentialPath> disclosablePaths,
         RedactPayloadDelegate redact,
         SignPayloadDelegate sign,
-        SaltFactoryDelegate saltFactory,
+        GenerateDisclosureSaltDelegate generateSalt,
         PrivateKeyMemory privateKey,
         string keyId,
         MemoryPool<byte> memoryPool,
@@ -177,7 +180,7 @@ public static class SdIssuance
         ArgumentNullException.ThrowIfNull(disclosablePaths);
         ArgumentNullException.ThrowIfNull(redact);
         ArgumentNullException.ThrowIfNull(sign);
-        ArgumentNullException.ThrowIfNull(saltFactory);
+        ArgumentNullException.ThrowIfNull(generateSalt);
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(keyId);
         ArgumentNullException.ThrowIfNull(memoryPool);
@@ -186,7 +189,7 @@ public static class SdIssuance
         string resolvedMediaType = mediaType ?? string.Empty;
 
         var (redactedPayload, disclosures) = redact(
-            payload, disclosablePaths, saltFactory, resolvedHashAlgorithm);
+            payload, disclosablePaths, generateSalt, resolvedHashAlgorithm);
 
         ReadOnlyMemory<byte> signedToken = await sign(
             redactedPayload, resolvedHashAlgorithm, resolvedMediaType,
