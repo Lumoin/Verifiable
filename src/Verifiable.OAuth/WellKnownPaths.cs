@@ -1,4 +1,3 @@
-﻿using System;
 using Verifiable.Core.Resolvers;
 
 namespace Verifiable.OAuth;

@@ -4,7 +4,6 @@ using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;

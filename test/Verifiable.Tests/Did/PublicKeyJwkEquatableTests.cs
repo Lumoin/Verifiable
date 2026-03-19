@@ -1,7 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Did;
 using Verifiable.JCose;
-using Verifiable.Jose;
 
 namespace Verifiable.Tests.Did
 {

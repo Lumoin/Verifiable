@@ -34,6 +34,8 @@
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="SimpleBase" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+    <PackageReference Include="System.Reactive" />
+    <PackageReference Include="Microsoft.Reactive.Testing" />
     <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage">      
       <VersionOverride>18.5.2</VersionOverride>
     </PackageReference>

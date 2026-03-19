@@ -1,4 +1,4 @@
-﻿namespace Verifiable.JCose;
+namespace Verifiable.JCose;
 
 /// <summary>
 /// CWT (CBOR Web Token) claim keys as defined in
@@ -241,7 +241,7 @@ public static class WellKnownCwtClaims
     /// <returns>The CWT claim key, or <see langword="null"/> if unknown.</returns>
     public static int? GetClaimKey(string jwtClaimName) => jwtClaimName switch
     {
-        var c when WellKnownJwtClaims.IsIssuer(c) => Iss,
+        var c when WellKnownJwtClaims.IsIss(c) => Iss,
         var c when WellKnownJwtClaims.IsSub(c) => Sub,
         var c when WellKnownJwtClaims.IsAud(c) => Aud,
         var c when WellKnownJwtClaims.IsExp(c) => Exp,

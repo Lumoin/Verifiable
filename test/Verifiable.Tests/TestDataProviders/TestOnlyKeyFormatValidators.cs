@@ -1,8 +1,7 @@
-﻿using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.Jose;
 
 namespace Verifiable.Tests.TestDataProviders
 {

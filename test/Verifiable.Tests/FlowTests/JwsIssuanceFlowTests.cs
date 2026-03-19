@@ -5,7 +5,6 @@ using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;

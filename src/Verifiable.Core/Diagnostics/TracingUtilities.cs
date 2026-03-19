@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Security.Cryptography;
 
 
-namespace Verifiable.Core.Assessment
+namespace Verifiable.Core.Diagnostics
 {
     /// <summary>
     /// Provides utilities for generating tracing information.

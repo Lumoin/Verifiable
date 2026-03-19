@@ -1,5 +1,4 @@
-﻿using Verifiable.JCose;
-using Verifiable.Jose;
+using Verifiable.JCose;
 
 namespace Verifiable.Tests.TestDataProviders
 {

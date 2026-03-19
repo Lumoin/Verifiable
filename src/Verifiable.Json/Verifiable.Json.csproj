@@ -20,6 +20,7 @@
     <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
     <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
     <ProjectReference Include="..\Verifiable.JsonPointer\Verifiable.JsonPointer.csproj" />
+    <ProjectReference Include="..\Verifiable.OAuth\Verifiable.OAuth.csproj" />
   </ItemGroup>
   
   <ItemGroup>

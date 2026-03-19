@@ -15,10 +15,8 @@ using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Sd;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
-using static Verifiable.JCose.Eudi.EudiPid;
 
 namespace Verifiable.Tests.DataIntegrity;
 

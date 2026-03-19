@@ -1,10 +1,8 @@
 using System.Buffers;
-using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 

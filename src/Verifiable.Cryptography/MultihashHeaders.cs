@@ -1,9 +1,7 @@
-﻿using System;
-
 namespace Verifiable.Cryptography
 {
     /// <summary>
-    /// https://www.w3.org/TR/vc-data-integrity/#multihash
+    /// https://www.w3.org/TR/cid-1.0/#multihash
     /// </summary>
     public static class MultihashHeaders
     {

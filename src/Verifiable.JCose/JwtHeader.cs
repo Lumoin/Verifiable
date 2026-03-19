@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -34,10 +34,13 @@ public class JwtHeader: Dictionary<string, object>, IEquatable<JwtHeader>
     public JwtHeader(int capacity) : base(capacity) { }
 
     /// <summary>
-    /// Creates a JWT header populated from an existing dictionary.
+    /// Creates a JWT header populated from any key-value enumerable,
+    /// including <see cref="Dictionary{TKey,TValue}"/>,
+    /// <see cref="IReadOnlyDictionary{TKey,TValue}"/>, and
+    /// <see cref="IDictionary{TKey,TValue}"/>.
     /// </summary>
-    /// <param name="dictionary">The dictionary whose entries are copied.</param>
-    public JwtHeader(IDictionary<string, object> dictionary) : base(dictionary) { }
+    /// <param name="parameters">The key-value pairs to copy.</param>
+    public JwtHeader(IEnumerable<KeyValuePair<string, object>> parameters) : base(parameters) { }
 
 
     /// <inheritdoc/>

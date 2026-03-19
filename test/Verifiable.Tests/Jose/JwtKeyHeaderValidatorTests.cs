@@ -1,6 +1,6 @@
-﻿using Verifiable.Core.Assessment;
+using Verifiable.Core.Assessment;
+using Verifiable.Core.Validation;
 using Verifiable.JCose;
-using Verifiable.Jose;
 
 namespace Verifiable.Tests.Jwt
 {

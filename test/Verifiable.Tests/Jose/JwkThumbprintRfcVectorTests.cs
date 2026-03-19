@@ -1,5 +1,4 @@
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Tests.TestInfrastructure;
 using static Verifiable.JCose.JwkThumbprintUtilities.JwkTemplateConstants;
 

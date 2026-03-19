@@ -99,6 +99,15 @@
         "resolved": "10.0.5",
         "contentHash": "A+5ZuQ0f449tM+MQrhf6R9ZX7lYpjk/ODEwLYKrnF6111rtARx8fVsm4YznUnQiKnnXfaXNBqgxmil6RW3L3SA=="
       },
+      "Microsoft.Reactive.Testing": {
+        "type": "Direct",
+        "requested": "[6.1.0, )",
+        "resolved": "6.1.0",
+        "contentHash": "1KLmcpM299ZSA8ZjCbXApM/TVeaJJGZZz8nEJ8SWszf/JYcPqhzeg5s2rhCBIWuSoBaga3lny4EATs4fi/ME5A==",
+        "dependencies": {
+          "System.Reactive": "6.1.0"
+        }
+      },
       "Microsoft.Sbom.Targets": {
         "type": "Direct",
         "requested": "[4.1.5, )",
@@ -235,6 +244,12 @@
         "requested": "[2.0.5, )",
         "resolved": "2.0.5",
         "contentHash": "2XtWAPk1G6arpe3OCFNrYYuf6iIboznxs2elJSGgd8e0euou7LfGYFon6hBEfDWNtOLr0M3+oUVgy1a5EGa41A=="
+      },
+      "System.Reactive": {
+        "type": "Direct",
+        "requested": "[6.1.0, )",
+        "resolved": "6.1.0",
+        "contentHash": "M5cCC1ZMkZr9jbSQGTHnVkb5TDN67qWCV7AP8TAHdGkvDlu0puT5NzemESNn9+HkYIDpWpocP68/i+/ame2/2w=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Direct",
@@ -962,7 +977,8 @@
         "dependencies": {
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
-          "Verifiable.JsonPointer": "[0.0.0, )"
+          "Verifiable.JsonPointer": "[0.0.0, )",
+          "Verifiable.OAuth": "[0.0.0, )"
         }
       },
       "verifiable.jsonpointer": {

@@ -6,7 +6,6 @@ using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Sd;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.DataIntegrity;

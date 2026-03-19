@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.Jose;
 
 namespace Verifiable.Core.Model.Credentials;
 

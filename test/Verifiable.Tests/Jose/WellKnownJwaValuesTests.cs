@@ -1,7 +1,7 @@
-﻿using Verifiable.Jose;
+using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.Jwt
+namespace Verifiable.Tests.Jose
 {
     /// <summary>
     /// Tests that canonicalization of JWK properies algorithms works correctly.

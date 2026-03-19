@@ -45,6 +45,8 @@
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.5.2" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.0.1" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.0.1" />
+    <PackageVersion Include="System.Reactive" Version="6.1.0" />
+    <PackageVersion Include="Microsoft.Reactive.Testing" Version="6.1.0" />
   </ItemGroup>
   <!--
     Benchmark packages used only in *.Benchmarks projects.

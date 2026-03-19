@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Jose
+namespace Verifiable.JCose
 {
     /// <summary>
     /// Class containing the well-known names of JSON Web Key (JWK) parameters.
@@ -113,6 +113,20 @@
         public static readonly string E = "e";
 
         /// <summary>
+        /// The <c>enc</c> (Encryption Algorithm) header parameter identifies the content encryption
+        /// algorithm used to produce the ciphertext and Authentication Tag.
+        /// See <see href="https://www.rfc-editor.org/rfc/rfc7516#section-4.1.2">RFC 7516 §4.1.2</see>.
+        /// </summary>
+        public static readonly string Enc = "enc";
+
+        /// <summary>
+        /// The <c>epk</c> (Ephemeral Public Key) header parameter carries the sender's ephemeral
+        /// public key in ECDH key agreement algorithms.
+        /// See <see href="https://www.rfc-editor.org/rfc/rfc7518#section-4.6.1.1">RFC 7518 §4.6.1.1</see>.
+        /// </summary>
+        public static readonly string Epk = "epk";
+
+        /// <summary>
         /// The "exp" (Expiration Time) claim identifies the expiration time on or after which the JWT must not be accepted for processing.
         /// </summary>
         /// <remarks>
@@ -146,6 +160,13 @@
         /// See more at <see href="https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.7">"jti" (JWT ID) Claim</see>.
         /// </remarks>
         public static readonly string Jti = "jti";
+
+        /// <summary>
+        /// The <c>jwk</c> (JSON Web Key) header parameter carries the public key used to digitally
+        /// sign the JWS. The key MUST NOT contain the private key component.
+        /// See <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.3">RFC 7515 §4.1.3</see>.
+        /// </summary>
+        public static readonly string Jwk = "jwk";
 
         /// <summary>
         /// The "k" (Symmetric Key Value) parameter contains the value of the symmetric (or other single-value) key.
@@ -601,6 +622,26 @@
         }
 
         /// <summary>
+        /// If <paramref name="property"/> is <see cref="Enc"/> or not.
+        /// </summary>
+        /// <param name="property">The property</param>.
+        /// <returns><see langword="true" /> if is <see cref="Enc"/>; otherwise, <see langword="false" /></returns>.
+        public static bool IsEnc(string property)
+        {
+            return Equals(Enc, property);
+        }
+
+        /// <summary>
+        /// If <paramref name="property"/> is <see cref="Epk"/> or not.
+        /// </summary>
+        /// <param name="property">The property</param>.
+        /// <returns><see langword="true" /> if is <see cref="Epk"/>; otherwise, <see langword="false" /></returns>.
+        public static bool IsEpk(string property)
+        {
+            return Equals(Epk, property);
+        }
+
+        /// <summary>
         /// If <paramref name="property"/> is <see cref="Exp"/> or not.
         /// </summary>
         /// <param name="property">The property</param>.
@@ -638,6 +679,16 @@
         public static bool IsJti(string property)
         {
             return Equals(Jti, property);
+        }
+
+        /// <summary>
+        /// If <paramref name="property"/> is <see cref="Jwk"/> or not.
+        /// </summary>
+        /// <param name="property">The property</param>.
+        /// <returns><see langword="true" /> if is <see cref="Jwk"/>; otherwise, <see langword="false" /></returns>.
+        public static bool IsJwk(string property)
+        {
+            return Equals(Jwk, property);
         }
 
         /// <summary>
@@ -769,10 +820,13 @@
             string _ when IsDp(property) => Dp,
             string _ when IsDq(property) => Dq,
             string _ when IsE(property) => E,
+            string _ when IsEnc(property) => Enc,
+            string _ when IsEpk(property) => Epk,
             string _ when IsExp(property) => Exp,
             string _ when IsIat(property) => Iat,
             string _ when IsIss(property) => Iss,
             string _ when IsJti(property) => Jti,
+            string _ when IsJwk(property) => Jwk,
             string _ when IsK(property) => K,
             string _ when IsKty(property) => Kty,
             string _ when IsUse(property) => Use,

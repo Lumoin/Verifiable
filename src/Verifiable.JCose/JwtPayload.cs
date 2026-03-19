@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -38,10 +38,13 @@ public class JwtPayload: Dictionary<string, object>, IEquatable<JwtPayload>
     public JwtPayload(int capacity) : base(capacity) { }
 
     /// <summary>
-    /// Creates a JWT payload populated from an existing dictionary.
+    /// Creates a JWT payload populated from any key-value enumerable,
+    /// including <see cref="Dictionary{TKey,TValue}"/>,
+    /// <see cref="IReadOnlyDictionary{TKey,TValue}"/>, and
+    /// <see cref="IDictionary{TKey,TValue}"/>.
     /// </summary>
-    /// <param name="dictionary">The dictionary whose entries are copied.</param>
-    public JwtPayload(IDictionary<string, object> dictionary) : base(dictionary) { }
+    /// <param name="claims">The key-value pairs to copy.</param>
+    public JwtPayload(IEnumerable<KeyValuePair<string, object>> claims) : base(claims) { }
 
 
     /// <inheritdoc/>

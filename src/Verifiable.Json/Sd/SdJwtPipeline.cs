@@ -1,17 +1,13 @@
-﻿using System.Buffers;
-using System.Collections.Generic;
+using System.Buffers;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.JCose.Sd;
-using Verifiable.Jose;
 
 namespace Verifiable.Json.Sd;
 

@@ -1,15 +1,14 @@
-﻿using Verifiable.OAuth;
+using Verifiable.OAuth;
 
 namespace Verifiable.Tests.OAuth;
 
-/// <summary>
-/// Tests for <see cref="WellKnownPaths"/> URL computation functions.
-/// </summary>
 [TestClass]
 internal sealed class WellKnownPathsTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
-    public void OAuthAuthorizationServerRootIssuer()
+    public void OAuthAuthorizationServerRootIssuerProducesWellKnownSuffix()
     {
         Uri result = WellKnownPaths.OAuthAuthorizationServer.ComputeUri("https://example.com");
 
@@ -17,7 +16,7 @@ internal sealed class WellKnownPathsTests
     }
 
     [TestMethod]
-    public void OAuthAuthorizationServerRootIssuerWithTrailingSlash()
+    public void OAuthAuthorizationServerRootIssuerWithTrailingSlashProducesWellKnownSuffix()
     {
         Uri result = WellKnownPaths.OAuthAuthorizationServer.ComputeUri("https://example.com/");
 
@@ -25,28 +24,37 @@ internal sealed class WellKnownPathsTests
     }
 
     [TestMethod]
-    public void OAuthAuthorizationServerWithPathComponent()
+    public void OAuthAuthorizationServerPathIssuerInsertsWellKnownBeforePath()
     {
-        //RFC 8414 Section 3: path is moved after well-known.
         Uri result = WellKnownPaths.OAuthAuthorizationServer.ComputeUri("https://example.com/tenant1");
 
-        Assert.AreEqual(
-            "https://example.com/.well-known/oauth-authorization-server/tenant1",
-            result.ToString());
+        Assert.AreEqual("https://example.com/.well-known/oauth-authorization-server/tenant1", result.ToString());
     }
 
     [TestMethod]
-    public void OAuthAuthorizationServerWithNestedPath()
+    public void OAuthAuthorizationServerDeepPathIssuerInsertsWellKnownBeforePath()
     {
-        Uri result = WellKnownPaths.OAuthAuthorizationServer.ComputeUri("https://example.com/org/tenant1");
+        Uri result = WellKnownPaths.OAuthAuthorizationServer.ComputeUri("https://example.com/region/eu/tenant1");
 
-        Assert.AreEqual(
-            "https://example.com/.well-known/oauth-authorization-server/org/tenant1",
-            result.ToString());
+        Assert.AreEqual("https://example.com/.well-known/oauth-authorization-server/region/eu/tenant1", result.ToString());
     }
 
     [TestMethod]
-    public void OpenIdConfigurationRootIssuer()
+    public void OAuthAuthorizationServerThrowsForEmptyIdentifier()
+    {
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            WellKnownPaths.OAuthAuthorizationServer.ComputeUri(string.Empty));
+    }
+
+    [TestMethod]
+    public void OAuthAuthorizationServerThrowsForWhitespaceIdentifier()
+    {
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            WellKnownPaths.OAuthAuthorizationServer.ComputeUri("   "));
+    }
+
+    [TestMethod]
+    public void OpenIdConfigurationRootIssuerProducesWellKnownSuffix()
     {
         Uri result = WellKnownPaths.OpenIdConfiguration.ComputeUri("https://example.com");
 
@@ -54,26 +62,39 @@ internal sealed class WellKnownPathsTests
     }
 
     [TestMethod]
-    public void OpenIdConfigurationWithPathAppendsSuffix()
+    public void OpenIdConfigurationPathIssuerAppendsSuffixAtEnd()
     {
-        //OpenID Connect Discovery appends, does not insert.
-        Uri result = WellKnownPaths.OpenIdConfiguration.ComputeUri("https://example.com/issuer1");
+        Uri result = WellKnownPaths.OpenIdConfiguration.ComputeUri("https://example.com/tenant1");
 
-        Assert.AreEqual(
-            "https://example.com/issuer1/.well-known/openid-configuration",
-            result.ToString());
+        Assert.AreEqual("https://example.com/tenant1/.well-known/openid-configuration", result.ToString());
     }
 
     [TestMethod]
-    public void OpenIdFederationEntityConfiguration()
+    public void OpenIdConfigurationIgnoresTrailingSlash()
     {
-        Uri result = WellKnownPaths.OpenIdFederation.ComputeUri("https://op.umu.se");
+        Uri result = WellKnownPaths.OpenIdConfiguration.ComputeUri("https://example.com/");
 
-        Assert.AreEqual("https://op.umu.se/.well-known/openid-federation", result.ToString());
+        Assert.AreEqual("https://example.com/.well-known/openid-configuration", result.ToString());
     }
 
     [TestMethod]
-    public void AuthZenConfigurationPdpMetadata()
+    public void OpenIdFederationProducesCorrectWellKnownSuffix()
+    {
+        Uri result = WellKnownPaths.OpenIdFederation.ComputeUri("https://trust-anchor.example.eu");
+
+        Assert.AreEqual("https://trust-anchor.example.eu/.well-known/openid-federation", result.ToString());
+    }
+
+    [TestMethod]
+    public void OpenIdFederationPathEntityIdentifierAppendsSuffixAtEnd()
+    {
+        Uri result = WellKnownPaths.OpenIdFederation.ComputeUri("https://example.com/entity/leaf");
+
+        Assert.AreEqual("https://example.com/entity/leaf/.well-known/openid-federation", result.ToString());
+    }
+
+    [TestMethod]
+    public void AuthZenConfigurationProducesCorrectWellKnownSuffix()
     {
         Uri result = WellKnownPaths.AuthZenConfiguration.ComputeUri("https://pdp.example.com");
 
@@ -81,7 +102,7 @@ internal sealed class WellKnownPathsTests
     }
 
     [TestMethod]
-    public void DidWebDomainOnlyResolvesToWellKnown()
+    public void DidWebRootDomainProducesWellKnownDidJson()
     {
         Uri result = WellKnownPaths.DidWeb.ComputeUri("did:web:example.com");
 
@@ -89,7 +110,7 @@ internal sealed class WellKnownPathsTests
     }
 
     [TestMethod]
-    public void DidWebWithPathSegments()
+    public void DidWebWithPathProducesPathDidJson()
     {
         Uri result = WellKnownPaths.DidWeb.ComputeUri("did:web:example.com:users:alice");
 
@@ -97,16 +118,7 @@ internal sealed class WellKnownPathsTests
     }
 
     [TestMethod]
-    public void DidWebWithPortEncoding()
-    {
-        //Percent-encoded colon (%3A) in domain represents port separator.
-        Uri result = WellKnownPaths.DidWeb.ComputeUri("did:web:example.com%3A8443");
-
-        Assert.AreEqual("https://example.com:8443/.well-known/did.json", result.ToString());
-    }
-
-    [TestMethod]
-    public void DidWebWithPortAndPath()
+    public void DidWebWithPortAndPathDecodesPercentEncodedColon()
     {
         Uri result = WellKnownPaths.DidWeb.ComputeUri("did:web:example.com%3A8443:users:bob");
 
@@ -117,20 +129,48 @@ internal sealed class WellKnownPathsTests
     public void DidWebThrowsForNonDidWebIdentifier()
     {
         Assert.ThrowsExactly<ArgumentException>(() =>
-            WellKnownPaths.DidWeb.ComputeUri("did:key:z6Mk..."));
+            WellKnownPaths.DidWeb.ComputeUri("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"));
     }
 
     [TestMethod]
     public void DidWebThrowsForEmptyIdentifier()
     {
         Assert.ThrowsExactly<ArgumentException>(() =>
-            WellKnownPaths.DidWeb.ComputeUri(""));
+            WellKnownPaths.DidWeb.ComputeUri(string.Empty));
     }
 
     [TestMethod]
-    public void OAuthAuthorizationServerThrowsForEmptyIdentifier()
+    public void OAuthAuthorizationServerHasCorrectNameAndSpecReference()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
-            WellKnownPaths.OAuthAuthorizationServer.ComputeUri(""));
+        Assert.AreEqual("oauth-authorization-server", WellKnownPaths.OAuthAuthorizationServer.Name);
+        Assert.AreEqual("RFC 8414", WellKnownPaths.OAuthAuthorizationServer.SpecificationReference);
+    }
+
+    [TestMethod]
+    public void OpenIdConfigurationHasCorrectNameAndSpecReference()
+    {
+        Assert.AreEqual("openid-configuration", WellKnownPaths.OpenIdConfiguration.Name);
+        Assert.AreEqual("OpenID Connect Discovery 1.0", WellKnownPaths.OpenIdConfiguration.SpecificationReference);
+    }
+
+    [TestMethod]
+    public void OpenIdFederationHasCorrectNameAndSpecReference()
+    {
+        Assert.AreEqual("openid-federation", WellKnownPaths.OpenIdFederation.Name);
+        Assert.AreEqual("OpenID Federation 1.0", WellKnownPaths.OpenIdFederation.SpecificationReference);
+    }
+
+    [TestMethod]
+    public void AuthZenConfigurationHasCorrectNameAndSpecReference()
+    {
+        Assert.AreEqual("authzen-configuration", WellKnownPaths.AuthZenConfiguration.Name);
+        Assert.AreEqual("Authorization API 1.0", WellKnownPaths.AuthZenConfiguration.SpecificationReference);
+    }
+
+    [TestMethod]
+    public void DidWebHasCorrectNameAndSpecReference()
+    {
+        Assert.AreEqual("did-web", WellKnownPaths.DidWeb.Name);
+        Assert.AreEqual("did:web Method Specification", WellKnownPaths.DidWeb.SpecificationReference);
     }
 }

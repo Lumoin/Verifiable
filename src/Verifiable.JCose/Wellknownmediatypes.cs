@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.JCose
 {
@@ -155,6 +155,18 @@ namespace Verifiable.JCose
             /// </summary>
             public static readonly string VcSdCwt = "application/vc+sd-cwt";
 
+            /// <summary>
+            /// OAuth 2.0 JWT Authorization Request (<c>application/oauth-authz-req+jwt</c>).
+            /// See <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 §4</see>.
+            /// </summary>
+            public static readonly string OauthAuthzReqJwt = "application/oauth-authz-req+jwt";
+
+            /// <summary>
+            /// DPoP proof JWT (<c>application/dpop+jwt</c>).
+            /// See <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 §4.3</see>.
+            /// </summary>
+            public static readonly string DpopJwt = "application/dpop+jwt";
+
 
             /// <summary>
             /// If <paramref name="mediaType"/> is <see cref="SdJwt"/> or not.
@@ -261,6 +273,22 @@ namespace Verifiable.JCose
 
 
             /// <summary>
+            /// Whether <paramref name="mediaType"/> is <see cref="OauthAuthzReqJwt"/>.
+            /// </summary>
+            /// <param name="mediaType">The media type.</param>
+            /// <returns><see langword="true"/> if <paramref name="mediaType"/> is <see cref="OauthAuthzReqJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsOauthAuthzReqJwt(string mediaType) => Equals(mediaType, OauthAuthzReqJwt);
+
+
+            /// <summary>
+            /// Whether <paramref name="mediaType"/> is <see cref="DpopJwt"/>.
+            /// </summary>
+            /// <param name="mediaType">The media type.</param>
+            /// <returns><see langword="true"/> if <paramref name="mediaType"/> is <see cref="DpopJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsDpopJwt(string mediaType) => Equals(mediaType, DpopJwt);
+
+
+            /// <summary>
             /// Returns the equivalent static instance, or the original instance if none match.
             /// This conversion is optional but allows for performance optimizations when comparing values elsewhere.
             /// </summary>
@@ -281,6 +309,8 @@ namespace Verifiable.JCose
                 _ when IsKbJwt(mediaType) => KbJwt,
                 _ when IsSdCwt(mediaType) => SdCwt,
                 _ when IsVcSdCwt(mediaType) => VcSdCwt,
+                _ when IsOauthAuthzReqJwt(mediaType) => OauthAuthzReqJwt,
+                _ when IsDpopJwt(mediaType) => DpopJwt,
                 _ => mediaType
             };
 
@@ -354,6 +384,24 @@ namespace Verifiable.JCose
             public static readonly string KbJwt = "kb+jwt";
 
             /// <summary>
+            /// SD-JWT Verifiable Credential per HAIP 1.0 and RFC 9901 (<c>dc+sd-jwt</c>).
+            /// See <see href="https://www.rfc-editor.org/rfc/rfc9901#section-3.2.2.1.1">RFC 9901 §3.2.2.1.1</see>.
+            /// </summary>
+            public static readonly string DcSdJwt = "dc+sd-jwt";
+
+            /// <summary>
+            /// JWT Authorization Request for JAR (<c>oauth-authz-req+jwt</c>).
+            /// See <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 §4</see>.
+            /// </summary>
+            public static readonly string OauthAuthzReqJwt = "oauth-authz-req+jwt";
+
+            /// <summary>
+            /// DPoP proof JWT (<c>dpop+jwt</c>).
+            /// See <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 §4.3</see>.
+            /// </summary>
+            public static readonly string DpopJwt = "dpop+jwt";
+
+            /// <summary>
             /// If <paramref name="typ"/> is <see cref="SdJwt"/> or not.
             /// </summary>
             /// <param name="typ">The JWT typ header value.</param>
@@ -375,6 +423,30 @@ namespace Verifiable.JCose
             /// <param name="typ">The JWT typ header value.</param>
             /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="KbJwt"/>; otherwise, <see langword="false"/>.</returns>
             public static bool IsKbJwt(string typ) => Equals(typ, KbJwt);
+
+
+            /// <summary>
+            /// Whether <paramref name="typ"/> is <see cref="DcSdJwt"/>.
+            /// </summary>
+            /// <param name="typ">The JWT typ header value.</param>
+            /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="DcSdJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsDcSdJwt(string typ) => Equals(typ, DcSdJwt);
+
+
+            /// <summary>
+            /// Whether <paramref name="typ"/> is <see cref="OauthAuthzReqJwt"/>.
+            /// </summary>
+            /// <param name="typ">The JWT typ header value.</param>
+            /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="OauthAuthzReqJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsOauthAuthzReqJwt(string typ) => Equals(typ, OauthAuthzReqJwt);
+
+
+            /// <summary>
+            /// Whether <paramref name="typ"/> is <see cref="DpopJwt"/>.
+            /// </summary>
+            /// <param name="typ">The JWT typ header value.</param>
+            /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="DpopJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsDpopJwt(string typ) => Equals(typ, DpopJwt);
 
 
             /// <summary>
@@ -424,6 +496,9 @@ namespace Verifiable.JCose
                 _ when IsVcSdJwt(typ) => VcSdJwt,
                 _ when IsSdJwt(typ) => SdJwt,
                 _ when IsKbJwt(typ) => KbJwt,
+                _ when IsDcSdJwt(typ) => DcSdJwt,
+                _ when IsOauthAuthzReqJwt(typ) => OauthAuthzReqJwt,
+                _ when IsDpopJwt(typ) => DpopJwt,
                 _ => typ
             };
 

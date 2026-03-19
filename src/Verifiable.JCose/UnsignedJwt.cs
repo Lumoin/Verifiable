@@ -1,8 +1,7 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
-using Verifiable.Jose;
 
 namespace Verifiable.JCose;
 

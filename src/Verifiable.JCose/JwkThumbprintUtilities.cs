@@ -1,8 +1,7 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
-using Verifiable.Jose;
 
 namespace Verifiable.JCose;
 
