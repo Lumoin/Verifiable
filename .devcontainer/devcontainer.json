@@ -1,0 +1,31 @@
+{
+  "name": "Verifiable",
+  "image": "mcr.microsoft.com/dotnet/sdk:10.0",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "postCreateCommand": "dotnet tool restore",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csdevkit",
+        "ms-vsliveshare.vsliveshare",
+        "GitHub.vscode-github-actions",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "dotnet.defaultSolution": "Verifiable.slnx",
+        "csharp.debug.console": "integratedTerminal",
+        "dotnet.backgroundAnalysis.analyzerDiagnosticsScope": "openFiles",
+        "files.exclude": {
+          "**/bin": true,
+          "**/obj": true
+        },
+        "search.exclude": {
+          "**/bin": true,
+          "**/obj": true
+        }
+      }
+    }
+  }
+}
