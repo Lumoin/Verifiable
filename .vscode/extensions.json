@@ -1,8 +1,9 @@
 {
   "recommendations": [
-    "ms-vscode.csharp",
-    "VisualStudioExptTeam.vscodeintellicode",
-    "MS-vsliveshare.vsliveshare-pack",
-    "redhat.vscode-yaml"
+    "ms-dotnettools.csdevkit",
+    "ms-vsliveshare.vsliveshare",
+    "GitHub.vscode-github-actions",
+    "redhat.vscode-yaml",
+    "ms-vscode-remote.remote-containers"
   ]
 }
