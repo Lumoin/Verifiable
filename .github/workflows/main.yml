@@ -231,7 +231,7 @@ jobs:
 
     - name: Publish coverage summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987
+      uses: marocchino/sticky-pull-request-comment@d4d6b0936434b21bc8345ad45a440c5f7d2c40ff
       with:
         header: Report
         path: '${{ github.workspace }}/reports/coverage/Summary.md'
