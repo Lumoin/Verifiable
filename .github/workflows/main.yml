@@ -195,7 +195,7 @@ jobs:
 
     #- name: Upload Stryker output artefacts
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+    #  uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
     #  with:
     #    name: 'Stryker output artefacts'
     #    path: ${{ github.workspace }}/StrykerOutput/
@@ -204,7 +204,7 @@ jobs:
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
 
     # - name: Archive publish results
-    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+    #  uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
     #  with:
     #    name: Verifiable.Benchmarks
     #    path: ./publish/*
@@ -213,7 +213,7 @@ jobs:
     #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
 
     # - name: Upload benchmark results
-    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+    #  uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
@@ -274,7 +274,7 @@ jobs:
 
     - name: Upload library NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: nupkg-libraries
         path: ./nupkgs/*.*
@@ -432,7 +432,7 @@ jobs:
       shell: bash
 
     - name: Upload AOT RID packages (${{ matrix.os }})
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: nupkg-cli-aot-${{ matrix.os }}
         path: ./nupkgs/*.nupkg
@@ -444,7 +444,7 @@ jobs:
     # <rid> with PublishAot=true — no extra build work. Upload it so people
     # without a .NET SDK can download and run the tool directly.
     - name: Upload native CLI binaries (${{ matrix.os }})
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: cli-binaries-${{ matrix.os }}
         path: src/Verifiable/bin/Release/net10.0/*/publish/Verifiable*
@@ -605,7 +605,7 @@ jobs:
 
     - name: Upload CLI NuGet packages
       if: ${{ github.actor != 'dependabot[bot]' }}
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: nupkg-cli
         path: ./nupkgs/*.*
