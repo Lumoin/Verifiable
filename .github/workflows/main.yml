@@ -101,7 +101,7 @@ jobs:
     steps:
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d
+      uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
       with:
         disable-sudo: true
         egress-policy: block
@@ -195,7 +195,7 @@ jobs:
 
     #- name: Upload Stryker output artefacts
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+    #  uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
     #  with:
     #    name: 'Stryker output artefacts'
     #    path: ${{ github.workspace }}/StrykerOutput/
@@ -204,7 +204,7 @@ jobs:
     #  run: dotnet publish -c Release --verbosity normal -o ./publish/
 
     # - name: Archive publish results
-    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+    #  uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
     #  with:
     #    name: Verifiable.Benchmarks
     #    path: ./publish/*
@@ -213,7 +213,7 @@ jobs:
     #  run: dotnet "./publish/Verifiable.Benchmarks.dll" -f "Verifiable.Benchmarks.*"
 
     # - name: Upload benchmark results
-    #  uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+    #  uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
     #  with:
     #    name: Benchmark_Results
     #    path: ./BenchmarkDotNet.Artifacts/results/*
@@ -231,7 +231,7 @@ jobs:
 
     - name: Publish coverage summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987
+      uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0
       with:
         header: Report
         path: '${{ github.workspace }}/reports/coverage/Summary.md'
@@ -274,7 +274,7 @@ jobs:
 
     - name: Upload library NuGet packages
       if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: nupkg-libraries
         path: ./nupkgs/*.*
@@ -342,7 +342,7 @@ jobs:
       if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm' }}
       # Note: disable-sudo is intentionally omitted here because apt-get is
       # needed below to install native AOT prerequisites (clang, zlib1g-dev).
-      uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d
+      uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
       with:
         egress-policy: block
         allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
@@ -432,7 +432,7 @@ jobs:
       shell: bash
 
     - name: Upload AOT RID packages (${{ matrix.os }})
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: nupkg-cli-aot-${{ matrix.os }}
         path: ./nupkgs/*.nupkg
@@ -444,7 +444,7 @@ jobs:
     # <rid> with PublishAot=true — no extra build work. Upload it so people
     # without a .NET SDK can download and run the tool directly.
     - name: Upload native CLI binaries (${{ matrix.os }})
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: cli-binaries-${{ matrix.os }}
         path: src/Verifiable/bin/Release/net10.0/*/publish/Verifiable*
@@ -463,7 +463,7 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d
+      uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
       with:
         disable-sudo: true
         egress-policy: block
@@ -605,15 +605,11 @@ jobs:
 
     - name: Upload CLI NuGet packages
       if: ${{ github.actor != 'dependabot[bot]' }}
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: nupkg-cli
         path: ./nupkgs/*.*
-
-  # ---------------------------------------------------------------------------
-  # Pre-release and release publishing.
-  # ---------------------------------------------------------------------------
-
+  
   # The release idea is inspired by https://dusted.codes/github-actions-for-dotnet-core-nuget-packages.
   prerelease:
     name: Create and upload Verifiable pre-release packages to GitHub
@@ -624,7 +620,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
         with:
           disable-sudo: true
           egress-policy: block
@@ -675,7 +671,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
         with:
           disable-sudo: true
           egress-policy: block
