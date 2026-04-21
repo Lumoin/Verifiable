@@ -101,7 +101,7 @@ jobs:
     steps:
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
+      uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40
       with:
         disable-sudo: true
         egress-policy: block
@@ -342,7 +342,7 @@ jobs:
       if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm' }}
       # Note: disable-sudo is intentionally omitted here because apt-get is
       # needed below to install native AOT prerequisites (clang, zlib1g-dev).
-      uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
+      uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40
       with:
         egress-policy: block
         allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
@@ -463,7 +463,7 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
+      uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40
       with:
         disable-sudo: true
         egress-policy: block
@@ -620,7 +620,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40
         with:
           disable-sudo: true
           egress-policy: block
@@ -671,7 +671,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40
         with:
           disable-sudo: true
           egress-policy: block
