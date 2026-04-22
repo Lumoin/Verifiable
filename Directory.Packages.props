@@ -16,7 +16,7 @@
     <PackageVersion Include="NSec.Cryptography" Version="25.4.0" />
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />    
     <PackageVersion Include="System.Collections.Immutable" Version="10.0.1" />
-    <PackageVersion Include="System.Formats.Cbor" Version="10.0.6" />
+    <PackageVersion Include="System.Formats.Cbor" Version="10.0.7" />
     <PackageVersion Include="System.Net.Http.Json" Version="10.0.1" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.6" />
     <PackageVersion Include="System.Text.Json" Version="10.0.1" />
