@@ -32,9 +32,9 @@
       },
       "System.Formats.Cbor": {
         "type": "Direct",
-        "requested": "[10.0.6, )",
-        "resolved": "10.0.6",
-        "contentHash": "FiEKCMZF4Hw+tt4JqYTUG6QO4wb5gR75Rqbsq15D3a11SxSfW+OB0qyRlNAijdQ+rB9zTiMMJbGRFXmK7fwkGA=="
+        "requested": "[10.0.7, )",
+        "resolved": "10.0.7",
+        "contentHash": "lqHPyoYhmrP7D0r8jLuBWUC0UaE+qmoZqm85OF8Q/YNH/gYDAR1ax6quqHPPgFFJV4P9qmqrMYOSwF2imqcsxQ=="
       },
       "Markdig.Signed": {
         "type": "Transitive",
