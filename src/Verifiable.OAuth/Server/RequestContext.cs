@@ -10,13 +10,38 @@ namespace Verifiable.OAuth.Server;
 /// </summary>
 /// <remarks>
 /// <para>
+/// Per-request bag populated at dispatch entry by the application skin. Lives
+/// until response. Carries edge values (HTTP fields, headers, route values)
+/// plus dispatch-time resolved values (issuer URL, time provider snapshot,
+/// resolved policy via
+/// <see cref="PolicyRequestContextExtensions"/>). Cross-request data lives in
+/// <see cref="OAuthFlowState"/>; stage-bounded refined views live in
+/// <see cref="Verifiable.OAuth.IssuanceContext"/> and
+/// <see cref="Verifiable.OAuth.Validation.ValidationContext"/>.
+/// </para>
+/// <para>
+/// Each per-request context shape's lifetime maps to a stage of request
+/// processing — the pipeline-stage separation is real, not incidental:
+/// <see cref="RequestContext"/> covers the whole request;
+/// <see cref="Verifiable.OAuth.IssuanceContext"/> exists only during a token
+/// producer / claim contributor walk;
+/// <see cref="Verifiable.OAuth.Validation.ValidationContext"/> exists only
+/// during a single validation-check run. Per-request data lives here via
+/// typed extensions; stage-bounded data lives on the appropriate
+/// stage-specific typed record; persistent cross-request data lives on
+/// <see cref="OAuthFlowState"/>.
+/// </para>
+/// <para>
 /// The ASP.NET skin constructs a <see cref="RequestContext"/> before calling
-/// <see cref="AuthorizationServerDispatcher.DispatchAsync"/>, placing whatever
-/// request-scoped data the application needs: tenant identifier, remote IP,
-/// trace context, authenticated user identity, billing tier, regional affinity.
-/// The dispatcher enriches it with the resolved <see cref="ClientRegistration"/>
-/// and a consistent request timestamp. Every delegate in the pipeline — endpoint
-/// builders, key resolvers, action handlers — receives the same instance.
+/// <see cref="AuthorizationServer.DispatchAsync(IncomingRequest, RequestContext, CancellationToken)"/>,
+/// placing whatever request-scoped data the application needs: tenant
+/// identifier, remote IP, trace context, authenticated user identity, billing
+/// tier, regional affinity. The dispatcher enriches it with the resolved
+/// <see cref="ClientRegistration"/>, a consistent request timestamp, and the
+/// resolved policy values populated by
+/// <see cref="AuthorizationServerIntegration.ResolvePolicyAsync"/>. Every
+/// delegate in the pipeline — endpoint builders, key resolvers, action
+/// handlers — receives the same instance.
 /// </para>
 /// <para>
 /// Typed access is provided by extension methods in

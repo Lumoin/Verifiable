@@ -397,6 +397,7 @@ public static class HaipOid4VpVerifierExecutor
 
             ValidationContext validationContext = new()
             {
+                Context = context,
                 Now = now,
                 ExpectedNonce = action.Nonce.Value,
                 ExpectedClientId = registration.ClientId,

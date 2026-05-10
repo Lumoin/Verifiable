@@ -49,7 +49,9 @@ public static class AuthCodeRequestObjectExtensions
             string clientId = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.ClientId);
             string responseType = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.ResponseType);
             string redirectUriString = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.RedirectUri);
-            string scope = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.Scope);
+            //Scope is optional in the projection; required-ness is a policy
+            //axis (policy.ScopeRequiredOnRequest) enforced at the matcher.
+            string scope = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameters.Scope) ?? string.Empty;
             string state = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.State);
             string nonce = JwtClaimReaders.RequireClaim(claims, WellKnownJwtClaims.Nonce);
             string codeChallenge = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.CodeChallenge);

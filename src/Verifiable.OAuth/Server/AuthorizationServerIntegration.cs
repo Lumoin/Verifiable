@@ -160,6 +160,26 @@ public sealed class AuthorizationServerIntegration
     /// </remarks>
     public ClassifyTokenDelegate? ClassifyTokenAsync { get; set; }
 
+    /// <summary>
+    /// Resolves the per-request policy values for the loaded registration and
+    /// populates them on the <see cref="RequestContext"/> at dispatch entry.
+    /// Required.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The dispatcher invokes this delegate once per request after the
+    /// registration is loaded but before any matcher executes. Matchers,
+    /// validators, and token producers downstream consult policy via the
+    /// typed extensions in <see cref="PolicyRequestContextExtensions"/>.
+    /// </para>
+    /// <para>
+    /// Wire to <see cref="PolicyProfiles.DefaultResolvePolicyAsync"/> for the
+    /// library's named-profile dispatch (<c>strict</c>, <c>haip</c>,
+    /// <c>rfc6749</c>), or supply a custom delegate for bespoke policy.
+    /// </para>
+    /// </remarks>
+    public ResolvePolicyDelegate? ResolvePolicyAsync { get; set; }
+
 
     /// <summary>
     /// Whether <see cref="Validate"/> has been called successfully on this group.
@@ -181,6 +201,7 @@ public sealed class AuthorizationServerIntegration
         if(LoadClientRegistrationAsync is null) { missing.Add(nameof(LoadClientRegistrationAsync)); }
         if(SaveFlowStateAsync is null) { missing.Add(nameof(SaveFlowStateAsync)); }
         if(LoadFlowStateAsync is null) { missing.Add(nameof(LoadFlowStateAsync)); }
+        if(ResolvePolicyAsync is null) { missing.Add(nameof(ResolvePolicyAsync)); }
 
         if(missing.Count > 0)
         {

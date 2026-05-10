@@ -5,20 +5,37 @@ using Verifiable.OAuth.Server;
 namespace Verifiable.OAuth;
 
 /// <summary>
-/// The immutable inputs available to a <see cref="TokenProducer"/> and to each
-/// <see cref="ClaimContributor"/> at a token-endpoint request. Constructed once per
-/// request from the loaded flow state and request context, then handed to every
-/// producer and contributor.
+/// Per-token-endpoint-call refined view, constructed from
+/// <see cref="RequestContext"/> + the loaded
+/// <see cref="OAuthFlowState"/> + resolved values. Lives only during the
+/// token producer / claim contributor walk.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The context carries the spec-required inputs that every token type needs (subject,
-/// issuer, client identifier, request times) plus the OIDC-specific signals (nonce,
-/// auth_time) that producers consume conditionally. It does not carry resolved key
-/// material or pre-resolved <c>KeyId</c>s — each producer performs its own two-step
-/// key resolution inside its <see cref="TokenProducer.BuildAsync"/> body using the
-/// <see cref="Verifiable.Cryptography.Context.KeyUsageContext"/> appropriate for the
-/// token type it produces.
+/// One of three stage-specific refined views in the pipeline. Each
+/// per-request context shape's lifetime maps to a stage of request
+/// processing: <see cref="RequestContext"/> covers the whole request and
+/// holds the resolved policy via
+/// <see cref="Server.PolicyRequestContextExtensions"/>;
+/// <see cref="IssuanceContext"/> exists only during the token producer /
+/// claim contributor walk;
+/// <see cref="Verifiable.OAuth.Validation.ValidationContext"/> exists only
+/// during a validation-check run.
+/// </para>
+/// <para>
+/// Each producer reads the inputs it needs and runs its own two-step key
+/// resolution inside its <see cref="TokenProducer.BuildAsync"/> body using
+/// the <see cref="Verifiable.Cryptography.Context.KeyUsageContext"/>
+/// appropriate for the token type. The typed-record shape (required fields
+/// where appropriate) is deliberate: <see cref="Subject"/> and
+/// <see cref="ClientId"/> are guaranteed present at any token-issuance walk,
+/// not just present "if populated".
+/// </para>
+/// <para>
+/// The context carries the spec-required inputs every token type needs
+/// (subject, issuer, client identifier, request times) plus the OIDC-specific
+/// signals (nonce, auth_time) that producers consume conditionally. It does
+/// not carry resolved key material or pre-resolved <c>KeyId</c>s.
 /// </para>
 /// <para>
 /// Time values use a single <see cref="IssuedAt"/> instant captured at the start of

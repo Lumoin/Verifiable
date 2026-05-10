@@ -1,5 +1,6 @@
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Validation;
 
@@ -602,6 +603,13 @@ public static class ValidationChecks
     /// Checks that the KB-JWT <c>iat</c> is not too far in the past.
     /// Conformance test: <c>VP1FinalVerifierKbJwtIatInPast</c>.
     /// </summary>
+    /// <remarks>
+    /// Reads the freshness window from the per-request policy
+    /// (<see cref="Verifiable.OAuth.Server.PolicyRequestContextExtensions.KbJwtMaxAgeWindow"/>)
+    /// when populated; otherwise falls back to the legacy
+    /// <see cref="ValidationContext.MaxAge"/> field. Closes audit Finding 7
+    /// (KB-JWT <c>iat</c>-too-old window has no library default).
+    /// </remarks>
     public static ValueTask<List<Claim>> CheckKbJwtIatNotTooOld(
         ValidationContext context,
         CancellationToken cancellationToken = default)
@@ -609,8 +617,10 @@ public static class ValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
+        TimeSpan maxAge = context.Context?.KbJwtMaxAgeWindow ?? context.MaxAge;
+
         ClaimOutcome outcome = context.KbJwtIat.HasValue
-            && context.KbJwtIat.Value >= context.Now.Subtract(context.MaxAge)
+            && context.KbJwtIat.Value >= context.Now.Subtract(maxAge)
             ? ClaimOutcome.Success
             : ClaimOutcome.Failure;
 

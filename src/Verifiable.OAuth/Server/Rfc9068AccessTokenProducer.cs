@@ -17,6 +17,18 @@ namespace Verifiable.OAuth.Server;
 /// <para>
 /// Consumed indirectly via <see cref="TokenProducer.Rfc9068AccessToken"/>.
 /// </para>
+/// <para>
+/// <strong>Known gap (audit Finding 2): RFC 9068 access-token <c>aud</c>.</strong>
+/// RFC 9068 §2.2 mandates the <c>aud</c> claim on access tokens. The producer
+/// currently passes <c>audience: null</c> below because <see cref="IssuanceContext"/>
+/// has no field surfacing the resource server identifier(s). Surfacing
+/// <c>aud</c> requires a design conversation about how the resource server
+/// identifier is supplied (per-registration metadata, per-request resolver,
+/// scope-derived mapping, etc.) and is deferred until that conversation
+/// concludes. The policy axis <c>policy.AccessTokenAudPolicy</c> is in place
+/// (default <see cref="AccessTokenAudPolicy.Required"/>); only the producer's
+/// audience-resolution side is missing.
+/// </para>
 /// </remarks>
 internal static class Rfc9068AccessTokenProducer
 {

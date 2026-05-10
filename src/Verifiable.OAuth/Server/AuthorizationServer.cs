@@ -417,6 +417,12 @@ public sealed class AuthorizationServer: IDisposable
                 activity?.SetTag(Diagnostics.OAuthTagNames.TenantId, registration.TenantId.Value);
                 activity?.SetTag(Diagnostics.OAuthTagNames.ClientId, registration.ClientId);
 
+                //2.5 Resolve per-request policy and place it on the context. Matchers,
+                //validators, and token producers downstream consult policy via the
+                //typed extensions in PolicyRequestContextExtensions.
+                await Integration.ResolvePolicyAsync!(
+                    registration, context, cancellationToken).ConfigureAwait(false);
+
                 //3. Build the registration's active endpoint chain and walk it.
                 //The chain is built fresh per request — builders may gate on
                 //per-request signals on the context (feature flags, tenant

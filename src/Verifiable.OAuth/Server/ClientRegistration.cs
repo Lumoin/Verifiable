@@ -173,6 +173,23 @@ public sealed record ClientRegistration
     public IReadOnlyDictionary<string, object> RegistrationMetadata { get; init; } =
         FrozenDictionary<string, object>.Empty;
 
+    /// <summary>
+    /// The named policy profile this registration runs under, consumed by the
+    /// default <see cref="ResolvePolicyDelegate"/> in
+    /// <see cref="PolicyProfiles"/>. <see langword="null"/> means the default
+    /// profile applies (<c>strict</c> — FAPI 2.0 / HAIP-aligned).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Recognised values today: <c>"strict"</c>, <c>"haip"</c>, <c>"rfc6749"</c>.
+    /// Custom profiles are supported by replacing the
+    /// <see cref="AuthorizationServerIntegration.ResolvePolicyAsync"/> delegate;
+    /// the registration's <see cref="ProfileName"/> is then read by the
+    /// application's resolver however it sees fit.
+    /// </para>
+    /// </remarks>
+    public string? ProfileName { get; init; }
+
 
     /// <summary>
     /// Returns <see langword="true"/> when this client is allowed to use

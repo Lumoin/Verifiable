@@ -233,13 +233,13 @@ public static class AuthCodeEndpoints
                             OAuthErrors.InvalidRequest, "Missing code_challenge.")));
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameters.CodeChallengeMethod, out string? method)
-                    || !string.Equals(method, OAuthRequestParameters.CodeChallengeMethodS256,
-                        StringComparison.Ordinal))
+                fields.TryGetValue(OAuthRequestParameters.CodeChallengeMethod, out string? method);
+                if(!IsAcceptedPkceMethod(method, context))
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
-                            OAuthErrors.InvalidRequest, "code_challenge_method must be S256.")));
+                            OAuthErrors.InvalidRequest,
+                            "code_challenge_method is not accepted under the active policy.")));
                 }
 
                 if(!fields.TryGetValue(OAuthRequestParameters.RedirectUri, out string? redirectUriString)
@@ -251,6 +251,13 @@ public static class AuthCodeEndpoints
                 }
 
                 fields.TryGetValue(OAuthRequestParameters.Scope, out string? scope);
+                if(context.ScopeRequiredOnRequest && string.IsNullOrEmpty(scope))
+                {
+                    return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
+                        ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest,
+                            "scope is required under the active policy.")));
+                }
                 scope ??= string.Empty;
 
                 fields.TryGetValue(WellKnownJwtClaims.Nonce, out string? nonce);
@@ -263,8 +270,8 @@ public static class AuthCodeEndpoints
                 Uri requestUri = new($"urn:ietf:params:oauth:request_uri:{requestUriToken}");
 
                 //RFC 9126 §2.2 leaves the request_uri lifetime implementation-defined.
-                //Library policy lives in TimingPolicy.AuthCodeParLifetime.
-                TimeSpan parLifetime = server.Timings.AuthCodeParLifetime;
+                //Library policy lives in policy.RequestUriLifetime (default 60s).
+                TimeSpan parLifetime = context.RequestUriLifetime;
                 DateTimeOffset expiresAt = now + parLifetime;
                 int expiresIn = (int)parLifetime.TotalSeconds;
 
@@ -407,9 +414,7 @@ public static class AuthCodeEndpoints
                         OAuthErrors.ServerError, "Unexpected state after authorize.");
                 }
 
-                string location =
-                    $"{code.RedirectUri}?code={Uri.EscapeDataString(code.CodeHash)}";
-                return ServerHttpResponse.Redirect(location);
+                return BuildAuthorizeRedirect(code, context);
             }
         };
 
@@ -487,13 +492,13 @@ public static class AuthCodeEndpoints
                             OAuthErrors.InvalidRequest, "Missing code_challenge.")));
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameters.CodeChallengeMethod, out string? method)
-                    || !string.Equals(method, OAuthRequestParameters.CodeChallengeMethodS256,
-                        StringComparison.Ordinal))
+                fields.TryGetValue(OAuthRequestParameters.CodeChallengeMethod, out string? method);
+                if(!IsAcceptedPkceMethod(method, context))
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
-                            OAuthErrors.InvalidRequest, "code_challenge_method must be S256.")));
+                            OAuthErrors.InvalidRequest,
+                            "code_challenge_method is not accepted under the active policy.")));
                 }
 
                 if(!fields.TryGetValue(OAuthRequestParameters.RedirectUri, out string? redirectUriString)
@@ -523,8 +528,8 @@ public static class AuthCodeEndpoints
 
                 //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for
                 //authorization codes. Library policy lives in
-                //TimingPolicy.AuthorizationCodeLifetime.
-                DateTimeOffset expiresAt = now + server.Timings.AuthorizationCodeLifetime;
+                //policy.AuthorizationCodeLifetime (default 600s).
+                DateTimeOffset expiresAt = now + context.AuthorizationCodeLifetime;
 
                 string rawCode = Guid.NewGuid().ToString("N");
                 string codeHash = ComputeDigestBase64Url(
@@ -559,9 +564,7 @@ public static class AuthCodeEndpoints
                         OAuthErrors.ServerError, "Unexpected state after direct authorize.");
                 }
 
-                string location =
-                    $"{code.RedirectUri}?code={Uri.EscapeDataString(code.CodeHash)}";
-                return ServerHttpResponse.Redirect(location);
+                return BuildAuthorizeRedirect(code, context);
             }
         };
 
@@ -646,8 +649,8 @@ public static class AuthCodeEndpoints
                 Uri requestUri = new($"urn:ietf:params:oauth:request_uri:{requestUriToken}");
 
                 //RFC 9126 §2.2 leaves the request_uri lifetime implementation-defined.
-                //Library policy lives in TimingPolicy.AuthCodeParLifetime.
-                TimeSpan parLifetime = server.Timings.AuthCodeParLifetime;
+                //Library policy lives in policy.RequestUriLifetime (default 60s).
+                TimeSpan parLifetime = context.RequestUriLifetime;
                 DateTimeOffset expiresAt = now + parLifetime;
                 int expiresIn = (int)parLifetime.TotalSeconds;
 
@@ -775,8 +778,8 @@ public static class AuthCodeEndpoints
 
                 //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for
                 //authorization codes. Library policy lives in
-                //TimingPolicy.AuthorizationCodeLifetime.
-                DateTimeOffset expiresAt = now + server.Timings.AuthorizationCodeLifetime;
+                //policy.AuthorizationCodeLifetime (default 600s).
+                DateTimeOffset expiresAt = now + context.AuthorizationCodeLifetime;
 
                 string rawCode = Guid.NewGuid().ToString("N");
                 string codeHash = ComputeDigestBase64Url(
@@ -802,7 +805,7 @@ public static class AuthCodeEndpoints
                     ExpiresAt: expiresAt), null);
             },
 
-            BuildResponse = static (state, _, _) =>
+            BuildResponse = static (state, _, context) =>
             {
                 if(state is not ServerCodeIssuedState code)
                 {
@@ -811,9 +814,7 @@ public static class AuthCodeEndpoints
                         "Unexpected state after JAR-by-value direct authorize.");
                 }
 
-                string location =
-                    $"{code.RedirectUri}?code={Uri.EscapeDataString(code.CodeHash)}";
-                return ServerHttpResponse.Redirect(location);
+                return BuildAuthorizeRedirect(code, context);
             }
         };
 
@@ -927,12 +928,15 @@ public static class AuthCodeEndpoints
 
         DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
+        //Clock skew and JAR lifetime ceiling come from per-request policy
+        //(populated by ResolvePolicyAsync at dispatch entry). Defaults match
+        //the historical TimingPolicy values for the strict reading.
         JarVerificationResult verification = await JarVerification.VerifyAsync(
             compactJar,
             signingPublicKey,
             now,
-            server.Timings.ClockSkewTolerance,
-            server.Timings.AuthCodeRequestObjectLifetime,
+            context.ClockSkewTolerance,
+            context.JarLifetimeCeiling,
             decoder,
             headerDeserializer,
             payloadDeserializer,
@@ -998,15 +1002,24 @@ public static class AuthCodeEndpoints
                 $"redirect_uri '{requestObject.RedirectUri}' is not among the registered redirect URIs."));
         }
 
-        //FAPI 2.0 §5.2.2, HAIP §3 — code_challenge_method MUST be S256.
-        if(!string.Equals(
-            requestObject.CodeChallengeMethod,
-            OAuthRequestParameters.CodeChallengeMethodS256,
-            StringComparison.Ordinal))
+        //Scope-required-on-request is a policy axis (Finding 4). Aligns the
+        //JAR-bearing matcher with the PKCE PAR matcher — either both require
+        //scope (the strict default) or both treat it as optional.
+        if(context.ScopeRequiredOnRequest && string.IsNullOrEmpty(requestObject.Scope))
         {
             return (null, ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidRequestObject,
-                "code_challenge_method must be S256."));
+                "scope is required under the active policy."));
+        }
+
+        //FAPI 2.0 §5.2.2, HAIP §3 — code_challenge_method MUST be S256 in the
+        //strict default. Permissive deployments via policy.AllowedPkceMethods
+        //may also accept "plain".
+        if(!IsAcceptedPkceMethod(requestObject.CodeChallengeMethod, context))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "code_challenge_method is not accepted under the active policy."));
         }
 
         return (requestObject, null);
@@ -1052,6 +1065,7 @@ public static class AuthCodeEndpoints
 
         ValidationContext validationContext = new()
         {
+            Context = context,
             TokenClaims = claims,
             ExpectedIssuer = issuerUri.ToString(),
             Now = server.TimeProvider.GetUtcNow(),
@@ -1493,6 +1507,63 @@ public static class AuthCodeEndpoints
             BuildResponse = static (state, _, _) =>
                 ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
         };
+
+
+    /// <summary>
+    /// Composes the Authorize-completed redirect Location, optionally
+    /// appending the RFC 9207 / FAPI 2.0 §5.3.1.2 <c>iss</c> response
+    /// parameter under <c>policy.EmitIssOnRedirect</c>. Closes audit Finding
+    /// 1 (missing <c>iss</c> on Authorize redirect).
+    /// </summary>
+    /// <remarks>
+    /// The issuer URL source order mirrors <c>DefaultIssuerResolver</c>:
+    /// <see cref="ClientRegistration.IssuerUri"/> first, then the per-request
+    /// <see cref="RequestContextExtensions.Issuer"/>. When neither is
+    /// populated the parameter is omitted rather than failing the redirect —
+    /// the strict-default deployment populates one of the two and the
+    /// permissive deployment opts out via <c>policy.EmitIssOnRedirect</c>.
+    /// </remarks>
+    private static ServerHttpResponse BuildAuthorizeRedirect(
+        ServerCodeIssuedState code, RequestContext context)
+    {
+        string location = $"{code.RedirectUri}?code={Uri.EscapeDataString(code.CodeHash)}";
+
+        if(context.EmitIssOnRedirect)
+        {
+            Uri? issuer = context.Registration?.IssuerUri ?? context.Issuer;
+            if(issuer is not null)
+            {
+                location += $"&iss={Uri.EscapeDataString(issuer.ToString())}";
+            }
+        }
+
+        return ServerHttpResponse.Redirect(location);
+    }
+
+
+    /// <summary>
+    /// Returns whether <paramref name="method"/> is an accepted PKCE
+    /// <c>code_challenge_method</c> value under the deployment's policy. The
+    /// strict default (<see cref="PkceMethodSet.S256Only"/>) accepts only
+    /// <c>S256</c>; the permissive baseline
+    /// (<see cref="PkceMethodSet.S256AndPlain"/>) also accepts <c>plain</c>.
+    /// </summary>
+    private static bool IsAcceptedPkceMethod(string? method, RequestContext context)
+    {
+        if(string.IsNullOrEmpty(method))
+        {
+            return false;
+        }
+
+        if(string.Equals(method, OAuthRequestParameters.CodeChallengeMethodS256,
+            StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return context.AllowedPkceMethods == PkceMethodSet.S256AndPlain
+            && string.Equals(method, "plain", StringComparison.Ordinal);
+    }
 
 
     /// <summary>

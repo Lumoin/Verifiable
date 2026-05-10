@@ -314,7 +314,12 @@ internal sealed class TestHostShell: IDisposable
                         bytes, TestSetup.DefaultSerializationOptions)
                         ?? throw new FormatException("Header JSON parsed to null."),
                     SensitiveMemoryPool<byte>.Shared,
-                    ct)
+                    ct),
+
+            //Per-request policy resolution. The default dispatches on
+            //ClientRegistration.ProfileName across the three shipped profiles;
+            //unset ProfileName falls back to "strict" (FAPI 2.0 / HAIP-aligned).
+            ResolvePolicyAsync = PolicyProfiles.DefaultResolvePolicyAsync
         };
 
         AuthorizationServerCryptography cryptography = new()

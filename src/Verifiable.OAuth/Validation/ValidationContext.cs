@@ -1,14 +1,51 @@
+using Verifiable.OAuth.Server;
+
 namespace Verifiable.OAuth.Validation;
 
 /// <summary>
-/// Context for all validation checks. Carries request fields, flow state, JWT
-/// claims, JWE parameters, KB-JWT claims, credential verification results, and
-/// expected values for comparison. Check functions read what they need and
-/// ignore the rest.
+/// Per-validation-check refined view. Composes
+/// <see cref="RequestContext"/> via <see cref="Context"/> so checks can read
+/// request-wide concerns (resolved policy, issuer, etc.) alongside their
+/// check-specific typed fields. Each check function reads what it needs and
+/// ignores the rest.
 /// </summary>
+/// <remarks>
+/// <para>
+/// One of four per-request context shapes that serve different lifecycles:
+/// <see cref="RequestContext"/> (per-request bag, populated at dispatch entry
+/// by the skin); <see cref="OAuthFlowState"/> (persistent cross-request
+/// carrier for state-machine progress); <see cref="Verifiable.OAuth.IssuanceContext"/>
+/// (per-token-endpoint-call refined view for the token producer / claim
+/// contributor walk); and this <see cref="ValidationContext"/>
+/// (per-validation-check refined view).
+/// </para>
+/// <para>
+/// The pipeline-stage separation is real: each context's lifetime maps to a
+/// stage of request processing. Per-request data lives on
+/// <see cref="RequestContext"/> via typed extensions; stage-bounded data
+/// lives on the appropriate stage-specific typed record; persistent
+/// cross-request data lives on <see cref="OAuthFlowState"/>. Policy values
+/// resolved at dispatch entry have per-request lifetime and consumers in all
+/// three downstream contexts; pattern fit places them on
+/// <see cref="RequestContext"/> via
+/// <see cref="Verifiable.OAuth.Server.PolicyRequestContextExtensions"/>.
+/// </para>
+/// </remarks>
 [System.Diagnostics.DebuggerDisplay("ValidationContext Now={Now}")]
 public sealed record ValidationContext
 {
+    /// <summary>
+    /// The per-request context bag. Validators read request-wide concerns
+    /// (resolved policy via
+    /// <see cref="Verifiable.OAuth.Server.PolicyRequestContextExtensions"/>,
+    /// issuer URL, time provider snapshot) through this composition rather
+    /// than via duplicated fields on this record. Required — every validator
+    /// invocation in dispatched flows has a request context, and unit tests
+    /// of individual validation checks construct an empty
+    /// <see cref="RequestContext"/> when no resolution has happened.
+    /// </summary>
+    public required RequestContext Context { get; init; }
+
     /// <summary>The request or callback parameters (form body, query string, or both).</summary>
     public IReadOnlyDictionary<string, string>? Fields { get; init; }
 

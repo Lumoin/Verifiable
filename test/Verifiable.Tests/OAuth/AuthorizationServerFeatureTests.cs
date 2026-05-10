@@ -134,7 +134,8 @@ internal sealed class AuthorizationServerFeatureTests
             SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
                 ValueTask.CompletedTask,
             LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
-                ValueTask.FromResult<(OAuthFlowState?, int)>((null, 0))
+                ValueTask.FromResult<(OAuthFlowState?, int)>((null, 0)),
+            ResolvePolicyAsync = PolicyProfiles.DefaultResolvePolicyAsync
         };
 
         InvalidOperationException ex =
@@ -147,6 +148,36 @@ internal sealed class AuthorizationServerFeatureTests
             "Error must name LoadClientRegistrationAsync.");
         Assert.IsFalse(integration.IsValidated,
             "IsValidated must remain false after a Validate() that threw.");
+    }
+
+
+    [TestMethod]
+    public void IntegrationValidateThrowsWhenResolvePolicyAsyncIsMissing()
+    {
+        //ResolvePolicyAsync is required so every dispatch resolves policy
+        //before matchers run. Misconfiguration detected at startup, not at
+        //first request.
+        AuthorizationServerIntegration integration = new()
+        {
+            ExtractTenantIdAsync = (ctx, ct) =>
+                ValueTask.FromResult<TenantId?>(null),
+            LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
+                ValueTask.FromResult<ClientRegistration?>(null),
+            SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
+                ValueTask.CompletedTask,
+            LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
+                ValueTask.FromResult<(OAuthFlowState?, int)>((null, 0))
+            //ResolvePolicyAsync deliberately omitted.
+        };
+
+        InvalidOperationException ex =
+            Assert.ThrowsExactly<InvalidOperationException>(integration.Validate);
+
+        Assert.Contains(
+            nameof(AuthorizationServerIntegration.ResolvePolicyAsync),
+            ex.Message,
+            StringComparison.Ordinal,
+            "Error must name ResolvePolicyAsync.");
     }
 
 

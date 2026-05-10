@@ -198,8 +198,15 @@ public static class AuthCodeFlowHandlers
             };
         }
 
+        //Client-side flow does not sit inside server dispatch, so there is no
+        //resolved per-request policy context to thread in. An empty
+        //RequestContext satisfies the required-field contract and keeps
+        //policy reads on the client-side validators returning library
+        //defaults (the strict reading) — which is the intended behaviour for
+        //out-of-dispatch validators.
         ValidationContext validationContext = new()
         {
+            Context = new RequestContext(),
             Fields = fields,
             FlowState = parCompleted,
             TimeProvider = options.TimeProvider,
