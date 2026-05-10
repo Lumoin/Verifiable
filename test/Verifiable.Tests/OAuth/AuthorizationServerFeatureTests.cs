@@ -120,6 +120,105 @@ internal sealed class AuthorizationServerFeatureTests
     //before any dispatch calls are made.
 
     [TestMethod]
+    public void PolicyProfileEqualityIsByCode()
+    {
+        //Round 4.8 — built-in values are equal to themselves, distinct from
+        //each other; the dynamic-enum pattern's contract.
+        Assert.AreEqual(PolicyProfile.Strict, PolicyProfile.Strict,
+            "Strict equals Strict.");
+        Assert.AreNotEqual(PolicyProfile.Strict, PolicyProfile.Haip,
+            "Strict and Haip have different codes; they must not be equal.");
+        Assert.AreNotEqual(PolicyProfile.Haip, PolicyProfile.Rfc6749,
+            "Haip and Rfc6749 have different codes; they must not be equal.");
+        Assert.AreEqual(PolicyProfile.Strict.GetHashCode(),
+            PolicyProfile.Strict.Code,
+            "GetHashCode returns Code per the dynamic-enum pattern.");
+    }
+
+
+    [TestMethod]
+    public void PolicyProfileCreateRejectsDuplicateCode()
+    {
+        //Code 0 is registered as Strict — Create(0) must throw.
+        Assert.ThrowsExactly<ArgumentException>(
+            () => PolicyProfile.Create(0));
+    }
+
+
+    [TestMethod]
+    public void PolicyProfileNamesReturnsExpectedNames()
+    {
+        Assert.AreEqual(nameof(PolicyProfile.Strict),
+            PolicyProfileNames.GetName(PolicyProfile.Strict));
+        Assert.AreEqual(nameof(PolicyProfile.Haip),
+            PolicyProfileNames.GetName(PolicyProfile.Haip));
+        Assert.AreEqual(nameof(PolicyProfile.Rfc6749),
+            PolicyProfileNames.GetName(PolicyProfile.Rfc6749));
+
+        //Application-defined codes return a generic Custom (code) form. Use
+        //a code in the application-reserved range so the test does not
+        //collide with any future built-in.
+        Assert.AreEqual("Custom (9999)", PolicyProfileNames.GetName(9999));
+    }
+
+
+    [TestMethod]
+    public async Task DefaultResolvePolicyAsyncDispatchesCorrectProfile()
+    {
+        //Three registrations, one per built-in profile, produce the expected
+        //policy values. Round 4.8 — confirms the dispatch via PolicyProfile
+        //code equality replaces the earlier string-equality approach.
+        ClientRegistration strict = MakeMinimalRegistration(PolicyProfile.Strict);
+        ClientRegistration haip = MakeMinimalRegistration(PolicyProfile.Haip);
+        ClientRegistration rfc = MakeMinimalRegistration(PolicyProfile.Rfc6749);
+
+        RequestContext strictContext = new();
+        RequestContext haipContext = new();
+        RequestContext rfcContext = new();
+
+        await PolicyProfiles.DefaultResolvePolicyAsync(
+            strict, strictContext, TestContext.CancellationToken).ConfigureAwait(false);
+        await PolicyProfiles.DefaultResolvePolicyAsync(
+            haip, haipContext, TestContext.CancellationToken).ConfigureAwait(false);
+        await PolicyProfiles.DefaultResolvePolicyAsync(
+            rfc, rfcContext, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(PkceMethodSet.S256Only, strictContext.AllowedPkceMethods,
+            "Strict permits only S256.");
+        Assert.AreEqual(PkceMethodSet.S256Only, haipContext.AllowedPkceMethods,
+            "Haip is Strict + tightenings — also S256-only.");
+        Assert.AreEqual(PkceMethodSet.S256AndPlain, rfcContext.AllowedPkceMethods,
+            "Rfc6749 baseline permits both S256 and plain.");
+
+        Assert.IsTrue(strictContext.EmitIssOnRedirect,
+            "Strict emits iss on redirect (RFC 9207 / FAPI 2.0).");
+        Assert.IsFalse(rfcContext.EmitIssOnRedirect,
+            "Rfc6749 baseline does not emit iss on redirect.");
+    }
+
+
+    [TestMethod]
+    public async Task DefaultResolvePolicyAsyncFallsBackToStrictForCustomCode()
+    {
+        //An application-defined profile that the library's default does not
+        //recognise falls through to the strict baseline as a fail-safe. Use
+        //a high code so the test does not collide with built-ins or other
+        //test-side registrations.
+        PolicyProfile custom = PolicyProfile.Create(9001);
+        ClientRegistration registration = MakeMinimalRegistration(custom);
+        RequestContext context = new();
+
+        await PolicyProfiles.DefaultResolvePolicyAsync(
+            registration, context, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(PkceMethodSet.S256Only, context.AllowedPkceMethods,
+            "Custom code with no application resolver falls back to Strict.");
+        Assert.IsTrue(context.EmitIssOnRedirect,
+            "Strict baseline emits iss on the redirect.");
+    }
+
+
+    [TestMethod]
     public void IntegrationValidateThrowsWhenLoadClientRegistrationAsyncIsMissing()
     {
         //AuthorizationServerIntegration.Validate names every missing required
@@ -2186,4 +2285,20 @@ internal sealed class AuthorizationServerFeatureTests
 
         public void OnCompleted() { }
     }
+
+
+    //Constructs the minimum-fields ClientRegistration the policy resolver
+    //needs. Tests in this class consume only the Profile axis.
+    private static ClientRegistration MakeMinimalRegistration(PolicyProfile profile) =>
+        new()
+        {
+            ClientId = "policy-test-client",
+            TenantId = "policy-test",
+            AllowedCapabilities = ImmutableHashSet<ServerCapabilityName>.Empty,
+            AllowedRedirectUris = ImmutableHashSet<Uri>.Empty,
+            AllowedScopes = ImmutableHashSet<string>.Empty,
+            SigningKeys = ImmutableDictionary<KeyUsageContext, SigningKeySet>.Empty,
+            TokenLifetimes = ImmutableDictionary<string, TimeSpan>.Empty,
+            Profile = profile
+        };
 }

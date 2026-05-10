@@ -174,21 +174,23 @@ public sealed record ClientRegistration
         FrozenDictionary<string, object>.Empty;
 
     /// <summary>
-    /// The named policy profile this registration runs under, consumed by the
+    /// The policy profile this registration runs under, consumed by the
     /// default <see cref="ResolvePolicyDelegate"/> in
     /// <see cref="PolicyProfiles"/>. <see langword="null"/> means the default
-    /// profile applies (<c>strict</c> — FAPI 2.0 / HAIP-aligned).
+    /// profile applies (<see cref="PolicyProfile.Strict"/> — FAPI 2.0 /
+    /// HAIP-aligned).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Recognised values today: <c>"strict"</c>, <c>"haip"</c>, <c>"rfc6749"</c>.
-    /// Custom profiles are supported by replacing the
-    /// <see cref="AuthorizationServerIntegration.ResolvePolicyAsync"/> delegate;
-    /// the registration's <see cref="ProfileName"/> is then read by the
-    /// application's resolver however it sees fit.
+    /// Built-in values: <see cref="PolicyProfile.Strict"/>,
+    /// <see cref="PolicyProfile.Haip"/>, <see cref="PolicyProfile.Rfc6749"/>.
+    /// Application-defined profiles are registered via
+    /// <see cref="PolicyProfile.Create"/>; see the remarks on
+    /// <see cref="PolicyProfile"/> for the extension shape and a worked
+    /// example of installing a custom resolver.
     /// </para>
     /// </remarks>
-    public string? ProfileName { get; init; }
+    public PolicyProfile? Profile { get; init; }
 
 
     /// <summary>

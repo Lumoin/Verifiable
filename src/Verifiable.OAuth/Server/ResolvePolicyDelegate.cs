@@ -9,7 +9,7 @@ namespace Verifiable.OAuth.Server;
 /// The dispatcher invokes this delegate exactly once per request, after the
 /// tenant has been resolved and the registration loaded but before any
 /// matcher executes. The implementation reads
-/// <see cref="ClientRegistration.ProfileName"/> (or any other application
+/// <see cref="ClientRegistration.Profile"/> (or any other application
 /// signal) and writes the corresponding <see cref="PolicyContextKeys"/>
 /// entries on <paramref name="context"/> via the typed extensions in
 /// <see cref="PolicyRequestContextExtensions"/>. Matchers, validators, and
@@ -19,9 +19,12 @@ namespace Verifiable.OAuth.Server;
 /// <para>
 /// The library ships a default implementation in
 /// <see cref="PolicyProfiles.DefaultResolvePolicyAsync"/> that dispatches on
-/// the registration's <see cref="ClientRegistration.ProfileName"/> across
-/// the three named profiles <c>strict</c>, <c>haip</c>, and <c>rfc6749</c>.
-/// Applications that need custom policy resolution wire their own delegate.
+/// the registration's <see cref="ClientRegistration.Profile"/> across the
+/// three built-in <see cref="PolicyProfile"/> values
+/// (<see cref="PolicyProfile.Strict"/>, <see cref="PolicyProfile.Haip"/>,
+/// <see cref="PolicyProfile.Rfc6749"/>). Applications that need custom
+/// policy resolution wire their own delegate; see the remarks on
+/// <see cref="PolicyProfile.Create"/> for the extension shape.
 /// </para>
 /// </remarks>
 /// <param name="registration">The registration whose policy is being resolved.</param>

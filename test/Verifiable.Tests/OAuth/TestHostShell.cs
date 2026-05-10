@@ -317,8 +317,9 @@ internal sealed class TestHostShell: IDisposable
                     ct),
 
             //Per-request policy resolution. The default dispatches on
-            //ClientRegistration.ProfileName across the three shipped profiles;
-            //unset ProfileName falls back to "strict" (FAPI 2.0 / HAIP-aligned).
+            //ClientRegistration.Profile across the three shipped profiles;
+            //an unset Profile falls back to PolicyProfile.Strict
+            //(FAPI 2.0 / HAIP-aligned).
             ResolvePolicyAsync = PolicyProfiles.DefaultResolvePolicyAsync
         };
 

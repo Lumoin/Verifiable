@@ -3,47 +3,37 @@ using System.Diagnostics;
 namespace Verifiable.OAuth.Server;
 
 /// <summary>
-/// Built-in policy profiles that populate the
-/// <see cref="PolicyContextKeys"/> entries on a <see cref="RequestContext"/>
-/// in one call. The default
-/// <see cref="ResolvePolicyDelegate"/> dispatches on
-/// <see cref="ClientRegistration.ProfileName"/> across the three profiles
-/// shipped here.
+/// Built-in policy profile apply functions and the default
+/// <see cref="ResolvePolicyDelegate"/>. Each apply function populates the
+/// <see cref="PolicyContextKeys"/> entries on a
+/// <see cref="RequestContext"/> in one call.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Profiles are applied at dispatch entry once per request. Downstream
 /// consumers (matchers, validators, token producers) read policy via the
 /// typed extensions in <see cref="PolicyRequestContextExtensions"/>; the
-/// extensions return the strict default when a key is absent, so a request
+/// extensions return strict defaults when a key is absent, so a request
 /// processed without a profile having been applied still produces the
 /// safest behaviour.
 /// </para>
 /// <para>
-/// Defining a new profile is one new function on this class plus a
-/// <c>case</c> entry in <see cref="DefaultResolvePolicyAsync"/>. Applications
-/// with bespoke policy needs supply their own
-/// <see cref="ResolvePolicyDelegate"/> via
-/// <see cref="AuthorizationServerIntegration.ResolvePolicyAsync"/>.
+/// Adding a built-in profile means adding a new <c>ApplyXxx</c> function
+/// here plus a new static readonly value on <see cref="PolicyProfile"/>
+/// plus a dispatch arm in <see cref="DefaultResolvePolicyAsync"/>.
+/// Tenant-specific profiles do not modify this class; instead they use
+/// <see cref="PolicyProfile.Create"/> and supply a custom
+/// <see cref="ResolvePolicyDelegate"/>. See the remarks on
+/// <see cref="PolicyProfile"/> for the full extensibility shape.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PolicyProfiles")]
 public static class PolicyProfiles
 {
-    /// <summary>The named-profile value for <see cref="ApplyStrict"/>.</summary>
-    public static readonly string Strict = "strict";
-
-    /// <summary>The named-profile value for <see cref="ApplyHaip"/>.</summary>
-    public static readonly string Haip = "haip";
-
-    /// <summary>The named-profile value for <see cref="ApplyRfc6749Baseline"/>.</summary>
-    public static readonly string Rfc6749 = "rfc6749";
-
-
     /// <summary>
     /// Populates the FAPI 2.0-aligned strict reading. Used as the default
-    /// when no <see cref="ClientRegistration.ProfileName"/> is set, and as
-    /// the base for <see cref="ApplyHaip"/>.
+    /// when no <see cref="ClientRegistration.Profile"/> is set, and as the
+    /// base for <see cref="ApplyHaip"/>.
     /// </summary>
     public static void ApplyStrict(RequestContext context)
     {
@@ -107,9 +97,11 @@ public static class PolicyProfiles
 
     /// <summary>
     /// The library's default <see cref="ResolvePolicyDelegate"/>. Dispatches
-    /// on <see cref="ClientRegistration.ProfileName"/> across the three
-    /// shipped profiles; falls back to <see cref="ApplyStrict"/> when the
-    /// profile name is unrecognised or absent.
+    /// on <see cref="ClientRegistration.Profile"/> across the three shipped
+    /// profiles via <see cref="PolicyProfile"/> code equality; falls back to
+    /// <see cref="ApplyStrict"/> when the profile is absent or
+    /// application-defined (the application's own resolver handles its own
+    /// codes; this default is the fail-safe baseline).
     /// </summary>
     public static ValueTask DefaultResolvePolicyAsync(
         ClientRegistration registration,
@@ -120,30 +112,26 @@ public static class PolicyProfiles
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        string profileName = registration.ProfileName ?? Strict;
+        PolicyProfile profile = registration.Profile ?? PolicyProfile.Strict;
 
-        switch(profileName)
+        if(profile == PolicyProfile.Strict)
         {
-            case var name when string.Equals(name, Strict, StringComparison.Ordinal):
-            {
-                ApplyStrict(context);
-                break;
-            }
-            case var name when string.Equals(name, Haip, StringComparison.Ordinal):
-            {
-                ApplyHaip(context);
-                break;
-            }
-            case var name when string.Equals(name, Rfc6749, StringComparison.Ordinal):
-            {
-                ApplyRfc6749Baseline(context);
-                break;
-            }
-            default:
-            {
-                ApplyStrict(context);
-                break;
-            }
+            ApplyStrict(context);
+        }
+        else if(profile == PolicyProfile.Haip)
+        {
+            ApplyHaip(context);
+        }
+        else if(profile == PolicyProfile.Rfc6749)
+        {
+            ApplyRfc6749Baseline(context);
+        }
+        else
+        {
+            //Unknown custom code — application must supply its own
+            //ResolvePolicyDelegate to handle codes it registered via
+            //PolicyProfile.Create. Falling back to strict is fail-safe.
+            ApplyStrict(context);
         }
 
         return ValueTask.CompletedTask;
