@@ -109,7 +109,8 @@ public static class CredentialCoseExtensions
             payloadBytes,
             buildSigStructure,
             privateKey,
-            signaturePool).ConfigureAwait(false);
+            signaturePool,
+            cancellationToken).ConfigureAwait(false);
     }
 
 

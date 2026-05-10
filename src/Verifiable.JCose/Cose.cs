@@ -41,6 +41,7 @@ public static class Cose
     /// <param name="buildSigStructure">Delegate to build the Sig_structure for signing.</param>
     /// <param name="privateKey">The private key for signing.</param>
     /// <param name="signaturePool">Memory pool for signature allocation.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The COSE_Sign1 message containing the signature.</returns>
     public static async ValueTask<CoseSign1Message> SignAsync(
         ReadOnlyMemory<byte> protectedHeaderBytes,
@@ -48,11 +49,14 @@ public static class Cose
         ReadOnlyMemory<byte> payload,
         BuildSigStructureDelegate buildSigStructure,
         PrivateKeyMemory privateKey,
-        MemoryPool<byte> signaturePool)
+        MemoryPool<byte> signaturePool,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(buildSigStructure);
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signaturePool);
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         byte[] toBeSigned = buildSigStructure(
             protectedHeaderBytes.Span,
@@ -66,7 +70,8 @@ public static class Cose
         Signature signatureMemory = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             toBeSigned,
-            signaturePool).ConfigureAwait(false);
+            signaturePool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return new CoseSign1Message(
             protectedHeaderBytes,
@@ -94,12 +99,15 @@ public static class Cose
         BuildSigStructureDelegate buildSigStructure,
         PrivateKeyMemory privateKey,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> signaturePool)
+        MemoryPool<byte> signaturePool,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(buildSigStructure);
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         byte[] toBeSigned = buildSigStructure(
             protectedHeaderBytes.Span,
@@ -109,7 +117,8 @@ public static class Cose
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             toBeSigned,
-            signaturePool).ConfigureAwait(false);
+            signaturePool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return new CoseSign1Message(
             protectedHeaderBytes,
@@ -137,12 +146,15 @@ public static class Cose
         BuildSigStructureDelegate buildSigStructure,
         PrivateKeyMemory privateKey,
         SigningFunction<byte, byte, ValueTask<Signature>> signingFunction,
-        MemoryPool<byte> signaturePool)
+        MemoryPool<byte> signaturePool,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(buildSigStructure);
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingFunction);
         ArgumentNullException.ThrowIfNull(signaturePool);
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         byte[] toBeSigned = buildSigStructure(
             protectedHeaderBytes.Span,
@@ -169,11 +181,14 @@ public static class Cose
     public static async ValueTask<bool> VerifyAsync(
         CoseSign1Message message,
         BuildSigStructureDelegate buildSigStructure,
-        PublicKeyMemory publicKey)
+        PublicKeyMemory publicKey,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(buildSigStructure);
         ArgumentNullException.ThrowIfNull(publicKey);
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         byte[] toBeSigned = buildSigStructure(
             message.ProtectedHeaderBytes.Span,
@@ -187,7 +202,8 @@ public static class Cose
         return await verificationDelegate(
             toBeSigned,
             message.Signature,
-            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+            publicKey.AsReadOnlyMemory(),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -203,12 +219,15 @@ public static class Cose
         CoseSign1Message message,
         BuildSigStructureDelegate buildSigStructure,
         PublicKeyMemory publicKey,
-        VerificationDelegate verificationDelegate)
+        VerificationDelegate verificationDelegate,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(buildSigStructure);
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         byte[] toBeSigned = buildSigStructure(
             message.ProtectedHeaderBytes.Span,
@@ -218,7 +237,8 @@ public static class Cose
         return await verificationDelegate(
             toBeSigned,
             message.Signature,
-            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+            publicKey.AsReadOnlyMemory(),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -236,13 +256,16 @@ public static class Cose
         BuildSigStructureDelegate buildSigStructure,
         PublicKeyMemory publicKey,
         VerificationFunction<byte, byte, Signature, ValueTask<bool>> verificationFunction,
-        MemoryPool<byte> pool)
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(buildSigStructure);
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationFunction);
         ArgumentNullException.ThrowIfNull(pool);
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         byte[] toBeSigned = buildSigStructure(
             message.ProtectedHeaderBytes.Span,

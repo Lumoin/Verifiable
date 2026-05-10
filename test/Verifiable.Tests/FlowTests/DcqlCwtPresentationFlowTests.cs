@@ -180,7 +180,7 @@ internal sealed class DcqlCwtPresentationFlowTests
             presentationToken.IssuerSigned);
 
         bool signatureValid = await Verifiable.JCose.Cose.VerifyAsync(
-            coseMessage, CoseSerialization.BuildSigStructure, publicKey).ConfigureAwait(false);
+            coseMessage, CoseSerialization.BuildSigStructure, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(signatureValid, "Presented COSE_Sign1 issuer signature must be cryptographically valid.");
 
@@ -252,7 +252,7 @@ internal sealed class DcqlCwtPresentationFlowTests
             issuedToken.IssuerSigned);
 
         bool signatureValid = await Verifiable.JCose.Cose.VerifyAsync(
-            coseMessage, CoseSerialization.BuildSigStructure, publicKey).ConfigureAwait(false);
+            coseMessage, CoseSerialization.BuildSigStructure, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(signatureValid,
             "COSE_Sign1 signature must be valid regardless of disclosure decisions.");
@@ -278,7 +278,7 @@ internal sealed class DcqlCwtPresentationFlowTests
             issuedToken.IssuerSigned);
 
         bool signatureValid = await Verifiable.JCose.Cose.VerifyAsync(
-            coseMessage, CoseSerialization.BuildSigStructure, publicKey).ConfigureAwait(false);
+            coseMessage, CoseSerialization.BuildSigStructure, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(signatureValid, "P-256 COSE_Sign1 signature must be valid.");
 
@@ -320,7 +320,7 @@ internal sealed class DcqlCwtPresentationFlowTests
             presentationToken.IssuerSigned);
 
         bool presentationValid = await Verifiable.JCose.Cose.VerifyAsync(
-            presentedCose, CoseSerialization.BuildSigStructure, publicKey).ConfigureAwait(false);
+            presentedCose, CoseSerialization.BuildSigStructure, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(presentationValid, "P-256 signature must be valid on the presented token.");
     }

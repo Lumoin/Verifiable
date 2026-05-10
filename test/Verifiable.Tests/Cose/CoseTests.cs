@@ -38,7 +38,8 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(message);
         Assert.IsGreaterThan(0, message.Signature.Length);
@@ -48,7 +49,8 @@ internal sealed class CoseTests
             message,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
+            MicrosoftCryptographicFunctions.VerifyP256Async,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "COSE_Sign1 signature verification must succeed.");
     }
@@ -115,13 +117,15 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             privateKey,
             MicrosoftCryptographicFunctions.SignP384Async,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
             message,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP384Async).ConfigureAwait(false);
+            MicrosoftCryptographicFunctions.VerifyP384Async,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-384 COSE_Sign1 signature verification must succeed.");
     }
@@ -145,13 +149,15 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             privateKey,
             MicrosoftCryptographicFunctions.SignP521Async,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
             message,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP521Async).ConfigureAwait(false);
+            MicrosoftCryptographicFunctions.VerifyP521Async,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-521 COSE_Sign1 signature verification must succeed.");
     }
@@ -179,13 +185,15 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             signingPrivateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
             message,
             CoseSerialization.BuildSigStructure,
             wrongPublicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
+            MicrosoftCryptographicFunctions.VerifyP256Async,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(isValid, "Verification with wrong key must fail.");
     }
@@ -209,7 +217,8 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] coseBytes = CoseSerialization.SerializeCoseSign1(message);
         CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes);
@@ -222,7 +231,8 @@ internal sealed class CoseTests
             parsed,
             CoseSerialization.BuildSigStructure,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
+            MicrosoftCryptographicFunctions.VerifyP256Async,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Parsed COSE_Sign1 must verify successfully.");
     }

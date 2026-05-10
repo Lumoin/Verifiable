@@ -89,7 +89,8 @@ public static class VerifierAttestationKeyResolver
             base64UrlDecoder,
             static (ReadOnlySpan<byte> _) => (object?)null,
             pool,
-            trustAnchorPublicKey).ConfigureAwait(false);
+            trustAnchorPublicKey,
+            cancellationToken).ConfigureAwait(false);
 
         if(!attestationValid)
         {

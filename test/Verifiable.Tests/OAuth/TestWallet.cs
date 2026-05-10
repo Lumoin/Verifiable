@@ -349,7 +349,8 @@ internal sealed class TestWallet
                 BufferTags.Json),
             TestSetup.Base64UrlEncoder,
             HolderPrivateKey,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            cancellationToken).ConfigureAwait(false);
 
         string compactKbJwt = JwsSerialization.SerializeCompact(
             kbJws, TestSetup.Base64UrlEncoder);

@@ -105,7 +105,8 @@ public static class JarVerification
                     base64UrlDecoder,
                     static (ReadOnlySpan<byte> _) => (object?)null,
                     memoryPool,
-                    signingPublicKey).ConfigureAwait(false);
+                    signingPublicKey,
+                    cancellationToken).ConfigureAwait(false);
             }
             catch(Exception ex) when(ex is FormatException or InvalidOperationException)
             {

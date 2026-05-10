@@ -98,12 +98,16 @@ public static class Jws
         JwtPartEncoder<TJwtPart> partEncoder,
         EncodeDelegate base64UrlEncoder,
         PrivateKeyMemory privateKey,
-        MemoryPool<byte> signaturePool)
+        MemoryPool<byte> signaturePool,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(partEncoder);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signaturePool);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
         TaggedMemory<byte> headerBytes = partEncoder(header);
         TaggedMemory<byte> payloadBytes = partEncoder(payload);
 
@@ -119,7 +123,8 @@ public static class Jws
         Signature signatureMemory = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             dataToSign,
-            signaturePool).ConfigureAwait(false);
+            signaturePool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         var protectedHeader = BuildProtectedHeaderDictionary(header);
 
@@ -151,13 +156,17 @@ public static class Jws
         EncodeDelegate base64UrlEncoder,
         PrivateKeyMemory privateKey,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> signaturePool)
+        MemoryPool<byte> signaturePool,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(partEncoder);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
         TaggedMemory<byte> headerBytes = partEncoder(header);
         TaggedMemory<byte> payloadBytes = partEncoder(payload);
 
@@ -169,7 +178,8 @@ public static class Jws
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             dataToSign,
-            signaturePool).ConfigureAwait(false);
+            signaturePool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         var protectedHeader = BuildProtectedHeaderDictionary(header);
 
@@ -195,11 +205,15 @@ public static class Jws
     public static async ValueTask<bool> VerifyAsync(
         JwsMessage message,
         EncodeDelegate base64UrlEncoder,
-        PublicKeyMemory publicKey)
+        PublicKeyMemory publicKey,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(publicKey);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
         if(message.Signatures.Count != 1)
         {
             throw new InvalidOperationException(
@@ -221,7 +235,8 @@ public static class Jws
         return await verificationDelegate(
             dataToVerify,
             signature.SignatureBytes,
-            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+            publicKey.AsReadOnlyMemory(),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -241,13 +256,17 @@ public static class Jws
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
         MemoryPool<byte> pool,
-        PublicKeyMemory publicKey)
+        PublicKeyMemory publicKey,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(jws);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(partDecoder);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(publicKey);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
         string[] parts = jws.Split('.');
 
         if(parts.Length != 3)
@@ -265,7 +284,8 @@ public static class Jws
         return await verificationDelegate(
             dataToVerify,
             signatureOwner.Memory,
-            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+            publicKey.AsReadOnlyMemory(),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -287,7 +307,8 @@ public static class Jws
         Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey,
-        VerificationDelegate verificationDelegate)
+        VerificationDelegate verificationDelegate,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(jws);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -295,6 +316,9 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
         string[] parts = jws.Split('.');
 
         if(parts.Length != 3)
@@ -308,7 +332,8 @@ public static class Jws
         return await verificationDelegate(
             dataToVerify,
             signatureOwner.Memory,
-            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+            publicKey.AsReadOnlyMemory(),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -328,13 +353,17 @@ public static class Jws
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
         MemoryPool<byte> pool,
-        PublicKeyMemory publicKey)
+        PublicKeyMemory publicKey,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(jws);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(partDecoder);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(publicKey);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
         string[] parts = jws.Split('.');
 
         if(parts.Length != 3)
@@ -358,7 +387,8 @@ public static class Jws
         bool isValid = await verificationDelegate(
             dataToVerify,
             signatureOwner.Memory,
-            publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
+            publicKey.AsReadOnlyMemory(),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return new JwsVerificationResult<TJwtPart>(isValid, header, payload);
     }

@@ -462,12 +462,12 @@ internal sealed class JarClientIdentifierTests
             bool validWithMicrosoftKey = await Jws.VerifyAsync(
                 compactJar, Decoder,
                 static (ReadOnlySpan<byte> _) => (object?)null,
-                Pool, microsoftKey).ConfigureAwait(false);
+                Pool, microsoftKey, TestContext.CancellationToken).ConfigureAwait(false);
 
             bool validWithBouncyCastleKey = await Jws.VerifyAsync(
                 compactJar, Decoder,
                 static (ReadOnlySpan<byte> _) => (object?)null,
-                Pool, bouncyCastleKey).ConfigureAwait(false);
+                Pool, bouncyCastleKey, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(validWithMicrosoftKey,
                 "JAR signature must verify with the key resolved via the Microsoft driver.");
@@ -603,12 +603,12 @@ internal sealed class JarClientIdentifierTests
             bool microsoftVerifies = await Jws.VerifyAsync(
                 compactJar, Decoder,
                 static (ReadOnlySpan<byte> _) => (object?)null,
-                Pool, microsoftKey).ConfigureAwait(false);
+                Pool, microsoftKey, TestContext.CancellationToken).ConfigureAwait(false);
 
             bool bouncyCastleVerifies = await Jws.VerifyAsync(
                 compactJar, Decoder,
                 static (ReadOnlySpan<byte> _) => (object?)null,
-                Pool, bouncyCastleKey).ConfigureAwait(false);
+                Pool, bouncyCastleKey, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(microsoftVerifies,
                 "Microsoft driver must produce a key that verifies the JAR signature.");

@@ -407,7 +407,8 @@ public static class JarExtensions
             base64UrlDecoder,
             static (ReadOnlySpan<byte> _) => (object?)null,
             memoryPool,
-            signingPublicKey).ConfigureAwait(false);
+            signingPublicKey,
+            cancellationToken).ConfigureAwait(false);
 
         if(!signatureValid)
         {

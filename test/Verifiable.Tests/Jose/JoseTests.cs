@@ -42,7 +42,8 @@ internal sealed class JoseTests
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -56,7 +57,8 @@ internal sealed class JoseTests
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
+            MicrosoftCryptographicFunctions.VerifyP256Async,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Signature verification should succeed.");
     }
@@ -126,7 +128,8 @@ internal sealed class JoseTests
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP384Async,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -136,7 +139,8 @@ internal sealed class JoseTests
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP384Async).ConfigureAwait(false);
+            MicrosoftCryptographicFunctions.VerifyP384Async,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-384 signature verification should succeed.");
     }
@@ -159,7 +163,8 @@ internal sealed class JoseTests
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP521Async,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -169,7 +174,8 @@ internal sealed class JoseTests
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
             publicKey,
-            MicrosoftCryptographicFunctions.VerifyP521Async).ConfigureAwait(false);
+            MicrosoftCryptographicFunctions.VerifyP521Async,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-521 signature verification should succeed.");
     }
@@ -198,7 +204,8 @@ internal sealed class JoseTests
             TestSetup.Base64UrlEncoder,
             signingPrivateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -208,7 +215,8 @@ internal sealed class JoseTests
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
             wrongPublicKey,
-            MicrosoftCryptographicFunctions.VerifyP256Async).ConfigureAwait(false);
+            MicrosoftCryptographicFunctions.VerifyP256Async,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(isValid, "Verification with wrong key should fail.");
     }
@@ -235,7 +243,8 @@ internal sealed class JoseTests
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 

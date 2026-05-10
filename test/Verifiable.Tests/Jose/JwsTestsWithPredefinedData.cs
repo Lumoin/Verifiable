@@ -52,7 +52,8 @@ internal sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -81,7 +82,8 @@ internal sealed class JwsTestsWithPredefinedData
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
             publicKey,
-            verificationDelegate).ConfigureAwait(false);
+            verificationDelegate,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Signature verification should succeed.");
     }
@@ -116,7 +118,8 @@ internal sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -155,7 +158,8 @@ internal sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -179,7 +183,8 @@ internal sealed class JwsTestsWithPredefinedData
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
             publicKey,
-            verificationDelegate).ConfigureAwait(false);
+            verificationDelegate,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "RSA-PSS signature verification should succeed.");
     }

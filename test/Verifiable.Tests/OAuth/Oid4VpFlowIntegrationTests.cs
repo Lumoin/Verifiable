@@ -691,11 +691,11 @@ internal sealed class Oid4VpFlowIntegrationTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         bool validWithCorrectKey = await Jws.VerifyAsync(
-            signedJar.Message, TestSetup.Base64UrlEncoder, correctPublicKey)
+            signedJar.Message, TestSetup.Base64UrlEncoder, correctPublicKey, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         bool validWithWrongKey = await Jws.VerifyAsync(
-            signedJar.Message, TestSetup.Base64UrlEncoder, wrongPublicKey)
+            signedJar.Message, TestSetup.Base64UrlEncoder, wrongPublicKey, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.IsTrue(validWithCorrectKey,
