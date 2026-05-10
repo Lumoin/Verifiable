@@ -13,6 +13,7 @@ using Verifiable.Json.Sd;
 using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Server.States;
@@ -588,13 +589,14 @@ internal sealed class TestHostShell: IDisposable
 
 
     /// <summary>
-    /// Creates an <see cref="AuthCodeClient"/> wired to this server via in-process
+    /// Creates an <see cref="OAuthClient"/> wired to this server via in-process
     /// transport. No HTTP, no serialization — both PDAs run in the same process.
+    /// AuthCode flows are accessed via <see cref="OAuthClient.AuthCode"/>.
     /// </summary>
     /// <param name="registration">The client registration to wire.</param>
     /// <param name="redirectUri">The client's redirect URI.</param>
     /// <param name="issuerUri">The expected issuer URI for callback validation.</param>
-    public AuthCodeClient CreateAuthCodeClient(
+    public OAuthClient CreateOAuthClient(
         ClientRegistration registration,
         string redirectUri,
         string issuerUri)
@@ -608,7 +610,7 @@ internal sealed class TestHostShell: IDisposable
 
         Dictionary<string, OAuthFlowState> clientFlowStore = [];
 
-        AuthCodeFlowOptions options = AuthCodeFlowOptions.Create(
+        OAuthClientOptions options = OAuthClientOptions.Create(
             clientId: registration.ClientId,
             endpoints: new AuthorizationServerEndpoints
             {
@@ -647,7 +649,7 @@ internal sealed class TestHostShell: IDisposable
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
             timeProvider: Time);
 
-        return new AuthCodeClient(options);
+        return new OAuthClient(options);
     }
 
 

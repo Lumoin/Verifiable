@@ -732,9 +732,42 @@ internal sealed class JarParTests
 
 
     [TestMethod]
-    public Task AcceptsJarWithAudAsArrayContainingIssuer()
+    public async Task AcceptsJarWithAudAsArrayContainingIssuer()
     {
-        return Task.CompletedTask;
+        //RFC 7519 §4.1.3 permits aud as either a single string or an array of
+        //strings. CheckTokenAudContainsExpectedIssuer accepts both shapes; the
+        //matcher's ValidateJarAudienceAsync runs the check against verified.Claims
+        //(the raw payload dictionary) — not the projected
+        //AuthCodeRequestObject.Aud which is single-string only. This test
+        //exercises the array form by replacing the default string aud claim
+        //with an array that contains the expected issuer URL alongside two
+        //unrelated entries.
+        using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterClient(
+            ClientId, ClientBaseUri, JarParCapabilities);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+
+        string expectedAud = material.Registration.IssuerUri!.ToString();
+        claims[WellKnownJwtClaims.Aud] = new[]
+        {
+            "https://unrelated-aud.example",
+            expectedAud,
+            "https://another-unrelated.example"
+        };
+
+        string compactJar = await BuildSignedJarAsync(
+            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DispatchJarParAsync(
+            host, material, compactJar, ClientId, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode,
+            $"JAR with aud as array containing the issuer must be accepted. Body: {response.Body}");
+        Assert.Contains("\"request_uri\":", response.Body, StringComparison.Ordinal,
+            $"Array-form aud happy path must produce a JAR-PAR success body. Got: {response.Body}");
     }
 
 

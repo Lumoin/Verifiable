@@ -174,6 +174,23 @@ public sealed record ClientRegistration
         FrozenDictionary<string, object>.Empty;
 
     /// <summary>
+    /// Maps each granted scope token to the list of resource-server audiences
+    /// that scope grants access to. Consumed by the default
+    /// <see cref="ResolveAccessTokenAudienceDelegate"/> in
+    /// <see cref="Rfc9068AccessTokenProducer.DefaultResolveAccessTokenAudienceAsync"/>
+    /// to populate the RFC 9068 §2.2 <c>aud</c> claim. <see langword="null"/>
+    /// means the registration relies on a custom
+    /// <see cref="AuthorizationServerIntegration.ResolveAccessTokenAudienceAsync"/>
+    /// or has no audience requirement.
+    /// </summary>
+    /// <remarks>
+    /// RFC 7519 §4.1.3 permits multiple audiences per token; the value type
+    /// is a list to match. Multiple scopes may map to overlapping audience
+    /// sets; the default resolver dedupes via ordinal-equality.
+    /// </remarks>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>>? ScopeToAudience { get; init; }
+
+    /// <summary>
     /// The policy profile this registration runs under, consumed by the
     /// default <see cref="ResolvePolicyDelegate"/> in
     /// <see cref="PolicyProfiles"/>. <see langword="null"/> means the default

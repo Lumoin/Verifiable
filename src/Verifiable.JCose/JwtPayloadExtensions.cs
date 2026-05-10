@@ -220,7 +220,11 @@ public static class JwtPayloadExtensions
         /// The <c>iss</c> claim identifying the authorization server. Required by RFC 9068.
         /// </param>
         /// <param name="audience">
-        /// The <c>aud</c> claim identifying the intended resource server. Required by RFC 9068.
+        /// The <c>aud</c> claim identifying the intended resource server(s). Required
+        /// by RFC 9068. The wire shape follows
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 §4.1.3</see>:
+        /// <see langword="null"/> or empty omits the claim entirely; a single-element
+        /// list is emitted as a JSON string; a multi-element list as a JSON array.
         /// </param>
         /// <param name="clientId">
         /// The <c>client_id</c> claim identifying the OAuth client that requested the token.
@@ -237,7 +241,7 @@ public static class JwtPayloadExtensions
             DateTimeOffset issuedAt,
             DateTimeOffset expiresAt,
             string? issuer = null,
-            string? audience = null,
+            IReadOnlyList<string>? audience = null,
             string? clientId = null,
             IEnumerable<KeyValuePair<string, object>>? claims = null)
         {
@@ -259,9 +263,15 @@ public static class JwtPayloadExtensions
                 payload[WellKnownJwtClaims.Iss] = issuer;
             }
 
-            if(audience is not null)
+            //RFC 7519 §4.1.3 permits aud as either a single string or an array of
+            //strings. Emit single-element lists as a string for compatibility with
+            //RPs that only handle the string form; multi-element lists go on the
+            //wire as an array.
+            if(audience is not null && audience.Count > 0)
             {
-                payload[WellKnownJwtClaims.Aud] = audience;
+                payload[WellKnownJwtClaims.Aud] = audience.Count == 1
+                    ? audience[0]
+                    : audience;
             }
 
             if(clientId is not null)

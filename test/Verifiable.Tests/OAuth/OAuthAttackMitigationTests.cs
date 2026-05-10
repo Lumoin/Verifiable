@@ -3,6 +3,7 @@ using Verifiable.Core.Assessment;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Validation;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -60,7 +61,7 @@ internal sealed class OAuthAttackMitigationTests
     public async Task Rfc9700Section4Point4MixUpAttackCallbackWithWrongIssuerIsRejected()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store, ValidationProfiles.CallbackHaip10Rules());
+        OAuthClientOptions options = CreateOptions(store, ValidationProfiles.CallbackHaip10Rules());
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
@@ -85,7 +86,7 @@ internal sealed class OAuthAttackMitigationTests
     public async Task Rfc9700Section4Point4MixUpAttackCallbackWithMissingIssuerIsRejectedUnderHaip10()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store, ValidationProfiles.CallbackHaip10Rules());
+        OAuthClientOptions options = CreateOptions(store, ValidationProfiles.CallbackHaip10Rules());
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
@@ -111,7 +112,7 @@ internal sealed class OAuthAttackMitigationTests
     {
         //Plain RFC 6749 with PKCE does not require iss. The callback is valid without it.
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store, ValidationProfiles.CallbackRfc6749WithPkceRules());
+        OAuthClientOptions options = CreateOptions(store, ValidationProfiles.CallbackRfc6749WithPkceRules());
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
@@ -134,7 +135,7 @@ internal sealed class OAuthAttackMitigationTests
     public async Task Rfc9700Section4Point4MixUpAttackCallbackWithCorrectIssuerSucceeds()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store, ValidationProfiles.CallbackHaip10Rules());
+        OAuthClientOptions options = CreateOptions(store, ValidationProfiles.CallbackHaip10Rules());
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
@@ -167,7 +168,7 @@ internal sealed class OAuthAttackMitigationTests
     public async Task Rfc9700Section4Point7CsrfCallbackWithUnknownStateIsRejected()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store, ValidationProfiles.CallbackHaip10Rules());
+        OAuthClientOptions options = CreateOptions(store, ValidationProfiles.CallbackHaip10Rules());
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
@@ -188,7 +189,7 @@ internal sealed class OAuthAttackMitigationTests
     public async Task Rfc9700Section4Point7CsrfCallbackWithMissingStateIsRejected()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store, ValidationProfiles.CallbackHaip10Rules());
+        OAuthClientOptions options = CreateOptions(store, ValidationProfiles.CallbackHaip10Rules());
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
@@ -225,7 +226,7 @@ internal sealed class OAuthAttackMitigationTests
         //Its absence would allow a PKCE downgrade attack per RFC 9700 §4.8.
         var capturedFields = new Dictionary<string, string>();
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(
+        OAuthClientOptions options = CreateOptions(
             store,
             ValidationProfiles.CallbackHaip10Rules(),
             captureFormFields: capturedFields);
@@ -250,7 +251,7 @@ internal sealed class OAuthAttackMitigationTests
         var parCaptured = new Dictionary<string, string>();
         var tokenCaptured = new Dictionary<string, string>();
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(
+        OAuthClientOptions options = CreateOptions(
             store,
             ValidationProfiles.CallbackHaip10Rules(),
             captureFormFields: parCaptured,
@@ -297,7 +298,7 @@ internal sealed class OAuthAttackMitigationTests
     {
         var capturedFields = new Dictionary<string, string>();
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(
+        OAuthClientOptions options = CreateOptions(
             store,
             ValidationProfiles.CallbackHaip10Rules(),
             captureFormFields: capturedFields);
@@ -321,7 +322,7 @@ internal sealed class OAuthAttackMitigationTests
     public async Task Rfc9700Section4Point9TokenReplayExpiredFlowStateIsRejected()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(
+        OAuthClientOptions options = CreateOptions(
             store,
             ValidationProfiles.CallbackHaip10Rules(),
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:expired", 1));
@@ -350,7 +351,7 @@ internal sealed class OAuthAttackMitigationTests
     }
 
 
-    private AuthCodeFlowOptions CreateOptions(
+    private OAuthClientOptions CreateOptions(
         Dictionary<string, OAuthFlowState> store,
         IList<ClaimDelegate<ValidationContext>> validationRules,
         string? parResponse = null,
@@ -363,7 +364,7 @@ internal sealed class OAuthAttackMitigationTests
         Uri? resolvedRevocationEndpoint = revocationEndpoint
             ?? (useDefaultRevocationEndpoint ? new Uri("https://as.example.com/revoke") : null);
 
-        return AuthCodeFlowOptions.Create(
+        return OAuthClientOptions.Create(
             clientId: "test-client",
             endpoints: new AuthorizationServerEndpoints
             {

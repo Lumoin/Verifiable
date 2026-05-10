@@ -1,28 +1,37 @@
-using Verifiable.Core.Assessment;
-using Verifiable.OAuth.Validation;
 using System.Diagnostics;
+using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
+using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Validation;
 
-namespace Verifiable.OAuth.AuthCode;
+namespace Verifiable.OAuth.Client;
 
 /// <summary>
-/// Configuration and I/O delegates for the Authorization Code flow handlers.
+/// Long-lived configuration and I/O delegates shared by every flow an
+/// <see cref="OAuthClient"/> drives.
 /// </summary>
 /// <remarks>
 /// <para>
-/// All I/O — storage, HTTP, time, parsing, validation — is supplied via delegates.
-/// The static handlers in <see cref="AuthCodeFlowHandlers"/> perform no I/O themselves.
+/// All I/O — storage, HTTP transport, time, parsing, validation — is supplied
+/// via delegates. The flow handlers perform no I/O themselves; they call the
+/// delegates on this options instance and return shaped results.
 /// </para>
 /// <para>
 /// Construct via <see cref="Create"/> to ensure all mandatory parameters are
 /// validated at construction time. The same instance is safe to share across
-/// concurrent requests.
+/// concurrent requests — fields are <see langword="private init"/> after
+/// construction and the delegates are expected to be reentrant.
+/// </para>
+/// <para>
+/// Per-call inputs (form-encoded fields, refresh requests, revocation requests)
+/// are passed to <see cref="OAuthClient"/> methods at call time, not stored
+/// here. Anything stored here lives for the lifetime of the client instance.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("AuthCodeFlowOptions ClientId={ClientId}")]
-public sealed class AuthCodeFlowOptions
+[DebuggerDisplay("OAuthClientOptions ClientId={ClientId}")]
+public sealed class OAuthClientOptions
 {
-    private AuthCodeFlowOptions() { }
+    private OAuthClientOptions() { }
 
 
     /// <summary>The client identifier registered with the authorization server.</summary>
@@ -94,7 +103,7 @@ public sealed class AuthCodeFlowOptions
 
 
     /// <summary>
-    /// Creates a fully validated <see cref="AuthCodeFlowOptions"/> instance.
+    /// Creates a fully validated <see cref="OAuthClientOptions"/> instance.
     /// </summary>
     /// <param name="clientId">The client identifier registered with the authorization server.</param>
     /// <param name="endpoints">The resolved authorization server endpoints.</param>
@@ -111,8 +120,8 @@ public sealed class AuthCodeFlowOptions
     /// UTC time source. Defaults to <see cref="TimeProvider.System"/> when
     /// <see langword="null"/>.
     /// </param>
-    /// <returns>A fully validated <see cref="AuthCodeFlowOptions"/> instance.</returns>
-    public static AuthCodeFlowOptions Create(
+    /// <returns>A fully validated <see cref="OAuthClientOptions"/> instance.</returns>
+    public static OAuthClientOptions Create(
         string clientId,
         AuthorizationServerEndpoints endpoints,
         Uri redirectUri,
@@ -138,7 +147,7 @@ public sealed class AuthCodeFlowOptions
         ArgumentNullException.ThrowIfNull(callbackValidator);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
 
-        return new AuthCodeFlowOptions
+        return new OAuthClientOptions
         {
             ClientId = clientId,
             Endpoints = endpoints,

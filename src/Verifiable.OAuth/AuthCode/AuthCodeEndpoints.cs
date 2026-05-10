@@ -175,7 +175,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, WellKnownHttpMethods.Post, StringComparison.Ordinal))
+                if(!WellKnownHttpMethods.IsPost(req.Method))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -339,7 +339,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, WellKnownHttpMethods.Get, StringComparison.Ordinal))
+                if(!WellKnownHttpMethods.IsGet(req.Method))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -437,7 +437,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, WellKnownHttpMethods.Get, StringComparison.Ordinal))
+                if(!WellKnownHttpMethods.IsGet(req.Method))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -600,7 +600,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, WellKnownHttpMethods.Post, StringComparison.Ordinal))
+                if(!WellKnownHttpMethods.IsPost(req.Method))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -714,7 +714,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, WellKnownHttpMethods.Get, StringComparison.Ordinal))
+                if(!WellKnownHttpMethods.IsGet(req.Method))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1126,7 +1126,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, WellKnownHttpMethods.Post, StringComparison.Ordinal))
+                if(!WellKnownHttpMethods.IsPost(req.Method))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1426,7 +1426,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, WellKnownHttpMethods.Post, StringComparison.Ordinal))
+                if(!WellKnownHttpMethods.IsPost(req.Method))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1475,7 +1475,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, WellKnownHttpMethods.Post, StringComparison.Ordinal))
+                if(!WellKnownHttpMethods.IsPost(req.Method))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }

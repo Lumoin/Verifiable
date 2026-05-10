@@ -11,23 +11,43 @@ namespace Verifiable.OAuth.Server;
 /// <remarks>
 /// <para>
 /// The producer always applies — every token-endpoint request emits an access
-/// token unless an application replaces the producer list with one that excludes
-/// it. Signs with <see cref="KeyUsageContext.AccessTokenIssuance"/>.
+/// token unless an application replaces the producer list with one that
+/// excludes it. Signs with <see cref="KeyUsageContext.AccessTokenIssuance"/>.
 /// </para>
 /// <para>
 /// Consumed indirectly via <see cref="TokenProducer.Rfc9068AccessToken"/>.
 /// </para>
 /// <para>
-/// <strong>Known gap (audit Finding 2): RFC 9068 access-token <c>aud</c>.</strong>
-/// RFC 9068 §2.2 mandates the <c>aud</c> claim on access tokens. The producer
-/// currently passes <c>audience: null</c> below because <see cref="IssuanceContext"/>
-/// has no field surfacing the resource server identifier(s). Surfacing
-/// <c>aud</c> requires a design conversation about how the resource server
-/// identifier is supplied (per-registration metadata, per-request resolver,
-/// scope-derived mapping, etc.) and is deferred until that conversation
-/// concludes. The policy axis <c>policy.AccessTokenAudPolicy</c> is in place
-/// (default <see cref="AccessTokenAudPolicy.Required"/>); only the producer's
-/// audience-resolution side is missing.
+/// <strong>Audience resolution.</strong> RFC 9068 §2.2 mandates the <c>aud</c>
+/// claim. Audience values are resolved at issuance time through
+/// <see cref="AuthorizationServerIntegration.ResolveAccessTokenAudienceAsync"/>;
+/// when that slot is unwired the library's default
+/// <see cref="DefaultResolveAccessTokenAudienceAsync"/> reads from
+/// <see cref="ClientRegistration.ScopeToAudience"/>. The active
+/// <see cref="AccessTokenAudPolicy"/> from per-request policy decides what
+/// happens when no audience can be resolved:
+/// </para>
+/// <list type="bullet">
+/// <item><description>
+/// <see cref="AccessTokenAudPolicy.Required"/> — the producer raises
+/// <see cref="InvalidOperationException"/> when no audience is available.
+/// RFC 9068-conformant default.
+/// </description></item>
+/// <item><description>
+/// <see cref="AccessTokenAudPolicy.Optional"/> — the producer emits the
+/// token without an <c>aud</c> claim. Useful during migrations where
+/// resource servers do not yet enforce the claim.
+/// </description></item>
+/// <item><description>
+/// <see cref="AccessTokenAudPolicy.Suppressed"/> — the producer never
+/// emits <c>aud</c>, even if audiences are available. Used by deployments
+/// that explicitly opt out during a phased rollout.
+/// </description></item>
+/// </list>
+/// <para>
+/// Multi-audience tokens are supported per RFC 7519 §4.1.3:
+/// <see cref="JwtPayloadExtensions.ForAccessToken"/> emits a single audience as
+/// a JSON string and multiple audiences as a JSON array.
 /// </para>
 /// </remarks>
 internal static class Rfc9068AccessTokenProducer
@@ -46,7 +66,67 @@ internal static class Rfc9068AccessTokenProducer
     };
 
 
-    private static ValueTask<TokenProducerOutput> BuildAsync(
+    /// <summary>
+    /// Default audience resolver — reads the registration's
+    /// <see cref="ClientRegistration.ScopeToAudience"/> map and returns the
+    /// union (deduplicated, ordinal-equal) of audiences across the granted
+    /// scopes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns <see langword="null"/> when the registration has no
+    /// <c>ScopeToAudience</c> map or when no granted scope maps to any
+    /// audience. Applications with dynamic audience needs supply their own
+    /// <see cref="ResolveAccessTokenAudienceDelegate"/> via
+    /// <see cref="AuthorizationServerIntegration.ResolveAccessTokenAudienceAsync"/>.
+    /// </para>
+    /// <para>
+    /// The default does not bake in the FAPI <c>aud == client_id</c> behaviour
+    /// for client-credentials-style scopes. Applications that want that put
+    /// <c>client_id</c> explicitly into <c>ScopeToAudience</c> entries, or
+    /// supply a custom delegate that synthesises the value.
+    /// </para>
+    /// </remarks>
+    public static ValueTask<IReadOnlyList<string>?> DefaultResolveAccessTokenAudienceAsync(
+        ClientRegistration registration,
+        IssuanceContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if(registration.ScopeToAudience is null)
+        {
+            return ValueTask.FromResult<IReadOnlyList<string>?>(null);
+        }
+
+        HashSet<string> audiences = new(StringComparer.Ordinal);
+        string[] grantedScopes = context.Scope.Split(
+            ' ', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach(string scopeToken in grantedScopes)
+        {
+            if(registration.ScopeToAudience.TryGetValue(
+                scopeToken, out IReadOnlyList<string>? mapped))
+            {
+                foreach(string aud in mapped)
+                {
+                    audiences.Add(aud);
+                }
+            }
+        }
+
+        if(audiences.Count == 0)
+        {
+            return ValueTask.FromResult<IReadOnlyList<string>?>(null);
+        }
+
+        return ValueTask.FromResult<IReadOnlyList<string>?>(audiences.ToArray());
+    }
+
+
+    private static async ValueTask<TokenProducerOutput> BuildAsync(
         IssuanceContext context,
         AuthorizationServer server,
         KeyId signingKeyId,
@@ -65,6 +145,29 @@ internal static class Rfc9068AccessTokenProducer
         string jti = Guid.NewGuid().ToString();
         string issuerValue = context.IssuerUri.GetLeftPart(UriPartial.Authority);
 
+        ResolveAccessTokenAudienceDelegate resolver =
+            server.Integration.ResolveAccessTokenAudienceAsync
+            ?? DefaultResolveAccessTokenAudienceAsync;
+
+        IReadOnlyList<string>? audiences = await resolver(
+            context.Registration, context, cancellationToken).ConfigureAwait(false);
+
+        AccessTokenAudPolicy policy = context.Context.AccessTokenAudPolicy;
+
+        if(policy == AccessTokenAudPolicy.Required
+            && (audiences is null || audiences.Count == 0))
+        {
+            throw new InvalidOperationException(
+                "AccessTokenAudPolicy is Required but no audience was resolved. " +
+                "Either wire ResolveAccessTokenAudienceAsync, populate " +
+                "registration.ScopeToAudience, or set the policy to Optional or Suppressed.");
+        }
+
+        if(policy == AccessTokenAudPolicy.Suppressed)
+        {
+            audiences = null;
+        }
+
         JwtHeader header = JwtHeader.ForAccessToken(algorithm, signingKeyId.Value);
         JwtPayload payload = JwtPayload.ForAccessToken(
             subject: context.Subject,
@@ -73,9 +176,9 @@ internal static class Rfc9068AccessTokenProducer
             issuedAt: context.IssuedAt,
             expiresAt: expiresAt,
             issuer: issuerValue,
-            audience: null,
+            audience: audiences,
             clientId: context.ClientId);
 
-        return ValueTask.FromResult(new TokenProducerOutput(header, payload));
+        return new TokenProducerOutput(header, payload);
     }
 }

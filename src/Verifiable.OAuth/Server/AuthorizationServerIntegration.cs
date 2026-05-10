@@ -180,6 +180,22 @@ public sealed class AuthorizationServerIntegration
     /// </remarks>
     public ResolvePolicyDelegate? ResolvePolicyAsync { get; set; }
 
+    /// <summary>
+    /// Resolves the <c>aud</c> claim audience(s) for an RFC 9068 access token
+    /// at issuance time. Optional — when <see langword="null"/>, the library's
+    /// default <see cref="Rfc9068AccessTokenProducer.DefaultResolveAccessTokenAudienceAsync"/>
+    /// runs (reads from <see cref="ClientRegistration.ScopeToAudience"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Closes audit Finding 2. The producer consults the active
+    /// <see cref="AccessTokenAudPolicy"/> from the resolved policy and uses
+    /// the audience(s) this delegate returns to populate the <c>aud</c> claim
+    /// per <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 §2.2</see>.
+    /// </para>
+    /// </remarks>
+    public ResolveAccessTokenAudienceDelegate? ResolveAccessTokenAudienceAsync { get; set; }
+
 
     /// <summary>
     /// Whether <see cref="Validate"/> has been called successfully on this group.

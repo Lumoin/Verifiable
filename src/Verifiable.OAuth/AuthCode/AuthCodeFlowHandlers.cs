@@ -4,6 +4,7 @@ using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.AuthCode.States;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Validation;
@@ -17,14 +18,14 @@ namespace Verifiable.OAuth.AuthCode;
 /// <para>
 /// Each handler takes the inbound request fields, the configured delegate bundle,
 /// and a cancellation token. No instance state is held. The application author
-/// wires these to HTTP routes and supplies the <see cref="AuthCodeFlowOptions"/>
+/// wires these to HTTP routes and supplies the <see cref="OAuthClientOptions"/>
 /// constructed at startup.
 /// </para>
 /// <para>
 /// Typical ASP.NET wiring (application code, not part of this library):
 /// </para>
 /// <code>
-/// var options = new AuthCodeFlowOptions { ... };
+/// var options = OAuthClientOptions.Create( ... );
 /// var group = app.MapGroup("/oauth");
 /// group.MapPost(AuthCodeFlowRoutes.Par,
 ///     (IReadOnlyDictionary&lt;string, string&gt; fields, CancellationToken ct) =>
@@ -44,12 +45,11 @@ namespace Verifiable.OAuth.AuthCode;
 /// </para>
 /// <code>
 /// var store = new Dictionary&lt;string, OAuthFlowState&gt;();
-/// var options = new AuthCodeFlowOptions
-/// {
-///     SaveStateAsync = (state, _) => { store[state.FlowId] = state; return ValueTask.CompletedTask; },
-///     LoadStateAsync = (id, _)    => ValueTask.FromResult(store.GetValueOrDefault(id)),
+/// var options = OAuthClientOptions.Create(
 ///     ...
-/// };
+///     saveStateAsync: (state, _) => { store[state.FlowId] = state; return ValueTask.CompletedTask; },
+///     loadStateAsync: (id, _)    => ValueTask.FromResult(store.GetValueOrDefault(id)),
+///     ...);
 /// </code>
 /// </remarks>
 [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of disposable state records is transferred to SaveStateAsync on success. The nullable-with-finally pattern ensures disposal on all failure paths.")]
@@ -73,7 +73,7 @@ public static class AuthCodeFlowHandlers
     /// </returns>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleParAsync(
         IReadOnlyDictionary<string, string> fields,
-        AuthCodeFlowOptions options,
+        OAuthClientOptions options,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
@@ -168,7 +168,7 @@ public static class AuthCodeFlowHandlers
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleCallbackAsync(
         IReadOnlyDictionary<string, string> fields,
-        AuthCodeFlowOptions options,
+        OAuthClientOptions options,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
@@ -270,7 +270,7 @@ public static class AuthCodeFlowHandlers
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleTokenAsync(
         IReadOnlyDictionary<string, string> fields,
-        AuthCodeFlowOptions options,
+        OAuthClientOptions options,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
@@ -372,7 +372,7 @@ public static class AuthCodeFlowHandlers
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleRevocationAsync(
         IReadOnlyDictionary<string, string> fields,
-        AuthCodeFlowOptions options,
+        OAuthClientOptions options,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
@@ -433,7 +433,7 @@ public static class AuthCodeFlowHandlers
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> RefreshAsync(
         RefreshTokenRequest request,
-        AuthCodeFlowOptions options,
+        OAuthClientOptions options,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);

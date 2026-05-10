@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth.AuthCode;
 
@@ -15,7 +16,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// </para>
 /// <para>
 /// Construct using object initializer syntax and supply to
-/// <see cref="AuthCodeFlowOptions.Create"/> after fetching and validating the
+/// <see cref="OAuthClientOptions.Create"/> after fetching and validating the
 /// well-known metadata document. The same instance is safe to share across
 /// concurrent requests for the lifetime of the authorization server configuration.
 /// </para>

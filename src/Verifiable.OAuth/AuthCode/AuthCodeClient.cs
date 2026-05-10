@@ -1,55 +1,41 @@
 using System.Diagnostics;
-using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
-/// An OAuth 2.0 Authorization Code client that drives PKCE-protected flows
-/// from PAR through token exchange.
+/// The Authorization Code sub-client of <see cref="OAuthClient"/>. Drives
+/// PKCE-protected flows from PAR through token exchange, refresh, and
+/// revocation.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is the primary client type an application developer constructs at startup
-/// and registers in the dependency injection container:
+/// Constructed by <see cref="OAuthClient"/>; not directly constructible
+/// from application code. Application authors construct an
+/// <see cref="OAuthClient"/> at startup and access this sub-client via
+/// <see cref="OAuthClient.AuthCode"/>.
 /// </para>
 /// <code>
-/// var client = new AuthCodeClient(AuthCodeFlowOptions.Create(
-///     clientId: "my-app",
-///     endpoints: discoveredEndpoints,
-///     sendFormPostAsync: async (endpoint, fields, ct) =>
-///     {
-///         //Any transport: HttpClient, named pipe, in-process, gRPC.
-///         var content = new FormUrlEncodedContent(fields);
-///         var response = await httpClient.PostAsync(endpoint, content, ct);
-///         return new HttpResponseData
-///         {
-///             Body = await response.Content.ReadAsStringAsync(ct),
-///             StatusCode = (int)response.StatusCode
-///         };
-///     },
-///     ...));
+/// var client = new OAuthClient(OAuthClientOptions.Create(...));
+/// var redirect = await client.AuthCode.StartParAsync(
+///     OAuthFormEncodedFields.Empty, ct);
 /// </code>
-/// <para>
-/// The transport is a delegate. The client never knows whether it talks to the
-/// authorization server over HTTP, a named pipe, an in-process method call, or
-/// any other channel. OAuth is an HTTP protocol — the URIs and status codes are
-/// protocol-level, not transport-level — so the delegate shape fits all backends.
-/// </para>
 /// </remarks>
 [DebuggerDisplay("AuthCodeClient ClientId={Options.ClientId}")]
 public sealed class AuthCodeClient
 {
     /// <summary>The validated client options carrying all delegates.</summary>
-    public AuthCodeFlowOptions Options { get; }
+    public OAuthClientOptions Options { get; }
 
 
     /// <summary>
-    /// Creates a new Authorization Code client with the given options.
+    /// Creates a new Authorization Code client. Internal — use
+    /// <see cref="OAuthClient.AuthCode"/> to access an instance.
     /// </summary>
     /// <param name="options">
     /// The client options carrying transport, persistence, and validation delegates.
     /// </param>
-    public AuthCodeClient(AuthCodeFlowOptions options)
+    internal AuthCodeClient(OAuthClientOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -64,16 +50,14 @@ public sealed class AuthCodeClient
     /// </summary>
     /// <param name="additionalFields">
     /// Additional fields to include in the PAR request body (e.g., <c>scope</c>,
-    /// <c>acr_values</c>). May be empty.
+    /// <c>acr_values</c>). May be <see cref="OAuthFormEncodedFields.Empty"/>.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> StartParAsync(
-        IReadOnlyDictionary<string, string> additionalFields,
+        OAuthFormEncodedFields additionalFields,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(additionalFields);
-
-        return AuthCodeFlowHandlers.HandleParAsync(additionalFields, Options, cancellationToken);
+        return AuthCodeFlowHandlers.HandleParAsync(additionalFields.Fields, Options, cancellationToken);
     }
 
 
@@ -88,12 +72,10 @@ public sealed class AuthCodeClient
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> HandleCallbackAsync(
-        IReadOnlyDictionary<string, string> callbackParams,
+        OAuthFormEncodedFields callbackParams,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(callbackParams);
-
-        return AuthCodeFlowHandlers.HandleCallbackAsync(callbackParams, Options, cancellationToken);
+        return AuthCodeFlowHandlers.HandleCallbackAsync(callbackParams.Fields, Options, cancellationToken);
     }
 
 
@@ -142,11 +124,9 @@ public sealed class AuthCodeClient
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> RevokeAsync(
-        IReadOnlyDictionary<string, string> fields,
+        OAuthFormEncodedFields fields,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(fields);
-
-        return AuthCodeFlowHandlers.HandleRevocationAsync(fields, Options, cancellationToken);
+        return AuthCodeFlowHandlers.HandleRevocationAsync(fields.Fields, Options, cancellationToken);
     }
 }

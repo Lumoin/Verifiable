@@ -5,6 +5,7 @@ using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
+using Verifiable.OAuth.Client;
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Validation;
 using Verifiable.Tests.TestInfrastructure;
@@ -24,7 +25,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleParAsyncReturnsRedirectOnSuccess()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:abc", 60));
+        OAuthClientOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:abc", 60));
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string> { [OAuthRequestParameters.Scope] = "openid" },
@@ -42,7 +43,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleParAsyncReturnsInternalErrorWhenHttpFails()
     {
-        AuthCodeFlowOptions options = CreateOptions(
+        OAuthClientOptions options = CreateOptions(
             store: [],
             httpException: new InvalidOperationException("Network unreachable."));
 
@@ -59,7 +60,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleParAsyncReturnsBadRequestWhenServerReturnsProtocolError()
     {
-        AuthCodeFlowOptions options = CreateOptions(
+        OAuthClientOptions options = CreateOptions(
             store: new Dictionary<string, OAuthFlowState>(),
             parResponse: /*lang=json,strict*/ "{\"error\":\"invalid_client\"}");
 
@@ -77,7 +78,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleParAsyncReturnsInternalErrorWhenResponseIsMalformed()
     {
-        AuthCodeFlowOptions options = CreateOptions(
+        OAuthClientOptions options = CreateOptions(
             store: new Dictionary<string, OAuthFlowState>(),
             parResponse: "<html>502 Bad Gateway</html>");
 
@@ -95,7 +96,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleCallbackAsyncReturnsBadRequestWhenMissingParameters()
     {
-        AuthCodeFlowOptions options = CreateOptions(new Dictionary<string, OAuthFlowState>());
+        OAuthClientOptions options = CreateOptions(new Dictionary<string, OAuthFlowState>());
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string> { [OAuthRequestParameters.Code] = "abc" },
@@ -110,7 +111,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleCallbackAsyncReturnsBadRequestWhenFlowNotFound()
     {
-        AuthCodeFlowOptions options = CreateOptions(new Dictionary<string, OAuthFlowState>());
+        OAuthClientOptions options = CreateOptions(new Dictionary<string, OAuthFlowState>());
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
@@ -131,7 +132,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleCallbackAsyncReturnsBadRequestOnIssuerMismatch()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:x", 60));
+        OAuthClientOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:x", 60));
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -155,7 +156,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleCallbackAsyncPersistsCodeStateOnSuccess()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:y", 60));
+        OAuthClientOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:y", 60));
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -179,7 +180,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleTokenAsyncReturnsBadRequestWhenFlowIdMissing()
     {
-        AuthCodeFlowOptions options = CreateOptions(new Dictionary<string, OAuthFlowState>());
+        OAuthClientOptions options = CreateOptions(new Dictionary<string, OAuthFlowState>());
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleTokenAsync(
             new Dictionary<string, string>(),
@@ -195,7 +196,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleTokenAsyncReturnsBadRequestWhenNoCodePending()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:z", 60));
+        OAuthClientOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:z", 60));
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -214,7 +215,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleTokenAsyncReturnsOkWithTokensOnFullHappyPath()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(
+        OAuthClientOptions options = CreateOptions(
             store,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:happy", 60),
             tokenResponse: BuildTokenJson("at.abc", "Bearer", 3600, "rt.xyz"));
@@ -249,7 +250,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleRevocationAsyncReturnsBadRequestWhenEndpointMissing()
     {
-        AuthCodeFlowOptions options = CreateOptions(
+        OAuthClientOptions options = CreateOptions(
             new Dictionary<string, OAuthFlowState>(),
             useDefaultRevocationEndpoint: false);
 
@@ -266,7 +267,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleRevocationAsyncReturnsOkWhenEndpointPresent()
     {
-        AuthCodeFlowOptions options = CreateOptions(
+        OAuthClientOptions options = CreateOptions(
             new Dictionary<string, OAuthFlowState>());
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleRevocationAsync(
@@ -281,7 +282,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task RefreshAsyncReturnsOkWithNewTokens()
     {
-        AuthCodeFlowOptions options = CreateOptions(
+        OAuthClientOptions options = CreateOptions(
             new Dictionary<string, OAuthFlowState>(),
             tokenResponse: BuildTokenJson("at.new", "Bearer", 3600, "rt.new"));
 
@@ -305,7 +306,7 @@ internal sealed class AuthCodeFlowTests
     public async Task PkceVerifierIsBase64UrlEncodedWithCorrectLength()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store,
+        OAuthClientOptions options = CreateOptions(store,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:pkce1", 60));
 
         await AuthCodeFlowHandlers.HandleParAsync(
@@ -338,9 +339,9 @@ internal sealed class AuthCodeFlowTests
         var store1 = new Dictionary<string, OAuthFlowState>();
         var store2 = new Dictionary<string, OAuthFlowState>();
 
-        AuthCodeFlowOptions options1 = CreateOptions(store1,
+        OAuthClientOptions options1 = CreateOptions(store1,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:u1", 60));
-        AuthCodeFlowOptions options2 = CreateOptions(store2,
+        OAuthClientOptions options2 = CreateOptions(store2,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:u2", 60));
 
         await AuthCodeFlowHandlers.HandleParAsync(
@@ -367,7 +368,7 @@ internal sealed class AuthCodeFlowTests
     {
         const int expiresIn = 90;
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store,
+        OAuthClientOptions options = CreateOptions(store,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:exp", expiresIn));
 
         DateTimeOffset before = TimeProvider.GetUtcNow();
@@ -396,7 +397,7 @@ internal sealed class AuthCodeFlowTests
         using IDisposable subscription = CryptographicKeyEvents.Events.Subscribe(observer);
 
         var store = new Dictionary<string, OAuthFlowState>();
-        AuthCodeFlowOptions options = CreateOptions(store,
+        OAuthClientOptions options = CreateOptions(store,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:obs", 60));
 
         await AuthCodeFlowHandlers.HandleParAsync(
@@ -414,7 +415,7 @@ internal sealed class AuthCodeFlowTests
     }
 
 
-    private AuthCodeFlowOptions CreateOptions(
+    private OAuthClientOptions CreateOptions(
         Dictionary<string, OAuthFlowState> store,
         string? parResponse = null,
         string? tokenResponse = null,
@@ -425,7 +426,7 @@ internal sealed class AuthCodeFlowTests
         Uri? resolvedRevocationEndpoint = revocationEndpoint
             ?? (useDefaultRevocationEndpoint ? new Uri("https://as.example.com/revoke") : null);
 
-        return AuthCodeFlowOptions.Create(
+        return OAuthClientOptions.Create(
             clientId: "test-client",
             endpoints: new AuthorizationServerEndpoints
             {

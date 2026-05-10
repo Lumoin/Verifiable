@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Verifiable.Core;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth;
 
@@ -38,10 +39,10 @@ namespace Verifiable.OAuth;
 ///   </item>
 /// </list>
 /// <para>
-/// <strong>Usage in <see cref="AuthCodeFlowOptions"/>:</strong>
+/// <strong>Usage in <see cref="OAuthClientOptions"/>:</strong>
 /// </para>
 /// <code>
-/// AuthCodeFlowOptions.Create(
+/// OAuthClientOptions.Create(
 ///     ...
 ///     parseParResponseAsync:   OAuthResponseParsers.ParseParResponse,
 ///     parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,

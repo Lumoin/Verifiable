@@ -2273,6 +2273,136 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
+    [TestMethod]
+    public async Task DefaultResolverReturnsNullWhenScopeToAudienceUnset()
+    {
+        //Body D — closes audit Finding 2. Registration with no ScopeToAudience
+        //map produces null audience from the default resolver.
+        ClientRegistration registration = MakeRegistrationForAud(scopeToAudience: null);
+        IssuanceContext context = MakeIssuanceContext(registration, "openid profile");
+
+        IReadOnlyList<string>? audiences = await Rfc9068AccessTokenProducer
+            .DefaultResolveAccessTokenAudienceAsync(
+                registration, context, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.IsNull(audiences,
+            "Default resolver returns null when ScopeToAudience is unset.");
+    }
+
+
+    [TestMethod]
+    public async Task DefaultResolverMapsSingleScopeToAudiences()
+    {
+        //One scope mapping → list with the mapped audience.
+        Dictionary<string, IReadOnlyList<string>> map = new(StringComparer.Ordinal)
+        {
+            ["read"] = new[] { "https://api.example.com/orders" }
+        };
+        ClientRegistration registration = MakeRegistrationForAud(scopeToAudience: map);
+        IssuanceContext context = MakeIssuanceContext(registration, "read");
+
+        IReadOnlyList<string>? audiences = await Rfc9068AccessTokenProducer
+            .DefaultResolveAccessTokenAudienceAsync(
+                registration, context, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.IsNotNull(audiences);
+        Assert.HasCount(1, audiences);
+        Assert.AreEqual("https://api.example.com/orders", audiences[0]);
+    }
+
+
+    [TestMethod]
+    public async Task DefaultResolverDedupesAcrossScopes()
+    {
+        //Two scopes mapping to overlapping audiences — the union is deduped via
+        //ordinal-equal string comparison.
+        Dictionary<string, IReadOnlyList<string>> map = new(StringComparer.Ordinal)
+        {
+            ["read"] = new[] { "https://api.example.com/orders", "https://api.example.com/billing" },
+            ["write"] = new[] { "https://api.example.com/orders" }
+        };
+        ClientRegistration registration = MakeRegistrationForAud(scopeToAudience: map);
+        IssuanceContext context = MakeIssuanceContext(registration, "read write");
+
+        IReadOnlyList<string>? audiences = await Rfc9068AccessTokenProducer
+            .DefaultResolveAccessTokenAudienceAsync(
+                registration, context, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.IsNotNull(audiences);
+        Assert.HasCount(2, audiences);
+        Assert.Contains("https://api.example.com/orders", audiences);
+        Assert.Contains("https://api.example.com/billing", audiences);
+    }
+
+
+    [TestMethod]
+    public void JwtPayloadEmitsAudPerRfc7519()
+    {
+        //RFC 7519 §4.1.3 — single-element list emits as JSON string;
+        //multi-element list emits as JSON array; null/empty omits the claim.
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+
+        JwtPayload single = JwtPayload.ForAccessToken(
+            subject: "alice", jti: "j1", scope: "read",
+            issuedAt: now, expiresAt: now.AddHours(1),
+            issuer: "https://issuer", audience: SingleAudience, clientId: "c1");
+        Assert.IsTrue(single.TryGetValue(WellKnownJwtClaims.Aud, out object? singleAud));
+        Assert.IsInstanceOfType<string>(singleAud);
+        Assert.AreEqual("https://api1", (string)singleAud!);
+
+        JwtPayload multi = JwtPayload.ForAccessToken(
+            subject: "alice", jti: "j2", scope: "read",
+            issuedAt: now, expiresAt: now.AddHours(1),
+            issuer: "https://issuer",
+            audience: MultiAudience, clientId: "c1");
+        Assert.IsTrue(multi.TryGetValue(WellKnownJwtClaims.Aud, out object? multiAud));
+        Assert.IsInstanceOfType<IReadOnlyList<string>>(multiAud);
+
+        JwtPayload absent = JwtPayload.ForAccessToken(
+            subject: "alice", jti: "j3", scope: "read",
+            issuedAt: now, expiresAt: now.AddHours(1),
+            issuer: "https://issuer", audience: null, clientId: "c1");
+        Assert.IsFalse(absent.ContainsKey(WellKnownJwtClaims.Aud),
+            "Null audience must omit the aud claim entirely.");
+
+        JwtPayload empty = JwtPayload.ForAccessToken(
+            subject: "alice", jti: "j4", scope: "read",
+            issuedAt: now, expiresAt: now.AddHours(1),
+            issuer: "https://issuer",
+            audience: Array.Empty<string>(), clientId: "c1");
+        Assert.IsFalse(empty.ContainsKey(WellKnownJwtClaims.Aud),
+            "Empty audience list must omit the aud claim entirely.");
+    }
+
+
+    private static readonly string[] SingleAudience = ["https://api1"];
+    private static readonly string[] MultiAudience = ["https://api1", "https://api2"];
+
+
+    [TestMethod]
+    public void DefaultResolverSurfacesCancellation()
+    {
+        //Body D — cancellation propagates through the default resolver.
+        Dictionary<string, IReadOnlyList<string>> map = new(StringComparer.Ordinal)
+        {
+            ["read"] = new[] { "https://api" }
+        };
+        ClientRegistration registration = MakeRegistrationForAud(scopeToAudience: map);
+        IssuanceContext context = MakeIssuanceContext(registration, "read");
+
+        using CancellationTokenSource cts = new();
+        cts.Cancel();
+
+        Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+            await Rfc9068AccessTokenProducer.DefaultResolveAccessTokenAudienceAsync(
+                registration, context, cts.Token).ConfigureAwait(false))
+            .ConfigureAwait(false).GetAwaiter().GetResult();
+    }
+
+
     //Helper observer that collects all events into a list for assertion.
     private sealed class CollectingObserver<T>(List<T> collected): IObserver<T>
     {
@@ -2300,5 +2430,39 @@ internal sealed class AuthorizationServerFeatureTests
             SigningKeys = ImmutableDictionary<KeyUsageContext, SigningKeySet>.Empty,
             TokenLifetimes = ImmutableDictionary<string, TimeSpan>.Empty,
             Profile = profile
+        };
+
+
+    //Constructs the registration shape the Body D audience-resolver tests need:
+    //the ScopeToAudience field is the only axis under test; everything else is
+    //placeholder.
+    private static ClientRegistration MakeRegistrationForAud(
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? scopeToAudience) =>
+        new()
+        {
+            ClientId = "aud-test-client",
+            TenantId = "aud-test",
+            AllowedCapabilities = ImmutableHashSet<ServerCapabilityName>.Empty,
+            AllowedRedirectUris = ImmutableHashSet<Uri>.Empty,
+            AllowedScopes = ImmutableHashSet<string>.Empty,
+            SigningKeys = ImmutableDictionary<KeyUsageContext, SigningKeySet>.Empty,
+            TokenLifetimes = ImmutableDictionary<string, TimeSpan>.Empty,
+            ScopeToAudience = scopeToAudience
+        };
+
+
+    //Builds the IssuanceContext the resolver consumes. Subject and ClientId are
+    //placeholder; only Scope is varied per test.
+    private static IssuanceContext MakeIssuanceContext(
+        ClientRegistration registration, string scope) =>
+        new()
+        {
+            Registration = registration,
+            Context = new RequestContext(),
+            IssuerUri = new Uri("https://issuer.example.com"),
+            Subject = "alice",
+            Scope = scope,
+            ClientId = registration.ClientId,
+            IssuedAt = DateTimeOffset.UnixEpoch
         };
 }
