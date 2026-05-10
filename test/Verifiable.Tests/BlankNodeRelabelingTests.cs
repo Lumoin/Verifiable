@@ -244,7 +244,7 @@ internal sealed class BlankNodeRelabelingW3CTests
         const string HmacIdWithHyphen = "u3Lv2QpFgo-YAegc1cQQKWJFW2sEjQF6FfuZ0VEoMKHg";
         const string HmacIdWithUnderscore = "uVkUuBrlOaELGVQWJD4M_qW5bcKEHWGNbOrPA_qAOKKw";
 
-        Assert.IsTrue(HmacIdWithHyphen.Contains('-', StringComparison.Ordinal), "W3C test vector should contain hyphen.");
+        Assert.Contains('-', HmacIdWithHyphen, "W3C test vector should contain hyphen.");
         Assert.Contains('_', HmacIdWithUnderscore, "W3C test vector should contain underscore.");
 
         //Verify these can be extracted from relabeled statements.

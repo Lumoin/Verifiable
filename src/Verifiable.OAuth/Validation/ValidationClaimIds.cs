@@ -194,6 +194,14 @@ public static class ValidationClaimIds
     public static ClaimId AudContainsExpectedClient { get; } = ClaimId.Create(804, "AudContainsExpectedClient");
 
     /// <summary>
+    /// The <c>aud</c> value contains the expected issuer identifier.
+    /// Used for JAR <c>aud</c> validation per RFC 9101 §10.2 — distinct from
+    /// <see cref="AudContainsExpectedClient"/>, which enforces the
+    /// <c>aud == client_id</c> semantic used by KB-JWT in OID4VP.
+    /// </summary>
+    public static ClaimId AudContainsExpectedIssuer { get; } = ClaimId.Create(813, "AudContainsExpectedIssuer");
+
+    /// <summary>
     /// The <c>exp</c> claim is present.
     /// </summary>
     public static ClaimId ExpPresent { get; } = ClaimId.Create(805, "ExpPresent");

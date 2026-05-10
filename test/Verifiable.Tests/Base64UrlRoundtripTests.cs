@@ -77,9 +77,9 @@ namespace Verifiable.Tests
             Assert.AreEqual(manualBase64Url, ourBase64Url, "Character replacement doesn't match manual conversion");
 
             //Verify no forbidden characters in Base64Url.
-            Assert.IsFalse(ourBase64Url.Contains('+', StringComparison.Ordinal), "Base64Url contains forbidden '+'");
-            Assert.IsFalse(ourBase64Url.Contains('/', StringComparison.Ordinal), "Base64Url contains forbidden '/'");
-            Assert.IsFalse(ourBase64Url.Contains('=', StringComparison.Ordinal), "Base64Url contains forbidden '='");
+            Assert.DoesNotContain('+', ourBase64Url, "Base64Url contains forbidden '+'");
+            Assert.DoesNotContain('/', ourBase64Url, "Base64Url contains forbidden '/'");
+            Assert.DoesNotContain('=', ourBase64Url, "Base64Url contains forbidden '='");
         }
 
         [TestMethod]
@@ -107,7 +107,7 @@ namespace Verifiable.Tests
 
                 //Our Base64Url should have no padding.
                 string ourBase64Url = TestSetup.Base64UrlEncoder(data);
-                Assert.IsFalse(ourBase64Url.Contains('=', StringComparison.Ordinal), $"Base64Url should not contain padding for {Convert.ToHexString(data)}");
+                Assert.DoesNotContain('=', ourBase64Url, $"Base64Url should not contain padding for {Convert.ToHexString(data)}");
 
                 //Length should be base64 length minus padding.
                 Assert.AreEqual(base64.Length - expectedPadding, ourBase64Url.Length, "Base64Url length incorrect");

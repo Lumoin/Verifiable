@@ -246,7 +246,7 @@ internal sealed class ClaimIssuerTests
         Assert.IsInstanceOfType<FailedClaimContext>(failedClaim.Context);
 
         var failedContext = (FailedClaimContext)failedClaim.Context;
-        Assert.IsTrue(failedContext.FailureMessage.Contains("Simulated rule failure", StringComparison.Ordinal));
+        Assert.Contains("Simulated rule failure", failedContext.FailureMessage, StringComparison.Ordinal);
     }
 
 

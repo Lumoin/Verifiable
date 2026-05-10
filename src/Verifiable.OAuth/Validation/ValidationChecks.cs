@@ -338,6 +338,41 @@ public static class ValidationChecks
 
 
     /// <summary>
+    /// Checks that the <c>aud</c> claim contains the expected issuer URL.
+    /// Handles both single-string and array representations per RFC 7519 §4.1.3.
+    /// Used for JAR <c>aud</c> validation per RFC 9101 §10.2 — distinct from
+    /// <see cref="CheckTokenAudContainsClient"/>, which enforces the
+    /// <c>aud == client_id</c> semantic used by KB-JWT in OID4VP.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckTokenAudContainsExpectedIssuer(
+        ValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        ClaimOutcome outcome = ClaimOutcome.Failure;
+        if(context.TokenClaims!.TryGetValue(WellKnownJwtClaims.Aud, out object? aud))
+        {
+            outcome = aud switch
+            {
+                string single => string.Equals(single, context.ExpectedIssuer, StringComparison.Ordinal)
+                    ? ClaimOutcome.Success
+                    : ClaimOutcome.Failure,
+                IEnumerable<object> array => array.Any(item =>
+                    item is string s && string.Equals(s, context.ExpectedIssuer, StringComparison.Ordinal))
+                    ? ClaimOutcome.Success
+                    : ClaimOutcome.Failure,
+                _ => ClaimOutcome.Failure
+            };
+        }
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(ValidationClaimIds.AudContainsExpectedIssuer, outcome)]);
+    }
+
+
+    /// <summary>
     /// Checks that the <c>exp</c> claim is present.
     /// </summary>
     public static ValueTask<List<Claim>> CheckTokenExpPresent(

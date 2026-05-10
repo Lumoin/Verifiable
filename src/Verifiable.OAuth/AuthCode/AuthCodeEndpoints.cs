@@ -7,6 +7,7 @@ using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode.Server;
 using Verifiable.OAuth.AuthCode.Server.States;
+using Verifiable.OAuth.Jar;
 using Verifiable.OAuth.Oid4Vp;
 
 using Verifiable.OAuth.Server;
@@ -104,6 +105,18 @@ public static class AuthCodeEndpoints
             endpoints.Add(BuildDirectAuthorize());
         }
 
+        if(registration.IsCapabilityAllowed(ServerCapabilityName.PushedAuthorization)
+            && registration.IsCapabilityAllowed(ServerCapabilityName.JwtSecuredAuthorizationRequest))
+        {
+            endpoints.Add(BuildJarPar());
+        }
+
+        if(registration.IsCapabilityAllowed(ServerCapabilityName.DirectAuthorization)
+            && registration.IsCapabilityAllowed(ServerCapabilityName.JwtSecuredAuthorizationRequest))
+        {
+            endpoints.Add(BuildAuthorizeJarByValue());
+        }
+
         bool hasTokenCapability =
             registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode) ||
             registration.IsCapabilityAllowed(ServerCapabilityName.ClientCredentials) ||
@@ -180,6 +193,15 @@ public static class AuthCodeEndpoints
                 }
 
                 if(!fields.ContainsKey(OAuthRequestParameters.CodeChallenge))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                //Disjointness vs JAR-PAR — a body carrying a 'request' parameter
+                //routes to BuildJarPar regardless of any code_challenge/code_challenge_method
+                //the client also (incorrectly) included. RFC 9101 §6.1 requires
+                //outer parameters to be ignored when the JAR is present.
+                if(fields.ContainsKey(OAuthRequestParameters.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -432,6 +454,13 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
+                //Disjointness vs JAR-by-value Authorize — a query carrying a
+                //'request' parameter routes to BuildAuthorizeJarByValue.
+                if(fields.ContainsKey(OAuthRequestParameters.Request))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
                 if(!fields.ContainsKey(OAuthRequestParameters.CodeChallenge))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
@@ -535,6 +564,497 @@ public static class AuthCodeEndpoints
                 return ServerHttpResponse.Redirect(location);
             }
         };
+
+
+    /// <summary>
+    /// Builds the JAR-PAR endpoint per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101">RFC 9101</see> +
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126">RFC 9126</see>:
+    /// PAR with a signed Request Object (JAR) instead of bare PKCE fields.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Disjoint from <see cref="BuildPar"/> on a single body-field signal —
+    /// presence of the <c>request</c> parameter. The PKCE matcher's MatchesRequest
+    /// rejects a body that carries <c>request</c>, the JAR matcher's MatchesRequest
+    /// requires it; the chain remains disjoint and the DEBUG disjointness assertion
+    /// passes.
+    /// </para>
+    /// </remarks>
+    private static ServerEndpoint BuildJarPar() =>
+        new()
+        {
+            Name = "AuthCode.JarPar",
+            HttpMethod = Post,
+            Capability = ServerCapabilityName.PushedAuthorization,
+            StartsNewFlow = true,
+            Kind = FlowKind.AuthCodeServer,
+
+            //Acceptance test: POST to /par for this registration with both PAR
+            //and JAR capabilities allowed and the request body carrying a JAR
+            //in the 'request' parameter.
+            MatchesRequest = static (fields, context, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!string.Equals(req.Method, Post, StringComparison.Ordinal))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                ClientRegistration? registration = context.Registration;
+                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!registration.IsCapabilityAllowed(ServerCapabilityName.PushedAuthorization))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!registration.IsCapabilityAllowed(ServerCapabilityName.JwtSecuredAuthorizationRequest))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Par, registration.TenantId.Value))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!fields.ContainsKey(OAuthRequestParameters.Request))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, server, ct) =>
+            {
+                (AuthCodeRequestObject? requestObject, ServerHttpResponse? earlyExit) =
+                    await VerifyAndValidateAuthCodeJarAsync(fields, context, server, ct)
+                        .ConfigureAwait(false);
+
+                if(earlyExit is not null)
+                {
+                    return ((OAuthFlowInput?)null, earlyExit);
+                }
+
+                AuthCodeRequestObject ro = requestObject!;
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                string flowId = context.FlowId!;
+                string requestUriToken = Guid.NewGuid().ToString("N");
+                Uri requestUri = new($"urn:ietf:params:oauth:request_uri:{requestUriToken}");
+
+                //RFC 9126 §2.2 leaves the request_uri lifetime implementation-defined.
+                //Library policy lives in TimingPolicy.AuthCodeParLifetime.
+                TimeSpan parLifetime = server.Timings.AuthCodeParLifetime;
+                DateTimeOffset expiresAt = now + parLifetime;
+                int expiresIn = (int)parLifetime.TotalSeconds;
+
+                return ((OAuthFlowInput?)new ServerParValidated(
+                    FlowId: flowId,
+                    RequestUri: requestUri,
+                    CodeChallenge: ro.CodeChallenge,
+                    RedirectUri: ro.RedirectUri,
+                    Scope: ro.Scope,
+                    ClientId: ro.ClientId,
+                    Nonce: ro.Nonce,
+                    ExpectedIssuer: ro.ClientId,
+                    ReceivedAt: now,
+                    ExpiresAt: expiresAt,
+                    ExpiresIn: expiresIn), null);
+            },
+
+            BuildResponse = static (state, _, _) =>
+            {
+                if(state is not ParRequestReceivedState par)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Unexpected state after JAR-PAR.");
+                }
+
+                string body =
+                    $"{{\"request_uri\":\"{par.RequestUri}\",\"expires_in\":{par.ExpiresIn}}}";
+                return ServerHttpResponse.Ok(body, "application/json");
+            }
+        };
+
+
+    /// <summary>
+    /// Builds the JAR-by-value direct Authorize endpoint per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.1">RFC 9101 §6.1</see>:
+    /// the authorize endpoint accepts a signed Request Object directly via the
+    /// <c>request</c> query parameter without a prior PAR.
+    /// </summary>
+    /// <remarks>
+    /// Disjoint from <see cref="BuildDirectAuthorize"/> and the PAR-completed
+    /// <see cref="BuildAuthorize"/> on body/query signals — JAR-by-value matches
+    /// when <c>request</c> is present and <c>request_uri</c> is absent; the
+    /// PKCE direct matcher matches when neither <c>request</c> nor
+    /// <c>request_uri</c> is present; the PAR-completed matcher matches when
+    /// <c>request_uri</c> is present.
+    /// </remarks>
+    private static ServerEndpoint BuildAuthorizeJarByValue() =>
+        new()
+        {
+            Name = "AuthCode.AuthorizeJarByValue",
+            HttpMethod = Get,
+            Capability = ServerCapabilityName.DirectAuthorization,
+            StartsNewFlow = true,
+            Kind = FlowKind.AuthCodeServer,
+
+            //Acceptance test: GET to /authorize for this registration with both
+            //direct-authorize and JAR capabilities allowed, the query carrying a
+            //JAR in the 'request' parameter, and no 'request_uri' (which would
+            //route to BuildAuthorize per RFC 9101 §6.1).
+            MatchesRequest = static (fields, context, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!string.Equals(req.Method, Get, StringComparison.Ordinal))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                ClientRegistration? registration = context.Registration;
+                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!registration.IsCapabilityAllowed(ServerCapabilityName.DirectAuthorization))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!registration.IsCapabilityAllowed(ServerCapabilityName.JwtSecuredAuthorizationRequest))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Authorize, registration.TenantId.Value))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                //RFC 9101 §6.1 — request and request_uri MUST NOT both be present.
+                //When both arrive, neither JAR matcher accepts; the request 404s
+                //rather than silently picking one parameter over the other.
+                if(fields.ContainsKey(OAuthRequestParameters.RequestUri))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!fields.ContainsKey(OAuthRequestParameters.Request))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, server, ct) =>
+            {
+                (AuthCodeRequestObject? requestObject, ServerHttpResponse? earlyExit) =
+                    await VerifyAndValidateAuthCodeJarAsync(fields, context, server, ct)
+                        .ConfigureAwait(false);
+
+                if(earlyExit is not null)
+                {
+                    return ((OAuthFlowInput?)null, earlyExit);
+                }
+
+                AuthCodeRequestObject ro = requestObject!;
+
+                string? subjectId = context.SubjectId;
+                if(string.IsNullOrWhiteSpace(subjectId))
+                {
+                    return ((OAuthFlowInput?)null,
+                        ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError, "Subject not authenticated."));
+                }
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+                string flowId = context.FlowId!;
+
+                //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for
+                //authorization codes. Library policy lives in
+                //TimingPolicy.AuthorizationCodeLifetime.
+                DateTimeOffset expiresAt = now + server.Timings.AuthorizationCodeLifetime;
+
+                string rawCode = Guid.NewGuid().ToString("N");
+                string codeHash = ComputeDigestBase64Url(
+                    rawCode,
+                    Sha256DigestTag,
+                    WellKnownHashAlgorithms.Sha256SizeBytes,
+                    server.Codecs.ComputeDigest!,
+                    server.Codecs.Encoder!,
+                    SensitiveMemoryPool<byte>.Shared);
+
+                return ((OAuthFlowInput?)new ServerDirectAuthorizeCompleted(
+                    FlowId: flowId,
+                    CodeHash: codeHash,
+                    CodeChallenge: ro.CodeChallenge,
+                    RedirectUri: ro.RedirectUri,
+                    Scope: ro.Scope,
+                    ClientId: ro.ClientId,
+                    Nonce: ro.Nonce,
+                    SubjectId: subjectId,
+                    AuthTime: now,
+                    ExpectedIssuer: ro.ClientId,
+                    CompletedAt: now,
+                    ExpiresAt: expiresAt), null);
+            },
+
+            BuildResponse = static (state, _, _) =>
+            {
+                if(state is not ServerCodeIssuedState code)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "Unexpected state after JAR-by-value direct authorize.");
+                }
+
+                string location =
+                    $"{code.RedirectUri}?code={Uri.EscapeDataString(code.CodeHash)}";
+                return ServerHttpResponse.Redirect(location);
+            }
+        };
+
+
+    /// <summary>
+    /// Shared validation pipeline for JAR-bearing AuthCode matchers (JAR-PAR and
+    /// JAR-by-value direct Authorize). Verifies the JAR's signature, JOSE header,
+    /// and timing claims via <see cref="JarVerification.VerifyAsync"/>; projects
+    /// onto a typed <see cref="AuthCodeRequestObject"/>; runs the protocol-shaped
+    /// claim checks RFC 9101 §10.2 and RFC 9700 §4 mandate; and validates the
+    /// outer <c>client_id</c> against the JAR's per RFC 9700 §4.6 substitution
+    /// defense.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns <c>(requestObject, null)</c> on success and <c>(null, response)</c>
+    /// when validation fails. The matchers project the returned
+    /// <see cref="AuthCodeRequestObject"/> onto their endpoint-specific input
+    /// records (<see cref="ServerParValidated"/> for JAR-PAR;
+    /// <see cref="ServerDirectAuthorizeCompleted"/> for JAR-by-value).
+    /// </para>
+    /// <para>
+    /// The <c>aud</c> check enforces the RFC 9101 §10.2 reading: <c>aud</c> must
+    /// equal the AS issuer URL resolved through
+    /// <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>. The
+    /// EUDI/Microsoft <c>aud == client_id</c> reading is rejected; tenant-divergent
+    /// audience policy is a planned future extension point and is not in scope here.
+    /// </para>
+    /// </remarks>
+    private static async ValueTask<(AuthCodeRequestObject? RequestObject, ServerHttpResponse? EarlyExit)>
+        VerifyAndValidateAuthCodeJarAsync(
+            RequestFields fields,
+            RequestContext context,
+            AuthorizationServer server,
+            CancellationToken cancellationToken)
+    {
+        if(!fields.TryGetValue(OAuthRequestParameters.Request, out string? compactJar)
+            || string.IsNullOrWhiteSpace(compactJar))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest, "Missing request parameter."));
+        }
+
+        //RFC 9101 §5 explicitly permits the AS to require an outer client_id for
+        //pre-verification client identification. Requiring it sidesteps the
+        //"identify the registration before the JAR is verified" problem cleanly
+        //and defends against substitution per RFC 9700 §4.6.
+        if(!fields.TryGetValue(OAuthRequestParameters.ClientId, out string? outerClientId)
+            || string.IsNullOrWhiteSpace(outerClientId))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest,
+                "Missing outer client_id. The library requires an outer client_id alongside a JAR per RFC 9101 §5."));
+        }
+
+        ClientRegistration? registration = context.Registration;
+        if(registration is null)
+        {
+            return (null, ServerHttpResponse.Unauthorized(
+                OAuthErrors.InvalidClient, "Unknown client."));
+        }
+
+        if(!string.Equals(outerClientId, registration.ClientId, StringComparison.Ordinal))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest, "Outer client_id does not match the registered client."));
+        }
+
+        //Resolve the JAR signing public key for this registration. The library
+        //reads the JAR signing key id from the registration's JarSigning slot —
+        //never from the JAR's own header. Doing the latter would defeat the
+        //CVE-class header-key-injection defense.
+        KeyId verificationKeyId;
+        try
+        {
+            verificationKeyId = registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning);
+        }
+        catch(Exception ex) when(ex is KeyNotFoundException or InvalidOperationException)
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError,
+                $"Registration '{registration.ClientId}' has no JAR signing key configured: {ex.Message}"));
+        }
+
+        ServerVerificationKeyResolverDelegate? resolver = server.Cryptography.VerificationKeyResolver;
+        if(resolver is null)
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, "VerificationKeyResolver is not configured."));
+        }
+
+        PublicKeyMemory? signingPublicKey = await resolver(
+            verificationKeyId.Value, context, cancellationToken).ConfigureAwait(false);
+
+        if(signingPublicKey is null)
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError,
+                $"Verification key '{verificationKeyId.Value}' is unavailable."));
+        }
+
+        JwtHeaderDeserializer? headerDeserializer = server.Codecs.JwtHeaderDeserializer;
+        JwtPayloadDeserializer? payloadDeserializer = server.Codecs.JwtPayloadDeserializer;
+        DecodeDelegate? decoder = server.Codecs.Decoder;
+
+        if(headerDeserializer is null || payloadDeserializer is null || decoder is null)
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, "Required JWT codecs are not configured."));
+        }
+
+        DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+        JarVerificationResult verification = await JarVerification.VerifyAsync(
+            compactJar,
+            signingPublicKey,
+            now,
+            server.Timings.ClockSkewTolerance,
+            server.Timings.AuthCodeRequestObjectLifetime,
+            decoder,
+            headerDeserializer,
+            payloadDeserializer,
+            SensitiveMemoryPool<byte>.Shared,
+            cancellationToken).ConfigureAwait(false);
+
+        if(verification is JarRejected rejected)
+        {
+            return (null, ServerHttpResponse.BadRequest(rejected.ErrorCode, rejected.Reason));
+        }
+
+        JarVerified verified = (JarVerified)verification;
+
+        AuthCodeRequestObject requestObject;
+        try
+        {
+            requestObject = verified.ProjectAuthCode();
+        }
+        catch(FormatException ex)
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject, ex.Message));
+        }
+
+        //RFC 9101 §10.2 — iss MUST equal client_id when present in the JAR. The
+        //library treats iss as required for JAR per the same section; absence
+        //is rejected.
+        if(string.IsNullOrEmpty(requestObject.Iss)
+            || !string.Equals(requestObject.Iss, requestObject.ClientId, StringComparison.Ordinal))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "JAR iss must be present and equal to client_id per RFC 9101 §10.2."));
+        }
+
+        //RFC 9700 §4.6 — the JAR's client_id MUST match the registered client.
+        if(!string.Equals(requestObject.ClientId, registration.ClientId, StringComparison.Ordinal))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "JAR client_id does not match the registered client."));
+        }
+
+        //RFC 9101 §10.2, RFC 9700 §4.2 — aud MUST equal the AS issuer URL
+        //(the FAPI-conformant reading). Tenant-divergent aud policy is a
+        //planned follow-up. One inlined check here so the future delegate
+        //extension point replaces a single call site.
+        ServerHttpResponse? audFailure = await ValidateJarAudienceAsync(
+            requestObject, registration, context, server, cancellationToken).ConfigureAwait(false);
+        if(audFailure is not null)
+        {
+            return (null, audFailure);
+        }
+
+        //RFC 9700 §4.1 — redirect_uri exact-match against the registered set.
+        if(!registration.AllowedRedirectUris.Contains(requestObject.RedirectUri))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                $"redirect_uri '{requestObject.RedirectUri}' is not among the registered redirect URIs."));
+        }
+
+        //FAPI 2.0 §5.2.2, HAIP §3 — code_challenge_method MUST be S256.
+        if(!string.Equals(
+            requestObject.CodeChallengeMethod,
+            OAuthRequestParameters.CodeChallengeMethodS256,
+            StringComparison.Ordinal))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "code_challenge_method must be S256."));
+        }
+
+        return (requestObject, null);
+    }
+
+
+    /// <summary>
+    /// Validates the JAR <c>aud</c> claim against the AS issuer URL per RFC 9101
+    /// §10.2 and RFC 9700 §4.2. Single call site so the future
+    /// <c>ValidateJarAudienceDelegate</c> extension point — see the planned-
+    /// follow-up note in the JAR brief — can replace one method call rather
+    /// than tracking sprinkled checks.
+    /// </summary>
+    private static async ValueTask<ServerHttpResponse?> ValidateJarAudienceAsync(
+        AuthCodeRequestObject requestObject,
+        ClientRegistration registration,
+        RequestContext context,
+        AuthorizationServer server,
+        CancellationToken cancellationToken)
+    {
+        if(string.IsNullOrEmpty(requestObject.Aud))
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "JAR aud claim is required per RFC 9101 §10.2.");
+        }
+
+        Uri issuerUri;
+        try
+        {
+            issuerUri = server.Integration.ResolveIssuerAsync is not null
+                ? await server.Integration.ResolveIssuerAsync(registration, context, cancellationToken)
+                    .ConfigureAwait(false)
+                : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
+                    .ConfigureAwait(false);
+        }
+        catch(InvalidOperationException ex)
+        {
+            return ServerHttpResponse.ServerError(OAuthErrors.ServerError, ex.Message);
+        }
+
+        string expectedAud = issuerUri.ToString();
+        if(!string.Equals(requestObject.Aud, expectedAud, StringComparison.Ordinal))
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                $"JAR aud '{requestObject.Aud}' does not match the AS issuer per RFC 9101 §10.2.");
+        }
+
+        return null;
+    }
 
 
     /// <summary>

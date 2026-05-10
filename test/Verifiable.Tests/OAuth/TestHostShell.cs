@@ -377,7 +377,19 @@ internal sealed class TestHostShell: IDisposable
                 TestSetup.DefaultSerializationOptions),
             JwtPayloadSerializer = static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)payload,
-                TestSetup.DefaultSerializationOptions)
+                TestSetup.DefaultSerializationOptions),
+
+            //Deserializers required by JAR-bearing matchers (AuthCode JAR-PAR
+            //and AuthCode JAR-by-value direct Authorize). Other in-dispatch
+            //consumers may follow; the slots are wired here once.
+            JwtHeaderDeserializer = static bytes =>
+                JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions)
+                ?? throw new FormatException("Header JSON parsed to null."),
+            JwtPayloadDeserializer = static bytes =>
+                JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions)
+                ?? throw new FormatException("Payload JSON parsed to null.")
         };
 
         Server = new AuthorizationServer

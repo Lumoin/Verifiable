@@ -30,4 +30,19 @@ public static class OAuthErrors
 
     /// <summary>The authorization server is temporarily unable to handle the request.</summary>
     public static readonly string TemporarilyUnavailable = "temporarily_unavailable";
+
+    /// <summary>
+    /// The <c>request</c> parameter contains a JWT that fails validation per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 §5</see> —
+    /// signature verification failed, <c>typ</c> is wrong, a required claim is missing,
+    /// or a timing claim is outside the acceptable window.
+    /// </summary>
+    public static readonly string InvalidRequestObject = "invalid_request_object";
+
+    /// <summary>
+    /// The <c>request_uri</c> parameter could not be dereferenced or the dereferenced
+    /// value is not a valid Request Object per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 §5</see>.
+    /// </summary>
+    public static readonly string InvalidRequestUri = "invalid_request_uri";
 }

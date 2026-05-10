@@ -94,16 +94,16 @@ internal sealed class EcdhEsTests
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(headerEncoded, Pool);
         string headerJson = Encoding.UTF8.GetString(headerBytes.Memory.Span);
 
-        Assert.IsTrue(headerJson.Contains($"\"alg\":\"{WellKnownJweAlgorithms.EcdhEs}\"",
-            StringComparison.Ordinal), "Header must contain alg=ECDH-ES.");
-        Assert.IsTrue(headerJson.Contains($"\"enc\":\"{WellKnownJweEncryptionAlgorithms.A128Gcm}\"",
-            StringComparison.Ordinal), "Header must contain enc=A128GCM.");
-        Assert.IsTrue(headerJson.Contains($"\"{WellKnownJwkValues.Epk}\"",
-            StringComparison.Ordinal), "Header must contain the epk.");
-        Assert.IsTrue(headerJson.Contains($"\"{WellKnownJwkValues.Kty}\":\"{WellKnownKeyTypeValues.Ec}\"",
-            StringComparison.Ordinal), "EPK must have kty=EC.");
-        Assert.IsTrue(headerJson.Contains($"\"{WellKnownJwkValues.Crv}\":\"{WellKnownCurveValues.P256}\"",
-            StringComparison.Ordinal), "EPK must have crv=P-256.");
+        Assert.Contains($"\"alg\":\"{WellKnownJweAlgorithms.EcdhEs}\"",
+            headerJson, StringComparison.Ordinal, "Header must contain alg=ECDH-ES.");
+        Assert.Contains($"\"enc\":\"{WellKnownJweEncryptionAlgorithms.A128Gcm}\"",
+            headerJson, StringComparison.Ordinal, "Header must contain enc=A128GCM.");
+        Assert.Contains($"\"{WellKnownJwkValues.Epk}\"",
+            headerJson, StringComparison.Ordinal, "Header must contain the epk.");
+        Assert.Contains($"\"{WellKnownJwkValues.Kty}\":\"{WellKnownKeyTypeValues.Ec}\"",
+            headerJson, StringComparison.Ordinal, "EPK must have kty=EC.");
+        Assert.Contains($"\"{WellKnownJwkValues.Crv}\":\"{WellKnownCurveValues.P256}\"",
+            headerJson, StringComparison.Ordinal, "EPK must have crv=P-256.");
     }
 
 

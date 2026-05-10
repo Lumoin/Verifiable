@@ -87,6 +87,30 @@ public sealed class AuthorizationServerCodecs
     /// </remarks>
     public JwtPayloadSerializer? JwtPayloadSerializer { get; set; }
 
+    /// <summary>
+    /// Deserializes the protected header bytes of a compact JWS into a claim
+    /// dictionary. Required when the AS consumes JWTs from the wire — for
+    /// example, when an Authorization Code JAR arrives at the PAR or
+    /// Authorize endpoint per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101">RFC 9101</see>.
+    /// </summary>
+    /// <remarks>
+    /// Wire to the application's chosen JSON library. See
+    /// <see cref="JwtHeaderSerializer"/> for the rationale on why
+    /// the library does not import a JSON library directly.
+    /// </remarks>
+    public JwtHeaderDeserializer? JwtHeaderDeserializer { get; set; }
+
+    /// <summary>
+    /// Deserializes the payload bytes of a compact JWS into a claim
+    /// dictionary. Required when the AS consumes JWTs from the wire.
+    /// </summary>
+    /// <remarks>
+    /// Wire to the application's chosen JSON library. See
+    /// <see cref="JwtHeaderSerializer"/> for the rationale.
+    /// </remarks>
+    public JwtPayloadDeserializer? JwtPayloadDeserializer { get; set; }
+
 
     /// <summary>
     /// Whether <see cref="Validate"/> has been called successfully on this group.
@@ -109,6 +133,8 @@ public sealed class AuthorizationServerCodecs
         if(ComputeDigest is null) { missing.Add(nameof(ComputeDigest)); }
         if(JwtHeaderSerializer is null) { missing.Add(nameof(JwtHeaderSerializer)); }
         if(JwtPayloadSerializer is null) { missing.Add(nameof(JwtPayloadSerializer)); }
+        if(JwtHeaderDeserializer is null) { missing.Add(nameof(JwtHeaderDeserializer)); }
+        if(JwtPayloadDeserializer is null) { missing.Add(nameof(JwtPayloadDeserializer)); }
 
         if(missing.Count > 0)
         {

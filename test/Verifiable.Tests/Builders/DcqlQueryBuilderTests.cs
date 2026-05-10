@@ -150,7 +150,7 @@ internal class DcqlQueryBuilderTests
             async () => await builder.BuildAsync(TestContext.CancellationToken)
                 .ConfigureAwait(false)).ConfigureAwait(false);
 
-        Assert.IsTrue(exception.Message.Contains("nonexistent", StringComparison.Ordinal));
+        Assert.Contains("nonexistent", exception.Message, StringComparison.Ordinal);
     }
 
 

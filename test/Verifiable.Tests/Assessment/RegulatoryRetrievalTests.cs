@@ -173,7 +173,7 @@ internal sealed class CompositeClaimAssessorTests
 
         var faultedResult = result.IndividualResults.First(r => r.AssessorId == "faulting");
         Assert.AreEqual(AssessorCompletionStatus.Faulted, faultedResult.CompletionStatus);
-        Assert.IsTrue(faultedResult.ErrorMessage!.Contains("Remote AI service unavailable", StringComparison.Ordinal));
+        Assert.Contains("Remote AI service unavailable", faultedResult.ErrorMessage!, StringComparison.Ordinal);
     }
 
 

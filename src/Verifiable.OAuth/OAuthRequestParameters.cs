@@ -183,6 +183,16 @@ public static class OAuthRequestParameters
     /// </summary>
     public static readonly string RequestUri = "request_uri";
 
+    /// <summary>
+    /// The <c>request</c> parameter.
+    /// Carries a signed JWT Authorization Request (JAR) per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 §5</see>
+    /// either in the body of a Pushed Authorization Request per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-3">RFC 9126 §3</see>
+    /// or in the query of a direct authorization request per RFC 9101 §6.1.
+    /// </summary>
+    public static readonly string Request = "request";
+
     //Grant type values — RFC 6749.
 
     /// <summary>

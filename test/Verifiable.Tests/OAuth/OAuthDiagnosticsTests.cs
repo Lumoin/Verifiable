@@ -169,7 +169,7 @@ internal sealed class OAuthDiagnosticsTests
         {
             Assert.IsFalse(string.IsNullOrWhiteSpace(name),
                 "Activity names must not be null or whitespace.");
-            Assert.IsTrue(name.Contains('.', StringComparison.Ordinal),
+            Assert.Contains('.', name,
                 $"Activity name '{name}' must be dot-delimited.");
         }
     }
@@ -203,7 +203,7 @@ internal sealed class OAuthDiagnosticsTests
         {
             Assert.IsFalse(string.IsNullOrWhiteSpace(tag),
                 "Tag names must not be null or whitespace.");
-            Assert.IsTrue(tag.Contains('.', StringComparison.Ordinal),
+            Assert.Contains('.', tag,
                 $"Tag name '{tag}' must be dot-delimited.");
         }
     }
@@ -234,7 +234,7 @@ internal sealed class OAuthDiagnosticsTests
         {
             Assert.IsFalse(string.IsNullOrWhiteSpace(metric),
                 "Metric names must not be null or whitespace.");
-            Assert.IsTrue(metric.Contains('.', StringComparison.Ordinal),
+            Assert.Contains('.', metric,
                 $"Metric name '{metric}' must be dot-delimited.");
         }
     }
@@ -262,7 +262,7 @@ internal sealed class OAuthDiagnosticsTests
         {
             Assert.IsFalse(string.IsNullOrWhiteSpace(eventName),
                 "Event names must not be null or whitespace.");
-            Assert.IsTrue(eventName.Contains('.', StringComparison.Ordinal),
+            Assert.Contains('.', eventName,
                 $"Event name '{eventName}' must be dot-delimited.");
         }
     }

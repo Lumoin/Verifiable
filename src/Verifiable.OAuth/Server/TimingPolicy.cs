@@ -72,6 +72,20 @@ public sealed record TimingPolicy
     public TimeSpan AuthCodeParLifetime { get; init; } = TimeSpan.FromSeconds(60);
 
     /// <summary>
+    /// The lifetime of an Authorization Code JAR's <c>exp</c> claim relative to its
+    /// <c>iat</c> claim. Default 60 seconds per
+    /// <see href="https://openid.net/specs/fapi-2_0-security-profile.html">FAPI 2.0 Security Profile §5.2.2</see>
+    /// Clause 13, which mandates an <c>exp</c> claim and constrains its window.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="AuthCodeParLifetime"/>: that value is the lifetime of
+    /// the external <c>request_uri</c> handle the AS issues, this value is the lifetime
+    /// of the signed Request Object the client pushes. RFC 9101 leaves the JAR
+    /// lifetime profile-defined; FAPI 2.0 picks 60 seconds and the library aligns.
+    /// </remarks>
+    public TimeSpan AuthCodeRequestObjectLifetime { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
     /// The lifetime of an OAuth 2.0 authorization code per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>,
     /// which recommends a maximum of 10 minutes. Default 600 seconds.
