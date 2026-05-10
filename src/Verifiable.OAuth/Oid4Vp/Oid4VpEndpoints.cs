@@ -91,8 +91,6 @@ public static class Oid4VpEndpoints
     //elsewhere; the distinction is whether the value benefits from data-block
     //sharing across the assembly boundary, which these internal route markers
     //do not.
-    private const string Get = "GET";
-    private const string Post = "POST";
 
 
     /// <summary>
@@ -132,7 +130,7 @@ public static class Oid4VpEndpoints
         new()
         {
             Name = "Oid4Vp.Par",
-            HttpMethod = Post,
+            HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.VerifiablePresentation,
             StartsNewFlow = true,
             Kind = FlowKind.Oid4VpVerifierServer,
@@ -299,7 +297,7 @@ public static class Oid4VpEndpoints
         new()
         {
             Name = "Oid4Vp.JarRequest",
-            HttpMethod = Get,
+            HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.VerifiablePresentation,
             StartsNewFlow = false,
             Kind = FlowKind.Oid4VpVerifierServer,
@@ -319,7 +317,7 @@ public static class Oid4VpEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Get, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Get, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -398,7 +396,7 @@ public static class Oid4VpEndpoints
         new()
         {
             Name = "Oid4Vp.DirectPost",
-            HttpMethod = Post,
+            HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.VerifiablePresentation,
             StartsNewFlow = false,
             Kind = FlowKind.Oid4VpVerifierServer,
@@ -413,7 +411,7 @@ public static class Oid4VpEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Post, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Post, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }

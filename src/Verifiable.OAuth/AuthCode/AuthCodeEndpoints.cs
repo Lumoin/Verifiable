@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -9,6 +10,7 @@ using Verifiable.OAuth.AuthCode.Server;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Jar;
 using Verifiable.OAuth.Oid4Vp;
+using Verifiable.OAuth.Validation;
 
 using Verifiable.OAuth.Server;
 
@@ -66,8 +68,6 @@ namespace Verifiable.OAuth.AuthCode;
 [DebuggerDisplay("AuthCodeEndpoints")]
 public static class AuthCodeEndpoints
 {
-    private const string Get = "GET";
-    private const string Post = "POST";
 
     //SHA-256 is the only digest algorithm OAuth 2.0 PKCE per RFC 7636 §4.2 and
     //the Authorization Code grant code-hash currently use. The tag is pre-built
@@ -156,7 +156,7 @@ public static class AuthCodeEndpoints
         new()
         {
             Name = "AuthCode.Par",
-            HttpMethod = Post,
+            HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.PushedAuthorization,
             StartsNewFlow = true,
             Kind = FlowKind.AuthCodeServer,
@@ -175,7 +175,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Post, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Post, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -305,7 +305,7 @@ public static class AuthCodeEndpoints
         new()
         {
             Name = "AuthCode.Authorize",
-            HttpMethod = Get,
+            HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.AuthorizationCode,
             StartsNewFlow = false,
             Kind = FlowKind.AuthCodeServer,
@@ -332,7 +332,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Get, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Get, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -418,7 +418,7 @@ public static class AuthCodeEndpoints
         new()
         {
             Name = "AuthCode.DirectAuthorize",
-            HttpMethod = Get,
+            HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.DirectAuthorization,
             StartsNewFlow = true,
             Kind = FlowKind.AuthCodeServer,
@@ -432,7 +432,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Get, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Get, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -585,7 +585,7 @@ public static class AuthCodeEndpoints
         new()
         {
             Name = "AuthCode.JarPar",
-            HttpMethod = Post,
+            HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.PushedAuthorization,
             StartsNewFlow = true,
             Kind = FlowKind.AuthCodeServer,
@@ -597,7 +597,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Post, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Post, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -698,7 +698,7 @@ public static class AuthCodeEndpoints
         new()
         {
             Name = "AuthCode.AuthorizeJarByValue",
-            HttpMethod = Get,
+            HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.DirectAuthorization,
             StartsNewFlow = true,
             Kind = FlowKind.AuthCodeServer,
@@ -711,7 +711,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Get, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Get, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -978,10 +978,13 @@ public static class AuthCodeEndpoints
 
         //RFC 9101 §10.2, RFC 9700 §4.2 — aud MUST equal the AS issuer URL
         //(the FAPI-conformant reading). Tenant-divergent aud policy is a
-        //planned follow-up. One inlined check here so the future delegate
-        //extension point replaces a single call site.
+        //planned follow-up. One call site here so the future delegate
+        //extension point replaces a single method call. The validation runs
+        //against verified.Claims rather than the projected requestObject.Aud
+        //so the array form per RFC 7519 §4.1.3 is honoured — the projection
+        //is single-string only.
         ServerHttpResponse? audFailure = await ValidateJarAudienceAsync(
-            requestObject, registration, context, server, cancellationToken).ConfigureAwait(false);
+            verified.Claims, registration, context, server, cancellationToken).ConfigureAwait(false);
         if(audFailure is not null)
         {
             return (null, audFailure);
@@ -1015,16 +1018,18 @@ public static class AuthCodeEndpoints
     /// §10.2 and RFC 9700 §4.2. Single call site so the future
     /// <c>ValidateJarAudienceDelegate</c> extension point — see the planned-
     /// follow-up note in the JAR brief — can replace one method call rather
-    /// than tracking sprinkled checks.
+    /// than tracking sprinkled checks. Delegates the string-or-array shape
+    /// handling to <see cref="ValidationChecks.CheckTokenAudContainsExpectedIssuer"/>
+    /// so both single-string and array-form <c>aud</c> per RFC 7519 §4.1.3 work.
     /// </summary>
     private static async ValueTask<ServerHttpResponse?> ValidateJarAudienceAsync(
-        AuthCodeRequestObject requestObject,
+        IReadOnlyDictionary<string, object> claims,
         ClientRegistration registration,
         RequestContext context,
         AuthorizationServer server,
         CancellationToken cancellationToken)
     {
-        if(string.IsNullOrEmpty(requestObject.Aud))
+        if(!claims.ContainsKey(WellKnownJwtClaims.Aud))
         {
             return ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidRequestObject,
@@ -1045,15 +1050,25 @@ public static class AuthCodeEndpoints
             return ServerHttpResponse.ServerError(OAuthErrors.ServerError, ex.Message);
         }
 
-        string expectedAud = issuerUri.ToString();
-        if(!string.Equals(requestObject.Aud, expectedAud, StringComparison.Ordinal))
+        ValidationContext validationContext = new()
         {
-            return ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidRequestObject,
-                $"JAR aud '{requestObject.Aud}' does not match the AS issuer per RFC 9101 §10.2.");
+            TokenClaims = claims,
+            ExpectedIssuer = issuerUri.ToString(),
+            Now = server.TimeProvider.GetUtcNow(),
+            ClockSkew = server.Timings.ClockSkewTolerance
+        };
+
+        List<Claim> result = await ValidationChecks.CheckTokenAudContainsExpectedIssuer(
+            validationContext, cancellationToken).ConfigureAwait(false);
+
+        if(result[0].Outcome == ClaimOutcome.Success)
+        {
+            return null;
         }
 
-        return null;
+        return ServerHttpResponse.BadRequest(
+            OAuthErrors.InvalidRequestObject,
+            $"JAR aud does not match the AS issuer '{issuerUri}' per RFC 9101 §10.2.");
     }
 
 
@@ -1082,7 +1097,7 @@ public static class AuthCodeEndpoints
         new()
         {
             Name = "AuthCode.Token",
-            HttpMethod = Post,
+            HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.AuthorizationCode,
             StartsNewFlow = false,
             Kind = FlowKind.AuthCodeServer,
@@ -1097,7 +1112,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Post, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Post, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1386,7 +1401,7 @@ public static class AuthCodeEndpoints
         new()
         {
             Name = "AuthCode.Revocation",
-            HttpMethod = Post,
+            HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.TokenRevocation,
             StartsNewFlow = false,
             Kind = FlowKind.AuthCodeServer,
@@ -1397,7 +1412,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Post, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Post, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1435,7 +1450,7 @@ public static class AuthCodeEndpoints
         new()
         {
             Name = "AuthCode.Introspection",
-            HttpMethod = Post,
+            HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.TokenIntrospection,
             StartsNewFlow = false,
             Kind = FlowKind.AuthCodeServer,
@@ -1446,7 +1461,7 @@ public static class AuthCodeEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Post, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Post, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }

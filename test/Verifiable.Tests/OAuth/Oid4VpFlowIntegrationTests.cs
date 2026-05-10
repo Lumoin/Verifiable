@@ -68,7 +68,6 @@ internal sealed class Oid4VpFlowIntegrationTests
             ServerCapabilityName.DiscoveryEndpoint);
 
 
-    //=========================================================================
     //Cross-device flow — OID4VP 1.0 §3.2, §8.2, §8.3.1, HAIP 1.0 §5.1.
     //
     //The End-User scans a QR code displayed by the Verifier. The Wallet and
@@ -117,7 +116,6 @@ internal sealed class Oid4VpFlowIntegrationTests
     //       |                      |                |                |
     //  [Verifier PDA accept: PresentationVerified]
     //  [Wallet PDA accept: ResponseSent]
-    //=========================================================================
 
     [TestMethod]
     public async Task CrossDeviceFlowBothPdasReachAcceptState()
@@ -141,12 +139,10 @@ internal sealed class Oid4VpFlowIntegrationTests
         string walletFlowId = $"wallet-{Guid.NewGuid():N}";
 
 
-        //=====================================================================
         //Step 1: Verifier — PAR endpoint (POST /connect/{segment}/par).
         //The server validates inputs, generates request_uri and its opaque token, and
         //returns them to the Wallet. JAR signing is deferred.
         //PDA: sentinel -> VerifierParReceived.
-        //=====================================================================
 
         (Uri requestUri, string parHandle) = await app.HandleParAsync(verifierKeys,
             new TransactionNonce("nonce-xdevice-01"),
@@ -158,18 +154,14 @@ internal sealed class Oid4VpFlowIntegrationTests
             "Verifier PDA must be in VerifierParReceived after PAR.");
 
 
-        //=====================================================================
         //=== Wire boundary: request_uri crosses from Verifier to Wallet. ===
         //The Wallet receives request_uri in the PAR response body (same-device)
         //or via QR code / deep link (cross-device). Only a string crosses here.
-        //=====================================================================
 
 
-        //=====================================================================
         //Step 2: Wallet — QR scan / deep link.
         //The Wallet receives the request_uri and enters RequestUriReceived.
         //Wallet PDA: sentinel -> RequestUriReceived.
-        //=====================================================================
 
         wallet.HandleQrScan(requestUri, walletFlowId);
 
@@ -178,11 +170,9 @@ internal sealed class Oid4VpFlowIntegrationTests
             "Wallet PDA must be in RequestUriReceived after QR scan.");
 
 
-        //=====================================================================
         //Step 3: Wallet -> Verifier — JAR request (GET /request/{parHandle}).
         //The Verifier signs the JAR on demand and returns the compact JWS.
         //PDA: VerifierParReceived + ServerJarSigned -> VerifierJarServed.
-        //=====================================================================
 
         string compactJar = await app.HandleJarRequestAsync(verifierKeys,
             parHandle, TestContext.CancellationToken).ConfigureAwait(false);
@@ -192,19 +182,15 @@ internal sealed class Oid4VpFlowIntegrationTests
             "Verifier PDA must be in VerifierJarServed after serving the JAR.");
 
 
-        //=====================================================================
         //=== Wire boundary: compact JWS JAR crosses from Verifier to Wallet. ===
-        //=====================================================================
 
 
-        //=====================================================================
         //Step 4: Wallet — JAR processing.
         //The Wallet fetches, verifies, and processes the JAR: signature
         //verification, DCQL evaluation, disclosure selection, VP token assembly,
         //JWE encryption.
         //Wallet PDA: RequestUriReceived -> JarParsed -> DcqlEvaluated
         //            -> PresentationBuilt.
-        //=====================================================================
 
         await wallet.HandleJarFetchAsync(
             walletFlowId,
@@ -218,11 +204,9 @@ internal sealed class Oid4VpFlowIntegrationTests
             "Wallet PDA must be in PresentationBuilt after JAR processing.");
 
 
-        //=====================================================================
         //=== Wire boundary: compact JWE crosses from Wallet to Verifier. ===
         //Only the encrypted JWE string crosses — the plaintext VP token never
         //leaves the Wallet unencrypted.
-        //=====================================================================
 
         string compactJwe = await wallet.HandleResponsePostAsync(
             walletFlowId, TestContext.CancellationToken).ConfigureAwait(false);
@@ -235,14 +219,12 @@ internal sealed class Oid4VpFlowIntegrationTests
             "Wallet PDA must traverse exactly four transitions in the cross-device flow.");
 
 
-        //=====================================================================
         //Step 5: Verifier — direct_post endpoint (POST /connect/{segment}/cb).
         //The Verifier receives the JWE, decrypts it, verifies the VP token,
         //and advances to PresentationVerified.
         //PDA: VerifierJarServed + ResponsePosted -> VerifierResponseReceived.
         //PDA effectful loop: DecryptResponseAction -> VerificationSucceeded
         //                    -> PresentationVerified.
-        //=====================================================================
 
         PresentationVerifiedState verified = await app.HandleDirectPostAsync(verifierKeys,
             parHandle,
@@ -266,7 +248,6 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
-    //=========================================================================
     //Cross-device flow with A256GCM — HAIP 1.0 §5.1.
     //
     //HAIP 1.0 requires the Verifier to advertise both A128GCM and A256GCM in
@@ -274,7 +255,6 @@ internal sealed class Oid4VpFlowIntegrationTests
     //verifies that the full flow succeeds when the Wallet chooses A256GCM.
     //The sequence is identical to the A128GCM cross-device flow — only the
     //enc algorithm chosen by the TestWallet differs.
-    //=========================================================================
 
     [TestMethod]
     public async Task CrossDeviceFlowWithA256GcmBothPdasReachAcceptState()
@@ -352,7 +332,6 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
-    //=========================================================================
     //Same-device flow — OID4VP 1.0 §8.2, §8.3, §8.3.1, HAIP 1.0 §5.1.
     //
     //NOTE: OID4VP §3.1 describes a different same-device pattern using
@@ -402,7 +381,6 @@ internal sealed class Oid4VpFlowIntegrationTests
     //       |                      |<== GET /complete?session={tok} =|
     //  [Verifier PDA accept: PresentationVerified]
     //  [Wallet PDA accept: BrowserRedirectIssued]
-    //=========================================================================
 
     [TestMethod]
     public async Task SameDeviceFlowBothPdasReachAcceptState()
@@ -501,7 +479,6 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
-    //=========================================================================
     //Local / app-to-app flow — proximity scenario.
     //
     //HAIP 1.0 §5.1 explicitly acknowledges proximity scenarios as a valid
@@ -537,7 +514,6 @@ internal sealed class Oid4VpFlowIntegrationTests
     //        -> VerificationSucceeded -> PresentationVerified]
     //  [Verifier PDA accept: PresentationVerified]
     //  [Wallet PDA accept: ResponseSent]
-    //=========================================================================
 
     [TestMethod]
     public async Task LocalAppToAppFlowBothPdasReachAcceptState()
@@ -603,7 +579,6 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
-    //=========================================================================
     //Security: tampered JWE ciphertext is rejected.
     //
     //An attacker intercepts the compact JWE in transit and flips bits in the
@@ -614,7 +589,6 @@ internal sealed class Oid4VpFlowIntegrationTests
     //PDA states reached before the tamper:
     //  Verifier: VerifierParReceived -> VerifierJarServed -> VerifierResponseReceived
     //  (decryption throws before VerificationSucceeded is produced)
-    //=========================================================================
 
     [TestMethod]
     public async Task TamperedJweCiphertextIsRejectedByVerifier()
@@ -667,13 +641,11 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
-    //=========================================================================
     //Security: JAR signature verification.
     //
     //A JAR signed with the correct key must verify. A JAR signed with a
     //different key must not verify. This test exercises signature verification
     //independently of the full flow to isolate the cryptographic boundary.
-    //=========================================================================
 
     [TestMethod]
     public async Task JarSignatureVerifiesWithCorrectKeyAndFailsWithWrongKey()
@@ -733,9 +705,7 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
-    //=========================================================================
     //Pending: request_uri_method=post / wallet_nonce — OID4VP 1.0 §5.10.
-    //=========================================================================
 
     [TestMethod]
     public void RequestUriMethodPostWithWalletNonceBothPdasReachAcceptState()
@@ -747,9 +717,7 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
-    //=========================================================================
     //Pending: transaction_data — OID4VP 1.0 §8.4.
-    //=========================================================================
 
     [TestMethod]
     public void TransactionDataHashBoundIntoKeyBindingJwt()
@@ -761,9 +729,7 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
-    //=========================================================================
     //Pending: direct_post unencrypted — OID4VP 1.0 §8.2.
-    //=========================================================================
 
     [TestMethod]
     public void DirectPostUnencryptedBothPdasReachAcceptState()

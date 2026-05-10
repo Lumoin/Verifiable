@@ -59,7 +59,6 @@ internal sealed class JarClientIdentifierTests
     private const string VerifierClientId = "https://verifier.example.com";
 
 
-    //=========================================================================
     //verifier_attestation: prefix (OID4VP 1.0 §5.9.3, HAIP 1.0 mandatory).
     //
     //The JAR header carries a Verifier Attestation JWT in the "jwt" JOSE parameter.
@@ -85,7 +84,6 @@ internal sealed class JarClientIdentifierTests
     //      |                    |  2. attestation.sub ==    |
     //      |                    |     client_id (stripped)  |
     //      |                    |  3. JAR.sig OK with cnf   |
-    //=========================================================================
 
     [TestMethod]
     public async Task VerifierAttestationPrefixJarSignatureVerifiesWithValidAttestation()
@@ -332,12 +330,10 @@ internal sealed class JarClientIdentifierTests
     }
 
 
-    //=========================================================================
     //x509_san_dns: prefix (OID4VP 1.0 §5.9.3, HAIP 1.0 mandatory).
     //Pending: requires general-purpose X.509 chain validation infrastructure.
     //The infrastructure will be shared with TPM EK/AK chain validation and
     //SD-JWT VC issuer certificate validation.
-    //=========================================================================
 
     //x509_san_dns: prefix (OID4VP 1.0 §5.9.3, HAIP 1.0 mandatory).
     //
@@ -365,7 +361,6 @@ internal sealed class JarClientIdentifierTests
     //
     //Both BouncyCastle and Microsoft implementations are exercised and their results
     //cross-checked to verify consistent behaviour across driver libraries.
-    //=========================================================================
 
     [TestMethod]
     public async Task X509SanDnsPrefixJarSignatureVerifiesWithValidCertificateChain()

@@ -69,7 +69,6 @@ namespace Verifiable.OAuth.Server.Metadata;
 [DebuggerDisplay("MetadataEndpoints")]
 public static class MetadataEndpoints
 {
-    private const string Get = "GET";
 
 
     /// <summary>
@@ -118,7 +117,7 @@ public static class MetadataEndpoints
         new()
         {
             Name = "Metadata.Jwks",
-            HttpMethod = Get,
+            HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.JwksEndpoint,
             StartsNewFlow = true,
             Kind = FlowKind.Stateless,
@@ -131,7 +130,7 @@ public static class MetadataEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Get, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Get, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -223,7 +222,7 @@ public static class MetadataEndpoints
         new()
         {
             Name = "Metadata.Discovery",
-            HttpMethod = Get,
+            HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.DiscoveryEndpoint,
             StartsNewFlow = true,
             Kind = FlowKind.Stateless,
@@ -234,7 +233,7 @@ public static class MetadataEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!string.Equals(req.Method, Get, StringComparison.Ordinal))
+                if(!string.Equals(req.Method, WellKnownHttpMethods.Get, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }

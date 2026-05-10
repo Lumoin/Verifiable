@@ -306,10 +306,16 @@ public static class ValidationChecks
 
 
     /// <summary>
-    /// Checks that the <c>aud</c> value contains the expected client identifier.
-    /// Handles both single-string and array representations per RFC 7519 §4.1.3.
+    /// Checks that the <c>aud</c> claim matches <see cref="ValidationContext.ExpectedClientId"/>.
+    /// Used for KB-JWT in OID4VP per
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html">OID4VP 1.0 §6.4</see>
+    /// and for access-token validation where <c>aud</c> binds to a client. Distinct
+    /// from <see cref="CheckTokenAudContainsExpectedIssuer"/>, which enforces the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-10.2">RFC 9101 §10.2</see>
+    /// reading where <c>aud</c> matches the AS issuer URL. Handles both single-string
+    /// and array representations per RFC 7519 §4.1.3.
     /// </summary>
-    public static ValueTask<List<Claim>> CheckTokenAudContainsClient(
+    public static ValueTask<List<Claim>> CheckTokenAudContainsExpectedClientId(
         ValidationContext context,
         CancellationToken cancellationToken = default)
     {
@@ -341,7 +347,7 @@ public static class ValidationChecks
     /// Checks that the <c>aud</c> claim contains the expected issuer URL.
     /// Handles both single-string and array representations per RFC 7519 §4.1.3.
     /// Used for JAR <c>aud</c> validation per RFC 9101 §10.2 — distinct from
-    /// <see cref="CheckTokenAudContainsClient"/>, which enforces the
+    /// <see cref="CheckTokenAudContainsExpectedClientId"/>, which enforces the
     /// <c>aud == client_id</c> semantic used by KB-JWT in OID4VP.
     /// </summary>
     public static ValueTask<List<Claim>> CheckTokenAudContainsExpectedIssuer(

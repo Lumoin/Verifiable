@@ -487,9 +487,7 @@ internal sealed class JarAuthorizeByValueTests
     }
 
 
-    //=========================================================================
     //Helpers — JAR construction and dispatch.
-    //=========================================================================
 
     private static Dictionary<string, object> BuildBaseClaims(
         VerifierKeyMaterial material, DateTimeOffset now)

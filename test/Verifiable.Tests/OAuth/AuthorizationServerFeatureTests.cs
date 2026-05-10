@@ -112,130 +112,104 @@ internal sealed class AuthorizationServerFeatureTests
     ];
 
 
-    //=========================================================================
     //Observable: ClientRegistered event fires on registration.
     //
     //A real ASP.NET app subscribes to app.Server.Events at
     //startup to populate its routing table. This test verifies that the event
     //fires with the correct payload immediately when RegisterClient is called,
     //before any dispatch calls are made.
-    //=========================================================================
 
     [TestMethod]
-    public void ValidatePassesWithoutActionExecutorForAuthCodeFlow()
+    public void IntegrationValidateThrowsWhenLoadClientRegistrationAsyncIsMissing()
     {
-        //ActionExecutor is only needed for flows that produce OAuthAction values —
-        //the OID4VP Verifier flow does. The Authorization Code server flow does not.
-        //Validate() must not require it so Auth Code deployments can omit it cleanly.
-        AuthorizationServerOptions options = new()
+        //AuthorizationServerIntegration.Validate names every missing required
+        //delegate in one error so misconfiguration is fixable in a single
+        //startup pass. Constructing a fully-populated group with exactly one
+        //required slot null isolates the message to that slot's name.
+        AuthorizationServerIntegration integration = new()
         {
-            TimeProvider = TimeProvider,
-            Encoder = TestSetup.Base64UrlEncoder,
-            Decoder = TestSetup.Base64UrlDecoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigest,
             ExtractTenantIdAsync = (ctx, ct) =>
                 ValueTask.FromResult<TenantId?>(null),
-            LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
-                ValueTask.FromResult<ClientRegistration?>(null),
+            //LoadClientRegistrationAsync deliberately omitted.
             SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
                 ValueTask.CompletedTask,
             LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
-                ValueTask.FromResult<(OAuthFlowState?, int)>((null, 0)),
+                ValueTask.FromResult<(OAuthFlowState?, int)>((null, 0))
+        };
+
+        InvalidOperationException ex =
+            Assert.ThrowsExactly<InvalidOperationException>(integration.Validate);
+
+        Assert.Contains(
+            nameof(AuthorizationServerIntegration.LoadClientRegistrationAsync),
+            ex.Message,
+            StringComparison.Ordinal,
+            "Error must name LoadClientRegistrationAsync.");
+        Assert.IsFalse(integration.IsValidated,
+            "IsValidated must remain false after a Validate() that threw.");
+    }
+
+
+    [TestMethod]
+    public void CryptographyValidateThrowsWhenVerificationKeyResolverIsMissing()
+    {
+        //AuthorizationServerCryptography requires both SigningKeyResolver and
+        //VerificationKeyResolver. Nulling one and populating the other proves
+        //Validate names the missing slot rather than the populated one.
+        AuthorizationServerCryptography cryptography = new()
+        {
             SigningKeyResolver = (keyId, ctx, ct) =>
-                ValueTask.FromResult<Verifiable.Cryptography.PrivateKeyMemory?>(null),
-            VerificationKeyResolver = (keyId, ctx, ct) =>
-                ValueTask.FromResult<Verifiable.Cryptography.PublicKeyMemory?>(null),
+                ValueTask.FromResult<Verifiable.Cryptography.PrivateKeyMemory?>(null)
+            //VerificationKeyResolver deliberately omitted.
+        };
+
+        InvalidOperationException ex =
+            Assert.ThrowsExactly<InvalidOperationException>(cryptography.Validate);
+
+        Assert.Contains(
+            nameof(AuthorizationServerCryptography.VerificationKeyResolver),
+            ex.Message,
+            StringComparison.Ordinal,
+            "Error must name VerificationKeyResolver.");
+        Assert.IsFalse(cryptography.IsValidated,
+            "IsValidated must remain false after a Validate() that threw.");
+    }
+
+
+    [TestMethod]
+    public void CodecsValidateThrowsWhenJwtHeaderDeserializerIsMissing()
+    {
+        //AuthorizationServerCodecs requires both serializer and deserializer
+        //pairs alongside the encoder/decoder/digest slots. Nulling exactly one
+        //(JwtHeaderDeserializer) confirms Validate isolates that slot.
+        AuthorizationServerCodecs codecs = new()
+        {
+            Encoder = TestSetup.Base64UrlEncoder,
+            Decoder = TestSetup.Base64UrlDecoder,
+            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigest,
             JwtHeaderSerializer = static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)header,
                 TestSetup.DefaultSerializationOptions),
             JwtPayloadSerializer = static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)payload,
                 TestSetup.DefaultSerializationOptions),
-            Configuration = ServerConfiguration.Empty.WithEndpointBuilders(
-                new EndpointBuilderSet([AuthCodeEndpoints.Builder]))
-            //ActionExecutor deliberately omitted.
-        };
-
-        //Must not throw.
-        options.Validate();
-
-        Assert.IsTrue(options.IsValidated,
-            "Options without ActionExecutor must pass validation for Auth Code flows.");
-    }
-
-
-    [TestMethod]
-    public void ValidateThrowsWhenRequiredDelegatesAreMissing()
-    {
-        //All required delegates omitted — Validate must list them all.
-        AuthorizationServerOptions options = new()
-        {
-            TimeProvider = TimeProvider
+            //JwtHeaderDeserializer deliberately omitted.
+            JwtPayloadDeserializer = static bytes =>
+                JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions)
+                ?? throw new FormatException("Payload JSON parsed to null.")
         };
 
         InvalidOperationException ex =
-            Assert.ThrowsExactly<InvalidOperationException>(options.Validate);
+            Assert.ThrowsExactly<InvalidOperationException>(codecs.Validate);
 
-        Assert.IsTrue(
-            ex.Message.Contains(
-                nameof(AuthorizationServerOptions.LoadClientRegistrationAsync),
-                StringComparison.Ordinal),
-            "Error must name LoadClientRegistrationAsync.");
-        Assert.IsTrue(
-            ex.Message.Contains(
-                nameof(AuthorizationServerOptions.SaveFlowStateAsync),
-                StringComparison.Ordinal),
-            "Error must name SaveFlowStateAsync.");
-        Assert.IsTrue(
-            ex.Message.Contains(
-                nameof(AuthorizationServerOptions.LoadFlowStateAsync),
-                StringComparison.Ordinal),
-            "Error must name LoadFlowStateAsync.");
-        Assert.IsTrue(
-            ex.Message.Contains(
-                nameof(AuthorizationServerOptions.SigningKeyResolver),
-                StringComparison.Ordinal),
-            "Error must name SigningKeyResolver.");
-        Assert.IsTrue(
-            ex.Message.Contains(
-                nameof(AuthorizationServerOptions.VerificationKeyResolver),
-                StringComparison.Ordinal),
-            "Error must name VerificationKeyResolver.");
-        Assert.IsTrue(
-            ex.Message.Contains(
-                nameof(AuthorizationServerOptions.Encoder),
-                StringComparison.Ordinal),
-            "Error must name Encoder.");
-        Assert.IsTrue(
-            ex.Message.Contains(
-                nameof(AuthorizationServerOptions.Decoder),
-                StringComparison.Ordinal),
-            "Error must name Decoder.");
-        Assert.IsTrue(
-            ex.Message.Contains(
-                nameof(AuthorizationServerOptions.ComputeDigest),
-                StringComparison.Ordinal),
-            "Error must name ComputeDigest.");
-        Assert.IsTrue(
-            ex.Message.Contains(
-                nameof(AuthorizationServerOptions.JwtHeaderSerializer),
-                StringComparison.Ordinal),
-            "Error must name JwtHeaderSerializer.");
-        Assert.IsTrue(
-            ex.Message.Contains(
-                nameof(AuthorizationServerOptions.JwtPayloadSerializer),
-                StringComparison.Ordinal),
-            "Error must name JwtPayloadSerializer.");
-        Assert.IsTrue(
-            ex.Message.Contains(
-                $"{nameof(AuthorizationServerOptions.Configuration)}.{nameof(ServerConfiguration.EndpointBuilders)}",
-                StringComparison.Ordinal),
-            "Error must name Configuration.EndpointBuilders.");
-        Assert.IsFalse(
-            ex.Message.Contains(
-                nameof(AuthorizationServerOptions.ActionExecutor),
-                StringComparison.Ordinal),
-            "Error must not name ActionExecutor — it is optional.");
+        Assert.Contains(
+            nameof(AuthorizationServerCodecs.JwtHeaderDeserializer),
+            ex.Message,
+            StringComparison.Ordinal,
+            "Error must name JwtHeaderDeserializer.");
+        Assert.IsFalse(codecs.IsValidated,
+            "IsValidated must remain false after a Validate() that threw.");
     }
 
 
@@ -274,12 +248,10 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //Observable: registration store is populated before dispatch.
     //
     //The routing table must be updated synchronously by the subscriber so that
     //the first dispatch call after RegisterClient can resolve the registration.
-    //=========================================================================
 
     [TestMethod]
     public void RegistrationStoreIsPopulatedImmediatelyAfterRegisterClient()
@@ -297,13 +269,11 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //Observable: deregistration removes from routing table immediately.
     //
     //A production app that deregisters a client must have the routing table
     //updated before the next request arrives. Dispatch to the deregistered
     //segment must return 404.
-    //=========================================================================
 
     [TestMethod]
     public async Task DeregisterClientRemovesFromRoutingTableAndDispatchReturns404()
@@ -358,7 +328,6 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //Observable: key rotation updates registration and new flows use new key.
     //
     //Key rotation is a common production operation. The old signing key must
@@ -366,7 +335,6 @@ internal sealed class AuthorizationServerFeatureTests
     //key. This test verifies that RotateSigningKey emits ClientUpdated, that
     //the routing table reflects the new key identifier, and that a full flow
     //completed after rotation verifies correctly with the new key.
-    //=========================================================================
 
     [TestMethod]
     public async Task KeyRotationEmitsClientUpdatedAndNewFlowUsesNewKey()
@@ -458,13 +426,11 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //Observable: multiple clients registered, each receives independent events.
     //
     //A SaaS deployment registers multiple tenants. Each registration emits its
     //own ClientRegistered event. All registrations must be independently
     //reachable via their own endpoint segments with no cross-contamination.
-    //=========================================================================
 
     [TestMethod]
     public async Task MultipleClientsRegisteredEachReachableIndependently()
@@ -560,13 +526,11 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //Observable: capability granted event fires and is carried correctly.
     //
     //Verifies that OnCapabilityGranted produces a CapabilityGranted event with
     //the correct payload — a production app would use this to activate new
     //endpoints for a client without a full re-registration.
-    //=========================================================================
 
     [TestMethod]
     public void CapabilityGrantedEventCarriesCorrectPayload()
@@ -610,12 +574,10 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //Observable: unsubscribed observer stops receiving events.
     //
     //A production app may conditionally enable or disable observability. This
     //test verifies that disposing the subscription stops event delivery.
-    //=========================================================================
 
     [TestMethod]
     public void DisposingSubscriptionStopsEventDelivery()
@@ -652,10 +614,8 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //HTTP response shape: PAR response body is valid JSON with request_uri and
     //expires_in — exactly what the ASP.NET skin would read and forward.
-    //=========================================================================
 
     [TestMethod]
     public async Task ParDispatchReturns200WithRequestUriAndExpiresInJson()
@@ -698,9 +658,7 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //HTTP response shape: JAR request returns compact JWS in correct MIME type.
-    //=========================================================================
 
     [TestMethod]
     public async Task JarRequestDispatchReturns200WithCompactJwsContentType()
@@ -743,10 +701,8 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //HTTP response shape: direct_post returns 200 with empty body (cross-device)
     //or JSON with redirect_uri (same-device).
-    //=========================================================================
 
     [TestMethod]
     public async Task DirectPostCrossDeviceReturns200WithEmptyBody()
@@ -883,9 +839,7 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //HTTP response shape: unknown segment returns 404.
-    //=========================================================================
 
     [TestMethod]
     public async Task DispatchToUnknownSegmentReturns404()
@@ -905,7 +859,6 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //Client journey: newly registered client discovers endpoints and verifies
     //the JWKS — exactly what a real client does immediately after registration.
     //
@@ -918,9 +871,7 @@ internal sealed class AuthorizationServerFeatureTests
     //These tests assert on the raw ServerHttpResponse the ASP.NET skin would
     //receive and forward — no test-specific helpers, exactly what the real skin
     //does with each endpoint.
-    //=========================================================================
 
-    //=========================================================================
     //Client journey: newly registered client discovers endpoints and verifies
     //the JWKS — exactly what a real client does immediately after registration.
     //
@@ -932,7 +883,6 @@ internal sealed class AuthorizationServerFeatureTests
     //
     //These tests dispatch to the real endpoints via DispatchAsync, asserting on
     //the raw ServerHttpResponse the ASP.NET skin would receive and forward.
-    //=========================================================================
 
     [TestMethod]
     public void NewlyRegisteredClientCanComputeEndpointUrisFromSegment()
@@ -1420,7 +1370,6 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //=========================================================================
     //Caching contract: the library always calls BuildJwksDocumentAsync on every
     //request — it never caches. Caching, precomputation, invalidation, regional
     //distribution, and change-gating are entirely the application's concern,
@@ -1432,7 +1381,6 @@ internal sealed class AuthorizationServerFeatureTests
     //    subscriber reacts to this signal
     //  - The context bag reaches the delegate unchanged on every call, carrying
     //    whatever the application placed there (region, time-of-day, caller tier)
-    //=========================================================================
 
     [TestMethod]
     public async Task LibraryCallsBuildJwksDocumentDelegateOnEveryRequest()

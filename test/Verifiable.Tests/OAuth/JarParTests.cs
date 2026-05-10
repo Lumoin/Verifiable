@@ -731,9 +731,6 @@ internal sealed class JarParTests
     }
 
 
-    [Ignore("ValidateJarAudienceAsync currently only handles a single string aud claim. " +
-            "When a JSON array is allowed (per RFC 7519 §4.1.3), this test will assert " +
-            "the array form with the AS issuer present is accepted.")]
     [TestMethod]
     public Task AcceptsJarWithAudAsArrayContainingIssuer()
     {
@@ -741,9 +738,7 @@ internal sealed class JarParTests
     }
 
 
-    //=========================================================================
     //Helpers — JAR construction and dispatch.
-    //=========================================================================
 
     private static Dictionary<string, object> BuildBaseClaims(
         VerifierKeyMaterial material, DateTimeOffset now)
