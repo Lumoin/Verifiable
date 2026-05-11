@@ -497,7 +497,8 @@ internal sealed class TestHostShell: IDisposable
             ? BuildClientMetadata(clientId, exchangeKeyPair.PublicKey, encryptionKeyId)
             : null;
 
-        Uri responseUri = new(baseUri, $"/connect/{segment}/direct_post");
+        Uri responseUri = new(baseUri, ServerEndpointPaths.DirectPost
+            .Replace("{segment}", segment, StringComparison.Ordinal));
 
         ClientRegistration registration = new()
         {
@@ -550,6 +551,68 @@ internal sealed class TestHostShell: IDisposable
     /// The capabilities this client is allowed to use.
     /// </param>
     /// <returns>The registered <see cref="ClientRegistration"/>.</returns>
+    /// <summary>
+    /// Registers a client with the supplied signing key in the
+    /// <see cref="KeyUsageContext.JarSigning"/> slot, so JAR-bearing AuthCode
+    /// or OID4VP flows can be parameterised across signature algorithms.
+    /// </summary>
+    public VerifierKeyMaterial RegisterJarSigningClient(
+        string clientId,
+        Uri baseUri,
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeyPair,
+        ImmutableHashSet<ServerCapabilityName> capabilities)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
+        ArgumentNullException.ThrowIfNull(baseUri);
+        ArgumentNullException.ThrowIfNull(signingKeyPair);
+        ArgumentNullException.ThrowIfNull(capabilities);
+
+        string segment = Guid.NewGuid().ToString("N")[..8];
+        KeyId signingKeyId = new($"urn:uuid:{Guid.NewGuid()}");
+
+        SigningKeys[signingKeyId] = signingKeyPair.PrivateKey;
+        VerificationKeys[signingKeyId] = signingKeyPair.PublicKey;
+
+        //P-256 exchange keypair satisfies VerifierKeyMaterial's required
+        //DecryptionPrivateKey slot. JAR-signing-only tests do not exercise
+        //response encryption, but the type's invariant still applies.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> exchangeKeyPair =
+            TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
+        KeyId encryptionKeyId = new($"urn:uuid:{Guid.NewGuid()}");
+        DecryptionKeys[encryptionKeyId] = exchangeKeyPair.PrivateKey;
+        exchangeKeyPair.PublicKey.Dispose();
+
+        ClientRegistration registration = new()
+        {
+            ClientId = clientId,
+            TenantId = segment,
+            IssuerUri = new Uri($"https://issuer.test/{segment}"),
+            AllowedCapabilities = capabilities,
+            AllowedRedirectUris = ImmutableHashSet.Create(
+                new Uri("https://client.example.com/callback")),
+            AllowedScopes = ImmutableHashSet.Create(WellKnownScopes.OpenId),
+            SigningKeys = ImmutableDictionary<KeyUsageContext, SigningKeySet>.Empty
+                .Add(KeyUsageContext.JarSigning, new SigningKeySet { Current = [signingKeyId] }),
+            TokenLifetimes = ImmutableDictionary<string, TimeSpan>.Empty,
+            ResponseUri = new Uri(baseUri, ServerEndpointPaths.DirectPost
+                .Replace("{segment}", segment, StringComparison.Ordinal))
+        };
+
+        Registrations[segment] = registration;
+        Registrations[clientId] = registration;
+
+        Server.RegisterClient(registration, new RequestContext());
+
+        return new VerifierKeyMaterial(
+            registration,
+            signingKeyPair.PublicKey,
+            signingKeyPair.PrivateKey,
+            decryptionPrivateKey: exchangeKeyPair.PrivateKey,
+            encryptionKeyId: encryptionKeyId,
+            signingKeyId: signingKeyId);
+    }
+
+
     public ClientRegistration RegisterSigningClient(
         string clientId,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeyPair,
@@ -610,14 +673,19 @@ internal sealed class TestHostShell: IDisposable
 
         Dictionary<string, OAuthFlowState> clientFlowStore = [];
 
+        string segment = registration.TenantId.Value;
+        Uri baseUri = new($"https://verifier.example.com");
         OAuthClientOptions options = OAuthClientOptions.Create(
             clientId: registration.ClientId,
             endpoints: new AuthorizationServerEndpoints
             {
                 Issuer = issuerUri,
-                PushedAuthorizationRequestEndpoint = new Uri($"{issuerUri}/par"),
-                AuthorizationEndpoint = new Uri($"{issuerUri}/authorize"),
-                TokenEndpoint = new Uri($"{issuerUri}/token")
+                PushedAuthorizationRequestEndpoint = new Uri(baseUri, ServerEndpointPaths.Par
+                    .Replace("{segment}", segment, StringComparison.Ordinal)),
+                AuthorizationEndpoint = new Uri(baseUri, ServerEndpointPaths.Authorize
+                    .Replace("{segment}", segment, StringComparison.Ordinal)),
+                TokenEndpoint = new Uri(baseUri, ServerEndpointPaths.Token
+                    .Replace("{segment}", segment, StringComparison.Ordinal))
             },
             redirectUri: new Uri(redirectUri),
             saveStateAsync: (state, ct) =>

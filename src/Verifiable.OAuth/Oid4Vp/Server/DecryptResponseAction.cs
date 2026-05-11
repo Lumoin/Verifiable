@@ -30,8 +30,17 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// <c>encrypted_response_enc_values_supported</c>. The JWE <c>enc</c> header must
 /// be one of these values.
 /// </param>
+/// <param name="CredentialQueryId">
+/// The DCQL credential query identifier the Verifier expects to receive a
+/// presentation for. Used as the lookup key when extracting the compact
+/// presentation from the decrypted <c>vp_token</c> JSON object per
+/// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0-final.html#response-parameters">OID4VP 1.0 §8.1</see>.
+/// Threaded from the Verifier's DCQL query so the response handler does not
+/// have to infer the key from wire-data structure.
+/// </param>
 public sealed record DecryptResponseAction(
     string EncryptedResponseJwt,
     KeyId DecryptionKeyId,
     TransactionNonce Nonce,
-    IReadOnlyList<string> AllowedEncAlgorithms): OAuthAction;
+    IReadOnlyList<string> AllowedEncAlgorithms,
+    CredentialQueryId CredentialQueryId): OAuthAction;

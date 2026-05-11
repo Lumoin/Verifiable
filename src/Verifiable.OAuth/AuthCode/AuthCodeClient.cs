@@ -129,4 +129,40 @@ public sealed class AuthCodeClient
     {
         return AuthCodeFlowHandlers.HandleRevocationAsync(fields.Fields, Options, cancellationToken);
     }
+
+
+    /// <summary>
+    /// Starts a JAR-bearing PAR+PKCE flow per RFC 9101 + RFC 9126: signs an
+    /// AuthCode JAR carrying the PKCE challenge and the AuthCode claims, POSTs
+    /// to the PAR endpoint with the outer <c>client_id</c> + <c>request</c>
+    /// body, and returns the authorize redirect URI carrying the issued
+    /// <c>request_uri</c>.
+    /// </summary>
+    /// <param name="jarOptions">Per-call inputs including signing key and serialisers.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public ValueTask<AuthCodeFlowEndpointResult> StartJarParAsync(
+        AuthCodeStartJarParOptions jarOptions,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(jarOptions);
+
+        return AuthCodeFlowHandlers.HandleJarParAsync(jarOptions, Options, cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Starts a JAR-by-value direct authorization per RFC 9101 §6.1: signs an
+    /// AuthCode JAR and returns a redirect URL whose query carries
+    /// <c>request=&lt;compact-jws&gt;</c> alongside the outer <c>client_id</c>.
+    /// </summary>
+    /// <param name="jarOptions">Per-call inputs including signing key and serialisers.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public ValueTask<AuthCodeFlowEndpointResult> StartJarAuthorizeAsync(
+        AuthCodeStartJarAuthorizeOptions jarOptions,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(jarOptions);
+
+        return AuthCodeFlowHandlers.HandleJarAuthorizeAsync(jarOptions, Options, cancellationToken);
+    }
 }

@@ -43,4 +43,13 @@ public sealed record VerifierJarServedState: OAuthFlowState
     /// algorithm set.
     /// </summary>
     public required IReadOnlyList<string> AllowedEncAlgorithms { get; init; }
+
+    /// <summary>
+    /// The DCQL credential query identifier the Verifier set when constructing
+    /// the JAR. Threaded forward so
+    /// <see cref="VerifierResponseReceivedState.NextAction"/> can pass it into
+    /// the <see cref="DecryptResponseAction"/> for response-side lookup against
+    /// the JSON-encoded <c>vp_token</c>.
+    /// </summary>
+    public required CredentialQueryId CredentialQueryId { get; init; }
 }

@@ -43,11 +43,19 @@ public sealed record VerifierResponseReceivedState: OAuthFlowState
     /// </summary>
     public required IReadOnlyList<string> AllowedEncAlgorithms { get; init; }
 
+    /// <summary>
+    /// The DCQL credential query identifier the Verifier set in its JAR. The
+    /// <see cref="DecryptResponseAction"/> handler uses this as the lookup key
+    /// against the decrypted <c>vp_token</c> JSON object.
+    /// </summary>
+    public required CredentialQueryId CredentialQueryId { get; init; }
+
     /// <inheritdoc/>
     public override PdaAction NextAction =>
         new DecryptResponseAction(
             EncryptedResponseJwt,
             DecryptionKeyId,
             Nonce,
-            AllowedEncAlgorithms);
+            AllowedEncAlgorithms,
+            CredentialQueryId);
 }

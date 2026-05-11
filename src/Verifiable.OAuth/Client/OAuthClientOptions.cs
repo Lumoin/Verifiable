@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Client;
@@ -100,6 +101,15 @@ public sealed class OAuthClientOptions
     /// Inject <c>FakeTimeProvider</c> in tests for deterministic time control.
     /// </summary>
     public TimeProvider TimeProvider { get; private init; } = TimeProvider.System;
+
+    /// <summary>
+    /// The wallet-side configuration that backs the
+    /// <see cref="OAuthClient.Oid4VpWallet"/> convenience property. When
+    /// <see langword="null"/>, the property returns <see langword="null"/>
+    /// and applications wanting OID4VP Wallet flows construct
+    /// <see cref="Oid4VpWalletClient{TCredential}"/> directly.
+    /// </summary>
+    public Oid4VpWalletConfiguration<SdJwtVcCredential>? DefaultSdJwtVcWalletConfiguration { get; init; }
 
 
     /// <summary>

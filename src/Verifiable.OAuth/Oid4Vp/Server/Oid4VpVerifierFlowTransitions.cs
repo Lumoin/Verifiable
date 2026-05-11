@@ -123,7 +123,9 @@ public static class Oid4VpVerifierFlowTransitions
                                 ParHandle = received.ParHandle,
                                 Nonce = received.Nonce,
                                 DecryptionKeyId = received.DecryptionKeyId,
-                                AllowedEncAlgorithms = received.AllowedEncAlgorithms
+                                AllowedEncAlgorithms = received.AllowedEncAlgorithms,
+                                CredentialQueryId = new CredentialQueryId(
+                                    received.Query.Query.Credentials![0].Id!)
                             },
                             StackAction<Oid4VpVerifierStackSymbol>.None,
                             "VerifierJarServed"),
@@ -144,7 +146,8 @@ public static class Oid4VpVerifierFlowTransitions
                                 ReceivedAt = posted.ReceivedAt,
                                 DecryptionKeyId = served.DecryptionKeyId,
                                 Nonce = served.Nonce,
-                                AllowedEncAlgorithms = served.AllowedEncAlgorithms
+                                AllowedEncAlgorithms = served.AllowedEncAlgorithms,
+                                CredentialQueryId = served.CredentialQueryId
                             },
                             StackAction<Oid4VpVerifierStackSymbol>.None,
                             "VerifierResponseReceived"),

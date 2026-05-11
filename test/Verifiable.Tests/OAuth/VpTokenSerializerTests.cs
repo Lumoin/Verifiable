@@ -23,18 +23,19 @@ internal sealed class VpTokenSerializerTests
 
 
     [TestMethod]
-    public void SerializesSdJwtVcAsArrayUnderDcSdJwtKey()
+    public void SerializesSdJwtVcAsArrayUnderCredentialQueryIdKey()
     {
+        const string QueryId = "pid";
         const string Presentation = "eyJhbGciOiJFUzI1NiJ9.eyJfc2QiOlsiYWJjIl19.sig~WyJzIiwibiIsInYiXQ~eyJhbGciOiJFUzI1NiIsInR5cCI6ImtiK2p3dCJ9.eyJub25jZSI6Im4ifQ.kbsig";
 
         string vpTokenJson = VpTokenSerializer.SerializeSingleSdJwtVc(
-            Presentation, PayloadSerializer);
+            QueryId, Presentation, PayloadSerializer);
 
         using JsonDocument document = JsonDocument.Parse(vpTokenJson);
         JsonElement root = document.RootElement;
 
         Assert.AreEqual(JsonValueKind.Object, root.ValueKind);
-        Assert.IsTrue(root.TryGetProperty(WellKnownMediaTypes.Jwt.DcSdJwt, out JsonElement value));
+        Assert.IsTrue(root.TryGetProperty(QueryId, out JsonElement value));
         Assert.AreEqual(JsonValueKind.Array, value.ValueKind);
         Assert.AreEqual(1, value.GetArrayLength());
         Assert.AreEqual(Presentation, value[0].GetString());
@@ -42,9 +43,12 @@ internal sealed class VpTokenSerializerTests
 
 
     [TestMethod]
-    public void OutputParsesAsJsonObject()
+    public void OutputParsesAsJsonObjectKeyedByQueryId()
     {
+        const string QueryId = "my_credential";
+
         string vpTokenJson = VpTokenSerializer.SerializeSingleSdJwtVc(
+            QueryId,
             "credential-string",
             PayloadSerializer);
 
@@ -53,6 +57,7 @@ internal sealed class VpTokenSerializerTests
 
         Assert.IsNotNull(parsed);
         Assert.HasCount(1, parsed);
-        Assert.IsTrue(parsed.ContainsKey(WellKnownMediaTypes.Jwt.DcSdJwt));
+        Assert.IsTrue(parsed.ContainsKey(QueryId));
+        Assert.AreEqual(JsonValueKind.Array, parsed[QueryId].ValueKind);
     }
 }

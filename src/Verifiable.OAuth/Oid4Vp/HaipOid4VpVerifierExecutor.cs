@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
+using System.Text;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
@@ -370,18 +371,23 @@ public static class HaipOid4VpVerifierExecutor
 
             using DecryptedContent ownedDecrypted = decrypted;
 
-            string vpTokenJson =
-                System.Text.Encoding.UTF8.GetString(ownedDecrypted.AsReadOnlySpan());
-
             context.SetTransactionNonce(action.Nonce);
 
-            //TODO: Add CredentialQueryId to DecryptResponseAction so the PDA
-            //carries the matched credential query identifier through the flow.
-            //For single-credential VP responses this is always the first query ID.
-            const string credentialQueryId = "pid";
+            //OID4VP 1.0 §8.1: vp_token is a JSON object whose keys are DCQL
+            //credential query identifiers and whose values are arrays of one
+            //or more compact presentations. Single-credential responses still
+            //carry the array shape with one element.
+            string credentialQueryId = action.CredentialQueryId.Value;
+            ReadOnlySpan<byte> vpTokenBytes = ownedDecrypted.AsReadOnlySpan();
+            string compactPresentation =
+                JwkJsonReader.ExtractFirstStringFromArrayProperty(
+                    vpTokenBytes, Encoding.UTF8.GetBytes(credentialQueryId))
+                ?? throw new FormatException(
+                    $"vp_token does not contain a non-empty array of presentations " +
+                    $"under credential query identifier '{credentialQueryId}'.");
 
             VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
-                vpTokenJson, credentialQueryId, parseSdJwtToken, computeSdJwtHashInput,
+                compactPresentation, credentialQueryId, parseSdJwtToken, computeSdJwtHashInput,
                 resolveIssuerKey, computeDigest, decoder, encoder, pool, ct)
                 .ConfigureAwait(false);
 

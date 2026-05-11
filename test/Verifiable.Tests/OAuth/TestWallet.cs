@@ -22,16 +22,22 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// An in-process Wallet that mirrors what a Wallet app would do at each
-/// processing boundary in the OID4VP presentation flow.
+/// A step-by-step test-only Wallet fixture for OID4VP presentation flows.
+/// Each public method corresponds to one user interaction or protocol step,
+/// allowing tests to assert PDA state at intermediate transition points. The
+/// production wallet path is
+/// <see cref="Verifiable.OAuth.Oid4Vp.Wallet.Oid4VpWalletClient{TCredential}.PresentJarAsync"/>,
+/// which collapses the whole flow into a single call.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Each public method corresponds to one user interaction or protocol step.
 /// The Wallet holds its own credential store and flow state store — it shares
 /// no objects or key material with the Verifier. The only values that cross
 /// from the Verifier to this Wallet are strings: the compact JAR and the
-/// optional redirect URI.
+/// optional redirect URI. KB-JWT signing composes with the production
+/// <see cref="Verifiable.OAuth.Oid4Vp.Wallet.KbJwtIssuance"/> primitive — the
+/// only wallet-specific path that remains here is the step-by-step PDA
+/// progression.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TestWallet ExpectedVerifierClientId={ExpectedVerifierClientId}")]
@@ -238,9 +244,19 @@ internal sealed class TestWallet
             presentationBuilt.Request.ClientId,
             cancellationToken).ConfigureAwait(false);
 
+        //Wrap the SD-JWT VC presentation in the OID4VP 1.0 §8.1 spec-shaped
+        //vp_token JSON object: keyed by DCQL credential query id, array values.
+        string credentialQueryId = CredentialStore.Keys.First();
+        Dictionary<string, object> vpTokenObject = new(StringComparer.Ordinal)
+        {
+            [credentialQueryId] = new[] { vpTokenWithKbJwt }
+        };
+        string vpTokenJson = JsonSerializer.Serialize(
+            vpTokenObject, TestSetup.DefaultSerializationOptions);
+
         string compactJwe = await HaipProfile.EncryptResponseAsync(
             presentationBuilt.Request,
-            Encoding.UTF8.GetBytes(vpTokenWithKbJwt).AsMemory(),
+            Encoding.UTF8.GetBytes(vpTokenJson).AsMemory(),
             header => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)header,
                 TestSetup.DefaultSerializationOptions),
@@ -307,9 +323,9 @@ internal sealed class TestWallet
 
 
     /// <summary>
-    /// Parses the SD-JWT, computes <c>sd_hash</c>, signs a KB-JWT with the holder
-    /// private key, attaches it to the token, and returns the serialized SD-JWT
-    /// with key binding per RFC 9901 §4.3.
+    /// Parses the SD-JWT, signs a KB-JWT via the production
+    /// <see cref="KbJwtIssuance"/> primitive, attaches it to the token, and
+    /// returns the serialized SD-JWT with key binding per RFC 9901 §4.3.
     /// </summary>
     private async Task<string> CreateVpTokenWithKeyBindingAsync(
         string sdJwtWithoutKb,
@@ -320,44 +336,23 @@ internal sealed class TestWallet
         using SdToken<string> token = SdJwtSerializer.ParseToken(
             sdJwtWithoutKb, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag);
 
-        //Compute sd_hash: SHA-256 of the SD-JWT without KB-JWT (with trailing tilde).
         string hashInput = SdJwtSerializer.GetSdJwtForHashing(token, TestSetup.Base64UrlEncoder);
-        byte[] hashBytes = SHA256.HashData(Encoding.ASCII.GetBytes(hashInput));
-        string sdHash = TestSetup.Base64UrlEncoder(hashBytes);
+        byte[] hashInputBytes = Encoding.UTF8.GetBytes(hashInput);
 
-        //Build KB-JWT header and payload.
-        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(HolderPrivateKey.Tag);
-
-        JwtHeader kbHeader = JwtHeaderExtensions.ForKeyBinding(algorithm);
-
-        var kbPayload = new Dictionary<string, object>
-        {
-            [WellKnownJwtClaims.Nonce] = nonce,
-            [WellKnownJwtClaims.Aud] = audience,
-            [WellKnownJwtClaims.Iat] = Time.GetUtcNow().ToUnixTimeSeconds(),
-            [SdConstants.SdHashClaim] = sdHash
-        };
-
-        //Sign the KB-JWT with the holder's private key.
-        using JwsMessage kbJws = await Jws.SignAsync(
-            kbHeader,
-            kbPayload,
-            static part => new TaggedMemory<byte>(
-                Encoding.UTF8.GetBytes(
-                    JsonSerializerExtensions.Serialize(
-                        part, TestSetup.DefaultSerializationOptions)),
-                BufferTags.Json),
-            TestSetup.Base64UrlEncoder,
+        string compactKbJwt = await KbJwtIssuance.IssueAsync(
+            hashInputBytes,
             HolderPrivateKey,
+            nonce,
+            audience,
+            Time.GetUtcNow(),
+            TestSetup.Base64UrlEncoder,
+            static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+            static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken).ConfigureAwait(false);
 
-        string compactKbJwt = JwsSerialization.SerializeCompact(
-            kbJws, TestSetup.Base64UrlEncoder);
-
-        //Attach the KB-JWT and serialize the full SD-JWT with key binding. The
-        //returned token owns fresh copies of the disclosures (per WithKeyBinding's
-        //copy-on-derive contract) and is independently disposable.
         using SdToken<string> tokenWithKb = token.WithKeyBinding(compactKbJwt, SensitiveMemoryPool<byte>.Shared);
         return SdJwtSerializer.SerializeToken(tokenWithKb, TestSetup.Base64UrlEncoder);
     }

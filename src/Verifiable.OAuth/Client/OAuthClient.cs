@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Oid4Vp.Wallet;
 
 namespace Verifiable.OAuth.Client;
 
@@ -60,6 +61,16 @@ public sealed class OAuthClient
 
 
     /// <summary>
+    /// The OID4VP Wallet sub-client for SD-JWT VC presentations. Non-null when
+    /// <see cref="OAuthClientOptions.DefaultSdJwtVcWalletConfiguration"/> is
+    /// wired; <see langword="null"/> otherwise. Applications that need a
+    /// different <c>TCredential</c> construct
+    /// <see cref="Oid4VpWalletClient{TCredential}"/> directly.
+    /// </summary>
+    public Oid4VpWalletClient<SdJwtVcCredential>? Oid4VpWallet { get; }
+
+
+    /// <summary>
     /// Creates a new OAuth client with the supplied options.
     /// </summary>
     /// <param name="options">
@@ -75,5 +86,9 @@ public sealed class OAuthClient
 
         Options = options;
         AuthCode = new AuthCodeClient(options);
+        Oid4VpWallet = options.DefaultSdJwtVcWalletConfiguration is null
+            ? null
+            : new Oid4VpWalletClient<SdJwtVcCredential>(
+                options, options.DefaultSdJwtVcWalletConfiguration);
     }
 }

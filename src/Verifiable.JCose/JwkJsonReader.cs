@@ -160,6 +160,53 @@ public static class JwkJsonReader
 
 
     /// <summary>
+    /// Extracts the first string element of an array-valued property. Handles the
+    /// OID4VP 1.0 §8.1 <c>vp_token</c> structure where each credential-query-id
+    /// key maps to an array of one or more compact presentation strings:
+    /// <c>{"my_credential":["eyJhbGci..."]}</c>.
+    /// </summary>
+    /// <param name="json">UTF-8 JSON bytes to search.</param>
+    /// <param name="key">The array property key as a UTF-8 literal.</param>
+    /// <returns>
+    /// The first string in the array, or <see langword="null"/> when the key is
+    /// absent, the value is not an array, the array is empty, or the first
+    /// element is not a string.
+    /// </returns>
+    public static string? ExtractFirstStringFromArrayProperty(
+        ReadOnlySpan<byte> json,
+        ReadOnlySpan<byte> key)
+    {
+        int keyStart = IndexOfKey(json, key);
+        if(keyStart < 0)
+        {
+            return null;
+        }
+
+        int afterKey = keyStart + key.Length + 1;
+        afterKey = SkipWhitespaceAndColon(json, afterKey);
+        if(afterKey < 0 || afterKey >= json.Length || json[afterKey] != (byte)'[')
+        {
+            return null;
+        }
+
+        int cursor = afterKey + 1;
+        while(cursor < json.Length
+            && (json[cursor] == (byte)' ' || json[cursor] == (byte)'\t'
+                || json[cursor] == (byte)'\r' || json[cursor] == (byte)'\n'))
+        {
+            cursor++;
+        }
+
+        if(cursor >= json.Length || json[cursor] != (byte)'"')
+        {
+            return null;
+        }
+
+        return ExtractStringAt(json, cursor + 1);
+    }
+
+
+    /// <summary>
     /// Extracts all string-valued properties from an object nested two levels deep.
     /// For example, extracts all JWK fields from <c>{"cnf":{"jwk":{"kty":"OKP","crv":"Ed25519","x":"..."}}}</c>.
     /// </summary>

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
@@ -478,6 +479,243 @@ public static class AuthCodeFlowHandlers
                 [OAuthRequestParameters.Scope] = tokenResponse.Scope ?? string.Empty
             }
         };
+    }
+
+
+    /// <summary>
+    /// Handles a JAR-bearing Pushed Authorization Request per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101">RFC 9101</see> +
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126">RFC 9126</see>. The
+    /// client signs a JAR with the AuthCode claims (PKCE challenge, redirect
+    /// URI, scope, state, nonce) and POSTs to the PAR endpoint with the outer
+    /// <c>client_id</c> + <c>request</c> body fields. Persists
+    /// <see cref="ParCompletedState"/> with the PKCE verifier and returns the
+    /// authorize redirect URI carrying the issued <c>request_uri</c>.
+    /// </summary>
+    public static async ValueTask<AuthCodeFlowEndpointResult> HandleJarParAsync(
+        AuthCodeStartJarParOptions jarOptions,
+        OAuthClientOptions options,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(jarOptions);
+        ArgumentNullException.ThrowIfNull(options);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        DateTimeOffset now = options.TimeProvider.GetUtcNow();
+        string state = Guid.NewGuid().ToString("N");
+        string nonce = jarOptions.Nonce ?? Guid.NewGuid().ToString("N");
+        PkceParameters pkce = GeneratePkceParameters(options.Base64UrlEncoder);
+
+        AuthCodeRequestObject requestObject = BuildJarRequestObject(
+            options, jarOptions, pkce, state, nonce, now);
+
+        string compactJar = await AuthCodeJarSigning.SignAsync(
+            requestObject,
+            jarOptions.SigningKey,
+            jarOptions.SigningKeyId,
+            jarOptions.HeaderSerializer,
+            jarOptions.PayloadSerializer,
+            options.Base64UrlEncoder,
+            jarOptions.MemoryPool,
+            cancellationToken).ConfigureAwait(false);
+
+        Dictionary<string, string> parBody = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameters.ClientId] = options.ClientId,
+            [OAuthRequestParameters.Request] = compactJar
+        };
+        foreach((string key, string value) in jarOptions.AdditionalFields.Fields)
+        {
+            parBody[key] = value;
+        }
+
+        HttpResponseData parHttpResponse;
+        try
+        {
+            parHttpResponse = await options.SendFormPostAsync(
+                options.Endpoints.PushedAuthorizationRequestEndpoint,
+                parBody,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception ex)
+        {
+            return new AuthCodeFlowEndpointResult
+            {
+                Outcome = AuthCodeFlowEndpointOutcome.InternalError,
+                ErrorCode = "server_error",
+                ErrorDescription = ex.Message
+            };
+        }
+
+        Result<ParResponse, OAuthParseError> parResult =
+            options.ParseParResponseAsync(parHttpResponse);
+
+        if(!parResult.IsSuccess)
+        {
+            return BuildEndpointResultFromParseError(parResult.Error!);
+        }
+
+        ParResponse parResponse = parResult.Value;
+        ImmutableArray<string> scopes = [.. jarOptions.Scope.Split(' ', StringSplitOptions.RemoveEmptyEntries)];
+        ParCompletedState parCompleted = new()
+        {
+            FlowId = state,
+            ExpectedIssuer = options.Endpoints.Issuer,
+            EnteredAt = now,
+            ExpiresAt = now.AddSeconds(parResponse.ExpiresIn),
+            Kind = FlowKind.AuthCodeClient,
+            Pkce = pkce,
+            RedirectUri = options.RedirectUri,
+            Scopes = scopes,
+            Par = parResponse
+        };
+
+        await options.SaveStateAsync(parCompleted, cancellationToken).ConfigureAwait(false);
+
+        Uri authorizationUri = BuildAuthorizationRedirectUri(
+            options.Endpoints.AuthorizationEndpoint,
+            options.ClientId,
+            parResponse.RequestUri);
+
+        return new AuthCodeFlowEndpointResult
+        {
+            Outcome = AuthCodeFlowEndpointOutcome.Redirect,
+            RedirectUri = authorizationUri
+        };
+    }
+
+
+    /// <summary>
+    /// Handles a JAR-by-value direct authorization per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.1">RFC 9101 §6.1</see>.
+    /// The client signs a JAR with the AuthCode claims and the handler builds
+    /// a redirect URL carrying <c>request=&lt;compact-jws&gt;</c> alongside
+    /// the outer <c>client_id</c>. The PKCE verifier is persisted so the
+    /// eventual token exchange can complete.
+    /// </summary>
+    public static async ValueTask<AuthCodeFlowEndpointResult> HandleJarAuthorizeAsync(
+        AuthCodeStartJarAuthorizeOptions jarOptions,
+        OAuthClientOptions options,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(jarOptions);
+        ArgumentNullException.ThrowIfNull(options);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        DateTimeOffset now = options.TimeProvider.GetUtcNow();
+        string state = Guid.NewGuid().ToString("N");
+        string nonce = jarOptions.Nonce ?? Guid.NewGuid().ToString("N");
+        PkceParameters pkce = GeneratePkceParameters(options.Base64UrlEncoder);
+
+        AuthCodeRequestObject requestObject = new()
+        {
+            ClientId = options.ClientId,
+            ResponseType = OAuthRequestParameters.ResponseTypeCode,
+            RedirectUri = options.RedirectUri,
+            Scope = jarOptions.Scope,
+            State = state,
+            Nonce = nonce,
+            CodeChallenge = pkce.EncodedChallenge,
+            CodeChallengeMethod = pkce.Method.ToString().ToUpperInvariant(),
+            Iat = now,
+            Nbf = now,
+            Exp = now.Add(jarOptions.JarLifetime),
+            Iss = options.ClientId,
+            Aud = options.Endpoints.Issuer
+        };
+
+        string compactJar = await AuthCodeJarSigning.SignAsync(
+            requestObject,
+            jarOptions.SigningKey,
+            jarOptions.SigningKeyId,
+            jarOptions.HeaderSerializer,
+            jarOptions.PayloadSerializer,
+            options.Base64UrlEncoder,
+            jarOptions.MemoryPool,
+            cancellationToken).ConfigureAwait(false);
+
+        Uri authorizationUri = BuildJarAuthorizeRedirectUri(
+            options.Endpoints.AuthorizationEndpoint,
+            options.ClientId,
+            compactJar,
+            jarOptions.AdditionalFields);
+
+        ImmutableArray<string> scopes = [.. jarOptions.Scope.Split(' ', StringSplitOptions.RemoveEmptyEntries)];
+        ParCompletedState parCompleted = new()
+        {
+            FlowId = state,
+            ExpectedIssuer = options.Endpoints.Issuer,
+            EnteredAt = now,
+            ExpiresAt = now.Add(jarOptions.JarLifetime),
+            Kind = FlowKind.AuthCodeClient,
+            Pkce = pkce,
+            RedirectUri = options.RedirectUri,
+            Scopes = scopes,
+            Par = new ParResponse(authorizationUri, (int)jarOptions.JarLifetime.TotalSeconds)
+        };
+
+        await options.SaveStateAsync(parCompleted, cancellationToken).ConfigureAwait(false);
+
+        return new AuthCodeFlowEndpointResult
+        {
+            Outcome = AuthCodeFlowEndpointOutcome.Redirect,
+            RedirectUri = authorizationUri
+        };
+    }
+
+
+    private static AuthCodeRequestObject BuildJarRequestObject(
+        OAuthClientOptions options,
+        AuthCodeStartJarParOptions jarOptions,
+        PkceParameters pkce,
+        string state,
+        string nonce,
+        DateTimeOffset now) => new()
+        {
+            ClientId = options.ClientId,
+            ResponseType = OAuthRequestParameters.ResponseTypeCode,
+            RedirectUri = options.RedirectUri,
+            Scope = jarOptions.Scope,
+            State = state,
+            Nonce = nonce,
+            CodeChallenge = pkce.EncodedChallenge,
+            CodeChallengeMethod = pkce.Method.ToString().ToUpperInvariant(),
+            Iat = now,
+            Nbf = now,
+            Exp = now.Add(jarOptions.JarLifetime),
+            Iss = options.ClientId,
+            Aud = options.Endpoints.Issuer
+        };
+
+
+    private static Uri BuildJarAuthorizeRedirectUri(
+        Uri authorizationEndpoint,
+        string clientId,
+        string compactJar,
+        OAuthFormEncodedFields additionalFields)
+    {
+        StringBuilder builder = new();
+        builder.Append(authorizationEndpoint);
+        builder.Append('?');
+        builder.Append(OAuthRequestParameters.ClientId);
+        builder.Append('=');
+        builder.Append(Uri.EscapeDataString(clientId));
+        builder.Append('&');
+        builder.Append(OAuthRequestParameters.Request);
+        builder.Append('=');
+        builder.Append(Uri.EscapeDataString(compactJar));
+
+        foreach((string key, string value) in additionalFields.Fields)
+        {
+            builder.Append('&');
+            builder.Append(Uri.EscapeDataString(key));
+            builder.Append('=');
+            builder.Append(Uri.EscapeDataString(value));
+        }
+
+        return new Uri(builder.ToString());
     }
 
 
