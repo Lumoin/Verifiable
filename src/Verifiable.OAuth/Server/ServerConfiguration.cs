@@ -54,7 +54,7 @@ public sealed record ServerConfiguration
 
     /// <summary>
     /// The endpoint-builder modules that contribute <see cref="ServerEndpoint"/>
-    /// records when invoked against a <see cref="ClientRegistration"/>.
+    /// records when invoked against a <see cref="ClientRecord"/>.
     /// </summary>
     public required EndpointBuilderSet EndpointBuilders { get; init; }
 

@@ -9,11 +9,15 @@ namespace Verifiable.OAuth.Server;
 
 /// <summary>
 /// A registered client and its allowed capabilities, redirect URIs, scopes,
-/// and associated metadata.
+/// and associated metadata as the authorization server holds it. Server-side
+/// counterpart of the client-side
+/// <see cref="Verifiable.OAuth.Client.ClientRegistration"/>: every AS handler
+/// reads this record after the tenant has been resolved and the registration
+/// loaded.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="ClientRegistration"/> is pure data — it carries no delegates and
+/// <see cref="ClientRecord"/> is pure data — it carries no delegates and
 /// performs no I/O. All effectful operations (loading, saving, CIMD fetch) are
 /// performed by the delegates in <see cref="AuthorizationServer"/>.
 /// </para>
@@ -39,7 +43,7 @@ namespace Verifiable.OAuth.Server;
 /// from this client.
 /// </para>
 /// <para>
-/// <strong>Signing keys</strong>
+/// <strong>Signing keys.</strong>
 /// </para>
 /// <para>
 /// <see cref="SigningKeys"/> carries the tenant's signing-key inventory indexed by
@@ -57,8 +61,8 @@ namespace Verifiable.OAuth.Server;
 /// through <see cref="AuthorizationServerCryptography.SigningKeyResolver"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("ClientRegistration ClientId={ClientId} TenantId={TenantId}")]
-public sealed record ClientRegistration
+[DebuggerDisplay("ClientRecord ClientId={ClientId} TenantId={TenantId}")]
+public sealed record ClientRecord
 {
     /// <summary>
     /// The client identifier. May be an opaque string, a CIMD URL, or a DID.
@@ -194,17 +198,16 @@ public sealed record ClientRegistration
     /// The policy profile this registration runs under, consumed by the
     /// default <see cref="ResolvePolicyDelegate"/> in
     /// <see cref="PolicyProfiles"/>. <see langword="null"/> means the default
-    /// profile applies (<see cref="PolicyProfile.Strict"/> — FAPI 2.0 /
-    /// HAIP-aligned).
+    /// profile applies (<see cref="PolicyProfile.Fapi20"/>).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Built-in values: <see cref="PolicyProfile.Strict"/>,
-    /// <see cref="PolicyProfile.Haip"/>, <see cref="PolicyProfile.Rfc6749"/>.
-    /// Application-defined profiles are registered via
-    /// <see cref="PolicyProfile.Create"/>; see the remarks on
-    /// <see cref="PolicyProfile"/> for the extension shape and a worked
-    /// example of installing a custom resolver.
+    /// Built-in values: <see cref="PolicyProfile.Fapi20"/>,
+    /// <see cref="PolicyProfile.Haip10"/>,
+    /// <see cref="PolicyProfile.Rfc6749WithPkce"/>. Application-defined
+    /// profiles are registered via <see cref="PolicyProfile.Create"/>; see
+    /// the remarks on <see cref="PolicyProfile"/> for the extension shape
+    /// and a worked example of installing a custom resolver.
     /// </para>
     /// </remarks>
     public PolicyProfile? Profile { get; init; }

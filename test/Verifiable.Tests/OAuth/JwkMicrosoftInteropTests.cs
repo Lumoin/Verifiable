@@ -116,7 +116,7 @@ internal sealed class JwkMicrosoftInteropTests
         using TestHostShell app = new(TimeProvider);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair = createKeys();
 
-        ClientRegistration registration = app.RegisterSigningClient(
+        ClientRecord registration = app.RegisterSigningClient(
             $"client-{expectedKty}-{expectedAlg}", keyPair, JwksCapabilities);
 
         ServerHttpResponse response = await FetchJwksAsync(
@@ -150,7 +150,7 @@ internal sealed class JwkMicrosoftInteropTests
 
     private static async Task<ServerHttpResponse> FetchJwksAsync(
         TestHostShell app,
-        ClientRegistration registration,
+        ClientRecord registration,
         CancellationToken cancellationToken)
     {
         string segment = registration.TenantId;

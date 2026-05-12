@@ -37,7 +37,7 @@ namespace Verifiable.OAuth.Server;
 /// placing whatever request-scoped data the application needs: tenant
 /// identifier, remote IP, trace context, authenticated user identity, billing
 /// tier, regional affinity. The dispatcher enriches it with the resolved
-/// <see cref="ClientRegistration"/>, a consistent request timestamp, and the
+/// <see cref="ClientRecord"/>, a consistent request timestamp, and the
 /// resolved policy values populated by
 /// <see cref="AuthorizationServerIntegration.ResolvePolicyAsync"/>. Every
 /// delegate in the pipeline — endpoint builders, key resolvers, action

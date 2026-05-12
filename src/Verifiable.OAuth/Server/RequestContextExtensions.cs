@@ -148,7 +148,7 @@ public static class RequestContextExtensions
 
 
         /// <summary>
-        /// Gets the <see cref="ClientRegistration"/> resolved by the dispatcher at the
+        /// Gets the <see cref="ClientRecord"/> resolved by the dispatcher at the
         /// start of each request. Available to all <see cref="BuildInputDelegate"/>
         /// implementations without capturing the registration from outside.
         /// </summary>
@@ -156,16 +156,16 @@ public static class RequestContextExtensions
         /// The resolved registration, or <see langword="null"/> when the dispatcher has
         /// not yet resolved it.
         /// </returns>
-        public ClientRegistration? Registration =>
+        public ClientRecord? Registration =>
             context.TryGetValue(AuthorizationServerHandlers.RegistrationKey, out object? v)
-                && v is ClientRegistration r ? r : null;
+                && v is ClientRecord r ? r : null;
 
         /// <summary>
-        /// Sets the resolved <see cref="ClientRegistration"/>. Called by the dispatcher
+        /// Sets the resolved <see cref="ClientRecord"/>. Called by the dispatcher
         /// after resolving the registration by tenant identifier.
         /// </summary>
         /// <param name="registration">The resolved client registration.</param>
-        public void SetRegistration(ClientRegistration registration)
+        public void SetRegistration(ClientRecord registration)
         {
             ArgumentNullException.ThrowIfNull(registration);
             context[AuthorizationServerHandlers.RegistrationKey] = registration;

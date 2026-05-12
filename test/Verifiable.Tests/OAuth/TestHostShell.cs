@@ -64,7 +64,7 @@ namespace Verifiable.Tests.OAuth;
 [DebuggerDisplay("TestHostShell Clients={Registrations.Count} Flows={FlowStates.Count}")]
 internal sealed class TestHostShell: IDisposable
 {
-    private ConcurrentDictionary<string, ClientRegistration> Registrations { get; } = new();
+    private ConcurrentDictionary<string, ClientRecord> Registrations { get; } = new();
     private ConcurrentDictionary<string, (OAuthFlowState State, int StepCount)> FlowStates { get; } = new();
     private ConcurrentDictionary<string, string> RequestUriTokenIndex { get; } = new();
     private ConcurrentDictionary<string, string> CodeIndex { get; } = new();
@@ -78,7 +78,7 @@ internal sealed class TestHostShell: IDisposable
     public AuthorizationServer Server { get; }
 
     /// <summary>The current registration routing table.</summary>
-    public IReadOnlyDictionary<string, ClientRegistration> RegistrationStore => Registrations;
+    public IReadOnlyDictionary<string, ClientRecord> RegistrationStore => Registrations;
 
     /// <summary>The server-side flow state store.</summary>
     public IReadOnlyDictionary<string, (OAuthFlowState State, int StepCount)> FlowStore => FlowStates;
@@ -153,7 +153,7 @@ internal sealed class TestHostShell: IDisposable
 
             LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
                 ValueTask.FromResult(
-                    Registrations.TryGetValue(tenantId, out ClientRegistration? reg)
+                    Registrations.TryGetValue(tenantId, out ClientRecord? reg)
                         ? reg : null),
 
             SaveFlowStateAsync = (tenantId, flowId, state, stepCount, ctx, ct) =>
@@ -318,8 +318,8 @@ internal sealed class TestHostShell: IDisposable
                     ct),
 
             //Per-request policy resolution. The default dispatches on
-            //ClientRegistration.Profile across the three shipped profiles;
-            //an unset Profile falls back to PolicyProfile.Strict
+            //ClientRecord.Profile across the three shipped profiles;
+            //an unset Profile falls back to PolicyProfile.Fapi20
             //(FAPI 2.0 / HAIP-aligned).
             ResolvePolicyAsync = PolicyProfiles.DefaultResolvePolicyAsync
         };
@@ -500,7 +500,7 @@ internal sealed class TestHostShell: IDisposable
         Uri responseUri = new(baseUri, ServerEndpointPaths.DirectPost
             .Replace("{segment}", segment, StringComparison.Ordinal));
 
-        ClientRegistration registration = new()
+        ClientRecord registration = new()
         {
             ClientId = clientId,
             TenantId = segment,
@@ -550,7 +550,7 @@ internal sealed class TestHostShell: IDisposable
     /// <param name="capabilities">
     /// The capabilities this client is allowed to use.
     /// </param>
-    /// <returns>The registered <see cref="ClientRegistration"/>.</returns>
+    /// <returns>The registered <see cref="ClientRecord"/>.</returns>
     /// <summary>
     /// Registers a client with the supplied signing key in the
     /// <see cref="KeyUsageContext.JarSigning"/> slot, so JAR-bearing AuthCode
@@ -582,7 +582,7 @@ internal sealed class TestHostShell: IDisposable
         DecryptionKeys[encryptionKeyId] = exchangeKeyPair.PrivateKey;
         exchangeKeyPair.PublicKey.Dispose();
 
-        ClientRegistration registration = new()
+        ClientRecord registration = new()
         {
             ClientId = clientId,
             TenantId = segment,
@@ -613,7 +613,7 @@ internal sealed class TestHostShell: IDisposable
     }
 
 
-    public ClientRegistration RegisterSigningClient(
+    public ClientRecord RegisterSigningClient(
         string clientId,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeyPair,
         ImmutableHashSet<ServerCapabilityName> capabilities)
@@ -628,7 +628,7 @@ internal sealed class TestHostShell: IDisposable
         SigningKeys[signingKeyId] = signingKeyPair.PrivateKey;
         VerificationKeys[signingKeyId] = signingKeyPair.PublicKey;
 
-        ClientRegistration registration = new()
+        ClientRecord registration = new()
         {
             ClientId = clientId,
             TenantId = segment,
@@ -660,7 +660,7 @@ internal sealed class TestHostShell: IDisposable
     /// <param name="redirectUri">The client's redirect URI.</param>
     /// <param name="issuerUri">The expected issuer URI for callback validation.</param>
     public OAuthClient CreateOAuthClient(
-        ClientRegistration registration,
+        ClientRecord registration,
         string redirectUri,
         string issuerUri)
     {
@@ -749,7 +749,7 @@ internal sealed class TestHostShell: IDisposable
     /// in flight) construct a fresh empty <see cref="RequestContext"/> at
     /// the call site.
     /// </summary>
-    public EndpointChain GetEndpoints(ClientRegistration registration, RequestContext context)
+    public EndpointChain GetEndpoints(ClientRecord registration, RequestContext context)
         => Server.GetEndpoints(registration, context);
 
 
@@ -994,7 +994,7 @@ internal sealed class TestHostShell: IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(segment);
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
 
-        if(!Registrations.TryGetValue(segment, out ClientRegistration? registration))
+        if(!Registrations.TryGetValue(segment, out ClientRecord? registration))
         {
             return;
         }
@@ -1015,7 +1015,7 @@ internal sealed class TestHostShell: IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(segment);
 
-        if(!Registrations.TryGetValue(segment, out ClientRegistration? previous))
+        if(!Registrations.TryGetValue(segment, out ClientRecord? previous))
         {
             throw new InvalidOperationException(
                 $"No registration found for segment '{segment}'.");
@@ -1053,7 +1053,7 @@ internal sealed class TestHostShell: IDisposable
         signingKeysBuilder[KeyUsageContext.JarSigning] =
             new SigningKeySet { Current = [newSigningKeyId] };
 
-        ClientRegistration updated = previous with
+        ClientRecord updated = previous with
         {
             SigningKeys = signingKeysBuilder.ToImmutable(),
             ClientMetadata = newMetadata
@@ -1100,7 +1100,7 @@ internal sealed class TestHostShell: IDisposable
 
 
     /// <summary>
-    /// Replaces the <see cref="ClientRegistration.SigningKeys"/> map for the given
+    /// Replaces the <see cref="ClientRecord.SigningKeys"/> map for the given
     /// segment, then re-publishes the updated registration through the server's
     /// <see cref="AuthorizationServer.UpdateClient"/> so a <c>ClientUpdated</c>
     /// event is emitted. Used by rotation tests to inject Incoming, Retiring,
@@ -1116,13 +1116,13 @@ internal sealed class TestHostShell: IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(segment);
         ArgumentNullException.ThrowIfNull(signingKeys);
 
-        if(!Registrations.TryGetValue(segment, out ClientRegistration? previous))
+        if(!Registrations.TryGetValue(segment, out ClientRecord? previous))
         {
             throw new InvalidOperationException(
                 $"No registration found for segment '{segment}'.");
         }
 
-        ClientRegistration updated = previous with
+        ClientRecord updated = previous with
         {
             SigningKeys = signingKeys.ToImmutableDictionary()
         };
@@ -1214,7 +1214,7 @@ internal sealed class TestHostShell: IDisposable
     [DebuggerDisplay("InProcessTransport Segment={segment}")]
     private sealed class InProcessTransport(
         AuthorizationServer server,
-        ClientRegistration registration,
+        ClientRecord registration,
         string segment,
         string issuerUri)
     {
@@ -1266,7 +1266,7 @@ internal sealed class TestHostShell: IDisposable
     /// Observer that populates the registration routing table from events.
     /// </summary>
     private sealed class RegistrationObserver(
-        ConcurrentDictionary<string, ClientRegistration> store)
+        ConcurrentDictionary<string, ClientRecord> store)
         : IObserver<ClientRegistrationEvent>
     {
         public void OnNext(ClientRegistrationEvent value)

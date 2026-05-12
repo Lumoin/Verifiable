@@ -231,7 +231,7 @@ public static class HaipOid4VpVerifierExecutor
                 ?? throw new InvalidOperationException(
                     "Tenant identifier not found in context.");
 
-            ClientRegistration? registration = await server.Integration.LoadClientRegistrationAsync!(
+            ClientRecord? registration = await server.Integration.LoadClientRegistrationAsync!(
                 tenantId, context, ct).ConfigureAwait(false);
 
             if(registration is null)
@@ -243,13 +243,13 @@ public static class HaipOid4VpVerifierExecutor
             if(registration.ResponseUri is null)
             {
                 throw new InvalidOperationException(
-                    $"ClientRegistration for tenant '{tenantId.Value}' has no ResponseUri.");
+                    $"ClientRecord for tenant '{tenantId.Value}' has no ResponseUri.");
             }
 
             if(registration.ClientMetadata is null)
             {
                 throw new InvalidOperationException(
-                    $"ClientRegistration for tenant '{tenantId.Value}' has no ClientMetadata.");
+                    $"ClientRecord for tenant '{tenantId.Value}' has no ClientMetadata.");
             }
 
             //Stamp JAR timing claims using the dispatcher's per-request VerifiedAt
@@ -391,7 +391,7 @@ public static class HaipOid4VpVerifierExecutor
                 resolveIssuerKey, computeDigest, decoder, encoder, pool, ct)
                 .ConfigureAwait(false);
 
-            ClientRegistration registration = context.Registration
+            ClientRecord registration = context.Registration
                 ?? throw new InvalidOperationException(
                     "Client registration not found in context.");
 

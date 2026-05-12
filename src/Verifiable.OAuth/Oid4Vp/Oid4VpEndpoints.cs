@@ -154,7 +154,7 @@ public static class Oid4VpEndpoints
                 if(context.PreparedQuery is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(context.DecryptionKeyId is null) { return ValueTask.FromResult<MatchPayload?>(null); }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.VerifiablePresentation))
                 {
@@ -166,7 +166,7 @@ public static class Oid4VpEndpoints
 
             BuildInputAsync = async (fields, context, currentState, server, ct) =>
             {
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null)
                 {
                     return (null,
@@ -327,7 +327,7 @@ public static class Oid4VpEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.VerifiablePresentation))
                 {
@@ -416,7 +416,7 @@ public static class Oid4VpEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.VerifiablePresentation))
                 {

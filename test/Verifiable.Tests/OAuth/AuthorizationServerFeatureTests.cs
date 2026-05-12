@@ -124,14 +124,14 @@ internal sealed class AuthorizationServerFeatureTests
     {
         //Round 4.8 — built-in values are equal to themselves, distinct from
         //each other; the dynamic-enum pattern's contract.
-        Assert.AreEqual(PolicyProfile.Strict, PolicyProfile.Strict,
+        Assert.AreEqual(PolicyProfile.Fapi20, PolicyProfile.Fapi20,
             "Strict equals Strict.");
-        Assert.AreNotEqual(PolicyProfile.Strict, PolicyProfile.Haip,
+        Assert.AreNotEqual(PolicyProfile.Fapi20, PolicyProfile.Haip10,
             "Strict and Haip have different codes; they must not be equal.");
-        Assert.AreNotEqual(PolicyProfile.Haip, PolicyProfile.Rfc6749,
+        Assert.AreNotEqual(PolicyProfile.Haip10, PolicyProfile.Rfc6749WithPkce,
             "Haip and Rfc6749 have different codes; they must not be equal.");
-        Assert.AreEqual(PolicyProfile.Strict.GetHashCode(),
-            PolicyProfile.Strict.Code,
+        Assert.AreEqual(PolicyProfile.Fapi20.GetHashCode(),
+            PolicyProfile.Fapi20.Code,
             "GetHashCode returns Code per the dynamic-enum pattern.");
     }
 
@@ -148,12 +148,12 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public void PolicyProfileNamesReturnsExpectedNames()
     {
-        Assert.AreEqual(nameof(PolicyProfile.Strict),
-            PolicyProfileNames.GetName(PolicyProfile.Strict));
-        Assert.AreEqual(nameof(PolicyProfile.Haip),
-            PolicyProfileNames.GetName(PolicyProfile.Haip));
-        Assert.AreEqual(nameof(PolicyProfile.Rfc6749),
-            PolicyProfileNames.GetName(PolicyProfile.Rfc6749));
+        Assert.AreEqual(nameof(PolicyProfile.Fapi20),
+            PolicyProfileNames.GetName(PolicyProfile.Fapi20));
+        Assert.AreEqual(nameof(PolicyProfile.Haip10),
+            PolicyProfileNames.GetName(PolicyProfile.Haip10));
+        Assert.AreEqual(nameof(PolicyProfile.Rfc6749WithPkce),
+            PolicyProfileNames.GetName(PolicyProfile.Rfc6749WithPkce));
 
         //Application-defined codes return a generic Custom (code) form. Use
         //a code in the application-reserved range so the test does not
@@ -168,9 +168,9 @@ internal sealed class AuthorizationServerFeatureTests
         //Three registrations, one per built-in profile, produce the expected
         //policy values. Round 4.8 — confirms the dispatch via PolicyProfile
         //code equality replaces the earlier string-equality approach.
-        ClientRegistration strict = MakeMinimalRegistration(PolicyProfile.Strict);
-        ClientRegistration haip = MakeMinimalRegistration(PolicyProfile.Haip);
-        ClientRegistration rfc = MakeMinimalRegistration(PolicyProfile.Rfc6749);
+        ClientRecord strict = MakeMinimalRegistration(PolicyProfile.Fapi20);
+        ClientRecord haip = MakeMinimalRegistration(PolicyProfile.Haip10);
+        ClientRecord rfc = MakeMinimalRegistration(PolicyProfile.Rfc6749WithPkce);
 
         RequestContext strictContext = new();
         RequestContext haipContext = new();
@@ -205,7 +205,7 @@ internal sealed class AuthorizationServerFeatureTests
         //a high code so the test does not collide with built-ins or other
         //test-side registrations.
         PolicyProfile custom = PolicyProfile.Create(9001);
-        ClientRegistration registration = MakeMinimalRegistration(custom);
+        ClientRecord registration = MakeMinimalRegistration(custom);
         RequestContext context = new();
 
         await PolicyProfiles.DefaultResolvePolicyAsync(
@@ -261,7 +261,7 @@ internal sealed class AuthorizationServerFeatureTests
             ExtractTenantIdAsync = (ctx, ct) =>
                 ValueTask.FromResult<TenantId?>(null),
             LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
-                ValueTask.FromResult<ClientRegistration?>(null),
+                ValueTask.FromResult<ClientRecord?>(null),
             SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
                 ValueTask.CompletedTask,
             LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
@@ -374,7 +374,7 @@ internal sealed class AuthorizationServerFeatureTests
         Assert.AreEqual(segment, evt.TenantId.Value,
             "ClientRegistered must carry the endpoint segment.");
         Assert.AreSame(keys.Registration, evt.Registration,
-            "ClientRegistered must carry the exact ClientRegistration instance.");
+            "ClientRegistered must carry the exact ClientRecord instance.");
     }
 
 
@@ -393,7 +393,7 @@ internal sealed class AuthorizationServerFeatureTests
             app.RegistrationStore.ContainsKey(keys.Registration.TenantId),
             "Registration store must contain the segment immediately after RegisterClient.");
 
-        ClientRegistration stored = app.RegistrationStore[keys.Registration.TenantId];
+        ClientRecord stored = app.RegistrationStore[keys.Registration.TenantId];
         Assert.AreEqual(VerifierClientId, stored.ClientId,
             "Stored registration must carry the correct client identifier.");
     }
@@ -502,7 +502,7 @@ internal sealed class AuthorizationServerFeatureTests
             "ClientUpdated.Current must carry the new signing key identifier.");
 
         //Routing table must immediately reflect the new registration.
-        ClientRegistration current = app.RegistrationStore[segment];
+        ClientRecord current = app.RegistrationStore[segment];
         Assert.AreEqual(rotatedKeys.SigningKeyId, current.GetDefaultSigningKeyId(KeyUsageContext.JarSigning),
             "Routing table must carry the new signing key identifier after rotation.");
 
@@ -1132,7 +1132,7 @@ internal sealed class AuthorizationServerFeatureTests
         string expectedAlg = expectedJwk.Alg!;
         string? expectedCrv = expectedJwk.Crv;
 
-        ClientRegistration registration = app.RegisterSigningClient(
+        ClientRecord registration = app.RegisterSigningClient(
             $"client-{displayName}", keyPair, JwksCapabilities);
 
         ServerHttpResponse response = await FetchJwksAsync(
@@ -1190,9 +1190,9 @@ internal sealed class AuthorizationServerFeatureTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> pqKeys =
             TestKeyMaterialProvider.CreateMlDsa65KeyMaterial();
 
-        ClientRegistration ecClient = app.RegisterSigningClient(
+        ClientRecord ecClient = app.RegisterSigningClient(
             "ec-client", ecKeys, JwksCapabilities);
-        ClientRegistration pqClient = app.RegisterSigningClient(
+        ClientRecord pqClient = app.RegisterSigningClient(
             "pq-client", pqKeys, JwksCapabilities);
 
         ServerHttpResponse ecResponse = await FetchJwksAsync(
@@ -1277,7 +1277,7 @@ internal sealed class AuthorizationServerFeatureTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(keys.SigningKeyId, capturedSigningKeyId,
-            "BuildJwksDocumentAsync must receive the ClientRegistration with its SigningKeyId.");
+            "BuildJwksDocumentAsync must receive the ClientRecord with its SigningKeyId.");
         Assert.AreEqual(tenantId, capturedTenantId,
             "BuildJwksDocumentAsync must receive the tenant identifier from the context bag.");
         Assert.AreEqual(callerTier, capturedCallerTier,
@@ -2186,7 +2186,7 @@ internal sealed class AuthorizationServerFeatureTests
 
     private static async ValueTask<ServerHttpResponse> FetchJwksAsync(
         TestHostShell app,
-        ClientRegistration registration,
+        ClientRecord registration,
         CancellationToken cancellationToken)
     {
         RequestContext context = new();
@@ -2278,7 +2278,7 @@ internal sealed class AuthorizationServerFeatureTests
     {
         //Body D — closes audit Finding 2. Registration with no ScopeToAudience
         //map produces null audience from the default resolver.
-        ClientRegistration registration = MakeRegistrationForAud(scopeToAudience: null);
+        ClientRecord registration = MakeRegistrationForAud(scopeToAudience: null);
         IssuanceContext context = MakeIssuanceContext(registration, "openid profile");
 
         IReadOnlyList<string>? audiences = await Rfc9068AccessTokenProducer
@@ -2299,7 +2299,7 @@ internal sealed class AuthorizationServerFeatureTests
         {
             ["read"] = new[] { "https://api.example.com/orders" }
         };
-        ClientRegistration registration = MakeRegistrationForAud(scopeToAudience: map);
+        ClientRecord registration = MakeRegistrationForAud(scopeToAudience: map);
         IssuanceContext context = MakeIssuanceContext(registration, "read");
 
         IReadOnlyList<string>? audiences = await Rfc9068AccessTokenProducer
@@ -2323,7 +2323,7 @@ internal sealed class AuthorizationServerFeatureTests
             ["read"] = new[] { "https://api.example.com/orders", "https://api.example.com/billing" },
             ["write"] = new[] { "https://api.example.com/orders" }
         };
-        ClientRegistration registration = MakeRegistrationForAud(scopeToAudience: map);
+        ClientRecord registration = MakeRegistrationForAud(scopeToAudience: map);
         IssuanceContext context = MakeIssuanceContext(registration, "read write");
 
         IReadOnlyList<string>? audiences = await Rfc9068AccessTokenProducer
@@ -2390,7 +2390,7 @@ internal sealed class AuthorizationServerFeatureTests
         {
             ["read"] = new[] { "https://api" }
         };
-        ClientRegistration registration = MakeRegistrationForAud(scopeToAudience: map);
+        ClientRecord registration = MakeRegistrationForAud(scopeToAudience: map);
         IssuanceContext context = MakeIssuanceContext(registration, "read");
 
         using CancellationTokenSource cts = new();
@@ -2417,9 +2417,9 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //Constructs the minimum-fields ClientRegistration the policy resolver
+    //Constructs the minimum-fields ClientRecord the policy resolver
     //needs. Tests in this class consume only the Profile axis.
-    private static ClientRegistration MakeMinimalRegistration(PolicyProfile profile) =>
+    private static ClientRecord MakeMinimalRegistration(PolicyProfile profile) =>
         new()
         {
             ClientId = "policy-test-client",
@@ -2436,7 +2436,7 @@ internal sealed class AuthorizationServerFeatureTests
     //Constructs the registration shape the Body D audience-resolver tests need:
     //the ScopeToAudience field is the only axis under test; everything else is
     //placeholder.
-    private static ClientRegistration MakeRegistrationForAud(
+    private static ClientRecord MakeRegistrationForAud(
         IReadOnlyDictionary<string, IReadOnlyList<string>>? scopeToAudience) =>
         new()
         {
@@ -2454,7 +2454,7 @@ internal sealed class AuthorizationServerFeatureTests
     //Builds the IssuanceContext the resolver consumes. Subject and ClientId are
     //placeholder; only Scope is varied per test.
     private static IssuanceContext MakeIssuanceContext(
-        ClientRegistration registration, string scope) =>
+        ClientRecord registration, string scope) =>
         new()
         {
             Registration = registration,

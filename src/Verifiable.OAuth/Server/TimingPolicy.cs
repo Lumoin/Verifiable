@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// <para>
 /// Per-registration overrides remain available where applicable. Token
-/// producers consult <see cref="ClientRegistration"/> first via
+/// producers consult <see cref="ClientRecord"/> first via
 /// <c>GetTokenLifetime</c> and fall back to the corresponding entry on this
 /// policy when no override is set. This keeps the deployment-wide default in
 /// one place while letting individual clients tighten or loosen lifetimes.
@@ -95,14 +95,14 @@ public sealed record TimingPolicy
     /// <summary>
     /// The default lifetime of an RFC 9068 access token when the client
     /// registration does not specify a per-registration override via
-    /// <see cref="ClientRegistration.GetTokenLifetime"/>. Default 1 hour.
+    /// <see cref="ClientRecord.GetTokenLifetime"/>. Default 1 hour.
     /// </summary>
     public TimeSpan AccessTokenLifetime { get; init; } = TimeSpan.FromHours(1);
 
     /// <summary>
     /// The default lifetime of an OIDC 1.0 ID token when the client registration
     /// does not specify a per-registration override via
-    /// <see cref="ClientRegistration.GetTokenLifetime"/>. Default 1 hour.
+    /// <see cref="ClientRecord.GetTokenLifetime"/>. Default 1 hour.
     /// </summary>
     public TimeSpan IdTokenLifetime { get; init; } = TimeSpan.FromHours(1);
 

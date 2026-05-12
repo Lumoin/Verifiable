@@ -17,7 +17,7 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// <para>
 /// <see cref="EndpointChain"/> is the runtime form of an
 /// <see cref="EndpointBuilderSet"/> applied to a specific
-/// <see cref="ClientRegistration"/> in the context of an inbound request:
+/// <see cref="ClientRecord"/> in the context of an inbound request:
 /// the set's builder modules each contribute the endpoints their flow
 /// supports for that registration and request, and the contributed
 /// endpoints are concatenated in the order their producing builders
@@ -129,7 +129,7 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// <param name="context">
     /// The per-request context, carrying the typed
     /// <see cref="IncomingRequest"/> envelope, resolved
-    /// <see cref="ClientRegistration"/>, and any application-supplied
+    /// <see cref="ClientRecord"/>, and any application-supplied
     /// request-scoped state.
     /// </param>
     /// <param name="server">
@@ -145,7 +145,7 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// Thrown when any argument is <see langword="null"/>.
     /// </exception>
     public static EndpointChain BuildForRequest(
-        ClientRegistration registration,
+        ClientRecord registration,
         RequestContext context,
         AuthorizationServer server)
     {

@@ -39,7 +39,7 @@ public sealed class AuthorizationServerCryptography
     /// <summary>
     /// Selects which <see cref="KeyId"/> to sign with at a given library call site.
     /// Optional. When <see langword="null"/>, the library calls
-    /// <see cref="ClientRegistration.GetDefaultSigningKeyId"/> which returns the
+    /// <see cref="ClientRecord.GetDefaultSigningKeyId"/> which returns the
     /// first entry in the registration's <c>SigningKeys[usage].Current</c> list.
     /// </summary>
     /// <remarks>
@@ -57,7 +57,7 @@ public sealed class AuthorizationServerCryptography
     /// for any registration, otherwise optional.
     /// </summary>
     /// <remarks>
-    /// The implementation receives the resolved <see cref="ClientRegistration"/>
+    /// The implementation receives the resolved <see cref="ClientRecord"/>
     /// and the per-request context bag, and decides which keys to include —
     /// typically all active signing keys for the registration, including keys
     /// in a rotation grace period. The library never prescribes which keys to

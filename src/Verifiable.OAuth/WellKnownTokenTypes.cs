@@ -2,7 +2,7 @@ namespace Verifiable.OAuth;
 
 /// <summary>
 /// Well-known token type names used as response field keys in token endpoint
-/// responses and as keys in <see cref="ClientRegistration.TokenLifetimes"/>.
+/// responses and as keys in <see cref="ClientRecord.TokenLifetimes"/>.
 /// </summary>
 /// <remarks>
 /// <para>

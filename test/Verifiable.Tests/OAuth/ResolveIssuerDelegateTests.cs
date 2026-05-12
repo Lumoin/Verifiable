@@ -41,7 +41,7 @@ internal sealed class ResolveIssuerDelegateTests
         Uri registrationUri = new("https://tenant-a.issuer.example");
         Uri contextUri = new("https://fallback.example");
 
-        ClientRegistration registration = BuildRegistration(issuerUri: registrationUri);
+        ClientRecord registration = BuildRegistration(issuerUri: registrationUri);
         RequestContext context = new();
         context.SetIssuer(contextUri);
 
@@ -59,7 +59,7 @@ internal sealed class ResolveIssuerDelegateTests
     {
         Uri contextUri = new("https://derived.example");
 
-        ClientRegistration registration = BuildRegistration(issuerUri: null);
+        ClientRecord registration = BuildRegistration(issuerUri: null);
         RequestContext context = new();
         context.SetIssuer(contextUri);
 
@@ -75,7 +75,7 @@ internal sealed class ResolveIssuerDelegateTests
     [TestMethod]
     public async Task DefaultIssuerResolverThrowsWhenBothAreUnset()
     {
-        ClientRegistration registration = BuildRegistration(issuerUri: null);
+        ClientRecord registration = BuildRegistration(issuerUri: null);
         RequestContext context = new();
 
         InvalidOperationException thrown = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
@@ -83,7 +83,7 @@ internal sealed class ResolveIssuerDelegateTests
                 registration, context, TestContext.CancellationToken).ConfigureAwait(false))
             .ConfigureAwait(false);
 
-        Assert.Contains(nameof(ClientRegistration.IssuerUri), thrown.Message,
+        Assert.Contains(nameof(ClientRecord.IssuerUri), thrown.Message,
             "Exception message must identify IssuerUri as the missing declaration site.");
     }
 
@@ -94,7 +94,7 @@ internal sealed class ResolveIssuerDelegateTests
         Uri registrationUri = new("https://declared.example");
         Uri overrideUri = new("https://policy-chosen.example");
 
-        ClientRegistration registration = BuildRegistration(issuerUri: registrationUri);
+        ClientRecord registration = BuildRegistration(issuerUri: registrationUri);
         RequestContext context = new();
 
         ResolveIssuerDelegate customResolver = (_, _, _) =>
@@ -290,7 +290,7 @@ internal sealed class ResolveIssuerDelegateTests
     }
 
 
-    private static ClientRegistration BuildRegistration(Uri? issuerUri) =>
+    private static ClientRecord BuildRegistration(Uri? issuerUri) =>
         new()
         {
             ClientId = "test-client",

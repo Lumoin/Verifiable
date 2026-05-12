@@ -6,7 +6,7 @@ namespace Verifiable.OAuth;
 
 /// <summary>
 /// A rotation-aware collection of key identifiers for a single protocol usage
-/// context. One of these is attached to a <see cref="ClientRegistration"/> per
+/// context. One of these is attached to a <see cref="ClientRecord"/> per
 /// active <see cref="Verifiable.Cryptography.Context.KeyUsageContext"/>.
 /// </summary>
 /// <remarks>

@@ -14,7 +14,7 @@ namespace Verifiable.OAuth.Server;
 /// The producer applies only when <c>openid</c> is in the granted scope. Signs
 /// with <see cref="KeyUsageContext.IdTokenIssuance"/>, allowing deployments to
 /// use different key material for ID Tokens than for access tokens via the
-/// per-usage <see cref="ClientRegistration.SigningKeys"/> map.
+/// per-usage <see cref="ClientRecord.SigningKeys"/> map.
 /// </para>
 /// <para>
 /// Consumed indirectly via <see cref="TokenProducer.Oidc10IdToken"/>.

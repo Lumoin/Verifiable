@@ -2,20 +2,19 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Verifiable.OAuth.Server;
+namespace Verifiable.OAuth;
 
 /// <summary>
 /// Identifies a named policy profile a client registration runs under. Profiles
-/// bundle the per-request policy axes
-/// (<see cref="PolicyContextKeys"/>) into a coherent set
-/// (<see cref="PolicyProfile.Strict"/>, <see cref="PolicyProfile.Haip"/>,
-/// <see cref="PolicyProfile.Rfc6749"/>) and dispatch via
-/// <see cref="PolicyProfiles.DefaultResolvePolicyAsync"/>.
+/// bundle the per-request policy axes into a coherent set
+/// (<see cref="PolicyProfile.Fapi20"/>, <see cref="PolicyProfile.Haip10"/>,
+/// <see cref="PolicyProfile.Rfc6749WithPkce"/>) shared across server-side
+/// enforcement and client-side validation.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Follows the dynamic-enum pattern shared with
-/// <see cref="ServerCapabilityName"/> and
+/// <see cref="Verifiable.OAuth.Server.ServerCapabilityName"/> and
 /// <see cref="Verifiable.Cryptography.Context.EntropySource"/>: a readonly
 /// struct whose canonical values are static readonly properties, with equality
 /// determined by <see cref="Code"/>. Names are looked up via the companion
@@ -23,23 +22,28 @@ namespace Verifiable.OAuth.Server;
 /// keeping the value type minimal.
 /// </para>
 /// <para>
+/// The profile choice is a single fact about a registration with two-sided
+/// meaning. Server-side dispatchers in
+/// <see cref="Verifiable.OAuth.Server.PolicyProfiles"/> apply the per-request
+/// enforcement axes (PKCE method set, JAR lifetime ceiling, JTI replay
+/// policy, and so on) to the <see cref="Verifiable.OAuth.Server.RequestContext"/>.
+/// Client-side dispatchers in
+/// <see cref="Verifiable.OAuth.Client.ClientPolicyProfiles"/> resolve the
+/// callback validator, PKCE method selection, JAR composition rules, and the
+/// expected callback parameter set. Both sides read the same identifier from
+/// the registration record their side owns.
+/// </para>
+/// <para>
 /// <strong>Adding a built-in profile.</strong> Library-defined profiles are
 /// added by introducing a new static readonly property here (with a fresh
-/// code below 1000), wiring its apply function in
-/// <see cref="PolicyProfiles"/>, and adding its dispatch arm in
-/// <see cref="PolicyProfiles.DefaultResolvePolicyAsync"/>.
+/// code below 1000), wiring its apply functions on each side that needs them,
+/// and adding the dispatch arm in the relevant <c>DefaultResolve</c> method.
 /// </para>
 /// <para>
 /// <strong>Adding an application-defined profile.</strong> Tenants with
 /// bespoke policy needs use <see cref="Create"/> to register a custom profile
 /// (codes 1000 and above to avoid collision with future library additions)
-/// and supply their own
-/// <see cref="ResolvePolicyDelegate"/> via
-/// <see cref="AuthorizationServerIntegration.ResolvePolicyAsync"/>. The
-/// custom delegate handles the application's codes; for codes it does not
-/// recognise it can fall through to
-/// <see cref="PolicyProfiles.DefaultResolvePolicyAsync"/>, which applies
-/// <see cref="Strict"/> as a fail-safe default.
+/// and supply their own resolver delegates on either side.
 /// </para>
 /// <para>
 /// <strong>Persistence.</strong> The type is an identifier, not a
@@ -66,29 +70,36 @@ public readonly struct PolicyProfile: IEquatable<PolicyProfile>
 
 
     /// <summary>
-    /// FAPI 2.0-aligned strict reading. The library default when no
-    /// <see cref="ClientRegistration.Profile"/> is set on a registration.
-    /// See <see cref="PolicyProfiles.ApplyStrict"/> for the populated axes.
+    /// FAPI 2.0 Security Profile —
+    /// <see href="https://openid.net/specs/fapi-security-profile-2_0-final.html">FAPI 2.0</see>.
+    /// The library default when no <c>Profile</c> is set on a registration. See
+    /// <see cref="Verifiable.OAuth.Server.PolicyProfiles.ApplyFapi20"/> for the
+    /// server-side axes; see
+    /// <see cref="Verifiable.OAuth.Client.ClientPolicyProfiles"/> for the
+    /// client-side axes.
     /// </summary>
-    public static PolicyProfile Strict { get; } = new(0);
+    public static PolicyProfile Fapi20 { get; } = new(0);
 
     /// <summary>
     /// HAIP 1.0 profile —
     /// <see href="https://openid.net/specs/openid4vc-high-assurance-interoperability-profile-1_0.html">High
-    /// Assurance Interoperability Profile</see> — Strict with HAIP-specific
-    /// tightenings. See <see cref="PolicyProfiles.ApplyHaip"/>.
+    /// Assurance Interoperability Profile</see>. Layered on top of
+    /// <see cref="Fapi20"/> with HAIP-specific tightenings around verifier
+    /// metadata, response encryption, and lifetime ceilings.
     /// </summary>
-    public static PolicyProfile Haip { get; } = new(1);
+    public static PolicyProfile Haip10 { get; } = new(1);
 
     /// <summary>
-    /// Permissive RFC 6749 baseline — useful for pre-FAPI-2 OAuth
-    /// deployments interoperating with legacy clients. See
-    /// <see cref="PolicyProfiles.ApplyRfc6749Baseline"/>.
+    /// RFC 6749 with PKCE — the permissive baseline that supports PKCE per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636">RFC 7636</see> while
+    /// remaining tolerant of pre-FAPI-2 OAuth deployments. Useful for
+    /// interoperating with legacy clients that do not implement the
+    /// FAPI 2.0 tightenings.
     /// </summary>
-    public static PolicyProfile Rfc6749 { get; } = new(2);
+    public static PolicyProfile Rfc6749WithPkce { get; } = new(2);
 
 
-    private static readonly List<PolicyProfile> profiles = [Strict, Haip, Rfc6749];
+    private static readonly List<PolicyProfile> profiles = [Fapi20, Haip10, Rfc6749WithPkce];
 
     /// <summary>Gets all registered profile values including any custom ones.</summary>
     public static IReadOnlyList<PolicyProfile> Profiles => profiles.AsReadOnly();
@@ -105,49 +116,12 @@ public readonly struct PolicyProfile: IEquatable<PolicyProfile>
     /// <returns>The newly registered profile.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="code"/> is already registered.</exception>
     /// <remarks>
-    /// <para>
-    /// Registering a profile here makes the value usable on
-    /// <see cref="ClientRegistration.Profile"/>, but the library's
-    /// default resolver does not know how to apply application-defined
-    /// codes. Applications must supply their own
-    /// <see cref="ResolvePolicyDelegate"/> via
-    /// <see cref="AuthorizationServerIntegration.ResolvePolicyAsync"/> that
-    /// dispatches the custom code to its own apply logic. The custom
-    /// delegate is free to fall through to
-    /// <see cref="PolicyProfiles.DefaultResolvePolicyAsync"/> for codes it
-    /// does not recognise.
-    /// </para>
-    /// <para>
-    /// <strong>Worked example.</strong>
-    /// </para>
-    /// <code>
-    /// // Application startup — register the custom profile and apply function.
-    /// public static class FintechProfiles
-    /// {
-    ///     public static PolicyProfile FintechStrict { get; } = PolicyProfile.Create(1000);
-    ///
-    ///     public static void ApplyFintechStrict(RequestContext context)
-    ///     {
-    ///         PolicyProfiles.ApplyStrict(context);
-    ///         context.SetClockSkewTolerance(TimeSpan.FromSeconds(30));
-    ///         context.SetJarLifetimeCeiling(TimeSpan.FromSeconds(30));
-    ///     }
-    /// }
-    ///
-    /// // Custom resolver wired into AuthorizationServerIntegration.
-    /// integration.ResolvePolicyAsync = (registration, context, ct) =>
-    /// {
-    ///     PolicyProfile profile = registration.Profile ?? PolicyProfile.Strict;
-    ///     if(profile == FintechProfiles.FintechStrict)
-    ///     {
-    ///         FintechProfiles.ApplyFintechStrict(context);
-    ///         return ValueTask.CompletedTask;
-    ///     }
-    ///
-    ///     // Fall through to the library's default for codes we did not register.
-    ///     return PolicyProfiles.DefaultResolvePolicyAsync(registration, context, ct);
-    /// };
-    /// </code>
+    /// Registering a profile here makes the value usable on a registration's
+    /// <c>Profile</c> slot, but the library's default resolvers do not know how
+    /// to apply application-defined codes. Applications must supply their own
+    /// resolver delegates on whichever side handles the custom code, falling
+    /// through to the library's default resolver for codes the application
+    /// did not register.
     /// </remarks>
     public static PolicyProfile Create(int code)
     {

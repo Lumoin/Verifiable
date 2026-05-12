@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.Server;
 /// <summary>
 /// An immutable, ordered set of <see cref="EndpointBuilderDelegate"/> modules
 /// that contribute <see cref="ServerEndpoint"/> records when invoked against a
-/// <see cref="ClientRegistration"/>.
+/// <see cref="ClientRecord"/>.
 /// </summary>
 /// <remarks>
 /// <para>

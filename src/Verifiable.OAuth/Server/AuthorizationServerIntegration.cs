@@ -45,7 +45,7 @@ public sealed class AuthorizationServerIntegration
     public ExtractTenantIdDelegate? ExtractTenantIdAsync { get; set; }
 
     /// <summary>
-    /// Loads a <see cref="ClientRegistration"/> by tenant identifier. Required.
+    /// Loads a <see cref="ClientRecord"/> by tenant identifier. Required.
     /// </summary>
     public LoadClientRegistrationDelegate? LoadClientRegistrationAsync { get; set; }
 
@@ -105,7 +105,7 @@ public sealed class AuthorizationServerIntegration
     /// Resolves the authorization server's issuer URI (the <c>iss</c> claim and
     /// the base URL advertised in discovery). Optional. When
     /// <see langword="null"/>, the library uses <see cref="DefaultIssuerResolver"/>
-    /// which reads <see cref="ClientRegistration.IssuerUri"/> first and falls
+    /// which reads <see cref="ClientRecord.IssuerUri"/> first and falls
     /// back to <see cref="RequestContextExtensions.Issuer"/> on the request
     /// context.
     /// </summary>
@@ -113,7 +113,7 @@ public sealed class AuthorizationServerIntegration
 
     /// <summary>
     /// Context-sensitive capability check. When <see langword="null"/>, falls
-    /// back to <see cref="ClientRegistration.IsCapabilityAllowed"/>. Optional.
+    /// back to <see cref="ClientRecord.IsCapabilityAllowed"/>. Optional.
     /// </summary>
     public IsCapabilityAllowedDelegate? IsCapabilityAllowedAsync { get; set; }
 
@@ -184,7 +184,7 @@ public sealed class AuthorizationServerIntegration
     /// Resolves the <c>aud</c> claim audience(s) for an RFC 9068 access token
     /// at issuance time. Optional — when <see langword="null"/>, the library's
     /// default <see cref="Rfc9068AccessTokenProducer.DefaultResolveAccessTokenAudienceAsync"/>
-    /// runs (reads from <see cref="ClientRegistration.ScopeToAudience"/>).
+    /// runs (reads from <see cref="ClientRecord.ScopeToAudience"/>).
     /// </summary>
     /// <remarks>
     /// <para>

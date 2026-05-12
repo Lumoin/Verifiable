@@ -72,7 +72,7 @@ public sealed record TokenProducer
     /// <summary>
     /// The capability the registration must have for this producer to run. The
     /// endpoint handler skips producers whose <see cref="RequiredCapability"/> is
-    /// not allowed by the active <see cref="ClientRegistration"/>.
+    /// not allowed by the active <see cref="ClientRecord"/>.
     /// </summary>
     public required ServerCapabilityName RequiredCapability { get; init; }
 

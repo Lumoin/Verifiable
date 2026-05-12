@@ -180,7 +180,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.PushedAuthorization))
                 {
@@ -344,7 +344,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode))
                 {
@@ -442,7 +442,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.DirectAuthorization))
                 {
@@ -605,7 +605,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.PushedAuthorization))
                 {
@@ -719,7 +719,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.DirectAuthorization))
                 {
@@ -870,7 +870,7 @@ public static class AuthCodeEndpoints
                 "Missing outer client_id. The library requires an outer client_id alongside a JAR per RFC 9101 §5."));
         }
 
-        ClientRegistration? registration = context.Registration;
+        ClientRecord? registration = context.Registration;
         if(registration is null)
         {
             return (null, ServerHttpResponse.Unauthorized(
@@ -1037,7 +1037,7 @@ public static class AuthCodeEndpoints
     /// </summary>
     private static async ValueTask<ServerHttpResponse?> ValidateJarAudienceAsync(
         IReadOnlyDictionary<string, object> claims,
-        ClientRegistration registration,
+        ClientRecord registration,
         RequestContext context,
         AuthorizationServer server,
         CancellationToken cancellationToken)
@@ -1131,7 +1131,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode))
                 {
@@ -1200,7 +1200,7 @@ public static class AuthCodeEndpoints
                 //the context. Use that rather than re-loading by client_id; doing the
                 //lookup again under a different identifier would conflate clientId
                 //and tenantId, which the protocol layer keeps distinct.
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.Unauthorized(
@@ -1431,7 +1431,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.TokenRevocation))
                 {
@@ -1480,7 +1480,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.TokenIntrospection))
                 {
@@ -1517,7 +1517,7 @@ public static class AuthCodeEndpoints
     /// </summary>
     /// <remarks>
     /// The issuer URL source order mirrors <c>DefaultIssuerResolver</c>:
-    /// <see cref="ClientRegistration.IssuerUri"/> first, then the per-request
+    /// <see cref="ClientRecord.IssuerUri"/> first, then the per-request
     /// <see cref="RequestContextExtensions.Issuer"/>. When neither is
     /// populated the parameter is omitted rather than failing the redirect —
     /// the strict-default deployment populates one of the two and the

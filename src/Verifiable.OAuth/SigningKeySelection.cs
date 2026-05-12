@@ -16,7 +16,7 @@ namespace Verifiable.OAuth;
 /// <see cref="ResolveSigningKeyIdAsync"/>. Applications that wire
 /// <see cref="AuthorizationServerCryptography.SelectSigningKey"/> see their
 /// delegate invoked; applications that do not get the default behaviour from
-/// <see cref="ClientRegistration.GetDefaultSigningKeyId"/>.
+/// <see cref="ClientRecord.GetDefaultSigningKeyId"/>.
 /// </remarks>
 internal static class SigningKeySelection
 {
@@ -35,7 +35,7 @@ internal static class SigningKeySelection
     /// <returns>The <see cref="KeyId"/> to sign with.</returns>
     public static ValueTask<KeyId> ResolveSigningKeyIdAsync(
         AuthorizationServer server,
-        ClientRegistration registration,
+        ClientRecord registration,
         KeyUsageContext usage,
         IReadOnlyDictionary<string, object> context,
         CancellationToken cancellationToken)

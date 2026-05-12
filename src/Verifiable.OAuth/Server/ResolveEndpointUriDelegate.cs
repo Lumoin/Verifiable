@@ -2,7 +2,7 @@ namespace Verifiable.OAuth.Server;
 
 /// <summary>
 /// Resolves the absolute <see cref="Uri"/> at which a named endpoint is reachable
-/// for a given <see cref="ClientRegistration"/> in the current request.
+/// for a given <see cref="ClientRecord"/> in the current request.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -50,7 +50,7 @@ namespace Verifiable.OAuth.Server;
 /// for non-discovery endpoint URLs.
 /// </param>
 /// <param name="registration">
-/// The resolved <see cref="ClientRegistration"/> for the current request.
+/// The resolved <see cref="ClientRecord"/> for the current request.
 /// </param>
 /// <param name="context">
 /// The per-request context bag carrying whatever request data the application
@@ -64,6 +64,6 @@ namespace Verifiable.OAuth.Server;
 /// </returns>
 public delegate ValueTask<Uri?> ResolveEndpointUriDelegate(
     string endpointKey,
-    ClientRegistration registration,
+    ClientRecord registration,
     RequestContext context,
     CancellationToken cancellationToken);

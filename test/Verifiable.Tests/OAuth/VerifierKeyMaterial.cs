@@ -18,7 +18,7 @@ internal sealed class VerifierKeyMaterial: IDisposable
     private bool disposed;
 
     /// <summary>The client registration for this key material.</summary>
-    public ClientRegistration Registration { get; }
+    public ClientRecord Registration { get; }
 
     /// <summary>
     /// The Verifier's public signing key. The Wallet uses this to verify JAR signatures.
@@ -42,7 +42,7 @@ internal sealed class VerifierKeyMaterial: IDisposable
     /// Initializes a new <see cref="VerifierKeyMaterial"/>.
     /// </summary>
     public VerifierKeyMaterial(
-        ClientRegistration registration,
+        ClientRecord registration,
         PublicKeyMemory signingPublicKey,
         PrivateKeyMemory signingPrivateKey,
         PrivateKeyMemory decryptionPrivateKey,

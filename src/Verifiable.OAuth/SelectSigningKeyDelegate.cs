@@ -12,8 +12,8 @@ namespace Verifiable.OAuth;
 /// context bag.
 /// </summary>
 /// <param name="registration">
-/// The tenant's <see cref="ClientRegistration"/>, carrying the structured
-/// <see cref="ClientRegistration.SigningKeys"/> indexed by usage context.
+/// The tenant's <see cref="ClientRecord"/>, carrying the structured
+/// <see cref="ClientRecord.SigningKeys"/> indexed by usage context.
 /// </param>
 /// <param name="usage">
 /// The protocol role of the signing operation — token issuance, JAR signing,
@@ -66,7 +66,7 @@ namespace Verifiable.OAuth;
 /// </para>
 /// </remarks>
 public delegate ValueTask<KeyId> SelectSigningKeyDelegate(
-    ClientRegistration registration,
+    ClientRecord registration,
     KeyUsageContext usage,
     IReadOnlyDictionary<string, object> context,
     CancellationToken cancellationToken);

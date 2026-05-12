@@ -16,7 +16,7 @@ namespace Verifiable.OAuth.Server;
 /// The library ships
 /// <see cref="Rfc9068AccessTokenProducer.DefaultResolveAccessTokenAudienceAsync"/>
 /// as a default; that default reads from
-/// <see cref="ClientRegistration.ScopeToAudience"/>. Applications that need
+/// <see cref="ClientRecord.ScopeToAudience"/>. Applications that need
 /// dynamic, tenant-aware, or registration-store-derived audience resolution
 /// supply their own delegate via
 /// <see cref="AuthorizationServerIntegration.ResolveAccessTokenAudienceAsync"/>.
@@ -39,6 +39,6 @@ namespace Verifiable.OAuth.Server;
 /// a single audience is emitted as a JSON string.
 /// </returns>
 public delegate ValueTask<IReadOnlyList<string>?> ResolveAccessTokenAudienceDelegate(
-    ClientRegistration registration,
+    ClientRecord registration,
     IssuanceContext context,
     CancellationToken cancellationToken);

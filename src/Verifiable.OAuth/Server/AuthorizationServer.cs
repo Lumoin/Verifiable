@@ -273,7 +273,7 @@ public sealed class AuthorizationServer: IDisposable
     /// <param name="context">
     /// The per-request context threaded through to each builder.
     /// </param>
-    public EndpointChain GetEndpoints(ClientRegistration registration, RequestContext context)
+    public EndpointChain GetEndpoints(ClientRecord registration, RequestContext context)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
@@ -287,10 +287,10 @@ public sealed class AuthorizationServer: IDisposable
     /// capability. Uses
     /// <see cref="AuthorizationServerIntegration.IsCapabilityAllowedAsync"/>
     /// when set, otherwise falls back to
-    /// <see cref="ClientRegistration.IsCapabilityAllowed"/>.
+    /// <see cref="ClientRecord.IsCapabilityAllowed"/>.
     /// </summary>
     public ValueTask<bool> CheckCapabilityAsync(
-        ClientRegistration registration,
+        ClientRecord registration,
         ServerCapabilityName capability,
         RequestContext context,
         CancellationToken cancellationToken)
@@ -328,7 +328,7 @@ public sealed class AuthorizationServer: IDisposable
     ///   <see cref="AuthorizationServerIntegration.ExtractTenantIdAsync"/>
     ///   reads it from whichever signal in the request envelope identifies the
     ///   tenant in this deployment.</description></item>
-    ///   <item><description>Load the <see cref="ClientRegistration"/> via
+    ///   <item><description>Load the <see cref="ClientRecord"/> via
     ///   <see cref="AuthorizationServerIntegration.LoadClientRegistrationAsync"/>.</description></item>
     ///   <item><description>Build the registration's active
     ///   <see cref="EndpointChain"/> via <see cref="GetEndpoints"/> and walk it
@@ -402,7 +402,7 @@ public sealed class AuthorizationServer: IDisposable
         else
         {
             //2. Load the registration for this tenant.
-            ClientRegistration? registration = context.Registration
+            ClientRecord? registration = context.Registration
                 ?? await Integration.LoadClientRegistrationAsync!(
                     tenantId.Value, context, cancellationToken).ConfigureAwait(false);
 
@@ -493,7 +493,7 @@ public sealed class AuthorizationServer: IDisposable
         ServerEndpoint endpoint,
         RequestFields fields,
         RequestContext context,
-        ClientRegistration registration,
+        ClientRecord registration,
         Activity? activity,
         CancellationToken cancellationToken)
     {
@@ -683,7 +683,7 @@ public sealed class AuthorizationServer: IDisposable
     /// Emits a <see cref="ClientRegistered"/> event to this instance's
     /// <see cref="Events"/> stream.
     /// </summary>
-    public void RegisterClient(ClientRegistration registration, RequestContext context)
+    public void RegisterClient(ClientRecord registration, RequestContext context)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
@@ -704,8 +704,8 @@ public sealed class AuthorizationServer: IDisposable
     /// <see cref="Events"/> stream.
     /// </summary>
     public void UpdateClient(
-        ClientRegistration previous,
-        ClientRegistration current,
+        ClientRecord previous,
+        ClientRecord current,
         RequestContext context)
     {
         ArgumentNullException.ThrowIfNull(previous);
@@ -729,7 +729,7 @@ public sealed class AuthorizationServer: IDisposable
     /// <see cref="Events"/> stream.
     /// </summary>
     public void DeregisterClient(
-        ClientRegistration registration,
+        ClientRecord registration,
         string reason,
         RequestContext context)
     {
@@ -753,7 +753,7 @@ public sealed class AuthorizationServer: IDisposable
     /// <see cref="Events"/> stream.
     /// </summary>
     public void GrantCapability(
-        ClientRegistration registration,
+        ClientRecord registration,
         ServerCapabilityName capability,
         RequestContext context)
     {
@@ -776,7 +776,7 @@ public sealed class AuthorizationServer: IDisposable
     /// <see cref="Events"/> stream.
     /// </summary>
     public void RevokeCapability(
-        ClientRegistration registration,
+        ClientRecord registration,
         ServerCapabilityName capability,
         string reason,
         RequestContext context)

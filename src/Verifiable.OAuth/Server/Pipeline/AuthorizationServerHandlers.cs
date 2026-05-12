@@ -64,10 +64,10 @@ internal static class AuthorizationServerHandlers
     public const string AuthTimeKey = "server.authTime";
 
     /// <summary>
-    /// Context bag key for the <see cref="ClientRegistration"/> resolved at the start
+    /// Context bag key for the <see cref="ClientRecord"/> resolved at the start
     /// of each request. Set by the dispatcher so <c>BuildInputAsync</c> delegates can
     /// read per-registration values without capturing from outside static lambdas.
-    /// Value type: <see cref="ClientRegistration"/>.
+    /// Value type: <see cref="ClientRecord"/>.
     /// </summary>
     public const string RegistrationKey = "server.registration";
 

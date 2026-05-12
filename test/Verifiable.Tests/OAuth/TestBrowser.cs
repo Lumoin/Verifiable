@@ -49,7 +49,7 @@ internal static class TestBrowser
     /// </returns>
     public static async Task<(string Code, string State)> FollowAuthorizeRedirectAsync(
         AuthorizationServer server,
-        ClientRegistration registration,
+        ClientRecord registration,
         string? requestUri,
         string? codeChallenge,
         string subjectId,

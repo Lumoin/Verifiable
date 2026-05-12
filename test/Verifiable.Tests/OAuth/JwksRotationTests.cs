@@ -223,7 +223,7 @@ internal sealed class JwksRotationTests
     [TestMethod]
     public void GetDefaultSigningKeyIdThrowsWhenUsageContextHasNoEntry()
     {
-        ClientRegistration registration = BuildRegistrationWithAccessTokenIssuanceKey(
+        ClientRecord registration = BuildRegistrationWithAccessTokenIssuanceKey(
             new KeyId("urn:uuid:any"));
 
         KeyNotFoundException thrown = Assert.ThrowsExactly<KeyNotFoundException>(
@@ -237,7 +237,7 @@ internal sealed class JwksRotationTests
     [TestMethod]
     public void GetDefaultSigningKeyIdThrowsWhenCurrentIsEmpty()
     {
-        ClientRegistration registration = new()
+        ClientRecord registration = new()
         {
             ClientId = ClientId,
             TenantId = "test",
@@ -286,7 +286,7 @@ internal sealed class JwksRotationTests
     }
 
 
-    private static ClientRegistration BuildRegistrationWithAccessTokenIssuanceKey(KeyId keyId) =>
+    private static ClientRecord BuildRegistrationWithAccessTokenIssuanceKey(KeyId keyId) =>
         new()
         {
             ClientId = ClientId,

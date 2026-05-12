@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.Server;
 /// <see cref="AuthorizationServerIntegration.ResolveAccessTokenAudienceAsync"/>;
 /// when that slot is unwired the library's default
 /// <see cref="DefaultResolveAccessTokenAudienceAsync"/> reads from
-/// <see cref="ClientRegistration.ScopeToAudience"/>. The active
+/// <see cref="ClientRecord.ScopeToAudience"/>. The active
 /// <see cref="AccessTokenAudPolicy"/> from per-request policy decides what
 /// happens when no audience can be resolved:
 /// </para>
@@ -68,7 +68,7 @@ internal static class Rfc9068AccessTokenProducer
 
     /// <summary>
     /// Default audience resolver — reads the registration's
-    /// <see cref="ClientRegistration.ScopeToAudience"/> map and returns the
+    /// <see cref="ClientRecord.ScopeToAudience"/> map and returns the
     /// union (deduplicated, ordinal-equal) of audiences across the granted
     /// scopes.
     /// </summary>
@@ -88,7 +88,7 @@ internal static class Rfc9068AccessTokenProducer
     /// </para>
     /// </remarks>
     public static ValueTask<IReadOnlyList<string>?> DefaultResolveAccessTokenAudienceAsync(
-        ClientRegistration registration,
+        ClientRecord registration,
         IssuanceContext context,
         CancellationToken cancellationToken)
     {

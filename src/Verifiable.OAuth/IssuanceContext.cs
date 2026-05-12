@@ -44,7 +44,7 @@ namespace Verifiable.OAuth;
 /// </para>
 /// <para>
 /// Per-token expiry is derived inside each producer from
-/// <see cref="ClientRegistration.GetTokenLifetime"/> using the producer's own token
+/// <see cref="ClientRecord.GetTokenLifetime"/> using the producer's own token
 /// type constant — different token types have different lifetimes.
 /// </para>
 /// </remarks>
@@ -54,7 +54,7 @@ public sealed record IssuanceContext
     /// <summary>
     /// The client registration the request belongs to.
     /// </summary>
-    public required ClientRegistration Registration { get; init; }
+    public required ClientRecord Registration { get; init; }
 
     /// <summary>
     /// The per-request context bag. Producers and contributors may read it for

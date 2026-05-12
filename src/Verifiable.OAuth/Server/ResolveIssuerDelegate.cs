@@ -2,7 +2,7 @@ namespace Verifiable.OAuth.Server;
 
 /// <summary>
 /// Resolves the authorization server's issuer identifier for a given
-/// <see cref="ClientRegistration"/> and <see cref="RequestContext"/>.
+/// <see cref="ClientRecord"/> and <see cref="RequestContext"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -25,7 +25,7 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// <para>
 /// The library ships <see cref="DefaultIssuerResolver"/> as the default
-/// implementation. It reads <see cref="ClientRegistration.IssuerUri"/> first,
+/// implementation. It reads <see cref="ClientRecord.IssuerUri"/> first,
 /// then falls back to <see cref="RequestContextExtensions.Issuer"/> set by
 /// the ASP.NET skin, and throws when neither is available. Applications that
 /// need per-caller, per-region, or dynamically-resolved issuer URIs set this
@@ -39,6 +39,6 @@ namespace Verifiable.OAuth.Server;
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>The authoritative issuer URI for this request.</returns>
 public delegate ValueTask<Uri> ResolveIssuerDelegate(
-    ClientRegistration registration,
+    ClientRecord registration,
     RequestContext context,
     CancellationToken cancellationToken);

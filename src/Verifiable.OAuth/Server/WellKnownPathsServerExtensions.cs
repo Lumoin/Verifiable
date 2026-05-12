@@ -44,7 +44,7 @@ public static class WellKnownPathsServer
     /// The base URI of the authorization server, e.g. <c>https://verifable.app</c>.
     /// </param>
     /// <param name="endpointSegment">
-    /// The unguessable segment from <see cref="Verifiable.OAuth.Server.ClientRegistration.EndpointSegment"/>.
+    /// The unguessable segment from <see cref="Verifiable.OAuth.Server.ClientRecord.EndpointSegment"/>.
     /// </param>
     /// <param name="pathTemplate">
     /// A path template containing <c>{segment}</c> as the placeholder, e.g.

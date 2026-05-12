@@ -10,7 +10,7 @@ namespace Verifiable.OAuth.Server;
 /// <remarks>
 /// <para>
 /// <see cref="TenantId"/> names the entity the library loads
-/// <see cref="ClientRegistration"/> for when handling a request. The string form
+/// <see cref="ClientRecord"/> for when handling a request. The string form
 /// is produced by the application's request-routing layer from whatever signal
 /// identifies the tenant in that deployment:
 /// </para>

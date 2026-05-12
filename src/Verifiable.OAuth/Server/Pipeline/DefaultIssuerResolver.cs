@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// <list type="number">
 ///   <item>
 ///     <description>
-///       <see cref="ClientRegistration.IssuerUri"/> — the declared canonical
+///       <see cref="ClientRecord.IssuerUri"/> — the declared canonical
 ///       URL for the tenant. Used as-is when set. Suitable for deployments
 ///       where the tenant's authorization-server URL is stable and known at
 ///       registration time.
@@ -56,11 +56,11 @@ internal static class DefaultIssuerResolver
     /// <param name="cancellationToken">Cancellation token (unused by the default but present for delegate compatibility).</param>
     /// <returns>The authoritative issuer URI for this request.</returns>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when neither <see cref="ClientRegistration.IssuerUri"/> nor
+    /// Thrown when neither <see cref="ClientRecord.IssuerUri"/> nor
     /// <see cref="RequestContextExtensions.Issuer"/> is set.
     /// </exception>
     public static ValueTask<Uri> ResolveAsync(
-        ClientRegistration registration,
+        ClientRecord registration,
         RequestContext context,
         CancellationToken cancellationToken)
     {
@@ -80,7 +80,7 @@ internal static class DefaultIssuerResolver
 
         throw new InvalidOperationException(
             $"Cannot resolve issuer URI: registration '{registration.ClientId}' has no " +
-            $"{nameof(ClientRegistration.IssuerUri)} set and the request context does not " +
+            $"{nameof(ClientRecord.IssuerUri)} set and the request context does not " +
             "carry an Issuer URI. Either declare the canonical URL on the registration, or " +
             "have the ASP.NET skin populate the issuer on every request, or supply a custom " +
             $"{nameof(ResolveIssuerDelegate)} via {nameof(AuthorizationServer)}.{nameof(AuthorizationServer.Integration)}.{nameof(AuthorizationServerIntegration.ResolveIssuerAsync)}.");

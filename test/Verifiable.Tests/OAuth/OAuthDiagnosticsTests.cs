@@ -45,7 +45,7 @@ internal sealed class OAuthDiagnosticsTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
             TestKeyMaterialProvider.CreateP256KeyMaterial();
 
-        ClientRegistration registration = app.RegisterSigningClient(
+        ClientRecord registration = app.RegisterSigningClient(
             "diag-client", keys, JwksCapabilities);
 
         RequestContext context = new();

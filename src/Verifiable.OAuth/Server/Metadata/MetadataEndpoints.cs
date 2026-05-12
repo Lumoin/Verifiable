@@ -135,7 +135,7 @@ public static class MetadataEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.JwksEndpoint))
                 {
@@ -162,7 +162,7 @@ public static class MetadataEndpoints
                         "BuildJwksDocumentAsync is not configured."));
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -238,7 +238,7 @@ public static class MetadataEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!registration.IsCapabilityAllowed(ServerCapabilityName.DiscoveryEndpoint))
                 {
@@ -255,7 +255,7 @@ public static class MetadataEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, server, ct) =>
             {
-                ClientRegistration? registration = context.Registration;
+                ClientRecord? registration = context.Registration;
                 if(registration is null)
                 {
                     return (null,
@@ -390,7 +390,7 @@ public static class MetadataEndpoints
     private static async ValueTask AppendEndpointAsync(
         StringBuilder sb,
         AuthorizationServer server,
-        ClientRegistration registration,
+        ClientRecord registration,
         RequestContext context,
         ServerCapabilityName capability,
         string metadataKey,

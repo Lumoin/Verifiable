@@ -39,34 +39,34 @@ public abstract record ClientRegistrationEvent
 
 
 /// <summary>
-/// Emitted when a new <see cref="ClientRegistration"/> is created.
+/// Emitted when a new <see cref="ClientRecord"/> is created.
 /// Subscribers should make the registration's endpoints immediately reachable.
 /// </summary>
 [DebuggerDisplay("ClientRegistered ClientId={ClientId} TenantId={TenantId}")]
 public sealed record ClientRegistered: ClientRegistrationEvent
 {
     /// <summary>The newly created registration.</summary>
-    public required ClientRegistration Registration { get; init; }
+    public required ClientRecord Registration { get; init; }
 }
 
 
 /// <summary>
-/// Emitted when an existing <see cref="ClientRegistration"/> is replaced.
+/// Emitted when an existing <see cref="ClientRecord"/> is replaced.
 /// Subscribers should refresh any cached data derived from the registration.
 /// </summary>
 [DebuggerDisplay("ClientUpdated ClientId={ClientId} TenantId={TenantId}")]
 public sealed record ClientUpdated: ClientRegistrationEvent
 {
     /// <summary>The registration before the update.</summary>
-    public required ClientRegistration Previous { get; init; }
+    public required ClientRecord Previous { get; init; }
 
     /// <summary>The registration after the update.</summary>
-    public required ClientRegistration Current { get; init; }
+    public required ClientRecord Current { get; init; }
 }
 
 
 /// <summary>
-/// Emitted when a <see cref="ClientRegistration"/> is removed.
+/// Emitted when a <see cref="ClientRecord"/> is removed.
 /// Subscribers should make the registration's endpoints immediately unreachable
 /// and evict any cached state for this client.
 /// </summary>
@@ -82,7 +82,7 @@ public sealed record ClientDeregistered: ClientRegistrationEvent
 
 
 /// <summary>
-/// Emitted when a capability is added to an existing <see cref="ClientRegistration"/>.
+/// Emitted when a capability is added to an existing <see cref="ClientRecord"/>.
 /// Subscribers should activate the corresponding endpoint for this client's tenant.
 /// </summary>
 [DebuggerDisplay("CapabilityGranted ClientId={ClientId} Capability={Capability}")]
@@ -94,7 +94,7 @@ public sealed record CapabilityGranted: ClientRegistrationEvent
 
 
 /// <summary>
-/// Emitted when a capability is removed from an existing <see cref="ClientRegistration"/>.
+/// Emitted when a capability is removed from an existing <see cref="ClientRecord"/>.
 /// Subscribers should deactivate the corresponding endpoint for this client's tenant.
 /// </summary>
 [DebuggerDisplay("CapabilityRevoked ClientId={ClientId} Capability={Capability}")]

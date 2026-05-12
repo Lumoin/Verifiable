@@ -116,7 +116,7 @@ public readonly struct ServerCapabilityName: IEquatable<ServerCapabilityName>
     /// </para>
     /// <para>
     /// The <see cref="AuthorizationServerCryptography.BuildJwksDocumentAsync"/> delegate
-    /// decides which keys to include based on the <see cref="ClientRegistration"/> and
+    /// decides which keys to include based on the <see cref="ClientRecord"/> and
     /// the per-request context bag. The delegate can return different key sets for
     /// different callers — for example, hiding keys that are in a rotation grace period
     /// for external callers while returning them for internal monitoring.
@@ -133,7 +133,7 @@ public readonly struct ServerCapabilityName: IEquatable<ServerCapabilityName>
     /// Independent of token-issuance capabilities. Any registration that needs to
     /// advertise its endpoints via a discovery document can enable this capability.
     /// The discovery document lists only the endpoints that are active for this
-    /// registration based on its <see cref="ClientRegistration.AllowedCapabilities"/>
+    /// registration based on its <see cref="ClientRecord.AllowedCapabilities"/>
     /// and the per-request <see cref="AuthorizationServerIntegration.IsCapabilityAllowedAsync"/>
     /// delegate result.
     /// </para>

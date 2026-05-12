@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// Carries exactly the per-flow values needed to build and sign the JAR.
 /// Per-registration static values — <c>client_id</c>, <c>response_uri</c>,
 /// <c>client_metadata</c> — are resolved by the handler from
-/// <see cref="Verifiable.OAuth.Server.ClientRegistration"/>. JWT timing claim
+/// <see cref="Verifiable.OAuth.Server.ClientRecord"/>. JWT timing claim
 /// values (<c>iat</c>, <c>nbf</c>, <c>exp</c>) are computed by the handler from
 /// <see cref="Verifiable.OAuth.Server.TimingPolicy.Oid4VpRequestObjectLifetime"/>
 /// at sign time.

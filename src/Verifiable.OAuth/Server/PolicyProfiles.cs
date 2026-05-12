@@ -31,11 +31,11 @@ namespace Verifiable.OAuth.Server;
 public static class PolicyProfiles
 {
     /// <summary>
-    /// Populates the FAPI 2.0-aligned strict reading. Used as the default
-    /// when no <see cref="ClientRegistration.Profile"/> is set, and as the
-    /// base for <see cref="ApplyHaip"/>.
+    /// Populates the FAPI 2.0 Security Profile axes. Used as the default
+    /// when no <c>Profile</c> is set on a registration, and as the base for
+    /// <see cref="ApplyHaip10"/>.
     /// </summary>
-    public static void ApplyStrict(RequestContext context)
+    public static void ApplyFapi20(RequestContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -61,15 +61,15 @@ public static class PolicyProfiles
     /// <summary>
     /// Populates the
     /// <see href="https://openid.net/specs/openid4vc-high-assurance-interoperability-profile-1_0.html">HAIP 1.0</see>
-    /// profile. <see cref="ApplyStrict"/> with HAIP-specific tightenings.
+    /// profile. <see cref="ApplyFapi20"/> with HAIP-specific tightenings.
     /// </summary>
-    public static void ApplyHaip(RequestContext context)
+    public static void ApplyHaip10(RequestContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        ApplyStrict(context);
+        ApplyFapi20(context);
         //HAIP §3 mandates 60-second lifetime ceilings throughout — already
-        //the default in ApplyStrict but pinned here for clarity. HAIP-specific
+        //the default in ApplyFapi20 but pinned here for clarity. HAIP-specific
         //axes that the library does not yet expose (for example mandatory
         //A128GCM/A256GCM advertisement on verifier client metadata) live
         //outside the policy bag on VerifierClientMetadata directly.
@@ -79,14 +79,17 @@ public static class PolicyProfiles
 
 
     /// <summary>
-    /// Populates the permissive RFC 6749 baseline reading. Useful for
-    /// pre-FAPI-2 OAuth deployments interoperating with legacy clients.
+    /// Populates the RFC 6749 with PKCE baseline. Permissive relative to
+    /// <see cref="ApplyFapi20"/> — supports PKCE methods beyond S256, relaxes
+    /// the <c>iss</c>-on-redirect requirement, and relaxes the
+    /// scope-required-on-request requirement. Useful for interoperating with
+    /// pre-FAPI-2 OAuth deployments that still want PKCE protection.
     /// </summary>
-    public static void ApplyRfc6749Baseline(RequestContext context)
+    public static void ApplyRfc6749WithPkce(RequestContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        ApplyStrict(context);
+        ApplyFapi20(context);
         context.SetAllowedPkceMethods(PkceMethodSet.S256AndPlain);
         context.SetEmitIssOnRedirect(false);
         context.SetScopeRequiredOnRequest(false);
@@ -97,14 +100,14 @@ public static class PolicyProfiles
 
     /// <summary>
     /// The library's default <see cref="ResolvePolicyDelegate"/>. Dispatches
-    /// on <see cref="ClientRegistration.Profile"/> across the three shipped
+    /// on the registration's <c>Profile</c> across the three shipped
     /// profiles via <see cref="PolicyProfile"/> code equality; falls back to
-    /// <see cref="ApplyStrict"/> when the profile is absent or
+    /// <see cref="ApplyFapi20"/> when the profile is absent or
     /// application-defined (the application's own resolver handles its own
     /// codes; this default is the fail-safe baseline).
     /// </summary>
     public static ValueTask DefaultResolvePolicyAsync(
-        ClientRegistration registration,
+        ClientRecord registration,
         RequestContext context,
         CancellationToken cancellationToken)
     {
@@ -112,26 +115,26 @@ public static class PolicyProfiles
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        PolicyProfile profile = registration.Profile ?? PolicyProfile.Strict;
+        PolicyProfile profile = registration.Profile ?? PolicyProfile.Fapi20;
 
-        if(profile == PolicyProfile.Strict)
+        if(profile == PolicyProfile.Fapi20)
         {
-            ApplyStrict(context);
+            ApplyFapi20(context);
         }
-        else if(profile == PolicyProfile.Haip)
+        else if(profile == PolicyProfile.Haip10)
         {
-            ApplyHaip(context);
+            ApplyHaip10(context);
         }
-        else if(profile == PolicyProfile.Rfc6749)
+        else if(profile == PolicyProfile.Rfc6749WithPkce)
         {
-            ApplyRfc6749Baseline(context);
+            ApplyRfc6749WithPkce(context);
         }
         else
         {
             //Unknown custom code — application must supply its own
             //ResolvePolicyDelegate to handle codes it registered via
-            //PolicyProfile.Create. Falling back to strict is fail-safe.
-            ApplyStrict(context);
+            //PolicyProfile.Create. Falling back to Fapi20 is fail-safe.
+            ApplyFapi20(context);
         }
 
         return ValueTask.CompletedTask;

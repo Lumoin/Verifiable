@@ -2,7 +2,7 @@ namespace Verifiable.OAuth.Server;
 
 /// <summary>
 /// Builds <see cref="ServerEndpoint"/> records for a given
-/// <see cref="ClientRegistration"/> and inbound request, providing the flow
+/// <see cref="ClientRecord"/> and inbound request, providing the flow
 /// factory, input builder, and response builder delegates for each endpoint.
 /// </summary>
 /// <remarks>
@@ -46,14 +46,14 @@ namespace Verifiable.OAuth.Server;
 /// </code>
 /// </remarks>
 /// <param name="registration">
-/// The <see cref="ClientRegistration"/> whose capabilities determine which
+/// The <see cref="ClientRecord"/> whose capabilities determine which
 /// endpoints to produce. Check
-/// <see cref="ClientRegistration.IsCapabilityAllowed"/> before emitting endpoints.
+/// <see cref="ClientRecord.IsCapabilityAllowed"/> before emitting endpoints.
 /// </param>
 /// <param name="context">
 /// The per-request context. Carries the typed
 /// <see cref="IncomingRequest"/> envelope, the resolved
-/// <see cref="ClientRegistration"/>, tenant identifier, and any
+/// <see cref="ClientRecord"/>, tenant identifier, and any
 /// application-supplied request-scoped state. Builders that gate on
 /// per-request signals read them through this context's typed accessor surface.
 /// </param>
@@ -68,4 +68,4 @@ namespace Verifiable.OAuth.Server;
 /// when the registration does not support this flow or when per-request signals
 /// indicate this builder's endpoints should not be active for this request.
 /// </returns>
-public delegate IEnumerable<ServerEndpoint> EndpointBuilderDelegate(ClientRegistration registration, RequestContext context, AuthorizationServer server);
+public delegate IEnumerable<ServerEndpoint> EndpointBuilderDelegate(ClientRecord registration, RequestContext context, AuthorizationServer server);

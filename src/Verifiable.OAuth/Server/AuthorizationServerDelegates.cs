@@ -5,7 +5,7 @@ using Verifiable.OAuth.Server.Metadata;
 namespace Verifiable.OAuth.Server;
 
 /// <summary>
-/// Loads a <see cref="ClientRegistration"/> from the backing store by tenant identifier.
+/// Loads a <see cref="ClientRecord"/> from the backing store by tenant identifier.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,7 +20,7 @@ namespace Verifiable.OAuth.Server;
 /// for finer-grained decisions (e.g., region routing, feature flags).
 /// </para>
 /// </remarks>
-public delegate ValueTask<ClientRegistration?> LoadClientRegistrationDelegate(
+public delegate ValueTask<ClientRecord?> LoadClientRegistrationDelegate(
     TenantId tenantId,
     RequestContext context,
     CancellationToken cancellationToken);
@@ -131,7 +131,7 @@ public delegate ValueTask<string> SerializeJwksDelegate(
 /// </summary>
 /// <remarks>
 /// <para>
-/// The delegate receives the full <see cref="ClientRegistration"/> and the per-request
+/// The delegate receives the full <see cref="ClientRecord"/> and the per-request
 /// context bag so the implementation can make context-sensitive decisions — for example,
 /// returning only a subset of keys based on the caller's tenant, filtering by algorithm
 /// support, or hiding keys that are in a rotation grace period. The library never
@@ -149,7 +149,7 @@ public delegate ValueTask<string> SerializeJwksDelegate(
 /// </para>
 /// </remarks>
 /// <param name="registration">
-/// The <see cref="ClientRegistration"/> whose JWKS is being served.
+/// The <see cref="ClientRecord"/> whose JWKS is being served.
 /// </param>
 /// <param name="context">
 /// The per-request context bag carrying whatever the ASP.NET skin chose to surface.
@@ -159,22 +159,22 @@ public delegate ValueTask<string> SerializeJwksDelegate(
 /// The <see cref="JwksDocument"/> to serialize and return in the HTTP response body.
 /// </returns>
 public delegate ValueTask<JwksDocument> BuildJwksDocumentDelegate(
-    ClientRegistration registration,
+    ClientRecord registration,
     RequestContext context,
     CancellationToken cancellationToken);
 
 
 /// <summary>
-/// Determines whether the given <see cref="ClientRegistration"/> is allowed to use
+/// Determines whether the given <see cref="ClientRecord"/> is allowed to use
 /// <paramref name="capability"/> for the current request.
 /// </summary>
 /// <remarks>
 /// Return <see langword="false"/> to have the handler respond with
 /// <c>unauthorized_client</c>. The default when this delegate is null is to check
-/// <see cref="ClientRegistration.IsCapabilityAllowed"/> only.
+/// <see cref="ClientRecord.IsCapabilityAllowed"/> only.
 /// </remarks>
 public delegate ValueTask<bool> IsCapabilityAllowedDelegate(
-    ClientRegistration registration,
+    ClientRecord registration,
     ServerCapabilityName capability,
     RequestContext context,
     CancellationToken cancellationToken);
@@ -187,7 +187,7 @@ public delegate ValueTask<bool> IsCapabilityAllowedDelegate(
 /// Return <see langword="null"/> when the document cannot be fetched or fails
 /// validation. Caching with appropriate TTL is the responsibility of the implementation.
 /// </remarks>
-public delegate ValueTask<ClientRegistration?> ResolveClientMetadataDelegate(
+public delegate ValueTask<ClientRecord?> ResolveClientMetadataDelegate(
     Uri clientMetadataUri,
     RequestContext context,
     CancellationToken cancellationToken);
@@ -235,11 +235,11 @@ public delegate ValueTask<PrivateKeyMemory?> ServerDecryptionKeyResolverDelegate
 /// shape the library knows how to serialize.
 /// </para>
 /// </remarks>
-/// <param name="registration">The <see cref="ClientRegistration"/> the discovery document describes.</param>
+/// <param name="registration">The <see cref="ClientRecord"/> the discovery document describes.</param>
 /// <param name="context">The per-request context bag.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>The contributed discovery fields.</returns>
 public delegate ValueTask<DiscoveryDocumentContribution> ContributeDiscoveryFieldsDelegate(
-    ClientRegistration registration,
+    ClientRecord registration,
     RequestContext context,
     CancellationToken cancellationToken);
