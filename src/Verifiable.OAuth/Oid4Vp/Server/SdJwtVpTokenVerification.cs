@@ -21,33 +21,6 @@ public delegate PublicKeyMemory? ResolveIssuerKeyDelegate(string issuerId);
 
 
 /// <summary>
-/// Parses an SD-JWT from its wire format (tilde-separated) into the structured
-/// <see cref="SdToken{T}"/> representation.
-/// </summary>
-/// <remarks>
-/// Wired by the application to <c>SdJwtSerializer.ParseToken</c> from
-/// <c>Verifiable.Json.Sd</c> with the appropriate decoder and pool.
-/// </remarks>
-/// <param name="sdJwt">The serialized SD-JWT string.</param>
-/// <returns>The parsed token with issuer JWS, disclosures, and optional KB-JWT.</returns>
-public delegate SdToken<string> ParseSdJwtTokenDelegate(string sdJwt);
-
-
-/// <summary>
-/// Computes the SD-JWT string that serves as input to the <c>sd_hash</c>
-/// computation: the issuer JWS and disclosures with trailing tilde, but
-/// without the KB-JWT.
-/// </summary>
-/// <remarks>
-/// Wired by the application to <c>SdJwtSerializer.GetSdJwtForHashing</c> from
-/// <c>Verifiable.Json.Sd</c> with the appropriate encoder.
-/// </remarks>
-/// <param name="token">The parsed SD-JWT token.</param>
-/// <returns>The hash input string per RFC 9449 §4.3.</returns>
-public delegate string ComputeSdJwtHashInputDelegate(SdToken<string> token);
-
-
-/// <summary>
 /// Parses and cryptographically verifies an SD-JWT VP token with Key Binding JWT
 /// per <see href="https://www.rfc-editor.org/rfc/rfc9901#section-4.3">RFC 9901 §4.3</see>
 /// and <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.1">OID4VP 1.0 §8.1</see>.

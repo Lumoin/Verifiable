@@ -43,10 +43,10 @@ public sealed record Oid4VpWalletConfiguration<TCredential> where TCredential : 
     public required JwtPayloadSerializer JwtPayloadSerializer { get; init; }
 
     /// <summary>Deserialises the JAR's protected header bytes into a dictionary.</summary>
-    public required Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> JarHeaderDeserializer { get; init; }
+    public required JarDictionaryDeserializer JarHeaderDeserializer { get; init; }
 
     /// <summary>Deserialises the JAR's payload bytes into a dictionary.</summary>
-    public required Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> JarPayloadDeserializer { get; init; }
+    public required JarDictionaryDeserializer JarPayloadDeserializer { get; init; }
 
     /// <summary>Deserialises the JAR's <c>dcql_query</c> claim from JSON.</summary>
     public required JarClaimDeserializer<DcqlQuery> DcqlQueryDeserializer { get; init; }
@@ -72,7 +72,7 @@ public sealed record Oid4VpWalletConfiguration<TCredential> where TCredential : 
     /// implementation — typically <c>Verifiable.Json.Sd.SdJwtSerializer.ParseToken</c>
     /// with the wallet's salt tag, base64url decoder, and memory pool baked in.
     /// </summary>
-    public required Func<string, SdToken<string>> ParseSdJwt { get; init; }
+    public required ParseSdJwtTokenDelegate ParseSdJwt { get; init; }
 
     /// <summary>
     /// Serialises an <see cref="SdToken{TEnvelope}"/> back to compact wire form
@@ -81,7 +81,7 @@ public sealed record Oid4VpWalletConfiguration<TCredential> where TCredential : 
     /// <c>Verifiable.Json.Sd.SdJwtSerializer.SerializeToken</c> with the
     /// wallet's base64url encoder baked in.
     /// </summary>
-    public required Func<SdToken<string>, string> SerializeSdJwt { get; init; }
+    public required SerializeSdJwtTokenDelegate SerializeSdJwt { get; init; }
 
     /// <summary>
     /// Computes the <c>sd_hash</c> input string: the SD-JWT plus selected
@@ -90,7 +90,7 @@ public sealed record Oid4VpWalletConfiguration<TCredential> where TCredential : 
     /// Wired by the application to
     /// <c>Verifiable.Json.Sd.SdJwtSerializer.GetSdJwtForHashing</c>.
     /// </summary>
-    public required Func<SdToken<string>, string> ComputeSdJwtHashInput { get; init; }
+    public required ComputeSdJwtHashInputDelegate ComputeSdJwtHashInput { get; init; }
 
     /// <summary>Memory pool for transient cryptographic buffers.</summary>
     public required MemoryPool<byte> MemoryPool { get; init; }

@@ -224,8 +224,8 @@ public static class JarExtensions
     public static AuthorizationRequestObject ParseJar(
         string compactJar,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> payloadDeserializer,
+        JarDictionaryDeserializer headerDeserializer,
+        JarDictionaryDeserializer payloadDeserializer,
         JarClaimDeserializer<DcqlQuery> dcqlQueryDeserializer,
         JarClaimDeserializer<VerifierClientMetadata> clientMetadataDeserializer,
         MemoryPool<byte> memoryPool)
@@ -241,7 +241,7 @@ public static class JarExtensions
         using UnverifiedJwsMessage unverified = JwsParsing.ParseCompact(
             compactJar,
             base64UrlDecoder,
-            headerDeserializer,
+            headerDeserializer.Invoke,
             memoryPool);
 
         UnverifiedJwtHeader unverifiedHeader = unverified.Signatures[0].ProtectedHeader;
@@ -386,8 +386,8 @@ public static class JarExtensions
         string compactJar,
         PublicKeyMemory signingPublicKey,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> payloadDeserializer,
+        JarDictionaryDeserializer headerDeserializer,
+        JarDictionaryDeserializer payloadDeserializer,
         JarClaimDeserializer<DcqlQuery> dcqlQueryDeserializer,
         JarClaimDeserializer<VerifierClientMetadata> clientMetadataDeserializer,
         MemoryPool<byte> memoryPool,
