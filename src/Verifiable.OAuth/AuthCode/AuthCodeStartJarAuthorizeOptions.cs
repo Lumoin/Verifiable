@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth.AuthCode;
 
@@ -24,6 +25,15 @@ public sealed record AuthCodeStartJarAuthorizeOptions
 
     /// <summary>The <c>kid</c> header parameter value identifying <see cref="SigningKey"/>.</summary>
     public required string SigningKeyId { get; init; }
+
+    /// <summary>
+    /// The redirect URI to put in the JAR's <c>redirect_uri</c> claim. Per
+    /// RFC 6749 §3.1.2.3 the client picks one of the AS's allow-listed URIs
+    /// at request time; the library does not validate against
+    /// <see cref="ClientRegistration.RedirectUris"/> — that is the AS's
+    /// responsibility.
+    /// </summary>
+    public required Uri RedirectUri { get; init; }
 
     /// <summary>Serialises the JAR protected header to UTF-8 JSON bytes.</summary>
     public required JwtHeaderSerializer HeaderSerializer { get; init; }

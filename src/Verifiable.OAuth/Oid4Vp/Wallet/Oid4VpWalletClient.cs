@@ -45,12 +45,12 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 [DebuggerDisplay("Oid4VpWalletClient")]
 public sealed class Oid4VpWalletClient<TCredential> where TCredential : SdJwtVcCredential
 {
-    private readonly OAuthClientOptions options;
+    private readonly OAuthClientInfrastructure infrastructure;
     private readonly Oid4VpWalletConfiguration<TCredential> walletConfiguration;
 
 
-    /// <summary>The shared OAuth client options carrying transport, time, and encoding delegates.</summary>
-    public OAuthClientOptions Options => options;
+    /// <summary>The shared infrastructure carrying transport, time, and encoding delegates.</summary>
+    public OAuthClientInfrastructure Infrastructure => infrastructure;
 
 
     /// <summary>The wallet-specific configuration carrying delegates for JAR parsing, KB-JWT signing, and response encryption.</summary>
@@ -60,19 +60,19 @@ public sealed class Oid4VpWalletClient<TCredential> where TCredential : SdJwtVcC
     /// <summary>
     /// Creates a new OID4VP Wallet client.
     /// </summary>
-    /// <param name="options">The shared client options.</param>
+    /// <param name="infrastructure">The shared client infrastructure.</param>
     /// <param name="walletConfiguration">The wallet-specific delegate bundle.</param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when either argument is <see langword="null"/>.
     /// </exception>
     public Oid4VpWalletClient(
-        OAuthClientOptions options,
+        OAuthClientInfrastructure infrastructure,
         Oid4VpWalletConfiguration<TCredential> walletConfiguration)
     {
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(infrastructure);
         ArgumentNullException.ThrowIfNull(walletConfiguration);
 
-        this.options = options;
+        this.infrastructure = infrastructure;
         this.walletConfiguration = walletConfiguration;
     }
 
@@ -122,10 +122,10 @@ public sealed class Oid4VpWalletClient<TCredential> where TCredential : SdJwtVcC
                 requestUri: presentJarOptions.RequestUri,
                 expectedVerifierClientId: presentJarOptions.ExpectedVerifierClientId,
                 flowId: presentJarOptions.FlowId ?? Guid.NewGuid().ToString(),
-                timeProvider: options.TimeProvider);
+                timeProvider: infrastructure.TimeProvider);
 
         await pda.StepAsync(
-            new JarReceived(presentJarOptions.RequestUri, request, options.TimeProvider.GetUtcNow()),
+            new JarReceived(presentJarOptions.RequestUri, request, infrastructure.TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<TCredential> candidates = await walletConfiguration.ResolveCandidateCredentials(
@@ -144,7 +144,7 @@ public sealed class Oid4VpWalletClient<TCredential> where TCredential : SdJwtVcC
             new DcqlMatched(
                 preparedQuery,
                 new Dictionary<string, string> { [credentialQueryId] = chosenCredential.CompactSdJwt },
-                options.TimeProvider.GetUtcNow()),
+                infrastructure.TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
 
         string vpTokenJson = await BuildVpTokenJsonAsync(
@@ -156,7 +156,7 @@ public sealed class Oid4VpWalletClient<TCredential> where TCredential : SdJwtVcC
             cancellationToken).ConfigureAwait(false);
 
         await pda.StepAsync(
-            new PresentationSelected(vpTokenJson, options.TimeProvider.GetUtcNow()),
+            new PresentationSelected(vpTokenJson, infrastructure.TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
 
         byte[] vpTokenBytes = Encoding.UTF8.GetBytes(vpTokenJson);
@@ -168,7 +168,7 @@ public sealed class Oid4VpWalletClient<TCredential> where TCredential : SdJwtVcC
             walletConfiguration.KeyAgreementEncrypt,
             walletConfiguration.KeyDerivation,
             walletConfiguration.AeadEncrypt,
-            options.Base64UrlEncoder,
+            infrastructure.Base64UrlEncoder,
             walletConfiguration.Base64UrlDecoder,
             walletConfiguration.MemoryPool,
             cancellationToken).ConfigureAwait(false);
@@ -182,7 +182,7 @@ public sealed class Oid4VpWalletClient<TCredential> where TCredential : SdJwtVcC
             postFields[OAuthRequestParameters.State] = request.State;
         }
 
-        HttpResponseData postResponse = await options.SendFormPostAsync(
+        HttpResponseData postResponse = await infrastructure.SendFormPostAsync(
             request.ResponseUri,
             postFields,
             cancellationToken).ConfigureAwait(false);
@@ -198,7 +198,7 @@ public sealed class Oid4VpWalletClient<TCredential> where TCredential : SdJwtVcC
             new ResponsePostedByWallet(
                 request.ResponseUri,
                 request.State,
-                options.TimeProvider.GetUtcNow()),
+                infrastructure.TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
 
         return new PresentationResult
@@ -237,8 +237,8 @@ public sealed class Oid4VpWalletClient<TCredential> where TCredential : SdJwtVcC
                 presentJarOptions.HolderKey,
                 request.Nonce,
                 request.ClientId,
-                options.TimeProvider.GetUtcNow(),
-                options.Base64UrlEncoder,
+                infrastructure.TimeProvider.GetUtcNow(),
+                infrastructure.Base64UrlEncoder,
                 walletConfiguration.JwtHeaderSerializer,
                 walletConfiguration.JwtPayloadSerializer,
                 walletConfiguration.MemoryPool,

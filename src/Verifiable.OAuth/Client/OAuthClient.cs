@@ -1,94 +1,81 @@
 using System.Diagnostics;
-using Verifiable.OAuth.AuthCode;
-using Verifiable.OAuth.Oid4Vp.Wallet;
 
 namespace Verifiable.OAuth.Client;
 
 /// <summary>
-/// The OAuth 2.0 client facade. Drives PKCE-protected Authorization Code
-/// flows via <see cref="AuthCode"/>.
+/// The OAuth 2.0 client facade. A thin handle around
+/// <see cref="OAuthClientInfrastructure"/> from which protocol-specific
+/// sub-clients (Authorization Code, OID4VP Wallet, future Logout / UserInfo)
+/// are reached via extension blocks.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Construct one <see cref="OAuthClient"/> per relying-party identity at
-/// startup, register it in the dependency injection container, and access
-/// flows via the per-flow sub-clients (<see cref="AuthCode"/>). All
-/// long-lived state — endpoints, transport delegate, parsers, validators —
-/// is held on <see cref="OAuthClientOptions"/>.
+/// Construct one <see cref="OAuthClient"/> per application infrastructure at
+/// startup. Every protocol call threads a <see cref="ClientRegistration"/> as
+/// its first parameter, so one client serves many registrations — different
+/// authorization servers, different relying-party identities, different
+/// tenants — without any per-AS bound state on the client itself.
+/// </para>
+/// <para>
+/// <strong>Extension surface.</strong> Sub-clients attach to
+/// <see cref="OAuthClient"/> via Pattern 5 extension blocks in their own
+/// files (<c>AuthCodeClientExtensions.cs</c>,
+/// <c>Oid4VpWalletClientExtensions.cs</c>, and so on). Adding a new
+/// protocol surface — say RP-Initiated Logout — is one new extension file,
+/// not a code change here. The base type stays closed at one property so
+/// the surface is uniform and unambiguous regardless of how many protocols
+/// the application activates.
+/// </para>
+/// <para>
+/// <strong>Usage.</strong>
 /// </para>
 /// <code>
-/// var client = new OAuthClient(OAuthClientOptions.Create(
-///     clientId: "my-app",
-///     endpoints: discoveredEndpoints,
-///     sendFormPostAsync: async (endpoint, fields, ct) =>
-///     {
-///         var content = new FormUrlEncodedContent(fields);
-///         var response = await httpClient.PostAsync(endpoint, content, ct);
-///         return new HttpResponseData
-///         {
-///             Body = await response.Content.ReadAsStringAsync(ct),
-///             StatusCode = (int)response.StatusCode
-///         };
-///     },
-///     ...));
+/// OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
+///     sendFormPostAsync: ...,
+///     saveStateAsync: ...,
+///     loadStateAsync: ...,
+///     loadStateByRequestUriAsync: ...,
+///     parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
+///     parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
+///     parseAuthorizationServerMetadataAsync: ...,
+///     parseRegistrationResponseAsync: ...,
+///     resolveAuthorizationServerMetadataAsync: ...,
+///     resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
+///     base64UrlEncoder: ...,
+///     timeProvider: TimeProvider.System);
 ///
-/// var redirect = await client.AuthCode.StartParAsync(
-///     OAuthFormEncodedFields.Empty, ct);
+/// OAuthClient client = new(infrastructure);
+///
+/// ClientRegistration registration = LoadFromStore(clientId);
+/// AuthCodeFlowEndpointResult redirect = await client.AuthCode.StartParAsync(
+///     registration, OAuthFormEncodedFields.Empty, ct);
 /// </code>
-/// <para>
-/// The transport is a delegate. The client never knows whether it talks to the
-/// authorization server over HTTP, a named pipe, an in-process method call, or
-/// any other channel. OAuth is an HTTP protocol — the URIs and status codes
-/// are protocol-level, not transport-level — so the delegate shape fits all
-/// backends.
-/// </para>
 /// </remarks>
-[DebuggerDisplay("OAuthClient ClientId={Options.ClientId}")]
+[DebuggerDisplay("OAuthClient")]
 public sealed class OAuthClient
 {
     /// <summary>
-    /// The validated long-lived options carrying every delegate this client
-    /// uses.
+    /// The long-lived infrastructure carrying every I/O delegate this client
+    /// uses. Reached by extension-block properties (<c>AuthCode</c>,
+    /// <c>Oid4VpWallet</c>) to construct per-call sub-client structs.
     /// </summary>
-    public OAuthClientOptions Options { get; }
+    public OAuthClientInfrastructure Infrastructure { get; }
 
 
     /// <summary>
-    /// The Authorization Code sub-client — drives PAR, callback handling,
-    /// token exchange, refresh, and revocation flows.
+    /// Creates a new OAuth client over the supplied infrastructure.
     /// </summary>
-    public AuthCodeClient AuthCode { get; }
-
-
-    /// <summary>
-    /// The OID4VP Wallet sub-client for SD-JWT VC presentations. Non-null when
-    /// <see cref="OAuthClientOptions.DefaultSdJwtVcWalletConfiguration"/> is
-    /// wired; <see langword="null"/> otherwise. Applications that need a
-    /// different <c>TCredential</c> construct
-    /// <see cref="Oid4VpWalletClient{TCredential}"/> directly.
-    /// </summary>
-    public Oid4VpWalletClient<SdJwtVcCredential>? Oid4VpWallet { get; }
-
-
-    /// <summary>
-    /// Creates a new OAuth client with the supplied options.
-    /// </summary>
-    /// <param name="options">
-    /// The validated client options carrying transport, persistence, and
-    /// validation delegates.
+    /// <param name="infrastructure">
+    /// The validated infrastructure carrying transport, persistence, parsing,
+    /// resolution, and policy delegates.
     /// </param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="options"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="infrastructure"/> is <see langword="null"/>.
     /// </exception>
-    public OAuthClient(OAuthClientOptions options)
+    public OAuthClient(OAuthClientInfrastructure infrastructure)
     {
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(infrastructure);
 
-        Options = options;
-        AuthCode = new AuthCodeClient(options);
-        Oid4VpWallet = options.DefaultSdJwtVcWalletConfiguration is null
-            ? null
-            : new Oid4VpWalletClient<SdJwtVcCredential>(
-                options, options.DefaultSdJwtVcWalletConfiguration);
+        Infrastructure = infrastructure;
     }
 }

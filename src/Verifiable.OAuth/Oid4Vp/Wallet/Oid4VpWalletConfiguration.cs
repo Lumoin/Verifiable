@@ -19,8 +19,8 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// </typeparam>
 /// <remarks>
 /// Bundles wallet plumbing in one record rather than fanning the delegates
-/// across <see cref="Client.OAuthClientOptions"/>. The wallet's surface stays
-/// self-contained; the shared <see cref="Client.OAuthClientOptions"/> exposes
+/// across <see cref="Client.OAuthClientInfrastructure"/>. The wallet's surface stays
+/// self-contained; the shared <see cref="Client.OAuthClientInfrastructure"/> exposes
 /// only the flow-agnostic identifiers and transport delegates that every
 /// client surface shares.
 /// </remarks>

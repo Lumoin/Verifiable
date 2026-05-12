@@ -193,7 +193,7 @@ internal sealed class Oid4VpWalletClientTests
         VerifierKeyMaterial verifierKeys,
         SdJwtVcCredential storedCredential)
     {
-        OAuthClient oauthClient = app.CreateOAuthClient(
+        (OAuthClient oauthClient, _) = app.CreateOAuthClientAndRegistration(
             verifierKeys.Registration,
             "https://client.example.com/callback",
             verifierKeys.Registration.IssuerUri!.ToString());
@@ -226,7 +226,7 @@ internal sealed class Oid4VpWalletClientTests
             MemoryPool = Pool
         };
 
-        return new Oid4VpWalletClient<SdJwtVcCredential>(oauthClient.Options, walletConfig);
+        return new Oid4VpWalletClient<SdJwtVcCredential>(oauthClient.Infrastructure, walletConfig);
     }
 
 

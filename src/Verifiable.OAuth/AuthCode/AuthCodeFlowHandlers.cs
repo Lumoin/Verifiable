@@ -17,36 +17,39 @@ namespace Verifiable.OAuth.AuthCode;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Each handler takes the inbound request fields, the configured delegate bundle,
-/// and a cancellation token. No instance state is held. The application author
-/// wires these to HTTP routes and supplies the <see cref="OAuthClientOptions"/>
-/// constructed at startup.
+/// Each handler takes the inbound request fields, the long-lived
+/// <see cref="OAuthClientInfrastructure"/>, the per-call
+/// <see cref="ClientRegistration"/>, and a cancellation token. No instance
+/// state is held. The application author wires these to HTTP routes and
+/// supplies the infrastructure constructed at startup plus the registration
+/// loaded for the current request.
 /// </para>
 /// <para>
 /// Typical ASP.NET wiring (application code, not part of this library):
 /// </para>
 /// <code>
-/// var options = OAuthClientOptions.Create( ... );
+/// OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create( ... );
+/// ClientRegistration registration = LoadFromStore(clientId);
 /// var group = app.MapGroup("/oauth");
 /// group.MapPost(AuthCodeFlowRoutes.Par,
 ///     (IReadOnlyDictionary&lt;string, string&gt; fields, CancellationToken ct) =>
-///         AuthCodeFlowHandlers.HandleParAsync(fields, options, ct));
+///         AuthCodeFlowHandlers.HandleParAsync(fields, infrastructure, registration, ct));
 /// group.MapGet(AuthCodeFlowRoutes.Callback,
 ///     (IReadOnlyDictionary&lt;string, string&gt; fields, CancellationToken ct) =>
-///         AuthCodeFlowHandlers.HandleCallbackAsync(fields, options, ct));
+///         AuthCodeFlowHandlers.HandleCallbackAsync(fields, infrastructure, registration, ct));
 /// group.MapPost(AuthCodeFlowRoutes.Token,
 ///     (IReadOnlyDictionary&lt;string, string&gt; fields, CancellationToken ct) =>
-///         AuthCodeFlowHandlers.HandleTokenAsync(fields, options, ct));
+///         AuthCodeFlowHandlers.HandleTokenAsync(fields, infrastructure, registration, ct));
 /// group.MapPost(AuthCodeFlowRoutes.Revocation,
 ///     (IReadOnlyDictionary&lt;string, string&gt; fields, CancellationToken ct) =>
-///         AuthCodeFlowHandlers.HandleRevocationAsync(fields, options, ct));
+///         AuthCodeFlowHandlers.HandleRevocationAsync(fields, infrastructure, registration, ct));
 /// </code>
 /// <para>
 /// In-memory state store for development and testing:
 /// </para>
 /// <code>
 /// var store = new Dictionary&lt;string, OAuthFlowState&gt;();
-/// var options = OAuthClientOptions.Create(
+/// OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
 ///     ...
 ///     saveStateAsync: (state, _) => { store[state.FlowId] = state; return ValueTask.CompletedTask; },
 ///     loadStateAsync: (id, _)    => ValueTask.FromResult(store.GetValueOrDefault(id)),
@@ -63,9 +66,10 @@ public static class AuthCodeFlowHandlers
     /// </summary>
     /// <param name="fields">
     /// Inbound form fields. May include <c>scope</c>; other required values are
-    /// taken from <paramref name="options"/>.
+    /// taken from <paramref name="registration"/>.
     /// </param>
-    /// <param name="options">The delegate bundle and configuration for this flow.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the authorization server this call targets.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// <see cref="AuthCodeFlowEndpointOutcome.Redirect"/> on success with
@@ -74,16 +78,24 @@ public static class AuthCodeFlowHandlers
     /// </returns>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleParAsync(
         IReadOnlyDictionary<string, string> fields,
-        OAuthClientOptions options,
+        Uri redirectUri,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(redirectUri);
+        ArgumentNullException.ThrowIfNull(infrastructure);
+        ArgumentNullException.ThrowIfNull(registration);
 
-        DateTimeOffset now = options.TimeProvider.GetUtcNow();
+        AuthorizationServerMetadata metadata = await infrastructure
+            .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, cancellationToken)
+            .ConfigureAwait(false);
+
+        DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         string state = Guid.NewGuid().ToString("N");
 
-        PkceParameters pkce = GeneratePkceParameters(options.Base64UrlEncoder);
+        PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder);
 
         ImmutableArray<string> scopes = fields.TryGetValue(OAuthRequestParameters.Scope, out string? scopeValue)
             ? [.. scopeValue.Split(' ', StringSplitOptions.RemoveEmptyEntries)]
@@ -91,10 +103,10 @@ public static class AuthCodeFlowHandlers
 
         var parBody = new ParRequestBody
         {
-            ClientId = options.ClientId,
+            ClientId = registration.ClientId.Value,
             CodeChallenge = pkce.EncodedChallenge,
             CodeChallengeMethod = pkce.Method,
-            RedirectUri = options.RedirectUri,
+            RedirectUri = redirectUri,
             Scopes = scopes,
             State = state
         };
@@ -104,8 +116,8 @@ public static class AuthCodeFlowHandlers
         HttpResponseData parHttpResponse;
         try
         {
-            parHttpResponse = await options.SendFormPostAsync(
-                options.Endpoints.PushedAuthorizationRequestEndpoint,
+            parHttpResponse = await infrastructure.SendFormPostAsync(
+                metadata.PushedAuthorizationRequestEndpoint!,
                 formFields,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -120,7 +132,7 @@ public static class AuthCodeFlowHandlers
         }
 
         Result<ParResponse, OAuthParseError> parResult =
-            options.ParseParResponseAsync(parHttpResponse);
+            infrastructure.ParseParResponseAsync(parHttpResponse);
 
         if(!parResult.IsSuccess)
         {
@@ -131,21 +143,21 @@ public static class AuthCodeFlowHandlers
         ParCompletedState parCompleted = new ParCompletedState
         {
             FlowId = state,
-            ExpectedIssuer = options.Endpoints.Issuer,
+            ExpectedIssuer = registration.AuthorizationServerIssuer.OriginalString,
             EnteredAt = now,
             ExpiresAt = now.AddSeconds(parResponse.ExpiresIn),
             Kind = FlowKind.AuthCodeClient,
             Pkce = pkce,
-            RedirectUri = options.RedirectUri,
+            RedirectUri = redirectUri,
             Scopes = scopes,
             Par = parResponse
         };
 
-        await options.SaveStateAsync(parCompleted, cancellationToken).ConfigureAwait(false);
+        await infrastructure.SaveStateAsync(parCompleted, cancellationToken).ConfigureAwait(false);
 
         Uri authorizationUri = BuildAuthorizationRedirectUri(
-            options.Endpoints.AuthorizationEndpoint,
-            options.ClientId,
+            metadata.AuthorizationEndpoint!,
+            registration.ClientId.Value,
             parResponse.RequestUri);
 
         return new AuthCodeFlowEndpointResult
@@ -165,15 +177,22 @@ public static class AuthCodeFlowHandlers
     /// The callback query parameters. Must include <c>code</c> and <c>state</c>.
     /// HAIP 1.0 additionally requires <c>iss</c>.
     /// </param>
-    /// <param name="options">The delegate bundle and configuration for this flow.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the authorization server this call targets.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleCallbackAsync(
         IReadOnlyDictionary<string, string> fields,
-        OAuthClientOptions options,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(infrastructure);
+        ArgumentNullException.ThrowIfNull(registration);
+
+        AuthorizationServerMetadata metadata = await infrastructure
+            .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, cancellationToken)
+            .ConfigureAwait(false);
 
         if(!fields.TryGetValue(OAuthRequestParameters.Code, out string? code) ||
            !fields.TryGetValue(OAuthRequestParameters.State, out string? state))
@@ -186,7 +205,7 @@ public static class AuthCodeFlowHandlers
             };
         }
 
-        OAuthFlowState? loaded = await options.LoadStateAsync(
+        OAuthFlowState? loaded = await infrastructure.LoadStateAsync(
             state, cancellationToken).ConfigureAwait(false);
 
         if(loaded is not ParCompletedState parCompleted)
@@ -210,11 +229,14 @@ public static class AuthCodeFlowHandlers
             Context = new RequestContext(),
             Fields = fields,
             FlowState = parCompleted,
-            TimeProvider = options.TimeProvider,
-            Now = options.TimeProvider.GetUtcNow()
+            TimeProvider = infrastructure.TimeProvider,
+            Now = infrastructure.TimeProvider.GetUtcNow()
         };
 
-        ClaimIssueResult validationResult = await options.CallbackValidator.GenerateClaimsAsync(
+        ClaimIssuer<ValidationContext> callbackValidator =
+            infrastructure.ResolveCallbackValidator(registration, infrastructure.TimeProvider);
+
+        ClaimIssueResult validationResult = await callbackValidator.GenerateClaimsAsync(
             validationContext, parCompleted.FlowId, cancellationToken).ConfigureAwait(false);
 
         if(!validationResult.IsComplete
@@ -233,7 +255,7 @@ public static class AuthCodeFlowHandlers
             ? issValue
             : null;
 
-        DateTimeOffset now = options.TimeProvider.GetUtcNow();
+        DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
 
         AuthorizationCodeReceivedState codeReceived = new AuthorizationCodeReceivedState
         {
@@ -249,7 +271,7 @@ public static class AuthCodeFlowHandlers
             RedirectUri = parCompleted.RedirectUri
         };
 
-        await options.SaveStateAsync(codeReceived, cancellationToken).ConfigureAwait(false);
+        await infrastructure.SaveStateAsync(codeReceived, cancellationToken).ConfigureAwait(false);
 
         return new AuthCodeFlowEndpointResult
         {
@@ -267,15 +289,22 @@ public static class AuthCodeFlowHandlers
     /// <param name="fields">
     /// Inbound form fields. Must include <c>flow_id</c> to locate the pending state.
     /// </param>
-    /// <param name="options">The delegate bundle and configuration for this flow.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the authorization server this call targets.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleTokenAsync(
         IReadOnlyDictionary<string, string> fields,
-        OAuthClientOptions options,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(infrastructure);
+        ArgumentNullException.ThrowIfNull(registration);
+
+        AuthorizationServerMetadata metadata = await infrastructure
+            .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, cancellationToken)
+            .ConfigureAwait(false);
 
         if(!fields.TryGetValue(AuthCodeFlowRoutes.FlowIdField, out string? flowId))
         {
@@ -287,7 +316,7 @@ public static class AuthCodeFlowHandlers
             };
         }
 
-        OAuthFlowState? loaded = await options.LoadStateAsync(
+        OAuthFlowState? loaded = await infrastructure.LoadStateAsync(
             flowId, cancellationToken).ConfigureAwait(false);
 
         if(loaded is not AuthorizationCodeReceivedState codeState)
@@ -300,7 +329,7 @@ public static class AuthCodeFlowHandlers
             };
         }
 
-        DateTimeOffset now = options.TimeProvider.GetUtcNow();
+        DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         if(now > codeState.ExpiresAt)
         {
             return new AuthCodeFlowEndpointResult
@@ -312,18 +341,18 @@ public static class AuthCodeFlowHandlers
         }
 
         Dictionary<string, string> tokenFields = EncodeTokenRequest(
-            options.ClientId,
+            registration.ClientId.Value,
             codeState.Code,
             codeState.RedirectUri,
             codeState.Pkce);
 
-        HttpResponseData tokenHttpResponse = await options.SendFormPostAsync(
-            options.Endpoints.TokenEndpoint,
+        HttpResponseData tokenHttpResponse = await infrastructure.SendFormPostAsync(
+            metadata.TokenEndpoint!,
             tokenFields,
             cancellationToken).ConfigureAwait(false);
 
         Result<TokenResponse, OAuthParseError> tokenResult =
-            options.ParseTokenResponseAsync(tokenHttpResponse, now);
+            infrastructure.ParseTokenResponseAsync(tokenHttpResponse, now);
 
         if(!tokenResult.IsSuccess)
         {
@@ -346,7 +375,7 @@ public static class AuthCodeFlowHandlers
             ReceivedAt = now
         };
 
-        await options.SaveStateAsync(tokenReceived, cancellationToken).ConfigureAwait(false);
+        await infrastructure.SaveStateAsync(tokenReceived, cancellationToken).ConfigureAwait(false);
 
         return new AuthCodeFlowEndpointResult
         {
@@ -369,17 +398,24 @@ public static class AuthCodeFlowHandlers
     /// <param name="fields">
     /// Inbound form fields. Must include <c>token</c>; optionally <c>token_type_hint</c>.
     /// </param>
-    /// <param name="options">The delegate bundle and configuration for this flow.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the authorization server this call targets.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleRevocationAsync(
         IReadOnlyDictionary<string, string> fields,
-        OAuthClientOptions options,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(infrastructure);
+        ArgumentNullException.ThrowIfNull(registration);
 
-        if(options.Endpoints.RevocationEndpoint is null)
+        AuthorizationServerMetadata metadata = await infrastructure
+            .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, cancellationToken)
+            .ConfigureAwait(false);
+
+        if(metadata.RevocationEndpoint is null)
         {
             return new AuthCodeFlowEndpointResult
             {
@@ -401,7 +437,7 @@ public static class AuthCodeFlowHandlers
 
         var revocationFields = new Dictionary<string, string>
         {
-            [OAuthRequestParameters.ClientId] = options.ClientId,
+            [OAuthRequestParameters.ClientId] = registration.ClientId.Value,
             [OAuthRequestParameters.Token] = token
         };
 
@@ -413,8 +449,8 @@ public static class AuthCodeFlowHandlers
         //RFC 7009 §2.2 — the revocation endpoint returns 200 with an empty body on
         //success. The response body is not parsed; transport errors are surfaced via
         //exception from the delegate.
-        _ = await options.SendFormPostAsync(
-            options.Endpoints.RevocationEndpoint,
+        _ = await infrastructure.SendFormPostAsync(
+            metadata.RevocationEndpoint,
             revocationFields,
             cancellationToken).ConfigureAwait(false);
 
@@ -430,20 +466,27 @@ public static class AuthCodeFlowHandlers
     /// machine — call this when the stored access token has expired.
     /// </summary>
     /// <param name="request">The refresh request parameters.</param>
-    /// <param name="options">The delegate bundle and configuration for this flow.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the authorization server this call targets.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> RefreshAsync(
         RefreshTokenRequest request,
-        OAuthClientOptions options,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(infrastructure);
+        ArgumentNullException.ThrowIfNull(registration);
+
+        AuthorizationServerMetadata metadata = await infrastructure
+            .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, cancellationToken)
+            .ConfigureAwait(false);
 
         var fields = new Dictionary<string, string>
         {
             [OAuthRequestParameters.GrantType] = OAuthRequestParameters.GrantTypeRefreshToken,
-            [OAuthRequestParameters.ClientId] = options.ClientId,
+            [OAuthRequestParameters.ClientId] = registration.ClientId.Value,
             [OAuthRequestParameters.RefreshToken] = request.RefreshToken
         };
 
@@ -452,14 +495,14 @@ public static class AuthCodeFlowHandlers
             fields[OAuthRequestParameters.Scope] = request.Scope;
         }
 
-        HttpResponseData refreshHttpResponse = await options.SendFormPostAsync(
-            options.Endpoints.TokenEndpoint,
+        HttpResponseData refreshHttpResponse = await infrastructure.SendFormPostAsync(
+            metadata.TokenEndpoint!,
             fields,
             cancellationToken).ConfigureAwait(false);
 
-        DateTimeOffset now = options.TimeProvider.GetUtcNow();
+        DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         Result<TokenResponse, OAuthParseError> refreshResult =
-            options.ParseTokenResponseAsync(refreshHttpResponse, now);
+            infrastructure.ParseTokenResponseAsync(refreshHttpResponse, now);
 
         if(!refreshResult.IsSuccess)
         {
@@ -494,21 +537,27 @@ public static class AuthCodeFlowHandlers
     /// </summary>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleJarParAsync(
         AuthCodeStartJarParOptions jarOptions,
-        OAuthClientOptions options,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(jarOptions);
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(infrastructure);
+        ArgumentNullException.ThrowIfNull(registration);
+
+        AuthorizationServerMetadata metadata = await infrastructure
+            .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, cancellationToken)
+            .ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        DateTimeOffset now = options.TimeProvider.GetUtcNow();
+        DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         string state = Guid.NewGuid().ToString("N");
         string nonce = jarOptions.Nonce ?? Guid.NewGuid().ToString("N");
-        PkceParameters pkce = GeneratePkceParameters(options.Base64UrlEncoder);
+        PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder);
 
         AuthCodeRequestObject requestObject = BuildJarRequestObject(
-            options, jarOptions, pkce, state, nonce, now);
+            registration, jarOptions, pkce, state, nonce, now);
 
         string compactJar = await AuthCodeJarSigning.SignAsync(
             requestObject,
@@ -516,13 +565,13 @@ public static class AuthCodeFlowHandlers
             jarOptions.SigningKeyId,
             jarOptions.HeaderSerializer,
             jarOptions.PayloadSerializer,
-            options.Base64UrlEncoder,
+            infrastructure.Base64UrlEncoder,
             jarOptions.MemoryPool,
             cancellationToken).ConfigureAwait(false);
 
         Dictionary<string, string> parBody = new(StringComparer.Ordinal)
         {
-            [OAuthRequestParameters.ClientId] = options.ClientId,
+            [OAuthRequestParameters.ClientId] = registration.ClientId.Value,
             [OAuthRequestParameters.Request] = compactJar
         };
         foreach((string key, string value) in jarOptions.AdditionalFields.Fields)
@@ -533,8 +582,8 @@ public static class AuthCodeFlowHandlers
         HttpResponseData parHttpResponse;
         try
         {
-            parHttpResponse = await options.SendFormPostAsync(
-                options.Endpoints.PushedAuthorizationRequestEndpoint,
+            parHttpResponse = await infrastructure.SendFormPostAsync(
+                metadata.PushedAuthorizationRequestEndpoint!,
                 parBody,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -549,7 +598,7 @@ public static class AuthCodeFlowHandlers
         }
 
         Result<ParResponse, OAuthParseError> parResult =
-            options.ParseParResponseAsync(parHttpResponse);
+            infrastructure.ParseParResponseAsync(parHttpResponse);
 
         if(!parResult.IsSuccess)
         {
@@ -561,21 +610,21 @@ public static class AuthCodeFlowHandlers
         ParCompletedState parCompleted = new()
         {
             FlowId = state,
-            ExpectedIssuer = options.Endpoints.Issuer,
+            ExpectedIssuer = registration.AuthorizationServerIssuer.OriginalString,
             EnteredAt = now,
             ExpiresAt = now.AddSeconds(parResponse.ExpiresIn),
             Kind = FlowKind.AuthCodeClient,
             Pkce = pkce,
-            RedirectUri = options.RedirectUri,
+            RedirectUri = jarOptions.RedirectUri,
             Scopes = scopes,
             Par = parResponse
         };
 
-        await options.SaveStateAsync(parCompleted, cancellationToken).ConfigureAwait(false);
+        await infrastructure.SaveStateAsync(parCompleted, cancellationToken).ConfigureAwait(false);
 
         Uri authorizationUri = BuildAuthorizationRedirectUri(
-            options.Endpoints.AuthorizationEndpoint,
-            options.ClientId,
+            metadata.AuthorizationEndpoint!,
+            registration.ClientId.Value,
             parResponse.RequestUri);
 
         return new AuthCodeFlowEndpointResult
@@ -596,24 +645,30 @@ public static class AuthCodeFlowHandlers
     /// </summary>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleJarAuthorizeAsync(
         AuthCodeStartJarAuthorizeOptions jarOptions,
-        OAuthClientOptions options,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(jarOptions);
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(infrastructure);
+        ArgumentNullException.ThrowIfNull(registration);
+
+        AuthorizationServerMetadata metadata = await infrastructure
+            .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, cancellationToken)
+            .ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        DateTimeOffset now = options.TimeProvider.GetUtcNow();
+        DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         string state = Guid.NewGuid().ToString("N");
         string nonce = jarOptions.Nonce ?? Guid.NewGuid().ToString("N");
-        PkceParameters pkce = GeneratePkceParameters(options.Base64UrlEncoder);
+        PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder);
 
         AuthCodeRequestObject requestObject = new()
         {
-            ClientId = options.ClientId,
+            ClientId = registration.ClientId.Value,
             ResponseType = OAuthRequestParameters.ResponseTypeCode,
-            RedirectUri = options.RedirectUri,
+            RedirectUri = jarOptions.RedirectUri,
             Scope = jarOptions.Scope,
             State = state,
             Nonce = nonce,
@@ -622,8 +677,8 @@ public static class AuthCodeFlowHandlers
             Iat = now,
             Nbf = now,
             Exp = now.Add(jarOptions.JarLifetime),
-            Iss = options.ClientId,
-            Aud = options.Endpoints.Issuer
+            Iss = registration.ClientId.Value,
+            Aud = registration.AuthorizationServerIssuer.OriginalString
         };
 
         string compactJar = await AuthCodeJarSigning.SignAsync(
@@ -632,13 +687,13 @@ public static class AuthCodeFlowHandlers
             jarOptions.SigningKeyId,
             jarOptions.HeaderSerializer,
             jarOptions.PayloadSerializer,
-            options.Base64UrlEncoder,
+            infrastructure.Base64UrlEncoder,
             jarOptions.MemoryPool,
             cancellationToken).ConfigureAwait(false);
 
         Uri authorizationUri = BuildJarAuthorizeRedirectUri(
-            options.Endpoints.AuthorizationEndpoint,
-            options.ClientId,
+            metadata.AuthorizationEndpoint!,
+            registration.ClientId.Value,
             compactJar,
             jarOptions.AdditionalFields);
 
@@ -646,17 +701,17 @@ public static class AuthCodeFlowHandlers
         ParCompletedState parCompleted = new()
         {
             FlowId = state,
-            ExpectedIssuer = options.Endpoints.Issuer,
+            ExpectedIssuer = registration.AuthorizationServerIssuer.OriginalString,
             EnteredAt = now,
             ExpiresAt = now.Add(jarOptions.JarLifetime),
             Kind = FlowKind.AuthCodeClient,
             Pkce = pkce,
-            RedirectUri = options.RedirectUri,
+            RedirectUri = jarOptions.RedirectUri,
             Scopes = scopes,
             Par = new ParResponse(authorizationUri, (int)jarOptions.JarLifetime.TotalSeconds)
         };
 
-        await options.SaveStateAsync(parCompleted, cancellationToken).ConfigureAwait(false);
+        await infrastructure.SaveStateAsync(parCompleted, cancellationToken).ConfigureAwait(false);
 
         return new AuthCodeFlowEndpointResult
         {
@@ -667,27 +722,27 @@ public static class AuthCodeFlowHandlers
 
 
     private static AuthCodeRequestObject BuildJarRequestObject(
-        OAuthClientOptions options,
+        ClientRegistration registration,
         AuthCodeStartJarParOptions jarOptions,
         PkceParameters pkce,
         string state,
         string nonce,
         DateTimeOffset now) => new()
-        {
-            ClientId = options.ClientId,
-            ResponseType = OAuthRequestParameters.ResponseTypeCode,
-            RedirectUri = options.RedirectUri,
-            Scope = jarOptions.Scope,
-            State = state,
-            Nonce = nonce,
-            CodeChallenge = pkce.EncodedChallenge,
-            CodeChallengeMethod = pkce.Method.ToString().ToUpperInvariant(),
-            Iat = now,
-            Nbf = now,
-            Exp = now.Add(jarOptions.JarLifetime),
-            Iss = options.ClientId,
-            Aud = options.Endpoints.Issuer
-        };
+    {
+        ClientId = registration.ClientId.Value,
+        ResponseType = OAuthRequestParameters.ResponseTypeCode,
+        RedirectUri = jarOptions.RedirectUri,
+        Scope = jarOptions.Scope,
+        State = state,
+        Nonce = nonce,
+        CodeChallenge = pkce.EncodedChallenge,
+        CodeChallengeMethod = pkce.Method.ToString().ToUpperInvariant(),
+        Iat = now,
+        Nbf = now,
+        Exp = now.Add(jarOptions.JarLifetime),
+        Iss = registration.ClientId.Value,
+        Aud = registration.AuthorizationServerIssuer.OriginalString
+    };
 
 
     private static Uri BuildJarAuthorizeRedirectUri(

@@ -39,10 +39,10 @@ namespace Verifiable.OAuth;
 ///   </item>
 /// </list>
 /// <para>
-/// <strong>Usage in <see cref="OAuthClientOptions"/>:</strong>
+/// <strong>Usage in <see cref="OAuthClientInfrastructure"/>:</strong>
 /// </para>
 /// <code>
-/// OAuthClientOptions.Create(
+/// OAuthClientInfrastructure.Create(
 ///     ...
 ///     parseParResponseAsync:   OAuthResponseParsers.ParseParResponse,
 ///     parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,

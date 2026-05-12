@@ -34,6 +34,7 @@ internal sealed class JarAuthCodeClientTests
 
     private const string ClientId = "https://client.example.com";
     private static readonly Uri ClientBaseUri = new("https://client.example.com");
+    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
 
     private static readonly ImmutableHashSet<ServerCapabilityName> JarParCapabilities =
         ImmutableHashSet.Create(
@@ -63,14 +64,16 @@ internal sealed class JarAuthCodeClientTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
-        OAuthClient client = BuildAuthCodeClient(host, material);
+        (OAuthClient client, ClientRegistration registration) = BuildAuthCodeClient(host, material);
 
         AuthCodeFlowEndpointResult result = await client.AuthCode.StartJarParAsync(
+            registration,
             new AuthCodeStartJarParOptions
             {
                 Scope = WellKnownScopes.OpenId,
                 SigningKey = material.SigningPrivateKey,
                 SigningKeyId = material.SigningKeyId.Value,
+                RedirectUri = RedirectUri,
                 HeaderSerializer = HeaderSerializer,
                 PayloadSerializer = PayloadSerializer,
                 MemoryPool = SensitiveMemoryPool<byte>.Shared
@@ -92,14 +95,16 @@ internal sealed class JarAuthCodeClientTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarAuthorizeCapabilities);
 
-        OAuthClient client = BuildAuthCodeClient(host, material);
+        (OAuthClient client, ClientRegistration registration) = BuildAuthCodeClient(host, material);
 
         AuthCodeFlowEndpointResult result = await client.AuthCode.StartJarAuthorizeAsync(
+            registration,
             new AuthCodeStartJarAuthorizeOptions
             {
                 Scope = WellKnownScopes.OpenId,
                 SigningKey = material.SigningPrivateKey,
                 SigningKeyId = material.SigningKeyId.Value,
+                RedirectUri = RedirectUri,
                 HeaderSerializer = HeaderSerializer,
                 PayloadSerializer = PayloadSerializer,
                 MemoryPool = SensitiveMemoryPool<byte>.Shared
@@ -122,7 +127,7 @@ internal sealed class JarAuthCodeClientTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
-        OAuthClient client = BuildAuthCodeClient(host, material);
+        (OAuthClient client, ClientRegistration registration) = BuildAuthCodeClient(host, material);
 
         using CancellationTokenSource cts = new();
         await cts.CancelAsync().ConfigureAwait(false);
@@ -130,11 +135,13 @@ internal sealed class JarAuthCodeClientTests
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
         {
             _ = await client.AuthCode.StartJarParAsync(
+                registration,
                 new AuthCodeStartJarParOptions
                 {
                     Scope = WellKnownScopes.OpenId,
                     SigningKey = material.SigningPrivateKey,
                     SigningKeyId = material.SigningKeyId.Value,
+                    RedirectUri = RedirectUri,
                     HeaderSerializer = HeaderSerializer,
                     PayloadSerializer = PayloadSerializer,
                     MemoryPool = SensitiveMemoryPool<byte>.Shared
@@ -151,7 +158,7 @@ internal sealed class JarAuthCodeClientTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarAuthorizeCapabilities);
 
-        OAuthClient client = BuildAuthCodeClient(host, material);
+        (OAuthClient client, ClientRegistration registration) = BuildAuthCodeClient(host, material);
 
         using CancellationTokenSource cts = new();
         await cts.CancelAsync().ConfigureAwait(false);
@@ -159,11 +166,13 @@ internal sealed class JarAuthCodeClientTests
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
         {
             _ = await client.AuthCode.StartJarAuthorizeAsync(
+                registration,
                 new AuthCodeStartJarAuthorizeOptions
                 {
                     Scope = WellKnownScopes.OpenId,
                     SigningKey = material.SigningPrivateKey,
                     SigningKeyId = material.SigningKeyId.Value,
+                    RedirectUri = RedirectUri,
                     HeaderSerializer = HeaderSerializer,
                     PayloadSerializer = PayloadSerializer,
                     MemoryPool = SensitiveMemoryPool<byte>.Shared
@@ -173,10 +182,10 @@ internal sealed class JarAuthCodeClientTests
     }
 
 
-    private static OAuthClient BuildAuthCodeClient(
+    private static (OAuthClient Client, ClientRegistration Registration) BuildAuthCodeClient(
         TestHostShell host,
         VerifierKeyMaterial material) =>
-        host.CreateOAuthClient(
+        host.CreateOAuthClientAndRegistration(
             material.Registration,
             "https://client.example.com/callback",
             material.Registration.IssuerUri!.ToString());
@@ -200,6 +209,7 @@ internal sealed class JarAuthCodeClientPqTests
 
     private const string ClientId = "https://client.example.com";
     private static readonly Uri ClientBaseUri = new("https://client.example.com");
+    private static readonly Uri RedirectUri = new("https://client.example.com/callback");
 
     private static readonly ImmutableHashSet<ServerCapabilityName> JarParCapabilities =
         ImmutableHashSet.Create(
@@ -236,17 +246,19 @@ internal sealed class JarAuthCodeClientPqTests
         using VerifierKeyMaterial material = host.RegisterJarSigningClient(
             ClientId, ClientBaseUri, keyPair, JarParCapabilities);
 
-        OAuthClient client = host.CreateOAuthClient(
+        (OAuthClient client, ClientRegistration registration) = host.CreateOAuthClientAndRegistration(
             material.Registration,
             "https://client.example.com/callback",
             material.Registration.IssuerUri!.ToString());
 
         AuthCodeFlowEndpointResult result = await client.AuthCode.StartJarParAsync(
+            registration,
             new AuthCodeStartJarParOptions
             {
                 Scope = WellKnownScopes.OpenId,
                 SigningKey = material.SigningPrivateKey,
                 SigningKeyId = material.SigningKeyId.Value,
+                RedirectUri = RedirectUri,
                 HeaderSerializer = HeaderSerializer,
                 PayloadSerializer = PayloadSerializer,
                 MemoryPool = SensitiveMemoryPool<byte>.Shared

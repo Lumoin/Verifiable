@@ -20,16 +20,20 @@ internal sealed class AuthCodeFlowTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
+    private static readonly Uri DefaultRedirectUri = new("https://client.example.com/callback");
+
 
     [TestMethod]
     public async Task HandleParAsyncReturnsRedirectOnSuccess()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        OAuthClientOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:abc", 60));
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:abc", 60));
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string> { [OAuthRequestParameters.Scope] = "openid" },
-            options,
+            DefaultRedirectUri,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, result.Outcome);
@@ -43,13 +47,15 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleParAsyncReturnsInternalErrorWhenHttpFails()
     {
-        OAuthClientOptions options = CreateOptions(
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             store: [],
             httpException: new InvalidOperationException("Network unreachable."));
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
-            options,
+            DefaultRedirectUri,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome);
@@ -60,13 +66,15 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleParAsyncReturnsBadRequestWhenServerReturnsProtocolError()
     {
-        OAuthClientOptions options = CreateOptions(
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             store: new Dictionary<string, OAuthFlowState>(),
             parResponse: /*lang=json,strict*/ "{\"error\":\"invalid_client\"}");
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
-            options,
+            DefaultRedirectUri,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
@@ -78,13 +86,15 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleParAsyncReturnsInternalErrorWhenResponseIsMalformed()
     {
-        OAuthClientOptions options = CreateOptions(
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             store: new Dictionary<string, OAuthFlowState>(),
             parResponse: "<html>502 Bad Gateway</html>");
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
-            options,
+            DefaultRedirectUri,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome);
@@ -96,11 +106,12 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleCallbackAsyncReturnsBadRequestWhenMissingParameters()
     {
-        OAuthClientOptions options = CreateOptions(new Dictionary<string, OAuthFlowState>());
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(new Dictionary<string, OAuthFlowState>());
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string> { [OAuthRequestParameters.Code] = "abc" },
-            options,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
@@ -111,7 +122,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleCallbackAsyncReturnsBadRequestWhenFlowNotFound()
     {
-        OAuthClientOptions options = CreateOptions(new Dictionary<string, OAuthFlowState>());
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(new Dictionary<string, OAuthFlowState>());
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
@@ -120,7 +131,8 @@ internal sealed class AuthCodeFlowTests
                 [OAuthRequestParameters.State] = "unknown-flow-id",
                 [OAuthRequestParameters.Iss] = "https://as.example.com"
             },
-            options,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
@@ -132,8 +144,8 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleCallbackAsyncReturnsBadRequestOnIssuerMismatch()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        OAuthClientOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:x", 60));
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken).ConfigureAwait(false);
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:x", 60));
+        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
 
@@ -144,7 +156,8 @@ internal sealed class AuthCodeFlowTests
                 [OAuthRequestParameters.State] = flowId,
                 [OAuthRequestParameters.Iss] = "https://attacker.example.com"
             },
-            options,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
@@ -156,8 +169,8 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleCallbackAsyncPersistsCodeStateOnSuccess()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        OAuthClientOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:y", 60));
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken).ConfigureAwait(false);
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:y", 60));
+        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
 
@@ -168,7 +181,8 @@ internal sealed class AuthCodeFlowTests
                 [OAuthRequestParameters.State] = flowId,
                 [OAuthRequestParameters.Iss] = "https://as.example.com"
             },
-            options,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome);
@@ -180,11 +194,12 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleTokenAsyncReturnsBadRequestWhenFlowIdMissing()
     {
-        OAuthClientOptions options = CreateOptions(new Dictionary<string, OAuthFlowState>());
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(new Dictionary<string, OAuthFlowState>());
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleTokenAsync(
             new Dictionary<string, string>(),
-            options,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
@@ -196,14 +211,15 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleTokenAsyncReturnsBadRequestWhenNoCodePending()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        OAuthClientOptions options = CreateOptions(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:z", 60));
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken).ConfigureAwait(false);
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:z", 60));
+        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleTokenAsync(
             new Dictionary<string, string> { [AuthCodeFlowRoutes.FlowIdField] = flowId },
-            options,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome,
@@ -215,12 +231,12 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleTokenAsyncReturnsOkWithTokensOnFullHappyPath()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        OAuthClientOptions options = CreateOptions(
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             store,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:happy", 60),
             tokenResponse: BuildTokenJson("at.abc", "Bearer", 3600, "rt.xyz"));
 
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), options, TestContext.CancellationToken).ConfigureAwait(false);
+        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
         string flowId = GetSingleFlowId(store);
 
         await AuthCodeFlowHandlers.HandleCallbackAsync(
@@ -230,12 +246,14 @@ internal sealed class AuthCodeFlowTests
                 [OAuthRequestParameters.State] = flowId,
                 [OAuthRequestParameters.Iss] = "https://as.example.com"
             },
-            options,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleTokenAsync(
             new Dictionary<string, string> { [AuthCodeFlowRoutes.FlowIdField] = flowId },
-            options,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome);
@@ -250,13 +268,14 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleRevocationAsyncReturnsBadRequestWhenEndpointMissing()
     {
-        OAuthClientOptions options = CreateOptions(
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             new Dictionary<string, OAuthFlowState>(),
             useDefaultRevocationEndpoint: false);
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleRevocationAsync(
             new Dictionary<string, string> { ["token"] = "some-token" },
-            options,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
@@ -267,12 +286,13 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleRevocationAsyncReturnsOkWhenEndpointPresent()
     {
-        OAuthClientOptions options = CreateOptions(
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             new Dictionary<string, OAuthFlowState>());
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleRevocationAsync(
             new Dictionary<string, string> { ["token"] = "some-token" },
-            options,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome);
@@ -282,7 +302,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task RefreshAsyncReturnsOkWithNewTokens()
     {
-        OAuthClientOptions options = CreateOptions(
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             new Dictionary<string, OAuthFlowState>(),
             tokenResponse: BuildTokenJson("at.new", "Bearer", 3600, "rt.new"));
 
@@ -292,7 +312,8 @@ internal sealed class AuthCodeFlowTests
                 ClientId = "test-client",
                 RefreshToken = "rt.old"
             },
-            options,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome);
@@ -306,12 +327,14 @@ internal sealed class AuthCodeFlowTests
     public async Task PkceVerifierIsBase64UrlEncodedWithCorrectLength()
     {
         var store = new Dictionary<string, OAuthFlowState>();
-        OAuthClientOptions options = CreateOptions(store,
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:pkce1", 60));
 
         await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
-            options,
+            DefaultRedirectUri,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         ParCompletedState state = Assert.IsInstanceOfType<ParCompletedState>(
@@ -339,16 +362,16 @@ internal sealed class AuthCodeFlowTests
         var store1 = new Dictionary<string, OAuthFlowState>();
         var store2 = new Dictionary<string, OAuthFlowState>();
 
-        OAuthClientOptions options1 = CreateOptions(store1,
+        (OAuthClientInfrastructure infrastructure1, ClientRegistration registration1) = CreateInfrastructureAndRegistration(store1,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:u1", 60));
-        OAuthClientOptions options2 = CreateOptions(store2,
+        (OAuthClientInfrastructure infrastructure2, ClientRegistration registration2) = CreateInfrastructureAndRegistration(store2,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:u2", 60));
 
         await AuthCodeFlowHandlers.HandleParAsync(
-            new Dictionary<string, string>(), options1,
+            new Dictionary<string, string>(), DefaultRedirectUri, infrastructure1, registration1,
             TestContext.CancellationToken).ConfigureAwait(false);
         await AuthCodeFlowHandlers.HandleParAsync(
-            new Dictionary<string, string>(), options2,
+            new Dictionary<string, string>(), DefaultRedirectUri, infrastructure2, registration2,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         ParCompletedState state1 = Assert.IsInstanceOfType<ParCompletedState>(
@@ -368,14 +391,16 @@ internal sealed class AuthCodeFlowTests
     {
         const int expiresIn = 90;
         var store = new Dictionary<string, OAuthFlowState>();
-        OAuthClientOptions options = CreateOptions(store,
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:exp", expiresIn));
 
         DateTimeOffset before = TimeProvider.GetUtcNow();
 
         await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
-            options,
+            DefaultRedirectUri,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         ParCompletedState state = Assert.IsInstanceOfType<ParCompletedState>(
@@ -397,12 +422,14 @@ internal sealed class AuthCodeFlowTests
         using IDisposable subscription = CryptographicKeyEvents.Events.Subscribe(observer);
 
         var store = new Dictionary<string, OAuthFlowState>();
-        OAuthClientOptions options = CreateOptions(store,
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:obs", 60));
 
         await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
-            options,
+            DefaultRedirectUri,
+            infrastructure,
+            registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         System.Collections.Generic.List<EntropyConsumedEvent> entropyEvents =
@@ -415,7 +442,7 @@ internal sealed class AuthCodeFlowTests
     }
 
 
-    private OAuthClientOptions CreateOptions(
+    private (OAuthClientInfrastructure Infrastructure, ClientRegistration Registration) CreateInfrastructureAndRegistration(
         Dictionary<string, OAuthFlowState> store,
         string? parResponse = null,
         string? tokenResponse = null,
@@ -426,37 +453,18 @@ internal sealed class AuthCodeFlowTests
         Uri? resolvedRevocationEndpoint = revocationEndpoint
             ?? (useDefaultRevocationEndpoint ? new Uri("https://as.example.com/revoke") : null);
 
-        return OAuthClientOptions.Create(
-            clientId: "test-client",
-            endpoints: new AuthorizationServerEndpoints
-            {
-                Issuer = "https://as.example.com",
-                PushedAuthorizationRequestEndpoint = new Uri("https://as.example.com/par"),
-                AuthorizationEndpoint = new Uri("https://as.example.com/authorize"),
-                TokenEndpoint = new Uri("https://as.example.com/token"),
-                RevocationEndpoint = resolvedRevocationEndpoint
-            },
-            redirectUri: new Uri("https://client.example.com/callback"),
-            saveStateAsync: (state, _) =>
-            {
-                store[state.FlowId] = state;
-                return ValueTask.CompletedTask;
-            },
-            loadStateAsync: (flowId, _) =>
-                ValueTask.FromResult(store.GetValueOrDefault(flowId)),
-            loadStateByRequestUriAsync: (requestUri, _) =>
-            {
-                OAuthFlowState? found = null;
-                foreach(OAuthFlowState s in store.Values)
-                {
-                    if(s is ParCompletedState pc && string.Equals(pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
-                    {
-                        found = s;
-                        break;
-                    }
-                }
-                return ValueTask.FromResult(found);
-            },
+        Uri issuerUri = new("https://as.example.com");
+
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = issuerUri,
+            PushedAuthorizationRequestEndpoint = new Uri("https://as.example.com/par"),
+            AuthorizationEndpoint = new Uri("https://as.example.com/authorize"),
+            TokenEndpoint = new Uri("https://as.example.com/token"),
+            RevocationEndpoint = resolvedRevocationEndpoint
+        };
+
+        OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
             sendFormPostAsync: async (endpoint, _, __) =>
             {
                 if(httpException is not null)
@@ -470,12 +478,53 @@ internal sealed class AuthCodeFlowTests
                     : parResponse ?? string.Empty;
                 return new HttpResponseData { Body = body, StatusCode = 200 };
             },
+            saveStateAsync: (state, _) =>
+            {
+                store[state.FlowId] = state;
+                return ValueTask.CompletedTask;
+            },
+            loadStateAsync: (flowId, _) =>
+                ValueTask.FromResult(store.GetValueOrDefault(flowId)),
+            loadStateByRequestUriAsync: (requestUri, _) =>
+            {
+                OAuthFlowState? found = null;
+                foreach(OAuthFlowState s in store.Values)
+                {
+                    if(s is ParCompletedState pc
+                        && string.Equals(pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
+                    {
+                        found = s;
+                        break;
+                    }
+                }
+                return ValueTask.FromResult(found);
+            },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-            callbackValidator: new ClaimIssuer<ValidationContext>(
-                "test-callback-validator", ValidationProfiles.CallbackHaip10Rules(), TimeProvider),
+            parseAuthorizationServerMetadataAsync: (body, ct) =>
+                throw new NotImplementedException("Test pre-resolves metadata; the parser is not exercised."),
+            parseRegistrationResponseAsync: (body, ct) =>
+                throw new NotImplementedException("AuthCodeFlowTests does not exercise dynamic registration."),
+            resolveAuthorizationServerMetadataAsync: (issuer, ct) =>
+                ValueTask.FromResult(metadata),
+            resolveCallbackValidator: (registration, timeProvider) =>
+                new ClaimIssuer<ValidationContext>(
+                    "test-callback-validator",
+                    ValidationProfiles.CallbackHaip10Rules(),
+                    timeProvider),
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
             timeProvider: TimeProvider);
+
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId("test-client"),
+            AuthorizationServerIssuer = issuerUri,
+            RedirectUris = [DefaultRedirectUri],
+            AuthenticationMethod = ClientAuthenticationMethod.None,
+            Profile = PolicyProfile.Haip10
+        };
+
+        return (infrastructure, registration);
     }
 
     private static string BuildParJson(string requestUri, int expiresIn) =>

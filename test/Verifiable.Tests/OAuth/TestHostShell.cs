@@ -652,42 +652,50 @@ internal sealed class TestHostShell: IDisposable
 
 
     /// <summary>
-    /// Creates an <see cref="OAuthClient"/> wired to this server via in-process
-    /// transport. No HTTP, no serialization — both PDAs run in the same process.
-    /// AuthCode flows are accessed via <see cref="OAuthClient.AuthCode"/>.
+    /// Constructs an <see cref="OAuthClient"/> over a fresh
+    /// <see cref="OAuthClientInfrastructure"/> and the matching
+    /// <see cref="ClientRegistration"/> for the registered tenant. Returns
+    /// both because every protocol-method call threads the registration
+    /// alongside the client.
     /// </summary>
-    /// <param name="registration">The client registration to wire.</param>
+    /// <param name="record">The server-side registration record.</param>
     /// <param name="redirectUri">The client's redirect URI.</param>
     /// <param name="issuerUri">The expected issuer URI for callback validation.</param>
-    public OAuthClient CreateOAuthClient(
-        ClientRecord registration,
+    public (OAuthClient Client, ClientRegistration Registration) CreateOAuthClientAndRegistration(
+        ClientRecord record,
         string redirectUri,
         string issuerUri)
     {
-        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(record);
         ArgumentException.ThrowIfNullOrWhiteSpace(redirectUri);
         ArgumentException.ThrowIfNullOrWhiteSpace(issuerUri);
 
         InProcessTransport transport = new(
-            Server, registration, registration.TenantId, issuerUri);
+            Server, record, record.TenantId, issuerUri);
 
         Dictionary<string, OAuthFlowState> clientFlowStore = [];
 
-        string segment = registration.TenantId.Value;
-        Uri baseUri = new($"https://verifier.example.com");
-        OAuthClientOptions options = OAuthClientOptions.Create(
-            clientId: registration.ClientId,
-            endpoints: new AuthorizationServerEndpoints
-            {
-                Issuer = issuerUri,
-                PushedAuthorizationRequestEndpoint = new Uri(baseUri, ServerEndpointPaths.Par
-                    .Replace("{segment}", segment, StringComparison.Ordinal)),
-                AuthorizationEndpoint = new Uri(baseUri, ServerEndpointPaths.Authorize
-                    .Replace("{segment}", segment, StringComparison.Ordinal)),
-                TokenEndpoint = new Uri(baseUri, ServerEndpointPaths.Token
-                    .Replace("{segment}", segment, StringComparison.Ordinal))
-            },
-            redirectUri: new Uri(redirectUri),
+        string segment = record.TenantId.Value;
+        Uri baseUri = new("https://verifier.example.com");
+
+        Uri parEndpoint = new(baseUri, ServerEndpointPaths.Par
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri authEndpoint = new(baseUri, ServerEndpointPaths.Authorize
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri tokenEndpoint = new(baseUri, ServerEndpointPaths.Token
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri issuerUriValue = new(issuerUri);
+
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = issuerUriValue,
+            PushedAuthorizationRequestEndpoint = parEndpoint,
+            AuthorizationEndpoint = authEndpoint,
+            TokenEndpoint = tokenEndpoint
+        };
+
+        OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
+            sendFormPostAsync: transport.SendAsync,
             saveStateAsync: (state, ct) =>
             {
                 clientFlowStore[state.FlowId] = state;
@@ -709,16 +717,31 @@ internal sealed class TestHostShell: IDisposable
 
                 return ValueTask.FromResult<OAuthFlowState?>(null);
             },
-            sendFormPostAsync: transport.SendAsync,
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
-            callbackValidator: new ClaimIssuer<ValidationContext>(
-                "callback-haip10", ValidationProfiles.CallbackHaip10Rules(), Time),
+            parseAuthorizationServerMetadataAsync: (body, ct) =>
+                throw new NotImplementedException("Test host pre-resolves metadata; the parser is not exercised."),
+            parseRegistrationResponseAsync: (body, ct) =>
+                throw new NotImplementedException("Phase 2 does not exercise dynamic registration."),
+            resolveAuthorizationServerMetadataAsync: (issuer, ct) =>
+                ValueTask.FromResult(metadata),
+            resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
             timeProvider: Time);
 
-        return new OAuthClient(options);
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId(record.ClientId),
+            AuthorizationServerIssuer = issuerUriValue,
+            RedirectUris = [new Uri(redirectUri)],
+            AuthenticationMethod = ClientAuthenticationMethod.None,
+            Profile = PolicyProfile.Haip10
+        };
+
+        return (new OAuthClient(infrastructure), registration);
     }
+
+
 
 
     /// <summary>
