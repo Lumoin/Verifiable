@@ -6,6 +6,7 @@ using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Validation;
@@ -119,6 +120,7 @@ public static class AuthCodeFlowHandlers
             parHttpResponse = await infrastructure.SendFormPostAsync(
                 metadata.PushedAuthorizationRequestEndpoint!,
                 formFields,
+                OutgoingHeaders.Empty,
                 cancellationToken).ConfigureAwait(false);
         }
         catch(Exception ex)
@@ -346,9 +348,13 @@ public static class AuthCodeFlowHandlers
             codeState.RedirectUri,
             codeState.Pkce);
 
+        OutgoingHeaders tokenHeaders = await BuildDpopAttachedHeadersAsync(
+            infrastructure, metadata.TokenEndpoint!, cancellationToken).ConfigureAwait(false);
+
         HttpResponseData tokenHttpResponse = await infrastructure.SendFormPostAsync(
             metadata.TokenEndpoint!,
             tokenFields,
+            tokenHeaders,
             cancellationToken).ConfigureAwait(false);
 
         Result<TokenResponse, OAuthParseError> tokenResult =
@@ -452,6 +458,7 @@ public static class AuthCodeFlowHandlers
         _ = await infrastructure.SendFormPostAsync(
             metadata.RevocationEndpoint,
             revocationFields,
+            OutgoingHeaders.Empty,
             cancellationToken).ConfigureAwait(false);
 
         return new AuthCodeFlowEndpointResult
@@ -498,6 +505,7 @@ public static class AuthCodeFlowHandlers
         HttpResponseData refreshHttpResponse = await infrastructure.SendFormPostAsync(
             metadata.TokenEndpoint!,
             fields,
+            OutgoingHeaders.Empty,
             cancellationToken).ConfigureAwait(false);
 
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
@@ -585,6 +593,7 @@ public static class AuthCodeFlowHandlers
             parHttpResponse = await infrastructure.SendFormPostAsync(
                 metadata.PushedAuthorizationRequestEndpoint!,
                 parBody,
+                OutgoingHeaders.Empty,
                 cancellationToken).ConfigureAwait(false);
         }
         catch(Exception ex)
@@ -853,5 +862,45 @@ public static class AuthCodeFlowHandlers
                 ErrorDescription = error.Support.Summary
             }
         };
+    }
+
+
+    /// <summary>
+    /// Builds the outgoing-headers bag for a token-endpoint request,
+    /// attaching a freshly-constructed DPoP proof when the infrastructure
+    /// is wired for DPoP.
+    /// </summary>
+    /// <remarks>
+    /// Phase 6 client-side ships single-shot proof attachment only — there
+    /// is no <c>use_dpop_nonce</c> retry loop and no nonce cache. A
+    /// nonce-required AS that challenges the first attempt with a 401 +
+    /// <c>DPoP-Nonce</c> response header surfaces the failure to the
+    /// caller; the application can read the response and retry at a
+    /// higher level. Cross-call nonce caching belongs with the AS-side
+    /// validation work in phase 6b, where the storage shape can match
+    /// the existing flow-state delegate pattern.
+    /// </remarks>
+    private static async ValueTask<OutgoingHeaders> BuildDpopAttachedHeadersAsync(
+        OAuthClientInfrastructure infrastructure,
+        Uri tokenEndpoint,
+        CancellationToken cancellationToken)
+    {
+        if(infrastructure.ConstructDpopProofAsync is null || infrastructure.DpopKey is null)
+        {
+            return OutgoingHeaders.Empty;
+        }
+
+        DpopProofClaims claims = new()
+        {
+            Htm = WellKnownHttpMethods.Post,
+            Htu = tokenEndpoint.GetLeftPart(UriPartial.Path),
+            Iat = infrastructure.TimeProvider.GetUtcNow(),
+            Jti = Guid.NewGuid().ToString("N")
+        };
+
+        string proof = await infrastructure.ConstructDpopProofAsync(
+            claims, infrastructure.DpopKey, cancellationToken).ConfigureAwait(false);
+
+        return OutgoingHeaders.Empty.WithDpop(proof);
     }
 }

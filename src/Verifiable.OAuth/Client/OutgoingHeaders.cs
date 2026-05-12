@@ -32,7 +32,7 @@ public sealed record OutgoingHeaders
     /// <paramref name="parameter"/>. Composes per RFC 9110 §11.6.2.
     /// </summary>
     public OutgoingHeaders WithAuthorization(string scheme, string parameter) =>
-        this with { Values = Values.SetItem("Authorization", $"{scheme} {parameter}") };
+        this with { Values = Values.SetItem(WellKnownHttpHeaderNames.Authorization, $"{scheme} {parameter}") };
 
     /// <summary>
     /// Returns a new <see cref="OutgoingHeaders"/> with <paramref name="name"/>

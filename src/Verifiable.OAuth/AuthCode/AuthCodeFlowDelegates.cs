@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core;
+using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth.AuthCode;
 
@@ -93,6 +94,12 @@ public delegate ValueTask<OAuthFlowState?> LoadFlowStateByRequestUriDelegate(
 /// </remarks>
 /// <param name="endpoint">The URI to POST to.</param>
 /// <param name="formFields">The form fields as <c>application/x-www-form-urlencoded</c>.</param>
+/// <param name="headers">
+/// Composed request headers. The handler layer attaches scheme-specific
+/// values such as <c>Authorization</c> or <c>DPoP</c> here before
+/// dispatching to the transport. The transport itself stays
+/// authentication-scheme-naive.
+/// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>
 /// The HTTP response carrying body, status code, and optional transport metadata.
@@ -100,6 +107,7 @@ public delegate ValueTask<OAuthFlowState?> LoadFlowStateByRequestUriDelegate(
 public delegate ValueTask<HttpResponseData> SendFormPostDelegate(
     Uri endpoint,
     System.Collections.Generic.IReadOnlyDictionary<string, string> formFields,
+    OutgoingHeaders headers,
     CancellationToken cancellationToken);
 
 

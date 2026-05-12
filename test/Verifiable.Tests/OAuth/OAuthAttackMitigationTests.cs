@@ -387,7 +387,7 @@ internal sealed class OAuthAttackMitigationTests
         };
 
         OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
-            sendFormPostAsync: async (endpoint, fields, _) =>
+            sendFormPostAsync: async (endpoint, fields, _, _) =>
             {
                 bool isTokenEndpoint = endpoint.AbsolutePath.EndsWith("/token", StringComparison.Ordinal)
                                     || endpoint.AbsolutePath.EndsWith("/revoke", StringComparison.Ordinal);

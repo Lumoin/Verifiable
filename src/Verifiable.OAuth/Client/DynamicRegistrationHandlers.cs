@@ -84,7 +84,7 @@ public static class DynamicRegistrationHandlers
         }
 
         OutgoingHeaders headers = OutgoingHeaders.Empty
-            .WithAuthorization("Bearer", registration.AccessToken.Value.Value);
+            .WithAuthorization(WellKnownAuthenticationSchemes.Bearer, registration.AccessToken.Value.Value);
 
         HttpResponseData response = await infrastructure.SendJsonGetAsync(
             registration.ManagementUri, headers, cancellationToken).ConfigureAwait(false);
@@ -133,7 +133,7 @@ public static class DynamicRegistrationHandlers
         string body = SerializeClientMetadata(newMetadata);
 
         OutgoingHeaders headers = OutgoingHeaders.Empty
-            .WithAuthorization("Bearer", registration.AccessToken.Value.Value);
+            .WithAuthorization(WellKnownAuthenticationSchemes.Bearer, registration.AccessToken.Value.Value);
 
         HttpResponseData response = await infrastructure.SendJsonPutAsync(
             registration.ManagementUri, body, headers, cancellationToken).ConfigureAwait(false);
@@ -173,7 +173,7 @@ public static class DynamicRegistrationHandlers
         }
 
         OutgoingHeaders headers = OutgoingHeaders.Empty
-            .WithAuthorization("Bearer", registration.AccessToken.Value.Value);
+            .WithAuthorization(WellKnownAuthenticationSchemes.Bearer, registration.AccessToken.Value.Value);
 
         HttpResponseData response = await infrastructure.SendJsonDeleteAsync(
             registration.ManagementUri, headers, cancellationToken).ConfigureAwait(false);

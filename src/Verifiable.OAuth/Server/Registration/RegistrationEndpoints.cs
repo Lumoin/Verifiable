@@ -525,17 +525,18 @@ public static class RegistrationEndpoints
         }
 
         IncomingRequest? req = context.IncomingRequest;
+        string bearerPrefix = WellKnownAuthenticationSchemes.Bearer + " ";
         if(req is null
-            || !req.Headers.TryGetSingle("Authorization", out string? authHeader)
+            || !req.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authHeader)
             || authHeader is null
-            || !authHeader.StartsWith("Bearer ", StringComparison.Ordinal))
+            || !authHeader.StartsWith(bearerPrefix, StringComparison.Ordinal))
         {
             return ServerHttpResponse.Unauthorized(
                 OAuthErrors.InvalidToken,
                 "Missing or malformed Authorization header.");
         }
 
-        string presented = authHeader["Bearer ".Length..];
+        string presented = authHeader[bearerPrefix.Length..];
         ClientRecord registration = context.Registration!;
 
         bool valid = await integration.ValidateRegistrationAccessTokenAsync(

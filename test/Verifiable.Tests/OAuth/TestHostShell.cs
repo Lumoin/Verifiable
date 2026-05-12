@@ -1601,8 +1601,14 @@ internal sealed class TestHostShell: IDisposable
         public async ValueTask<HttpResponseData> SendAsync(
             Uri endpoint,
             IReadOnlyDictionary<string, string> fields,
+            OutgoingHeaders headers,
             CancellationToken cancellationToken)
         {
+            //Headers are accepted by the SendFormPostDelegate contract for DPoP and
+            //similar scheme-bearing flows; the in-process transport does not
+            //surface them on the inbound IncomingRequest yet because the AS-side
+            //DPoP validation handler that would read them is part of phase 6b.
+            _ = headers;
             //The OAuth client's transport contract is form-POST: it speaks
             //URLs and form fields. The matcher chain reads everything it
             //needs from the IncomingRequest envelope; capability narrowing
@@ -1658,8 +1664,11 @@ internal sealed class TestHostShell: IDisposable
         public async ValueTask<HttpResponseData> SendAsync(
             Uri endpoint,
             IReadOnlyDictionary<string, string> fields,
+            OutgoingHeaders headers,
             CancellationToken cancellationToken)
         {
+            //Same DPoP-headers passthrough rationale as InProcessTransport.SendAsync.
+            _ = headers;
             string segment = ExtractTenantSegment(endpoint.AbsolutePath);
             if(!registrations.TryGetValue(segment, out ClientRecord? registration))
             {

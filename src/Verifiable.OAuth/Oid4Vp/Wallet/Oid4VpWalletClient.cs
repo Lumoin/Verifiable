@@ -185,6 +185,7 @@ public sealed class Oid4VpWalletClient<TCredential> where TCredential : SdJwtVcC
         HttpResponseData postResponse = await infrastructure.SendFormPostAsync(
             request.ResponseUri,
             postFields,
+            OutgoingHeaders.Empty,
             cancellationToken).ConfigureAwait(false);
 
         if(postResponse.StatusCode != 200)

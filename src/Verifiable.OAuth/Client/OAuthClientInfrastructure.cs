@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 
 namespace Verifiable.OAuth.Client;
@@ -171,6 +172,25 @@ public sealed class OAuthClientInfrastructure
     public Oid4VpWalletConfiguration<SdJwtVcCredential>? DefaultSdJwtVcWalletConfiguration { get; init; }
 
 
+    //DPoP — RFC 9449 client-side proof attachment. Both slots must be
+    //wired together; either both null (no DPoP) or both non-null (proofs
+    //attached at the token endpoint).
+
+    /// <summary>
+    /// Constructs DPoP proofs for outbound requests. When wired alongside
+    /// <see cref="DpopKey"/>, the AuthCode token-endpoint handler attaches
+    /// a fresh proof to every token-exchange request. <see langword="null"/>
+    /// means DPoP is not in use.
+    /// </summary>
+    public ConstructDpopProofDelegate? ConstructDpopProofAsync { get; private init; }
+
+    /// <summary>
+    /// The DPoP signing key. Required when
+    /// <see cref="ConstructDpopProofAsync"/> is set; ignored otherwise.
+    /// </summary>
+    public DpopKey? DpopKey { get; private init; }
+
+
     /// <summary>
     /// Constructs a fully validated <see cref="OAuthClientInfrastructure"/>.
     /// Every mandatory delegate is checked for non-null at construction so
@@ -195,7 +215,9 @@ public sealed class OAuthClientInfrastructure
         SendJsonGetDelegate? sendJsonGetAsync = null,
         SendJsonPutDelegate? sendJsonPutAsync = null,
         SendJsonDeleteDelegate? sendJsonDeleteAsync = null,
-        ParseClientMetadataDelegate? parseClientMetadataAsync = null)
+        ParseClientMetadataDelegate? parseClientMetadataAsync = null,
+        ConstructDpopProofDelegate? constructDpopProofAsync = null,
+        DpopKey? dpopKey = null)
     {
         ArgumentNullException.ThrowIfNull(sendFormPostAsync);
         ArgumentNullException.ThrowIfNull(saveStateAsync);
@@ -208,6 +230,13 @@ public sealed class OAuthClientInfrastructure
         ArgumentNullException.ThrowIfNull(resolveAuthorizationServerMetadataAsync);
         ArgumentNullException.ThrowIfNull(resolveCallbackValidator);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+
+        if((constructDpopProofAsync is null) != (dpopKey is null))
+        {
+            throw new ArgumentException(
+                "ConstructDpopProofAsync and DpopKey must be wired together: "
+                + "supply both or neither.");
+        }
 
         return new OAuthClientInfrastructure
         {
@@ -229,7 +258,9 @@ public sealed class OAuthClientInfrastructure
             SendJsonGetAsync = sendJsonGetAsync,
             SendJsonPutAsync = sendJsonPutAsync,
             SendJsonDeleteAsync = sendJsonDeleteAsync,
-            ParseClientMetadataAsync = parseClientMetadataAsync
+            ParseClientMetadataAsync = parseClientMetadataAsync,
+            ConstructDpopProofAsync = constructDpopProofAsync,
+            DpopKey = dpopKey
         };
     }
 }

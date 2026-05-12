@@ -299,6 +299,18 @@
 
 
         /// <summary>
+        /// If <paramref name="alg"/> is any ECDSA variant — <see cref="Es256"/>,
+        /// <see cref="Es384"/>, <see cref="Es512"/>, or <see cref="Es256k1"/>.
+        /// </summary>
+        /// <param name="alg">The algorithm</param>.
+        /// <returns><see langword="true" /> if <paramref name="alg"/> is any ECDSA variant; otherwise, <see langword="false" /></returns>.
+        public static bool IsEcdsa(string alg)
+        {
+            return IsEs256(alg) || IsEs384(alg) || IsEs512(alg) || IsEs256k1(alg);
+        }
+
+
+        /// <summary>
         /// If <paramref name="alg"/> is <see cref="Ecdha"/> or not.
         /// </summary>
         /// <param name="alg">The algorithm</param>.
