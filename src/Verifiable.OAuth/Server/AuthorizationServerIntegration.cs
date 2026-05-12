@@ -124,6 +124,40 @@ public sealed class AuthorizationServerIntegration
     public ResolveClientMetadataDelegate? ResolveClientMetadataAsync { get; set; }
 
     /// <summary>
+    /// Generates the <c>client_id</c> for a newly-registered client.
+    /// <see langword="null"/> means the library default
+    /// (<see cref="Registration.RegistrationEndpoints.DefaultGenerateClientIdAsync"/>) is used.
+    /// Optional.
+    /// </summary>
+    public GenerateClientIdDelegate? GenerateClientIdAsync { get; set; }
+
+    /// <summary>
+    /// Generates the <c>registration_access_token</c> for a newly-registered
+    /// client. <see langword="null"/> means the library default
+    /// (<see cref="Registration.RegistrationEndpoints.DefaultGenerateRegistrationAccessTokenAsync"/>)
+    /// is used. Optional.
+    /// </summary>
+    public GenerateRegistrationAccessTokenDelegate? GenerateRegistrationAccessTokenAsync { get; set; }
+
+    /// <summary>
+    /// Parses an incoming RFC 7591 client metadata document body into a typed
+    /// <see cref="Client.ClientMetadata"/>. Required when
+    /// <see cref="ServerCapabilityName.DynamicClientRegistration"/> is
+    /// advertised — the default JSON implementation lives in
+    /// <c>Verifiable.OAuth.Json</c> and is wired by the application.
+    /// </summary>
+    public ParseClientMetadataServerDelegate? ParseClientMetadataAsync { get; set; }
+
+    /// <summary>
+    /// Validates a bearer token presented at an RFC 7592 management endpoint.
+    /// Required when
+    /// <see cref="ServerCapabilityName.DynamicClientRegistration"/> is
+    /// advertised — the application implements the constant-time comparison
+    /// against its persisted form.
+    /// </summary>
+    public ValidateRegistrationAccessTokenDelegate? ValidateRegistrationAccessTokenAsync { get; set; }
+
+    /// <summary>
     /// Contributes additional fields to the discovery document
     /// (<c>/.well-known/openid-configuration</c> and equivalents). Optional.
     /// </summary>

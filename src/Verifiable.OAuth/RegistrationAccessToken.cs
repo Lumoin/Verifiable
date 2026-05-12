@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Verifiable.OAuth.Client;
+namespace Verifiable.OAuth;
 
 /// <summary>
 /// The bearer token an authorization server issues alongside a successful

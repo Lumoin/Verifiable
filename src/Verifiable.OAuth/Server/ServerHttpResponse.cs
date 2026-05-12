@@ -48,6 +48,26 @@ public sealed record ServerHttpResponse
         };
 
 
+    /// <summary>Returns a 201 Created response with a JSON body.</summary>
+    public static ServerHttpResponse Created(string body, string contentType) =>
+        new()
+        {
+            StatusCode = (int)HttpStatusCode.Created,
+            Body = body,
+            ContentType = contentType
+        };
+
+
+    /// <summary>Returns a 204 No Content response with an empty body.</summary>
+    public static ServerHttpResponse NoContent() =>
+        new()
+        {
+            StatusCode = (int)HttpStatusCode.NoContent,
+            Body = string.Empty,
+            ContentType = string.Empty
+        };
+
+
     /// <summary>
     /// Returns a 302 Found redirect response to <paramref name="location"/>.
     /// </summary>

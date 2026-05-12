@@ -681,9 +681,14 @@ public sealed class AuthorizationServer: IDisposable
 
     /// <summary>
     /// Emits a <see cref="ClientRegistered"/> event to this instance's
-    /// <see cref="Events"/> stream.
+    /// <see cref="Events"/> stream. The plaintext bearer token rides on the
+    /// event so subscribers can persist it (typically hashed) for later
+    /// validation against RFC 7592 management calls.
     /// </summary>
-    public void RegisterClient(ClientRecord registration, RequestContext context)
+    public void RegisterClient(
+        ClientRecord registration,
+        RegistrationAccessToken accessToken,
+        RequestContext context)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
@@ -694,7 +699,8 @@ public sealed class AuthorizationServer: IDisposable
             TenantId = registration.TenantId,
             OccurredAt = TimeProvider.GetUtcNow(),
             Context = context,
-            Registration = registration
+            Registration = registration,
+            AccessToken = accessToken
         });
     }
 

@@ -72,6 +72,17 @@ public sealed class OAuthClientInfrastructure
     /// </summary>
     public SendFormPostDelegate SendFormPostAsync { get; private init; } = null!;
 
+    /// <summary>
+    /// Sends an HTTP POST with a JSON body — used by RFC 7591 §3 dynamic
+    /// client registration. <see langword="null"/> when the application does
+    /// not register clients dynamically; required when
+    /// <see cref="OAuthDynamicRegistrationClient.RegisterAsync"/> is called.
+    /// The in-process test transport wires this delegate to
+    /// <see cref="Verifiable.OAuth.Server.Registration.RegistrationEndpoints.HandleCreateAsync"/>;
+    /// production deployments wire it to their HTTP transport.
+    /// </summary>
+    public SendJsonPostDelegate? SendJsonPostAsync { get; private init; }
+
 
     //Flow state storage.
 
@@ -154,7 +165,8 @@ public sealed class OAuthClientInfrastructure
         EncodeDelegate base64UrlEncoder,
         TimeProvider? timeProvider = null,
         MemoryPool<byte>? memoryPool = null,
-        Oid4VpWalletConfiguration<SdJwtVcCredential>? defaultSdJwtVcWalletConfiguration = null)
+        Oid4VpWalletConfiguration<SdJwtVcCredential>? defaultSdJwtVcWalletConfiguration = null,
+        SendJsonPostDelegate? sendJsonPostAsync = null)
     {
         ArgumentNullException.ThrowIfNull(sendFormPostAsync);
         ArgumentNullException.ThrowIfNull(saveStateAsync);
@@ -183,7 +195,8 @@ public sealed class OAuthClientInfrastructure
             Base64UrlEncoder = base64UrlEncoder,
             TimeProvider = timeProvider ?? TimeProvider.System,
             MemoryPool = memoryPool ?? SensitiveMemoryPool<byte>.Shared,
-            DefaultSdJwtVcWalletConfiguration = defaultSdJwtVcWalletConfiguration
+            DefaultSdJwtVcWalletConfiguration = defaultSdJwtVcWalletConfiguration,
+            SendJsonPostAsync = sendJsonPostAsync
         };
     }
 }

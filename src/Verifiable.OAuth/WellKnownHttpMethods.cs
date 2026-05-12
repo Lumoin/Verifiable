@@ -41,6 +41,20 @@ public static class WellKnownHttpMethods
     /// </summary>
     public static readonly string Post = "POST";
 
+    /// <summary>
+    /// The HTTP <c>PUT</c> method per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#name-put">RFC 9110 §9.3.4</see>.
+    /// Used by RFC 7592 §2.2 client update requests.
+    /// </summary>
+    public static readonly string Put = "PUT";
+
+    /// <summary>
+    /// The HTTP <c>DELETE</c> method per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#name-delete">RFC 9110 §9.3.5</see>.
+    /// Used by RFC 7592 §2.3 client deregistration requests.
+    /// </summary>
+    public static readonly string Delete = "DELETE";
+
 
     /// <summary>
     /// Returns <see langword="true"/> when <paramref name="method"/> is the
@@ -53,6 +67,18 @@ public static class WellKnownHttpMethods
     /// HTTP <c>POST</c> token.
     /// </summary>
     public static bool IsPost(string method) => Equals(method, Post);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="method"/> is the
+    /// HTTP <c>PUT</c> token.
+    /// </summary>
+    public static bool IsPut(string method) => Equals(method, Put);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="method"/> is the
+    /// HTTP <c>DELETE</c> token.
+    /// </summary>
+    public static bool IsDelete(string method) => Equals(method, Delete);
 
 
     /// <summary>
@@ -69,6 +95,8 @@ public static class WellKnownHttpMethods
     {
         var m when IsGet(m) => Get,
         var m when IsPost(m) => Post,
+        var m when IsPut(m) => Put,
+        var m when IsDelete(m) => Delete,
         _ => method
     };
 

@@ -26,6 +26,7 @@ using Verifiable.Tests.TestInfrastructure;
 
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Server.Metadata;
+using Verifiable.OAuth.Server.Registration;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
@@ -71,7 +72,32 @@ internal sealed class TestHostShell: IDisposable
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> SigningKeys { get; } = new();
     private ConcurrentDictionary<KeyId, PublicKeyMemory> VerificationKeys { get; } = new();
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> DecryptionKeys { get; } = new();
+    private ConcurrentDictionary<string, string> RegistrationAccessTokens { get; } = new();
     private bool Disposed { get; set; }
+
+    /// <summary>
+    /// Constant tenant segment used by dynamic-registration tests. The
+    /// global RFC 7591 POST has no segment in the URL, so the test transport
+    /// supplies this value to <see cref="RegistrationEndpoints.HandleCreateAsync"/>.
+    /// All dynamically-registered clients in tests share this tenant.
+    /// </summary>
+    private const string DynamicRegistrationTenant = "dynamic-clients";
+
+    /// <summary>
+    /// The AS's issuer URI for dynamic-registration tests. Returned by
+    /// <see cref="GlobalRegistrationEndpoint"/> for the host root and used as
+    /// <see cref="ClientRegistration.AuthorizationServerIssuer"/> on the
+    /// resulting registration.
+    /// </summary>
+    public Uri IssuerUri { get; } = new($"https://issuer.test/{DynamicRegistrationTenant}");
+
+    /// <summary>
+    /// The global RFC 7591 §3 registration endpoint URL. Used by
+    /// dynamic-registration tests as the value of
+    /// <see cref="RegisterClientOptions.RegistrationEndpoint"/>.
+    /// </summary>
+    public Uri GlobalRegistrationEndpoint { get; } =
+        new("https://verifier.example.com/connect/register");
 
 
     /// <summary>The authorization server instance. All tests dispatch through this.</summary>
@@ -321,7 +347,56 @@ internal sealed class TestHostShell: IDisposable
             //ClientRecord.Profile across the three shipped profiles;
             //an unset Profile falls back to PolicyProfile.Fapi20
             //(FAPI 2.0 / HAIP-aligned).
-            ResolvePolicyAsync = PolicyProfiles.DefaultResolvePolicyAsync
+            ResolvePolicyAsync = PolicyProfiles.DefaultResolvePolicyAsync,
+
+            //Dynamic registration delegates. The parser uses JsonDocument to
+            //read the few fields the canonical test exercises directly into a
+            //ClientMetadata record; production deployments wire their full
+            //JSON layer through Verifiable.OAuth.Json instead.
+            ParseClientMetadataAsync = (body, ct) =>
+            {
+                using JsonDocument doc = JsonDocument.Parse(body);
+                JsonElement root = doc.RootElement;
+
+                List<Uri> redirectUris = [];
+                if(root.TryGetProperty("redirect_uris", out JsonElement uris))
+                {
+                    foreach(JsonElement el in uris.EnumerateArray())
+                    {
+                        string? s = el.GetString();
+                        if(s is not null)
+                        {
+                            redirectUris.Add(new Uri(s));
+                        }
+                    }
+                }
+
+                string? clientName = root.TryGetProperty("client_name", out JsonElement nm) ? nm.GetString() : null;
+                string? scope = root.TryGetProperty("scope", out JsonElement sc) ? sc.GetString() : null;
+                ClientAuthenticationMethod? authMethod = null;
+                if(root.TryGetProperty("token_endpoint_auth_method", out JsonElement am)
+                    && am.GetString() is string authMethodStr
+                    && ClientAuthenticationMethodNames.TryParse(authMethodStr, out ClientAuthenticationMethod parsed))
+                {
+                    authMethod = parsed;
+                }
+
+                return ValueTask.FromResult(new ClientMetadata
+                {
+                    RedirectUris = redirectUris,
+                    ClientName = clientName,
+                    Scope = scope,
+                    TokenEndpointAuthMethod = authMethod
+                });
+            },
+
+            //Bearer-token validation for RFC 7592 management calls. Test
+            //wiring stores the plaintext token and compares ordinally;
+            //production deployments hash and use FixedTimeEquals.
+            ValidateRegistrationAccessTokenAsync = (tenantId, clientId, presented, _, _) =>
+                ValueTask.FromResult(
+                    RegistrationAccessTokens.TryGetValue(clientId, out string? stored)
+                    && string.Equals(stored, presented, StringComparison.Ordinal))
         };
 
         AuthorizationServerCryptography cryptography = new()
@@ -417,7 +492,8 @@ internal sealed class TestHostShell: IDisposable
                 [
                     AuthCodeEndpoints.Builder,
                     Oid4VpEndpoints.Builder,
-                    MetadataEndpoints.Builder
+                    MetadataEndpoints.Builder,
+                    RegistrationEndpoints.Builder
                 ]),
                 TokenProducers = TokenProducerSet.Empty,
                 ClaimContributors = ClaimContributorSet.Empty
@@ -457,7 +533,7 @@ internal sealed class TestHostShell: IDisposable
         Server.Validate();
 
         //Subscribe to populate the routing table from events.
-        Server.Events.Subscribe(new RegistrationObserver(Registrations));
+        Server.Events.Subscribe(new RegistrationObserver(Registrations, RegistrationAccessTokens));
     }
 
 
@@ -521,7 +597,10 @@ internal sealed class TestHostShell: IDisposable
         Registrations[clientId] = registration;
 
         //Emit event so observers (routing table, caches) are notified.
-        Server.RegisterClient(registration, new RequestContext());
+        Server.RegisterClient(
+            registration,
+            new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
+            new RequestContext());
 
         //Dispose the exchange public key — only the private key is retained.
         //The signing public key is retained in VerificationKeys for JAR verification.
@@ -601,7 +680,10 @@ internal sealed class TestHostShell: IDisposable
         Registrations[segment] = registration;
         Registrations[clientId] = registration;
 
-        Server.RegisterClient(registration, new RequestContext());
+        Server.RegisterClient(
+            registration,
+            new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
+            new RequestContext());
 
         return new VerifierKeyMaterial(
             registration,
@@ -645,7 +727,10 @@ internal sealed class TestHostShell: IDisposable
         Registrations[segment] = registration;
         Registrations[clientId] = registration;
 
-        Server.RegisterClient(registration, new RequestContext());
+        Server.RegisterClient(
+            registration,
+            new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
+            new RequestContext());
 
         return registration;
     }
@@ -742,6 +827,163 @@ internal sealed class TestHostShell: IDisposable
     }
 
 
+    /// <summary>
+    /// Constructs an <see cref="OAuthClient"/> with the full dynamic-registration
+    /// + AuthCode transport wired but without any pre-existing
+    /// <see cref="ClientRegistration"/>. Used by the canonical phase 4 test
+    /// that registers dynamically and then drives an AuthCode flow against
+    /// the freshly-issued registration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The infrastructure wires three transports:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description>
+    ///     <c>SendJsonPostAsync</c> — dispatches the RFC 7591 §3 POST to
+    ///     <see cref="RegistrationEndpoints.HandleCreateAsync"/> with the
+    ///     <see cref="DynamicRegistrationTenant"/> as the tenant identifier.
+    ///   </description></item>
+    ///   <item><description>
+    ///     <c>SendFormPostAsync</c> — dispatches PAR / token / revocation
+    ///     calls via a tenant-lookup transport that reads the segment from
+    ///     the URL and resolves the <see cref="ClientRecord"/> from
+    ///     <see cref="Registrations"/>.
+    ///   </description></item>
+    ///   <item><description>
+    ///     <c>ResolveAuthorizationServerMetadataAsync</c> — returns AS
+    ///     metadata whose endpoints point at the test verifier's hostnames
+    ///     for the configured tenant segment.
+    ///   </description></item>
+    /// </list>
+    /// </remarks>
+    public OAuthClient CreateOAuthClientWithoutRegistration()
+    {
+        Dictionary<string, OAuthFlowState> clientFlowStore = [];
+
+        Uri baseUri = new("https://verifier.example.com");
+        Uri parEndpoint = new(baseUri, ServerEndpointPaths.Par
+            .Replace("{segment}", DynamicRegistrationTenant, StringComparison.Ordinal));
+        Uri authEndpoint = new(baseUri, ServerEndpointPaths.Authorize
+            .Replace("{segment}", DynamicRegistrationTenant, StringComparison.Ordinal));
+        Uri tokenEndpoint = new(baseUri, ServerEndpointPaths.Token
+            .Replace("{segment}", DynamicRegistrationTenant, StringComparison.Ordinal));
+
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = IssuerUri,
+            PushedAuthorizationRequestEndpoint = parEndpoint,
+            AuthorizationEndpoint = authEndpoint,
+            TokenEndpoint = tokenEndpoint
+        };
+
+        LookupTransport transport = new(Server, Registrations, IssuerUri.OriginalString);
+
+        OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
+            sendFormPostAsync: transport.SendAsync,
+            saveStateAsync: (state, ct) =>
+            {
+                clientFlowStore[state.FlowId] = state;
+                return ValueTask.CompletedTask;
+            },
+            loadStateAsync: (flowId, ct) =>
+                ValueTask.FromResult(clientFlowStore.GetValueOrDefault(flowId)),
+            loadStateByRequestUriAsync: (requestUri, ct) =>
+            {
+                foreach(OAuthFlowState state in clientFlowStore.Values)
+                {
+                    if(state is Verifiable.OAuth.AuthCode.States.ParCompletedState pc
+                        && string.Equals(
+                            pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
+                    {
+                        return ValueTask.FromResult<OAuthFlowState?>(state);
+                    }
+                }
+
+                return ValueTask.FromResult<OAuthFlowState?>(null);
+            },
+            parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
+            parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
+            parseAuthorizationServerMetadataAsync: (body, ct) =>
+                throw new NotImplementedException("Test host pre-resolves metadata; the parser is not exercised."),
+            parseRegistrationResponseAsync: (body, ct) => ParseRegistrationResponseJson(body),
+            resolveAuthorizationServerMetadataAsync: (issuer, ct) =>
+                ValueTask.FromResult(metadata),
+            resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
+            base64UrlEncoder: TestSetup.Base64UrlEncoder,
+            timeProvider: Time,
+            sendJsonPostAsync: async (endpoint, jsonBody, cancellationToken) =>
+            {
+                TenantId tenantId = new(DynamicRegistrationTenant);
+                ImmutableHashSet<ServerCapabilityName> capabilities = ImmutableHashSet.Create(
+                    ServerCapabilityName.AuthorizationCode,
+                    ServerCapabilityName.PushedAuthorization,
+                    ServerCapabilityName.DynamicClientRegistration);
+
+                ServerHttpResponse response = await RegistrationEndpoints.HandleCreateAsync(
+                    tenantId,
+                    jsonBody,
+                    capabilities,
+                    new RequestContext(),
+                    Server,
+                    cancellationToken).ConfigureAwait(false);
+
+                return new HttpResponseData
+                {
+                    Body = response.Body ?? string.Empty,
+                    StatusCode = response.StatusCode
+                };
+            });
+
+        return new OAuthClient(infrastructure);
+    }
+
+
+    private static ValueTask<RegistrationResponse> ParseRegistrationResponseJson(string body)
+    {
+        using JsonDocument doc = JsonDocument.Parse(body);
+        JsonElement root = doc.RootElement;
+
+        string clientIdValue = root.GetProperty("client_id").GetString()
+            ?? throw new FormatException("RFC 7591 §3.2.1 response missing client_id.");
+
+        RegistrationAccessToken? token = null;
+        if(root.TryGetProperty("registration_access_token", out JsonElement tokElem)
+            && tokElem.GetString() is string tokenValue)
+        {
+            token = new RegistrationAccessToken(tokenValue);
+        }
+
+        Uri? mgmtUri = null;
+        if(root.TryGetProperty("registration_client_uri", out JsonElement mgmtElem)
+            && mgmtElem.GetString() is string mgmtValue
+            && Uri.TryCreate(mgmtValue, UriKind.RelativeOrAbsolute, out Uri? parsedMgmt))
+        {
+            mgmtUri = parsedMgmt;
+        }
+
+        DateTimeOffset? issuedAt = null;
+        if(root.TryGetProperty("client_id_issued_at", out JsonElement issuedElem)
+            && issuedElem.TryGetInt64(out long unixIssued))
+        {
+            issuedAt = DateTimeOffset.FromUnixTimeSeconds(unixIssued);
+        }
+
+        ClientMetadata metadata = new()
+        {
+            ClientName = root.TryGetProperty("client_name", out JsonElement nm) ? nm.GetString() : null,
+            Scope = root.TryGetProperty("scope", out JsonElement sc) ? sc.GetString() : null
+        };
+
+        return ValueTask.FromResult(new RegistrationResponse
+        {
+            ClientId = new ClientId(clientIdValue),
+            Metadata = metadata,
+            AccessToken = token,
+            ManagementUri = mgmtUri,
+            IssuedAt = issuedAt
+        });
+    }
 
 
     /// <summary>
@@ -1286,10 +1528,81 @@ internal sealed class TestHostShell: IDisposable
 
 
     /// <summary>
+    /// In-process transport that resolves the <see cref="ClientRecord"/> from
+    /// the host's registration dictionary at dispatch time, rather than
+    /// binding to a fixed registration at construction. Used by the dynamic-
+    /// registration path where the registration does not exist at client-
+    /// construction time.
+    /// </summary>
+    [DebuggerDisplay("LookupTransport")]
+    private sealed class LookupTransport(
+        AuthorizationServer server,
+        ConcurrentDictionary<string, ClientRecord> registrations,
+        string issuerUri)
+    {
+        public async ValueTask<HttpResponseData> SendAsync(
+            Uri endpoint,
+            IReadOnlyDictionary<string, string> fields,
+            CancellationToken cancellationToken)
+        {
+            string segment = ExtractTenantSegment(endpoint.AbsolutePath);
+            if(!registrations.TryGetValue(segment, out ClientRecord? registration))
+            {
+                return new HttpResponseData
+                {
+                    StatusCode = 404,
+                    Body = $"No registration found for segment '{segment}'."
+                };
+            }
+
+            RequestFields serverFields = new(fields);
+
+            IncomingRequest request = new(
+                Path: endpoint.AbsolutePath,
+                Method: "POST",
+                Fields: serverFields,
+                Headers: RequestHeaders.Empty,
+                RouteValues: RouteValues.Empty);
+
+            RequestContext context = new();
+            context.SetTenantId(segment);
+            context.SetIssuer(new Uri(issuerUri));
+            context.SetRegistration(registration);
+
+            ServerHttpResponse response = await server.DispatchAsync(
+                request, context, cancellationToken).ConfigureAwait(false);
+
+            return new HttpResponseData
+            {
+                Body = response.Body ?? string.Empty,
+                StatusCode = response.StatusCode
+            };
+        }
+
+
+        private static string ExtractTenantSegment(string path)
+        {
+            //Test paths follow /connect/{segment}/<endpoint>. Anything else
+            //returns an empty segment which will fail the registration
+            //lookup and surface a 404.
+            const string prefix = "/connect/";
+            if(!path.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return string.Empty;
+            }
+            int start = prefix.Length;
+            int end = path.IndexOf('/', start);
+            return end < 0 ? path[start..] : path[start..end];
+        }
+    }
+
+
+    /// <summary>
     /// Observer that populates the registration routing table from events.
     /// </summary>
     private sealed class RegistrationObserver(
-        ConcurrentDictionary<string, ClientRecord> store)
+        ConcurrentDictionary<string, ClientRecord> store,
+        ConcurrentDictionary<string, string> tokenStore)
         : IObserver<ClientRegistrationEvent>
     {
         public void OnNext(ClientRegistrationEvent value)
@@ -1298,11 +1611,13 @@ internal sealed class TestHostShell: IDisposable
             {
                 store[registered.TenantId] = registered.Registration;
                 store[registered.Registration.ClientId] = registered.Registration;
+                tokenStore[registered.Registration.ClientId] = registered.AccessToken.Value;
             }
             else if(value is ClientDeregistered deregistered)
             {
                 store.TryRemove(deregistered.TenantId, out _);
                 store.TryRemove(deregistered.ClientId, out _);
+                tokenStore.TryRemove(deregistered.ClientId, out _);
             }
             else if(value is ClientUpdated updated)
             {

@@ -45,4 +45,19 @@ public static class OAuthErrors
     /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 §5</see>.
     /// </summary>
     public static readonly string InvalidRequestUri = "invalid_request_uri";
+
+    /// <summary>
+    /// The request body submitted to the dynamic client registration endpoint
+    /// was not a valid RFC 7591 §2 client metadata document, or one of the
+    /// requested fields conflicts with policy per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.2">RFC 7591 §3.2.2</see>.
+    /// </summary>
+    public static readonly string InvalidClientMetadata = "invalid_client_metadata";
+
+    /// <summary>
+    /// The bearer token presented at an RFC 7592 management endpoint is
+    /// missing, malformed, or does not match the persisted registration access
+    /// token.
+    /// </summary>
+    public static readonly string InvalidToken = "invalid_token";
 }

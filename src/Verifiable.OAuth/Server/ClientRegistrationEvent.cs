@@ -47,6 +47,22 @@ public sealed record ClientRegistered: ClientRegistrationEvent
 {
     /// <summary>The newly created registration.</summary>
     public required ClientRecord Registration { get; init; }
+
+    /// <summary>
+    /// The plaintext registration access token issued to the client per
+    /// RFC 7591 §3.2.1. Event subscribers persist this credential —
+    /// preferably hashed — for later validation against RFC 7592
+    /// management calls.
+    /// </summary>
+    /// <remarks>
+    /// The library does not retain the plaintext value beyond the event
+    /// emission. The subscriber's persistence strategy (storing the bearer
+    /// directly, storing a hash, storing in a separate vault) is opaque to
+    /// the library; the application later answers
+    /// <see cref="ValidateRegistrationAccessTokenDelegate"/> calls using
+    /// whatever shape it persisted.
+    /// </remarks>
+    public required RegistrationAccessToken AccessToken { get; init; }
 }
 
 
