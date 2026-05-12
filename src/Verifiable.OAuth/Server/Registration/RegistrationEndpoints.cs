@@ -2,7 +2,9 @@ using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Text;
+using Verifiable.JCose;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server.Routing;
 
@@ -151,7 +153,7 @@ public static class RegistrationEndpoints
         string body = BuildRegistrationResponseJson(
             clientId, accessToken, metadata, now, tenantId.Value);
 
-        return ServerHttpResponse.Created(body, "application/json");
+        return ServerHttpResponse.Created(body, WellKnownMediaTypes.Application.Json);
     }
 
 
@@ -418,27 +420,78 @@ public static class RegistrationEndpoints
         ClientRecord registration = context.Registration!;
         DateTimeOffset now = server.TimeProvider.GetUtcNow();
         string body = BuildReadResponseJson(registration, now);
-        return ServerHttpResponse.Ok(body, "application/json");
+        return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
     }
 
 
-    private static ValueTask<ServerHttpResponse> HandleUpdateAsync(
+    private static async ValueTask<ServerHttpResponse> HandleUpdateAsync(
         RequestContext context,
         AuthorizationServer server,
         CancellationToken cancellationToken)
     {
-        //RFC 7592 §2.2 PUT requires reading the request body. The current
-        //IncomingRequest envelope does not expose a Body field; phase 5 adds
-        //a Body slot (or a request-body parameter to the management handler
-        //pipeline) alongside the SendJsonPutDelegate it ships. Until then the
-        //update endpoint matches and returns a defensive ServerError so the
-        //surface is shaped correctly but exercising it surfaces the gap.
-        _ = context;
-        _ = server;
-        cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult(ServerHttpResponse.ServerError(
-            OAuthErrors.ServerError,
-            "RFC 7592 update body extraction is not yet wired — phase 5 work item."));
+        ServerHttpResponse? authFailure = await ValidateBearerAsync(
+            context, server, cancellationToken).ConfigureAwait(false);
+        if(authFailure is not null) { return authFailure; }
+
+        AuthorizationServerIntegration integration = server.Integration;
+        if(integration.ParseClientMetadataAsync is null)
+        {
+            return ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError,
+                "ParseClientMetadataAsync is not configured.");
+        }
+
+        RequestBody body = context.IncomingRequest?.Body ?? RequestBody.None;
+        if(body.IsEmpty)
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidClientMetadata,
+                "RFC 7592 §2.2 PUT requires a request body.");
+        }
+        if(!WellKnownMediaTypes.Application.IsJson(body.ContentType))
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidClientMetadata,
+                $"RFC 7592 §2.2 PUT requires Content-Type application/json; got '{body.ContentType}'.");
+        }
+
+        string bodyText = Encoding.UTF8.GetString(body.Bytes.Span);
+        ClientMetadata newMetadata;
+        try
+        {
+            newMetadata = await integration.ParseClientMetadataAsync(
+                bodyText, cancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception)
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidClientMetadata,
+                "Request body did not parse as a valid RFC 7591 client metadata document.");
+        }
+
+        ClientRecord previous = context.Registration!;
+        ClientRecord updated = BuildUpdatedRecord(previous, newMetadata);
+
+        server.UpdateClient(previous, updated, context);
+
+        DateTimeOffset now = server.TimeProvider.GetUtcNow();
+        string responseBody = BuildReadResponseJson(updated, now);
+        return ServerHttpResponse.Ok(responseBody, WellKnownMediaTypes.Application.Json);
+    }
+
+
+    private static ClientRecord BuildUpdatedRecord(ClientRecord previous, ClientMetadata newMetadata)
+    {
+        ImmutableHashSet<Uri> redirectUris = [.. newMetadata.RedirectUris];
+        ImmutableHashSet<string> scopes = newMetadata.Scope is null
+            ? previous.AllowedScopes
+            : [.. newMetadata.Scope.Split(' ', StringSplitOptions.RemoveEmptyEntries)];
+
+        return previous with
+        {
+            AllowedRedirectUris = redirectUris,
+            AllowedScopes = scopes
+        };
     }
 
 
@@ -512,7 +565,12 @@ public static class RegistrationEndpoints
         AppendUriListField(sb, "redirect_uris", [.. registration.AllowedRedirectUris], isFirst: false);
         if(registration.AllowedScopes.Count > 0)
         {
-            string scope = string.Join(' ', registration.AllowedScopes);
+            //RFC 6749 §3.3 says scope order does not matter on the wire, so the
+            //internal store is an ImmutableHashSet (correct set semantics for
+            //membership checks). Sort alphabetically on output so the response
+            //body is byte-for-byte deterministic across invocations — easier
+            //debugging, stable diffs in audit logs.
+            string scope = string.Join(' ', registration.AllowedScopes.OrderBy(s => s, StringComparer.Ordinal));
             AppendStringField(sb, "scope", scope, isFirst: false);
         }
         sb.Append('}');

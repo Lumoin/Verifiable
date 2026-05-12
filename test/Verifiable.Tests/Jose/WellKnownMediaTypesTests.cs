@@ -22,6 +22,8 @@ namespace Verifiable.Tests.Jwt
             yield return new object[] { WellKnownMediaTypes.Application.VpLdCose, new Func<string, bool>(WellKnownMediaTypes.Application.IsVpLdCose) };
             yield return new object[] { WellKnownMediaTypes.Application.VcCose, new Func<string, bool>(WellKnownMediaTypes.Application.IsVcCose) };
             yield return new object[] { WellKnownMediaTypes.Application.VpCose, new Func<string, bool>(WellKnownMediaTypes.Application.IsVpCose) };
+            yield return new object[] { WellKnownMediaTypes.Application.Json, new Func<string, bool>(WellKnownMediaTypes.Application.IsJson) };
+            yield return new object[] { WellKnownMediaTypes.Application.FormUrlEncoded, new Func<string, bool>(WellKnownMediaTypes.Application.IsFormUrlEncoded) };
         }
 
 

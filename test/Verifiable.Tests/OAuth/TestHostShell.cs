@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Core.Dcql;
@@ -912,8 +913,10 @@ internal sealed class TestHostShell: IDisposable
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
             timeProvider: Time,
-            sendJsonPostAsync: async (endpoint, jsonBody, cancellationToken) =>
+            sendJsonPostAsync: async (endpoint, jsonBody, headers, cancellationToken) =>
             {
+                //Headers are unused for the global registration POST — RFC 7591 §3 is unauthenticated.
+                _ = headers;
                 TenantId tenantId = new(DynamicRegistrationTenant);
                 ImmutableHashSet<ServerCapabilityName> capabilities = ImmutableHashSet.Create(
                     ServerCapabilityName.AuthorizationCode,
@@ -933,9 +936,121 @@ internal sealed class TestHostShell: IDisposable
                     Body = response.Body ?? string.Empty,
                     StatusCode = response.StatusCode
                 };
-            });
+            },
+            sendJsonGetAsync: (endpoint, headers, ct) =>
+                DispatchManagementAsync(endpoint, headers, WellKnownHttpMethods.Get, jsonBody: null, ct),
+            sendJsonPutAsync: (endpoint, jsonBody, headers, ct) =>
+                DispatchManagementAsync(endpoint, headers, WellKnownHttpMethods.Put, jsonBody: jsonBody, ct),
+            sendJsonDeleteAsync: (endpoint, headers, ct) =>
+                DispatchManagementAsync(endpoint, headers, WellKnownHttpMethods.Delete, jsonBody: null, ct),
+            parseClientMetadataAsync: ParseClientMetadataJson);
 
         return new OAuthClient(infrastructure);
+    }
+
+
+    /// <summary>
+    /// Test-transport dispatcher for the three RFC 7592 management methods.
+    /// Resolves the registration by tenant segment from the URL path, builds
+    /// an <see cref="IncomingRequest"/> carrying the Authorization header
+    /// (and the request body for PUT), then dispatches via
+    /// <see cref="AuthorizationServer.DispatchAsync"/>.
+    /// </summary>
+    private async ValueTask<HttpResponseData> DispatchManagementAsync(
+        Uri endpoint,
+        OutgoingHeaders headers,
+        string method,
+        string? jsonBody,
+        CancellationToken cancellationToken)
+    {
+        string path = endpoint.IsAbsoluteUri ? endpoint.AbsolutePath : endpoint.OriginalString;
+
+        string segment = LookupTransport.ExtractTenantSegmentForTests(path);
+        if(!Registrations.TryGetValue(segment, out ClientRecord? registration))
+        {
+            return new HttpResponseData
+            {
+                StatusCode = 404,
+                Body = $"No registration found for segment '{segment}'."
+            };
+        }
+
+        Dictionary<string, string[]> headerDict = new(StringComparer.OrdinalIgnoreCase);
+        foreach(KeyValuePair<string, string> pair in headers.Values)
+        {
+            headerDict[pair.Key] = [pair.Value];
+        }
+        RequestHeaders requestHeaders = new(headerDict);
+
+        RequestBody body = jsonBody is null
+            ? RequestBody.None
+            : new RequestBody
+            {
+                Bytes = Encoding.UTF8.GetBytes(jsonBody),
+                ContentType = WellKnownMediaTypes.Application.Json
+            };
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: method,
+            Fields: new RequestFields(new Dictionary<string, string>(0)),
+            Headers: requestHeaders,
+            RouteValues: RouteValues.Empty)
+        {
+            Body = body
+        };
+
+        RequestContext context = new();
+        context.SetTenantId(segment);
+        context.SetIssuer(IssuerUri);
+        context.SetRegistration(registration);
+
+        ServerHttpResponse response = await Server.DispatchAsync(
+            request, context, cancellationToken).ConfigureAwait(false);
+
+        return new HttpResponseData
+        {
+            Body = response.Body ?? string.Empty,
+            StatusCode = response.StatusCode
+        };
+    }
+
+
+    /// <summary>
+    /// Minimal client-side <see cref="ClientMetadata"/> parser used by the
+    /// test transport. Reads only the fields the canonical lifecycle test
+    /// exercises (<c>client_id</c>, <c>redirect_uris</c>, <c>scope</c>,
+    /// <c>client_name</c>); production wiring uses
+    /// <c>Verifiable.OAuth.Json</c>.
+    /// </summary>
+    private static ValueTask<ClientMetadata> ParseClientMetadataJson(string body, CancellationToken cancellationToken)
+    {
+        _ = cancellationToken;
+        using JsonDocument doc = JsonDocument.Parse(body);
+        JsonElement root = doc.RootElement;
+
+        List<Uri> redirectUris = [];
+        if(root.TryGetProperty("redirect_uris", out JsonElement uris))
+        {
+            foreach(JsonElement el in uris.EnumerateArray())
+            {
+                string? s = el.GetString();
+                if(s is not null)
+                {
+                    redirectUris.Add(new Uri(s));
+                }
+            }
+        }
+
+        string? clientName = root.TryGetProperty("client_name", out JsonElement nm) ? nm.GetString() : null;
+        string? scope = root.TryGetProperty("scope", out JsonElement sc) ? sc.GetString() : null;
+
+        return ValueTask.FromResult(new ClientMetadata
+        {
+            ClientName = clientName,
+            RedirectUris = redirectUris,
+            Scope = scope
+        });
     }
 
 
@@ -1580,7 +1695,11 @@ internal sealed class TestHostShell: IDisposable
         }
 
 
-        private static string ExtractTenantSegment(string path)
+        private static string ExtractTenantSegment(string path) =>
+            ExtractTenantSegmentForTests(path);
+
+
+        internal static string ExtractTenantSegmentForTests(string path)
         {
             //Test paths follow /connect/{segment}/<endpoint>. Anything else
             //returns an empty segment which will fail the registration

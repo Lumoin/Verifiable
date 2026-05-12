@@ -83,6 +83,31 @@ public sealed class OAuthClientInfrastructure
     /// </summary>
     public SendJsonPostDelegate? SendJsonPostAsync { get; private init; }
 
+    /// <summary>
+    /// Issues a JSON GET. Required when the application drives RFC 7592 §2.1
+    /// read-client-metadata calls; optional otherwise.
+    /// </summary>
+    public SendJsonGetDelegate? SendJsonGetAsync { get; private init; }
+
+    /// <summary>
+    /// Issues a JSON PUT. Required when the application drives RFC 7592 §2.2
+    /// update-client-metadata calls; optional otherwise.
+    /// </summary>
+    public SendJsonPutDelegate? SendJsonPutAsync { get; private init; }
+
+    /// <summary>
+    /// Issues a JSON DELETE. Required when the application drives RFC 7592
+    /// §2.3 deregister-client calls; optional otherwise.
+    /// </summary>
+    public SendJsonDeleteDelegate? SendJsonDeleteAsync { get; private init; }
+
+    /// <summary>
+    /// Parses RFC 7592 §2.1 read responses and §2.2 update responses into a
+    /// typed <see cref="ClientMetadata"/>. Required when the application
+    /// drives RFC 7592 read or update calls; optional otherwise.
+    /// </summary>
+    public ParseClientMetadataDelegate? ParseClientMetadataAsync { get; private init; }
+
 
     //Flow state storage.
 
@@ -166,7 +191,11 @@ public sealed class OAuthClientInfrastructure
         TimeProvider? timeProvider = null,
         MemoryPool<byte>? memoryPool = null,
         Oid4VpWalletConfiguration<SdJwtVcCredential>? defaultSdJwtVcWalletConfiguration = null,
-        SendJsonPostDelegate? sendJsonPostAsync = null)
+        SendJsonPostDelegate? sendJsonPostAsync = null,
+        SendJsonGetDelegate? sendJsonGetAsync = null,
+        SendJsonPutDelegate? sendJsonPutAsync = null,
+        SendJsonDeleteDelegate? sendJsonDeleteAsync = null,
+        ParseClientMetadataDelegate? parseClientMetadataAsync = null)
     {
         ArgumentNullException.ThrowIfNull(sendFormPostAsync);
         ArgumentNullException.ThrowIfNull(saveStateAsync);
@@ -196,7 +225,11 @@ public sealed class OAuthClientInfrastructure
             TimeProvider = timeProvider ?? TimeProvider.System,
             MemoryPool = memoryPool ?? SensitiveMemoryPool<byte>.Shared,
             DefaultSdJwtVcWalletConfiguration = defaultSdJwtVcWalletConfiguration,
-            SendJsonPostAsync = sendJsonPostAsync
+            SendJsonPostAsync = sendJsonPostAsync,
+            SendJsonGetAsync = sendJsonGetAsync,
+            SendJsonPutAsync = sendJsonPutAsync,
+            SendJsonDeleteAsync = sendJsonDeleteAsync,
+            ParseClientMetadataAsync = parseClientMetadataAsync
         };
     }
 }

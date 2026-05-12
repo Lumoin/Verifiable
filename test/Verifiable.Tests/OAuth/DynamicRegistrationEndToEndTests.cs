@@ -75,4 +75,98 @@ internal sealed class DynamicRegistrationEndToEndTests
         Assert.Contains("request_uri", parResult.RedirectUri!.ToString(), StringComparison.Ordinal,
             "Authorize redirect URI must carry the PAR-issued request_uri.");
     }
+
+
+    [TestMethod]
+    public async Task RegistrationLifecycleRegistersReadsUpdatesAndDeregisters()
+    {
+        using TestHostShell host = new(TimeProvider);
+
+        OAuthClient client = host.CreateOAuthClientWithoutRegistration();
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKey =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        ClientMetadata initialMetadata = new()
+        {
+            ClientName = "phase-5-lifecycle-client",
+            RedirectUris = [DefaultRedirectUri],
+            TokenEndpointAuthMethod = ClientAuthenticationMethod.None,
+            Scope = WellKnownScopes.OpenId
+        };
+
+        RegisterClientOptions registerOptions = new()
+        {
+            RegistrationEndpoint = host.GlobalRegistrationEndpoint,
+            AuthorizationServerIssuer = host.IssuerUri,
+            Metadata = initialMetadata,
+            AuthenticationMethod = ClientAuthenticationMethod.None,
+            SigningKeyMaterial = signingKey,
+            Profile = PolicyProfile.Haip10
+        };
+
+        //Register.
+        DynamicRegistrationResult registered = await client.DynamicRegistration
+            .RegisterAsync(registerOptions, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.IsNotNull(registered.Registration.ClientId.Value);
+        Assert.IsNotNull(registered.Registration.ManagementUri);
+        Assert.IsNotNull(registered.Registration.AccessToken);
+
+        //Read.
+        ClientMetadata fetchedAfterRegister = await client.DynamicRegistration
+            .ReadAsync(registered.Registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(initialMetadata.Scope, fetchedAfterRegister.Scope);
+        Assert.HasCount(1, fetchedAfterRegister.RedirectUris,
+            "Read must echo the single registered redirect_uri.");
+
+        //Update.
+        ClientMetadata updatedMetadata = initialMetadata with
+        {
+            ClientName = "phase-5-lifecycle-client-renamed",
+            Scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Profile}"
+        };
+
+        ClientMetadata appliedAfterUpdate = await client.DynamicRegistration
+            .UpdateAsync(registered.Registration, updatedMetadata, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        //Scope is a set on the wire per RFC 6749 §3.3 — order is not significant.
+        //The server stores it as ImmutableHashSet and emits via deterministic
+        //alphabetic sort, so the wire order is stable but caller code should
+        //still treat scope as a set rather than relying on the ordering.
+        HashSet<string> expectedScopes = [WellKnownScopes.OpenId, WellKnownScopes.Profile];
+        HashSet<string> appliedScopes = SplitScope(appliedAfterUpdate.Scope);
+        Assert.IsTrue(appliedScopes.SetEquals(expectedScopes),
+            $"Update response must echo the new scope tokens; got '{appliedAfterUpdate.Scope}'.");
+
+        //Read again — confirms the update persisted on the AS side.
+        ClientMetadata fetchedAfterUpdate = await client.DynamicRegistration
+            .ReadAsync(registered.Registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        HashSet<string> fetchedScopes = SplitScope(fetchedAfterUpdate.Scope);
+        Assert.IsTrue(fetchedScopes.SetEquals(expectedScopes),
+            $"Second read must reflect the updated scope tokens; got '{fetchedAfterUpdate.Scope}'.");
+
+        //Deregister.
+        await client.DynamicRegistration
+            .DeregisterAsync(registered.Registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        //Subsequent read must fail — the registration no longer exists.
+        InvalidOperationException postDeleteRead = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            async () => await client.DynamicRegistration
+                .ReadAsync(registered.Registration, TestContext.CancellationToken)
+                .ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.Contains("RFC 7592 read failed", postDeleteRead.Message, StringComparison.Ordinal);
+    }
+
+
+    private static HashSet<string> SplitScope(string? scope) =>
+        [.. (scope ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries)];
 }

@@ -303,7 +303,7 @@ public static class AuthCodeEndpoints
                 //BuildResponse. The source policy is TimingPolicy.AuthCodeParLifetime.
                 string body =
                     $"{{\"request_uri\":\"{par.RequestUri}\",\"expires_in\":{par.ExpiresIn}}}";
-                return ServerHttpResponse.Ok(body, "application/json");
+                return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
             }
         };
 
@@ -678,7 +678,7 @@ public static class AuthCodeEndpoints
 
                 string body =
                     $"{{\"request_uri\":\"{par.RequestUri}\",\"expires_in\":{par.ExpiresIn}}}";
-                return ServerHttpResponse.Ok(body, "application/json");
+                return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
             }
         };
 
@@ -1406,7 +1406,7 @@ public static class AuthCodeEndpoints
                 }
 
                 sb.Append('}');
-                return ServerHttpResponse.Ok(sb.ToString(), "application/json");
+                return ServerHttpResponse.Ok(sb.ToString(), WellKnownMediaTypes.Application.Json);
             }
         };
 

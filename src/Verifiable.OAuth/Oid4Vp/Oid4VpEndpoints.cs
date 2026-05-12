@@ -288,7 +288,7 @@ public static class Oid4VpEndpoints
                     $"{{\"request_uri\":\"{par.Par.RequestUri}\"," +
                     $"\"expires_in\":{par.Par.ExpiresIn}}}";
 
-                return ServerHttpResponse.Ok(body, "application/json");
+                return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
             }
         };
 
@@ -485,7 +485,7 @@ public static class Oid4VpEndpoints
                     ? $"{{\"redirect_uri\":\"{verified.RedirectUri}\"}}"
                     : "{}";
 
-                return ServerHttpResponse.Ok(body, "application/json");
+                return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
             }
         };
 }

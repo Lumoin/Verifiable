@@ -175,7 +175,7 @@ public static class MetadataEndpoints
 
                 string body = BuildJwksJson(jwks);
 
-                return (null, ServerHttpResponse.Ok(body, "application/json"));
+                return (null, ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json));
             },
 
             BuildResponse = static (state, _, _) =>
@@ -357,7 +357,7 @@ public static class MetadataEndpoints
 
                 sb.Append('}');
 
-                return (null, ServerHttpResponse.Ok(sb.ToString(), "application/json"));
+                return (null, ServerHttpResponse.Ok(sb.ToString(), WellKnownMediaTypes.Application.Json));
             },
 
             BuildResponse = static (state, _, _) =>

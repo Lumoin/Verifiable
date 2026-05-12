@@ -181,6 +181,18 @@ namespace Verifiable.JCose
             /// </summary>
             public static readonly string VerifierAttestationJwt = "verifier-attestation+jwt";
 
+            /// <summary>
+            /// The JSON content-type, <c>application/json</c>, per
+            /// <see href="https://www.rfc-editor.org/rfc/rfc8259">RFC 8259</see>.
+            /// </summary>
+            public static readonly string Json = "application/json";
+
+            /// <summary>
+            /// The form-urlencoded content-type, <c>application/x-www-form-urlencoded</c>,
+            /// per <see href="https://url.spec.whatwg.org/#application/x-www-form-urlencoded">URL Standard</see>.
+            /// </summary>
+            public static readonly string FormUrlEncoded = "application/x-www-form-urlencoded";
+
 
             /// <summary>
             /// If <paramref name="mediaType"/> is <see cref="SdJwt"/> or not.
@@ -311,6 +323,26 @@ namespace Verifiable.JCose
 
 
             /// <summary>
+            /// Returns <see langword="true"/> if <paramref name="mediaType"/> is the
+            /// <c>application/json</c> media type, comparing case-insensitively per
+            /// RFC 9110 §8.3.1.
+            /// </summary>
+            /// <param name="mediaType">The media type.</param>
+            /// <returns><see langword="true"/> if <paramref name="mediaType"/> is <see cref="Json"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsJson(string mediaType) => Equals(mediaType, Json);
+
+
+            /// <summary>
+            /// Returns <see langword="true"/> if <paramref name="mediaType"/> is the
+            /// <c>application/x-www-form-urlencoded</c> media type, comparing
+            /// case-insensitively per RFC 9110 §8.3.1.
+            /// </summary>
+            /// <param name="mediaType">The media type.</param>
+            /// <returns><see langword="true"/> if <paramref name="mediaType"/> is <see cref="FormUrlEncoded"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsFormUrlEncoded(string mediaType) => Equals(mediaType, FormUrlEncoded);
+
+
+            /// <summary>
             /// Returns the equivalent static instance, or the original instance if none match.
             /// This conversion is optional but allows for performance optimizations when comparing values elsewhere.
             /// </summary>
@@ -334,6 +366,8 @@ namespace Verifiable.JCose
                 _ when IsOauthAuthzReqJwt(mediaType) => OauthAuthzReqJwt,
                 _ when IsAtJwt(mediaType) => AtJwt,
                 _ when IsDpopJwt(mediaType) => DpopJwt,
+                _ when IsJson(mediaType) => Json,
+                _ when IsFormUrlEncoded(mediaType) => FormUrlEncoded,
                 _ => mediaType
             };
 

@@ -34,7 +34,7 @@ public static class DynamicRegistrationHandlers
         string body = SerializeClientMetadata(options.Metadata);
 
         HttpResponseData response = await infrastructure.SendJsonPostAsync(
-            options.RegistrationEndpoint, body, cancellationToken).ConfigureAwait(false);
+            options.RegistrationEndpoint, body, OutgoingHeaders.Empty, cancellationToken).ConfigureAwait(false);
 
         if(response.StatusCode is < 200 or >= 300)
         {
@@ -59,22 +59,44 @@ public static class DynamicRegistrationHandlers
     /// Handles RFC 7592 §2.1 client read. GETs the management URI with the
     /// registration's bearer token, parses the echoed metadata.
     /// </summary>
-    /// <remarks>
-    /// Phase 4 stub — the underlying transport delegate
-    /// (<c>SendJsonGetAsync</c>) ships in phase 5. Calling this method
-    /// throws <see cref="NotImplementedException"/>.
-    /// </remarks>
-    public static ValueTask<ClientMetadata> HandleReadAsync(
+    public static async ValueTask<ClientMetadata> HandleReadAsync(
         ClientRegistration registration,
         OAuthClientInfrastructure infrastructure,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(infrastructure);
-        cancellationToken.ThrowIfCancellationRequested();
 
-        throw new NotImplementedException(
-            "RFC 7592 read requires a SendJsonGetAsync delegate on OAuthClientInfrastructure — out of phase 4 scope.");
+        if(registration.ManagementUri is null || registration.AccessToken is null)
+        {
+            throw new InvalidOperationException(
+                "Read requires a registration with ManagementUri and AccessToken set.");
+        }
+        if(infrastructure.SendJsonGetAsync is null)
+        {
+            throw new InvalidOperationException(
+                "OAuthClientInfrastructure.SendJsonGetAsync is not configured.");
+        }
+        if(infrastructure.ParseClientMetadataAsync is null)
+        {
+            throw new InvalidOperationException(
+                "OAuthClientInfrastructure.ParseClientMetadataAsync is not configured.");
+        }
+
+        OutgoingHeaders headers = OutgoingHeaders.Empty
+            .WithAuthorization("Bearer", registration.AccessToken.Value.Value);
+
+        HttpResponseData response = await infrastructure.SendJsonGetAsync(
+            registration.ManagementUri, headers, cancellationToken).ConfigureAwait(false);
+
+        if(response.StatusCode is < 200 or >= 300)
+        {
+            throw new InvalidOperationException(
+                $"RFC 7592 read failed with status {response.StatusCode}: {response.Body}");
+        }
+
+        return await infrastructure.ParseClientMetadataAsync(
+            response.Body, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -82,10 +104,7 @@ public static class DynamicRegistrationHandlers
     /// Handles RFC 7592 §2.2 client update. PUTs the new metadata with the
     /// registration's bearer token, parses the echoed updated metadata.
     /// </summary>
-    /// <remarks>
-    /// Phase 4 stub — see <see cref="HandleReadAsync"/> remarks.
-    /// </remarks>
-    public static ValueTask<ClientMetadata> HandleUpdateAsync(
+    public static async ValueTask<ClientMetadata> HandleUpdateAsync(
         ClientRegistration registration,
         ClientMetadata newMetadata,
         OAuthClientInfrastructure infrastructure,
@@ -94,10 +113,39 @@ public static class DynamicRegistrationHandlers
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(newMetadata);
         ArgumentNullException.ThrowIfNull(infrastructure);
-        cancellationToken.ThrowIfCancellationRequested();
 
-        throw new NotImplementedException(
-            "RFC 7592 update requires a SendJsonPutAsync delegate on OAuthClientInfrastructure — out of phase 4 scope.");
+        if(registration.ManagementUri is null || registration.AccessToken is null)
+        {
+            throw new InvalidOperationException(
+                "Update requires a registration with ManagementUri and AccessToken set.");
+        }
+        if(infrastructure.SendJsonPutAsync is null)
+        {
+            throw new InvalidOperationException(
+                "OAuthClientInfrastructure.SendJsonPutAsync is not configured.");
+        }
+        if(infrastructure.ParseClientMetadataAsync is null)
+        {
+            throw new InvalidOperationException(
+                "OAuthClientInfrastructure.ParseClientMetadataAsync is not configured.");
+        }
+
+        string body = SerializeClientMetadata(newMetadata);
+
+        OutgoingHeaders headers = OutgoingHeaders.Empty
+            .WithAuthorization("Bearer", registration.AccessToken.Value.Value);
+
+        HttpResponseData response = await infrastructure.SendJsonPutAsync(
+            registration.ManagementUri, body, headers, cancellationToken).ConfigureAwait(false);
+
+        if(response.StatusCode is < 200 or >= 300)
+        {
+            throw new InvalidOperationException(
+                $"RFC 7592 update failed with status {response.StatusCode}: {response.Body}");
+        }
+
+        return await infrastructure.ParseClientMetadataAsync(
+            response.Body, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -105,20 +153,36 @@ public static class DynamicRegistrationHandlers
     /// Handles RFC 7592 §2.3 client deregistration. DELETEs the management URI
     /// with the registration's bearer token.
     /// </summary>
-    /// <remarks>
-    /// Phase 4 stub — see <see cref="HandleReadAsync"/> remarks.
-    /// </remarks>
-    public static ValueTask HandleDeregisterAsync(
+    public static async ValueTask HandleDeregisterAsync(
         ClientRegistration registration,
         OAuthClientInfrastructure infrastructure,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(infrastructure);
-        cancellationToken.ThrowIfCancellationRequested();
 
-        throw new NotImplementedException(
-            "RFC 7592 delete requires a SendJsonDeleteAsync delegate on OAuthClientInfrastructure — out of phase 4 scope.");
+        if(registration.ManagementUri is null || registration.AccessToken is null)
+        {
+            throw new InvalidOperationException(
+                "Deregister requires a registration with ManagementUri and AccessToken set.");
+        }
+        if(infrastructure.SendJsonDeleteAsync is null)
+        {
+            throw new InvalidOperationException(
+                "OAuthClientInfrastructure.SendJsonDeleteAsync is not configured.");
+        }
+
+        OutgoingHeaders headers = OutgoingHeaders.Empty
+            .WithAuthorization("Bearer", registration.AccessToken.Value.Value);
+
+        HttpResponseData response = await infrastructure.SendJsonDeleteAsync(
+            registration.ManagementUri, headers, cancellationToken).ConfigureAwait(false);
+
+        if(response.StatusCode is < 200 or >= 300)
+        {
+            throw new InvalidOperationException(
+                $"RFC 7592 deregister failed with status {response.StatusCode}: {response.Body}");
+        }
     }
 
 

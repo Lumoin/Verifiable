@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth;
 
@@ -61,6 +62,22 @@ namespace Verifiable.OAuth;
 public readonly struct HttpResponseData: IEquatable<HttpResponseData>
 {
     /// <summary>
+    /// Initialises an empty <see cref="HttpResponseData"/> with empty body,
+    /// zero status code, and <see cref="ResponseHeaders.Empty"/>. Required
+    /// by C# (CS8983) because the struct carries field initializers — the
+    /// public usage path is always object-initialiser syntax that supplies
+    /// the required values via <c>init</c>.
+    /// </summary>
+    public HttpResponseData()
+    {
+        Body = string.Empty;
+        StatusCode = 0;
+        TransportMetadata = null;
+        Headers = ResponseHeaders.Empty;
+    }
+
+
+    /// <summary>
     /// The response body. For OAuth protocol endpoints this is typically a
     /// JSON object. May be empty for endpoints that return no body.
     /// </summary>
@@ -77,6 +94,15 @@ public readonly struct HttpResponseData: IEquatable<HttpResponseData>
     /// <see langword="null"/> when the delegate did not capture any metadata.
     /// </summary>
     public IReadOnlyDictionary<string, string>? TransportMetadata { get; init; }
+
+    /// <summary>
+    /// Response headers. Defaults to <see cref="ResponseHeaders.Empty"/>.
+    /// Populated by the production HttpClient-based transport from
+    /// <c>HttpResponseMessage.Headers</c>. Consumed by future library work
+    /// (RFC 9449 DPoP nonce flow, OID4VCI deferred credential
+    /// <c>Retry-After</c>); phase 5 ships the slot without active consumers.
+    /// </summary>
+    public ResponseHeaders Headers { get; init; } = ResponseHeaders.Empty;
 
 
     /// <summary>

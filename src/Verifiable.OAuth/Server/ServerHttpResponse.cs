@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Server;
 
@@ -87,7 +88,7 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.BadRequest,
             Body = BuildErrorBody(error, description),
-            ContentType = "application/json"
+            ContentType = WellKnownMediaTypes.Application.Json
         };
 
 
@@ -97,7 +98,7 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.Unauthorized,
             Body = BuildErrorBody(error, description),
-            ContentType = "application/json"
+            ContentType = WellKnownMediaTypes.Application.Json
         };
 
 
@@ -107,7 +108,7 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.Forbidden,
             Body = BuildErrorBody(error, description),
-            ContentType = "application/json"
+            ContentType = WellKnownMediaTypes.Application.Json
         };
 
 
@@ -127,7 +128,7 @@ public sealed record ServerHttpResponse
         {
             StatusCode = (int)HttpStatusCode.InternalServerError,
             Body = BuildErrorBody(error, description),
-            ContentType = "application/json"
+            ContentType = WellKnownMediaTypes.Application.Json
         };
 
 

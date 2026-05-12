@@ -26,9 +26,15 @@ namespace Verifiable.OAuth.Client;
 /// </remarks>
 /// <param name="endpoint">The URI to POST the JSON body to.</param>
 /// <param name="jsonBody">The serialised JSON body. The implementation sets the content type.</param>
+/// <param name="headers">Composed request headers. RFC 7591 §3 registration is
+/// unauthenticated, so this is typically <see cref="OutgoingHeaders.Empty"/>; the
+/// parameter is required so the four JSON-transport delegates have a uniform shape
+/// and so production wiring can add optional headers (User-Agent, X-Request-Id)
+/// without a signature change.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>The HTTP response carrying body, status code, and optional transport metadata.</returns>
 public delegate ValueTask<HttpResponseData> SendJsonPostDelegate(
     Uri endpoint,
     string jsonBody,
+    OutgoingHeaders headers,
     CancellationToken cancellationToken);

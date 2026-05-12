@@ -60,4 +60,12 @@ public sealed record IncomingRequest(
     string Method,
     RequestFields Fields,
     RequestHeaders Headers,
-    RouteValues RouteValues);
+    RouteValues RouteValues)
+{
+    /// <summary>
+    /// The request body, or <see cref="RequestBody.None"/> when the request
+    /// carries no body (GET requests, or form-encoded POSTs whose payload
+    /// is already in <see cref="Fields"/>).
+    /// </summary>
+    public RequestBody Body { get; init; } = RequestBody.None;
+}
