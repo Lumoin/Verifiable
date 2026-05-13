@@ -1,6 +1,8 @@
 using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
+using System.Threading.Tasks;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
@@ -48,28 +50,30 @@ public static class TpmSecdsaExtensions
         /// A <see cref="TpmResult{T}"/> containing the output point on success,
         /// or a TPM or transport error.
         /// </returns>
-        public TpmResult<EcdhZGenResponse> EcdhZGen(
+        public ValueTask<TpmResult<EcdhZGenResponse>> EcdhZGenAsync(
             TpmiDhObject keyHandle,
-            ReadOnlySpan<byte> inPoint,
-            MemoryPool<byte> pool)
+            ReadOnlyMemory<byte> inPoint,
+            MemoryPool<byte> pool,
+            CancellationToken cancellationToken = default)
         {
-            return ExecuteEcdhZGen(device, keyHandle, inPoint, pool);
+            return ExecuteEcdhZGenAsync(device, keyHandle, inPoint, pool, cancellationToken);
         }
     }
 
-    private static TpmResult<EcdhZGenResponse> ExecuteEcdhZGen(
+    private static async ValueTask<TpmResult<EcdhZGenResponse>> ExecuteEcdhZGenAsync(
         TpmDevice device,
         TpmiDhObject keyHandle,
-        ReadOnlySpan<byte> inPoint,
-        MemoryPool<byte> pool)
+        ReadOnlyMemory<byte> inPoint,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_ECDH_ZGen, TpmResponseCodec.EcdhZGen);
 
-        using EcdhZGenInput ecdhInput = EcdhZGenInput.FromUncompressedPoint(keyHandle, inPoint, pool);
+        using EcdhZGenInput ecdhInput = EcdhZGenInput.FromUncompressedPoint(keyHandle, inPoint.Span, pool);
         using var keyAuth = TpmPasswordSession.CreateEmpty(pool);
 
-        return TpmCommandExecutor.Execute<EcdhZGenResponse>(
-            device, ecdhInput, [keyAuth], pool, registry);
+        return await TpmCommandExecutor.ExecuteAsync<EcdhZGenResponse>(
+            device, ecdhInput, [keyAuth], pool, registry, cancellationToken).ConfigureAwait(false);
     }
 }

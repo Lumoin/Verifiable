@@ -5,16 +5,31 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Verifiable.Tpm;
 
 /// <summary>
-/// Delegate for submitting TPM commands.
+/// Delegate for asynchronously submitting TPM commands.
 /// </summary>
 /// <param name="command">The command bytes to submit.</param>
 /// <param name="pool">The memory pool for allocating the response.</param>
+/// <param name="cancellationToken">Token to observe while the submission is in flight.</param>
 /// <returns>A result containing the TPM response or a transport error.</returns>
-public delegate TpmResult<TpmResponse> TpmSubmitHandler(ReadOnlySpan<byte> command, MemoryPool<byte> pool);
+/// <remarks>
+/// <para>
+/// On Linux, <see cref="TpmDevice"/> opens <c>/dev/tpmrm0</c> with
+/// <c>FileStream(isAsync: true)</c> so submission yields the calling thread for the
+/// kernel TPM round-trip. On Windows, the TBS API <c>Tbsip_Submit_Command</c> is
+/// synchronous; the implementation wraps it in a synchronously-completed
+/// <see cref="ValueTask{TResult}"/>. Custom handlers (virtual TPMs, recorders) may
+/// likewise return synchronously-completed value tasks.
+/// </para>
+/// </remarks>
+public delegate ValueTask<TpmResult<TpmResponse>> TpmSubmitHandler(
+    ReadOnlyMemory<byte> command,
+    MemoryPool<byte> pool,
+    CancellationToken cancellationToken);
 
 /// <summary>
 /// Cross-platform TPM 2.0 device access with observable command/response traffic.
@@ -47,7 +62,7 @@ public delegate TpmResult<TpmResponse> TpmSubmitHandler(ReadOnlySpan<byte> comma
 /// using var tpm = TpmDevice.Open();
 /// using var pool = SensitiveMemoryPool&lt;byte&gt;.Shared;
 ///
-/// using TpmResponse response = tpm.Submit(commandBytes, pool);
+/// using TpmResponse response = (await tpm.SubmitAsync(commandBytes, pool)).Value;
 /// //Parse response...
 /// </code>
 /// <para>
@@ -65,7 +80,7 @@ public delegate TpmResult<TpmResponse> TpmSubmitHandler(ReadOnlySpan<byte> comma
 /// using var recorder = new TpmRecorder();
 /// using(tpm.Subscribe(recorder))
 /// {
-///     using TpmResponse response = tpm.Submit(commandBytes, pool);
+///     using TpmResponse response = (await tpm.SubmitAsync(commandBytes, pool)).Value;
 /// }
 /// TpmRecording recording = recorder.ToRecording(tpm.GetSessionInfo(TimeProvider.System));
 /// </code>
@@ -85,7 +100,7 @@ public delegate TpmResult<TpmResponse> TpmSubmitHandler(ReadOnlySpan<byte> comma
 /// by the caller are invalid regardless.
 /// </para>
 /// <code>
-/// TpmResult&lt;TpmResponse&gt; result = tpm.Submit(commandBytes, pool);
+/// TpmResult&lt;TpmResponse&gt; result = await tpm.SubmitAsync(commandBytes, pool);
 /// if(result.IsTransportError)
 /// {
 ///     TpmTransportFailure info = tpm.Failure!;
@@ -276,12 +291,21 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
 
 
     /// <summary>
-    /// Submits a command to the TPM and receives the response.
+    /// Asynchronously submits a command to the TPM and receives the response.
     /// </summary>
     /// <param name="command">The command bytes to send.</param>
     /// <param name="pool">The memory pool for allocating the response buffer.</param>
+    /// <param name="cancellationToken">Token to observe while the submission is in flight.</param>
     /// <returns>A result containing the TPM response or a transport error.</returns>
     /// <remarks>
+    /// <para>
+    /// On Linux, the underlying <see cref="FileStream"/> is opened with
+    /// <c>isAsync: true</c> against the kernel resource manager, so the calling
+    /// thread yields for the TPM round-trip rather than blocking. On Windows, the
+    /// TBS API <c>Tbsip_Submit_Command</c> is synchronous and is wrapped in a
+    /// synchronously-completed <see cref="ValueTask{TResult}"/>; the calling thread
+    /// blocks for the TPM duration on that platform.
+    /// </para>
     /// <para>
     /// On success, the caller is responsible for disposing the returned <see cref="TpmResponse"/>.
     /// The response buffer is allocated from the provided pool and will be returned
@@ -299,7 +323,10 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// the response bytes are securely cleared when disposed.
     /// </para>
     /// </remarks>
-    public TpmResult<TpmResponse> Submit(ReadOnlySpan<byte> command, MemoryPool<byte> pool)
+    public async ValueTask<TpmResult<TpmResponse>> SubmitAsync(
+        ReadOnlyMemory<byte> command,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -311,12 +338,12 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
         }
 
         long startTicks = Stopwatch.GetTimestamp();
-        TpmResult<TpmResponse> result = SubmitCore(command, pool);
+        TpmResult<TpmResponse> result = await SubmitCoreAsync(command, pool, cancellationToken).ConfigureAwait(false);
         long endTicks = Stopwatch.GetTimestamp();
 
         if(result.IsSuccess)
         {
-            NotifyObservers(startTicks, endTicks, command, result.Value.AsReadOnlySpan());
+            NotifyObservers(startTicks, endTicks, command.Span, result.Value.AsReadOnlySpan());
         }
 
         return result;
@@ -482,8 +509,10 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
 
             //Wrap the validated descriptor. SafeFileHandle takes ownership, so if the FileStream
             //constructor succeeds, we must not call LinuxClose manually.
+            //isAsync: true enables genuine kernel-level async I/O via epoll/io_uring against
+            ///dev/tpmrm0; SubmitAsync awaits the kernel TPM round-trip rather than blocking.
             var safeHandle = new Microsoft.Win32.SafeHandles.SafeFileHandle(fd, ownsHandle: true);
-            linuxStream = new FileStream(safeHandle, FileAccess.ReadWrite, bufferSize: 0);
+            linuxStream = new FileStream(safeHandle, FileAccess.ReadWrite, bufferSize: 0, isAsync: true);
             Endpoint = LinuxTpmResourceManagerPath;
         }
         catch
@@ -508,30 +537,36 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     }
 
 
-    private TpmResult<TpmResponse> SubmitCore(ReadOnlySpan<byte> command, MemoryPool<byte> pool)
+    private ValueTask<TpmResult<TpmResponse>> SubmitCoreAsync(
+        ReadOnlyMemory<byte> command,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
         if(customHandler is not null)
         {
-            return customHandler(command, pool);
+            return customHandler(command, pool, cancellationToken);
         }
 
         if(Platform is TpmPlatform.Linux)
         {
-            return SubmitLinux(command, pool);
+            return SubmitLinuxAsync(command, pool, cancellationToken);
         }
 
         if(Platform is TpmPlatform.Windows)
         {
-            return SubmitWindows(command, pool);
+            return SubmitWindowsAsync(command, pool, cancellationToken);
         }
 
-        return TpmResult<TpmResponse>.TransportError(0u);
+        return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(0u));
     }
 
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TpmResponse takes ownership of responseOwner. The caller is responsible for disposing the returned TpmResult.")]
-    private TpmResult<TpmResponse> SubmitLinux(ReadOnlySpan<byte> command, MemoryPool<byte> pool)
+    private async ValueTask<TpmResult<TpmResponse>> SubmitLinuxAsync(
+        ReadOnlyMemory<byte> command,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
         if(linuxStream is null)
         {
@@ -542,16 +577,17 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
 
         //Allocate response buffer.
         IMemoryOwner<byte> responseOwner = pool.Rent(TpmConstants.MaxResponseSize);
-        Span<byte> responseSpan = responseOwner.Memory.Span;
+        Memory<byte> responseMemory = responseOwner.Memory[..TpmConstants.MaxResponseSize];
 
         try
         {
-            //Send command.
-            linuxStream.Write(command);
-            linuxStream.Flush();
+            //Send command. The FileStream is opened with isAsync: true so WriteAsync/ReadAsync
+            //yield the calling thread for the kernel TPM round-trip rather than blocking.
+            await linuxStream.WriteAsync(command, cancellationToken).ConfigureAwait(false);
+            await linuxStream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
             //Read response.
-            int bytesRead = linuxStream.Read(responseSpan);
+            int bytesRead = await linuxStream.ReadAsync(responseMemory, cancellationToken).ConfigureAwait(false);
 
             return TpmResult<TpmResponse>.Success(new TpmResponse(responseOwner, bytesRead));
         }
@@ -570,16 +606,23 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TpmResponse takes ownership of responseOwner. The caller is responsible for disposing the returned TpmResult.")]
-    private TpmResult<TpmResponse> SubmitWindows(ReadOnlySpan<byte> command, MemoryPool<byte> pool)
+    private ValueTask<TpmResult<TpmResponse>> SubmitWindowsAsync(
+        ReadOnlyMemory<byte> command,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if(windowsContext == IntPtr.Zero)
         {
             uint errorCode = (uint)TbsResult.TBS_E_INVALID_CONTEXT;
             failure = new TpmTransportFailure(errorCode, TpmPlatform.Windows, "TBS context is not open.");
-            return TpmResult<TpmResponse>.TransportError(errorCode);
+            return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(errorCode));
         }
 
-        //Allocate response buffer.
+        //Allocate response buffer. The TBS API is genuinely synchronous; the calling thread
+        //blocks for the TPM duration on Windows. ValueTask.FromResult preserves the async
+        //surface so the platform difference does not leak into the executor.
         IMemoryOwner<byte> responseOwner = pool.Rent(TpmConstants.MaxResponseSize);
         Span<byte> responseSpan = responseOwner.Memory.Span;
 
@@ -588,7 +631,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
             windowsContext,
             TbsLocality.Zero,
             TbsPriority.Normal,
-            command,
+            command.Span,
             (uint)command.Length,
             responseSpan,
             ref responseSize);
@@ -598,10 +641,11 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
             responseOwner.Dispose();
             TbsResult tbsResult = (TbsResult)result;
             failure = new TpmTransportFailure(result, TpmPlatform.Windows, tbsResult.GetDescription());
-            return TpmResult<TpmResponse>.TransportError(result);
+            return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(result));
         }
 
-        return TpmResult<TpmResponse>.Success(new TpmResponse(responseOwner, (int)responseSize));
+        return ValueTask.FromResult(
+            TpmResult<TpmResponse>.Success(new TpmResponse(responseOwner, (int)responseSize)));
     }
 
 

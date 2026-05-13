@@ -26,7 +26,7 @@ internal static class VerifiableOperations
     /// <summary>
     /// Gets TPM information as a structured object.
     /// </summary>
-    public static Result<TpmInfo, string> GetTpmInfo()
+    public static async Task<Result<TpmInfo, string>> GetTpmInfoAsync()
     {
         if(!TpmDevice.IsAvailable)
         {
@@ -36,7 +36,7 @@ internal static class VerifiableOperations
         try
         {
             using TpmDevice device = TpmDevice.Open();
-            TpmResult<TpmInfo> result = device.GetInfo();
+            TpmResult<TpmInfo> result = await device.GetInfoAsync().ConfigureAwait(false);
 
             return result.Match(
                 onSuccess: Result.Success<TpmInfo, string>,
@@ -53,9 +53,9 @@ internal static class VerifiableOperations
     /// <summary>
     /// Gets TPM information as a JSON string.
     /// </summary>
-    public static Result<string, string> GetTpmInfoAsJson()
+    public static async Task<Result<string, string>> GetTpmInfoAsJsonAsync()
     {
-        var infoResult = GetTpmInfo();
+        var infoResult = await GetTpmInfoAsync().ConfigureAwait(false);
 
         if(!infoResult.IsSuccess)
         {
@@ -72,7 +72,7 @@ internal static class VerifiableOperations
     public static async Task<Result<string, string>> SaveTpmInfoToFileAsync(string? filePath = null)
     {
         string targetPath = filePath ?? "tpm_data.json";
-        var infoResult = GetTpmInfoAsJson();
+        var infoResult = await GetTpmInfoAsJsonAsync().ConfigureAwait(false);
         if(!infoResult.IsSuccess)
         {
             return Result.Failure<string, string>(infoResult.Error!);

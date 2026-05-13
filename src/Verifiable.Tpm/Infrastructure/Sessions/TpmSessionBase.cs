@@ -1,5 +1,7 @@
-﻿using System;
+using System;
 using System.Buffers;
+using System.Threading;
+using System.Threading.Tasks;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
@@ -22,9 +24,18 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// <list type="number">
 ///   <item><description>Session is created from StartAuthSession response or as password session.</description></item>
 ///   <item><description>Executor calls <see cref="GetAuthCommandSize"/> to compute buffer size.</description></item>
-///   <item><description>Executor calls <see cref="WriteAuthCommand"/> to write TPMS_AUTH_COMMAND.</description></item>
-///   <item><description>Executor calls <see cref="VerifyAndUpdate"/> to verify response and update nonces.</description></item>
+///   <item><description>Executor calls <see cref="PrepareAuthHmacAsync"/> to precompute the auth HMAC.</description></item>
+///   <item><description>Executor calls <see cref="WriteAuthCommand"/> to write TPMS_AUTH_COMMAND using the precomputed HMAC.</description></item>
+///   <item><description>Executor calls <see cref="VerifyAndUpdateAsync"/> to verify response and update nonces.</description></item>
 /// </list>
+/// <para>
+/// <b>Why precompute is split from write:</b> HMAC routes through the registered
+/// <see cref="Verifiable.Cryptography.ComputeHmacDelegate"/>, which is async to
+/// support hardware-bound key backends. <see cref="TpmWriter"/> is a
+/// <see langword="ref struct"/> and cannot cross <c>await</c> boundaries, so
+/// computation and writing are deliberately separated. Writing is synchronous and
+/// consumes the precomputed value.
+/// </para>
 /// </remarks>
 public abstract class TpmSessionBase
 {
@@ -64,11 +75,32 @@ public abstract class TpmSessionBase
     public abstract int GetAuthCommandSize();
 
     /// <summary>
-    /// Writes TPMS_AUTH_COMMAND to the buffer.
+    /// Asynchronously precomputes the auth HMAC for this session, if any.
+    /// </summary>
+    /// <param name="cpHash">The command parameter hash.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="cancellationToken">Token to observe while awaiting HMAC computation.</param>
+    /// <returns>
+    /// The precomputed HMAC bytes wrapped in <see cref="Tpm2bAuth"/>, or
+    /// <see langword="null"/> for sessions that do not compute an HMAC
+    /// (such as password sessions, which transmit the password directly).
+    /// Ownership of the returned <see cref="Tpm2bAuth"/> transfers to the caller,
+    /// which is responsible for disposal after the corresponding
+    /// <see cref="WriteAuthCommand"/> call.
+    /// </returns>
+    public abstract ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
+        ReadOnlyMemory<byte> cpHash,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Writes TPMS_AUTH_COMMAND to the buffer using the precomputed auth HMAC.
     /// </summary>
     /// <param name="writer">The writer positioned at the auth command location.</param>
-    /// <param name="cpHash">The command parameter hash for HMAC computation.</param>
-    /// <param name="pool">The memory pool for allocating the HMAC.</param>
+    /// <param name="precomputedHmac">
+    /// The HMAC produced by a prior call to <see cref="PrepareAuthHmacAsync"/>,
+    /// or <see langword="null"/> for sessions that do not compute an HMAC.
+    /// </param>
     /// <remarks>
     /// <para>
     /// The session writes its authorization data including:
@@ -77,17 +109,18 @@ public abstract class TpmSessionBase
     ///   <item><description>sessionHandle.</description></item>
     ///   <item><description>nonceCaller (freshly generated for HMAC sessions, empty for password).</description></item>
     ///   <item><description>sessionAttributes.</description></item>
-    ///   <item><description>hmac (computed using cpHash for HMAC sessions, password for password sessions).</description></item>
+    ///   <item><description>hmac (the precomputed value for HMAC sessions, the password for password sessions).</description></item>
     /// </list>
     /// </remarks>
-    public abstract void WriteAuthCommand(ref TpmWriter writer, scoped ReadOnlySpan<byte> cpHash, MemoryPool<byte> pool);
+    public abstract void WriteAuthCommand(ref TpmWriter writer, Tpm2bAuth? precomputedHmac);
 
     /// <summary>
-    /// Verifies the response HMAC and updates session state.
+    /// Asynchronously verifies the response HMAC and updates session state.
     /// </summary>
     /// <param name="response">The parsed TPMS_AUTH_RESPONSE.</param>
     /// <param name="rpHash">The response parameter hash for HMAC verification.</param>
     /// <param name="pool">The memory pool for allocating new nonces.</param>
+    /// <param name="cancellationToken">Token to observe while awaiting HMAC computation.</param>
     /// <returns>True if verification succeeded; false otherwise.</returns>
     /// <remarks>
     /// <para>
@@ -101,5 +134,9 @@ public abstract class TpmSessionBase
     /// Password sessions always return true without verification.
     /// </para>
     /// </remarks>
-    public abstract bool VerifyAndUpdate(TpmsAuthResponse response, scoped ReadOnlySpan<byte> rpHash, MemoryPool<byte> pool);
+    public abstract ValueTask<bool> VerifyAndUpdateAsync(
+        TpmsAuthResponse response,
+        ReadOnlyMemory<byte> rpHash,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken);
 }

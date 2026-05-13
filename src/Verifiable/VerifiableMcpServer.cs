@@ -12,9 +12,9 @@ namespace Verifiable;
 internal sealed class VerifiableMcpServer
 {
     [McpServerTool(Name = McpToolNames.GetTpmInfo), Description("Get TPM (Trusted Platform Module) information from the current system. Returns JSON with TPM details or an error if TPM is not supported.")]
-    public static string GetTpmInfo()
+    public static async Task<string> GetTpmInfo()
     {
-        var result = VerifiableOperations.GetTpmInfoAsJson();
+        var result = await VerifiableOperations.GetTpmInfoAsJsonAsync().ConfigureAwait(false);
 
         return result.IsSuccess ? result.Value! : result.Error!;
     }

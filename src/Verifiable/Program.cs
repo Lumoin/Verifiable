@@ -180,7 +180,7 @@ internal static class Program
                     await Console.Error.WriteLineAsync().ConfigureAwait(false);
                 }
 
-                var jsonResult = VerifiableOperations.GetTpmInfoAsJson();
+                var jsonResult = await VerifiableOperations.GetTpmInfoAsJsonAsync().ConfigureAwait(false);
 
                 if(jsonResult.IsSuccess)
                 {
@@ -193,7 +193,7 @@ internal static class Program
             }
 
             //Human-readable format (default).
-            var infoResult = VerifiableOperations.GetTpmInfo();
+            var infoResult = await VerifiableOperations.GetTpmInfoAsync().ConfigureAwait(false);
 
             if(infoResult.IsSuccess)
             {

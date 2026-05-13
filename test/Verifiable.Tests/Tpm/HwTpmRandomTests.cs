@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -66,7 +66,7 @@ internal class HwTpmRandomTests
 
 
     [TestMethod]
-    public void ExecutorReturnsRequestedBytes()
+    public async Task ExecutorReturnsRequestedBytes()
     {        
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -76,12 +76,12 @@ internal class HwTpmRandomTests
         const int NumberOfRandomBytes = 16;
         var input = new GetRandomInput(NumberOfRandomBytes);
 
-        TpmResult<GetRandomResponse> result = TpmCommandExecutor.Execute<GetRandomResponse>(
+        TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
             Tpm,
             input,
             [],
             pool,
-            registry);
+            registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"Expected success, got: '{result.ResponseCode}'.");
 

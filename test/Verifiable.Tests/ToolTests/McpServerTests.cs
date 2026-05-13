@@ -113,14 +113,14 @@ internal sealed class McpServerTests
 
     [TestMethod]
     [SkipIfNoTpm]
-    public void GetTpmInfoAsJsonReturnsValidJsonOrError()
+    public async Task GetTpmInfoAsJsonReturnsValidJsonOrError()
     {
         if(!TpmDevice.IsAvailable)
         {
             Assert.Inconclusive(TestInfrastructureConstants.NoTpmDeviceAvailableMessage);
         }
 
-        var result = VerifiableOperations.GetTpmInfoAsJson();
+        var result = await VerifiableOperations.GetTpmInfoAsJsonAsync().ConfigureAwait(false);
 
         if(result.IsSuccess)
         {

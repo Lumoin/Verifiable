@@ -60,7 +60,7 @@ internal sealed class HwTpmSecdsaSignTests
     }
 
     [TestMethod]
-    public void TpmSignsDigestAndPureNetVerifies()
+    public async Task TpmSignsDigestAndPureNetVerifies()
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -78,8 +78,8 @@ internal sealed class HwTpmSecdsaSignTests
 
         using var ownerAuth = TpmPasswordSession.CreateEmpty(pool);
 
-        TpmResult<CreatePrimaryResponse> createResult = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
-            Tpm, createInput, [ownerAuth], pool, registry);
+        TpmResult<CreatePrimaryResponse> createResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            Tpm, createInput, [ownerAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(createResult, "CreatePrimary");
 
@@ -94,8 +94,8 @@ internal sealed class HwTpmSecdsaSignTests
             keyHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
 
         using var keyAuth = TpmPasswordSession.CreateEmpty(pool);
-        TpmResult<SignResponse> signResult = TpmCommandExecutor.Execute<SignResponse>(
-            Tpm, signInput, [keyAuth], pool, registry);
+        TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            Tpm, signInput, [keyAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(signResult, "TPM2_Sign");
 
@@ -112,11 +112,11 @@ internal sealed class HwTpmSecdsaSignTests
         Assert.IsTrue(valid, "TPM-produced ECDSA signature must verify with pure .NET EC math.");
 
         var flushInput = FlushContextInput.ForHandle(keyHandle.Value);
-        _ = TpmCommandExecutor.Execute<FlushContextResponse>(Tpm, flushInput, [], pool, registry);
+        _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(Tpm, flushInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     [TestMethod]
-    public void TpmReadPublicNameIsPresent()
+    public async Task TpmReadPublicNameIsPresent()
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -134,8 +134,8 @@ internal sealed class HwTpmSecdsaSignTests
 
         using var ownerAuth = TpmPasswordSession.CreateEmpty(pool);
 
-        TpmResult<CreatePrimaryResponse> createResult = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
-            Tpm, createInput, [ownerAuth], pool, registry);
+        TpmResult<CreatePrimaryResponse> createResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            Tpm, createInput, [ownerAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(createResult, "CreatePrimary");
 
@@ -145,8 +145,8 @@ internal sealed class HwTpmSecdsaSignTests
 
         ReadPublicInput readInput = ReadPublicInput.ForHandle(keyHandle);
 
-        TpmResult<ReadPublicResponse> readResult = TpmCommandExecutor.Execute<ReadPublicResponse>(
-            Tpm, readInput, [], pool, registry);
+        TpmResult<ReadPublicResponse> readResult = await TpmCommandExecutor.ExecuteAsync<ReadPublicResponse>(
+            Tpm, readInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(readResult, "TPM2_ReadPublic");
 
@@ -156,7 +156,7 @@ internal sealed class HwTpmSecdsaSignTests
         TestContext.WriteLine($"Name ({readResponse.Name.Size} bytes): {Convert.ToHexString(readResponse.Name.Span)}");
 
         var flushInput = FlushContextInput.ForHandle(keyHandle.Value);
-        _ = TpmCommandExecutor.Execute<FlushContextResponse>(Tpm, flushInput, [], pool, registry);
+        _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(Tpm, flushInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

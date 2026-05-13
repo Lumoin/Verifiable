@@ -23,7 +23,7 @@ namespace Verifiable.Tpm;
 /// <strong>Usage:</strong>
 /// </para>
 /// <code>
-/// using TpmResponse response = device.Submit(commandBytes, pool);
+/// using TpmResponse response = (await device.SubmitAsync(commandBytes, pool)).Value;
 /// 
 /// //Parse the response.
 /// var reader = new TpmReader(response.AsReadOnlySpan());

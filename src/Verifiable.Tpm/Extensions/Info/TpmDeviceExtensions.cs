@@ -3,6 +3,8 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Extensions.Pcr;
 using Verifiable.Tpm.Infrastructure;
@@ -31,14 +33,14 @@ public static class TpmDeviceExtensions
         /// </para>
         /// </remarks>
         /// <returns>A result containing the TPM info or an error.</returns>
-        public TpmResult<TpmInfo> GetInfo()
+        public ValueTask<TpmResult<TpmInfo>> GetInfoAsync(CancellationToken cancellationToken = default)
         {
-            return GetInfoCore(device);
+            return GetInfoCoreAsync(device, cancellationToken);
         }
     }
 
 
-    private static TpmResult<TpmInfo> GetInfoCore(TpmDevice device)
+    private static async ValueTask<TpmResult<TpmInfo>> GetInfoCoreAsync(TpmDevice device, CancellationToken cancellationToken)
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -46,28 +48,28 @@ public static class TpmDeviceExtensions
         _ = registry.Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);
 
         //Get identity from fixed properties.
-        var identityResult = GetIdentity(device, pool, registry);
+        var identityResult = await GetIdentityAsync(device, pool, registry, cancellationToken).ConfigureAwait(false);
         if(!identityResult.IsSuccess)
         {
             return identityResult.Map<TpmInfo>(_ => null!);
         }
 
         //Get supported algorithms.
-        var algorithmsResult = GetSupportedAlgorithms(device, pool, registry);
+        var algorithmsResult = await GetSupportedAlgorithmsAsync(device, pool, registry, cancellationToken).ConfigureAwait(false);
         if(!algorithmsResult.IsSuccess)
         {
             return algorithmsResult.Map<TpmInfo>(_ => null!);
         }
 
         //Get supported ECC curves.
-        var curvesResult = GetSupportedCurves(device, pool, registry);
+        var curvesResult = await GetSupportedCurvesAsync(device, pool, registry, cancellationToken).ConfigureAwait(false);
         if(!curvesResult.IsSuccess)
         {
             return curvesResult.Map<TpmInfo>(_ => null!);
         }
 
         //Reuse the PCR extension.
-        TpmResult<PcrSnapshot> pcrsResult = device.ReadAllPcrs();
+        TpmResult<PcrSnapshot> pcrsResult = await device.ReadAllPcrsAsync(cancellationToken).ConfigureAwait(false);
         if(!pcrsResult.IsSuccess)
         {
             return pcrsResult.Map<TpmInfo>(_ => null!);
@@ -91,10 +93,11 @@ public static class TpmDeviceExtensions
         return TpmResult<TpmInfo>.Success(info);
     }
 
-    private static TpmResult<TpmIdentity> GetIdentity(
+    private static async ValueTask<TpmResult<TpmIdentity>> GetIdentityAsync(
         TpmDevice device,
         MemoryPool<byte> pool,
-        TpmResponseRegistry registry)
+        TpmResponseRegistry registry,
+        CancellationToken cancellationToken)
     {
         var properties = new Dictionary<uint, uint>();
 
@@ -106,8 +109,8 @@ public static class TpmDeviceExtensions
         {
             var input = GetCapabilityInput.ForTpmProperties(property);
 
-            TpmResult<GetCapabilityResponse> result = TpmCommandExecutor.Execute<GetCapabilityResponse>(
-                device, input, [], pool, registry);
+            TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+                device, input, [], pool, registry, cancellationToken).ConfigureAwait(false);
 
             if(!result.IsSuccess)
             {
@@ -174,15 +177,16 @@ public static class TpmDeviceExtensions
         return TpmResult<TpmIdentity>.Success(identity);
     }
 
-    private static TpmResult<List<string>> GetSupportedAlgorithms(
+    private static async ValueTask<TpmResult<List<string>>> GetSupportedAlgorithmsAsync(
         TpmDevice device,
         MemoryPool<byte> pool,
-        TpmResponseRegistry registry)
+        TpmResponseRegistry registry,
+        CancellationToken cancellationToken)
     {
         var input = GetCapabilityInput.ForAlgorithms();
 
-        TpmResult<GetCapabilityResponse> result = TpmCommandExecutor.Execute<GetCapabilityResponse>(
-            device, input, [], pool, registry);
+        TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+            device, input, [], pool, registry, cancellationToken).ConfigureAwait(false);
 
         if(!result.IsSuccess)
         {
@@ -204,15 +208,16 @@ public static class TpmDeviceExtensions
         return TpmResult<List<string>>.Success(algorithms);
     }
 
-    private static TpmResult<List<string>> GetSupportedCurves(
+    private static async ValueTask<TpmResult<List<string>>> GetSupportedCurvesAsync(
         TpmDevice device,
         MemoryPool<byte> pool,
-        TpmResponseRegistry registry)
+        TpmResponseRegistry registry,
+        CancellationToken cancellationToken)
     {
         var input = GetCapabilityInput.ForEccCurves();
 
-        TpmResult<GetCapabilityResponse> result = TpmCommandExecutor.Execute<GetCapabilityResponse>(
-            device, input, [], pool, registry);
+        TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+            device, input, [], pool, registry, cancellationToken).ConfigureAwait(false);
 
         if(!result.IsSuccess)
         {

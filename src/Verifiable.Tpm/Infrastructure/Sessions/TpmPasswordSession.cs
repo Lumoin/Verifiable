@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Buffers;
+using System.Threading;
+using System.Threading.Tasks;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
@@ -111,7 +113,22 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
     }
 
     /// <inheritdoc/>
-    public override void WriteAuthCommand(ref TpmWriter writer, scoped ReadOnlySpan<byte> cpHash, MemoryPool<byte> pool)
+    /// <remarks>
+    /// Password sessions transmit the password directly as the HMAC field rather
+    /// than computing one, so this method always returns <see langword="null"/>.
+    /// </remarks>
+    public override ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
+        ReadOnlyMemory<byte> cpHash,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        return ValueTask.FromResult<Tpm2bAuth?>(null);
+    }
+
+    /// <inheritdoc/>
+    public override void WriteAuthCommand(ref TpmWriter writer, Tpm2bAuth? precomputedHmac)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
@@ -130,11 +147,15 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
     }
 
     /// <inheritdoc/>
-    public override bool VerifyAndUpdate(TpmsAuthResponse response, scoped ReadOnlySpan<byte> rpHash, MemoryPool<byte> pool)
+    public override ValueTask<bool> VerifyAndUpdateAsync(
+        TpmsAuthResponse response,
+        ReadOnlyMemory<byte> rpHash,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
-        // Password sessions don't verify response HMAC.
-        // The TPM returns empty nonce and empty hmac for password sessions.
-        return true;
+        //Password sessions don't verify response HMAC.
+        //The TPM returns empty nonce and empty hmac for password sessions.
+        return ValueTask.FromResult(true);
     }
 
     /// <summary>

@@ -130,11 +130,11 @@ internal sealed class McpServerPropertyTests
 
 
     [TestMethod]
-    public void GetTpmInfoAsJsonNeverThrows()
+    public async Task GetTpmInfoAsJsonNeverThrows()
     {
         for(int i = 0; i < 2; i++)
         {
-            var result = VerifiableOperations.GetTpmInfoAsJson();
+            var result = await VerifiableOperations.GetTpmInfoAsJsonAsync().ConfigureAwait(false);
 
             Assert.IsTrue(result.IsSuccess || !string.IsNullOrEmpty(result.Error));
         }

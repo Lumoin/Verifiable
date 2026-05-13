@@ -3,6 +3,10 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Infrastructure.Spec.Attributes;
@@ -22,12 +26,12 @@ namespace Verifiable.Tpm.Infrastructure;
 /// </para>
 /// <list type="bullet">
 ///   <item><description>Building request: header, handles, auth area, parameters.</description></item>
-///   <item><description>Computing cpHash for request HMAC.</description></item>
-///   <item><description>Submitting to TPM device.</description></item>
+///   <item><description>Computing cpHash for request HMAC via the registered digest primitive.</description></item>
+///   <item><description>Submitting to TPM device asynchronously.</description></item>
 ///   <item><description>Parsing response: header, handles, parameterSize split, auth area.</description></item>
-///   <item><description>Computing rpHash for response verification.</description></item>
+///   <item><description>Computing rpHash for response verification via the registered digest primitive.</description></item>
 ///   <item><description>Invoking codec parser on parameters only.</description></item>
-///   <item><description>Verifying session HMACs.</description></item>
+///   <item><description>Verifying session HMACs via the registered HMAC primitive.</description></item>
 /// </list>
 /// <para>
 /// <b>Design:</b>
@@ -38,6 +42,14 @@ namespace Verifiable.Tpm.Infrastructure;
 /// object. The executor returns <see cref="TpmResult{T}"/> containing the typed response.
 /// </para>
 /// <para>
+/// <b>Async surface:</b> Every TPM operation is asynchronous because the underlying
+/// transport is — Linux <c>/dev/tpmrm0</c> supports kernel-level async I/O, network
+/// HSM/KMS backends are inherently round-trip-bound, and the future TPM2_HMAC backend
+/// will be hardware-bound. Software-only digest and HMAC paths complete synchronously
+/// at the registered backend, so the async overhead is bounded to a state-machine
+/// elision.
+/// </para>
+/// <para>
 /// <b>Key invariant:</b> Codec parsers receive only the parameter area bytes.
 /// They never see header, handles, or auth data.
 /// </para>
@@ -45,7 +57,7 @@ namespace Verifiable.Tpm.Infrastructure;
 public static class TpmCommandExecutor
 {
     /// <summary>
-    /// Executes a TPM command and returns a strongly-typed response.
+    /// Asynchronously executes a TPM command and returns a strongly-typed response.
     /// </summary>
     /// <typeparam name="TResponse">The response type.</typeparam>
     /// <param name="device">The TPM device.</param>
@@ -53,13 +65,15 @@ public static class TpmCommandExecutor
     /// <param name="sessions">The sessions (empty for no auth).</param>
     /// <param name="pool">The memory pool.</param>
     /// <param name="registry">The response codec registry.</param>
+    /// <param name="cancellationToken">Token to observe across the device round-trip and crypto primitives.</param>
     /// <returns>The result containing the typed response, TPM error, or transport error.</returns>
-    public static TpmResult<TResponse> Execute<TResponse>(
+    public static async ValueTask<TpmResult<TResponse>> ExecuteAsync<TResponse>(
         TpmDevice device,
         ITpmCommandInput input,
         IReadOnlyList<TpmSessionBase> sessions,
         MemoryPool<byte> pool,
-        TpmResponseRegistry registry)
+        TpmResponseRegistry registry,
+        CancellationToken cancellationToken = default)
         where TResponse : ITpmWireType
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -90,11 +104,14 @@ public static class TpmCommandExecutor
         int inputSize = input.GetSerializedSize();
         int parametersSize = inputSize - inputHandleSize;
 
-        //Pre-serialize handles and parameters to compute cpHash before writing auth.
-        Span<byte> handlesBuffer = stackalloc byte[inputHandleSize];
+        //Pre-serialize handles and parameters into pool-rented buffers so they survive
+        //across awaits (cpHash + per-session auth HMAC precompute) before being copied
+        //into the request buffer.
+        using IMemoryOwner<byte> handlesOwner = pool.Rent(Math.Max(inputHandleSize, 1));
+        Memory<byte> handlesMemory = handlesOwner.Memory[..inputHandleSize];
         if(inputHandleSize > 0)
         {
-            var handleWriter = new TpmWriter(handlesBuffer);
+            var handleWriter = new TpmWriter(handlesMemory.Span);
             input.WriteHandles(ref handleWriter);
 
             if(handleWriter.Written != inputHandleSize)
@@ -103,10 +120,11 @@ public static class TpmCommandExecutor
             }
         }
 
-        Span<byte> parametersBuffer = stackalloc byte[parametersSize];
+        using IMemoryOwner<byte> parametersOwner = pool.Rent(Math.Max(parametersSize, 1));
+        Memory<byte> parametersMemory = parametersOwner.Memory[..parametersSize];
         if(parametersSize > 0)
         {
-            var paramWriter = new TpmWriter(parametersBuffer);
+            var paramWriter = new TpmWriter(parametersMemory.Span);
             input.WriteParameters(ref paramWriter);
 
             if(paramWriter.Written != parametersSize)
@@ -117,300 +135,418 @@ public static class TpmCommandExecutor
 
         //Compute cpHash if sessions that need it are present.
         //Password sessions (TPM_ALG_NULL) don't need cpHash.
-        Span<byte> cpHashBuffer = stackalloc byte[64]; //Max digest size (SHA-512).
-        int cpHashSize = 0;
         TpmAlgIdConstants sessionHashAlg = TpmAlgIdConstants.TPM_ALG_NULL;
+        IMemoryOwner<byte>? cpHashOwner = null;
+        Memory<byte> cpHashMemory = Memory<byte>.Empty;
 
-        if(hasSessions)
+        try
         {
-            //Find first session with a real hash algorithm.
-            foreach(var session in sessions)
+            if(hasSessions)
             {
-                if(session.HashAlgorithm != TpmAlgIdConstants.TPM_ALG_NULL)
+                //Find first session with a real hash algorithm.
+                foreach(var session in sessions)
                 {
-                    sessionHashAlg = session.HashAlgorithm;
-                    break;
+                    if(session.HashAlgorithm != TpmAlgIdConstants.TPM_ALG_NULL)
+                    {
+                        sessionHashAlg = session.HashAlgorithm;
+                        break;
+                    }
+                }
+
+                if(sessionHashAlg != TpmAlgIdConstants.TPM_ALG_NULL)
+                {
+                    int cpHashSize = GetDigestSize(sessionHashAlg);
+                    cpHashOwner = pool.Rent(cpHashSize);
+                    cpHashMemory = cpHashOwner.Memory[..cpHashSize];
+                    await ComputeCpHashAsync(
+                        sessionHashAlg, commandCode, handlesMemory, parametersMemory, cpHashMemory, pool, cancellationToken).ConfigureAwait(false);
                 }
             }
 
-            if(sessionHashAlg != TpmAlgIdConstants.TPM_ALG_NULL)
+            //Precompute per-session auth HMACs before writing the auth area. The writer
+            //is a ref struct and cannot cross await boundaries.
+            Tpm2bAuth?[] preparedAuthHmacs = new Tpm2bAuth?[sessions.Count];
+            try
             {
-                cpHashSize = GetDigestSize(sessionHashAlg);
-                ComputeCpHash(sessionHashAlg, commandCode, handlesBuffer, parametersBuffer, cpHashBuffer.Slice(0, cpHashSize));
-            }
-        }
-
-        //Compute auth area size.
-        int authAreaSize = 0;
-        if(hasSessions)
-        {
-            authAreaSize = 4; //authorizationSize field.
-            foreach(var session in sessions)
-            {
-                authAreaSize += session.GetAuthCommandSize();
-            }
-        }
-
-        int totalRequestSize = TpmConstants.HeaderSize + inputHandleSize + authAreaSize + parametersSize;
-
-        //Rent request buffer.
-        using IMemoryOwner<byte> requestOwner = pool.Rent(totalRequestSize);
-        Memory<byte> requestMemory = requestOwner.Memory.Slice(0, totalRequestSize);
-        Span<byte> requestSpan = requestMemory.Span;
-
-        //Build request.
-        var writer = new TpmWriter(requestSpan);
-
-        //Write header.
-        writer.WriteUInt16(requestTag);
-        writer.WriteUInt32((uint)totalRequestSize);
-        writer.WriteUInt32((uint)commandCode);
-
-        //Write handles.
-        if(inputHandleSize > 0)
-        {
-            writer.WriteBytes(handlesBuffer);
-        }
-
-        //Write auth area if sessions present.
-        if(hasSessions)
-        {
-            int authBodySize = authAreaSize - 4;
-            writer.WriteUInt32((uint)authBodySize);
-
-            ReadOnlySpan<byte> cpHash = cpHashBuffer.Slice(0, cpHashSize);
-            foreach(var session in sessions)
-            {
-                session.WriteAuthCommand(ref writer, cpHash, pool);
-            }
-        }
-
-        //Write parameters.
-        if(parametersSize > 0)
-        {
-            writer.WriteBytes(parametersBuffer);
-        }
-
-        //Submit to TPM.
-        TpmResult<TpmResponse> transportResult = device.Submit(requestSpan, pool);
-
-        if(transportResult.IsTransportError)
-        {
-            return TpmResult<TResponse>.TransportError(transportResult.TransportErrorCode);
-        }
-
-        if(!transportResult.IsSuccess)
-        {
-            return TpmResult<TResponse>.TransportError(0u);
-        }
-
-        using TpmResponse response = transportResult.Value;
-        ReadOnlySpan<byte> actualResponse = response.AsReadOnlySpan();
-        int responseLength = response.Length;
-
-        //Validate minimum response size.
-        if(responseLength < TpmConstants.HeaderSize)
-        {
-            return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
-        }
-
-        //Parse response header.
-        var headerReader = new TpmReader(actualResponse);
-        ushort responseTag = headerReader.ReadUInt16();
-        uint responseSize = headerReader.ReadUInt32();
-        uint responseCode = headerReader.ReadUInt32();
-
-        //Validate response size.
-        if(responseSize < TpmConstants.HeaderSize || responseSize > TpmConstants.MaxResponseSize || responseSize != responseLength)
-        {
-            return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
-        }
-
-        //Check for TPM error.
-        if(responseCode != (uint)TpmRcConstants.TPM_RC_SUCCESS)
-        {
-            return TpmResult<TResponse>.TpmError((TpmRcConstants)responseCode);
-        }
-
-        //Parse output handles.
-        int handlesStartOffset = TpmConstants.HeaderSize;
-        var reader = new TpmReader(actualResponse.Slice(handlesStartOffset));
-
-        var outHandles = new uint[codec.OutHandleCount];
-        for(int i = 0; i < codec.OutHandleCount; i++)
-        {
-            outHandles[i] = reader.ReadUInt32();
-        }
-
-        //Split parameters and auth.
-        int currentOffset = TpmConstants.HeaderSize + (codec.OutHandleCount * sizeof(uint));
-        bool responseHasSessions = responseTag == (ushort)TpmStConstants.TPM_ST_SESSIONS;
-
-        int parametersStart;
-        int parametersLength;
-        int authStart;
-        int authLength;
-
-        if(responseHasSessions)
-        {
-            uint parameterSize = reader.ReadUInt32();
-            currentOffset += sizeof(uint);
-
-            parametersStart = currentOffset;
-            parametersLength = (int)parameterSize;
-
-            authStart = parametersStart + parametersLength;
-            authLength = (int)responseSize - authStart;
-        }
-        else
-        {
-            parametersStart = currentOffset;
-            parametersLength = (int)responseSize - parametersStart;
-
-            authStart = 0;
-            authLength = 0;
-        }
-
-        //Parse response parameters using codec.
-        TResponse typedResponse;
-        if(codec.HasResponseParameters && parametersLength > 0)
-        {
-            ReadOnlySpan<byte> parametersArea = actualResponse.Slice(parametersStart, parametersLength);
-            var paramReader = new TpmReader(parametersArea);
-
-            ITpmWireType parsed = codec.ParseResponse(ref paramReader, outHandles, pool);
-
-            if(parsed is not TResponse typed)
-            {
-                return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_FAILURE);
-            }
-
-            typedResponse = typed;
-
-            //Verify no trailing bytes.
-            if(paramReader.Remaining > 0)
-            {
-                return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
-            }
-        }
-        else
-        {
-            //Command has no response parameters - use default/singleton.
-            if(typeof(TResponse) == typeof(FlushContextResponse))
-            {
-                typedResponse = (TResponse)(ITpmWireType)FlushContextResponse.Instance;
-            }
-            else
-            {
-                return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_FAILURE);
-            }
-        }
-
-        //Parse and verify sessions.
-        if(responseHasSessions && sessions.Count > 0)
-        {
-            //Compute rpHash only if we have sessions that need it.
-            Span<byte> rpHashBuffer = stackalloc byte[64]; //Max digest size.
-            int rpHashSize = 0;
-
-            if(sessionHashAlg != TpmAlgIdConstants.TPM_ALG_NULL)
-            {
-                rpHashSize = GetDigestSize(sessionHashAlg);
-                ReadOnlySpan<byte> responseParameters = actualResponse.Slice(parametersStart, parametersLength);
-                ComputeRpHash(sessionHashAlg, responseCode, commandCode, responseParameters, rpHashBuffer.Slice(0, rpHashSize));
-            }
-
-            ReadOnlySpan<byte> authArea = actualResponse.Slice(authStart, authLength);
-            var authReader = new TpmReader(authArea);
-
-            for(int i = 0; i < sessions.Count; i++)
-            {
-                using TpmsAuthResponse authResponse = TpmsAuthResponse.Parse(ref authReader, pool);
-                if(!sessions[i].VerifyAndUpdate(authResponse, rpHashBuffer.Slice(0, rpHashSize), pool))
+                for(int i = 0; i < sessions.Count; i++)
                 {
-                    return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_AUTH_FAIL);
+                    preparedAuthHmacs[i] = await sessions[i].PrepareAuthHmacAsync(
+                        cpHashMemory, pool, cancellationToken).ConfigureAwait(false);
+                }
+
+                //Compute auth area size.
+                int authAreaSize = 0;
+                if(hasSessions)
+                {
+                    authAreaSize = 4; //authorizationSize field.
+                    foreach(var session in sessions)
+                    {
+                        authAreaSize += session.GetAuthCommandSize();
+                    }
+                }
+
+                int totalRequestSize = TpmConstants.HeaderSize + inputHandleSize + authAreaSize + parametersSize;
+
+                //Rent request buffer.
+                using IMemoryOwner<byte> requestOwner = pool.Rent(totalRequestSize);
+                Memory<byte> requestMemory = requestOwner.Memory[..totalRequestSize];
+
+                //Build request synchronously inside this scope; the writer is a ref struct.
+                {
+                    var writer = new TpmWriter(requestMemory.Span);
+
+                    //Write header.
+                    writer.WriteUInt16(requestTag);
+                    writer.WriteUInt32((uint)totalRequestSize);
+                    writer.WriteUInt32((uint)commandCode);
+
+                    //Write handles.
+                    if(inputHandleSize > 0)
+                    {
+                        writer.WriteBytes(handlesMemory.Span);
+                    }
+
+                    //Write auth area if sessions present.
+                    if(hasSessions)
+                    {
+                        int authBodySize = authAreaSize - 4;
+                        writer.WriteUInt32((uint)authBodySize);
+
+                        for(int i = 0; i < sessions.Count; i++)
+                        {
+                            sessions[i].WriteAuthCommand(ref writer, preparedAuthHmacs[i]);
+                        }
+                    }
+
+                    //Write parameters.
+                    if(parametersSize > 0)
+                    {
+                        writer.WriteBytes(parametersMemory.Span);
+                    }
+                }
+
+                //Submit to TPM.
+                TpmResult<TpmResponse> transportResult = await device.SubmitAsync(
+                    requestMemory, pool, cancellationToken).ConfigureAwait(false);
+
+                if(transportResult.IsTransportError)
+                {
+                    return TpmResult<TResponse>.TransportError(transportResult.TransportErrorCode);
+                }
+
+                if(!transportResult.IsSuccess)
+                {
+                    return TpmResult<TResponse>.TransportError(0u);
+                }
+
+                using TpmResponse response = transportResult.Value;
+                int responseLength = response.Length;
+
+                //Validate minimum response size.
+                if(responseLength < TpmConstants.HeaderSize)
+                {
+                    return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
+                }
+
+                //Parse response synchronously inside this scope; the reader is a ref struct.
+                ushort responseTag;
+                uint responseSize;
+                uint responseCode;
+                uint[] outHandles;
+                int parametersStart;
+                int parametersLength;
+                int authStart;
+                int authLength;
+                bool responseHasSessions;
+
+                {
+                    ReadOnlySpan<byte> actualResponse = response.AsReadOnlySpan();
+
+                    //Parse response header.
+                    var headerReader = new TpmReader(actualResponse);
+                    responseTag = headerReader.ReadUInt16();
+                    responseSize = headerReader.ReadUInt32();
+                    responseCode = headerReader.ReadUInt32();
+
+                    //Validate response size.
+                    if(responseSize < TpmConstants.HeaderSize || responseSize > TpmConstants.MaxResponseSize || responseSize != responseLength)
+                    {
+                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
+                    }
+
+                    //Check for TPM error.
+                    if(responseCode != (uint)TpmRcConstants.TPM_RC_SUCCESS)
+                    {
+                        return TpmResult<TResponse>.TpmError((TpmRcConstants)responseCode);
+                    }
+
+                    //Parse output handles.
+                    int handlesStartOffset = TpmConstants.HeaderSize;
+                    var reader = new TpmReader(actualResponse[handlesStartOffset..]);
+
+                    outHandles = new uint[codec.OutHandleCount];
+                    for(int i = 0; i < codec.OutHandleCount; i++)
+                    {
+                        outHandles[i] = reader.ReadUInt32();
+                    }
+
+                    //Split parameters and auth.
+                    int currentOffset = TpmConstants.HeaderSize + (codec.OutHandleCount * sizeof(uint));
+                    responseHasSessions = responseTag == (ushort)TpmStConstants.TPM_ST_SESSIONS;
+
+                    if(responseHasSessions)
+                    {
+                        uint parameterSize = reader.ReadUInt32();
+                        currentOffset += sizeof(uint);
+
+                        parametersStart = currentOffset;
+                        parametersLength = (int)parameterSize;
+
+                        authStart = parametersStart + parametersLength;
+                        authLength = (int)responseSize - authStart;
+                    }
+                    else
+                    {
+                        parametersStart = currentOffset;
+                        parametersLength = (int)responseSize - parametersStart;
+
+                        authStart = 0;
+                        authLength = 0;
+                    }
+                }
+
+                //Parse response parameters using codec.
+                TResponse typedResponse;
+                if(codec.HasResponseParameters && parametersLength > 0)
+                {
+                    ReadOnlySpan<byte> parametersArea = response.AsReadOnlySpan().Slice(parametersStart, parametersLength);
+                    var paramReader = new TpmReader(parametersArea);
+
+                    ITpmWireType parsed = codec.ParseResponse(ref paramReader, outHandles, pool);
+
+                    if(parsed is not TResponse typed)
+                    {
+                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_FAILURE);
+                    }
+
+                    typedResponse = typed;
+
+                    //Verify no trailing bytes.
+                    if(paramReader.Remaining > 0)
+                    {
+                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
+                    }
+                }
+                else
+                {
+                    //Command has no response parameters - use default/singleton.
+                    if(typeof(TResponse) == typeof(FlushContextResponse))
+                    {
+                        typedResponse = (TResponse)(ITpmWireType)FlushContextResponse.Instance;
+                    }
+                    else
+                    {
+                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_FAILURE);
+                    }
+                }
+
+                //Parse and verify sessions.
+                if(responseHasSessions && sessions.Count > 0)
+                {
+                    //Compute rpHash only if we have sessions that need it.
+                    IMemoryOwner<byte>? rpHashOwner = null;
+                    Memory<byte> rpHashMemory = Memory<byte>.Empty;
+
+                    try
+                    {
+                        if(sessionHashAlg != TpmAlgIdConstants.TPM_ALG_NULL)
+                        {
+                            int rpHashSize = GetDigestSize(sessionHashAlg);
+                            rpHashOwner = pool.Rent(rpHashSize);
+                            rpHashMemory = rpHashOwner.Memory[..rpHashSize];
+
+                            //Copy the response parameters into a pool-rented buffer so the
+                            //bytes survive across the async digest computation; the response
+                            //buffer is borrowed from the pool already, but slicing through
+                            //a Memory reference keeps the lifetime explicit.
+                            using IMemoryOwner<byte> responseParamsOwner = pool.Rent(Math.Max(parametersLength, 1));
+                            Memory<byte> responseParamsMemory = responseParamsOwner.Memory[..parametersLength];
+                            response.AsReadOnlySpan().Slice(parametersStart, parametersLength).CopyTo(responseParamsMemory.Span);
+
+                            await ComputeRpHashAsync(
+                                sessionHashAlg, responseCode, commandCode, responseParamsMemory, rpHashMemory, pool, cancellationToken).ConfigureAwait(false);
+                        }
+
+                        //Auth area parsing must happen on the response span; copy out to
+                        //pool-backed memory before any further awaits.
+                        IMemoryOwner<byte> authOwner = pool.Rent(Math.Max(authLength, 1));
+                        Memory<byte> authMemory = authOwner.Memory[..authLength];
+                        response.AsReadOnlySpan().Slice(authStart, authLength).CopyTo(authMemory.Span);
+
+                        try
+                        {
+                            int authReaderRemaining;
+                            List<TpmsAuthResponse> parsedAuthResponses = new(sessions.Count);
+                            try
+                            {
+                                {
+                                    var authReader = new TpmReader(authMemory.Span);
+                                    for(int i = 0; i < sessions.Count; i++)
+                                    {
+                                        parsedAuthResponses.Add(TpmsAuthResponse.Parse(ref authReader, pool));
+                                    }
+                                    authReaderRemaining = authReader.Remaining;
+                                }
+
+                                for(int i = 0; i < sessions.Count; i++)
+                                {
+                                    bool ok = await sessions[i].VerifyAndUpdateAsync(
+                                        parsedAuthResponses[i], rpHashMemory, pool, cancellationToken).ConfigureAwait(false);
+                                    if(!ok)
+                                    {
+                                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_AUTH_FAIL);
+                                    }
+                                }
+
+                                //Verify no trailing bytes in auth.
+                                if(authReaderRemaining > 0)
+                                {
+                                    return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
+                                }
+                            }
+                            finally
+                            {
+                                foreach(var ar in parsedAuthResponses)
+                                {
+                                    ar.Dispose();
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            authOwner.Dispose();
+                        }
+                    }
+                    finally
+                    {
+                        rpHashOwner?.Dispose();
+                    }
+                }
+
+                return TpmResult<TResponse>.Success(typedResponse);
+            }
+            finally
+            {
+                for(int i = 0; i < preparedAuthHmacs.Length; i++)
+                {
+                    preparedAuthHmacs[i]?.Dispose();
                 }
             }
-
-            //Verify no trailing bytes in auth.
-            if(authReader.Remaining > 0)
-            {
-                return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
-            }
         }
-
-        return TpmResult<TResponse>.Success(typedResponse);
+        finally
+        {
+            cpHashOwner?.Dispose();
+        }
     }
 
     /// <summary>
-    /// Computes cpHash per TPM 2.0 Part 1, Section 16.7.
+    /// Asynchronously computes cpHash per TPM 2.0 Part 1, Section 16.7.
     /// </summary>
-    private static void ComputeCpHash(
+    private static async ValueTask ComputeCpHashAsync(
         TpmAlgIdConstants hashAlg,
         TpmCcConstants commandCode,
-        ReadOnlySpan<byte> handleNames,
-        ReadOnlySpan<byte> parameters,
-        Span<byte> destination)
+        ReadOnlyMemory<byte> handleNames,
+        ReadOnlyMemory<byte> parameters,
+        Memory<byte> destination,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
-        using IncrementalHash hash = CreateIncrementalHash(hashAlg);
+        using IMemoryOwner<byte> ccOwner = pool.Rent(sizeof(uint));
+        Memory<byte> ccMemory = ccOwner.Memory[..sizeof(uint)];
+        BinaryPrimitives.WriteUInt32BigEndian(ccMemory.Span, (uint)commandCode);
 
-        Span<byte> ccBytes = stackalloc byte[sizeof(uint)];
-        BinaryPrimitives.WriteUInt32BigEndian(ccBytes, (uint)commandCode);
-        hash.AppendData(ccBytes);
-
+        BufferSegment first = new(ccMemory);
+        BufferSegment last = first;
         if(handleNames.Length > 0)
         {
-            hash.AppendData(handleNames);
+            last = last.Append(handleNames);
         }
-
         if(parameters.Length > 0)
         {
-            hash.AppendData(parameters);
+            last = last.Append(parameters);
         }
 
-        hash.GetHashAndReset(destination);
+        ReadOnlySequence<byte> input = new(first, 0, last, last.Memory.Length);
+
+        Tag tag = BuildDigestTag(hashAlg);
+        using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+            input,
+            outputByteLength: destination.Length,
+            tag: tag,
+            pool: pool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        digest.AsReadOnlySpan().CopyTo(destination.Span);
     }
 
     /// <summary>
-    /// Computes rpHash per TPM 2.0 Part 1, Section 16.8.
+    /// Asynchronously computes rpHash per TPM 2.0 Part 1, Section 16.8.
     /// </summary>
-    private static void ComputeRpHash(
+    private static async ValueTask ComputeRpHashAsync(
         TpmAlgIdConstants hashAlg,
         uint responseCode,
         TpmCcConstants commandCode,
-        ReadOnlySpan<byte> parameters,
-        Span<byte> destination)
+        ReadOnlyMemory<byte> parameters,
+        Memory<byte> destination,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
-        using IncrementalHash hash = CreateIncrementalHash(hashAlg);
+        using IMemoryOwner<byte> rcOwner = pool.Rent(sizeof(uint));
+        Memory<byte> rcMemory = rcOwner.Memory[..sizeof(uint)];
+        BinaryPrimitives.WriteUInt32BigEndian(rcMemory.Span, responseCode);
 
-        Span<byte> rcBytes = stackalloc byte[sizeof(uint)];
-        BinaryPrimitives.WriteUInt32BigEndian(rcBytes, responseCode);
-        hash.AppendData(rcBytes);
+        using IMemoryOwner<byte> ccOwner = pool.Rent(sizeof(uint));
+        Memory<byte> ccMemory = ccOwner.Memory[..sizeof(uint)];
+        BinaryPrimitives.WriteUInt32BigEndian(ccMemory.Span, (uint)commandCode);
 
-        Span<byte> ccBytes = stackalloc byte[sizeof(uint)];
-        BinaryPrimitives.WriteUInt32BigEndian(ccBytes, (uint)commandCode);
-        hash.AppendData(ccBytes);
-
+        BufferSegment first = new(rcMemory);
+        BufferSegment last = first.Append(ccMemory);
         if(parameters.Length > 0)
         {
-            hash.AppendData(parameters);
+            last = last.Append(parameters);
         }
 
-        hash.GetHashAndReset(destination);
+        ReadOnlySequence<byte> input = new(first, 0, last, last.Memory.Length);
+
+        Tag tag = BuildDigestTag(hashAlg);
+        using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+            input,
+            outputByteLength: destination.Length,
+            tag: tag,
+            pool: pool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        digest.AsReadOnlySpan().CopyTo(destination.Span);
     }
 
-    //TPM command-parameter hashing is intentionally a direct IncrementalHash
-    //call for the same reasons documented at TpmSession.ComputeHmac: it requires
-    //SHA-1 for TPM protocol compatibility, it is synchronous and span-writing
-    //(migration would force async up through the executor with no benefit),
-    //and the operation is TPM-internal protocol material rather than a
-    //library-surface digest. See the HMAC handoff MD section 3.
-    private static IncrementalHash CreateIncrementalHash(TpmAlgIdConstants hashAlg) => hashAlg switch
+    private static Tag BuildDigestTag(TpmAlgIdConstants hashAlg)
     {
-        TpmAlgIdConstants.TPM_ALG_SHA1 => IncrementalHash.CreateHash(HashAlgorithmName.SHA1),
-        TpmAlgIdConstants.TPM_ALG_SHA256 => IncrementalHash.CreateHash(HashAlgorithmName.SHA256),
-        TpmAlgIdConstants.TPM_ALG_SHA384 => IncrementalHash.CreateHash(HashAlgorithmName.SHA384),
-        TpmAlgIdConstants.TPM_ALG_SHA512 => IncrementalHash.CreateHash(HashAlgorithmName.SHA512),
+        HashAlgorithmName algorithmName = ToHashAlgorithmName(hashAlg);
+        return new Tag(new Dictionary<Type, object>
+        {
+            [typeof(HashAlgorithmName)] = algorithmName,
+            [typeof(Purpose)] = Purpose.Digest,
+            [typeof(EncodingScheme)] = EncodingScheme.Raw,
+            [typeof(MaterialSemantics)] = MaterialSemantics.Direct
+        });
+    }
+
+    private static HashAlgorithmName ToHashAlgorithmName(TpmAlgIdConstants hashAlg) => hashAlg switch
+    {
+        TpmAlgIdConstants.TPM_ALG_SHA1 => HashAlgorithmName.SHA1,
+        TpmAlgIdConstants.TPM_ALG_SHA256 => HashAlgorithmName.SHA256,
+        TpmAlgIdConstants.TPM_ALG_SHA384 => HashAlgorithmName.SHA384,
+        TpmAlgIdConstants.TPM_ALG_SHA512 => HashAlgorithmName.SHA512,
         _ => throw new NotSupportedException($"Hash algorithm '{hashAlg}' is not supported.")
     };
 
