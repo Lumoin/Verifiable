@@ -76,8 +76,8 @@ public static class PkceGeneration
             Encoding.ASCII.GetBytes(encodedVerifier, inputBytes);
 
             string encodedChallenge;
-            using(DigestValue challenge = CryptographicKeyEvents.ComputeDigest(
-                inputBytes,
+            using(DigestValue challenge = CryptographicKeyEvents.ComputeDigestSyncBridge(
+                inputOwner.Memory[..inputByteCount],
                 ChallengeSha256ByteLength,
                 CryptoTags.Sha256Digest,
                 pool))

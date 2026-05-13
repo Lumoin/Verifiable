@@ -316,7 +316,7 @@ internal sealed class AuthorizationServerFeatureTests
         {
             Encoder = TestSetup.Base64UrlEncoder,
             Decoder = TestSetup.Base64UrlDecoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigest,
+            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
             JwtHeaderSerializer = static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)header,
                 TestSetup.DefaultSerializationOptions),

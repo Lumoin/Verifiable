@@ -154,7 +154,7 @@ public static class KeyExtensions
     /// <returns>The computed <see cref="HmacValue"/>.</returns>
     public static async ValueTask<HmacValue> ComputeHmacAsync(
         this SymmetricKeyMemory key,
-        ReadOnlyMemory<byte> message,
+        System.Buffers.ReadOnlySequence<byte> message,
         int outputByteLength,
         ComputeHmacDelegate hmacDelegate,
         System.Buffers.MemoryPool<byte> pool,
@@ -175,6 +175,18 @@ public static class KeyExtensions
     }
 
 
+    /// <summary>Convenience overload for one-shot callers.</summary>
+    public static ValueTask<HmacValue> ComputeHmacAsync(
+        this SymmetricKeyMemory key,
+        ReadOnlyMemory<byte> message,
+        int outputByteLength,
+        ComputeHmacDelegate hmacDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default) =>
+        key.ComputeHmacAsync(new System.Buffers.ReadOnlySequence<byte>(message), outputByteLength, hmacDelegate, pool, context, cancellationToken);
+
+
     /// <summary>
     /// Verifies an HMAC <paramref name="expectedMac"/> against an HMAC of
     /// <paramref name="message"/> using the symmetric key and the supplied
@@ -182,7 +194,7 @@ public static class KeyExtensions
     /// </summary>
     public static ValueTask<bool> VerifyHmacAsync(
         this SymmetricKeyMemory key,
-        ReadOnlyMemory<byte> message,
+        System.Buffers.ReadOnlySequence<byte> message,
         HmacValue expectedMac,
         VerifyHmacDelegate verifyDelegate,
         System.Buffers.MemoryPool<byte> pool,
@@ -201,7 +213,7 @@ public static class KeyExtensions
     /// </summary>
     public static async ValueTask<bool> VerifyHmacAsync(
         this SymmetricKeyMemory key,
-        ReadOnlyMemory<byte> message,
+        System.Buffers.ReadOnlySequence<byte> message,
         ReadOnlyMemory<byte> expectedMacBytes,
         VerifyHmacDelegate verifyDelegate,
         System.Buffers.MemoryPool<byte> pool,
@@ -220,4 +232,28 @@ public static class KeyExtensions
 
         return isValid;
     }
+
+
+    /// <summary>Convenience overload: ReadOnlyMemory message + HmacValue expected.</summary>
+    public static ValueTask<bool> VerifyHmacAsync(
+        this SymmetricKeyMemory key,
+        ReadOnlyMemory<byte> message,
+        HmacValue expectedMac,
+        VerifyHmacDelegate verifyDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default) =>
+        key.VerifyHmacAsync(new System.Buffers.ReadOnlySequence<byte>(message), expectedMac, verifyDelegate, pool, context, cancellationToken);
+
+
+    /// <summary>Convenience overload: ReadOnlyMemory message + raw expected bytes.</summary>
+    public static ValueTask<bool> VerifyHmacAsync(
+        this SymmetricKeyMemory key,
+        ReadOnlyMemory<byte> message,
+        ReadOnlyMemory<byte> expectedMacBytes,
+        VerifyHmacDelegate verifyDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default) =>
+        key.VerifyHmacAsync(new System.Buffers.ReadOnlySequence<byte>(message), expectedMacBytes, verifyDelegate, pool, context, cancellationToken);
 }

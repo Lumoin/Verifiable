@@ -71,7 +71,7 @@ public static class SdJwtVpTokenVerification
     /// <param name="computeDigest">
     /// Computes a digest. Wired to a provider-side implementation registered on
     /// <see cref="CryptographicKeyFactory"/> such as
-    /// <c>MicrosoftEntropyFunctions.ComputeDigest</c>. The algorithm is carried in
+    /// <c>MicrosoftEntropyFunctions.ComputeDigestAsync</c>. The algorithm is carried in
     /// the <see cref="Tag"/> argument constructed per-call from the credential's
     /// <c>_sd_alg</c> claim.
     /// </param>
@@ -195,8 +195,9 @@ public static class SdJwtVpTokenVerification
                 Span<byte> inputBytes = inputOwner.Memory.Span[..inputByteCount];
                 Encoding.ASCII.GetBytes(hashInput, inputBytes);
 
-                (DigestValue digest, _) = computeDigest(
-                    inputBytes, digestByteLength, digestTag, pool);
+                (DigestValue digest, _) = await computeDigest(
+                    new ReadOnlySequence<byte>(inputOwner.Memory[..inputByteCount]),
+                    digestByteLength, digestTag, pool, null, cancellationToken).ConfigureAwait(false);
 
                 using(digest)
                 {

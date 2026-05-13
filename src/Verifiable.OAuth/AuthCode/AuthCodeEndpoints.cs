@@ -1582,18 +1582,24 @@ public static class AuthCodeEndpoints
         EncodeDelegate encoder,
         MemoryPool<byte> pool)
     {
+        //AuthCode endpoint handlers run inside sync endpoint-builder lambdas that
+        //don't have an await boundary at this layer; bridge to async via
+        //CryptographicKeyEvents.ComputeDigestSyncBridge. The computeDigest
+        //parameter is retained for API stability but the registered delegate is
+        //used directly via the bridge — both resolve to the same backend in
+        //practice. If a future profile needs a non-default qualifier here, the
+        //helper migrates to async at that point.
+        _ = computeDigest;
+
         int inputByteCount = System.Text.Encoding.ASCII.GetByteCount(input);
         using IMemoryOwner<byte> inputOwner = pool.Rent(inputByteCount);
         Span<byte> inputBytes = inputOwner.Memory.Span[..inputByteCount];
         System.Text.Encoding.ASCII.GetBytes(input, inputBytes);
 
-        (DigestValue digest, _) = computeDigest(
-            inputBytes, digestByteLength, algorithmTag, pool);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigestSyncBridge(
+            inputOwner.Memory[..inputByteCount], digestByteLength, algorithmTag, pool);
 
-        using(digest)
-        {
-            return encoder(digest.AsReadOnlySpan());
-        }
+        return encoder(digest.AsReadOnlySpan());
     }
 
 

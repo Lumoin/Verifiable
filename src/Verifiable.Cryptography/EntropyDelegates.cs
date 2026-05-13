@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Frozen;
 
 namespace Verifiable.Cryptography;
 
@@ -6,13 +7,6 @@ namespace Verifiable.Cryptography;
 /// Generates a <see cref="Nonce"/> of <paramref name="byteLength"/> bytes and
 /// optionally produces a <see cref="CryptoEvent"/> describing the operation.
 /// </summary>
-/// <param name="byteLength">The number of random bytes to generate.</param>
-/// <param name="tag">Metadata identifying the purpose and entropy source.</param>
-/// <param name="pool">The memory pool to allocate from.</param>
-/// <returns>
-/// The generated <see cref="Nonce"/> and an optional <see cref="CryptoEvent"/>.
-/// <see langword="null"/> when the provider does not support observability.
-/// </returns>
 public delegate (Nonce Result, CryptoEvent? Event) GenerateNonceDelegate(
     int byteLength,
     Tag tag,
@@ -23,13 +17,6 @@ public delegate (Nonce Result, CryptoEvent? Event) GenerateNonceDelegate(
 /// Generates a <see cref="Salt"/> of <paramref name="byteLength"/> bytes and
 /// optionally produces a <see cref="CryptoEvent"/> describing the operation.
 /// </summary>
-/// <param name="byteLength">The number of random bytes to generate.</param>
-/// <param name="tag">Metadata identifying the purpose and entropy source.</param>
-/// <param name="pool">The memory pool to allocate from.</param>
-/// <returns>
-/// The generated <see cref="Salt"/> and an optional <see cref="CryptoEvent"/>.
-/// <see langword="null"/> when the provider does not support observability.
-/// </returns>
 public delegate (Salt Result, CryptoEvent? Event) GenerateSaltDelegate(
     int byteLength,
     Tag tag,
@@ -40,16 +27,31 @@ public delegate (Salt Result, CryptoEvent? Event) GenerateSaltDelegate(
 /// Computes a <see cref="DigestValue"/> over <paramref name="input"/> and
 /// optionally produces a <see cref="CryptoEvent"/> describing the operation.
 /// </summary>
-/// <param name="input">The bytes to hash.</param>
-/// <param name="outputByteLength">The expected digest length in bytes.</param>
-/// <param name="tag">Metadata identifying the algorithm and purpose.</param>
-/// <param name="pool">The memory pool to allocate from.</param>
-/// <returns>
-/// The computed <see cref="DigestValue"/> and an optional <see cref="CryptoEvent"/>.
-/// <see langword="null"/> when the provider does not support observability.
-/// </returns>
-public delegate (DigestValue Result, CryptoEvent? Event) ComputeDigestDelegate(
-    ReadOnlySpan<byte> input,
+/// <remarks>
+/// <para>
+/// The async shape and <see cref="ReadOnlySequence{T}"/> input accommodate both
+/// software backends (which return a synchronously-completed
+/// <see cref="ValueTask{TResult}"/>) and hardware-async backends (TPM2_Hash via
+/// Linux async I/O; KMS hash-as-a-service).
+/// </para>
+/// <para>
+/// One-shot callers pass <see cref="ReadOnlyMemory{T}"/> via the convenience
+/// extension on <see cref="CryptographicKeyEvents"/> which wraps in
+/// <c>new ReadOnlySequence&lt;byte&gt;(memory)</c>. Multi-segment callers build a
+/// <see cref="ReadOnlySequence{T}"/> via <see cref="BufferSegment"/>-style linked
+/// nodes and pass it directly.
+/// </para>
+/// <para>
+/// Sync callers that cannot propagate async (key derivation, JWK thumbprint
+/// computation) bridge via the convenience helper
+/// <see cref="CryptographicKeyEvents.ComputeDigestSyncBridge"/> which asserts the
+/// underlying delegate completed synchronously before returning.
+/// </para>
+/// </remarks>
+public delegate ValueTask<(DigestValue Result, CryptoEvent? Event)> ComputeDigestDelegate(
+    ReadOnlySequence<byte> input,
     int outputByteLength,
     Tag tag,
-    MemoryPool<byte> pool);
+    MemoryPool<byte> pool,
+    FrozenDictionary<string, object>? context = null,
+    CancellationToken cancellationToken = default);

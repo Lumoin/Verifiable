@@ -1,5 +1,7 @@
 using System.Buffers;
+using System.Collections.Frozen;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -18,37 +20,25 @@ namespace Verifiable.Microsoft;
 /// <code>
 /// CryptographicKeyFactory.RegisterFunction(
 ///     typeof(GenerateNonceDelegate),
-///     MicrosoftEntropyFunctions.GenerateNonce);
+///     (GenerateNonceDelegate)MicrosoftEntropyFunctions.GenerateNonce);
 ///
 /// CryptographicKeyFactory.RegisterFunction(
 ///     typeof(GenerateSaltDelegate),
-///     MicrosoftEntropyFunctions.GenerateSalt);
+///     (GenerateSaltDelegate)MicrosoftEntropyFunctions.GenerateSalt);
 ///
 /// CryptographicKeyFactory.RegisterFunction(
 ///     typeof(ComputeDigestDelegate),
-///     MicrosoftEntropyFunctions.ComputeDigest);
+///     (ComputeDigestDelegate)MicrosoftEntropyFunctions.ComputeDigestAsync);
 /// </code>
-/// <para>
-/// Each operation uses <see cref="CryptoProviderInstrumentation"/> to stamp the
-/// <see cref="Tag"/> with <see cref="ProviderLibrary"/>, <see cref="CryptoLibrary"/>,
-/// <see cref="ProviderClass"/>, and <see cref="ProviderOperation"/> entries, and to
-/// set standard <see cref="CryptoTelemetry"/> attributes on the OTel activity.
-/// The activity spans the full lifetime of the returned value and is stopped on disposal.
-/// If no OTel listener is configured the activity is <see langword="null"/> and the
-/// entire instrumentation path is zero-cost.
-/// </para>
 /// </remarks>
 public static class MicrosoftEntropyFunctions
 {
-    //Resolved once at class initialization — AOT-safe, zero cost at operation time.
     private static readonly ProviderLibrary ProviderLib = new(
         typeof(MicrosoftEntropyFunctions).Assembly.GetName().Name
             ?? "Verifiable.Microsoft",
         typeof(MicrosoftEntropyFunctions).Assembly.GetName().Version?.ToString()
             ?? "Unknown");
 
-    //System.Security.Cryptography lives in the .NET runtime assembly.
-    //Its version equals the runtime version — the most meaningful CBOM identifier.
     private static readonly CryptoLibraryInfo CryptoLib = new(
         "System.Security.Cryptography",
         typeof(RandomNumberGenerator).Assembly.GetName().Version?.ToString()
@@ -61,13 +51,6 @@ public static class MicrosoftEntropyFunctions
     /// <summary>
     /// Generates a <see cref="Nonce"/> using <see cref="RandomNumberGenerator.Fill"/>.
     /// </summary>
-    /// <param name="byteLength">The number of random bytes to generate.</param>
-    /// <param name="tag">Metadata identifying the purpose and entropy source.</param>
-    /// <param name="pool">The memory pool to allocate from.</param>
-    /// <returns>
-    /// The generated <see cref="Nonce"/> and an <see cref="EntropyConsumedEvent"/>
-    /// identifying the OS CSPRNG as the entropy source.
-    /// </returns>
     public static (Nonce Result, CryptoEvent? Event) GenerateNonce(
         int byteLength,
         Tag tag,
@@ -106,13 +89,6 @@ public static class MicrosoftEntropyFunctions
     /// <summary>
     /// Generates a <see cref="Salt"/> using <see cref="RandomNumberGenerator.Fill"/>.
     /// </summary>
-    /// <param name="byteLength">The number of random bytes to generate.</param>
-    /// <param name="tag">Metadata identifying the purpose and entropy source.</param>
-    /// <param name="pool">The memory pool to allocate from.</param>
-    /// <returns>
-    /// The generated <see cref="Salt"/> and an <see cref="EntropyConsumedEvent"/>
-    /// identifying the OS CSPRNG as the entropy source.
-    /// </returns>
     public static (Salt Result, CryptoEvent? Event) GenerateSalt(
         int byteLength,
         Tag tag,
@@ -151,26 +127,30 @@ public static class MicrosoftEntropyFunctions
     /// <summary>
     /// Computes a <see cref="DigestValue"/> using the .NET platform hash implementation
     /// identified by the <see cref="HashAlgorithmName"/> in <paramref name="tag"/>.
-    /// Supports SHA-256, SHA-384, and SHA-512.
+    /// Supports SHA-256, SHA-384, SHA-512, and SHA-1 (the SHA-1 path exists for TPM
+    /// session protocol compatibility).
     /// </summary>
-    /// <param name="input">The bytes to hash.</param>
-    /// <param name="outputByteLength">The expected digest length in bytes.</param>
-    /// <param name="tag">Metadata identifying the algorithm and purpose.</param>
-    /// <param name="pool">The memory pool to allocate from.</param>
-    /// <returns>
-    /// The computed <see cref="DigestValue"/> and a <see cref="DigestComputedEvent"/>.
-    /// </returns>
-    /// <exception cref="ArgumentException">
-    /// Thrown when the tag does not carry a supported <see cref="HashAlgorithmName"/>.
-    /// </exception>
-    public static (DigestValue Result, CryptoEvent? Event) ComputeDigest(
-        ReadOnlySpan<byte> input,
+    /// <remarks>
+    /// Single-segment input uses the .NET BCL one-shot hash methods. Multi-segment
+    /// input streams via <see cref="IncrementalHash"/>, iterating
+    /// <see cref="ReadOnlySequence{T}"/> segments and feeding each to
+    /// <c>AppendData</c> without pre-buffering. Returns a synchronously-completed
+    /// <see cref="ValueTask{TResult}"/>.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned DigestValue takes ownership of the IMemoryOwner and is disposed by the caller.")]
+    [SuppressMessage("Security", "CA5350:Do Not Use Weak Cryptographic Algorithms", Justification = "SHA-1 is dispatched only when the consumer composes a Tag inline with HashAlgorithmName.SHA1 — exclusively the TPM command-parameter hashing path. Convenience tags in CryptoTags omit SHA-1 so new protocol code cannot use it.")]
+    public static ValueTask<(DigestValue Result, CryptoEvent? Event)> ComputeDigestAsync(
+        ReadOnlySequence<byte> input,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool)
+        MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         if(!tag.TryGet<HashAlgorithmName>(out HashAlgorithmName algorithmName))
         {
@@ -179,16 +159,7 @@ public static class MicrosoftEntropyFunctions
                 nameof(tag));
         }
 
-        HashFunctionDelegate hashFunction = algorithmName switch
-        {
-            var a when a == HashAlgorithmName.SHA256 => SHA256.HashData,
-            var a when a == HashAlgorithmName.SHA384 => SHA384.HashData,
-            var a when a == HashAlgorithmName.SHA512 => SHA512.HashData,
-            _ => throw new ArgumentException(
-                $"Unsupported hash algorithm: {algorithmName.Name}.", nameof(tag))
-        };
-
-        ProviderOperation operation = new(nameof(ComputeDigest));
+        ProviderOperation operation = new(nameof(ComputeDigestAsync));
         Tag stamped = CryptoProviderInstrumentation.StampTag(
             tag, ProviderLib, CryptoLib, ProviderCls, operation);
 
@@ -203,14 +174,55 @@ public static class MicrosoftEntropyFunctions
             activity.SetTag(CryptoTelemetry.Digest.OutputLength, outputByteLength);
         }
 
-        DigestValue result = DigestValue.Compute(
-            input, hashFunction, outputByteLength, stamped, pool, activity);
+        IMemoryOwner<byte> owner = pool.Rent(outputByteLength);
+        int written;
+        try
+        {
+            Span<byte> destination = owner.Memory.Span[..outputByteLength];
+
+            if(input.IsSingleSegment)
+            {
+                ReadOnlySpan<byte> inputSpan = input.FirstSpan;
+                written = algorithmName switch
+                {
+                    var a when a == HashAlgorithmName.SHA256 => SHA256.HashData(inputSpan, destination),
+                    var a when a == HashAlgorithmName.SHA384 => SHA384.HashData(inputSpan, destination),
+                    var a when a == HashAlgorithmName.SHA512 => SHA512.HashData(inputSpan, destination),
+                    var a when a == HashAlgorithmName.SHA1 => SHA1.HashData(inputSpan, destination),
+                    _ => throw new ArgumentException(
+                        $"Unsupported digest hash algorithm: {algorithmName.Name}.", nameof(tag))
+                };
+            }
+            else
+            {
+                using IncrementalHash hasher = IncrementalHash.CreateHash(algorithmName);
+                foreach(ReadOnlyMemory<byte> segment in input)
+                {
+                    hasher.AppendData(segment.Span);
+                }
+                written = hasher.GetHashAndReset(destination);
+            }
+        }
+        catch
+        {
+            owner.Dispose();
+            throw;
+        }
+
+        if(written != outputByteLength)
+        {
+            owner.Dispose();
+            throw new InvalidOperationException(
+                $"Digest output length mismatch: expected {outputByteLength}, got {written}.");
+        }
+
+        DigestValue result = new(owner, stamped, activity);
 
         Purpose evtPurpose = stamped.TryGet<Purpose>(out Purpose p)
             ? p : Purpose.Digest;
         CryptoEvent evt = DigestComputedEvent.Create(
-            algorithmName.Name ?? "Unknown", input.Length, outputByteLength, evtPurpose);
+            algorithmName.Name ?? "Unknown", (int)input.Length, outputByteLength, evtPurpose);
 
-        return (result, evt);
+        return ValueTask.FromResult<(DigestValue, CryptoEvent?)>((result, evt));
     }
 }

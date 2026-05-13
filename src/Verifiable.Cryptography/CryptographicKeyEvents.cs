@@ -133,24 +133,20 @@ public static class CryptographicKeyEvents
 
 
     /// <summary>
-    /// Retrieves the registered <see cref="ComputeDigestDelegate"/>, invokes it,
-    /// and emits any produced <see cref="CryptoEvent"/> to <see cref="Events"/>.
+    /// Retrieves the registered async <see cref="ComputeDigestDelegate"/>, invokes
+    /// it, and emits any produced <see cref="CryptoEvent"/> to <see cref="Events"/>.
     /// </summary>
-    /// <param name="input">The bytes to hash.</param>
-    /// <param name="outputByteLength">The expected digest length in bytes.</param>
-    /// <param name="tag">Metadata identifying the algorithm and purpose.</param>
-    /// <param name="pool">The memory pool to allocate from.</param>
-    /// <param name="qualifier">Optional qualifier for selecting among multiple implementations.</param>
-    /// <returns>The computed <see cref="DigestValue"/>.</returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when no <see cref="ComputeDigestDelegate"/> has been registered.
     /// </exception>
-    public static DigestValue ComputeDigest(
-        ReadOnlySpan<byte> input,
+    public static async ValueTask<DigestValue> ComputeDigestAsync(
+        ReadOnlySequence<byte> input,
         int outputByteLength,
         Tag tag,
         MemoryPool<byte> pool,
-        string? qualifier = null)
+        FrozenDictionary<string, object>? context = null,
+        string? qualifier = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
@@ -166,7 +162,8 @@ public static class CryptographicKeyEvents
                 "Call CryptographicKeyFactory.RegisterFunction during application startup.");
         }
 
-        (DigestValue result, CryptoEvent? evt) = compute(input, outputByteLength, tag, pool);
+        (DigestValue result, CryptoEvent? evt) = await compute(
+            input, outputByteLength, tag, pool, context, cancellationToken).ConfigureAwait(false);
 
         if(evt is not null)
         {
@@ -178,23 +175,83 @@ public static class CryptographicKeyEvents
 
 
     /// <summary>
+    /// Convenience overload accepting <see cref="ReadOnlyMemory{T}"/> for one-shot
+    /// callers. Wraps in <c>new ReadOnlySequence&lt;byte&gt;(input)</c> and forwards.
+    /// </summary>
+    public static ValueTask<DigestValue> ComputeDigestAsync(
+        ReadOnlyMemory<byte> input,
+        int outputByteLength,
+        Tag tag,
+        MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        string? qualifier = null,
+        CancellationToken cancellationToken = default) =>
+        ComputeDigestAsync(new ReadOnlySequence<byte>(input), outputByteLength, tag, pool, context, qualifier, cancellationToken);
+
+
+    /// <summary>
+    /// Synchronous bridge to
+    /// <see cref="ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, FrozenDictionary{string, object}?, string?, CancellationToken)"/>
+    /// for callers that cannot propagate async (key derivation, JWK thumbprint
+    /// computation, similar). Asserts the underlying delegate's ValueTask is
+    /// already completed; throws <see cref="InvalidOperationException"/> if not.
+    /// </summary>
+    /// <remarks>
+    /// Safe for the in-process Microsoft software backend (which always completes
+    /// synchronously). If a hardware-async digest backend (TPM2_Hash, KMS) is
+    /// registered, the bridge throws rather than block — the caller must migrate
+    /// to async.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2012:Use ValueTasks correctly", Justification = "IsCompleted is asserted before GetAwaiter().GetResult() is called.")]
+    public static DigestValue ComputeDigestSyncBridge(
+        ReadOnlyMemory<byte> input,
+        int outputByteLength,
+        Tag tag,
+        MemoryPool<byte> pool,
+        string? qualifier = null)
+    {
+        ValueTask<DigestValue> task = ComputeDigestAsync(input, outputByteLength, tag, pool, qualifier: qualifier);
+        if(!task.IsCompleted)
+        {
+            throw new InvalidOperationException(
+                "ComputeDigestSyncBridge requires a synchronously-completing "
+                + "ComputeDigestDelegate. A hardware-async digest backend cannot be "
+                + "consumed from a sync entry point; migrate the caller to async.");
+        }
+        return task.GetAwaiter().GetResult();
+    }
+
+
+    /// <summary>
+    /// Synchronous bridge for the multi-segment
+    /// <see cref="ReadOnlySequence{T}"/> case.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2012:Use ValueTasks correctly", Justification = "IsCompleted is asserted before GetAwaiter().GetResult() is called.")]
+    public static DigestValue ComputeDigestSyncBridge(
+        ReadOnlySequence<byte> input,
+        int outputByteLength,
+        Tag tag,
+        MemoryPool<byte> pool,
+        string? qualifier = null)
+    {
+        ValueTask<DigestValue> task = ComputeDigestAsync(input, outputByteLength, tag, pool, qualifier: qualifier);
+        if(!task.IsCompleted)
+        {
+            throw new InvalidOperationException(
+                "ComputeDigestSyncBridge requires a synchronously-completing "
+                + "ComputeDigestDelegate. A hardware-async digest backend cannot be "
+                + "consumed from a sync entry point; migrate the caller to async.");
+        }
+        return task.GetAwaiter().GetResult();
+    }
+
+
+    /// <summary>
     /// Retrieves the registered <see cref="ComputeHmacDelegate"/>, invokes it,
     /// and emits any produced <see cref="CryptoEvent"/> to <see cref="Events"/>.
     /// </summary>
-    /// <param name="message">The bytes to authenticate.</param>
-    /// <param name="keyBytes">The HMAC key bytes.</param>
-    /// <param name="outputByteLength">The expected HMAC output length in bytes.</param>
-    /// <param name="tag">Metadata identifying the algorithm.</param>
-    /// <param name="pool">The memory pool to allocate from.</param>
-    /// <param name="context">Optional context parameters.</param>
-    /// <param name="qualifier">Optional qualifier for selecting among multiple implementations.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The computed <see cref="HmacValue"/>.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when no <see cref="ComputeHmacDelegate"/> has been registered.
-    /// </exception>
     public static async ValueTask<HmacValue> ComputeHmacAsync(
-        ReadOnlyMemory<byte> message,
+        ReadOnlySequence<byte> message,
         ReadOnlyMemory<byte> keyBytes,
         int outputByteLength,
         Tag tag,
@@ -229,15 +286,25 @@ public static class CryptographicKeyEvents
     }
 
 
+    /// <summary>Convenience overload for one-shot callers.</summary>
+    public static ValueTask<HmacValue> ComputeHmacAsync(
+        ReadOnlyMemory<byte> message,
+        ReadOnlyMemory<byte> keyBytes,
+        int outputByteLength,
+        Tag tag,
+        MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        string? qualifier = null,
+        CancellationToken cancellationToken = default) =>
+        ComputeHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, outputByteLength, tag, pool, context, qualifier, cancellationToken);
+
+
     /// <summary>
     /// Retrieves the registered <see cref="VerifyHmacDelegate"/>, invokes it,
     /// and emits any produced <see cref="CryptoEvent"/> to <see cref="Events"/>.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when no <see cref="VerifyHmacDelegate"/> has been registered.
-    /// </exception>
     public static async ValueTask<bool> VerifyHmacAsync(
-        ReadOnlyMemory<byte> message,
+        ReadOnlySequence<byte> message,
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> expectedMac,
         Tag tag,
@@ -270,6 +337,19 @@ public static class CryptographicKeyEvents
 
         return isValid;
     }
+
+
+    /// <summary>Convenience overload for one-shot callers.</summary>
+    public static ValueTask<bool> VerifyHmacAsync(
+        ReadOnlyMemory<byte> message,
+        ReadOnlyMemory<byte> keyBytes,
+        ReadOnlyMemory<byte> expectedMac,
+        Tag tag,
+        MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        string? qualifier = null,
+        CancellationToken cancellationToken = default) =>
+        VerifyHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, expectedMac, tag, pool, context, qualifier, cancellationToken);
 
 
     //Minimal IObservable/IObserver implementation — no System.Reactive dependency.

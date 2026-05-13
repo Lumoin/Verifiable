@@ -450,7 +450,7 @@ internal sealed class TestHostShell: IDisposable
         {
             Encoder = TestSetup.Base64UrlEncoder,
             Decoder = TestSetup.Base64UrlDecoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigest,
+            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
 
             //The library signs access tokens via the registered token producers.
             //TestHostShell supplies the two JSON serialization delegates; tests
@@ -522,7 +522,7 @@ internal sealed class TestHostShell: IDisposable
                     s, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag),
                 computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
                     t, TestSetup.Base64UrlEncoder),
-                computeDigest: MicrosoftEntropyFunctions.ComputeDigest,
+                computeDigest: MicrosoftEntropyFunctions.ComputeDigestAsync,
                 vpValidator: vpValidator,
                 keyAgreementDecryptDelegate:
                     BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,

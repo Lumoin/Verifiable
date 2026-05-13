@@ -156,7 +156,7 @@ public static class DpopProofValidation
         //Access-token binding check (resource-server calls).
         if(request.AccessToken is not null)
         {
-            string expectedAth = ComputeAth(request.AccessToken, base64UrlEncoder, memoryPool);
+            string expectedAth = await ComputeAthAsync(request.AccessToken, base64UrlEncoder, memoryPool, cancellationToken).ConfigureAwait(false);
             if(claims.Ath is null || !string.Equals(claims.Ath, expectedAth, StringComparison.Ordinal))
             {
                 return DpopValidationResult.Failure(DpopValidationFailureReason.AthMismatch);
@@ -183,21 +183,23 @@ public static class DpopProofValidation
     /// the same observability and CBOM provenance stamping as every other digest
     /// in the library.
     /// </remarks>
-    public static string ComputeAth(
+    public static async ValueTask<string> ComputeAthAsync(
         string accessToken,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(accessToken);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(pool);
 
         byte[] accessTokenBytes = Encoding.ASCII.GetBytes(accessToken);
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+        using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
             accessTokenBytes,
             outputByteLength: SHA256.HashSizeInBytes,
             tag: CryptoTags.Sha256Digest,
-            pool: pool);
+            pool: pool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return base64UrlEncoder(digest.AsReadOnlySpan());
     }

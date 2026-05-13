@@ -224,14 +224,14 @@ public static class CredentialDataIntegrityExtensions
             System.Diagnostics.Debug.Assert(credentialBytesWritten == credentialByteCount, "Encoded byte count must match the pre-computed count.");
             System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
 
-            (DigestValue credentialDigestValue, _) = computeDigest(
-                credentialBytesOwner.Memory.Span[..credentialBytesWritten],
-                digestByteLength, digestTag, memoryPool);
+            (DigestValue credentialDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(credentialBytesOwner.Memory[..credentialBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
             using DigestValue credentialDigest = credentialDigestValue;
 
-            (DigestValue proofOptionsDigestValue, _) = computeDigest(
-                proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten],
-                digestByteLength, digestTag, memoryPool);
+            (DigestValue proofOptionsDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(proofOptionsBytesOwner.Memory[..proofOptionsBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
             using DigestValue proofOptionsDigest = proofOptionsDigestValue;
 
             //Combine hashes using memory pool: proofOptionsHash || credentialHash.
@@ -399,14 +399,14 @@ public static class CredentialDataIntegrityExtensions
             System.Diagnostics.Debug.Assert(credentialBytesWritten == credentialByteCount, "Encoded byte count must match the pre-computed count.");
             System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
 
-            (DigestValue credentialDigestValue, _) = computeDigest(
-                credentialBytesOwner.Memory.Span[..credentialBytesWritten],
-                digestByteLength, digestTag, memoryPool);
+            (DigestValue credentialDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(credentialBytesOwner.Memory[..credentialBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
             using DigestValue credentialDigest = credentialDigestValue;
 
-            (DigestValue proofOptionsDigestValue, _) = computeDigest(
-                proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten],
-                digestByteLength, digestTag, memoryPool);
+            (DigestValue proofOptionsDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(proofOptionsBytesOwner.Memory[..proofOptionsBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
             using DigestValue proofOptionsDigest = proofOptionsDigestValue;
 
             //Combine hashes using memory pool: proofOptionsHash || credentialHash.

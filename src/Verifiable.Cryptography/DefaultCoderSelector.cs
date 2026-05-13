@@ -154,7 +154,7 @@ public static class DefaultCoderSelector
 /// // 3. Entropy and digest delegates registered by delegate type.
 /// CryptographicKeyFactory.RegisterFunction(typeof(GenerateNonceDelegate), MicrosoftEntropyFunctions.GenerateNonce);
 /// CryptographicKeyFactory.RegisterFunction(typeof(GenerateSaltDelegate),  MicrosoftEntropyFunctions.GenerateSalt);
-/// CryptographicKeyFactory.RegisterFunction(typeof(ComputeDigestDelegate), MicrosoftEntropyFunctions.ComputeDigest);
+/// CryptographicKeyFactory.RegisterFunction(typeof(ComputeDigestDelegate), MicrosoftEntropyFunctions.ComputeDigestAsync);
 ///
 /// // 4. Key agreement registry, where used.
 /// KeyAgreementFunctionRegistry&lt;CryptoAlgorithm, Purpose&gt;.Initialize(...);

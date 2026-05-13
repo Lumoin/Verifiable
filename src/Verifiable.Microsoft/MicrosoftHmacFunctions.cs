@@ -12,7 +12,8 @@ namespace Verifiable.Microsoft;
 
 /// <summary>
 /// HMAC compute and verify functions backed by .NET platform cryptography
-/// (<see cref="HMACSHA256"/>, <see cref="HMACSHA384"/>, <see cref="HMACSHA512"/>).
+/// (<see cref="HMACSHA256"/>, <see cref="HMACSHA384"/>, <see cref="HMACSHA512"/>,
+/// <see cref="HMACSHA1"/>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -28,10 +29,11 @@ namespace Verifiable.Microsoft;
 ///     (VerifyHmacDelegate)MicrosoftHmacFunctions.VerifyHmacAsync);
 /// </code>
 /// <para>
-/// The compute and verify operations are synchronous at the BCL layer but the
-/// delegate shape is async to accommodate hardware backends. Software returns a
-/// synchronously-completed <see cref="ValueTask{TResult}"/> with effectively zero
-/// state-machine cost.
+/// SHA-1 support exists for TPM session protocol compatibility (TPM 2.0 spec allows
+/// SHA-1 sessions; some platforms negotiate it). The convenience tag constants in
+/// <see cref="CryptoTags"/> deliberately do not include an <c>HmacSha1Key</c> — new
+/// protocol code should not use SHA-1 — but the backend dispatches it when the
+/// consumer composes a Tag inline with <see cref="HashAlgorithmName.SHA1"/>.
 /// </para>
 /// </remarks>
 public static class MicrosoftHmacFunctions
@@ -51,14 +53,26 @@ public static class MicrosoftHmacFunctions
         new(nameof(MicrosoftHmacFunctions));
 
 
-    /// <summary>
-    /// Computes an HMAC using the .NET platform HMAC implementation identified by
-    /// the <see cref="HashAlgorithmName"/> in <paramref name="tag"/>. Supports
-    /// SHA-256, SHA-384, and SHA-512.
-    /// </summary>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned HmacValue takes ownership of the IMemoryOwner and is disposed by the caller.")]
+    /// <summary>Convenience overload accepting <see cref="ReadOnlyMemory{T}"/>.</summary>
     public static ValueTask<(HmacValue Result, CryptoEvent? Event)> ComputeHmacAsync(
         ReadOnlyMemory<byte> message,
+        ReadOnlyMemory<byte> keyBytes,
+        int outputByteLength,
+        Tag tag,
+        MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default) =>
+        ComputeHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, outputByteLength, tag, pool, context, cancellationToken);
+
+
+    /// <summary>
+    /// Computes an HMAC using the .NET platform HMAC implementation identified by
+    /// the <see cref="HashAlgorithmName"/> in <paramref name="tag"/>.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned HmacValue takes ownership of the IMemoryOwner and is disposed by the caller.")]
+    [SuppressMessage("Security", "CA5350:Do Not Use Weak Cryptographic Algorithms", Justification = "HMAC-SHA-1 is dispatched only when the consumer composes a Tag inline with HashAlgorithmName.SHA1 — exclusively the TPM session authorisation path per the TPM 2.0 spec. Convenience tags in CryptoTags omit SHA-1 so new protocol code cannot use it.")]
+    public static ValueTask<(HmacValue Result, CryptoEvent? Event)> ComputeHmacAsync(
+        ReadOnlySequence<byte> message,
         ReadOnlyMemory<byte> keyBytes,
         int outputByteLength,
         Tag tag,
@@ -97,17 +111,34 @@ public static class MicrosoftHmacFunctions
         int written;
         try
         {
-            written = algorithmName switch
+            Span<byte> destination = owner.Memory.Span[..outputByteLength];
+
+            if(message.IsSingleSegment)
             {
-                var a when a == HashAlgorithmName.SHA256 =>
-                    HMACSHA256.HashData(keyBytes.Span, message.Span, owner.Memory.Span[..outputByteLength]),
-                var a when a == HashAlgorithmName.SHA384 =>
-                    HMACSHA384.HashData(keyBytes.Span, message.Span, owner.Memory.Span[..outputByteLength]),
-                var a when a == HashAlgorithmName.SHA512 =>
-                    HMACSHA512.HashData(keyBytes.Span, message.Span, owner.Memory.Span[..outputByteLength]),
-                _ => throw new ArgumentException(
-                    $"Unsupported HMAC hash algorithm: {algorithmName.Name}.", nameof(tag))
-            };
+                ReadOnlySpan<byte> messageSpan = message.FirstSpan;
+                written = algorithmName switch
+                {
+                    var a when a == HashAlgorithmName.SHA256 =>
+                        HMACSHA256.HashData(keyBytes.Span, messageSpan, destination),
+                    var a when a == HashAlgorithmName.SHA384 =>
+                        HMACSHA384.HashData(keyBytes.Span, messageSpan, destination),
+                    var a when a == HashAlgorithmName.SHA512 =>
+                        HMACSHA512.HashData(keyBytes.Span, messageSpan, destination),
+                    var a when a == HashAlgorithmName.SHA1 =>
+                        HMACSHA1.HashData(keyBytes.Span, messageSpan, destination),
+                    _ => throw new ArgumentException(
+                        $"Unsupported HMAC hash algorithm: {algorithmName.Name}.", nameof(tag))
+                };
+            }
+            else
+            {
+                using IncrementalHash hasher = IncrementalHash.CreateHMAC(algorithmName, keyBytes.Span);
+                foreach(ReadOnlyMemory<byte> segment in message)
+                {
+                    hasher.AppendData(segment.Span);
+                }
+                written = hasher.GetHashAndReset(destination);
+            }
         }
         catch
         {
@@ -124,20 +155,31 @@ public static class MicrosoftHmacFunctions
 
         HmacValue result = new(owner, stamped, activity);
         CryptoEvent evt = HmacComputedEvent.Create(
-            algorithmName.Name ?? "Unknown", message.Length, outputByteLength);
+            algorithmName.Name ?? "Unknown", (int)message.Length, outputByteLength);
 
         return ValueTask.FromResult<(HmacValue, CryptoEvent?)>((result, evt));
     }
 
 
-    /// <summary>
-    /// Verifies an HMAC using the .NET platform HMAC implementation identified by
-    /// the <see cref="HashAlgorithmName"/> in <paramref name="tag"/>. Uses
-    /// <see cref="CryptographicOperations.FixedTimeEquals(ReadOnlySpan{byte}, ReadOnlySpan{byte})"/>
-    /// for constant-time comparison.
-    /// </summary>
+    /// <summary>Convenience overload accepting <see cref="ReadOnlyMemory{T}"/>.</summary>
     public static ValueTask<(bool IsValid, CryptoEvent? Event)> VerifyHmacAsync(
         ReadOnlyMemory<byte> message,
+        ReadOnlyMemory<byte> keyBytes,
+        ReadOnlyMemory<byte> expectedMac,
+        Tag tag,
+        MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default) =>
+        VerifyHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, expectedMac, tag, pool, context, cancellationToken);
+
+
+    /// <summary>
+    /// Verifies an HMAC using constant-time comparison via
+    /// <see cref="CryptographicOperations.FixedTimeEquals(ReadOnlySpan{byte}, ReadOnlySpan{byte})"/>.
+    /// </summary>
+    [SuppressMessage("Security", "CA5350:Do Not Use Weak Cryptographic Algorithms", Justification = "HMAC-SHA-1 dispatched only for TPM session protocol; see ComputeHmacAsync.")]
+    public static ValueTask<(bool IsValid, CryptoEvent? Event)> VerifyHmacAsync(
+        ReadOnlySequence<byte> message,
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> expectedMac,
         Tag tag,
@@ -162,6 +204,7 @@ public static class MicrosoftHmacFunctions
             var a when a == HashAlgorithmName.SHA256 => HMACSHA256.HashSizeInBytes,
             var a when a == HashAlgorithmName.SHA384 => HMACSHA384.HashSizeInBytes,
             var a when a == HashAlgorithmName.SHA512 => HMACSHA512.HashSizeInBytes,
+            var a when a == HashAlgorithmName.SHA1 => HMACSHA1.HashSizeInBytes,
             _ => throw new ArgumentException(
                 $"Unsupported HMAC hash algorithm: {algorithmName.Name}.", nameof(tag))
         };
@@ -185,24 +228,37 @@ public static class MicrosoftHmacFunctions
         {
             Span<byte> tempSpan = tempOwner.Memory.Span[..outputByteLength];
 
-            int written = algorithmName switch
+            int written;
+            if(message.IsSingleSegment)
             {
-                var a when a == HashAlgorithmName.SHA256 =>
-                    HMACSHA256.HashData(keyBytes.Span, message.Span, tempSpan),
-                var a when a == HashAlgorithmName.SHA384 =>
-                    HMACSHA384.HashData(keyBytes.Span, message.Span, tempSpan),
-                var a when a == HashAlgorithmName.SHA512 =>
-                    HMACSHA512.HashData(keyBytes.Span, message.Span, tempSpan),
-                _ => 0
-            };
+                ReadOnlySpan<byte> messageSpan = message.FirstSpan;
+                written = algorithmName switch
+                {
+                    var a when a == HashAlgorithmName.SHA256 =>
+                        HMACSHA256.HashData(keyBytes.Span, messageSpan, tempSpan),
+                    var a when a == HashAlgorithmName.SHA384 =>
+                        HMACSHA384.HashData(keyBytes.Span, messageSpan, tempSpan),
+                    var a when a == HashAlgorithmName.SHA512 =>
+                        HMACSHA512.HashData(keyBytes.Span, messageSpan, tempSpan),
+                    var a when a == HashAlgorithmName.SHA1 =>
+                        HMACSHA1.HashData(keyBytes.Span, messageSpan, tempSpan),
+                    _ => 0
+                };
+            }
+            else
+            {
+                using IncrementalHash hasher = IncrementalHash.CreateHMAC(algorithmName, keyBytes.Span);
+                foreach(ReadOnlyMemory<byte> segment in message)
+                {
+                    hasher.AppendData(segment.Span);
+                }
+                written = hasher.GetHashAndReset(tempSpan);
+            }
 
             isValid = written == outputByteLength
                 && expectedMac.Length == outputByteLength
                 && CryptographicOperations.FixedTimeEquals(tempSpan, expectedMac.Span);
 
-            //Clear the temporary tag before returning the buffer to the pool — the
-            //HMAC value itself is not secret but constant-time discipline keeps the
-            //comparison-side bytes from lingering longer than necessary.
             tempSpan.Clear();
         }
 
@@ -213,7 +269,7 @@ public static class MicrosoftHmacFunctions
             ? VerificationOutcome.Valid
             : VerificationOutcome.Invalid;
         CryptoEvent evt = HmacVerifiedEvent.Create(
-            algorithmName.Name ?? "Unknown", outcome, message.Length);
+            algorithmName.Name ?? "Unknown", outcome, (int)message.Length);
 
         _ = stamped;
         _ = context;

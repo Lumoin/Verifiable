@@ -396,7 +396,7 @@ public static class CryptoTags
 
 
     //Digest tags. The hash family is carried via HashAlgorithmName per the existing
-    //digest dispatch contract (see CryptoFormatConversions / MicrosoftEntropyFunctions.ComputeDigest).
+    //digest dispatch contract (see CryptoFormatConversions / MicrosoftEntropyFunctions.ComputeDigestAsync).
 
     /// <summary>
     /// Tag for SHA-256 digest values. Carries

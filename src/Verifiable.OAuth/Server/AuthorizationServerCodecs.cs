@@ -49,7 +49,7 @@ public sealed class AuthorizationServerCodecs
     /// <see cref="CryptographicKeyFactory"/>:
     /// </para>
     /// <code>
-    /// codecs.ComputeDigest = MicrosoftEntropyFunctions.ComputeDigest;
+    /// codecs.ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync;
     /// </code>
     /// <para>
     /// The delegate's <see cref="Tag"/> argument carries the

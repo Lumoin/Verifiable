@@ -185,8 +185,12 @@ public static class SdJwtPathExtraction
             _ => throw new ArgumentException($"Unsupported hash algorithm: '{algorithmName}'.", nameof(algorithmName))
         };
 
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
-            data, outputLength, tag, SensitiveMemoryPool<byte>.Shared);
+        //ComputeDisclosureDigest's public API is sync byte[]-returning; bridge via
+        //ComputeDigestSyncBridge which asserts the registered delegate completed
+        //synchronously (true for the Microsoft software backend). The data byte[]
+        //wraps in ReadOnlyMemory cheaply for the bridge.
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigestSyncBridge(
+            data.AsMemory(), outputLength, tag, SensitiveMemoryPool<byte>.Shared);
         return digest.AsReadOnlySpan().ToArray();
     }
 

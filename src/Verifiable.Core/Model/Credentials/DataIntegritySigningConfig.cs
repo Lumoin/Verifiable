@@ -112,7 +112,7 @@ public sealed record DataIntegritySigningConfig
     /// <summary>
     /// Computes a digest. Wired to a provider-side implementation registered
     /// on <see cref="CryptographicKeyFactory"/> such as
-    /// <c>MicrosoftEntropyFunctions.ComputeDigest</c>. The hash algorithm
+    /// <c>MicrosoftEntropyFunctions.ComputeDigestAsync</c>. The hash algorithm
     /// comes from the cryptosuite at signing time; the delegate dispatches on
     /// the algorithm via the <see cref="Tag"/> built per-call inside
     /// <see cref="CredentialDataIntegrityExtensions.SignAsync"/>.

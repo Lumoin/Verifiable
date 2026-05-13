@@ -201,7 +201,7 @@ internal static class TestSetup
 
         CryptographicKeyFactory.RegisterFunction(
             typeof(ComputeDigestDelegate),
-            (ComputeDigestDelegate)MicrosoftEntropyFunctions.ComputeDigest);
+            (ComputeDigestDelegate)MicrosoftEntropyFunctions.ComputeDigestAsync);
     }
 
 

@@ -131,8 +131,15 @@ public static class ConcatKdf
 
         //Hash through the registered ComputeDigestDelegate so Concat KDF picks up
         //the same observability and CBOM provenance stamping as every other digest.
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
-            hashInput, SHA256.HashSizeInBytes, CryptoTags.Sha256Digest, pool);
+        //ConcatKdf.Derive is sync (pure mathematics, no I/O); the sync bridge
+        //asserts the underlying delegate completed synchronously (true for the
+        //Microsoft software backend) and throws if a hardware-async backend is
+        //registered.
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigestSyncBridge(
+            hashInputOwner.Memory[..hashInputLength],
+            SHA256.HashSizeInBytes,
+            CryptoTags.Sha256Digest,
+            pool);
         hashInput.Clear();
 
         int outputByteLength = keydataLenBits / 8;

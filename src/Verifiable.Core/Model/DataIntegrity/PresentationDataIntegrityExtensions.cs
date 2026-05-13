@@ -167,14 +167,14 @@ public static class PresentationDataIntegrityExtensions
             System.Diagnostics.Debug.Assert(presentationBytesWritten == presentationByteCount, "Encoded byte count must match the pre-computed count.");
             System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
 
-            (DigestValue presentationDigestValue, _) = computeDigest(
-                presentationBytesOwner.Memory.Span[..presentationBytesWritten],
-                digestByteLength, digestTag, memoryPool);
+            (DigestValue presentationDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(presentationBytesOwner.Memory[..presentationBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
             using DigestValue presentationDigest = presentationDigestValue;
 
-            (DigestValue proofOptionsDigestValue, _) = computeDigest(
-                proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten],
-                digestByteLength, digestTag, memoryPool);
+            (DigestValue proofOptionsDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(proofOptionsBytesOwner.Memory[..proofOptionsBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
             using DigestValue proofOptionsDigest = proofOptionsDigestValue;
 
             //Combine hashes: proofOptionsHash || presentationHash.
@@ -346,14 +346,14 @@ public static class PresentationDataIntegrityExtensions
             System.Diagnostics.Debug.Assert(presentationBytesWritten == presentationByteCount, "Encoded byte count must match the pre-computed count.");
             System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
 
-            (DigestValue presentationDigestValue, _) = computeDigest(
-                presentationBytesOwner.Memory.Span[..presentationBytesWritten],
-                digestByteLength, digestTag, memoryPool);
+            (DigestValue presentationDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(presentationBytesOwner.Memory[..presentationBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
             using DigestValue presentationDigest = presentationDigestValue;
 
-            (DigestValue proofOptionsDigestValue, _) = computeDigest(
-                proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten],
-                digestByteLength, digestTag, memoryPool);
+            (DigestValue proofOptionsDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(proofOptionsBytesOwner.Memory[..proofOptionsBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
             using DigestValue proofOptionsDigest = proofOptionsDigestValue;
 
             var combinedLength = proofOptionsDigest.Length + presentationDigest.Length;
