@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography;
@@ -391,5 +392,77 @@ public static class CryptoTags
     public static Tag P521ExchangePrivateKey { get; } = Tag.Create(
         (typeof(CryptoAlgorithm), CryptoAlgorithm.P521),
         (typeof(Purpose), Purpose.Exchange),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+
+    //Digest tags. The hash family is carried via HashAlgorithmName per the existing
+    //digest dispatch contract (see CryptoFormatConversions / MicrosoftEntropyFunctions.ComputeDigest).
+
+    /// <summary>
+    /// Tag for SHA-256 digest values. Carries
+    /// <see cref="HashAlgorithmName.SHA256"/>, <see cref="Purpose.Digest"/>, raw encoding.
+    /// </summary>
+    public static Tag Sha256Digest { get; } = Tag.Create(
+        (typeof(HashAlgorithmName), HashAlgorithmName.SHA256),
+        (typeof(Purpose), Purpose.Digest),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for SHA-384 digest values. Carries
+    /// <see cref="HashAlgorithmName.SHA384"/>, <see cref="Purpose.Digest"/>, raw encoding.
+    /// </summary>
+    public static Tag Sha384Digest { get; } = Tag.Create(
+        (typeof(HashAlgorithmName), HashAlgorithmName.SHA384),
+        (typeof(Purpose), Purpose.Digest),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for SHA-512 digest values. Carries
+    /// <see cref="HashAlgorithmName.SHA512"/>, <see cref="Purpose.Digest"/>, raw encoding.
+    /// </summary>
+    public static Tag Sha512Digest { get; } = Tag.Create(
+        (typeof(HashAlgorithmName), HashAlgorithmName.SHA512),
+        (typeof(Purpose), Purpose.Digest),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+
+    //HMAC tags. Key and Value variants carry identical Tag composition; they exist for
+    //ergonomic call-site clarity — `new SymmetricKeyMemory(owner, CryptoTags.HmacSha256Key)`
+    //reads as a key, `new HmacValue(owner, CryptoTags.HmacSha256Value)` reads as a value.
+
+    /// <summary>Tag for HMAC-SHA-256 keys.</summary>
+    public static Tag HmacSha256Key { get; } = Tag.Create(
+        (typeof(HashAlgorithmName), HashAlgorithmName.SHA256),
+        (typeof(Purpose), Purpose.Hmac),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>Tag for HMAC-SHA-384 keys.</summary>
+    public static Tag HmacSha384Key { get; } = Tag.Create(
+        (typeof(HashAlgorithmName), HashAlgorithmName.SHA384),
+        (typeof(Purpose), Purpose.Hmac),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>Tag for HMAC-SHA-512 keys.</summary>
+    public static Tag HmacSha512Key { get; } = Tag.Create(
+        (typeof(HashAlgorithmName), HashAlgorithmName.SHA512),
+        (typeof(Purpose), Purpose.Hmac),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>Tag for HMAC-SHA-256 output values.</summary>
+    public static Tag HmacSha256Value { get; } = Tag.Create(
+        (typeof(HashAlgorithmName), HashAlgorithmName.SHA256),
+        (typeof(Purpose), Purpose.Hmac),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>Tag for HMAC-SHA-384 output values.</summary>
+    public static Tag HmacSha384Value { get; } = Tag.Create(
+        (typeof(HashAlgorithmName), HashAlgorithmName.SHA384),
+        (typeof(Purpose), Purpose.Hmac),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>Tag for HMAC-SHA-512 output values.</summary>
+    public static Tag HmacSha512Value { get; } = Tag.Create(
+        (typeof(HashAlgorithmName), HashAlgorithmName.SHA512),
+        (typeof(Purpose), Purpose.Hmac),
         (typeof(EncodingScheme), EncodingScheme.Raw));
 }

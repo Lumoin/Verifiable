@@ -120,6 +120,7 @@ internal static class TestSetup
         InitializeCoders();
         InitializeCryptoFunctions();
         InitializeEntropyFunctions();
+        InitializeHmacFunctions();
         InitializeKeyAgreementFunctions();
         MulticodecHeaderRegistry.Initialize();
     }
@@ -201,6 +202,18 @@ internal static class TestSetup
         CryptographicKeyFactory.RegisterFunction(
             typeof(ComputeDigestDelegate),
             (ComputeDigestDelegate)MicrosoftEntropyFunctions.ComputeDigest);
+    }
+
+
+    private static void InitializeHmacFunctions()
+    {
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(ComputeHmacDelegate),
+            (ComputeHmacDelegate)MicrosoftHmacFunctions.ComputeHmacAsync);
+
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(VerifyHmacDelegate),
+            (VerifyHmacDelegate)MicrosoftHmacFunctions.VerifyHmacAsync);
     }
 
 

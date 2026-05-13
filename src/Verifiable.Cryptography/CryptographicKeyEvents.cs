@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography;
@@ -173,6 +174,101 @@ public static class CryptographicKeyEvents
         }
 
         return result;
+    }
+
+
+    /// <summary>
+    /// Retrieves the registered <see cref="ComputeHmacDelegate"/>, invokes it,
+    /// and emits any produced <see cref="CryptoEvent"/> to <see cref="Events"/>.
+    /// </summary>
+    /// <param name="message">The bytes to authenticate.</param>
+    /// <param name="keyBytes">The HMAC key bytes.</param>
+    /// <param name="outputByteLength">The expected HMAC output length in bytes.</param>
+    /// <param name="tag">Metadata identifying the algorithm.</param>
+    /// <param name="pool">The memory pool to allocate from.</param>
+    /// <param name="context">Optional context parameters.</param>
+    /// <param name="qualifier">Optional qualifier for selecting among multiple implementations.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The computed <see cref="HmacValue"/>.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no <see cref="ComputeHmacDelegate"/> has been registered.
+    /// </exception>
+    public static async ValueTask<HmacValue> ComputeHmacAsync(
+        ReadOnlyMemory<byte> message,
+        ReadOnlyMemory<byte> keyBytes,
+        int outputByteLength,
+        Tag tag,
+        MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        string? qualifier = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(tag);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        ComputeHmacDelegate? compute =
+            CryptographicKeyFactory.GetFunction<ComputeHmacDelegate>(
+                typeof(ComputeHmacDelegate), qualifier);
+
+        if(compute is null)
+        {
+            throw new InvalidOperationException(
+                $"No {nameof(ComputeHmacDelegate)} has been registered. " +
+                "Call CryptographicKeyFactory.RegisterFunction during application startup.");
+        }
+
+        (HmacValue result, CryptoEvent? evt) = await compute(
+            message, keyBytes, outputByteLength, tag, pool, context, cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            subject.OnNext(evt);
+        }
+
+        return result;
+    }
+
+
+    /// <summary>
+    /// Retrieves the registered <see cref="VerifyHmacDelegate"/>, invokes it,
+    /// and emits any produced <see cref="CryptoEvent"/> to <see cref="Events"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no <see cref="VerifyHmacDelegate"/> has been registered.
+    /// </exception>
+    public static async ValueTask<bool> VerifyHmacAsync(
+        ReadOnlyMemory<byte> message,
+        ReadOnlyMemory<byte> keyBytes,
+        ReadOnlyMemory<byte> expectedMac,
+        Tag tag,
+        MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        string? qualifier = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(tag);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        VerifyHmacDelegate? verify =
+            CryptographicKeyFactory.GetFunction<VerifyHmacDelegate>(
+                typeof(VerifyHmacDelegate), qualifier);
+
+        if(verify is null)
+        {
+            throw new InvalidOperationException(
+                $"No {nameof(VerifyHmacDelegate)} has been registered. " +
+                "Call CryptographicKeyFactory.RegisterFunction during application startup.");
+        }
+
+        (bool isValid, CryptoEvent? evt) = await verify(
+            message, keyBytes, expectedMac, tag, pool, context, cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            subject.OnNext(evt);
+        }
+
+        return isValid;
     }
 
 

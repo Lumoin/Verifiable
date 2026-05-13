@@ -138,4 +138,86 @@ public static class KeyExtensions
 
         return publicKey.WithKeyBytesAsync((publicKeyBytes, dataToVerify, sig) => verificationDelegate(dataToVerify, sig.AsReadOnlyMemory(), publicKeyBytes, context), dataToVerify, signature);
     }
+
+
+    /// <summary>
+    /// Computes an HMAC over <paramref name="message"/> using the symmetric key and
+    /// the supplied <see cref="ComputeHmacDelegate"/>.
+    /// </summary>
+    /// <param name="key">The symmetric key memory containing the HMAC key bytes.</param>
+    /// <param name="message">The bytes to authenticate.</param>
+    /// <param name="outputByteLength">The expected HMAC output length in bytes.</param>
+    /// <param name="hmacDelegate">The HMAC compute delegate, typically from a cryptographic backend.</param>
+    /// <param name="pool">The memory pool to allocate the output from.</param>
+    /// <param name="context">Optional context parameters.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The computed <see cref="HmacValue"/>.</returns>
+    public static async ValueTask<HmacValue> ComputeHmacAsync(
+        this SymmetricKeyMemory key,
+        ReadOnlyMemory<byte> message,
+        int outputByteLength,
+        ComputeHmacDelegate hmacDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(hmacDelegate);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        (HmacValue result, CryptoEvent? _) = await key.WithKeyBytesAsync(
+            (keyBytes, args) => args.HmacDelegate(
+                args.Message, keyBytes, args.OutputByteLength, key.Tag, args.Pool, args.Context, args.CancellationToken),
+            (Message: message, OutputByteLength: outputByteLength, HmacDelegate: hmacDelegate,
+                Pool: pool, Context: context, CancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return result;
+    }
+
+
+    /// <summary>
+    /// Verifies an HMAC <paramref name="expectedMac"/> against an HMAC of
+    /// <paramref name="message"/> using the symmetric key and the supplied
+    /// <see cref="VerifyHmacDelegate"/>.
+    /// </summary>
+    public static ValueTask<bool> VerifyHmacAsync(
+        this SymmetricKeyMemory key,
+        ReadOnlyMemory<byte> message,
+        HmacValue expectedMac,
+        VerifyHmacDelegate verifyDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(expectedMac);
+        return key.VerifyHmacAsync(message, expectedMac.AsReadOnlyMemory(), verifyDelegate, pool, context, cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Verifies <paramref name="expectedMacBytes"/> against an HMAC of
+    /// <paramref name="message"/> using the symmetric key and the supplied
+    /// <see cref="VerifyHmacDelegate"/>.
+    /// </summary>
+    public static async ValueTask<bool> VerifyHmacAsync(
+        this SymmetricKeyMemory key,
+        ReadOnlyMemory<byte> message,
+        ReadOnlyMemory<byte> expectedMacBytes,
+        VerifyHmacDelegate verifyDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(verifyDelegate);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        (bool isValid, CryptoEvent? _) = await key.WithKeyBytesAsync(
+            (keyBytes, args) => args.VerifyDelegate(
+                args.Message, keyBytes, args.ExpectedMacBytes, key.Tag, args.Pool, args.Context, args.CancellationToken),
+            (Message: message, ExpectedMacBytes: expectedMacBytes, VerifyDelegate: verifyDelegate,
+                Pool: pool, Context: context, CancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return isValid;
+    }
 }

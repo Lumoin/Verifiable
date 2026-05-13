@@ -117,6 +117,28 @@ public static class CryptoTelemetry
 
 
     /// <summary>
+    /// Attribute names specific to <see cref="HmacValue"/> lifetime spans and
+    /// HMAC compute / verify operations.
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible",
+        Justification = "Intentional grouping of related constants — same pattern as WellKnownMediaTypes.")]
+    public static class Hmac
+    {
+        /// <summary>Hash algorithm name backing the HMAC, e.g. <c>SHA256</c>.</summary>
+        public const string Algorithm = "crypto.hmac.algorithm";
+
+        /// <summary>Length of the message being authenticated in bytes.</summary>
+        public const string InputLength = "crypto.hmac.input_length";
+
+        /// <summary>Length of the HMAC output in bytes.</summary>
+        public const string OutputLength = "crypto.hmac.output_byte_length";
+
+        /// <summary><see langword="true"/> when verification succeeded; <see langword="false"/> otherwise.</summary>
+        public const string Valid = "crypto.hmac.valid";
+    }
+
+
+    /// <summary>
     /// Activity name constants used when starting spans on
     /// <see cref="CryptoActivitySource.Source"/>.
     /// </summary>
@@ -132,6 +154,12 @@ public static class CryptoTelemetry
 
         /// <summary>Activity name for <see cref="DigestValue"/> computation.</summary>
         public const string Digest = "crypto.digest";
+
+        /// <summary>Activity name for HMAC compute operations.</summary>
+        public const string HmacCompute = "crypto.hmac.compute";
+
+        /// <summary>Activity name for HMAC verify operations.</summary>
+        public const string HmacVerify = "crypto.hmac.verify";
     }
 
 

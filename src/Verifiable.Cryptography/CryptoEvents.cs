@@ -370,6 +370,92 @@ public sealed record DigestComputedEvent: CryptoEvent
 
 
 /// <summary>
+/// Emitted when an HMAC is computed.
+/// </summary>
+public sealed record HmacComputedEvent: CryptoEvent
+{
+    /// <summary>The hash algorithm backing the HMAC (e.g. SHA-256).</summary>
+    public string AlgorithmName { get; init; } = string.Empty;
+
+    /// <summary>Length in bytes of the message that was authenticated.</summary>
+    public int InputLength { get; init; }
+
+    /// <summary>Length in bytes of the produced HMAC tag.</summary>
+    public int OutputLength { get; init; }
+
+
+    /// <summary>
+    /// Constructs an <see cref="HmacComputedEvent"/> capturing the current
+    /// trace context automatically.
+    /// </summary>
+    public static HmacComputedEvent Create(
+        string algorithmName,
+        int inputLength,
+        int outputLength,
+        string emittedBy = "",
+        TimeProvider? timeProvider = null)
+    {
+        (string? traceParent, string? traceState) = CaptureTraceContext();
+        return new HmacComputedEvent
+        {
+            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            AlgorithmName = algorithmName,
+            InputLength = inputLength,
+            OutputLength = outputLength,
+            EmittedBy = emittedBy,
+            TraceParent = traceParent,
+            TraceState = traceState
+        };
+    }
+}
+
+
+/// <summary>
+/// Emitted when an HMAC verification operation completes.
+/// </summary>
+/// <remarks>
+/// An <see cref="VerificationOutcome.Invalid"/> result in a regulated flow is a
+/// security event and should be treated accordingly by the subscriber.
+/// </remarks>
+public sealed record HmacVerifiedEvent: CryptoEvent
+{
+    /// <summary>The hash algorithm backing the HMAC.</summary>
+    public string AlgorithmName { get; init; } = string.Empty;
+
+    /// <summary>Whether verification succeeded, failed, or encountered an error.</summary>
+    public VerificationOutcome Outcome { get; init; }
+
+    /// <summary>Length in bytes of the message that was verified.</summary>
+    public int InputLength { get; init; }
+
+
+    /// <summary>
+    /// Constructs an <see cref="HmacVerifiedEvent"/> capturing the current
+    /// trace context automatically.
+    /// </summary>
+    public static HmacVerifiedEvent Create(
+        string algorithmName,
+        VerificationOutcome outcome,
+        int inputLength,
+        string emittedBy = "",
+        TimeProvider? timeProvider = null)
+    {
+        (string? traceParent, string? traceState) = CaptureTraceContext();
+        return new HmacVerifiedEvent
+        {
+            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            AlgorithmName = algorithmName,
+            Outcome = outcome,
+            InputLength = inputLength,
+            EmittedBy = emittedBy,
+            TraceParent = traceParent,
+            TraceState = traceState
+        };
+    }
+}
+
+
+/// <summary>
 /// The outcome of a cryptographic signature verification operation.
 /// </summary>
 public enum VerificationOutcome
