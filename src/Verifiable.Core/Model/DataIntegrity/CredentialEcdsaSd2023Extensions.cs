@@ -266,33 +266,47 @@ public static class CredentialEcdsaSd2023Extensions
             //Generate HMAC key using the provided delegate.
             var hmacKey = generateHmacKey();
 
-            var prepared = NQuadStatementPreparation.Prepare(
+            ComputeHmacDelegate hmacCompute = ResolveHmacDelegate();
+
+            var prepared = await NQuadStatementPreparation.PrepareAsync(
                 partition.AllStatements,
                 partition.MandatoryIndexes,
                 hmacKey,
-                HMACSHA256.HashData,
-                encoder);
+                hmacCompute,
+                encoder,
+                memoryPool,
+                cancellationToken).ConfigureAwait(false);
 
             var sortedMandatoryStatements = prepared.MandatoryIndexes
                 .OrderBy(i => i)
                 .Select(idx => prepared.SortedStatements[idx])
                 .ToList();
 
-            var mandatoryHash = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("", sortedMandatoryStatements)));
+            using DigestValue mandatoryHash = await CryptographicKeyEvents.ComputeDigestAsync(
+                Encoding.UTF8.GetBytes(string.Join("", sortedMandatoryStatements)),
+                outputByteLength: 32,
+                tag: CryptoTags.Sha256Digest,
+                pool: memoryPool,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             var ephemeralPublicKeyWithHeader = MultibaseSerializer.PrependHeader(
                 ephemeralKeyPair.PublicKey,
                 memoryPool);
 
             var proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
-            var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm));
+            using DigestValue proofOptionsHash = await CryptographicKeyEvents.ComputeDigestAsync(
+                Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm),
+                outputByteLength: 32,
+                tag: CryptoTags.Sha256Digest,
+                pool: memoryPool,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             int signatureDataLength = proofOptionsHash.Length + ephemeralPublicKeyWithHeader.Memory.Length + mandatoryHash.Length;
             var baseSignatureData = memoryPool.Rent(signatureDataLength);
             var signatureDataSpan = baseSignatureData.Memory.Span;
-            proofOptionsHash.CopyTo(signatureDataSpan);
+            proofOptionsHash.AsReadOnlySpan().CopyTo(signatureDataSpan);
             ephemeralPublicKeyWithHeader.Memory.Span.CopyTo(signatureDataSpan[proofOptionsHash.Length..]);
-            mandatoryHash.CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralPublicKeyWithHeader.Memory.Length)..]);
+            mandatoryHash.AsReadOnlySpan().CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralPublicKeyWithHeader.Memory.Length)..]);
 
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -338,8 +352,8 @@ public static class CredentialEcdsaSd2023Extensions
                 prepared.LabelMap,
                 prepared.MandatoryIndexes.OrderBy(i => i).ToList(),
                 prepared.NonMandatoryIndexes.OrderBy(i => i).ToList(),
-                mandatoryHash,
-                proofOptionsHash,
+                mandatoryHash.AsReadOnlySpan().ToArray(),
+                proofOptionsHash.AsReadOnlySpan().ToArray(),
                 hmacKey,
                 ephemeralPublicKeyWithHeader,
                 baseSignature,
@@ -482,25 +496,39 @@ public static class CredentialEcdsaSd2023Extensions
             var partition = await partitionStatements(credentialJson, parsedProof.MandatoryPointers.ToList(), canonicalize, contextResolver, cancellationToken).ConfigureAwait(false);
             var canonicalStatements = partition.AllStatements.ToList();
 
-            var prepared = NQuadStatementPreparation.Prepare(
+            ComputeHmacDelegate hmacCompute = ResolveHmacDelegate();
+
+            var prepared = await NQuadStatementPreparation.PrepareAsync(
                 partition.AllStatements,
                 partition.MandatoryIndexes,
                 parsedProof.HmacKey,
-                HMACSHA256.HashData,
-                encoder);
+                hmacCompute,
+                encoder,
+                memoryPool,
+                cancellationToken).ConfigureAwait(false);
 
             var sortedMandatoryStatements = prepared.MandatoryIndexes
                 .OrderBy(i => i)
                 .Select(idx => prepared.SortedStatements[idx])
                 .ToList();
 
-            var mandatoryHash = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("", sortedMandatoryStatements)));
+            using DigestValue mandatoryHash = await CryptographicKeyEvents.ComputeDigestAsync(
+                Encoding.UTF8.GetBytes(string.Join("", sortedMandatoryStatements)),
+                outputByteLength: 32,
+                tag: CryptoTags.Sha256Digest,
+                pool: memoryPool,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             var proofOptions = ProofOptionsDocument.FromProof(proof, credential.Context);
             var proofOptionsJson = serializeProofOptions(proofOptions);
 
             var proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
-            var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm));
+            using DigestValue proofOptionsHash = await CryptographicKeyEvents.ComputeDigestAsync(
+                Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm),
+                outputByteLength: 32,
+                tag: CryptoTags.Sha256Digest,
+                pool: memoryPool,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             using var ephemeralKeyWithHeader = MultibaseSerializer.PrependHeader(
                 parsedProof.EphemeralPublicKey,
@@ -509,9 +537,9 @@ public static class CredentialEcdsaSd2023Extensions
             int signatureDataLength = proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length + mandatoryHash.Length;
             var baseSignatureData = memoryPool.Rent(signatureDataLength);
             var signatureDataSpan = baseSignatureData.Memory.Span;
-            proofOptionsHash.CopyTo(signatureDataSpan);
+            proofOptionsHash.AsReadOnlySpan().CopyTo(signatureDataSpan);
             ephemeralKeyWithHeader.Memory.Span.CopyTo(signatureDataSpan[proofOptionsHash.Length..]);
-            mandatoryHash.CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length)..]);
+            mandatoryHash.AsReadOnlySpan().CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length)..]);
 
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -564,8 +592,8 @@ public static class CredentialEcdsaSd2023Extensions
                 signatureDataLength,
                 ephemeralKeyMemory,
                 parsedProof.HmacKey,
-                proofOptionsHash,
-                mandatoryHash);
+                proofOptionsHash.AsReadOnlySpan().ToArray(),
+                mandatoryHash.AsReadOnlySpan().ToArray());
 
             return (CredentialVerificationResult.Success(), context);
         }
@@ -704,12 +732,16 @@ public static class CredentialEcdsaSd2023Extensions
             //Prepare full credential statements to determine which signatures to include.
             var fullPartition = await partitionStatements(fullCredentialJson, parsedProof.MandatoryPointers.ToList(), canonicalize, contextResolver, cancellationToken).ConfigureAwait(false);
 
-            var fullPrepared = NQuadStatementPreparation.Prepare(
+            ComputeHmacDelegate hmacCompute = ResolveHmacDelegate();
+
+            var fullPrepared = await NQuadStatementPreparation.PrepareAsync(
                 fullPartition.AllStatements,
                 fullPartition.MandatoryIndexes,
                 parsedProof.HmacKey,
-                HMACSHA256.HashData,
-                encoder);
+                hmacCompute,
+                encoder,
+                memoryPool,
+                cancellationToken).ConfigureAwait(false);
 
             //Map verifier requested paths to JSON pointers.
             var requestedPointers = verifierRequestedPaths
@@ -719,12 +751,14 @@ public static class CredentialEcdsaSd2023Extensions
 
             //Map verifier requested paths to statement indexes in the full credential.
             var requestedPartition = await partitionStatements(fullCredentialJson, requestedPointers, canonicalize, contextResolver, cancellationToken).ConfigureAwait(false);
-            var requestedPrepared = NQuadStatementPreparation.Prepare(
+            var requestedPrepared = await NQuadStatementPreparation.PrepareAsync(
                 requestedPartition.AllStatements,
                 requestedPartition.MandatoryIndexes,
                 parsedProof.HmacKey,
-                HMACSHA256.HashData,
-                encoder);
+                hmacCompute,
+                encoder,
+                memoryPool,
+                cancellationToken).ConfigureAwait(false);
             var requestedIndexes = requestedPrepared.MandatoryIndexes;
 
             //Map user exclusions to statement indexes if provided.
@@ -737,12 +771,14 @@ public static class CredentialEcdsaSd2023Extensions
                     .ToList();
 
                 var excludedPartition = await partitionStatements(fullCredentialJson, excludedPointers, canonicalize, contextResolver, cancellationToken).ConfigureAwait(false);
-                var excludedPrepared = NQuadStatementPreparation.Prepare(
+                var excludedPrepared = await NQuadStatementPreparation.PrepareAsync(
                     excludedPartition.AllStatements,
                     excludedPartition.MandatoryIndexes,
                     parsedProof.HmacKey,
-                    HMACSHA256.HashData,
-                    encoder);
+                    hmacCompute,
+                    encoder,
+                    memoryPool,
+                    cancellationToken).ConfigureAwait(false);
 
                 excludedIndexes = excludedPrepared.MandatoryIndexes;
             }
@@ -986,13 +1022,23 @@ public static class CredentialEcdsaSd2023Extensions
                 .Select(idx => sortedStatements[idx])
                 .ToList();
 
-            var mandatoryHash = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("", mandatoryStatements)));
+            using DigestValue mandatoryHash = await CryptographicKeyEvents.ComputeDigestAsync(
+                Encoding.UTF8.GetBytes(string.Join("", mandatoryStatements)),
+                outputByteLength: 32,
+                tag: CryptoTags.Sha256Digest,
+                pool: memoryPool,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             var proofOptions = ProofOptionsDocument.FromProof(proof, credential.Context);
             var proofOptionsJson = serializeProofOptions(proofOptions);
 
             var proofOptionsCanonicalization = await canonicalize(proofOptionsJson, contextResolver, cancellationToken).ConfigureAwait(false);
-            var proofOptionsHash = SHA256.HashData(Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm));
+            using DigestValue proofOptionsHash = await CryptographicKeyEvents.ComputeDigestAsync(
+                Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm),
+                outputByteLength: 32,
+                tag: CryptoTags.Sha256Digest,
+                pool: memoryPool,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             using var ephemeralKeyWithHeader = MultibaseSerializer.PrependHeader(
                 parsedProof.EphemeralPublicKey,
@@ -1001,9 +1047,9 @@ public static class CredentialEcdsaSd2023Extensions
             int signatureDataLength = proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length + mandatoryHash.Length;
             var baseSignatureData = memoryPool.Rent(signatureDataLength);
             var signatureDataSpan = baseSignatureData.Memory.Span;
-            proofOptionsHash.CopyTo(signatureDataSpan);
+            proofOptionsHash.AsReadOnlySpan().CopyTo(signatureDataSpan);
             ephemeralKeyWithHeader.Memory.Span.CopyTo(signatureDataSpan[proofOptionsHash.Length..]);
-            mandatoryHash.CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length)..]);
+            mandatoryHash.AsReadOnlySpan().CopyTo(signatureDataSpan[(proofOptionsHash.Length + ephemeralKeyWithHeader.Memory.Length)..]);
 
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -1220,4 +1266,11 @@ public static class CredentialEcdsaSd2023Extensions
         identifier.StartsWith("_:", StringComparison.Ordinal)
             ? identifier[2..]
             : identifier;
+
+
+    private static ComputeHmacDelegate ResolveHmacDelegate() =>
+        CryptographicKeyFactory.GetFunction<ComputeHmacDelegate>(typeof(ComputeHmacDelegate))
+        ?? throw new InvalidOperationException(
+            $"No {nameof(ComputeHmacDelegate)} has been registered. " +
+            "Call CryptographicKeyFactory.RegisterFunction during application startup.");
 }

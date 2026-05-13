@@ -1,6 +1,9 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -16,7 +19,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// in the sorted statement list.
 /// </para>
 /// <para>
-/// Use <see cref="NQuadStatementPreparation.Prepare"/> to create instances.
+/// Use <see cref="NQuadStatementPreparation.PrepareAsync"/> to create instances.
 /// </para>
 /// </remarks>
 public sealed class PreparedNQuadStatements
@@ -69,8 +72,13 @@ public static class NQuadStatementPreparation
     /// <param name="allStatements">All canonical N-Quad statements.</param>
     /// <param name="mandatoryIndexes">Indexes of mandatory statements in the canonical (unsorted) list.</param>
     /// <param name="hmacKey">The 32-byte HMAC key for blank node relabeling.</param>
-    /// <param name="hmac">The HMAC function (typically HMAC-SHA256).</param>
+    /// <param name="hmac">
+    /// HMAC computation delegate. Wired to a provider-side implementation
+    /// registered on <see cref="CryptographicKeyFactory"/>.
+    /// </param>
     /// <param name="encoder">Base64URL encoder for HMAC label generation.</param>
+    /// <param name="pool">Memory pool for cryptographic allocations.</param>
+    /// <param name="cancellationToken">Token to observe while awaiting HMAC computation.</param>
     /// <returns>Prepared statements with sorted indexes.</returns>
     /// <remarks>
     /// <para>
@@ -84,24 +92,29 @@ public static class NQuadStatementPreparation
     /// <see cref="PrepareWithLabelMap"/> instead.
     /// </para>
     /// </remarks>
-    public static PreparedNQuadStatements Prepare(
+    public static async ValueTask<PreparedNQuadStatements> PrepareAsync(
         IReadOnlyList<string> allStatements,
         IReadOnlyList<int> mandatoryIndexes,
-        ReadOnlySpan<byte> hmacKey,
-        HmacComputeDelegate hmac,
-        EncodeDelegate encoder)
+        ReadOnlyMemory<byte> hmacKey,
+        ComputeHmacDelegate hmac,
+        EncodeDelegate encoder,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(allStatements);
         ArgumentNullException.ThrowIfNull(mandatoryIndexes);
         ArgumentNullException.ThrowIfNull(hmac);
         ArgumentNullException.ThrowIfNull(encoder);
+        ArgumentNullException.ThrowIfNull(pool);
 
         //HMAC relabel blank nodes.
-        var relabelingResult = BlankNodeRelabeling.RelabelNQuadsWithMap(
+        var relabelingResult = await BlankNodeRelabeling.RelabelNQuadsWithMapAsync(
             allStatements,
             hmacKey,
             hmac,
-            encoder);
+            encoder,
+            pool,
+            cancellationToken).ConfigureAwait(false);
 
         var relabeledStatements = relabelingResult.Statements.ToList();
 
