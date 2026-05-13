@@ -69,19 +69,6 @@ namespace Verifiable.OAuth.AuthCode;
 public static class AuthCodeEndpoints
 {
 
-    //SHA-256 is the only digest algorithm OAuth 2.0 PKCE per RFC 7636 §4.2 and
-    //the Authorization Code grant code-hash currently use. The tag is pre-built
-    //here to keep call sites a single line; if a future profile needs SHA-384
-    //or post-quantum digests, lift this static into a per-call argument and
-    //pass the algorithm-appropriate length from
-    //<see cref="WellKnownHashAlgorithms.GetSizeBytes(HashAlgorithmName)"/>.
-    private static readonly Tag Sha256DigestTag = new(new Dictionary<Type, object>
-    {
-        [typeof(HashAlgorithmName)] = HashAlgorithmName.SHA256,
-        [typeof(Purpose)] = Purpose.Digest
-    });
-
-
     /// <summary>
     /// The endpoint builder delegate. Pass this to
     /// <see cref="AuthorizationServer.EndpointBuilders"/>.
@@ -387,7 +374,7 @@ public static class AuthCodeEndpoints
                 string rawCode = Guid.NewGuid().ToString("N");
                 string codeHash = ComputeDigestBase64Url(
                     rawCode,
-                    Sha256DigestTag,
+                    CryptoTags.Sha256Digest,
                     WellKnownHashAlgorithms.Sha256SizeBytes,
                     server.Codecs.ComputeDigest!,
                     server.Codecs.Encoder!,
@@ -534,7 +521,7 @@ public static class AuthCodeEndpoints
                 string rawCode = Guid.NewGuid().ToString("N");
                 string codeHash = ComputeDigestBase64Url(
                     rawCode,
-                    Sha256DigestTag,
+                    CryptoTags.Sha256Digest,
                     WellKnownHashAlgorithms.Sha256SizeBytes,
                     server.Codecs.ComputeDigest!,
                     server.Codecs.Encoder!,
@@ -784,7 +771,7 @@ public static class AuthCodeEndpoints
                 string rawCode = Guid.NewGuid().ToString("N");
                 string codeHash = ComputeDigestBase64Url(
                     rawCode,
-                    Sha256DigestTag,
+                    CryptoTags.Sha256Digest,
                     WellKnownHashAlgorithms.Sha256SizeBytes,
                     server.Codecs.ComputeDigest!,
                     server.Codecs.Encoder!,
@@ -1177,7 +1164,7 @@ public static class AuthCodeEndpoints
 
                 string computedChallenge = ComputeDigestBase64Url(
                     verifier,
-                    Sha256DigestTag,
+                    CryptoTags.Sha256Digest,
                     WellKnownHashAlgorithms.Sha256SizeBytes,
                     server.Codecs.ComputeDigest!,
                     server.Codecs.Encoder!,

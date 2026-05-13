@@ -129,14 +129,15 @@ public static class ConcatKdf
 
         BinaryPrimitives.WriteInt32BigEndian(hashInput[offset..], keydataLenBits);
 
-        using IMemoryOwner<byte> digestOwner = pool.Rent(SHA256.HashSizeInBytes);
-        SHA256.HashData(hashInput, digestOwner.Memory.Span);
+        //Hash through the registered ComputeDigestDelegate so Concat KDF picks up
+        //the same observability and CBOM provenance stamping as every other digest.
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            hashInput, SHA256.HashSizeInBytes, CryptoTags.Sha256Digest, pool);
         hashInput.Clear();
 
         int outputByteLength = keydataLenBits / 8;
         IMemoryOwner<byte> outputOwner = pool.Rent(outputByteLength);
-        digestOwner.Memory.Span[..outputByteLength].CopyTo(outputOwner.Memory.Span);
-        digestOwner.Memory.Span.Clear();
+        digest.AsReadOnlySpan()[..outputByteLength].CopyTo(outputOwner.Memory.Span);
 
         //Build the inner SymmetricKeyMemory first, then wrap it in the
         //single-use ContentEncryptionKey wrapper that AEAD consumers unwrap via UseKey().

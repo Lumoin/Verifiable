@@ -75,15 +75,11 @@ public static class PkceGeneration
             Span<byte> inputBytes = inputOwner.Memory.Span[..inputByteCount];
             Encoding.ASCII.GetBytes(encodedVerifier, inputBytes);
 
-            Tag challengeTag = Tag.Create(
-                (typeof(Purpose), Purpose.Digest),
-                (typeof(HashAlgorithmName), HashAlgorithmName.SHA256));
-
             string encodedChallenge;
             using(DigestValue challenge = CryptographicKeyEvents.ComputeDigest(
                 inputBytes,
                 ChallengeSha256ByteLength,
-                challengeTag,
+                CryptoTags.Sha256Digest,
                 pool))
             {
                 encodedChallenge = base64UrlEncoder(challenge.AsReadOnlySpan());

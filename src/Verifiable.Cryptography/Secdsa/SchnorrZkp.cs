@@ -103,6 +103,12 @@ public static class SchnorrZkp
         EcPoint[] publicKeys,
         ReadOnlySpan<byte> challengeBinding)
     {
+        //SchnorrZkp uses streaming IncrementalHash because the registered
+        //ComputeDigestDelegate is one-shot. Migration would require either a new
+        //ComputeIncrementalDigestDelegate primitive (its own design decision) or
+        //buffering all inputs before a single ComputeDigest call (defeats the
+        //per-segment processing the ZKP is designed around). See the HMAC handoff
+        //MD section 3.
         using IncrementalHash hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
         for(int i = 0; i < generators.Length; i++)

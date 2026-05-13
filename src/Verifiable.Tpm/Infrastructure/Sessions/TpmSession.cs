@@ -299,6 +299,19 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         sessionKeySpan.CopyTo(hmacKey);
         authValueSpan.CopyTo(hmacKey.Slice(sessionKeySpan.Length));
 
+        //TPM session HMAC is intentionally a direct IncrementalHash.CreateHMAC call.
+        //Three reasons it does not migrate to the registered ComputeHmacDelegate:
+        //(a) requires HMAC-SHA-1 for TPM session-key compatibility, which the
+        //    library-level HMAC convenience tags deliberately omit;
+        //(b) ComputeCommandHmac/ComputeResponseHmac are synchronous span-write
+        //    operations; routing them through the async delegate would force
+        //    sync-block-over-async or async propagation up through TpmSession and
+        //    TpmCommandExecutor — a TPM-layer refactor with no architectural
+        //    benefit for self-contained TPM protocol artifacts;
+        //(c) the HMAC key is software-derived (sessionKey || authValue stack-
+        //    allocated above) and never hardware-bound, so backend-diversity
+        //    benefits do not apply.
+        //See the HMAC handoff MD section 3 for the full reasoning.
         using IncrementalHash hmac = sessionAlg switch
         {
             TpmAlgIdConstants.TPM_ALG_SHA1 => IncrementalHash.CreateHMAC(HashAlgorithmName.SHA1, hmacKey),

@@ -156,7 +156,7 @@ public static class DpopProofValidation
         //Access-token binding check (resource-server calls).
         if(request.AccessToken is not null)
         {
-            string expectedAth = ComputeAth(request.AccessToken, base64UrlEncoder);
+            string expectedAth = ComputeAth(request.AccessToken, base64UrlEncoder, memoryPool);
             if(claims.Ath is null || !string.Equals(claims.Ath, expectedAth, StringComparison.Ordinal))
             {
                 return DpopValidationResult.Failure(DpopValidationFailureReason.AthMismatch);
@@ -177,18 +177,29 @@ public static class DpopProofValidation
     /// per RFC 9449 §4.3 — the value that must appear in a resource-call
     /// proof's <c>ath</c> claim.
     /// </summary>
-    public static string ComputeAth(string accessToken, EncodeDelegate base64UrlEncoder)
+    /// <remarks>
+    /// Routes through the registered <see cref="ComputeDigestDelegate"/> via
+    /// <see cref="CryptographicKeyEvents.ComputeDigest"/> so this operation picks up
+    /// the same observability and CBOM provenance stamping as every other digest
+    /// in the library.
+    /// </remarks>
+    public static string ComputeAth(
+        string accessToken,
+        EncodeDelegate base64UrlEncoder,
+        MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(accessToken);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+        ArgumentNullException.ThrowIfNull(pool);
 
-        Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
-        if(!SHA256.TryHashData(Encoding.ASCII.GetBytes(accessToken), hash, out int written)
-            || written != SHA256.HashSizeInBytes)
-        {
-            throw new InvalidOperationException("SHA-256 hash for ath claim failed.");
-        }
-        return base64UrlEncoder(hash);
+        byte[] accessTokenBytes = Encoding.ASCII.GetBytes(accessToken);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            accessTokenBytes,
+            outputByteLength: SHA256.HashSizeInBytes,
+            tag: CryptoTags.Sha256Digest,
+            pool: pool);
+
+        return base64UrlEncoder(digest.AsReadOnlySpan());
     }
 
 

@@ -92,7 +92,7 @@ public static class KbJwtIssuance
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        string sdHash = ComputeSdHash(sdJwtCompactWithDisclosures.Span, base64UrlEncoder);
+        string sdHash = ComputeSdHash(sdJwtCompactWithDisclosures.Span, base64UrlEncoder, memoryPool);
 
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(holderKey.Tag);
         JwtHeader header = JwtHeaderExtensions.ForKeyBinding(algorithm);
@@ -119,12 +119,13 @@ public static class KbJwtIssuance
 
 
     //Computes the SD-JWT VC sd_hash: base64url(SHA-256(issuer-jwt~d1~d2~...)).
-    //Synchronous so the digest Span lives entirely on the stack and never
-    //crosses an await boundary.
-    private static string ComputeSdHash(ReadOnlySpan<byte> input, EncodeDelegate encoder)
+    //Routes through CryptographicKeyEvents.ComputeDigest so this operation picks
+    //up the same observability and CBOM provenance stamping as every other
+    //digest in the library.
+    private static string ComputeSdHash(ReadOnlySpan<byte> input, EncodeDelegate encoder, MemoryPool<byte> pool)
     {
-        Span<byte> digest = stackalloc byte[Sha256DigestLength];
-        SHA256.HashData(input, digest);
-        return encoder(digest);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            input, Sha256DigestLength, CryptoTags.Sha256Digest, pool);
+        return encoder(digest.AsReadOnlySpan());
     }
 }

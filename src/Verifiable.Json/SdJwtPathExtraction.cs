@@ -172,14 +172,22 @@ public static class SdJwtPathExtraction
 
     private static byte[] ComputeHash(byte[] data, string algorithmName)
     {
+        //Route through the registered ComputeDigestDelegate so disclosure digests
+        //pick up observability and CBOM provenance stamping. The byte[] return is
+        //preserved to keep the public ComputeDisclosureDigest API stable; the
+        //~32-64 byte allocation per call is negligible against the SD-JWT path.
         HashAlgorithmName algorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(algorithmName);
-        return algorithm.Name switch
+        (int outputLength, Tag tag) = algorithm.Name switch
         {
-            WellKnownHashAlgorithms.Sha256 => SHA256.HashData(data),
-            WellKnownHashAlgorithms.Sha384 => SHA384.HashData(data),
-            WellKnownHashAlgorithms.Sha512 => SHA512.HashData(data),
+            WellKnownHashAlgorithms.Sha256 => (32, CryptoTags.Sha256Digest),
+            WellKnownHashAlgorithms.Sha384 => (48, CryptoTags.Sha384Digest),
+            WellKnownHashAlgorithms.Sha512 => (64, CryptoTags.Sha512Digest),
             _ => throw new ArgumentException($"Unsupported hash algorithm: '{algorithmName}'.", nameof(algorithmName))
         };
+
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            data, outputLength, tag, SensitiveMemoryPool<byte>.Shared);
+        return digest.AsReadOnlySpan().ToArray();
     }
 
     private static JsonElement ParseJwtPayload(string jwt, DecodeDelegate decoder, MemoryPool<byte> pool)

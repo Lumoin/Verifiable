@@ -510,21 +510,25 @@ public static class JwkThumbprintUtilities
 
 
     /// <summary>
-    /// Computes SHA-256 hash of the input data using the specified memory pool.
+    /// Computes SHA-256 hash of the input data through the registered
+    /// <see cref="ComputeDigestDelegate"/>, so JWK thumbprint computation
+    /// participates in the same observability and CBOM provenance stamping as
+    /// every other digest in the library.
     /// </summary>
-    /// <param name="pool">The memory pool to use for hash output allocation.</param>
-    /// <param name="input">The input data to hash.</param>
-    /// <returns>An IMemoryOwner containing the SHA-256 hash result.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when hash computation fails.</exception>
+    /// <remarks>
+    /// Returns the digest bytes as a fresh <see cref="IMemoryOwner{T}"/> to keep
+    /// the existing public <c>ComputeXxxThumbprint</c> return type
+    /// (<see cref="IMemoryOwner{T}"/>) stable across the migration. The intermediate
+    /// <see cref="DigestValue"/> is disposed before returning; the 32-byte copy is
+    /// negligible.
+    /// </remarks>
     private static IMemoryOwner<byte> ComputeSha256Hash(MemoryPool<byte> pool, ReadOnlySpan<byte> input)
     {
-        var owner = pool.Rent(Sha256HashSize);
-        if(!SHA256.TryHashData(input, owner.Memory.Span, out var bytesWritten) || bytesWritten != Sha256HashSize)
-        {
-            owner.Dispose();
-            throw new InvalidOperationException("Failed to compute SHA-256 hash.");
-        }
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            input, Sha256HashSize, CryptoTags.Sha256Digest, pool);
 
+        IMemoryOwner<byte> owner = pool.Rent(Sha256HashSize);
+        digest.AsReadOnlySpan().CopyTo(owner.Memory.Span);
         return owner;
     }
 

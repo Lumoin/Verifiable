@@ -399,6 +399,12 @@ public static class TpmCommandExecutor
         hash.GetHashAndReset(destination);
     }
 
+    //TPM command-parameter hashing is intentionally a direct IncrementalHash
+    //call for the same reasons documented at TpmSession.ComputeHmac: it requires
+    //SHA-1 for TPM protocol compatibility, it is synchronous and span-writing
+    //(migration would force async up through the executor with no benefit),
+    //and the operation is TPM-internal protocol material rather than a
+    //library-surface digest. See the HMAC handoff MD section 3.
     private static IncrementalHash CreateIncrementalHash(TpmAlgIdConstants hashAlg) => hashAlg switch
     {
         TpmAlgIdConstants.TPM_ALG_SHA1 => IncrementalHash.CreateHash(HashAlgorithmName.SHA1),
