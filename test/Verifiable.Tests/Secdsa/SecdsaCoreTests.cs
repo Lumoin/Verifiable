@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Numerics;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
@@ -297,7 +298,7 @@ internal sealed class SecdsaCoreTests
     }
 
     [TestMethod]
-    public void ZkpProofOfPossessionSucceeds()
+    public async Task ZkpProofOfPossessionSucceeds()
     {
         BigInteger d = EcMath.RandomScalar();
         EcPoint dPoint = EcMath.BasePointMultiply(d);
@@ -305,14 +306,19 @@ internal sealed class SecdsaCoreTests
         EcPoint[] generators = [EcMath.G];
         EcPoint[] publicKeys = [dPoint];
 
-        SchnorrZkProof proof = SchnorrZkp.Generate(generators, publicKeys, d, ReadOnlySpan<byte>.Empty);
-        bool isValid = SchnorrZkp.Verify(proof, generators, publicKeys, ReadOnlySpan<byte>.Empty);
+        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+
+        SchnorrZkProof proof = await SchnorrZkp.GenerateAsync(
+            generators, publicKeys, d, ReadOnlyMemory<byte>.Empty, pool, cancellationToken).ConfigureAwait(false);
+        bool isValid = await SchnorrZkp.VerifyAsync(
+            proof, generators, publicKeys, ReadOnlyMemory<byte>.Empty, pool, cancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Proof of possession must verify.");
     }
 
     [TestMethod]
-    public void ZkpDiscreteLogEqualityAcrossTwoGenerators()
+    public async Task ZkpDiscreteLogEqualityAcrossTwoGenerators()
     {
         BigInteger d = EcMath.RandomScalar();
         BigInteger h = EcMath.RandomScalar();
@@ -324,14 +330,19 @@ internal sealed class SecdsaCoreTests
         EcPoint[] generators = [EcMath.G, hPoint];
         EcPoint[] publicKeys = [point0, point1];
 
-        SchnorrZkProof proof = SchnorrZkp.Generate(generators, publicKeys, d, ReadOnlySpan<byte>.Empty);
-        bool isValid = SchnorrZkp.Verify(proof, generators, publicKeys, ReadOnlySpan<byte>.Empty);
+        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+
+        SchnorrZkProof proof = await SchnorrZkp.GenerateAsync(
+            generators, publicKeys, d, ReadOnlyMemory<byte>.Empty, pool, cancellationToken).ConfigureAwait(false);
+        bool isValid = await SchnorrZkp.VerifyAsync(
+            proof, generators, publicKeys, ReadOnlyMemory<byte>.Empty, pool, cancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Discrete log equality proof across two generators must verify.");
     }
 
     [TestMethod]
-    public void ZkpRejectsMismatchedDiscreteLogAcrossGenerators()
+    public async Task ZkpRejectsMismatchedDiscreteLogAcrossGenerators()
     {
         BigInteger d1 = EcMath.RandomScalar();
         BigInteger d2 = EcMath.RandomScalar();
@@ -344,19 +355,26 @@ internal sealed class SecdsaCoreTests
         EcPoint[] generators = [EcMath.G, hPoint];
         EcPoint[] publicKeys = [point0, point1];
 
-        SchnorrZkProof proofWithD1 = SchnorrZkp.Generate(generators, publicKeys, d1, ReadOnlySpan<byte>.Empty);
-        SchnorrZkProof proofWithD2 = SchnorrZkp.Generate(generators, publicKeys, d2, ReadOnlySpan<byte>.Empty);
+        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+
+        SchnorrZkProof proofWithD1 = await SchnorrZkp.GenerateAsync(
+            generators, publicKeys, d1, ReadOnlyMemory<byte>.Empty, pool, cancellationToken).ConfigureAwait(false);
+        SchnorrZkProof proofWithD2 = await SchnorrZkp.GenerateAsync(
+            generators, publicKeys, d2, ReadOnlyMemory<byte>.Empty, pool, cancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(
-            SchnorrZkp.Verify(proofWithD1, generators, publicKeys, ReadOnlySpan<byte>.Empty),
+            await SchnorrZkp.VerifyAsync(
+                proofWithD1, generators, publicKeys, ReadOnlyMemory<byte>.Empty, pool, cancellationToken).ConfigureAwait(false),
             "Proof with d1 must fail when public keys use different discrete logs.");
         Assert.IsFalse(
-            SchnorrZkp.Verify(proofWithD2, generators, publicKeys, ReadOnlySpan<byte>.Empty),
+            await SchnorrZkp.VerifyAsync(
+                proofWithD2, generators, publicKeys, ReadOnlyMemory<byte>.Empty, pool, cancellationToken).ConfigureAwait(false),
             "Proof with d2 must fail when public keys use different discrete logs.");
     }
 
     [TestMethod]
-    public void ZkpForBlindingKeyRelationship()
+    public async Task ZkpForBlindingKeyRelationship()
     {
         BigInteger aU = EcMath.RandomScalar();
         BigInteger yScalar = EcMath.RandomScalar();
@@ -368,14 +386,19 @@ internal sealed class SecdsaCoreTests
         EcPoint[] generators = [EcMath.G, y];
         EcPoint[] publicKeys = [gPrime, yPrime];
 
-        SchnorrZkProof proof = SchnorrZkp.Generate(generators, publicKeys, aU, ReadOnlySpan<byte>.Empty);
-        bool isValid = SchnorrZkp.Verify(proof, generators, publicKeys, ReadOnlySpan<byte>.Empty);
+        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+
+        SchnorrZkProof proof = await SchnorrZkp.GenerateAsync(
+            generators, publicKeys, aU, ReadOnlyMemory<byte>.Empty, pool, cancellationToken).ConfigureAwait(false);
+        bool isValid = await SchnorrZkp.VerifyAsync(
+            proof, generators, publicKeys, ReadOnlyMemory<byte>.Empty, pool, cancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Blinding key relationship proof must verify.");
     }
 
     [TestMethod]
-    public void ZkpChallengeBindingChangesProof()
+    public async Task ZkpChallengeBindingChangesProof()
     {
         BigInteger d = EcMath.RandomScalar();
         EcPoint dPoint = EcMath.BasePointMultiply(d);
@@ -385,11 +408,20 @@ internal sealed class SecdsaCoreTests
         byte[] binding1 = SHA256.HashData("Context A."u8);
         byte[] binding2 = SHA256.HashData("Context B."u8);
 
-        SchnorrZkProof proof1 = SchnorrZkp.Generate(generators, publicKeys, d, binding1);
-        SchnorrZkProof proof2 = SchnorrZkp.Generate(generators, publicKeys, d, binding2);
+        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+
+        SchnorrZkProof proof1 = await SchnorrZkp.GenerateAsync(
+            generators, publicKeys, d, binding1, pool, cancellationToken).ConfigureAwait(false);
+        SchnorrZkProof proof2 = await SchnorrZkp.GenerateAsync(
+            generators, publicKeys, d, binding2, pool, cancellationToken).ConfigureAwait(false);
 
         Assert.AreNotEqual(proof1.R, proof2.R, "Different challenge bindings must produce different challenge hashes.");
-        Assert.IsTrue(SchnorrZkp.Verify(proof1, generators, publicKeys, binding1), "Proof 1 must verify with binding 1.");
-        Assert.IsFalse(SchnorrZkp.Verify(proof1, generators, publicKeys, binding2), "Proof 1 must not verify with binding 2.");
+        Assert.IsTrue(
+            await SchnorrZkp.VerifyAsync(proof1, generators, publicKeys, binding1, pool, cancellationToken).ConfigureAwait(false),
+            "Proof 1 must verify with binding 1.");
+        Assert.IsFalse(
+            await SchnorrZkp.VerifyAsync(proof1, generators, publicKeys, binding2, pool, cancellationToken).ConfigureAwait(false),
+            "Proof 1 must not verify with binding 2.");
     }
 }

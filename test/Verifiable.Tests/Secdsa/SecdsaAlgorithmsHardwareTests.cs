@@ -526,7 +526,7 @@ internal sealed class SecdsaAlgorithmsHardwareTests
     /// </list>
     /// </remarks>
     [TestMethod]
-    public void TpmFullSecdsaProtocolFlowBothHardwareBoundariesHold()
+    public async Task TpmFullSecdsaProtocolFlowBothHardwareBoundariesHold()
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -722,17 +722,21 @@ internal sealed class SecdsaAlgorithmsHardwareTests
         EcPoint Gdouble = EcMath.Multiply(Gprime, sInv);
         EcPoint Ydouble = EcMath.Multiply(Yprime, sInv);
 
-        SchnorrZkProof zkp = SchnorrZkp.Generate(
+        SchnorrZkProof zkp = await SchnorrZkp.GenerateAsync(
             generators: [Gprime, Yprime],
             publicKeys: [Gdouble, Ydouble],
             witness: sInv,
-            challengeBinding: ReadOnlySpan<byte>.Empty);
+            challengeBinding: ReadOnlyMemory<byte>.Empty,
+            pool: pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(SchnorrZkp.Verify(
+        Assert.IsTrue(await SchnorrZkp.VerifyAsync(
             proof: zkp,
             generators: [Gprime, Yprime],
             publicKeys: [Gdouble, Ydouble],
-            challengeBinding: ReadOnlySpan<byte>.Empty),
+            challengeBinding: ReadOnlyMemory<byte>.Empty,
+            pool: pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
             "Schnorr ZKP must confirm G'' and Y'' share the same discrete log s^-1.");
 
         //-- WSCD boundary: ECDH verification equation R' = aU*R via TPM2_ECDH_ZGen --

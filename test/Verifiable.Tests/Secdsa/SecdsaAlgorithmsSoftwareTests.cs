@@ -358,7 +358,7 @@ internal sealed class SecdsaAlgorithmsSoftwareTests
     /// </code>
     /// </remarks>
     [TestMethod]
-    public void FullSecdsaProtocolFlowSoftwareCryptographicInvariantsHold()
+    public async Task FullSecdsaProtocolFlowSoftwareCryptographicInvariantsHold()
     {
         //-- ACTIVATION: Alice's wallet generates the NCH key pair -----------------
         //
@@ -510,17 +510,21 @@ internal sealed class SecdsaAlgorithmsSoftwareTests
         //prevents Alice from submitting a tampered G''/Y'' pair that would bypass
         //the WSCA's verification step. The ZKP is inside the ciphertext.
 
-        SchnorrZkProof zkp = SchnorrZkp.Generate(
+        SchnorrZkProof zkp = await SchnorrZkp.GenerateAsync(
             generators: [Gprime, Yprime],
             publicKeys: [Gdouble, Ydouble],
             witness: sInv,
-            challengeBinding: ReadOnlySpan<byte>.Empty);
+            challengeBinding: ReadOnlyMemory<byte>.Empty,
+            pool: MemoryPool<byte>.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(SchnorrZkp.Verify(
+        Assert.IsTrue(await SchnorrZkp.VerifyAsync(
             proof: zkp,
             generators: [Gprime, Yprime],
             publicKeys: [Gdouble, Ydouble],
-            challengeBinding: ReadOnlySpan<byte>.Empty),
+            challengeBinding: ReadOnlyMemory<byte>.Empty,
+            pool: MemoryPool<byte>.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
             "Schnorr ZKP must confirm that G'' = s^-1 * G' and Y'' = s^-1 * Y' share the same discrete log.");
 
         //-- WSCA VERIFICATION: ECDH equation proves Alice used the correct PIN ----

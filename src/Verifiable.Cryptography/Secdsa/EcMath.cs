@@ -198,10 +198,37 @@ public static class EcMath
     {
         ArgumentNullException.ThrowIfNull(point);
         byte[] result = new byte[P256.UncompressedPointByteCount];
-        result[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
-        ScalarToBytes(point.X).CopyTo(result, 1);
-        ScalarToBytes(point.Y).CopyTo(result, 1 + P256.PointArrayLength);
+        EncodePointUncompressedInto(point, result);
         return result;
+    }
+
+
+    /// <summary>
+    /// Encodes a point in uncompressed form into a caller-supplied destination span.
+    /// Avoids the per-call allocation of the array-returning overload, which matters
+    /// for multi-point hashing paths (Schnorr challenge hash) that build a
+    /// <see cref="ReadOnlySequence{T}"/> over pool-rented buffers.
+    /// </summary>
+    /// <param name="point">The EC point to encode.</param>
+    /// <param name="destination">
+    /// Destination span. Must be at least
+    /// <see cref="P256.UncompressedPointByteCount"/> bytes for P-256.
+    /// </param>
+    /// <returns>The number of bytes written.</returns>
+    public static int EncodePointUncompressedInto(EcPoint point, Span<byte> destination)
+    {
+        ArgumentNullException.ThrowIfNull(point);
+        if(destination.Length < P256.UncompressedPointByteCount)
+        {
+            throw new ArgumentException(
+                $"Destination span must be at least {P256.UncompressedPointByteCount} bytes.",
+                nameof(destination));
+        }
+
+        destination[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
+        ScalarToBytes(point.X).CopyTo(destination[1..]);
+        ScalarToBytes(point.Y).CopyTo(destination[(1 + P256.PointArrayLength)..]);
+        return P256.UncompressedPointByteCount;
     }
 
 
