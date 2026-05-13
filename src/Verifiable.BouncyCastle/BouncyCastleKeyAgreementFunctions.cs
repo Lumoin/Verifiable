@@ -228,19 +228,19 @@ public static class BouncyCastleKeyAgreementFunctions
     /// Matches <see cref="AeadEncryptDelegate"/>.
     /// </summary>
     /// <param name="plaintext">The plaintext bytes to encrypt.</param>
-    /// <param name="cek">The content encryption key. Must be disposed by the caller after this method returns.</param>
+    /// <param name="key">The symmetric key to encrypt under. Must be disposed by the caller after this method returns.</param>
     /// <param name="aad">The additional authenticated data.</param>
     /// <param name="pool">Memory pool for IV, ciphertext, and tag allocations.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The IV, ciphertext, and authentication tag. The caller owns and must dispose.</returns>
     public static async ValueTask<AeadEncryptResult> AesGcmEncryptAsync(
         ReadOnlyMemory<byte> plaintext,
-        ContentEncryptionKey cek,
+        SymmetricKeyMemory key,
         AdditionalData aad,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(cek);
+        ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(aad);
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -255,7 +255,7 @@ public static class BouncyCastleKeyAgreementFunctions
         IMemoryOwner<byte> ciphertextOwner = pool.Rent(plaintext.Length);
         IMemoryOwner<byte> tagOwner = pool.Rent(AesGcmTagLength);
 
-        using(var aesGcm = new AesGcm(cek.AsReadOnlySpan(), AesGcmTagLength))
+        using(var aesGcm = new AesGcm(key.AsReadOnlySpan(), AesGcmTagLength))
         {
             aesGcm.Encrypt(
                 ivOwner.Memory.Span[..AesGcmIvLength],
@@ -277,7 +277,7 @@ public static class BouncyCastleKeyAgreementFunctions
     /// Matches <see cref="AeadDecryptDelegate"/>.
     /// </summary>
     /// <param name="ciphertext">The encrypted bytes to decrypt.</param>
-    /// <param name="cek">The content encryption key. Must be disposed by the caller after this method returns.</param>
+    /// <param name="key">The symmetric key to decrypt under. Must be disposed by the caller after this method returns.</param>
     /// <param name="iv">The initialization vector nonce.</param>
     /// <param name="tag">The authentication tag to verify.</param>
     /// <param name="aad">The additional authenticated data to verify.</param>
@@ -289,7 +289,7 @@ public static class BouncyCastleKeyAgreementFunctions
     /// </exception>
     public static async ValueTask<DecryptedContent> AesGcmDecryptAsync(
         Ciphertext ciphertext,
-        ContentEncryptionKey cek,
+        SymmetricKeyMemory key,
         Nonce iv,
         AuthenticationTag tag,
         AdditionalData aad,
@@ -297,7 +297,7 @@ public static class BouncyCastleKeyAgreementFunctions
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ciphertext);
-        ArgumentNullException.ThrowIfNull(cek);
+        ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(iv);
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(aad);
@@ -313,7 +313,7 @@ public static class BouncyCastleKeyAgreementFunctions
 
         try
         {
-            using var aesGcm = new AesGcm(cek.AsReadOnlySpan(), AesGcmTagLength);
+            using var aesGcm = new AesGcm(key.AsReadOnlySpan(), AesGcmTagLength);
             aesGcm.Decrypt(
                 iv.AsReadOnlySpan(),
                 ciphertextSpan,

@@ -117,6 +117,33 @@ public static class CryptoTelemetry
 
 
     /// <summary>
+    /// Attribute names specific to <see cref="Verifiable.Cryptography.Aead.ContentEncryptionKey"/>
+    /// lifetime spans.
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible",
+        Justification = "Intentional grouping of related constants — same pattern as WellKnownMediaTypes.")]
+    public static class ContentEncryptionKey
+    {
+        /// <summary>
+        /// The value of
+        /// <see cref="Verifiable.Cryptography.Aead.ContentEncryptionKey.UseCount"/>
+        /// at the time <see cref="Verifiable.Cryptography.Aead.ContentEncryptionKey.UseKey"/>
+        /// was called. Emitted on every call — a value greater than one is a misuse
+        /// signal (the wrapper enforces single-use atomically, so the second call
+        /// throws; the counter reflects the attempt regardless).
+        /// </summary>
+        public const string UseCount = "crypto.cek.use_count";
+
+        /// <summary>
+        /// The final value of
+        /// <see cref="Verifiable.Cryptography.Aead.ContentEncryptionKey.UseCount"/>
+        /// at disposal time.
+        /// </summary>
+        public const string FinalUseCount = "crypto.cek.final_use_count";
+    }
+
+
+    /// <summary>
     /// Attribute names specific to <see cref="HmacValue"/> lifetime spans and
     /// HMAC compute / verify operations.
     /// </summary>

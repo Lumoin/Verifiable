@@ -18,9 +18,12 @@ namespace Verifiable.Cryptography.Aead;
 /// </para>
 /// </remarks>
 /// <param name="plaintext">The plaintext bytes to encrypt.</param>
-/// <param name="cek">
-/// The content encryption key derived from ECDH key agreement and KDF.
-/// Must be disposed by the caller immediately after this delegate returns.
+/// <param name="key">
+/// The symmetric key to encrypt under. May be the inner key from
+/// <see cref="ContentEncryptionKey.UseKey"/> for ephemeral derived CEKs, or a
+/// long-lived <see cref="SymmetricKeyMemory"/> for persistent-AEAD scenarios
+/// (e.g. an authority's DPP/eIDAS payload encryption key). Must be disposed by
+/// the caller immediately after this delegate returns.
 /// </param>
 /// <param name="aad">
 /// The additional authenticated data. For JWE this is the ASCII-encoded Base64url
@@ -34,7 +37,7 @@ namespace Verifiable.Cryptography.Aead;
 /// </returns>
 public delegate ValueTask<AeadEncryptResult> AeadEncryptDelegate(
     ReadOnlyMemory<byte> plaintext,
-    ContentEncryptionKey cek,
+    SymmetricKeyMemory key,
     AdditionalData aad,
     MemoryPool<byte> pool,
     CancellationToken cancellationToken = default);

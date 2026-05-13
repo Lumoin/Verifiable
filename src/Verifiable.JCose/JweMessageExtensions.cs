@@ -160,9 +160,12 @@ public static class JweMessageExtensions
             pool);
 
         //Step 4: Symmetric encryption with the derived CEK and the encoded header as AAD.
+        //UseKey() transfers ownership of the inner SymmetricKeyMemory out of the
+        //single-use wrapper; the caller now owns and disposes it.
+        using SymmetricKeyMemory cekKey = cek.UseKey();
         AeadEncryptResult encryptResult = await aeadEncryptDelegate(
             unencryptedJwe.Plaintext,
-            cek,
+            cekKey,
             aad,
             pool,
             cancellationToken).ConfigureAwait(false);
@@ -227,10 +230,12 @@ public static class JweMessageExtensions
             keydataLenBits,
             pool);
 
-        //Step 3: Symmetric decryption — may be a remote HSM call.
+        //Step 3: Symmetric decryption — may be a remote HSM call. UseKey() transfers
+        //ownership of the inner SymmetricKeyMemory out of the single-use wrapper.
+        using SymmetricKeyMemory cekKey = cek.UseKey();
         return await aeadDecryptDelegate(
             message.EncryptedBytes,
-            cek,
+            cekKey,
             message.Iv,
             message.Tag,
             message.Aad,

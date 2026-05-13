@@ -138,7 +138,10 @@ public static class ConcatKdf
         digestOwner.Memory.Span[..outputByteLength].CopyTo(outputOwner.Memory.Span);
         digestOwner.Memory.Span.Clear();
 
-        return new ContentEncryptionKey(outputOwner, CryptoTags.AesGcmCek);
+        //Build the inner SymmetricKeyMemory first, then wrap it in the
+        //single-use ContentEncryptionKey wrapper that AEAD consumers unwrap via UseKey().
+        SymmetricKeyMemory inner = new(outputOwner, CryptoTags.AesGcmCek);
+        return new ContentEncryptionKey(inner);
     }
 
 

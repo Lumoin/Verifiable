@@ -172,12 +172,12 @@ public static class MicrosoftKeyAgreementFunctions
     /// </summary>
     public static async ValueTask<AeadEncryptResult> AesGcmEncryptAsync(
         ReadOnlyMemory<byte> plaintext,
-        ContentEncryptionKey cek,
+        SymmetricKeyMemory key,
         AdditionalData aad,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(cek);
+        ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(aad);
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -190,7 +190,7 @@ public static class MicrosoftKeyAgreementFunctions
         IMemoryOwner<byte> ciphertextOwner = pool.Rent(plaintext.Length);
         IMemoryOwner<byte> tagOwner = pool.Rent(AesGcmTagLength);
 
-        using(var aesGcm = new AesGcm(cek.AsReadOnlySpan(), AesGcmTagLength))
+        using(var aesGcm = new AesGcm(key.AsReadOnlySpan(), AesGcmTagLength))
         {
             aesGcm.Encrypt(
                 ivOwner.Memory.Span[..AesGcmIvLength],
@@ -216,7 +216,7 @@ public static class MicrosoftKeyAgreementFunctions
     /// </exception>
     public static async ValueTask<DecryptedContent> AesGcmDecryptAsync(
         Ciphertext ciphertext,
-        ContentEncryptionKey cek,
+        SymmetricKeyMemory key,
         Nonce iv,
         AuthenticationTag tag,
         AdditionalData aad,
@@ -224,7 +224,7 @@ public static class MicrosoftKeyAgreementFunctions
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ciphertext);
-        ArgumentNullException.ThrowIfNull(cek);
+        ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(iv);
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(aad);
@@ -238,7 +238,7 @@ public static class MicrosoftKeyAgreementFunctions
 
         try
         {
-            using var aesGcm = new AesGcm(cek.AsReadOnlySpan(), AesGcmTagLength);
+            using var aesGcm = new AesGcm(key.AsReadOnlySpan(), AesGcmTagLength);
             aesGcm.Decrypt(
                 iv.AsReadOnlySpan(),
                 ciphertextSpan,

@@ -18,8 +18,10 @@ namespace Verifiable.Cryptography.Aead;
 /// </para>
 /// </remarks>
 /// <param name="ciphertext">The encrypted bytes to decrypt.</param>
-/// <param name="cek">
-/// The content encryption key derived from ECDH key agreement and KDF.
+/// <param name="key">
+/// The symmetric key to decrypt under. May be the inner key from
+/// <see cref="ContentEncryptionKey.UseKey"/> for ephemeral derived CEKs, or a
+/// long-lived <see cref="SymmetricKeyMemory"/> for persistent-AEAD scenarios.
 /// Must be disposed by the caller immediately after this delegate returns.
 /// </param>
 /// <param name="iv">The initialization vector nonce.</param>
@@ -36,7 +38,7 @@ namespace Verifiable.Cryptography.Aead;
 /// </exception>
 public delegate ValueTask<DecryptedContent> AeadDecryptDelegate(
     Ciphertext ciphertext,
-    ContentEncryptionKey cek,
+    SymmetricKeyMemory key,
     Nonce iv,
     AuthenticationTag tag,
     AdditionalData aad,
