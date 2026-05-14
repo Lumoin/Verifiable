@@ -348,14 +348,9 @@ public static class AuthCodeFlowHandlers
             codeState.RedirectUri,
             codeState.Pkce);
 
-        OutgoingHeaders tokenHeaders = await BuildDpopAttachedHeadersAsync(
-            infrastructure, metadata.TokenEndpoint!, cancellationToken).ConfigureAwait(false);
-
-        HttpResponseData tokenHttpResponse = await infrastructure.SendFormPostAsync(
-            metadata.TokenEndpoint!,
-            tokenFields,
-            tokenHeaders,
-            cancellationToken).ConfigureAwait(false);
+        HttpResponseData tokenHttpResponse = await SendTokenRequestWithDpopRetryAsync(
+            infrastructure, metadata.TokenEndpoint!, tokenFields, cancellationToken)
+            .ConfigureAwait(false);
 
         Result<TokenResponse, OAuthParseError> tokenResult =
             infrastructure.ParseTokenResponseAsync(tokenHttpResponse, now);
@@ -880,27 +875,94 @@ public static class AuthCodeFlowHandlers
     /// validation work in phase 6b, where the storage shape can match
     /// the existing flow-state delegate pattern.
     /// </remarks>
-    private static async ValueTask<OutgoingHeaders> BuildDpopAttachedHeadersAsync(
+    /// <summary>
+    /// Sends the token request with a DPoP proof attached when the
+    /// infrastructure has DPoP wired, retrying once on a
+    /// <c>use_dpop_nonce</c> challenge per RFC 9449 §8.1.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The retry path applies only when the AS responds with HTTP 400 +
+    /// <c>error=use_dpop_nonce</c> in the body and a fresh nonce in the
+    /// <c>DPoP-Nonce</c> response header. The fresh nonce is stored in the
+    /// infrastructure's nonce cache and a second proof is constructed
+    /// echoing it. There is no exponential backoff and no second retry —
+    /// applications wanting elaborate retry policies wrap this call.
+    /// </para>
+    /// <para>
+    /// When DPoP is not wired (proof construction or key absent), the
+    /// request is sent without DPoP and the response is returned
+    /// unchanged.
+    /// </para>
+    /// </remarks>
+    private static async ValueTask<HttpResponseData> SendTokenRequestWithDpopRetryAsync(
         OAuthClientInfrastructure infrastructure,
         Uri tokenEndpoint,
+        IReadOnlyDictionary<string, string> tokenFields,
         CancellationToken cancellationToken)
     {
         if(infrastructure.ConstructDpopProofAsync is null || infrastructure.DpopKey is null)
         {
-            return OutgoingHeaders.Empty;
+            //DPoP not wired — send without DPoP, headers empty.
+            return await infrastructure.SendFormPostAsync(
+                tokenEndpoint, tokenFields, OutgoingHeaders.Empty, cancellationToken)
+                .ConfigureAwait(false);
         }
+
+        string authority = InMemoryDpopNonceCache.AuthorityFor(tokenEndpoint);
+
+        HttpResponseData response = await SendOnceWithDpopAsync(
+            infrastructure, tokenEndpoint, tokenFields, authority, cancellationToken)
+            .ConfigureAwait(false);
+
+        if(response.StatusCode != 400)
+        {
+            return response;
+        }
+
+        //RFC 9449 §8.1: 400 + error=use_dpop_nonce in body + DPoP-Nonce header.
+        string? freshNonce = response.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce);
+        if(freshNonce is null)
+        {
+            return response;
+        }
+        if(!response.Body.Contains(WellKnownDpopValues.UseDpopNonceError, StringComparison.Ordinal))
+        {
+            return response;
+        }
+
+        infrastructure.StoreDpopNonce?.Invoke(authority, freshNonce);
+
+        return await SendOnceWithDpopAsync(
+            infrastructure, tokenEndpoint, tokenFields, authority, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    private static async ValueTask<HttpResponseData> SendOnceWithDpopAsync(
+        OAuthClientInfrastructure infrastructure,
+        Uri tokenEndpoint,
+        IReadOnlyDictionary<string, string> tokenFields,
+        string authority,
+        CancellationToken cancellationToken)
+    {
+        string? cachedNonce = infrastructure.LookupDpopNonce?.Invoke(authority);
 
         DpopProofClaims claims = new()
         {
             Htm = WellKnownHttpMethods.Post,
             Htu = tokenEndpoint.GetLeftPart(UriPartial.Path),
             Iat = infrastructure.TimeProvider.GetUtcNow(),
-            Jti = Guid.NewGuid().ToString("N")
+            Jti = Guid.NewGuid().ToString("N"),
+            Nonce = cachedNonce
         };
 
-        string proof = await infrastructure.ConstructDpopProofAsync(
-            claims, infrastructure.DpopKey, cancellationToken).ConfigureAwait(false);
+        string proof = await infrastructure.ConstructDpopProofAsync!(
+            claims, infrastructure.DpopKey!, cancellationToken).ConfigureAwait(false);
 
-        return OutgoingHeaders.Empty.WithDpop(proof);
+        OutgoingHeaders headers = OutgoingHeaders.Empty.WithDpop(proof);
+
+        return await infrastructure.SendFormPostAsync(
+            tokenEndpoint, tokenFields, headers, cancellationToken).ConfigureAwait(false);
     }
 }

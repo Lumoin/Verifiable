@@ -156,7 +156,8 @@ public static class AuthCodeServerFlowTransitions
                                 IssuedTokens = token.IssuedTokens,
                                 SubjectId = issued.SubjectId,
                                 Scope = issued.Scope,
-                                IssuedAt = token.IssuedAt
+                                IssuedAt = token.IssuedAt,
+                                BoundJwkThumbprint = token.BoundJwkThumbprint
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerTokenIssued"),

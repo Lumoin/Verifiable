@@ -19,5 +19,18 @@ public static class OutgoingHeadersDpopExtensions
         /// </summary>
         public OutgoingHeaders WithDpop(string proof) =>
             headers.With(WellKnownHttpHeaderNames.DPoP, proof);
+
+
+        /// <summary>
+        /// Returns a new <see cref="OutgoingHeaders"/> with the
+        /// <c>DPoP</c> header set to <paramref name="proof"/> and the
+        /// <c>Authorization</c> header set to <c>DPoP &lt;accessToken&gt;</c>.
+        /// Used on resource-server calls carrying both the proof and the
+        /// bound access token.
+        /// </summary>
+        public OutgoingHeaders WithDpopAndAccessToken(string proof, string accessToken) =>
+            headers
+                .With(WellKnownHttpHeaderNames.DPoP, proof)
+                .WithAuthorization(WellKnownAuthenticationSchemes.DPoP, accessToken);
     }
 }

@@ -232,6 +232,42 @@ public sealed class AuthorizationServerIntegration
 
 
     /// <summary>
+    /// Validates inbound DPoP proofs at the token endpoint per RFC 9449 §4.3.
+    /// Library default backing: <see cref="Verifiable.OAuth.Dpop.DpopProofValidation.ValidateAsync"/>
+    /// adapted to the <see cref="Verifiable.OAuth.Dpop.ValidateDpopProofDelegate"/>
+    /// shape. Required when any registration's <see cref="PolicyProfile"/>
+    /// requires DPoP (HAIP 1.0, FAPI 2.0).
+    /// </summary>
+    public Verifiable.OAuth.Dpop.ValidateDpopProofDelegate? ValidateDpopProofAsync { get; set; }
+
+
+    /// <summary>
+    /// Issues a fresh DPoP nonce on a 401 <c>use_dpop_nonce</c> challenge or
+    /// any other condition where the AS wants the client to refresh its
+    /// nonce. Library default backing:
+    /// <see cref="Verifiable.OAuth.Dpop.DefaultDpopNonceIssuance.IssueAsync"/>.
+    /// </summary>
+    public Verifiable.OAuth.Dpop.IssueDpopNonceDelegate? IssueDpopNonceAsync { get; set; }
+
+
+    /// <summary>
+    /// Validates a presented DPoP nonce. Library default backing:
+    /// <see cref="Verifiable.OAuth.Dpop.DefaultDpopNonceValidation.ValidateAsync"/>.
+    /// Issuance and validation must agree on the wire format.
+    /// </summary>
+    public Verifiable.OAuth.Dpop.ValidateDpopNonceDelegate? ValidateDpopNonceAsync { get; set; }
+
+
+    /// <summary>
+    /// Resolves the server-held HMAC key by kid for nonce issuance and
+    /// validation. Library default backing:
+    /// <see cref="InProcessHmacKeyResolver.ResolveAsync"/>. Multi-instance
+    /// deployments wire a Vault/KMS-backed implementation.
+    /// </summary>
+    public ResolveServerHmacKeyDelegate? ResolveServerHmacKeyAsync { get; set; }
+
+
+    /// <summary>
     /// Whether <see cref="Validate"/> has been called successfully on this group.
     /// </summary>
     public bool IsValidated { get; private set; }

@@ -190,6 +190,25 @@ public sealed class OAuthClientInfrastructure
     /// </summary>
     public DpopKey? DpopKey { get; private init; }
 
+    /// <summary>
+    /// Looks up the latest server-issued DPoP nonce for a given authority,
+    /// or <see langword="null"/> when none is cached. Library default
+    /// backing: <see cref="InMemoryDpopNonceCache.Lookup(string)"/>. Wired
+    /// together with <see cref="StoreDpopNonce"/>; either both null or
+    /// both non-null. When DPoP is in use, both must be non-null for the
+    /// retry-on-<c>use_dpop_nonce</c> loop to function.
+    /// </summary>
+    public DpopNonceLookupDelegate? LookupDpopNonce { get; private init; }
+
+    /// <summary>
+    /// Stores a server-issued DPoP nonce extracted from a
+    /// <c>DPoP-Nonce</c> response header. Library default backing:
+    /// <see cref="InMemoryDpopNonceCache.Store(string, string)"/>. Wired
+    /// together with <see cref="LookupDpopNonce"/>; either both null or
+    /// both non-null.
+    /// </summary>
+    public DpopNonceStoreDelegate? StoreDpopNonce { get; private init; }
+
 
     /// <summary>
     /// Constructs a fully validated <see cref="OAuthClientInfrastructure"/>.
@@ -217,7 +236,9 @@ public sealed class OAuthClientInfrastructure
         SendJsonDeleteDelegate? sendJsonDeleteAsync = null,
         ParseClientMetadataDelegate? parseClientMetadataAsync = null,
         ConstructDpopProofDelegate? constructDpopProofAsync = null,
-        DpopKey? dpopKey = null)
+        DpopKey? dpopKey = null,
+        DpopNonceLookupDelegate? lookupDpopNonce = null,
+        DpopNonceStoreDelegate? storeDpopNonce = null)
     {
         ArgumentNullException.ThrowIfNull(sendFormPostAsync);
         ArgumentNullException.ThrowIfNull(saveStateAsync);
@@ -235,6 +256,13 @@ public sealed class OAuthClientInfrastructure
         {
             throw new ArgumentException(
                 "ConstructDpopProofAsync and DpopKey must be wired together: "
+                + "supply both or neither.");
+        }
+
+        if((lookupDpopNonce is null) != (storeDpopNonce is null))
+        {
+            throw new ArgumentException(
+                "LookupDpopNonce and StoreDpopNonce must be wired together: "
                 + "supply both or neither.");
         }
 
@@ -260,7 +288,9 @@ public sealed class OAuthClientInfrastructure
             SendJsonDeleteAsync = sendJsonDeleteAsync,
             ParseClientMetadataAsync = parseClientMetadataAsync,
             ConstructDpopProofAsync = constructDpopProofAsync,
-            DpopKey = dpopKey
+            DpopKey = dpopKey,
+            LookupDpopNonce = lookupDpopNonce,
+            StoreDpopNonce = storeDpopNonce
         };
     }
 }

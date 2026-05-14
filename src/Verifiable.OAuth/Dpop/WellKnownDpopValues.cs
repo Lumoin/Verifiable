@@ -66,4 +66,37 @@ public static class WellKnownDpopValues
     /// the access token presented alongside the proof.
     /// </summary>
     public static readonly string ClaimAth = "ath";
+
+    /// <summary>
+    /// The length in bytes of the issuedAt field inside a binary-packed nonce.
+    /// Encoded as Unix seconds in an int64 big-endian.
+    /// </summary>
+    public static readonly int NonceIssuedAtByteLength = 8;
+
+    /// <summary>
+    /// The length in bytes of the audience hash inside a binary-packed nonce.
+    /// Computed as the first half of SHA-256 of the audience URI's
+    /// <see cref="Uri.OriginalString"/>.
+    /// </summary>
+    public static readonly int NonceAudienceHashByteLength = 16;
+
+    /// <summary>
+    /// The length in bytes of the random field inside a binary-packed nonce.
+    /// 128 bits is sufficient for collision resistance under agent-ready
+    /// issuance volumes.
+    /// </summary>
+    public static readonly int NonceRandomByteLength = 16;
+
+    /// <summary>
+    /// The length in bytes of the HMAC-SHA-256 tag at the end of a binary-packed
+    /// nonce. Matches the natural HMAC-SHA-256 output length.
+    /// </summary>
+    public static readonly int NonceHmacTagByteLength = 32;
+
+    /// <summary>
+    /// Default validity window for issued nonces. Validation accepts nonces
+    /// whose <c>issuedAt</c> falls inside <c>now ± DefaultNonceValidityWindow</c>.
+    /// 5 minutes matches the replay-window default.
+    /// </summary>
+    public static readonly TimeSpan DefaultNonceValidityWindow = TimeSpan.FromMinutes(5);
 }

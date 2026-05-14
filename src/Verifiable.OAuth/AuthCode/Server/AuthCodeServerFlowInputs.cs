@@ -106,7 +106,17 @@ public sealed record ServerAuthorizeCompleted(
 public sealed record ServerTokenExchangeSucceeded(
     IssuedTokenAuditSet IssuedTokens,
     DateTimeOffset IssuedAt,
-    DateTimeOffset ExpiresAt): AuthCodeServerFlowInput;
+    DateTimeOffset ExpiresAt): AuthCodeServerFlowInput
+{
+    /// <summary>
+    /// The JWK thumbprint (RFC 7638) of the DPoP key the issued access
+    /// token is bound to via <c>cnf.jkt</c>, or <see langword="null"/>
+    /// when no DPoP proof was presented and policy did not require it.
+    /// Recorded onto <see cref="States.ServerTokenIssuedState.BoundJwkThumbprint"/>
+    /// in the transition that consumes this input.
+    /// </summary>
+    public string? BoundJwkThumbprint { get; init; }
+}
 
 
 /// <summary>

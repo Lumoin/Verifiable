@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Net;
 using Verifiable.JCose;
@@ -37,6 +38,28 @@ public sealed record ServerHttpResponse
     /// <see langword="null"/> for non-redirect responses.
     /// </summary>
     public string? Location { get; init; }
+
+    /// <summary>
+    /// Additional response headers to emit alongside the standard
+    /// <c>Content-Type</c> / <c>Location</c> slots. Used by RFC 9449 §8.1
+    /// for the <c>DPoP-Nonce</c> challenge response and similar header-bound
+    /// protocol signals.
+    /// </summary>
+    public ImmutableDictionary<string, string> Headers { get; init; } =
+        ImmutableDictionary<string, string>.Empty;
+
+
+    /// <summary>
+    /// Returns a copy of this response with <paramref name="name"/> set to
+    /// <paramref name="value"/> in <see cref="Headers"/>, replacing any
+    /// previous value for the same header name.
+    /// </summary>
+    public ServerHttpResponse WithHeader(string name, string value)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(value);
+        return this with { Headers = Headers.SetItem(name, value) };
+    }
 
 
     /// <summary>Returns a 200 OK response with a JSON body.</summary>

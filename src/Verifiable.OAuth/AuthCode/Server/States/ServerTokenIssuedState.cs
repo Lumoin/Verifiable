@@ -50,4 +50,12 @@ public sealed record ServerTokenIssuedState: OAuthFlowState
     /// to dereference back to the parent state.
     /// </summary>
     public required DateTimeOffset IssuedAt { get; init; }
+
+    /// <summary>
+    /// The JWK thumbprint (RFC 7638 base64url-encoded) the issued access token
+    /// is bound to via RFC 9449 §6 <c>cnf.jkt</c>. <see langword="null"/> when
+    /// the token was issued without DPoP binding (the policy did not require
+    /// DPoP and no proof was presented at the token endpoint).
+    /// </summary>
+    public string? BoundJwkThumbprint { get; init; }
 }

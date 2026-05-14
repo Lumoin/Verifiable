@@ -8,6 +8,8 @@ using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode.Server;
 using Verifiable.OAuth.AuthCode.Server.States;
+using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Jar;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Validation;
@@ -17,6 +19,7 @@ using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Audit;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Server.Routing;
+using Verifiable.OAuth.Server.States;
 namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
@@ -1211,6 +1214,124 @@ public static class AuthCodeEndpoints
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
+                //RFC 9449 DPoP enforcement at the token endpoint. Runs before any
+                //token-producer work so a malformed or replayed proof rejects without
+                //touching signing keys or storage beyond the JTI seen marker.
+                bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+                string? dpopProofString = null;
+                context.IncomingRequest?.Headers.TryGetSingle(
+                    WellKnownHttpHeaderNames.DPoP, out dpopProofString);
+
+                string? boundJwkThumbprint = null;
+                if(dpopProofString is not null || dpopRequired)
+                {
+                    if(server.Integration.ValidateDpopProofAsync is null
+                        || server.Integration.IssueDpopNonceAsync is null
+                        || server.Integration.ValidateDpopNonceAsync is null
+                        || server.Integration.ResolveServerHmacKeyAsync is null)
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError,
+                            "DPoP enforcement is required by policy but DPoP delegates are not wired."));
+                    }
+
+                    if(dpopProofString is null)
+                    {
+                        string freshNonce = await server.Integration.IssueDpopNonceAsync(
+                            issuerUri, registration.TenantId, context, ct).ConfigureAwait(false);
+                        return (null, ServerHttpResponse
+                            .BadRequest(WellKnownDpopValues.UseDpopNonceError, "DPoP proof required.")
+                            .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
+                    }
+
+                    string tokenEndpointHtu = $"{issuerUri.GetLeftPart(UriPartial.Authority)}{context.IncomingRequest!.Path}";
+                    DpopProofValidationRequest validationRequest = new()
+                    {
+                        Proof = dpopProofString,
+                        HttpMethod = WellKnownHttpMethods.Post,
+                        HttpUrl = tokenEndpointHtu,
+                        NonceRequired = false
+                    };
+
+                    DpopValidationResult proofResult = await server.Integration.ValidateDpopProofAsync(
+                        validationRequest, ct).ConfigureAwait(false);
+
+                    if(!proofResult.IsSuccess)
+                    {
+                        if(proofResult.FailureReason is DpopValidationFailureReason.NonceMissing
+                            or DpopValidationFailureReason.NonceMismatch)
+                        {
+                            string freshNonce = await server.Integration.IssueDpopNonceAsync(
+                                issuerUri, registration.TenantId, context, ct).ConfigureAwait(false);
+                            return (null, ServerHttpResponse
+                                .BadRequest(WellKnownDpopValues.UseDpopNonceError, "DPoP nonce required.")
+                                .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
+                        }
+                        return (null, ServerHttpResponse.BadRequest(
+                            WellKnownDpopValues.InvalidDpopProofError,
+                            $"DPoP proof validation failed: {proofResult.FailureReason}."));
+                    }
+
+                    if(proofResult.Claims!.Nonce is not null)
+                    {
+                        DpopNonceValidationResult nonceResult = await server.Integration.ValidateDpopNonceAsync(
+                            proofResult.Claims.Nonce, issuerUri, registration.TenantId, context, ct)
+                            .ConfigureAwait(false);
+                        if(!nonceResult.IsSuccess)
+                        {
+                            string freshNonce = await server.Integration.IssueDpopNonceAsync(
+                                issuerUri, registration.TenantId, context, ct).ConfigureAwait(false);
+                            return (null, ServerHttpResponse
+                                .BadRequest(WellKnownDpopValues.UseDpopNonceError,
+                                    $"DPoP nonce invalid: {nonceResult.FailureReason}.")
+                                .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
+                        }
+                    }
+                    else if(dpopRequired)
+                    {
+                        string freshNonce = await server.Integration.IssueDpopNonceAsync(
+                            issuerUri, registration.TenantId, context, ct).ConfigureAwait(false);
+                        return (null, ServerHttpResponse
+                            .BadRequest(WellKnownDpopValues.UseDpopNonceError, "DPoP nonce required.")
+                            .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
+                    }
+
+                    //JTI replay check. Storage-backed; only after signature + nonce succeed.
+                    string jtiCorrelationKey = $"{issuerUri.OriginalString}:{proofResult.Claims.Jti}";
+                    if(server.Integration.ResolveCorrelationKeyAsync is not null)
+                    {
+                        string? existingJtiFlowId = await server.Integration.ResolveCorrelationKeyAsync(
+                            registration.TenantId, FlowKind.JtiReplay, jtiCorrelationKey, context, ct)
+                            .ConfigureAwait(false);
+                        if(existingJtiFlowId is not null)
+                        {
+                            return (null, ServerHttpResponse.BadRequest(
+                                WellKnownDpopValues.InvalidDpopProofError,
+                                "DPoP proof jti has been seen previously."));
+                        }
+                    }
+
+                    if(server.Integration.SaveFlowStateAsync is not null)
+                    {
+                        JtiSeenState jtiState = new()
+                        {
+                            FlowId = Guid.NewGuid().ToString("N"),
+                            ExpectedIssuer = issuerUri.OriginalString,
+                            EnteredAt = now,
+                            ExpiresAt = now + WellKnownDpopValues.DefaultReplayWindow,
+                            Kind = FlowKind.JtiReplay,
+                            Issuer = issuerUri.OriginalString,
+                            Jti = proofResult.Claims.Jti,
+                            SeenAt = now
+                        };
+                        await server.Integration.SaveFlowStateAsync(
+                            registration.TenantId, jtiCorrelationKey, jtiState, stepCount: 0, context, ct)
+                            .ConfigureAwait(false);
+                    }
+
+                    boundJwkThumbprint = proofResult.JwkThumbprint;
+                }
+
                 IssuanceContext issuance = new()
                 {
                     Registration = registration,
@@ -1333,7 +1454,10 @@ public static class AuthCodeEndpoints
                 return (new ServerTokenExchangeSucceeded(
                     IssuedTokens: auditSet,
                     IssuedAt: now,
-                    ExpiresAt: latestExpiry), null);
+                    ExpiresAt: latestExpiry)
+                {
+                    BoundJwkThumbprint = boundJwkThumbprint
+                }, null);
             },
             BuildResponse = static (state, _, context) =>
             {

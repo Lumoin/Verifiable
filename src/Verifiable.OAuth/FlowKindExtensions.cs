@@ -4,6 +4,7 @@ using Verifiable.OAuth.AuthCode.Server;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Wallet;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth;
 
@@ -82,5 +83,14 @@ public static class FlowKindExtensions
         /// </summary>
         public static StatelessFlowKind Stateless =>
             StatelessFlowKind.Instance;
+
+
+        /// <summary>
+        /// Marker for the JTI-replay defense flow used by DPoP per RFC 9449
+        /// §11.1. Carries persistence (a <see cref="States.JtiSeenState"/>
+        /// secondary index) but no transitions.
+        /// </summary>
+        public static JtiReplayFlowKind JtiReplay =>
+            JtiReplayFlowKind.Instance;
     }
 }

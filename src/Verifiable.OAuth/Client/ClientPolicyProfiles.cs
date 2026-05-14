@@ -83,4 +83,15 @@ public static class ClientPolicyProfiles
             ValidationProfiles.CallbackHaip10Rules(),
             timeProvider);
     }
+
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the given policy profile mandates
+    /// DPoP-bound access tokens. <see cref="PolicyProfile.Haip10"/> and
+    /// <see cref="PolicyProfile.Fapi20"/> both require DPoP at the token
+    /// endpoint; <see cref="PolicyProfile.Rfc6749WithPkce"/> and
+    /// <see langword="null"/> profiles do not.
+    /// </summary>
+    public static bool RequiresDpop(PolicyProfile? profile) =>
+        profile is { } p && (p == PolicyProfile.Haip10 || p == PolicyProfile.Fapi20);
 }
