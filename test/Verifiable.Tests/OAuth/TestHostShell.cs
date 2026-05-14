@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
@@ -14,12 +15,17 @@ using Verifiable.Json.Sd;
 using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Dpop;
+using Verifiable.Tests.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Audit;
+using Verifiable.OAuth.Server.States;
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Validation;
 using Verifiable.Tests.TestDataProviders;
@@ -70,11 +76,24 @@ internal sealed class TestHostShell: IDisposable
     private ConcurrentDictionary<string, (OAuthFlowState State, int StepCount)> FlowStates { get; } = new();
     private ConcurrentDictionary<string, string> RequestUriTokenIndex { get; } = new();
     private ConcurrentDictionary<string, string> CodeIndex { get; } = new();
+    private ConcurrentDictionary<string, string> JtiIndex { get; } = new();
+    private ConcurrentDictionary<string, string> AccessTokenIndex { get; } = new();
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> SigningKeys { get; } = new();
     private ConcurrentDictionary<KeyId, PublicKeyMemory> VerificationKeys { get; } = new();
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> DecryptionKeys { get; } = new();
     private ConcurrentDictionary<string, string> RegistrationAccessTokens { get; } = new();
+    private List<IDisposable> DpopOwnedDisposables { get; } = [];
+    private InProcessHmacKeyResolver? DpopHmacResolver { get; set; }
     private bool Disposed { get; set; }
+
+    /// <summary>Base64Url encoder shared by tests with the host's own wiring.</summary>
+    public static EncodeDelegate Base64UrlEncoder => TestSetup.Base64UrlEncoder;
+
+    /// <summary>Base64Url decoder shared by tests with the host's own wiring.</summary>
+    public static DecodeDelegate Base64UrlDecoder => TestSetup.Base64UrlDecoder;
+
+    /// <summary>The memory pool used by the host for sensitive allocations.</summary>
+    public static MemoryPool<byte> MemoryPool => SensitiveMemoryPool<byte>.Shared;
 
     /// <summary>
     /// Constant tenant segment used by dynamic-registration tests. The
@@ -221,6 +240,30 @@ internal sealed class TestHostShell: IDisposable
 
                         break;
                     }
+                    case JtiSeenState jti:
+                    {
+                        //RFC 9449 §11.1 replay defense. The flowId arrives already
+                        //composed as "{issuer}:{jti}" so the AS-side handler can
+                        //pre-resolve via ResolveCorrelationKeyAsync without rebuilding
+                        //the composite key. The index value is the same composite key
+                        //and presence in the dictionary is the replay signal.
+                        JtiIndex[$"{jti.Issuer}:{jti.Jti}"] = flowId;
+                        break;
+                    }
+                    case ServerTokenIssuedState:
+                    {
+                        //Capture access_token → flowId so test code can recover the
+                        //BoundJwkThumbprint binding for a known access token. The
+                        //IssuedTokenSet carries the live JWS strings on the request
+                        //context (they are never persisted onto state).
+                        string? accessToken = ctx.IssuedTokens?.AccessToken;
+                        if(!string.IsNullOrEmpty(accessToken))
+                        {
+                            AccessTokenIndex[accessToken] = flowId;
+                        }
+
+                        break;
+                    }
                 }
 
                 return ValueTask.CompletedTask;
@@ -234,6 +277,16 @@ internal sealed class TestHostShell: IDisposable
 
             ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
             {
+                //DPoP replay lookup is keyed specifically by flow kind: the AS
+                //pre-composes "{issuer}:{jti}" and asks under FlowKind.JtiReplay.
+                //Other flows fall through to the general secondary indexes.
+                if(flowKind == FlowKind.JtiReplay)
+                {
+                    return ValueTask.FromResult<string?>(
+                        JtiIndex.TryGetValue(externalHandle, out string? jtiFlowId)
+                            ? jtiFlowId : null);
+                }
+
                 //Try each secondary index. The application knows which handle
                 //types exist — this mirrors a SQL query with OR conditions.
                 if(RequestUriTokenIndex.TryGetValue(externalHandle, out string? flowId))
@@ -1512,6 +1565,318 @@ internal sealed class TestHostShell: IDisposable
     }
 
 
+    /// <summary>
+    /// Registers a client whose policy profile requires DPoP — HAIP 1.0 by
+    /// default. Allows AuthorizationCode + PushedAuthorization capabilities so
+    /// the canonical token-endpoint DPoP enforcement path is reachable.
+    /// </summary>
+    public VerifierKeyMaterial RegisterDpopClient(
+        string clientId,
+        Uri baseUri,
+        PolicyProfile? profile = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
+        ArgumentNullException.ThrowIfNull(baseUri);
+
+        ImmutableHashSet<ServerCapabilityName> capabilities = ImmutableHashSet.Create(
+            ServerCapabilityName.AuthorizationCode,
+            ServerCapabilityName.PushedAuthorization);
+
+        string segment = Guid.NewGuid().ToString("N")[..8];
+        KeyId signingKeyId = new($"urn:uuid:{Guid.NewGuid()}");
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeyPair =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        SigningKeys[signingKeyId] = signingKeyPair.PrivateKey;
+        VerificationKeys[signingKeyId] = signingKeyPair.PublicKey;
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> exchangeKeyPair =
+            TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
+        KeyId encryptionKeyId = new($"urn:uuid:{Guid.NewGuid()}");
+        DecryptionKeys[encryptionKeyId] = exchangeKeyPair.PrivateKey;
+        exchangeKeyPair.PublicKey.Dispose();
+
+        ClientRecord registration = new()
+        {
+            ClientId = clientId,
+            TenantId = segment,
+            IssuerUri = new Uri($"https://issuer.test/{segment}"),
+            AllowedCapabilities = capabilities,
+            AllowedRedirectUris = ImmutableHashSet.Create(
+                new Uri("https://client.example.com/callback")),
+            AllowedScopes = ImmutableHashSet.Create(WellKnownScopes.OpenId),
+            SigningKeys = ImmutableDictionary<KeyUsageContext, SigningKeySet>.Empty
+                .Add(KeyUsageContext.AccessTokenIssuance,
+                    new SigningKeySet { Current = [signingKeyId] }),
+            TokenLifetimes = ImmutableDictionary<string, TimeSpan>.Empty,
+            //FAPI 2.0 / HAIP require a resolved aud on access tokens. Map the
+            //openid scope to a deterministic resource-server identifier so the
+            //RFC 9068 producer has an audience to embed.
+            ScopeToAudience = new Dictionary<string, IReadOnlyList<string>>
+            {
+                [WellKnownScopes.OpenId] = new[] { "https://rs.example.com" }
+            },
+            Profile = profile ?? PolicyProfile.Haip10
+        };
+
+        Registrations[segment] = registration;
+        Registrations[clientId] = registration;
+
+        Server.RegisterClient(
+            registration,
+            new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
+            new RequestContext());
+
+        return new VerifierKeyMaterial(
+            registration,
+            signingKeyPair.PublicKey,
+            signingKeyPair.PrivateKey,
+            decryptionPrivateKey: exchangeKeyPair.PrivateKey,
+            encryptionKeyId: encryptionKeyId,
+            signingKeyId: signingKeyId);
+    }
+
+
+    /// <summary>
+    /// Wires up the AS-side DPoP delegates on the server's integration:
+    /// HMAC-key resolver, nonce issuance, nonce validation, and proof
+    /// validation. Returns the in-process HMAC resolver so tests can drive
+    /// rotation. Idempotent — repeat calls reuse the existing resolver.
+    /// </summary>
+    public InProcessHmacKeyResolver EnableDpop(string initialKid = "test-hmac-1")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(initialKid);
+
+        if(DpopHmacResolver is not null)
+        {
+            return DpopHmacResolver;
+        }
+
+        SymmetricKey hmacKey = CreateFreshHmacKey(initialKid);
+        DpopHmacResolver = new InProcessHmacKeyResolver(hmacKey, initialKid);
+
+        Server.Integration.ResolveServerHmacKeyAsync = DpopHmacResolver.ResolveAsync;
+        Server.Integration.ValidateDpopProofAsync = (request, ct) =>
+            DpopProofValidation.ValidateAsync(
+                request,
+                MicrosoftCryptographicFunctions.VerifyP256Async,
+                DpopTestSupport.Parser,
+                Base64UrlEncoder,
+                Base64UrlDecoder,
+                Time,
+                MemoryPool,
+                iatSkew: WellKnownDpopValues.DefaultIatSkew,
+                cancellationToken: ct);
+        Server.Integration.IssueDpopNonceAsync = (audience, tenantId, ctx, ct) =>
+            DefaultDpopNonceIssuance.IssueAsync(
+                audience,
+                tenantId,
+                ctx,
+                DpopHmacResolver.ResolveAsync,
+                Time,
+                Base64UrlEncoder,
+                MemoryPool,
+                ct);
+        Server.Integration.ValidateDpopNonceAsync = (presented, audience, tenantId, ctx, ct) =>
+            DefaultDpopNonceValidation.ValidateAsync(
+                presented,
+                audience,
+                tenantId,
+                ctx,
+                DpopHmacResolver.ResolveAsync,
+                Time,
+                WellKnownDpopValues.DefaultNonceValidityWindow,
+                Base64UrlDecoder,
+                MemoryPool,
+                ct);
+
+        return DpopHmacResolver;
+    }
+
+
+    /// <summary>
+    /// Rotates the AS-side HMAC key used to sign nonces. Returns the new key's
+    /// kid. <see cref="EnableDpop"/> must have been called first.
+    /// </summary>
+    public string RotateDpopHmacKey(string newKid)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newKid);
+        if(DpopHmacResolver is null)
+        {
+            throw new InvalidOperationException(
+                "EnableDpop must be called before RotateDpopHmacKey.");
+        }
+
+        SymmetricKey newKey = CreateFreshHmacKey(newKid);
+        DpopHmacResolver.Rotate(newKey, newKid);
+        return newKid;
+    }
+
+
+    /// <summary>
+    /// Mints a fresh 256-bit HMAC-SHA-256 key and wires it for the bound
+    /// HMAC delegates registered globally by <see cref="TestSetup"/>.
+    /// Records the key for lifetime cleanup at host disposal.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKeyMemory ownership transfers to SymmetricKey; SymmetricKey itself is tracked in DpopOwnedDisposables and disposed when the host is disposed.")]
+    private SymmetricKey CreateFreshHmacKey(string id)
+    {
+        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(32);
+        SymmetricKeyMemory material;
+        try
+        {
+            RandomNumberGenerator.Fill(owner.Memory.Span[..32]);
+            material = new SymmetricKeyMemory(owner, CryptoTags.HmacSha256Key);
+        }
+        catch
+        {
+            owner.Dispose();
+            throw;
+        }
+
+        SymmetricKey key = new(
+            material,
+            id,
+            MicrosoftHmacFunctions.ComputeHmacAsync,
+            MicrosoftHmacFunctions.VerifyHmacAsync);
+        DpopOwnedDisposables.Add(key);
+        return key;
+    }
+
+
+    /// <summary>
+    /// Builds a DPoP-enabled <see cref="OAuthClient"/> + matching
+    /// <see cref="ClientRegistration"/> for the supplied server registration,
+    /// generates a fresh P-256 DPoP key, wires the client-side cache, and
+    /// returns the components a test needs to drive a full DPoP-bound
+    /// AuthCode round-trip.
+    /// </summary>
+    public DpopClientFixture CreateDpopEnabledOAuthClient(
+        ClientRecord record,
+        string redirectUri,
+        string issuerUri)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        ArgumentException.ThrowIfNullOrWhiteSpace(redirectUri);
+        ArgumentException.ThrowIfNullOrWhiteSpace(issuerUri);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> dpopKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(dpopKeys, WellKnownJwaValues.Es256);
+        InMemoryDpopNonceCache nonceCache = new();
+
+        InProcessTransport transport = new(Server, record, record.TenantId, issuerUri);
+        Dictionary<string, OAuthFlowState> clientFlowStore = [];
+
+        string segment = record.TenantId.Value;
+        Uri issuerUriValue = new(issuerUri);
+        //RFC 9449 §4.2 — the htu claim is the URL of the inbound request. The
+        //AS-side enforcement composes htu from the issuer authority + request
+        //path (it has no direct access to the externally-visible URL); pin the
+        //client-side endpoint URLs to the same authority so both sides agree.
+        Uri baseUri = new(issuerUriValue.GetLeftPart(UriPartial.Authority));
+        Uri parEndpoint = new(baseUri, ServerEndpointPaths.Par
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri authEndpoint = new(baseUri, ServerEndpointPaths.Authorize
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri tokenEndpoint = new(baseUri, ServerEndpointPaths.Token
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = issuerUriValue,
+            PushedAuthorizationRequestEndpoint = parEndpoint,
+            AuthorizationEndpoint = authEndpoint,
+            TokenEndpoint = tokenEndpoint
+        };
+
+        OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
+            sendFormPostAsync: transport.SendAsync,
+            saveStateAsync: (state, ct) =>
+            {
+                clientFlowStore[state.FlowId] = state;
+                return ValueTask.CompletedTask;
+            },
+            loadStateAsync: (flowId, ct) =>
+                ValueTask.FromResult(clientFlowStore.GetValueOrDefault(flowId)),
+            loadStateByRequestUriAsync: (requestUri, ct) =>
+            {
+                foreach(OAuthFlowState state in clientFlowStore.Values)
+                {
+                    if(state is Verifiable.OAuth.AuthCode.States.ParCompletedState pc
+                        && string.Equals(
+                            pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
+                    {
+                        return ValueTask.FromResult<OAuthFlowState?>(state);
+                    }
+                }
+
+                return ValueTask.FromResult<OAuthFlowState?>(null);
+            },
+            parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
+            parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
+            parseAuthorizationServerMetadataAsync: (body, ct) =>
+                throw new NotImplementedException("Test host pre-resolves metadata; the parser is not exercised."),
+            parseRegistrationResponseAsync: (body, ct) =>
+                throw new NotImplementedException("DPoP gate test does not exercise dynamic registration."),
+            resolveAuthorizationServerMetadataAsync: (issuer, ct) =>
+                ValueTask.FromResult(metadata),
+            resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
+            base64UrlEncoder: Base64UrlEncoder,
+            timeProvider: Time,
+            constructDpopProofAsync: (claims, key, ct) => DpopProofConstruction.BuildAsync(
+                claims,
+                key,
+                Base64UrlEncoder,
+                DpopTestSupport.Serializer,
+                MicrosoftCryptographicFunctions.SignP256Async,
+                MemoryPool,
+                ct),
+            dpopKey: dpopKey,
+            lookupDpopNonce: nonceCache.Lookup,
+            storeDpopNonce: nonceCache.Store);
+
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId(record.ClientId),
+            AuthorizationServerIssuer = issuerUriValue,
+            RedirectUris = [new Uri(redirectUri)],
+            AuthenticationMethod = ClientAuthenticationMethod.None,
+            Profile = PolicyProfile.Haip10
+        };
+
+        return new DpopClientFixture(
+            new OAuthClient(infrastructure),
+            registration,
+            dpopKey,
+            nonceCache,
+            dpopKeys.PublicKey,
+            dpopKeys.PrivateKey,
+            clientFlowStore);
+    }
+
+
+    /// <summary>
+    /// Returns the RFC 9449 §6 <c>cnf.jkt</c> binding recorded against the
+    /// flow that issued <paramref name="accessToken"/>, or <see langword="null"/>
+    /// when the token is unknown or the issuing state did not carry a binding.
+    /// </summary>
+    public string? GetBoundThumbprintForAccessToken(string accessToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
+        if(!AccessTokenIndex.TryGetValue(accessToken, out string? flowId))
+        {
+            return null;
+        }
+        if(!FlowStates.TryGetValue(flowId, out var entry))
+        {
+            return null;
+        }
+        return entry.State is ServerTokenIssuedState issued ? issued.BoundJwkThumbprint : null;
+    }
+
+
     /// <inheritdoc/>
     public void Dispose()
     {
@@ -1522,6 +1887,11 @@ internal sealed class TestHostShell: IDisposable
 
         Disposed = true;
         Server.Dispose();
+
+        foreach(IDisposable owned in DpopOwnedDisposables)
+        {
+            owned.Dispose();
+        }
 
         foreach(PrivateKeyMemory key in SigningKeys.Values)
         {
@@ -1604,11 +1974,6 @@ internal sealed class TestHostShell: IDisposable
             OutgoingHeaders headers,
             CancellationToken cancellationToken)
         {
-            //Headers are accepted by the SendFormPostDelegate contract for DPoP and
-            //similar scheme-bearing flows; the in-process transport does not
-            //surface them on the inbound IncomingRequest yet because the AS-side
-            //DPoP validation handler that would read them is part of phase 6b.
-            _ = headers;
             //The OAuth client's transport contract is form-POST: it speaks
             //URLs and form fields. The matcher chain reads everything it
             //needs from the IncomingRequest envelope; capability narrowing
@@ -1619,7 +1984,7 @@ internal sealed class TestHostShell: IDisposable
                 Path: endpoint.AbsolutePath,
                 Method: "POST",
                 Fields: serverFields,
-                Headers: RequestHeaders.Empty,
+                Headers: BuildIncomingHeaders(headers),
                 RouteValues: RouteValues.Empty);
 
             RequestContext context = new();
@@ -1633,9 +1998,49 @@ internal sealed class TestHostShell: IDisposable
             return new HttpResponseData
             {
                 Body = response.Body ?? string.Empty,
-                StatusCode = response.StatusCode
+                StatusCode = response.StatusCode,
+                Headers = BuildResponseHeaders(response.Headers)
             };
         }
+    }
+
+
+    /// <summary>
+    /// Builds a <see cref="RequestHeaders"/> view over the client-side
+    /// <see cref="OutgoingHeaders"/>. The in-process transport forwards every
+    /// outgoing header so AS-side matchers (DPoP, RFC 9421 signing) see what
+    /// production deployments see over the wire.
+    /// </summary>
+    private static RequestHeaders BuildIncomingHeaders(OutgoingHeaders headers)
+    {
+        if(headers.Values.Count == 0)
+        {
+            return RequestHeaders.Empty;
+        }
+
+        Dictionary<string, string[]> incoming = new(headers.Values.Count, StringComparer.OrdinalIgnoreCase);
+        foreach(KeyValuePair<string, string> pair in headers.Values)
+        {
+            incoming[pair.Key] = [pair.Value];
+        }
+        return new RequestHeaders(incoming);
+    }
+
+
+    /// <summary>
+    /// Promotes server-side <see cref="ServerHttpResponse.Headers"/> into the
+    /// client-side <see cref="ResponseHeaders"/> shape. RFC 9449 §8.1 carries
+    /// fresh nonces in <c>DPoP-Nonce</c> on a 400 challenge; the client's
+    /// retry loop reads them via this surface.
+    /// </summary>
+    private static ResponseHeaders BuildResponseHeaders(ImmutableDictionary<string, string> headers)
+    {
+        if(headers.IsEmpty)
+        {
+            return ResponseHeaders.Empty;
+        }
+
+        return new ResponseHeaders { Values = headers };
     }
 
 
@@ -1667,8 +2072,6 @@ internal sealed class TestHostShell: IDisposable
             OutgoingHeaders headers,
             CancellationToken cancellationToken)
         {
-            //Same DPoP-headers passthrough rationale as InProcessTransport.SendAsync.
-            _ = headers;
             string segment = ExtractTenantSegment(endpoint.AbsolutePath);
             if(!registrations.TryGetValue(segment, out ClientRecord? registration))
             {
@@ -1685,7 +2088,7 @@ internal sealed class TestHostShell: IDisposable
                 Path: endpoint.AbsolutePath,
                 Method: "POST",
                 Fields: serverFields,
-                Headers: RequestHeaders.Empty,
+                Headers: BuildIncomingHeaders(headers),
                 RouteValues: RouteValues.Empty);
 
             RequestContext context = new();
@@ -1699,7 +2102,8 @@ internal sealed class TestHostShell: IDisposable
             return new HttpResponseData
             {
                 Body = response.Body ?? string.Empty,
-                StatusCode = response.StatusCode
+                StatusCode = response.StatusCode,
+                Headers = BuildResponseHeaders(response.Headers)
             };
         }
 
