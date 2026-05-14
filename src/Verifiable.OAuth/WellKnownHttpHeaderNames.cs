@@ -51,6 +51,15 @@ public static class WellKnownHttpHeaderNames
     /// </summary>
     public static readonly string DPoPNonce = "DPoP-Nonce";
 
+    /// <summary>
+    /// The <c>Cache-Control</c> response header per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7234#section-5.2">RFC 7234 §5.2</see>.
+    /// Used with <see cref="WellKnownCacheControlValues.NoStore"/> on
+    /// token-bearing responses per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1#section-3.2.3">OAuth 2.1 §3.2.3</see>.
+    /// </summary>
+    public static readonly string CacheControl = "Cache-Control";
+
 
     /// <summary>
     /// Returns <see langword="true"/> when <paramref name="name"/> is the
@@ -70,6 +79,12 @@ public static class WellKnownHttpHeaderNames
     /// </summary>
     public static bool IsDPoPNonce(string name) => Equals(name, DPoPNonce);
 
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="name"/> is the
+    /// <c>Cache-Control</c> header.
+    /// </summary>
+    public static bool IsCacheControl(string name) => Equals(name, CacheControl);
+
 
     /// <summary>
     /// Returns the canonical instance for <paramref name="name"/> when it
@@ -80,6 +95,7 @@ public static class WellKnownHttpHeaderNames
         var n when IsAuthorization(n) => Authorization,
         var n when IsDPoP(n) => DPoP,
         var n when IsDPoPNonce(n) => DPoPNonce,
+        var n when IsCacheControl(n) => CacheControl,
         _ => name
     };
 

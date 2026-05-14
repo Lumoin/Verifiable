@@ -240,6 +240,20 @@ public static class AuthCodeEndpoints
                             OAuthErrors.InvalidRequest, "Missing or invalid redirect_uri.")));
                 }
 
+                //RFC 9700 §2.1 + OAuth 2.1 §2.3.1 — redirect_uri exact-match
+                //against the registered set. Parallel to the JAR-PAR check
+                //around line 988; this matcher's MatchesRequest already
+                //asserts context.Registration is non-null, so the read is
+                //unconditional here.
+                ClientRecord registration = context.Registration!;
+                if(!registration.AllowedRedirectUris.Contains(redirectUri))
+                {
+                    return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
+                        ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest,
+                            $"redirect_uri '{redirectUri}' is not among the registered redirect URIs.")));
+                }
+
                 fields.TryGetValue(OAuthRequestParameters.Scope, out string? scope);
                 if(context.ScopeRequiredOnRequest && string.IsNullOrEmpty(scope))
                 {
@@ -293,7 +307,9 @@ public static class AuthCodeEndpoints
                 //BuildResponse. The source policy is TimingPolicy.AuthCodeParLifetime.
                 string body =
                     $"{{\"request_uri\":\"{par.RequestUri}\",\"expires_in\":{par.ExpiresIn}}}";
-                return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
+                return ServerHttpResponse
+                    .Ok(body, WellKnownMediaTypes.Application.Json)
+                    .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
             }
         };
 
@@ -668,7 +684,9 @@ public static class AuthCodeEndpoints
 
                 string body =
                     $"{{\"request_uri\":\"{par.RequestUri}\",\"expires_in\":{par.ExpiresIn}}}";
-                return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
+                return ServerHttpResponse
+                    .Ok(body, WellKnownMediaTypes.Application.Json)
+                    .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
             }
         };
 
@@ -1536,7 +1554,11 @@ public static class AuthCodeEndpoints
                 }
 
                 sb.Append('}');
-                return ServerHttpResponse.Ok(sb.ToString(), WellKnownMediaTypes.Application.Json);
+                //OAuth 2.1 §3.2.3 — token-bearing response MUST set
+                //Cache-Control: no-store. RFC 7234 §5.2.2.3.
+                return ServerHttpResponse
+                    .Ok(sb.ToString(), WellKnownMediaTypes.Application.Json)
+                    .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
             }
         };
 

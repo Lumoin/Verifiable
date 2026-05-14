@@ -153,7 +153,12 @@ public static class RegistrationEndpoints
         string body = BuildRegistrationResponseJson(
             clientId, accessToken, metadata, now, tenantId.Value);
 
-        return ServerHttpResponse.Created(body, WellKnownMediaTypes.Application.Json);
+        //OAuth 2.1 §3.2.3 — the response carries client_secret and
+        //registration_access_token (RFC 7591 §3.2.1). Same Cache-Control
+        //requirement as token-bearing responses.
+        return ServerHttpResponse
+            .Created(body, WellKnownMediaTypes.Application.Json)
+            .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
     }
 
 
@@ -417,10 +422,17 @@ public static class RegistrationEndpoints
             context, server, cancellationToken).ConfigureAwait(false);
         if(authFailure is not null) { return authFailure; }
 
+
         ClientRecord registration = context.Registration!;
         DateTimeOffset now = server.TimeProvider.GetUtcNow();
         string body = BuildReadResponseJson(registration, now);
-        return ServerHttpResponse.Ok(body, WellKnownMediaTypes.Application.Json);
+        //OAuth 2.1 §3.2.3 — the RFC 7592 read response echoes client
+        //metadata that may include sensitive fields (registration access
+        //token is omitted on read per RFC 7592 §3, but the response shape
+        //is treated uniformly with create/update).
+        return ServerHttpResponse
+            .Ok(body, WellKnownMediaTypes.Application.Json)
+            .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
     }
 
 
@@ -476,7 +488,11 @@ public static class RegistrationEndpoints
 
         DateTimeOffset now = server.TimeProvider.GetUtcNow();
         string responseBody = BuildReadResponseJson(updated, now);
-        return ServerHttpResponse.Ok(responseBody, WellKnownMediaTypes.Application.Json);
+        //OAuth 2.1 §3.2.3 — the update echoes the (possibly new)
+        //credentials back to the caller; treat as a token-bearing response.
+        return ServerHttpResponse
+            .Ok(responseBody, WellKnownMediaTypes.Application.Json)
+            .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
     }
 
 
