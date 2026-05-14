@@ -117,14 +117,23 @@ internal sealed class DpopProofValidationTests
 
         string proof = await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false);
 
-        //Flip the last character of the signature segment to an invalid one.
-        int lastDot = proof.LastIndexOf('.');
-        char tampered = proof[^1] == 'A' ? 'B' : 'A';
-        string tamperedProof = string.Concat(proof.AsSpan(0, proof.Length - 1), tampered.ToString());
+        //Tamper one byte of the signature by flipping a middle character of the
+        //base64url signature segment. The middle of a base64url string carries
+        //full 6-bit groups, so any base64url character substitutes to another
+        //base64url character without breaking decode validity -- the resulting
+        //bytes verify false, which is what this test asserts. The previous
+        //last-character substitution was non-deterministic: only A/Q/g/w are
+        //valid as the trailing single-byte position, so randomly-generated
+        //signatures ending in 'A' had no valid neighbour and threw
+        //FormatException at decode time.
+        int signatureStart = proof.LastIndexOf('.') + 1;
+        int tamperIndex = signatureStart + (proof.Length - signatureStart) / 2;
+        char tampered = proof[tamperIndex] == 'A' ? 'B' : 'A';
+        string tamperedProof = string.Concat(
+            proof.AsSpan(0, tamperIndex), tampered.ToString(), proof.AsSpan(tamperIndex + 1));
 
         DpopValidationResult result = await ValidateAsync(tamperedProof).ConfigureAwait(false);
         Assert.AreEqual(DpopValidationFailureReason.SignatureFailed, result.FailureReason);
-        _ = lastDot;
     }
 
 
