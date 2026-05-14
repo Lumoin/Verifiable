@@ -15,23 +15,31 @@
     <MSTestAnalysisMode>Recommended</MSTestAnalysisMode>
   </PropertyGroup>
  
-  <ItemGroup>    
+  <ItemGroup>
     <PackageReference Include="dotNetRdf" />
     <PackageReference Include="CsCheck" />
     <PackageReference Include="LiquidTestReports.Markdown" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
     <PackageReference Include="ModelContextProtocol" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="SimpleBase" />
-    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <PackageReference Include="System.Reactive" />
     <PackageReference Include="Microsoft.Reactive.Testing" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" />
-    <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage">            
+    <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage">
       <VersionOverride>18.6.2</VersionOverride>
     </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Kestrel + HttpContext mapping types live in the Microsoft.AspNetCore.App
+      shared framework rather than as NuGet packages on .NET 10. Test
+      infrastructure (Kestrel host + IHttpApplication mapping) needs this
+      reference; the library itself never does.
+    -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>

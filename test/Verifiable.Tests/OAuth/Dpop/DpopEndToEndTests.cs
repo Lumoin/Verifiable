@@ -40,14 +40,18 @@ internal sealed class DpopEndToEndTests
     [TestMethod]
     public async Task TokenIssuanceAndResourceCallValidateUnderDpopProtocol()
     {
+        //Phase 9b — proof-point migration to the HTTP-backed factory. Bytes
+        //flow through Kestrel ↔ HttpClient over a real socket; the test's
+        //wire-level assertions (token_type from response body, cnf.jkt from
+        //the JWT) now run against bytes that actually traversed HTTP framing.
         using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
         host.EnableDpop();
 
-        using DpopClientFixture fixture = host.CreateDpopEnabledOAuthClient(
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
             material.Registration,
             RedirectUri.OriginalString,
-            material.Registration.IssuerUri!.ToString());
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         //Step 1 — PAR. No DPoP at this endpoint per HAIP, just the PKCE-bearing
         //pushed authorization request that returns the request_uri handle.
@@ -152,11 +156,13 @@ internal sealed class DpopEndToEndTests
 
         //Audit follow-up — RFC 9068 §2 / RFC 8414 §3: the access token's iss
         //claim preserves the full issuer URL including any path component.
-        //The registration's IssuerUri is https://issuer.test/{segment}; the
-        //wire iss must equal that string exactly, not just the authority.
+        //Under HTTP, the issuer URI is aligned to the Kestrel base address
+        //(carrying the tenant segment as the path component); read the
+        //live value from the client-side registration that the factory
+        //wired with the aligned URI.
         string wireIss = JwtPayloadReader.ReadIssuer(accessToken)
             ?? throw new AssertFailedException("Access-token JWT must carry iss claim.");
-        Assert.AreEqual(material.Registration.IssuerUri!.OriginalString, wireIss,
+        Assert.AreEqual(fixture.Registration.AuthorizationServerIssuer.OriginalString, wireIss,
             "Access-token iss claim must preserve the full issuer URL per RFC 8414 §3.");
 
         //Step 5 — RS-side validation. The application playing the RS role
@@ -227,7 +233,7 @@ internal sealed class DpopEndToEndTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, OAuthFlowState> clientFlowStore) =
-            host.CreateOAuthClientAndRegistration(
+            host.CreateInProcessOAuthClientAndRegistration(
                 material.Registration,
                 RedirectUri.OriginalString,
                 material.Registration.IssuerUri!.ToString(),

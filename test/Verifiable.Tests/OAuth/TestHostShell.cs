@@ -70,7 +70,7 @@ namespace Verifiable.Tests.OAuth;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TestHostShell Clients={Registrations.Count} Flows={FlowStates.Count}")]
-internal sealed class TestHostShell: IDisposable
+internal sealed class TestHostShell: IDisposable, IAsyncDisposable
 {
     private ConcurrentDictionary<string, ClientRecord> Registrations { get; } = new();
     private ConcurrentDictionary<string, (OAuthFlowState State, int StepCount)> FlowStates { get; } = new();
@@ -85,6 +85,10 @@ internal sealed class TestHostShell: IDisposable
     private List<IDisposable> DpopOwnedDisposables { get; } = [];
     private InProcessHmacKeyResolver? DpopHmacResolver { get; set; }
     private bool Disposed { get; set; }
+
+    private global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServer? KestrelServer { get; set; }
+    private Uri? HttpBaseAddress { get; set; }
+    private System.Net.Http.HttpClient? SharedHttpClient { get; set; }
 
     /// <summary>Base64Url encoder shared by tests with the host's own wiring.</summary>
     public static EncodeDelegate Base64UrlEncoder => TestSetup.Base64UrlEncoder;
@@ -801,7 +805,7 @@ internal sealed class TestHostShell: IDisposable
     /// <param name="redirectUri">The client's redirect URI.</param>
     /// <param name="issuerUri">The expected issuer URI for callback validation.</param>
     public (OAuthClient Client, ClientRegistration Registration, Dictionary<string, OAuthFlowState> ClientFlowStore)
-        CreateOAuthClientAndRegistration(
+        CreateInProcessOAuthClientAndRegistration(
             ClientRecord record,
             string redirectUri,
             string issuerUri,
@@ -880,6 +884,134 @@ internal sealed class TestHostShell: IDisposable
         };
 
         return (new OAuthClient(infrastructure), registration, clientFlowStore);
+    }
+
+
+    /// <summary>
+    /// HTTP-backed counterpart to <see cref="CreateInProcessOAuthClientAndRegistration"/>.
+    /// Starts the in-process Kestrel listener if not already running and
+    /// wires the <see cref="OAuthClient"/> with <see cref="Hosting.HttpClientTransport"/>
+    /// transport delegates against a real <see cref="System.Net.Http.HttpClient"/>.
+    /// </summary>
+    /// <remarks>
+    /// The issuer URI on the supplied <paramref name="record"/> is rewritten
+    /// in-place to point at the Kestrel base address. This aligns the AS's
+    /// DPoP-htu computation (which uses <c>IssuerUri.Authority</c>) with
+    /// the client's actual outbound URL. Test isolation is preserved because
+    /// each <see cref="TestHostShell"/> binds its own ephemeral port.
+    /// </remarks>
+    public async ValueTask<(OAuthClient Client, ClientRegistration Registration, Dictionary<string, OAuthFlowState> ClientFlowStore)>
+        CreateOAuthClientAndRegistrationAsync(
+            ClientRecord record,
+            string redirectUri,
+            PolicyProfile? profile = null,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        ArgumentException.ThrowIfNullOrWhiteSpace(redirectUri);
+
+        await StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
+
+        ClientRecord alignedRecord = AlignRegistrationIssuerToHttpBase(record);
+
+        Dictionary<string, OAuthFlowState> clientFlowStore = [];
+
+        string segment = alignedRecord.TenantId.Value;
+        Uri baseUri = HttpBaseAddress!;
+        Uri parEndpoint = new(baseUri, ServerEndpointPaths.Par
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri authEndpoint = new(baseUri, ServerEndpointPaths.Authorize
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri tokenEndpoint = new(baseUri, ServerEndpointPaths.Token
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri issuerUriValue = alignedRecord.IssuerUri!;
+
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = issuerUriValue,
+            PushedAuthorizationRequestEndpoint = parEndpoint,
+            AuthorizationEndpoint = authEndpoint,
+            TokenEndpoint = tokenEndpoint
+        };
+
+        System.Net.Http.HttpClient httpClient = SharedHttpClient!;
+
+        OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
+            sendFormPostAsync: (endpoint, fields, headers, ct) =>
+                Hosting.HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct),
+            saveStateAsync: (state, ct) =>
+            {
+                clientFlowStore[state.FlowId] = state;
+                return ValueTask.CompletedTask;
+            },
+            loadStateAsync: (flowId, ct) =>
+                ValueTask.FromResult(clientFlowStore.GetValueOrDefault(flowId)),
+            loadStateByRequestUriAsync: (requestUri, ct) =>
+            {
+                foreach(OAuthFlowState state in clientFlowStore.Values)
+                {
+                    if(state is Verifiable.OAuth.AuthCode.States.ParCompletedState pc
+                        && string.Equals(
+                            pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
+                    {
+                        return ValueTask.FromResult<OAuthFlowState?>(state);
+                    }
+                }
+
+                return ValueTask.FromResult<OAuthFlowState?>(null);
+            },
+            parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
+            parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
+            parseAuthorizationServerMetadataAsync: (body, ct) =>
+                throw new NotImplementedException("Test host pre-resolves metadata; the parser is not exercised."),
+            parseRegistrationResponseAsync: (body, ct) =>
+                throw new NotImplementedException("HTTP-backed factory does not exercise dynamic registration parse."),
+            resolveAuthorizationServerMetadataAsync: (issuer, ct) =>
+                ValueTask.FromResult(metadata),
+            resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
+            base64UrlEncoder: TestSetup.Base64UrlEncoder,
+            timeProvider: Time);
+
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId(alignedRecord.ClientId),
+            AuthorizationServerIssuer = issuerUriValue,
+            RedirectUris = [new Uri(redirectUri)],
+            AuthenticationMethod = ClientAuthenticationMethod.None,
+            Profile = profile ?? PolicyProfile.Haip10
+        };
+
+        return (new OAuthClient(infrastructure), registration, clientFlowStore);
+    }
+
+
+    /// <summary>
+    /// Re-issues the supplied <see cref="ClientRecord"/> with its
+    /// <see cref="ClientRecord.IssuerUri"/> swapped to point at the Kestrel
+    /// base address (preserving the tenant-segment path component). The
+    /// in-memory registration dictionary is updated to match so the AS
+    /// resolves the same record on subsequent dispatch.
+    /// </summary>
+    private ClientRecord AlignRegistrationIssuerToHttpBase(ClientRecord record)
+    {
+        if(HttpBaseAddress is null)
+        {
+            throw new InvalidOperationException(
+                "HTTP host must be started before aligning registration issuer.");
+        }
+        if(record.IssuerUri is null)
+        {
+            return record;
+        }
+
+        string segmentPath = record.IssuerUri.AbsolutePath;
+        Uri httpAlignedIssuer = new(HttpBaseAddress, segmentPath);
+
+        ClientRecord aligned = record with { IssuerUri = httpAlignedIssuer };
+        //Replace both index entries (by tenant segment and by clientId).
+        Registrations[aligned.TenantId.Value] = aligned;
+        Registrations[aligned.ClientId] = aligned;
+        return aligned;
     }
 
 
@@ -1754,7 +1886,7 @@ internal sealed class TestHostShell: IDisposable
     /// returns the components a test needs to drive a full DPoP-bound
     /// AuthCode round-trip.
     /// </summary>
-    public DpopClientFixture CreateDpopEnabledOAuthClient(
+    public DpopClientFixture CreateInProcessDpopEnabledOAuthClient(
         ClientRecord record,
         string redirectUri,
         string issuerUri)
@@ -1860,6 +1992,120 @@ internal sealed class TestHostShell: IDisposable
 
 
     /// <summary>
+    /// HTTP-backed counterpart to <see cref="CreateInProcessDpopEnabledOAuthClient"/>.
+    /// Starts the in-process Kestrel listener if not already running, aligns
+    /// the registration's <see cref="ClientRecord.IssuerUri"/> to the
+    /// Kestrel base address (so DPoP htu comparison agrees on both sides),
+    /// and wires the <see cref="OAuthClient"/> with
+    /// <see cref="Hosting.HttpClientTransport"/>.
+    /// </summary>
+    public async ValueTask<DpopClientFixture> CreateDpopEnabledOAuthClientAsync(
+        ClientRecord record,
+        string redirectUri,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        ArgumentException.ThrowIfNullOrWhiteSpace(redirectUri);
+
+        await StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
+
+        ClientRecord alignedRecord = AlignRegistrationIssuerToHttpBase(record);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> dpopKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(dpopKeys, WellKnownJwaValues.Es256);
+        InMemoryDpopNonceCache nonceCache = new();
+
+        Dictionary<string, OAuthFlowState> clientFlowStore = [];
+
+        string segment = alignedRecord.TenantId.Value;
+        Uri baseUri = HttpBaseAddress!;
+        Uri parEndpoint = new(baseUri, ServerEndpointPaths.Par
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri authEndpoint = new(baseUri, ServerEndpointPaths.Authorize
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri tokenEndpoint = new(baseUri, ServerEndpointPaths.Token
+            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri issuerUriValue = alignedRecord.IssuerUri!;
+
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = issuerUriValue,
+            PushedAuthorizationRequestEndpoint = parEndpoint,
+            AuthorizationEndpoint = authEndpoint,
+            TokenEndpoint = tokenEndpoint
+        };
+
+        System.Net.Http.HttpClient httpClient = SharedHttpClient!;
+
+        OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
+            sendFormPostAsync: (endpoint, fields, headers, ct) =>
+                Hosting.HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct),
+            saveStateAsync: (state, ct) =>
+            {
+                clientFlowStore[state.FlowId] = state;
+                return ValueTask.CompletedTask;
+            },
+            loadStateAsync: (flowId, ct) =>
+                ValueTask.FromResult(clientFlowStore.GetValueOrDefault(flowId)),
+            loadStateByRequestUriAsync: (requestUri, ct) =>
+            {
+                foreach(OAuthFlowState state in clientFlowStore.Values)
+                {
+                    if(state is Verifiable.OAuth.AuthCode.States.ParCompletedState pc
+                        && string.Equals(
+                            pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
+                    {
+                        return ValueTask.FromResult<OAuthFlowState?>(state);
+                    }
+                }
+
+                return ValueTask.FromResult<OAuthFlowState?>(null);
+            },
+            parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
+            parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
+            parseAuthorizationServerMetadataAsync: (body, ct) =>
+                throw new NotImplementedException("Test host pre-resolves metadata; the parser is not exercised."),
+            parseRegistrationResponseAsync: (body, ct) =>
+                throw new NotImplementedException("HTTP-backed DPoP factory does not exercise dynamic registration parse."),
+            resolveAuthorizationServerMetadataAsync: (issuer, ct) =>
+                ValueTask.FromResult(metadata),
+            resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
+            base64UrlEncoder: Base64UrlEncoder,
+            timeProvider: Time,
+            constructDpopProofAsync: (claims, key, ct) => DpopProofConstruction.BuildAsync(
+                claims,
+                key,
+                Base64UrlEncoder,
+                DpopTestSupport.Serializer,
+                MicrosoftCryptographicFunctions.SignP256Async,
+                MemoryPool,
+                ct),
+            dpopKey: dpopKey,
+            lookupDpopNonce: nonceCache.Lookup,
+            storeDpopNonce: nonceCache.Store);
+
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId(alignedRecord.ClientId),
+            AuthorizationServerIssuer = issuerUriValue,
+            RedirectUris = [new Uri(redirectUri)],
+            AuthenticationMethod = ClientAuthenticationMethod.None,
+            Profile = PolicyProfile.Haip10
+        };
+
+        return new DpopClientFixture(
+            new OAuthClient(infrastructure),
+            registration,
+            dpopKey,
+            nonceCache,
+            dpopKeys.PublicKey,
+            dpopKeys.PrivateKey,
+            clientFlowStore);
+    }
+
+
+    /// <summary>
     /// Returns the RFC 7800 confirmation method recorded against the flow
     /// that issued <paramref name="accessToken"/>, or <see langword="null"/>
     /// when the token is unknown or the issuing state did not carry a
@@ -1882,8 +2128,70 @@ internal sealed class TestHostShell: IDisposable
     }
 
 
+    /// <summary>
+    /// Starts an in-process Kestrel listener bound to localhost on an
+    /// OS-assigned ephemeral port and maps inbound HTTP requests to
+    /// <see cref="AuthorizationServer.DispatchAsync"/> via
+    /// <see cref="Hosting.AuthorizationServerHttpApplication"/>.
+    /// Idempotent — repeat calls return without re-binding.
+    /// </summary>
+    /// <remarks>
+    /// Invoked automatically by the HTTP-backed
+    /// <see cref="CreateOAuthClientAndRegistrationAsync"/> /
+    /// <see cref="CreateDpopEnabledOAuthClientAsync"/> factories the first
+    /// time they're called. Tests that hold a <see cref="TestHostShell"/>
+    /// across multiple HTTP-backed flow drives reuse the same listener.
+    /// </remarks>
+    public async Task StartHttpHostAsync(CancellationToken cancellationToken = default)
+    {
+        if(KestrelServer is not null)
+        {
+            return;
+        }
+
+        global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions kestrelOptions = new();
+        //Kestrel's ListenLocalhost(0) rejects dynamic port (it binds both
+        //IPv4 + IPv6 loopback and can't reconcile a single OS-assigned port
+        //across two sockets). Listen on IPv4 loopback with an ephemeral
+        //port; the dispatched URL uses 127.0.0.1 explicitly.
+        kestrelOptions.Listen(System.Net.IPAddress.Loopback, port: 0);
+
+        global::Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportOptions socketOptions = new();
+        global::Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportFactory socketFactory = new(
+            global::Microsoft.Extensions.Options.Options.Create(socketOptions),
+            global::Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+
+        global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServer kestrel = new(
+            global::Microsoft.Extensions.Options.Options.Create(kestrelOptions),
+            socketFactory,
+            global::Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+
+        Hosting.AuthorizationServerHttpApplication app = new(Server);
+        await kestrel.StartAsync(app, cancellationToken).ConfigureAwait(false);
+
+        global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature? addresses =
+            kestrel.Features.Get<global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
+        if(addresses is null || addresses.Addresses.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Kestrel started but no server addresses were exposed via IServerAddressesFeature.");
+        }
+
+        KestrelServer = kestrel;
+        HttpBaseAddress = new Uri(addresses.Addresses.First());
+        SharedHttpClient = new System.Net.Http.HttpClient { BaseAddress = HttpBaseAddress };
+    }
+
+
     /// <inheritdoc/>
     public void Dispose()
+    {
+        DisposeAsync().AsTask().GetAwaiter().GetResult();
+    }
+
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
     {
         if(Disposed)
         {
@@ -1891,6 +2199,17 @@ internal sealed class TestHostShell: IDisposable
         }
 
         Disposed = true;
+
+        SharedHttpClient?.Dispose();
+        SharedHttpClient = null;
+
+        if(KestrelServer is not null)
+        {
+            await KestrelServer.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            KestrelServer.Dispose();
+            KestrelServer = null;
+        }
+
         Server.Dispose();
 
         foreach(IDisposable owned in DpopOwnedDisposables)
