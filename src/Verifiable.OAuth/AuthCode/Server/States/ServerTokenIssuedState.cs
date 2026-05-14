@@ -52,10 +52,12 @@ public sealed record ServerTokenIssuedState: OAuthFlowState
     public required DateTimeOffset IssuedAt { get; init; }
 
     /// <summary>
-    /// The JWK thumbprint (RFC 7638 base64url-encoded) the issued access token
-    /// is bound to via RFC 9449 §6 <c>cnf.jkt</c>. <see langword="null"/> when
-    /// the token was issued without DPoP binding (the policy did not require
-    /// DPoP and no proof was presented at the token endpoint).
+    /// The RFC 7800 confirmation method established at issuance time, or
+    /// <see langword="null"/> when the token was issued without sender
+    /// constraint (Bearer). Carries the DPoP <c>jkt</c> thumbprint when DPoP
+    /// enforcement bound the token; extensible to MTLS <c>x5t#S256</c> and
+    /// other binding methods. Mirrors the <c>cnf</c> claim embedded in the
+    /// issued access token JWT.
     /// </summary>
-    public string? BoundJwkThumbprint { get; init; }
+    public ConfirmationMethod? Confirmation { get; init; }
 }

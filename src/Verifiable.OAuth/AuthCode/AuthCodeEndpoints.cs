@@ -1222,7 +1222,7 @@ public static class AuthCodeEndpoints
                 context.IncomingRequest?.Headers.TryGetSingle(
                     WellKnownHttpHeaderNames.DPoP, out dpopProofString);
 
-                string? boundJwkThumbprint = null;
+                ConfirmationMethod? confirmation = null;
                 if(dpopProofString is not null || dpopRequired)
                 {
                     if(server.Integration.ValidateDpopProofAsync is null
@@ -1329,7 +1329,13 @@ public static class AuthCodeEndpoints
                             .ConfigureAwait(false);
                     }
 
-                    boundJwkThumbprint = proofResult.JwkThumbprint;
+                    if(proofResult.JwkThumbprint is not null)
+                    {
+                        confirmation = new ConfirmationMethod
+                        {
+                            JwkThumbprint = proofResult.JwkThumbprint
+                        };
+                    }
                 }
 
                 IssuanceContext issuance = new()
@@ -1342,7 +1348,8 @@ public static class AuthCodeEndpoints
                     ClientId = codeState.ClientId,
                     IssuedAt = now,
                     Nonce = string.IsNullOrEmpty(codeState.Nonce) ? null : codeState.Nonce,
-                    AuthTime = codeState.AuthTime
+                    AuthTime = codeState.AuthTime,
+                    Confirmation = confirmation
                 };
 
                 IReadOnlyList<TokenProducer> producers =
@@ -1456,7 +1463,7 @@ public static class AuthCodeEndpoints
                     IssuedAt: now,
                     ExpiresAt: latestExpiry)
                 {
-                    BoundJwkThumbprint = boundJwkThumbprint
+                    Confirmation = confirmation
                 }, null);
             },
             BuildResponse = static (state, _, context) =>
@@ -1489,10 +1496,22 @@ public static class AuthCodeEndpoints
 
                 int expiresIn = (int)(accessAudit.ExpiresAt - accessAudit.IssuedAt).TotalSeconds;
 
+                //RFC 9449 §5: when DPoP enforcement bound the access token,
+                //token_type is "DPoP"; otherwise the RFC 6750 "Bearer" default.
+                //The Confirmation slot on the terminal state carries the binding
+                //the producer embedded as cnf in the JWT payload; the wire-level
+                //token_type mirrors that decision so RS code can dispatch the
+                //right scheme without parsing the JWT.
+                string tokenTypeWireName = issued.Confirmation is { IsEmpty: false }
+                    ? WellKnownAuthenticationSchemes.DPoP
+                    : WellKnownAuthenticationSchemes.Bearer;
+
                 var sb = new StringBuilder();
                 sb.Append("{\"access_token\":\"");
                 sb.Append(tokenSet.AccessToken);
-                sb.Append("\",\"token_type\":\"Bearer\",\"expires_in\":");
+                sb.Append("\",\"token_type\":\"");
+                sb.Append(tokenTypeWireName);
+                sb.Append("\",\"expires_in\":");
                 sb.Append(expiresIn);
 
                 if(tokenSet.IdToken is not null)

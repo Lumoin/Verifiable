@@ -110,4 +110,14 @@ public sealed record IssuanceContext
     /// when present.
     /// </summary>
     public DateTimeOffset? AuthTime { get; init; }
+
+    /// <summary>
+    /// The RFC 7800 confirmation method established at the token endpoint —
+    /// for example the DPoP <c>jkt</c> thumbprint when the request carried a
+    /// validated DPoP proof. Token producers consume the populated members to
+    /// emit the <c>cnf</c> claim in their payload. <see langword="null"/> or
+    /// an empty <see cref="ConfirmationMethod"/> means the token is not
+    /// sender-constrained and no <c>cnf</c> claim is emitted.
+    /// </summary>
+    public ConfirmationMethod? Confirmation { get; init; }
 }

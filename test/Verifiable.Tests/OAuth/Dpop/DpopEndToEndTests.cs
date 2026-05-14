@@ -131,14 +131,33 @@ internal sealed class DpopEndToEndTests
         string accessToken = (string)accessTokenObj!;
         Assert.IsFalse(string.IsNullOrEmpty(accessToken));
 
-        //Assert: the access-token-to-binding accessor returns the thumbprint
-        //of the DPoP key, demonstrating that the AS's cnf.jkt binding flowed
-        //through the issuance pipeline onto ServerTokenIssuedState.
+        //Wire-level assertion: the response body's token_type field carries
+        //"DPoP" (RFC 9449 §5), not "Bearer", because DPoP enforcement bound
+        //the token. Reading from the parsed Body dictionary is equivalent to
+        //reading the wire because OAuthResponseParsers passes the JSON
+        //field through unchanged.
+        Assert.IsTrue(tokenResult.Body.TryGetValue(OAuthRequestParameters.TokenType, out object? tokenTypeObj));
+        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)tokenTypeObj!,
+            "DPoP-bound issuance must emit token_type=DPoP per RFC 9449 §5.");
+
+        //Wire-level assertion: the access-token JWT itself carries cnf.jkt
+        //(RFC 9449 §6.1) equal to the DPoP key's thumbprint. Read the JWT
+        //payload directly — no host-side accessor shortcut.
         string expectedThumbprint = fixture.DpopKey.GetThumbprint(
             TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool);
-        string? recordedThumbprint = host.GetBoundThumbprintForAccessToken(accessToken);
-        Assert.AreEqual(expectedThumbprint, recordedThumbprint,
-            "BoundJwkThumbprint on the issued state must equal the DPoP key's thumbprint.");
+        string wireJkt = JwtPayloadReader.ReadCnfJkt(accessToken)
+            ?? throw new AssertFailedException("Access-token JWT must carry cnf.jkt under DPoP issuance.");
+        Assert.AreEqual(expectedThumbprint, wireJkt,
+            "JWT cnf.jkt must equal the DPoP key's RFC 7638 thumbprint.");
+
+        //Audit follow-up — RFC 9068 §2 / RFC 8414 §3: the access token's iss
+        //claim preserves the full issuer URL including any path component.
+        //The registration's IssuerUri is https://issuer.test/{segment}; the
+        //wire iss must equal that string exactly, not just the authority.
+        string wireIss = JwtPayloadReader.ReadIssuer(accessToken)
+            ?? throw new AssertFailedException("Access-token JWT must carry iss claim.");
+        Assert.AreEqual(material.Registration.IssuerUri!.OriginalString, wireIss,
+            "Access-token iss claim must preserve the full issuer URL per RFC 8414 §3.");
 
         //Step 5 — RS-side validation. The application playing the RS role
         //constructs a fresh proof for a resource call carrying the ath claim
@@ -191,6 +210,97 @@ internal sealed class DpopEndToEndTests
             $"RS-side proof must validate. FailureReason={rsResult.FailureReason}");
         Assert.AreEqual(expectedThumbprint, rsResult.JwkThumbprint,
             "RS-validated thumbprint must equal the binding the AS recorded.");
+    }
+
+
+    [TestMethod]
+    public async Task BearerTokenIssuanceOmitsConfirmationAndUsesBearerWireType()
+    {
+        //Negative coverage: when DPoP enforcement does not run (policy does
+        //not require, no proof presented), the wire response carries
+        //token_type=Bearer and the access-token JWT has no cnf claim. Same
+        //wire-level reading discipline as the positive gate test — no host
+        //accessor in the assertion path, except for one verification that
+        //the diagnostic accessor agrees (returns null).
+        using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, OAuthFlowState> clientFlowStore) =
+            host.CreateOAuthClientAndRegistration(
+                material.Registration,
+                RedirectUri.OriginalString,
+                material.Registration.IssuerUri!.ToString(),
+                profile: PolicyProfile.Rfc6749WithPkce);
+
+        AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
+            registration,
+            RedirectUri,
+            OAuthFormEncodedFields.Empty,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
+            $"PAR must redirect. ErrorCode={parResult.ErrorCode}");
+
+        string flowId = clientFlowStore.Keys.Single();
+        ParCompletedState parCompleted = (ParCompletedState)clientFlowStore[flowId];
+        string requestUri = parCompleted.Par.RequestUri.ToString();
+
+        RequestFields authorizeFields = new()
+        {
+            [OAuthRequestParameters.ClientId] = ClientId,
+            [OAuthRequestParameters.RequestUri] = requestUri
+        };
+        RequestContext authorizeContext = new();
+        authorizeContext.SetSubjectId(TestSubject);
+
+        ServerHttpResponse authorizeResponse = await host.DispatchAtPathAsync(
+            material.Registration.TenantId.Value,
+            ServerEndpointPaths.Authorize,
+            WellKnownHttpMethods.Get,
+            authorizeFields,
+            authorizeContext,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(302, authorizeResponse.StatusCode);
+        (string code, string? iss) = ParseAuthorizeRedirect(authorizeResponse.Location!);
+        //Rfc6749WithPkce sets EmitIssOnRedirect=false; iss may be null.
+        Dictionary<string, string> callbackFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameters.Code] = code,
+            [OAuthRequestParameters.State] = flowId
+        };
+        if(iss is not null)
+        {
+            callbackFields[OAuthRequestParameters.Iss] = iss;
+        }
+
+        AuthCodeFlowEndpointResult callbackResult = await client.AuthCode.HandleCallbackAsync(
+            registration,
+            new OAuthFormEncodedFields(callbackFields),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, callbackResult.Outcome,
+            $"Callback must succeed under Rfc6749WithPkce. ErrorCode={callbackResult.ErrorCode} ErrorDescription={callbackResult.ErrorDescription}");
+
+        AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
+            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"Token issuance must succeed. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        Assert.IsNotNull(tokenResult.Body);
+
+        //Wire-level: token_type is Bearer per RFC 6750 §2.1.
+        Assert.IsTrue(tokenResult.Body!.TryGetValue(OAuthRequestParameters.TokenType, out object? typeObj));
+        Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, (string)typeObj!,
+            "Non-DPoP issuance must emit token_type=Bearer per RFC 6750 §2.1.");
+
+        //Wire-level: JWT carries no cnf claim.
+        string accessToken = (string)tokenResult.Body[OAuthRequestParameters.AccessToken]!;
+        Assert.IsFalse(JwtPayloadReader.HasCnfClaim(accessToken),
+            "Non-DPoP access token must not carry cnf claim.");
+
+        //Diagnostic-accessor agreement: GetConfirmationForAccessToken returns null.
+        Assert.IsNull(host.GetConfirmationForAccessToken(accessToken),
+            "Diagnostic accessor must agree with the wire — no binding recorded.");
     }
 
 

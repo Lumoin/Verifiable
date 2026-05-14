@@ -253,7 +253,7 @@ internal sealed class TestHostShell: IDisposable
                     case ServerTokenIssuedState:
                     {
                         //Capture access_token → flowId so test code can recover the
-                        //BoundJwkThumbprint binding for a known access token. The
+                        //Confirmation binding for a known access token. The
                         //IssuedTokenSet carries the live JWS strings on the request
                         //context (they are never persisted onto state).
                         string? accessToken = ctx.IssuedTokens?.AccessToken;
@@ -800,10 +800,12 @@ internal sealed class TestHostShell: IDisposable
     /// <param name="record">The server-side registration record.</param>
     /// <param name="redirectUri">The client's redirect URI.</param>
     /// <param name="issuerUri">The expected issuer URI for callback validation.</param>
-    public (OAuthClient Client, ClientRegistration Registration) CreateOAuthClientAndRegistration(
-        ClientRecord record,
-        string redirectUri,
-        string issuerUri)
+    public (OAuthClient Client, ClientRegistration Registration, Dictionary<string, OAuthFlowState> ClientFlowStore)
+        CreateOAuthClientAndRegistration(
+            ClientRecord record,
+            string redirectUri,
+            string issuerUri,
+            PolicyProfile? profile = null)
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentException.ThrowIfNullOrWhiteSpace(redirectUri);
@@ -874,10 +876,10 @@ internal sealed class TestHostShell: IDisposable
             AuthorizationServerIssuer = issuerUriValue,
             RedirectUris = [new Uri(redirectUri)],
             AuthenticationMethod = ClientAuthenticationMethod.None,
-            Profile = PolicyProfile.Haip10
+            Profile = profile ?? PolicyProfile.Haip10
         };
 
-        return (new OAuthClient(infrastructure), registration);
+        return (new OAuthClient(infrastructure), registration, clientFlowStore);
     }
 
 
@@ -1858,11 +1860,14 @@ internal sealed class TestHostShell: IDisposable
 
 
     /// <summary>
-    /// Returns the RFC 9449 §6 <c>cnf.jkt</c> binding recorded against the
-    /// flow that issued <paramref name="accessToken"/>, or <see langword="null"/>
-    /// when the token is unknown or the issuing state did not carry a binding.
+    /// Returns the RFC 7800 confirmation method recorded against the flow
+    /// that issued <paramref name="accessToken"/>, or <see langword="null"/>
+    /// when the token is unknown or the issuing state did not carry a
+    /// binding. Diagnostic accessor — wire-level tests should read
+    /// <c>cnf</c> from the JWT and <c>token_type</c> from the response
+    /// body rather than calling this helper.
     /// </summary>
-    public string? GetBoundThumbprintForAccessToken(string accessToken)
+    public ConfirmationMethod? GetConfirmationForAccessToken(string accessToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
         if(!AccessTokenIndex.TryGetValue(accessToken, out string? flowId))
@@ -1873,7 +1878,7 @@ internal sealed class TestHostShell: IDisposable
         {
             return null;
         }
-        return entry.State is ServerTokenIssuedState issued ? issued.BoundJwkThumbprint : null;
+        return entry.State is ServerTokenIssuedState issued ? issued.Confirmation : null;
     }
 
 

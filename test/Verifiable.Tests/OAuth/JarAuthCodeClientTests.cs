@@ -184,11 +184,14 @@ internal sealed class JarAuthCodeClientTests
 
     private static (OAuthClient Client, ClientRegistration Registration) BuildAuthCodeClient(
         TestHostShell host,
-        VerifierKeyMaterial material) =>
-        host.CreateOAuthClientAndRegistration(
+        VerifierKeyMaterial material)
+    {
+        (OAuthClient client, ClientRegistration registration, _) = host.CreateOAuthClientAndRegistration(
             material.Registration,
             "https://client.example.com/callback",
             material.Registration.IssuerUri!.ToString());
+        return (client, registration);
+    }
 }
 
 
@@ -246,7 +249,7 @@ internal sealed class JarAuthCodeClientPqTests
         using VerifierKeyMaterial material = host.RegisterJarSigningClient(
             ClientId, ClientBaseUri, keyPair, JarParCapabilities);
 
-        (OAuthClient client, ClientRegistration registration) = host.CreateOAuthClientAndRegistration(
+        (OAuthClient client, ClientRegistration registration, _) = host.CreateOAuthClientAndRegistration(
             material.Registration,
             "https://client.example.com/callback",
             material.Registration.IssuerUri!.ToString());

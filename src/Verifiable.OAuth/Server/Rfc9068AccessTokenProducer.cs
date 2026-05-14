@@ -1,6 +1,7 @@
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
+using Verifiable.OAuth.Dpop;
 
 namespace Verifiable.OAuth.Server;
 
@@ -143,7 +144,14 @@ internal static class Rfc9068AccessTokenProducer
         DateTimeOffset expiresAt = context.IssuedAt.Add(lifetime);
 
         string jti = Guid.NewGuid().ToString();
-        string issuerValue = context.IssuerUri.GetLeftPart(UriPartial.Authority);
+
+        //RFC 8414 §3 + RFC 9207 §2.4 require exact-string equality on the
+        //issuer identifier. Preserve the URL verbatim — path component, port,
+        //etc. — so multi-tenant deployments where the segment is in the path
+        //emit the right iss claim. The previous GetLeftPart(UriPartial.Authority)
+        //collapse stripped the tenant segment and broke exact-match comparison
+        //at the relying-party side.
+        string issuerValue = context.IssuerUri.OriginalString;
 
         ResolveAccessTokenAudienceDelegate resolver =
             server.Integration.ResolveAccessTokenAudienceAsync
@@ -178,6 +186,22 @@ internal static class Rfc9068AccessTokenProducer
             issuer: issuerValue,
             audience: audiences,
             clientId: context.ClientId);
+
+        //RFC 9449 §6.1 — sender-constrained access tokens carry the cnf claim
+        //with the proof key's RFC 7638 thumbprint. The enforcement block at
+        //the token endpoint populates context.Confirmation when a DPoP proof
+        //was validated; producers other than the access-token producer ignore
+        //the binding (refresh-token rotation per RFC 9700 §2.2.2 will read
+        //the same slot when that grant lands).
+        if(context.Confirmation is { IsEmpty: false } confirmation)
+        {
+            Dictionary<string, object> cnf = new(StringComparer.Ordinal);
+            if(confirmation.JwkThumbprint is not null)
+            {
+                cnf[WellKnownDpopValues.ConfirmationJwkThumbprint] = confirmation.JwkThumbprint;
+            }
+            payload[WellKnownJwtClaims.Cnf] = cnf;
+        }
 
         return new TokenProducerOutput(header, payload);
     }

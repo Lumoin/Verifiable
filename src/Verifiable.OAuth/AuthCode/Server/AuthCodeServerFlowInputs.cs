@@ -109,13 +109,15 @@ public sealed record ServerTokenExchangeSucceeded(
     DateTimeOffset ExpiresAt): AuthCodeServerFlowInput
 {
     /// <summary>
-    /// The JWK thumbprint (RFC 7638) of the DPoP key the issued access
-    /// token is bound to via <c>cnf.jkt</c>, or <see langword="null"/>
-    /// when no DPoP proof was presented and policy did not require it.
-    /// Recorded onto <see cref="States.ServerTokenIssuedState.BoundJwkThumbprint"/>
-    /// in the transition that consumes this input.
+    /// The RFC 7800 confirmation method established at the token endpoint,
+    /// or <see langword="null"/> when no proof-of-possession binding ran
+    /// (Bearer issuance). Populated with the DPoP <c>jkt</c> thumbprint when
+    /// the request carried a validated DPoP proof; extensible to MTLS
+    /// <c>x5t#S256</c> and other binding methods. Recorded onto
+    /// <see cref="States.ServerTokenIssuedState.Confirmation"/> in the
+    /// transition that consumes this input.
     /// </summary>
-    public string? BoundJwkThumbprint { get; init; }
+    public ConfirmationMethod? Confirmation { get; init; }
 }
 
 

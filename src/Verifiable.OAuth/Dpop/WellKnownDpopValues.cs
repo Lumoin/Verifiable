@@ -68,6 +68,13 @@ public static class WellKnownDpopValues
     public static readonly string ClaimAth = "ath";
 
     /// <summary>
+    /// The <c>jkt</c> member name within an RFC 7800 <c>cnf</c> claim per
+    /// RFC 9449 §6.1 — the base64url-encoded RFC 7638 JWK thumbprint of
+    /// the public key the access token is sender-constrained to.
+    /// </summary>
+    public static readonly string ConfirmationJwkThumbprint = "jkt";
+
+    /// <summary>
     /// The length in bytes of the issuedAt field inside a binary-packed nonce.
     /// Encoded as Unix seconds in an int64 big-endian.
     /// </summary>
