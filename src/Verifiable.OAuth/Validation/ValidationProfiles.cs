@@ -78,29 +78,6 @@ public static class ValidationProfiles
 
 
     /// <summary>
-    /// PAR request body validation rules: <c>state</c>, <c>redirect_uri</c>,
-    /// <c>code_challenge</c> presence, and <c>code_challenge_method = S256</c>.
-    /// </summary>
-    /// <returns>A mutable list the application can extend.</returns>
-    public static IList<ClaimDelegate<ValidationContext>> ParRequestRules() =>
-        new List<ClaimDelegate<ValidationContext>>
-        {
-            new(ValidationChecks.CheckRequestStatePresent,
-                [ValidationClaimIds.RequestContainsState]),
-
-            new(ValidationChecks.CheckRequestRedirectUriPresent,
-                [ValidationClaimIds.RequestContainsRedirectUri]),
-
-            new(ValidationChecks.CheckRequestCodeChallengePresent,
-                [ValidationClaimIds.RequestContainsCodeChallenge]),
-
-            new(ValidationChecks.CheckRequestCodeChallengeMethodIsS256,
-                [ValidationClaimIds.RequestCodeChallengeMethodIsS256]),
-        };
-
-
-
-    /// <summary>
     /// HAIP 1.0 verification rules for SD-JWT VC presentations.
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
@@ -127,22 +104,5 @@ public static class ValidationProfiles
 
             new(ValidationChecks.CheckSdHash,
                 [ValidationClaimIds.SdHashMatchesPresentation]),
-        };
-
-
-    /// <summary>
-    /// HAIP 1.0 verification rules for mdoc presentations. KB-JWT checks are
-    /// omitted (mdoc uses device authentication). Session transcript replaces
-    /// <c>sd_hash</c>.
-    /// </summary>
-    /// <returns>A mutable list the application can extend.</returns>
-    public static IList<ClaimDelegate<ValidationContext>> Haip10MdocRules() =>
-        new List<ClaimDelegate<ValidationContext>>
-        {
-            new(ValidationChecks.CheckCredentialSignature,
-                [ValidationClaimIds.CredentialSignatureValid]),
-
-            new(ValidationChecks.CheckSessionTranscript,
-                [ValidationClaimIds.SessionTranscriptValid]),
         };
 }

@@ -3,25 +3,26 @@ using Verifiable.Core.Assessment;
 namespace Verifiable.OAuth.Validation;
 
 /// <summary>
-/// All validation <see cref="ClaimId"/> instances for OAuth 2.0, OID4VP, and related
-/// protocol checks. Codes 700–999 (300 total).
+/// Validation <see cref="ClaimId"/> instances for OAuth 2.0, OID4VP, and related
+/// protocol checks. Codes 700–999.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Sub-ranges:
+/// Sub-ranges (only IDs with active consumers are populated; unused ranges are
+/// reserved for future protocol work):
 /// </para>
 /// <list type="bullet">
 ///   <item><description>700–719: Callback parameter presence.</description></item>
 ///   <item><description>720–739: Callback flow and CSRF checks.</description></item>
-///   <item><description>740–759: PKCE checks.</description></item>
-///   <item><description>760–779: JAR (JWT-Secured Authorization Request) validation.</description></item>
-///   <item><description>780–799: DPoP proof validation.</description></item>
-///   <item><description>800–819: JWT registered claims (iss, sub, aud, exp, nbf, iat, jti).</description></item>
-///   <item><description>820–839: ID Token and OIDC-specific checks.</description></item>
-///   <item><description>840–859: Token lifetime and scope checks.</description></item>
-///   <item><description>860–879: Outbound request pre-send checks.</description></item>
-///   <item><description>880–899: Client ID prefix and redirect URI validation.</description></item>
-///   <item><description>900–909: JWE decryption checks.</description></item>
+///   <item><description>740–759: PKCE checks (reserved for future use).</description></item>
+///   <item><description>760–779: JAR (JWT-Secured Authorization Request) validation (reserved).</description></item>
+///   <item><description>780–799: DPoP proof validation (reserved).</description></item>
+///   <item><description>807–808: <c>nbf</c> checks (reserved).</description></item>
+///   <item><description>813: JAR <c>aud</c> check used by <see cref="Verifiable.OAuth.AuthCode.AuthCodeEndpoints"/>.</description></item>
+///   <item><description>820–839: ID Token and OIDC-specific checks (reserved for OIDC track).</description></item>
+///   <item><description>840–859: Token lifetime and scope checks (reserved).</description></item>
+///   <item><description>880–899: Client ID prefix and redirect URI validation (reserved).</description></item>
+///   <item><description>901: JWE decryption success (reserved).</description></item>
 ///   <item><description>910–929: KB-JWT checks.</description></item>
 ///   <item><description>930–949: Credential verification.</description></item>
 ///   <item><description>950–969: VP token structure.</description></item>
@@ -169,47 +170,10 @@ public static class ValidationClaimIds
 
 
     /// <summary>
-    /// The <c>iss</c> claim is present and non-empty.
-    /// </summary>
-    public static ClaimId IssPresent { get; } = ClaimId.Create(800, "IssPresent");
-
-    /// <summary>
-    /// The <c>iss</c> value matches the expected issuer identifier.
-    /// </summary>
-    public static ClaimId IssMatchesExpected { get; } = ClaimId.Create(801, "IssMatchesExpected");
-
-    /// <summary>
-    /// The <c>sub</c> claim is present and non-empty.
-    /// </summary>
-    public static ClaimId SubPresent { get; } = ClaimId.Create(802, "SubPresent");
-
-    /// <summary>
-    /// The <c>aud</c> claim is present.
-    /// </summary>
-    public static ClaimId AudPresent { get; } = ClaimId.Create(803, "AudPresent");
-
-    /// <summary>
-    /// The <c>aud</c> value contains the expected client identifier.
-    /// </summary>
-    public static ClaimId AudContainsExpectedClient { get; } = ClaimId.Create(804, "AudContainsExpectedClient");
-
-    /// <summary>
     /// The <c>aud</c> value contains the expected issuer identifier.
-    /// Used for JAR <c>aud</c> validation per RFC 9101 §10.2 — distinct from
-    /// <see cref="AudContainsExpectedClient"/>, which enforces the
-    /// <c>aud == client_id</c> semantic used by KB-JWT in OID4VP.
+    /// Used for JAR <c>aud</c> validation per RFC 9101 §10.2.
     /// </summary>
     public static ClaimId AudContainsExpectedIssuer { get; } = ClaimId.Create(813, "AudContainsExpectedIssuer");
-
-    /// <summary>
-    /// The <c>exp</c> claim is present.
-    /// </summary>
-    public static ClaimId ExpPresent { get; } = ClaimId.Create(805, "ExpPresent");
-
-    /// <summary>
-    /// The token has not expired.
-    /// </summary>
-    public static ClaimId TokenNotExpired { get; } = ClaimId.Create(806, "TokenNotExpired");
 
     /// <summary>
     /// The <c>nbf</c> claim is present.
@@ -220,26 +184,6 @@ public static class ValidationClaimIds
     /// The current time is at or after <c>nbf</c>.
     /// </summary>
     public static ClaimId TokenNotBeforeValid { get; } = ClaimId.Create(808, "TokenNotBeforeValid");
-
-    /// <summary>
-    /// The <c>iat</c> claim is present.
-    /// </summary>
-    public static ClaimId IatPresent { get; } = ClaimId.Create(809, "IatPresent");
-
-    /// <summary>
-    /// The <c>iat</c> value is not in the future beyond clock skew tolerance.
-    /// </summary>
-    public static ClaimId IatNotInFuture { get; } = ClaimId.Create(810, "IatNotInFuture");
-
-    /// <summary>
-    /// The <c>jti</c> claim is present.
-    /// </summary>
-    public static ClaimId JtiPresent { get; } = ClaimId.Create(811, "JtiPresent");
-
-    /// <summary>
-    /// The <c>jti</c> value has not been seen before (replay prevention).
-    /// </summary>
-    public static ClaimId JtiNotReplayed { get; } = ClaimId.Create(812, "JtiNotReplayed");
 
 
 
@@ -288,28 +232,6 @@ public static class ValidationClaimIds
 
 
     /// <summary>
-    /// The request contains a <c>state</c> parameter for CSRF protection.
-    /// </summary>
-    public static ClaimId RequestContainsState { get; } = ClaimId.Create(860, "RequestContainsState");
-
-    /// <summary>
-    /// The request contains a <c>redirect_uri</c>.
-    /// </summary>
-    public static ClaimId RequestContainsRedirectUri { get; } = ClaimId.Create(861, "RequestContainsRedirectUri");
-
-    /// <summary>
-    /// The request contains a <c>code_challenge</c>.
-    /// </summary>
-    public static ClaimId RequestContainsCodeChallenge { get; } = ClaimId.Create(862, "RequestContainsCodeChallenge");
-
-    /// <summary>
-    /// The <c>code_challenge_method</c> is <c>S256</c>.
-    /// </summary>
-    public static ClaimId RequestCodeChallengeMethodIsS256 { get; } = ClaimId.Create(863, "RequestCodeChallengeMethodIsS256");
-
-
-
-    /// <summary>
     /// The client identifier prefix is recognized (<c>did:</c>, <c>x509_san_dns:</c>,
     /// <c>redirect_uri:</c>, <c>openid_federation:</c>).
     /// </summary>
@@ -331,11 +253,6 @@ public static class ValidationClaimIds
     public static ClaimId RedirectUriMatchesRegistered { get; } = ClaimId.Create(883, "RedirectUriMatchesRegistered");
 
 
-
-    /// <summary>
-    /// The JWE <c>enc</c> header is one of the algorithms the Verifier advertised.
-    /// </summary>
-    public static ClaimId JweEncAlgorithmAllowed { get; } = ClaimId.Create(900, "JweEncAlgorithmAllowed");
 
     /// <summary>
     /// The JWE decrypted successfully.
@@ -387,12 +304,6 @@ public static class ValidationClaimIds
     /// Conformance test: <c>VP1FinalVerifierInvalidSdHash</c>.
     /// </summary>
     public static ClaimId SdHashMatchesPresentation { get; } = ClaimId.Create(931, "SdHashMatchesPresentation");
-
-    /// <summary>
-    /// The session transcript for mdoc presentations is correctly computed.
-    /// Conformance test: <c>VP1FinalVerifierInvalidSessionTranscript</c>.
-    /// </summary>
-    public static ClaimId SessionTranscriptValid { get; } = ClaimId.Create(932, "SessionTranscriptValid");
 
     /// <summary>
     /// The credential's <c>vct</c> matches a type accepted by the DCQL query.

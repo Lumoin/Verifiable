@@ -407,14 +407,12 @@ public static class HaipOid4VpVerifierExecutor
                 Now = now,
                 ExpectedNonce = action.Nonce.Value,
                 ExpectedClientId = registration.ClientId,
-                AllowedEncAlgorithms = action.AllowedEncAlgorithms,
                 KbJwtNonce = parsed.KbJwtNonce,
                 KbJwtAud = parsed.KbJwtAud,
                 KbJwtIat = parsed.KbJwtIat,
                 KbJwtSignatureValid = parsed.KbJwtSignatureValid,
                 CredentialSignatureValid = parsed.CredentialSignatureValid,
                 SdHashValid = parsed.SdHashValid,
-                SessionTranscriptValid = parsed.SessionTranscriptValid,
             };
 
             ClaimIssueResult verificationResult = await vpValidator.GenerateClaimsAsync(

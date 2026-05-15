@@ -95,24 +95,6 @@ public sealed record ValidationContext
     /// </remarks>
     public TimeSpan MaxAge { get; init; } = TimeSpan.FromMinutes(5);
 
-    /// <summary>
-    /// Maximum acceptable token lifetime (exp - nbf/iat). Defaults to one hour.
-    /// </summary>
-    /// <remarks>
-    /// Application code that owns the active
-    /// <see cref="Verifiable.OAuth.Server.AuthorizationServer"/> may pass
-    /// <c>server.Timings.AccessTokenLifetime</c> here when validating an
-    /// access token, or <c>server.Timings.IdTokenLifetime</c> when validating
-    /// an ID token, so the validator and the issuer share one source of truth.
-    /// </remarks>
-    public TimeSpan MaximumLifetime { get; init; } = TimeSpan.FromHours(1);
-
-    /// <summary>The JWE <c>enc</c> header value.</summary>
-    public string? JweEncAlgorithm { get; init; }
-
-    /// <summary>The algorithms the Verifier advertised in <c>encrypted_response_enc_values_supported</c>.</summary>
-    public IReadOnlyList<string>? AllowedEncAlgorithms { get; init; }
-
     /// <summary>The KB-JWT <c>nonce</c> claim.</summary>
     public string? KbJwtNonce { get; init; }
 
@@ -130,13 +112,4 @@ public sealed record ValidationContext
 
     /// <summary>Whether the <c>sd_hash</c> matches the presentation.</summary>
     public bool SdHashValid { get; init; }
-
-    /// <summary>Whether the session transcript matches (mdoc).</summary>
-    public bool SessionTranscriptValid { get; init; }
-
-    /// <summary>Previously seen <c>jti</c> values for replay detection.</summary>
-    public IReadOnlySet<string>? SeenJtiValues { get; init; }
-
-    /// <summary>The scope string from the original request for scope-expansion checking.</summary>
-    public string? RequestedScope { get; init; }
 }
