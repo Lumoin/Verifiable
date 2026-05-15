@@ -1916,6 +1916,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             throw new InvalidOperationException(
                 "EnableDpop must be called before AddIncomingDpopHmacKey.");
         }
+
         SymmetricKey material = CreateFreshHmacKey(kid);
         KeyId kidValue = new(kid);
         DpopHmacKeySet.AddIncoming(kidValue, material);

@@ -104,6 +104,7 @@ public static class DefaultDpopNonceValidation
             {
                 return DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.Malformed);
             }
+
             offset += kidLength;
 
             long issuedAtUnixSeconds = BinaryPrimitives.ReadInt64BigEndian(decodedSpan[offset..]);

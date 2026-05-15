@@ -143,6 +143,7 @@ public static class DefaultDpopNonceIssuance
         {
             return kid;
         }
+
         return null;
     }
 }

@@ -84,10 +84,12 @@ public sealed record KeySet
         {
             if(k.Equals(kid)) { return true; }
         }
+
         foreach(KeyId k in Retiring)
         {
             if(k.Equals(kid)) { return true; }
         }
+
         return false;
     }
 }

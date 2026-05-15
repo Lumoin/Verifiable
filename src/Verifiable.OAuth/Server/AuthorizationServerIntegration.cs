@@ -273,7 +273,7 @@ public sealed class AuthorizationServerIntegration
     /// Loads the HMAC key material for a kid chosen by
     /// <see cref="SelectHmacKeyAsync"/> at issuance or extracted from the
     /// wire artefact at validation. Library default backing:
-    /// <see cref="InProcessKeySet{TKey}.ResolveByKid"/> wrapped as the
+    /// <see cref="Keys.InProcessKeySet.ResolveMaterial"/> wrapped as the
     /// delegate. Multi-instance deployments wire a Vault/KMS-backed
     /// implementation per the same contract.
     /// </summary>
@@ -281,10 +281,10 @@ public sealed class AuthorizationServerIntegration
 
 
     /// <summary>
-    /// Returns the current HMAC <see cref="KeySet{TKey}"/> for the given
+    /// Returns the current HMAC <see cref="Keys.KeySet"/> for the given
     /// tenant. Issuance feeds this into <see cref="SelectHmacKeyAsync"/>;
     /// validation reads it to check slot membership
-    /// (<see cref="KeySet{TKey}.IsKidValidForVerification"/>) before
+    /// (<see cref="Keys.KeySet.IsKidValidForVerification"/>) before
     /// accepting a presented kid; JWKS publication reads it via
     /// <c>Publishable()</c> when the application's
     /// <see cref="AuthorizationServerCryptography.BuildJwksDocumentAsync"/>
@@ -298,7 +298,7 @@ public sealed class AuthorizationServerIntegration
     /// <summary>
     /// Selects which kid to use for a given HMAC operation. When
     /// <see langword="null"/>, the library uses the kid of the first entry
-    /// in the keyset's <see cref="KeySet{TKey}.Current"/> list.
+    /// in the keyset's <see cref="Keys.KeySet.Current"/> list.
     /// </summary>
     public SelectHmacKeyDelegate? SelectHmacKeyAsync { get; set; }
 

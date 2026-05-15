@@ -58,11 +58,13 @@ public sealed class InProcessKeySet: IDisposable
         lock(transitionLock)
         {
             if(disposed) { return; }
+
             disposed = true;
             foreach(SymmetricKey material in materials.Values)
             {
                 material.Dispose();
             }
+
             materials = ImmutableDictionary<KeyId, SymmetricKey>.Empty;
         }
     }
@@ -119,6 +121,7 @@ public sealed class InProcessKeySet: IDisposable
                 throw new InvalidOperationException(
                     $"No kid '{kid.Value}' in Incoming.");
             }
+
             set = set with
             {
                 Incoming = set.Incoming.Remove(kid),
@@ -141,6 +144,7 @@ public sealed class InProcessKeySet: IDisposable
                 throw new InvalidOperationException(
                     $"No kid '{kid.Value}' in Current.");
             }
+
             set = set with
             {
                 Current = set.Current.Remove(kid),
@@ -165,6 +169,7 @@ public sealed class InProcessKeySet: IDisposable
                 throw new InvalidOperationException(
                     $"No kid '{kid.Value}' in Retiring.");
             }
+
             set = set with
             {
                 Retiring = set.Retiring.Remove(kid),

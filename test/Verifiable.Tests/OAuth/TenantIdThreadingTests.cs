@@ -194,6 +194,7 @@ internal sealed class TenantIdThreadingTests
                 return Uri.UnescapeDataString(pair[(eq + 1)..]);
             }
         }
+
         throw new InvalidOperationException(
             $"Authorize redirect did not carry a code parameter: {location}");
     }
