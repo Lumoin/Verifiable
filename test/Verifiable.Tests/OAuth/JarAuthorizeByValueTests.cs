@@ -68,7 +68,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task AcceptsValidAuthorizeJarByValueAndIssuesAuthorizationCode()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -97,7 +97,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarWithMissingOuterClientId()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -118,7 +118,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarWithRedirectUriNotInRegistration()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -141,7 +141,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarWithExpiredExp()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -164,7 +164,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarWithWrongTypHeader()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -187,7 +187,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarMissingClientId()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -210,7 +210,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarMissingExp()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -233,7 +233,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarSignedWithDifferentClientKey()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -259,7 +259,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarWithWrongAudience()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -282,7 +282,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarWithCodeChallengeMethodPlain()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -303,9 +303,9 @@ internal sealed class JarAuthorizeByValueTests
 
 
     [TestMethod]
-    public void JarAuthorizeMatcherAbsentWhenJwtSecuredAuthorizationRequestCapabilityNotAllowed()
+    public async Task JarAuthorizeMatcherAbsentWhenJwtSecuredAuthorizationRequestCapabilityNotAllowed()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, DirectOnlyCapabilities);
 
@@ -319,9 +319,9 @@ internal sealed class JarAuthorizeByValueTests
 
 
     [TestMethod]
-    public void JarAuthorizeMatcherAbsentWhenDirectAuthorizationCapabilityNotAllowed()
+    public async Task JarAuthorizeMatcherAbsentWhenDirectAuthorizationCapabilityNotAllowed()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarOnlyCapabilities);
 
@@ -340,7 +340,7 @@ internal sealed class JarAuthorizeByValueTests
         //Disjointness regression: a registration with direct authorize but no
         //JAR capability still accepts a pure PKCE direct authorize request
         //(code_challenge + S256, no 'request' parameter).
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, DirectOnlyCapabilities);
 
@@ -381,7 +381,7 @@ internal sealed class JarAuthorizeByValueTests
         //against the supplied token it rejects with invalid_request, which is
         //still the structurally-correct "do not silently route to JAR" outcome
         //the disjointness rule is meant to defend.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -421,7 +421,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarWithIssuerNotMatchingClientId()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -444,7 +444,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarWithMissingAudience()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
@@ -467,7 +467,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsJarWithLifetimeExceedingPolicyCeiling()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarDirectCapabilities);
 

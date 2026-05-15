@@ -113,7 +113,7 @@ internal sealed class JwkMicrosoftInteropTests
         string expectedAlg,
         string? expectedCrv)
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair = createKeys();
 
         ClientRecord registration = app.RegisterSigningClient(

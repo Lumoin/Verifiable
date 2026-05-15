@@ -120,7 +120,7 @@ internal sealed class Oid4VpFlowIntegrationTests
     [TestMethod]
     public async Task CrossDeviceFlowBothPdasReachAcceptState()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
@@ -259,7 +259,7 @@ internal sealed class Oid4VpFlowIntegrationTests
     [TestMethod]
     public async Task CrossDeviceFlowWithA256GcmBothPdasReachAcceptState()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
@@ -385,7 +385,7 @@ internal sealed class Oid4VpFlowIntegrationTests
     [TestMethod]
     public async Task SameDeviceFlowBothPdasReachAcceptState()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
@@ -518,7 +518,7 @@ internal sealed class Oid4VpFlowIntegrationTests
     [TestMethod]
     public async Task LocalAppToAppFlowBothPdasReachAcceptState()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
@@ -593,7 +593,7 @@ internal sealed class Oid4VpFlowIntegrationTests
     [TestMethod]
     public async Task TamperedJweCiphertextIsRejectedByVerifier()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 

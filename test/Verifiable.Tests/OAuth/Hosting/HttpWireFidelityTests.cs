@@ -41,7 +41,7 @@ internal sealed class HttpWireFidelityTests
         //(space, '+', '=' inside scope-string syntax — OAuth scope tokens
         //are space-separated lists) must round-trip cleanly through
         //FormUrlEncodedContent → HTTP wire → AS form parser → AS state.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -91,7 +91,7 @@ internal sealed class HttpWireFidelityTests
         //in-process server emits it on ServerHttpResponse.Headers; this
         //test verifies the same string lands on the client's parsed
         //response headers after a real socket round-trip.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -145,7 +145,7 @@ internal sealed class HttpWireFidelityTests
         //HTTP 400. The client sees this as BadRequest outcome after the
         //real HTTP round-trip — the status line and body actually
         //traversed Kestrel and HttpClient.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 

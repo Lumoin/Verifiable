@@ -70,7 +70,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task AcceptsValidJarParAndIssuesRequestUriHandle()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -98,7 +98,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithMissingOuterClientId()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -123,7 +123,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithOuterClientIdMismatchingJarClientId()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -149,7 +149,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarSignedWithDifferentClientKey()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -177,7 +177,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithIssuerNotMatchingClientId()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -201,7 +201,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithMissingIssuer()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -224,7 +224,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithWrongAudience()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -247,7 +247,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithMissingAudience()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -273,7 +273,7 @@ internal sealed class JarParTests
         //RFC 9101 §10.2 + RFC 9700 §4.2 reading: aud must equal the AS issuer
         //URL, not the client_id. The "EUDI/Microsoft" reading where aud = client_id
         //is rejected by the library.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -296,7 +296,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithExpiredExp()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -320,7 +320,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithNbfInFuture()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -347,7 +347,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithLifetimeExceedingPolicyCeiling()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -371,7 +371,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithWrongTypHeader()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -394,7 +394,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithRedirectUriNotInRegistration()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -417,7 +417,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarWithCodeChallengeMethodPlain()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -440,7 +440,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarMissingClientId()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -463,7 +463,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarMissingResponseType()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -486,7 +486,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarMissingRedirectUri()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -509,7 +509,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarMissingScope()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -532,7 +532,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarMissingState()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -555,7 +555,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarMissingNonce()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -578,7 +578,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarMissingCodeChallenge()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -601,7 +601,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsJarMissingExp()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -622,9 +622,9 @@ internal sealed class JarParTests
 
 
     [TestMethod]
-    public void JarParMatcherAbsentWhenJwtSecuredAuthorizationRequestCapabilityNotAllowed()
+    public async Task JarParMatcherAbsentWhenJwtSecuredAuthorizationRequestCapabilityNotAllowed()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, ParOnlyCapabilities);
 
@@ -638,9 +638,9 @@ internal sealed class JarParTests
 
 
     [TestMethod]
-    public void JarParMatcherAbsentWhenPushedAuthorizationCapabilityNotAllowed()
+    public async Task JarParMatcherAbsentWhenPushedAuthorizationCapabilityNotAllowed()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarOnlyCapabilities);
 
@@ -659,7 +659,7 @@ internal sealed class JarParTests
         //Disjointness regression: a registration with PAR but no JAR capability
         //must still accept a pure PKCE PAR body (code_challenge + S256 method,
         //no 'request' parameter) and produce a request_uri.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, ParOnlyCapabilities);
 
@@ -695,7 +695,7 @@ internal sealed class JarParTests
         //The matcher routing puts a body carrying 'request' onto the JAR-PAR
         //matcher regardless of any outer code_challenge. Confirm the response
         //is a JAR validation outcome (200 happy path here), not the PKCE one.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -742,7 +742,7 @@ internal sealed class JarParTests
         //exercises the array form by replacing the default string aud claim
         //with an array that contains the expected issuer URL alongside two
         //unrelated entries.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 

@@ -26,7 +26,7 @@ internal sealed class DynamicRegistrationEndToEndTests
     [TestMethod]
     public async Task RegisterAsyncIssuesClientIdAndDrivesAuthCodeFlow()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
 
         OAuthClient client = host.CreateOAuthClientWithoutRegistration();
 
@@ -80,7 +80,7 @@ internal sealed class DynamicRegistrationEndToEndTests
     [TestMethod]
     public async Task RegistrationLifecycleRegistersReadsUpdatesAndDeregisters()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
 
         OAuthClient client = host.CreateOAuthClientWithoutRegistration();
 

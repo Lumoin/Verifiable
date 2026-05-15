@@ -44,7 +44,7 @@ internal sealed class DpopEndToEndTests
         //flow through Kestrel ↔ HttpClient over a real socket; the test's
         //wire-level assertions (token_type from response body, cnf.jkt from
         //the JWT) now run against bytes that actually traversed HTTP framing.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
         host.EnableDpop();
 
@@ -228,7 +228,7 @@ internal sealed class DpopEndToEndTests
         //wire-level reading discipline as the positive gate test — no host
         //accessor in the assertion path, except for one verification that
         //the diagnostic accessor agrees (returns null).
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 

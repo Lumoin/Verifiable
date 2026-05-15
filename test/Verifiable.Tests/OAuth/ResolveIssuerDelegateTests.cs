@@ -115,7 +115,7 @@ internal sealed class ResolveIssuerDelegateTests
         FakeTimeProvider timeProvider = new(DateTimeOffset.Parse(
             "2026-04-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
 
-        using TestHostShell app = new(timeProvider);
+        await using TestHostShell app = new(timeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(
             "verifier-client",
             new Uri("https://verifier.example"),

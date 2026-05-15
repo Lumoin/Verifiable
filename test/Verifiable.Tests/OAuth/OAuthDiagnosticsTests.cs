@@ -41,7 +41,7 @@ internal sealed class OAuthDiagnosticsTests
         using ActivityListener listener = CreateListener(captured);
         ActivitySource.AddActivityListener(listener);
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
             TestKeyMaterialProvider.CreateP256KeyMaterial();
 
@@ -95,7 +95,7 @@ internal sealed class OAuthDiagnosticsTests
         using ActivityListener listener = CreateListener(captured);
         ActivitySource.AddActivityListener(listener);
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         await app.DispatchAtPathAsync(
             "nonexistent",

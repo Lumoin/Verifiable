@@ -55,7 +55,7 @@ internal sealed class Phase9aResponseHeadersTests
         //a redirect_uri that is not among the registration's
         //AllowedRedirectUris. Mirrors the JAR-PAR check that existed before
         //phase 9a; this regression-guards the new PKCE-PAR check.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, ParCapabilities);
 
@@ -92,7 +92,7 @@ internal sealed class Phase9aResponseHeadersTests
         //Positive regression guard for the new PKCE-PAR redirect_uri check:
         //a request submitting the registered redirect_uri must still return
         //a 200 OK request_uri response.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, ParCapabilities);
 
@@ -125,7 +125,7 @@ internal sealed class Phase9aResponseHeadersTests
         //OAuth 2.1 §3.2.3 — PAR response carries a short-lived single-use
         //request_uri. Treated as sensitive and emitted with Cache-Control:
         //no-store. (Decision §3 in PHASE9A handoff.)
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, ParCapabilities);
 
@@ -159,7 +159,7 @@ internal sealed class Phase9aResponseHeadersTests
         //OAuth 2.1 §3.2.3 — the token endpoint's success response carries
         //the access token; Cache-Control: no-store mandated. Drive a full
         //PKCE flow end to end and inspect the token response headers.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -231,7 +231,7 @@ internal sealed class Phase9aResponseHeadersTests
         //OAuth 2.1 §3.2.3 — the RFC 7591 §3.2.1 response carries the
         //newly-issued registration_access_token and (when applicable)
         //client_secret. Cache-Control: no-store required.
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
 
         ImmutableHashSet<ServerCapabilityName> capabilities = ImmutableHashSet.Create(
             ServerCapabilityName.DynamicClientRegistration);

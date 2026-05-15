@@ -70,7 +70,7 @@ namespace Verifiable.Tests.OAuth;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TestHostShell Clients={Registrations.Count} Flows={FlowStates.Count}")]
-internal sealed class TestHostShell: IDisposable, IAsyncDisposable
+internal sealed class TestHostShell: IAsyncDisposable
 {
     private ConcurrentDictionary<string, ClientRecord> Registrations { get; } = new();
     private ConcurrentDictionary<string, (OAuthFlowState State, int StepCount)> FlowStates { get; } = new();
@@ -2180,13 +2180,6 @@ internal sealed class TestHostShell: IDisposable, IAsyncDisposable
         KestrelServer = kestrel;
         HttpBaseAddress = new Uri(addresses.Addresses.First());
         SharedHttpClient = new System.Net.Http.HttpClient { BaseAddress = HttpBaseAddress };
-    }
-
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
 

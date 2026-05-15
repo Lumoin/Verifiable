@@ -48,7 +48,7 @@ internal sealed class JwksRotationTests
     [TestMethod]
     public async Task JwksIncludesIncomingKeysBeforeActivation()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(ClientId, BaseUri, VerifierCapabilities);
 
         string segment = keys.Registration.TenantId;
@@ -79,7 +79,7 @@ internal sealed class JwksRotationTests
     [TestMethod]
     public async Task JwksIncludesRetiringKeysInGraceWindow()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(ClientId, BaseUri, VerifierCapabilities);
 
         string segment = keys.Registration.TenantId;
@@ -110,7 +110,7 @@ internal sealed class JwksRotationTests
     [TestMethod]
     public async Task JwksOmitsHistoricalKeys()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(ClientId, BaseUri, VerifierCapabilities);
 
         string segment = keys.Registration.TenantId;
@@ -141,7 +141,7 @@ internal sealed class JwksRotationTests
     [TestMethod]
     public async Task RotationLifecycleEmitsClientUpdatedAtEveryTransition()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         List<ClientRegistrationEvent> received = [];
         using IDisposable subscription = app.Server.Events.Subscribe(

@@ -344,13 +344,13 @@ internal sealed class AuthorizationServerFeatureTests
 
 
     [TestMethod]
-    public void RegisterClientFiresClientRegisteredEventWithCorrectPayload()
+    public async Task RegisterClientFiresClientRegisteredEventWithCorrectPayload()
     {
         List<ClientRegistrationEvent> received = [];
 
 
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
@@ -384,9 +384,9 @@ internal sealed class AuthorizationServerFeatureTests
     //the first dispatch call after RegisterClient can resolve the registration.
 
     [TestMethod]
-    public void RegistrationStoreIsPopulatedImmediatelyAfterRegisterClient()
+    public async Task RegistrationStoreIsPopulatedImmediatelyAfterRegisterClient()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
         Assert.IsTrue(
@@ -412,7 +412,7 @@ internal sealed class AuthorizationServerFeatureTests
 
 
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
@@ -473,7 +473,7 @@ internal sealed class AuthorizationServerFeatureTests
 
 
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
@@ -569,7 +569,7 @@ internal sealed class AuthorizationServerFeatureTests
 
 
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
@@ -663,13 +663,13 @@ internal sealed class AuthorizationServerFeatureTests
     //endpoints for a client without a full re-registration.
 
     [TestMethod]
-    public void CapabilityGrantedEventCarriesCorrectPayload()
+    public async Task CapabilityGrantedEventCarriesCorrectPayload()
     {
         List<ClientRegistrationEvent> received = [];
 
 
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
@@ -710,13 +710,13 @@ internal sealed class AuthorizationServerFeatureTests
     //test verifies that disposing the subscription stops event delivery.
 
     [TestMethod]
-    public void DisposingSubscriptionStopsEventDelivery()
+    public async Task DisposingSubscriptionStopsEventDelivery()
     {
         List<ClientRegistrationEvent> received = [];
 
 
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
@@ -750,7 +750,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task ParDispatchReturns200WithRequestUriAndExpiresInJson()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
         string segment = keys.Registration.TenantId;
@@ -793,7 +793,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task JarRequestDispatchReturns200WithCompactJwsContentType()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
 
@@ -837,7 +837,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task DirectPostCrossDeviceReturns200WithEmptyBody()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
 
@@ -904,7 +904,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task DirectPostSameDeviceReturns200WithRedirectUriInBody()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
 
@@ -974,7 +974,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task DispatchToUnknownSegmentReturns404()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         ServerHttpResponse response = await app.DispatchAtPathAsync(
             "doesnotexist",
@@ -1015,9 +1015,9 @@ internal sealed class AuthorizationServerFeatureTests
     //the raw ServerHttpResponse the ASP.NET skin would receive and forward.
 
     [TestMethod]
-    public void NewlyRegisteredClientCanComputeEndpointUrisFromSegment()
+    public async Task NewlyRegisteredClientCanComputeEndpointUrisFromSegment()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
         string segment = keys.Registration.TenantId;
@@ -1059,7 +1059,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task NewlyRegisteredClientCanReachParEndpointAndReceivesRequestUri()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
         string segment = keys.Registration.TenantId;
@@ -1116,7 +1116,7 @@ internal sealed class AuthorizationServerFeatureTests
         string displayName,
         Func<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys)
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair = createKeys();
 
         //Derive expected values by running the same converter the server uses
@@ -1183,7 +1183,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task DistinctAlgorithmFamiliesProduceDistinctJwksKeyTypes()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> ecKeys =
             TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -1235,7 +1235,7 @@ internal sealed class AuthorizationServerFeatureTests
         string? capturedTenantId = null;
         string? capturedCallerTier = null;
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         //Override BuildJwksDocumentAsync to capture what the delegate receives.
         //This is exactly what an application developer would do — wire a delegate
@@ -1291,7 +1291,7 @@ internal sealed class AuthorizationServerFeatureTests
         //Demonstrates the per-call dynamic gate: the same registration returns
         //different JWKS depending on context bag contents. This is the billing/
         //tier/tenant isolation pattern the design intends.
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
         string segment = keys.Registration.TenantId;
@@ -1370,7 +1370,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task DiscoveryEndpointReturns200WithActiveCapabilityEndpoints()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
         string segment = keys.Registration.TenantId;
@@ -1424,7 +1424,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task AfterKeyRotationJwksContainsNewKid()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial originalKeys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
         string segment = originalKeys.Registration.TenantId;
@@ -1467,7 +1467,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task DeregisteredClientJwksAndDiscoveryReturn404()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
         string segment = keys.Registration.TenantId;
@@ -1521,7 +1521,7 @@ internal sealed class AuthorizationServerFeatureTests
         //and must not know.
         int callCount = 0;
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         app.Server.Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
         {
@@ -1565,7 +1565,7 @@ internal sealed class AuthorizationServerFeatureTests
 
 
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
@@ -1648,7 +1648,7 @@ internal sealed class AuthorizationServerFeatureTests
         //which cache partition to consult, whether to serve stale, and which keys to include.
         var capturedRegions = new List<string>();
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         app.Server.Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
         {
@@ -1706,7 +1706,7 @@ internal sealed class AuthorizationServerFeatureTests
         JwksDocument? precomputedDocument = null;
         int computeCount = 0;
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         //Subscribe to precompute on registration.
         List<ClientRegistrationEvent> events = [];
@@ -1797,7 +1797,7 @@ internal sealed class AuthorizationServerFeatureTests
 
 
     [TestMethod]
-    public void EventTimestampsReflectFakeTimeProviderAndAreOrdered()
+    public async Task EventTimestampsReflectFakeTimeProviderAndAreOrdered()
     {
         //Verifies that AuthorizationServer timestamps come from the injected
         //TimeProvider — not from DateTimeOffset.UtcNow or any other clock.
@@ -1812,7 +1812,7 @@ internal sealed class AuthorizationServerFeatureTests
         List<ClientRegistrationEvent> received = [];
 
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using IDisposable subscription = app.Server.Events.Subscribe(
             new CollectingObserver<ClientRegistrationEvent>(received));
@@ -1876,7 +1876,7 @@ internal sealed class AuthorizationServerFeatureTests
             return MetadataEndpoints.Builder(registration, context, server);
         };
 
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         ServerConfiguration configWithCounting = app.Server.Configuration
             .WithEndpointBuilders(new EndpointBuilderSet([
@@ -1911,7 +1911,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task CapabilityRejectionByIntegrationDelegateReturns403UnauthorizedClient()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
@@ -1939,7 +1939,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task StatelessEndpointDispatchDoesNotPersistFlowState()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
@@ -1960,7 +1960,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task ContinuingFlowDispatchedAfterExpiresAtReturns400Expired()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
@@ -1995,7 +1995,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task PostDispatchContextCarriesMatchedEndpointCapability()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
@@ -2016,7 +2016,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task ContinuingFlowResolvesExternalHandleToInternalFlowIdBeforeLoadingState()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
@@ -2054,7 +2054,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task DispatchPlacesMatchPayloadOnContextBeforeCapabilityCheck()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
@@ -2084,7 +2084,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task SameRequestContextInstanceReachesEveryIntegrationDelegate()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
@@ -2124,7 +2124,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task SaveFlowStateAsyncReceivesResolvedTenantId()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
@@ -2151,7 +2151,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task LoadFlowStateAsyncReceivesResolvedTenantId()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
 
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
@@ -2383,7 +2383,7 @@ internal sealed class AuthorizationServerFeatureTests
 
 
     [TestMethod]
-    public void DefaultResolverSurfacesCancellation()
+    public async Task DefaultResolverSurfacesCancellation()
     {
         //Body D — cancellation propagates through the default resolver.
         Dictionary<string, IReadOnlyList<string>> map = new(StringComparer.Ordinal)
@@ -2394,12 +2394,11 @@ internal sealed class AuthorizationServerFeatureTests
         IssuanceContext context = MakeIssuanceContext(registration, "read");
 
         using CancellationTokenSource cts = new();
-        cts.Cancel();
+        await cts.CancelAsync();
 
-        Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
             await Rfc9068AccessTokenProducer.DefaultResolveAccessTokenAudienceAsync(
-                registration, context, cts.Token).ConfigureAwait(false))
-            .ConfigureAwait(false).GetAwaiter().GetResult();
+                registration, context, cts.Token));
     }
 
 

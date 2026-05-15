@@ -60,7 +60,7 @@ internal sealed class JarAuthCodeClientTests
     [TestMethod]
     public async Task JarParAsyncRoundTripsThroughBuildJarParMatcher()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -91,7 +91,7 @@ internal sealed class JarAuthCodeClientTests
     [TestMethod]
     public async Task JarAuthorizeAsyncRoundTripsThroughBuildAuthorizeJarByValueMatcher()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarAuthorizeCapabilities);
 
@@ -123,7 +123,7 @@ internal sealed class JarAuthCodeClientTests
     [TestMethod]
     public async Task JarParAsyncSurfacesCancellation()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarParCapabilities);
 
@@ -154,7 +154,7 @@ internal sealed class JarAuthCodeClientTests
     [TestMethod]
     public async Task JarAuthorizeAsyncSurfacesCancellation()
     {
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarAuthorizeCapabilities);
 
@@ -245,7 +245,7 @@ internal sealed class JarAuthCodeClientPqTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
             CreateFreshKeyMaterial(algorithm);
 
-        using TestHostShell host = new(TimeProvider);
+        await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterJarSigningClient(
             ClientId, ClientBaseUri, keyPair, JarParCapabilities);
 

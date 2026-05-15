@@ -59,7 +59,7 @@ internal sealed class Oid4VpWalletClientTests
     [TestMethod]
     public async Task PresentsValidVpTokenForSimpleSdJwtVcRequest()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
@@ -98,7 +98,7 @@ internal sealed class Oid4VpWalletClientTests
     [TestMethod]
     public async Task PresentJarAsyncRoundTripsThroughExistingVerifier()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
@@ -136,7 +136,7 @@ internal sealed class Oid4VpWalletClientTests
     [TestMethod]
     public async Task PresentJarAsyncSurfacesCancellation()
     {
-        using TestHostShell app = new(TimeProvider);
+        await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
