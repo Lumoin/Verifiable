@@ -218,18 +218,18 @@ public static class HaipOid4VpVerifierExecutor
 
         executor.Register<SignJarAction>(async (action, context, server, ct) =>
         {
+            TenantId tenantId = context.TenantId
+                ?? throw new InvalidOperationException(
+                    "Tenant identifier not found in context.");
+
             PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
-                action.SigningKeyId.Value, context, ct).ConfigureAwait(false);
+                action.SigningKeyId.Value, tenantId, context, ct).ConfigureAwait(false);
 
             if(signingKey is null)
             {
                 throw new InvalidOperationException(
                     $"Signing key '{action.SigningKeyId}' not found.");
             }
-
-            TenantId tenantId = context.TenantId
-                ?? throw new InvalidOperationException(
-                    "Tenant identifier not found in context.");
 
             ClientRecord? registration = await server.Integration.LoadClientRegistrationAsync!(
                 tenantId, context, ct).ConfigureAwait(false);

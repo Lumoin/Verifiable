@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Keys;
 
 namespace Verifiable.OAuth.Dpop;
 
@@ -31,16 +32,16 @@ namespace Verifiable.OAuth.Dpop;
 public static class DefaultDpopNonceIssuance
 {
     /// <summary>
-    /// Issues a fresh DPoP nonce. Composes
-    /// <see cref="ResolveServerHmacKeyDelegate"/> for the kid'd HMAC key,
-    /// <see cref="CryptographicKeyEvents"/>'s digest dispatcher for the
-    /// audience hash, and the resolved <see cref="SymmetricKey"/>'s bound
-    /// HMAC delegate for the integrity tag.
+    /// Issues a fresh DPoP nonce. Loads the current HMAC keyset, asks the
+    /// selector to pick a kid, looks up the material via the byte-loader,
+    /// then signs the binary-packed payload with the resolved key.
     /// </summary>
     public static async ValueTask<string> IssueAsync(
         Uri audience,
         TenantId tenantId,
         RequestContext context,
+        GetHmacKeySetDelegate getHmacKeySet,
+        SelectHmacKeyDelegate? selectHmacKey,
         ResolveServerHmacKeyDelegate resolveServerHmacKey,
         TimeProvider timeProvider,
         EncodeDelegate base64UrlEncoder,
@@ -49,24 +50,38 @@ public static class DefaultDpopNonceIssuance
     {
         ArgumentNullException.ThrowIfNull(audience);
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(getHmacKeySet);
         ArgumentNullException.ThrowIfNull(resolveServerHmacKey);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
-        HmacKeyResolution? resolution = await resolveServerHmacKey(
-            kid: null, tenantId, context, cancellationToken).ConfigureAwait(false);
-        if(resolution is null)
+        KeySet<HmacKey> keySet = await getHmacKeySet(
+            tenantId, context, cancellationToken).ConfigureAwait(false);
+
+        string? chosenKid = selectHmacKey is not null
+            ? await selectHmacKey(keySet, WellKnownHmacPurposes.DpopNonce, tenantId, context, cancellationToken)
+                .ConfigureAwait(false)
+            : DefaultSelectCurrent(keySet);
+        if(chosenKid is null)
         {
             throw new InvalidOperationException(
-                "ResolveServerHmacKeyAsync returned no current key for nonce issuance.");
+                "No current HMAC key available for nonce issuance.");
         }
 
-        byte[] kidBytes = Encoding.UTF8.GetBytes(resolution.Kid);
+        HmacKey? key = await resolveServerHmacKey(
+            chosenKid, tenantId, context, cancellationToken).ConfigureAwait(false);
+        if(key is null)
+        {
+            throw new InvalidOperationException(
+                $"HMAC key for kid '{chosenKid}' could not be resolved.");
+        }
+
+        byte[] kidBytes = Encoding.UTF8.GetBytes(key.Kid);
         if(kidBytes.Length > byte.MaxValue)
         {
             throw new InvalidOperationException(
-                $"Kid '{resolution.Kid}' is too long; the binary nonce format requires <=255 UTF-8 bytes.");
+                $"Kid '{key.Kid}' is too long; the binary nonce format requires <=255 UTF-8 bytes.");
         }
 
         long issuedAtUnixSeconds = timeProvider.GetUtcNow().ToUnixTimeSeconds();
@@ -110,7 +125,7 @@ public static class DefaultDpopNonceIssuance
         //HMAC over the first payloadLength bytes; result fills the trailing 32-byte tag region.
         ReadOnlyMemory<byte> hmacMessage = packedMemory[..payloadLength];
 
-        using HmacValue hmacTag = await resolution.Key.ComputeHmacAsync(
+        using HmacValue hmacTag = await key.Material.ComputeHmacAsync(
             hmacMessage,
             outputByteLength: WellKnownDpopValues.NonceHmacTagByteLength,
             pool: memoryPool,
@@ -120,5 +135,15 @@ public static class DefaultDpopNonceIssuance
         hmacTag.AsReadOnlySpan().CopyTo(finalSpan[payloadLength..]);
 
         return base64UrlEncoder(finalSpan);
+    }
+
+
+    private static string? DefaultSelectCurrent(KeySet<HmacKey> keySet)
+    {
+        foreach(HmacKey k in keySet.Current)
+        {
+            return k.Kid;
+        }
+        return null;
     }
 }

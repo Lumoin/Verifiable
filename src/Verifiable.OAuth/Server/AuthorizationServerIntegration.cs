@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Verifiable.OAuth.Server.Keys;
 
 namespace Verifiable.OAuth.Server;
 
@@ -269,12 +270,37 @@ public sealed class AuthorizationServerIntegration
 
 
     /// <summary>
-    /// Resolves the server-held HMAC key by kid for nonce issuance and
-    /// validation. Library default backing:
-    /// <see cref="InProcessHmacKeyResolver.ResolveAsync"/>. Multi-instance
-    /// deployments wire a Vault/KMS-backed implementation.
+    /// Loads the HMAC key material for a kid chosen by
+    /// <see cref="SelectHmacKeyAsync"/> at issuance or extracted from the
+    /// wire artefact at validation. Library default backing:
+    /// <see cref="InProcessKeySet{TKey}.ResolveByKid"/> wrapped as the
+    /// delegate. Multi-instance deployments wire a Vault/KMS-backed
+    /// implementation per the same contract.
     /// </summary>
     public ResolveServerHmacKeyDelegate? ResolveServerHmacKeyAsync { get; set; }
+
+
+    /// <summary>
+    /// Returns the current HMAC <see cref="KeySet{TKey}"/> for the given
+    /// tenant. Issuance feeds this into <see cref="SelectHmacKeyAsync"/>;
+    /// validation reads it to check slot membership
+    /// (<see cref="KeySet{TKey}.IsKidValidForVerification"/>) before
+    /// accepting a presented kid; JWKS publication reads it via
+    /// <c>Publishable()</c> when the application's
+    /// <see cref="AuthorizationServerCryptography.BuildJwksDocumentAsync"/>
+    /// opts to publish HMAC keys as <c>kty=oct</c> JWKs per RFC 7518 §6.4
+    /// (typically for HS256 access-token verifiers in a private federation,
+    /// not for DPoP nonce keys which are server-internal).
+    /// </summary>
+    public GetHmacKeySetDelegate? GetHmacKeySetAsync { get; set; }
+
+
+    /// <summary>
+    /// Selects which kid to use for a given HMAC operation. When
+    /// <see langword="null"/>, the library uses the kid of the first entry
+    /// in the keyset's <see cref="KeySet{TKey}.Current"/> list.
+    /// </summary>
+    public SelectHmacKeyDelegate? SelectHmacKeyAsync { get; set; }
 
 
     /// <summary>

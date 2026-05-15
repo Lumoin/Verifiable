@@ -923,7 +923,7 @@ public static class AuthCodeEndpoints
         }
 
         PublicKeyMemory? signingPublicKey = await resolver(
-            verificationKeyId.Value, context, cancellationToken).ConfigureAwait(false);
+            verificationKeyId.Value, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
         if(signingPublicKey is null)
         {
@@ -1301,7 +1301,7 @@ public static class AuthCodeEndpoints
                         .ConfigureAwait(false);
 
                     PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
-                        signingKeyId.Value, context, ct).ConfigureAwait(false);
+                        signingKeyId.Value, registration.TenantId, context, ct).ConfigureAwait(false);
 
                     if(signingKey is null)
                     {
@@ -1662,7 +1662,7 @@ public static class AuthCodeEndpoints
                     KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
                         server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
                     PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
-                        signingKeyId.Value, context, ct).ConfigureAwait(false);
+                        signingKeyId.Value, registration.TenantId, context, ct).ConfigureAwait(false);
                     if(signingKey is null)
                     {
                         return (null, ServerHttpResponse.ServerError(

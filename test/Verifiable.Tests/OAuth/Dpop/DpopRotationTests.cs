@@ -6,6 +6,7 @@ using Verifiable.Cryptography;
 using Verifiable.Microsoft;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Keys;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth.Dpop;
@@ -23,73 +24,93 @@ internal sealed class DpopRotationTests
 
 
     [TestMethod]
-    public async Task NonceUnderRetiredKidStillValidatesDuringOverlapWindow()
+    public async Task NonceUnderRetiringKidStillValidatesDuringOverlapWindow()
     {
         //RFC 9449 §10 — rotating the HMAC key must not invalidate nonces still
-        //in flight. The resolver keeps retired keys for the overlap window;
-        //nonces signed under the retired kid still validate while a fresh
-        //issuance under the current kid is wire-distinguishable.
-        using SymmetricKey keyA = CreateHmacKey();
-        InProcessHmacKeyResolver resolver = new(keyA, "kid-A");
+        //in flight. The keyset keeps retired keys in the Retiring slot for the
+        //overlap window; nonces signed under the retired kid still validate
+        //while a fresh issuance under the new Current kid is wire-distinguishable.
+        HmacKey keyA = new() { Kid = "kid-A", Material = CreateHmacKey() };
+        InProcessKeySet<HmacKey> keySet = new(new KeySet<HmacKey> { Current = [keyA] });
 
-        string nonceUnderA = await DefaultDpopNonceIssuance.IssueAsync(
-            DefaultAudience,
-            TestTenant,
-            new RequestContext(),
-            resolver.ResolveAsync,
-            TimeProvider,
-            TestHostShell.Base64UrlEncoder,
-            TestHostShell.MemoryPool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+        string nonceUnderA = await IssueAsync(keySet).ConfigureAwait(false);
 
-        using SymmetricKey keyB = CreateHmacKey();
-        resolver.Rotate(keyB, "kid-B");
+        //Rotate: kid-A → Retiring, kid-B → Current.
+        HmacKey keyB = new() { Kid = "kid-B", Material = CreateHmacKey() };
+        keySet.AddIncoming(keyB);
+        keySet.PromoteIncomingToCurrent("kid-B");
+        keySet.RetireCurrent("kid-A");
 
-        DpopNonceValidationResult retiredResult = await DefaultDpopNonceValidation.ValidateAsync(
-            nonceUnderA,
-            DefaultAudience,
-            TestTenant,
-            new RequestContext(),
-            resolver.ResolveAsync,
-            TimeProvider,
-            WellKnownDpopValues.DefaultNonceValidityWindow,
-            TestHostShell.Base64UrlDecoder,
-            TestHostShell.MemoryPool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+        DpopNonceValidationResult retiredResult = await ValidateAsync(keySet, nonceUnderA).ConfigureAwait(false);
 
         Assert.IsTrue(retiredResult.IsSuccess,
-            $"Nonce issued under retired kid must still validate; got {retiredResult.FailureReason}.");
+            $"Nonce issued under Retiring kid must still validate; got {retiredResult.FailureReason}.");
         Assert.AreEqual("kid-A", retiredResult.Payload!.Kid);
 
-        //Fresh issuance under the rotated resolver picks up the new kid.
-        string nonceUnderB = await DefaultDpopNonceIssuance.IssueAsync(
-            DefaultAudience,
-            TestTenant,
-            new RequestContext(),
-            resolver.ResolveAsync,
-            TimeProvider,
-            TestHostShell.Base64UrlEncoder,
-            TestHostShell.MemoryPool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+        //Fresh issuance under the rotated keyset picks up the new Current kid.
+        string nonceUnderB = await IssueAsync(keySet).ConfigureAwait(false);
 
-        DpopNonceValidationResult currentResult = await DefaultDpopNonceValidation.ValidateAsync(
-            nonceUnderB,
-            DefaultAudience,
-            TestTenant,
-            new RequestContext(),
-            resolver.ResolveAsync,
-            TimeProvider,
-            WellKnownDpopValues.DefaultNonceValidityWindow,
-            TestHostShell.Base64UrlDecoder,
-            TestHostShell.MemoryPool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+        DpopNonceValidationResult currentResult = await ValidateAsync(keySet, nonceUnderB).ConfigureAwait(false);
 
         Assert.IsTrue(currentResult.IsSuccess);
         Assert.AreEqual("kid-B", currentResult.Payload!.Kid);
     }
 
 
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKeyMemory ownership transfers to the returned SymmetricKey, which the caller disposes.")]
+    [TestMethod]
+    public async Task NonceUnderHistoricalKidNoLongerValidates()
+    {
+        //After a key is archived from Retiring to Historical, nonces signed
+        //under it are rejected — the slot-membership check excludes Historical.
+        HmacKey keyA = new() { Kid = "kid-A", Material = CreateHmacKey() };
+        InProcessKeySet<HmacKey> keySet = new(new KeySet<HmacKey> { Current = [keyA] });
+
+        string nonceUnderA = await IssueAsync(keySet).ConfigureAwait(false);
+
+        HmacKey keyB = new() { Kid = "kid-B", Material = CreateHmacKey() };
+        keySet.AddIncoming(keyB);
+        keySet.PromoteIncomingToCurrent("kid-B");
+        keySet.RetireCurrent("kid-A");
+        keySet.ArchiveRetiring("kid-A");
+
+        DpopNonceValidationResult result = await ValidateAsync(keySet, nonceUnderA).ConfigureAwait(false);
+
+        Assert.AreEqual(DpopNonceValidationFailureReason.UnknownKid, result.FailureReason,
+            "Nonce signed under a Historical kid must be rejected.");
+    }
+
+
+    private async Task<string> IssueAsync(InProcessKeySet<HmacKey> keySet) =>
+        await DefaultDpopNonceIssuance.IssueAsync(
+            DefaultAudience,
+            TestTenant,
+            new RequestContext(),
+            (tenantId, ctx, ct) => ValueTask.FromResult(keySet.Snapshot()),
+            selectHmacKey: null,
+            (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveByKid(kid)),
+            TimeProvider,
+            TestHostShell.Base64UrlEncoder,
+            TestHostShell.MemoryPool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+
+    private async Task<DpopNonceValidationResult> ValidateAsync(
+        InProcessKeySet<HmacKey> keySet, string nonce) =>
+        await DefaultDpopNonceValidation.ValidateAsync(
+            nonce,
+            DefaultAudience,
+            TestTenant,
+            new RequestContext(),
+            (tenantId, ctx, ct) => ValueTask.FromResult(keySet.Snapshot()),
+            (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveByKid(kid)),
+            TimeProvider,
+            WellKnownDpopValues.DefaultNonceValidityWindow,
+            TestHostShell.Base64UrlDecoder,
+            TestHostShell.MemoryPool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKeyMemory ownership transfers to the returned SymmetricKey, which is owned by the InProcessKeySet for the lifetime of the test.")]
     private static SymmetricKey CreateHmacKey()
     {
         IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(32);

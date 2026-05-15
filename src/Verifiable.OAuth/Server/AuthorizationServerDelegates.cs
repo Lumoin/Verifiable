@@ -117,27 +117,40 @@ public delegate ValueTask<(OAuthFlowState? State, int StepCount)> LoadServerFlow
 
 
 /// <summary>
-/// Resolves a private signing key by identifier. The signing key is scoped to the
-/// registration that owns it; the registration is already tenant-scoped, so this
-/// delegate does not take a tenant parameter directly.
+/// Resolves a private signing key by identifier. Parallel to
+/// <see cref="ResolveServerHmacKeyDelegate"/> for symmetric HMAC keys —
+/// pure byte-loading with no rotation or selection logic. The kid is chosen
+/// at the call site by <see cref="SelectSigningKeyDelegate"/> (or its default).
 /// </summary>
 /// <remarks>
+/// <para>
 /// Return <see langword="null"/> when the key is unavailable — the handler returns
 /// <c>server_error</c> without leaking key store details.
+/// </para>
+/// <para>
+/// The <paramref name="tenantId"/> parameter enables per-tenant key isolation;
+/// applications that don't need it ignore the value. Production deployments
+/// backing this delegate with an HSM or KMS typically scope key handles by tenant.
+/// </para>
 /// </remarks>
 public delegate ValueTask<PrivateKeyMemory?> ServerSigningKeyResolverDelegate(
     string keyId,
+    TenantId tenantId,
     RequestContext context,
     CancellationToken cancellationToken);
 
 
 /// <summary>
-/// Resolves a public verification key by identifier. The verification key is scoped
-/// to the registration that publishes it; the registration is already tenant-scoped,
-/// so this delegate does not take a tenant parameter directly.
+/// Resolves a public verification key by identifier. Mirrors
+/// <see cref="ServerSigningKeyResolverDelegate"/> for the verification side.
 /// </summary>
+/// <remarks>
+/// The <paramref name="tenantId"/> parameter enables per-tenant key isolation;
+/// applications that don't need it ignore the value.
+/// </remarks>
 public delegate ValueTask<PublicKeyMemory?> ServerVerificationKeyResolverDelegate(
     string keyId,
+    TenantId tenantId,
     RequestContext context,
     CancellationToken cancellationToken);
 

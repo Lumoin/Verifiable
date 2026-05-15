@@ -288,7 +288,7 @@ internal sealed class AuthorizationServerFeatureTests
         //Validate names the missing slot rather than the populated one.
         AuthorizationServerCryptography cryptography = new()
         {
-            SigningKeyResolver = (keyId, ctx, ct) =>
+            SigningKeyResolver = (keyId, tenantId, ctx, ct) =>
                 ValueTask.FromResult<Verifiable.Cryptography.PrivateKeyMemory?>(null)
             //VerificationKeyResolver deliberately omitted.
         };

@@ -1,33 +1,32 @@
-using System.Threading;
-using System.Threading.Tasks;
+using Verifiable.OAuth.Server.Keys;
 
 namespace Verifiable.OAuth.Server;
 
 /// <summary>
-/// Resolves a server-held HMAC key for nonce issuance or validation,
-/// parallel to <see cref="ServerSigningKeyResolverDelegate"/> for
-/// asymmetric signing keys.
+/// Loads the HMAC key material for a specific kid. Parallel to
+/// <see cref="ServerSigningKeyResolverDelegate"/> for asymmetric signing
+/// keys — pure byte-loading with no rotation or selection logic.
 /// </summary>
 /// <remarks>
 /// <para>
-/// When <paramref name="kid"/> is <see langword="null"/>, the resolver
-/// returns the current key chosen for new issuance and the kid that
-/// identifies it. When <paramref name="kid"/> is non-null, the resolver
-/// looks up the key with that specific identifier — used during
-/// validation where the kid was extracted from a presented artefact.
+/// The kid is chosen at the call site by <see cref="SelectHmacKeyDelegate"/>
+/// (issuance) or extracted from the wire artefact (validation), then passed
+/// here for material lookup. Returning <see langword="null"/> indicates the
+/// kid is unknown to the application's key store; the caller treats this
+/// as an operational failure (issuance) or a verification failure
+/// (validation).
 /// </para>
 /// <para>
-/// Returns <see langword="null"/> when the kid is unknown (key was rotated
-/// out, kid was never issued by this AS, etc.). The caller treats this
-/// as a validation failure.
+/// Implementations MUST cache in-process on the hot path; nonce issuance
+/// and validation invoke this delegate per request.
 /// </para>
 /// <para>
-/// Implementations MUST cache in-process on the hot path; the library's
-/// nonce issuance and validation paths invoke this delegate per request.
+/// The <paramref name="tenantId"/> parameter enables per-tenant key
+/// isolation; applications that don't need it ignore the value.
 /// </para>
 /// </remarks>
-public delegate ValueTask<HmacKeyResolution?> ResolveServerHmacKeyDelegate(
-    string? kid,
+public delegate ValueTask<HmacKey?> ResolveServerHmacKeyDelegate(
+    string kid,
     TenantId tenantId,
     RequestContext context,
     CancellationToken cancellationToken);

@@ -65,7 +65,8 @@ internal static class DpopTokenEndpointValidation
         if(server.Integration.ValidateDpopProofAsync is null
             || server.Integration.IssueDpopNonceAsync is null
             || server.Integration.ValidateDpopNonceAsync is null
-            || server.Integration.ResolveServerHmacKeyAsync is null)
+            || server.Integration.ResolveServerHmacKeyAsync is null
+            || server.Integration.GetHmacKeySetAsync is null)
         {
             return DpopValidationOutcome.Failure(ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,

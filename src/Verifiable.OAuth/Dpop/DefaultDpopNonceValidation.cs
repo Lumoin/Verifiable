@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Keys;
 
 namespace Verifiable.OAuth.Dpop;
 
@@ -14,22 +15,24 @@ namespace Verifiable.OAuth.Dpop;
 /// </summary>
 /// <remarks>
 /// Mirrors <see cref="DefaultDpopNonceIssuance.IssueAsync"/>: decodes the
-/// binary-packed format, looks up the kid'd key, recomputes the HMAC,
-/// verifies the audience hash and the issuedAt window. Cheap structural
-/// checks run first; the resolver and HMAC computation only run after the
-/// nonce has cleared the cheap checks.
+/// binary-packed format, checks slot membership for the extracted kid,
+/// looks up the kid'd key, recomputes the HMAC, verifies the audience hash
+/// and the issuedAt window. Cheap structural checks run first; the resolver
+/// and HMAC computation only run after the nonce has cleared the cheap
+/// checks.
 /// </remarks>
 public static class DefaultDpopNonceValidation
 {
     /// <summary>
     /// Validates a presented nonce against the expected audience and the
-    /// resolver's key set.
+    /// application's HMAC keyset.
     /// </summary>
     public static async ValueTask<DpopNonceValidationResult> ValidateAsync(
         string presentedNonce,
         Uri expectedAudience,
         TenantId tenantId,
         RequestContext context,
+        GetHmacKeySetDelegate getHmacKeySet,
         ResolveServerHmacKeyDelegate resolveServerHmacKey,
         TimeProvider timeProvider,
         TimeSpan validityWindow,
@@ -40,6 +43,7 @@ public static class DefaultDpopNonceValidation
         ArgumentException.ThrowIfNullOrEmpty(presentedNonce);
         ArgumentNullException.ThrowIfNull(expectedAudience);
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(getHmacKeySet);
         ArgumentNullException.ThrowIfNull(resolveServerHmacKey);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -122,17 +126,28 @@ public static class DefaultDpopNonceValidation
                 return DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.AudienceMismatch);
             }
 
+            //Slot-membership check — only Current and Retiring kids are valid for
+            //verification. Incoming kids are pre-published but not yet usable;
+            //Historical kids are archived. A presented nonce whose kid is outside
+            //the verification slots is rejected before incurring HMAC work.
+            KeySet<HmacKey> keySet = await getHmacKeySet(
+                tenantId, context, cancellationToken).ConfigureAwait(false);
+            if(!keySet.IsKidValidForVerification(kid))
+            {
+                return DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.UnknownKid);
+            }
+
             //Resolver lookup — could hit a backend (Vault, KMS) on cold cache.
-            HmacKeyResolution? resolution = await resolveServerHmacKey(
+            HmacKey? key = await resolveServerHmacKey(
                 kid, tenantId, context, cancellationToken).ConfigureAwait(false);
-            if(resolution is null)
+            if(key is null)
             {
                 return DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.UnknownKid);
             }
 
             //Recompute HMAC over the payload bytes and verify in constant time.
             ReadOnlyMemory<byte> hmacMessage = decoded[..payloadLength];
-            bool hmacValid = await resolution.Key.VerifyHmacAsync(
+            bool hmacValid = await key.Material.VerifyHmacAsync(
                 hmacMessage,
                 presentedHmacTag,
                 pool: memoryPool,

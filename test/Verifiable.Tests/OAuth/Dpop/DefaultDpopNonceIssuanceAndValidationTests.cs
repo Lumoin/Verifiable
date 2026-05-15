@@ -6,6 +6,7 @@ using Verifiable.Cryptography;
 using Verifiable.Microsoft;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Keys;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth.Dpop;
@@ -25,11 +26,10 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
     [TestMethod]
     public async Task IssueAsyncProducesValidatableNonce()
     {
-        using SymmetricKey hmacKey = CreateHmacKey();
-        InProcessHmacKeyResolver resolver = new(hmacKey, "kid-1");
+        InProcessKeySet<HmacKey> keySet = CreateKeySet("kid-1");
 
-        string nonce = await IssueAsync(resolver, DefaultAudience).ConfigureAwait(false);
-        DpopNonceValidationResult result = await ValidateAsync(resolver, nonce, DefaultAudience)
+        string nonce = await IssueAsync(keySet, DefaultAudience).ConfigureAwait(false);
+        DpopNonceValidationResult result = await ValidateAsync(keySet, nonce, DefaultAudience)
             .ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess,
@@ -44,11 +44,10 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
     [TestMethod]
     public async Task ValidateAsyncRejectsMalformedNonce()
     {
-        using SymmetricKey hmacKey = CreateHmacKey();
-        InProcessHmacKeyResolver resolver = new(hmacKey, "kid-1");
+        InProcessKeySet<HmacKey> keySet = CreateKeySet("kid-1");
 
         DpopNonceValidationResult result = await ValidateAsync(
-            resolver, "not-a-nonce", DefaultAudience).ConfigureAwait(false);
+            keySet, "not-a-nonce", DefaultAudience).ConfigureAwait(false);
 
         Assert.AreEqual(DpopNonceValidationFailureReason.Malformed, result.FailureReason);
     }
@@ -57,10 +56,9 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
     [TestMethod]
     public async Task ValidateAsyncRejectsTamperedNonce()
     {
-        using SymmetricKey hmacKey = CreateHmacKey();
-        InProcessHmacKeyResolver resolver = new(hmacKey, "kid-1");
+        InProcessKeySet<HmacKey> keySet = CreateKeySet("kid-1");
 
-        string nonce = await IssueAsync(resolver, DefaultAudience).ConfigureAwait(false);
+        string nonce = await IssueAsync(keySet, DefaultAudience).ConfigureAwait(false);
 
         //Decode, flip a byte inside the HMAC tag region (the last 32 bytes),
         //re-encode. Tampering after the encoded boundary catches the HMAC
@@ -72,7 +70,7 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
         string tampered = TestHostShell.Base64UrlEncoder(bytes.Span);
 
         DpopNonceValidationResult result = await ValidateAsync(
-            resolver, tampered, DefaultAudience).ConfigureAwait(false);
+            keySet, tampered, DefaultAudience).ConfigureAwait(false);
 
         Assert.AreEqual(DpopNonceValidationFailureReason.HmacMismatch, result.FailureReason);
     }
@@ -81,15 +79,14 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
     [TestMethod]
     public async Task ValidateAsyncRejectsExpiredNonce()
     {
-        using SymmetricKey hmacKey = CreateHmacKey();
-        InProcessHmacKeyResolver resolver = new(hmacKey, "kid-1");
+        InProcessKeySet<HmacKey> keySet = CreateKeySet("kid-1");
 
-        string nonce = await IssueAsync(resolver, DefaultAudience).ConfigureAwait(false);
+        string nonce = await IssueAsync(keySet, DefaultAudience).ConfigureAwait(false);
 
         //Advance past the validity window.
         TimeProvider.Advance(WellKnownDpopValues.DefaultNonceValidityWindow + TimeSpan.FromSeconds(1));
 
-        DpopNonceValidationResult result = await ValidateAsync(resolver, nonce, DefaultAudience)
+        DpopNonceValidationResult result = await ValidateAsync(keySet, nonce, DefaultAudience)
             .ConfigureAwait(false);
 
         Assert.AreEqual(DpopNonceValidationFailureReason.Expired, result.FailureReason);
@@ -99,13 +96,12 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
     [TestMethod]
     public async Task ValidateAsyncRejectsAudienceMismatch()
     {
-        using SymmetricKey hmacKey = CreateHmacKey();
-        InProcessHmacKeyResolver resolver = new(hmacKey, "kid-1");
+        InProcessKeySet<HmacKey> keySet = CreateKeySet("kid-1");
 
-        string nonce = await IssueAsync(resolver, DefaultAudience).ConfigureAwait(false);
+        string nonce = await IssueAsync(keySet, DefaultAudience).ConfigureAwait(false);
 
         DpopNonceValidationResult result = await ValidateAsync(
-            resolver,
+            keySet,
             nonce,
             new Uri("https://attacker.example.com/token")).ConfigureAwait(false);
 
@@ -116,31 +112,31 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
     [TestMethod]
     public async Task ValidateAsyncRejectsUnknownKid()
     {
-        using SymmetricKey issuerKey = CreateHmacKey();
-        InProcessHmacKeyResolver issuingResolver = new(issuerKey, "kid-issuing");
+        InProcessKeySet<HmacKey> issuingKeySet = CreateKeySet("kid-issuing");
 
-        string nonce = await IssueAsync(issuingResolver, DefaultAudience).ConfigureAwait(false);
+        string nonce = await IssueAsync(issuingKeySet, DefaultAudience).ConfigureAwait(false);
 
-        //A second resolver with a non-overlapping kid set rejects the nonce
+        //A second keyset with a non-overlapping kid set rejects the nonce
         //because the embedded kid is unknown to it.
-        using SymmetricKey otherKey = CreateHmacKey();
-        InProcessHmacKeyResolver foreignResolver = new(otherKey, "kid-foreign");
+        InProcessKeySet<HmacKey> foreignKeySet = CreateKeySet("kid-foreign");
 
         DpopNonceValidationResult result = await ValidateAsync(
-            foreignResolver, nonce, DefaultAudience).ConfigureAwait(false);
+            foreignKeySet, nonce, DefaultAudience).ConfigureAwait(false);
 
         Assert.AreEqual(DpopNonceValidationFailureReason.UnknownKid, result.FailureReason);
     }
 
 
     private async Task<string> IssueAsync(
-        InProcessHmacKeyResolver resolver,
+        InProcessKeySet<HmacKey> keySet,
         Uri audience) =>
         await DefaultDpopNonceIssuance.IssueAsync(
             audience,
             TestTenant,
             new RequestContext(),
-            resolver.ResolveAsync,
+            (tenantId, ctx, ct) => ValueTask.FromResult(keySet.Snapshot()),
+            selectHmacKey: null,
+            (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveByKid(kid)),
             TimeProvider,
             TestHostShell.Base64UrlEncoder,
             TestHostShell.MemoryPool,
@@ -148,7 +144,7 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
 
 
     private async Task<DpopNonceValidationResult> ValidateAsync(
-        InProcessHmacKeyResolver resolver,
+        InProcessKeySet<HmacKey> keySet,
         string presentedNonce,
         Uri expectedAudience) =>
         await DefaultDpopNonceValidation.ValidateAsync(
@@ -156,7 +152,8 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
             expectedAudience,
             TestTenant,
             new RequestContext(),
-            resolver.ResolveAsync,
+            (tenantId, ctx, ct) => ValueTask.FromResult(keySet.Snapshot()),
+            (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveByKid(kid)),
             TimeProvider,
             WellKnownDpopValues.DefaultNonceValidityWindow,
             TestHostShell.Base64UrlDecoder,
@@ -172,7 +169,15 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
             + WellKnownDpopValues.NonceHmacTagByteLength;
 
 
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKeyMemory ownership transfers to the returned SymmetricKey, which the caller disposes.")]
+    private static InProcessKeySet<HmacKey> CreateKeySet(string kid)
+    {
+        SymmetricKey material = CreateHmacKey();
+        HmacKey key = new() { Kid = kid, Material = material };
+        return new InProcessKeySet<HmacKey>(new KeySet<HmacKey> { Current = [key] });
+    }
+
+
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKeyMemory ownership transfers to the returned SymmetricKey, which is owned by the test's InProcessKeySet.")]
     private static SymmetricKey CreateHmacKey()
     {
         IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(32);

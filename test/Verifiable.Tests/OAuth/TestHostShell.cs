@@ -25,6 +25,7 @@ using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Audit;
+using Verifiable.OAuth.Server.Keys;
 using Verifiable.OAuth.Server.States;
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Validation;
@@ -84,7 +85,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> DecryptionKeys { get; } = new();
     private ConcurrentDictionary<string, string> RegistrationAccessTokens { get; } = new();
     private List<IDisposable> DpopOwnedDisposables { get; } = [];
-    private InProcessHmacKeyResolver? DpopHmacResolver { get; set; }
+    private InProcessKeySet<HmacKey>? DpopHmacKeySet { get; set; }
     private bool Disposed { get; set; }
 
     private global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServer? KestrelServer { get; set; }
@@ -490,12 +491,12 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         AuthorizationServerCryptography cryptography = new()
         {
-            SigningKeyResolver = (keyId, ctx, ct) =>
+            SigningKeyResolver = (keyId, tenantId, ctx, ct) =>
                 ValueTask.FromResult(
                     SigningKeys.TryGetValue(keyId, out PrivateKeyMemory? key)
                         ? key : null),
 
-            VerificationKeyResolver = (keyId, ctx, ct) =>
+            VerificationKeyResolver = (keyId, tenantId, ctx, ct) =>
                 ValueTask.FromResult(
                     VerificationKeys.TryGetValue(keyId, out PublicKeyMemory? key)
                         ? key : null),
@@ -1805,23 +1806,31 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>
     /// Wires up the AS-side DPoP delegates on the server's integration:
-    /// HMAC-key resolver, nonce issuance, nonce validation, and proof
-    /// validation. Returns the in-process HMAC resolver so tests can drive
-    /// rotation. Idempotent — repeat calls reuse the existing resolver.
+    /// HMAC-key byte-loader, HMAC keyset accessor, nonce issuance, nonce
+    /// validation, and proof validation. Returns the in-process HMAC
+    /// keyset so tests can drive slot transitions. Idempotent — repeat
+    /// calls reuse the existing keyset.
     /// </summary>
-    public InProcessHmacKeyResolver EnableDpop(string initialKid = "test-hmac-1")
+    public InProcessKeySet<HmacKey> EnableDpop(string initialKid = "test-hmac-1")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(initialKid);
 
-        if(DpopHmacResolver is not null)
+        if(DpopHmacKeySet is not null)
         {
-            return DpopHmacResolver;
+            return DpopHmacKeySet;
         }
 
-        SymmetricKey hmacKey = CreateFreshHmacKey(initialKid);
-        DpopHmacResolver = new InProcessHmacKeyResolver(hmacKey, initialKid);
+        SymmetricKey hmacMaterial = CreateFreshHmacKey(initialKid);
+        HmacKey initialKey = new() { Kid = initialKid, Material = hmacMaterial };
+        DpopHmacKeySet = new InProcessKeySet<HmacKey>(new KeySet<HmacKey>
+        {
+            Current = [initialKey]
+        });
 
-        Server.Integration.ResolveServerHmacKeyAsync = DpopHmacResolver.ResolveAsync;
+        Server.Integration.ResolveServerHmacKeyAsync = (kid, tenantId, ctx, ct) =>
+            ValueTask.FromResult(DpopHmacKeySet!.ResolveByKid(kid));
+        Server.Integration.GetHmacKeySetAsync = (tenantId, ctx, ct) =>
+            ValueTask.FromResult(DpopHmacKeySet!.Snapshot());
         Server.Integration.ValidateDpopProofAsync = (request, ct) =>
             DpopProofValidation.ValidateAsync(
                 request,
@@ -1838,7 +1847,9 @@ internal sealed class TestHostShell: IAsyncDisposable
                 audience,
                 tenantId,
                 ctx,
-                DpopHmacResolver.ResolveAsync,
+                Server.Integration.GetHmacKeySetAsync!,
+                Server.Integration.SelectHmacKeyAsync,
+                Server.Integration.ResolveServerHmacKeyAsync!,
                 Time,
                 Base64UrlEncoder,
                 MemoryPool,
@@ -1849,34 +1860,84 @@ internal sealed class TestHostShell: IAsyncDisposable
                 audience,
                 tenantId,
                 ctx,
-                DpopHmacResolver.ResolveAsync,
+                Server.Integration.GetHmacKeySetAsync!,
+                Server.Integration.ResolveServerHmacKeyAsync!,
                 Time,
                 WellKnownDpopValues.DefaultNonceValidityWindow,
                 Base64UrlDecoder,
                 MemoryPool,
                 ct);
 
-        return DpopHmacResolver;
+        return DpopHmacKeySet;
     }
 
 
     /// <summary>
-    /// Rotates the AS-side HMAC key used to sign nonces. Returns the new key's
-    /// kid. <see cref="EnableDpop"/> must have been called first.
+    /// Convenience for tests: rotate the DPoP HMAC key by adding a new
+    /// Incoming key, promoting it to Current, and retiring the previous
+    /// Current keys. Returns the new key's kid. <see cref="EnableDpop"/>
+    /// must have been called first.
     /// </summary>
     public string RotateDpopHmacKey(string newKid)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(newKid);
-        if(DpopHmacResolver is null)
+        if(DpopHmacKeySet is null)
         {
             throw new InvalidOperationException(
                 "EnableDpop must be called before RotateDpopHmacKey.");
         }
 
-        SymmetricKey newKey = CreateFreshHmacKey(newKid);
-        DpopHmacResolver.Rotate(newKey, newKid);
+        SymmetricKey newMaterial = CreateFreshHmacKey(newKid);
+        HmacKey newKey = new() { Kid = newKid, Material = newMaterial };
+
+        DpopHmacKeySet.AddIncoming(newKey);
+        DpopHmacKeySet.PromoteIncomingToCurrent(newKid);
+
+        KeySet<HmacKey> snap = DpopHmacKeySet.Snapshot();
+        foreach(HmacKey old in snap.Current)
+        {
+            if(!string.Equals(old.Kid, newKid, StringComparison.Ordinal))
+            {
+                DpopHmacKeySet.RetireCurrent(old.Kid);
+            }
+        }
+
         return newKid;
     }
+
+
+    /// <summary>
+    /// Adds a key to the DPoP HMAC <c>Incoming</c> slot without promoting.
+    /// Used by slot-transition rotation tests.
+    /// </summary>
+    public HmacKey AddIncomingDpopHmacKey(string kid)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(kid);
+        if(DpopHmacKeySet is null)
+        {
+            throw new InvalidOperationException(
+                "EnableDpop must be called before AddIncomingDpopHmacKey.");
+        }
+        SymmetricKey material = CreateFreshHmacKey(kid);
+        HmacKey key = new() { Kid = kid, Material = material };
+        DpopHmacKeySet.AddIncoming(key);
+        return key;
+    }
+
+
+    /// <summary>Promotes a kid from <c>Incoming</c> to <c>Current</c>.</summary>
+    public void PromoteIncomingDpopHmacKey(string kid) =>
+        DpopHmacKeySet!.PromoteIncomingToCurrent(kid);
+
+
+    /// <summary>Moves a kid from <c>Current</c> to <c>Retiring</c>.</summary>
+    public void RetireCurrentDpopHmacKey(string kid) =>
+        DpopHmacKeySet!.RetireCurrent(kid);
+
+
+    /// <summary>Archives a kid from <c>Retiring</c> to <c>Historical</c>.</summary>
+    public void ArchiveRetiringDpopHmacKey(string kid) =>
+        DpopHmacKeySet!.ArchiveRetiring(kid);
 
 
     /// <summary>
