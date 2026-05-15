@@ -85,7 +85,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> DecryptionKeys { get; } = new();
     private ConcurrentDictionary<string, string> RegistrationAccessTokens { get; } = new();
     private List<IDisposable> DpopOwnedDisposables { get; } = [];
-    private InProcessKeySet<HmacKey>? DpopHmacKeySet { get; set; }
+    private InProcessKeySet? DpopHmacKeySet { get; set; }
     private bool Disposed { get; set; }
 
     private global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServer? KestrelServer { get; set; }
@@ -1811,7 +1811,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// keyset so tests can drive slot transitions. Idempotent — repeat
     /// calls reuse the existing keyset.
     /// </summary>
-    public InProcessKeySet<HmacKey> EnableDpop(string initialKid = "test-hmac-1")
+    public InProcessKeySet EnableDpop(string initialKid = "test-hmac-1")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(initialKid);
 
@@ -1821,14 +1821,12 @@ internal sealed class TestHostShell: IAsyncDisposable
         }
 
         SymmetricKey hmacMaterial = CreateFreshHmacKey(initialKid);
-        HmacKey initialKey = new() { Kid = initialKid, Material = hmacMaterial };
-        DpopHmacKeySet = new InProcessKeySet<HmacKey>(new KeySet<HmacKey>
-        {
-            Current = [initialKey]
-        });
+        KeyId initialKidValue = new(initialKid);
+        DpopHmacKeySet = new InProcessKeySet();
+        DpopHmacKeySet.AddCurrent(initialKidValue, hmacMaterial);
 
         Server.Integration.ResolveServerHmacKeyAsync = (kid, tenantId, ctx, ct) =>
-            ValueTask.FromResult(DpopHmacKeySet!.ResolveByKid(kid));
+            ValueTask.FromResult(DpopHmacKeySet!.ResolveMaterial(kid));
         Server.Integration.GetHmacKeySetAsync = (tenantId, ctx, ct) =>
             ValueTask.FromResult(DpopHmacKeySet!.Snapshot());
         Server.Integration.ValidateDpopProofAsync = (request, ct) =>
@@ -1878,7 +1876,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// Current keys. Returns the new key's kid. <see cref="EnableDpop"/>
     /// must have been called first.
     /// </summary>
-    public string RotateDpopHmacKey(string newKid)
+    public KeyId RotateDpopHmacKey(string newKid)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(newKid);
         if(DpopHmacKeySet is null)
@@ -1888,21 +1886,21 @@ internal sealed class TestHostShell: IAsyncDisposable
         }
 
         SymmetricKey newMaterial = CreateFreshHmacKey(newKid);
-        HmacKey newKey = new() { Kid = newKid, Material = newMaterial };
+        KeyId newKid_ = new(newKid);
 
-        DpopHmacKeySet.AddIncoming(newKey);
-        DpopHmacKeySet.PromoteIncomingToCurrent(newKid);
+        DpopHmacKeySet.AddIncoming(newKid_, newMaterial);
+        DpopHmacKeySet.PromoteIncomingToCurrent(newKid_);
 
-        KeySet<HmacKey> snap = DpopHmacKeySet.Snapshot();
-        foreach(HmacKey old in snap.Current)
+        KeySet snap = DpopHmacKeySet.Snapshot();
+        foreach(KeyId old in snap.Current)
         {
-            if(!string.Equals(old.Kid, newKid, StringComparison.Ordinal))
+            if(!old.Equals(newKid_))
             {
-                DpopHmacKeySet.RetireCurrent(old.Kid);
+                DpopHmacKeySet.RetireCurrent(old);
             }
         }
 
-        return newKid;
+        return newKid_;
     }
 
 
@@ -1910,7 +1908,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// Adds a key to the DPoP HMAC <c>Incoming</c> slot without promoting.
     /// Used by slot-transition rotation tests.
     /// </summary>
-    public HmacKey AddIncomingDpopHmacKey(string kid)
+    public KeyId AddIncomingDpopHmacKey(string kid)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(kid);
         if(DpopHmacKeySet is null)
@@ -1919,24 +1917,24 @@ internal sealed class TestHostShell: IAsyncDisposable
                 "EnableDpop must be called before AddIncomingDpopHmacKey.");
         }
         SymmetricKey material = CreateFreshHmacKey(kid);
-        HmacKey key = new() { Kid = kid, Material = material };
-        DpopHmacKeySet.AddIncoming(key);
-        return key;
+        KeyId kidValue = new(kid);
+        DpopHmacKeySet.AddIncoming(kidValue, material);
+        return kidValue;
     }
 
 
     /// <summary>Promotes a kid from <c>Incoming</c> to <c>Current</c>.</summary>
-    public void PromoteIncomingDpopHmacKey(string kid) =>
+    public void PromoteIncomingDpopHmacKey(KeyId kid) =>
         DpopHmacKeySet!.PromoteIncomingToCurrent(kid);
 
 
     /// <summary>Moves a kid from <c>Current</c> to <c>Retiring</c>.</summary>
-    public void RetireCurrentDpopHmacKey(string kid) =>
+    public void RetireCurrentDpopHmacKey(KeyId kid) =>
         DpopHmacKeySet!.RetireCurrent(kid);
 
 
     /// <summary>Archives a kid from <c>Retiring</c> to <c>Historical</c>.</summary>
-    public void ArchiveRetiringDpopHmacKey(string kid) =>
+    public void ArchiveRetiringDpopHmacKey(KeyId kid) =>
         DpopHmacKeySet!.ArchiveRetiring(kid);
 
 

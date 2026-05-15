@@ -8,28 +8,33 @@ using Verifiable.OAuth.Server.Keys;
 namespace Verifiable.Tests.OAuth.Dpop;
 
 /// <summary>
-/// Exercises <see cref="InProcessKeySet{TKey}"/>'s slot semantics with
-/// <see cref="HmacKey"/> as the concrete type. The slot transitions are
-/// parameter-uniform across <typeparamref name="TKey"/>; using HmacKey
-/// here mirrors the consumer that actually uses this primitive today.
+/// Exercises <see cref="InProcessKeySet"/>'s slot semantics: AddCurrent /
+/// AddIncoming / PromoteIncomingToCurrent / RetireCurrent / ArchiveRetiring
+/// transitions plus <see cref="InProcessKeySet.ResolveMaterial"/> material
+/// lookup. Structurally mirrors <see cref="Verifiable.OAuth.SigningKeySet"/>'s
+/// slot model.
 /// </summary>
+[SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKey ownership transfers from CreateHmacMaterial() to the InProcessKeySet via AddCurrent/AddIncoming; the keyset is held in a using and disposes all materials.")]
 [TestClass]
 internal sealed class InProcessKeySetTests
 {
     public TestContext TestContext { get; set; } = null!;
 
+    private static readonly KeyId KidA = new("kid-A");
+    private static readonly KeyId KidB = new("kid-B");
+    private static readonly KeyId KidC = new("kid-C");
+
 
     [TestMethod]
     public void AddIncomingPopulatesIncomingSlot()
     {
-        InProcessKeySet<HmacKey> keySet = new();
-        HmacKey key = NewKey("kid-1");
+        using InProcessKeySet keySet = new();
 
-        keySet.AddIncoming(key);
+        keySet.AddIncoming(KidA, CreateHmacMaterial());
 
-        KeySet<HmacKey> snap = keySet.Snapshot();
+        KeySet snap = keySet.Snapshot();
         Assert.HasCount(1, snap.Incoming);
-        Assert.AreEqual("kid-1", snap.Incoming[0].Kid);
+        Assert.AreEqual(KidA, snap.Incoming[0]);
         Assert.IsTrue(snap.Current.IsEmpty);
     }
 
@@ -37,29 +42,27 @@ internal sealed class InProcessKeySetTests
     [TestMethod]
     public void PromoteIncomingToCurrentMovesKey()
     {
-        InProcessKeySet<HmacKey> keySet = new();
-        keySet.AddIncoming(NewKey("kid-1"));
+        using InProcessKeySet keySet = new();
+        keySet.AddIncoming(KidA, CreateHmacMaterial());
 
-        keySet.PromoteIncomingToCurrent("kid-1");
+        keySet.PromoteIncomingToCurrent(KidA);
 
-        KeySet<HmacKey> snap = keySet.Snapshot();
+        KeySet snap = keySet.Snapshot();
         Assert.IsTrue(snap.Incoming.IsEmpty);
         Assert.HasCount(1, snap.Current);
-        Assert.AreEqual("kid-1", snap.Current[0].Kid);
+        Assert.AreEqual(KidA, snap.Current[0]);
     }
 
 
     [TestMethod]
     public void RetireCurrentMovesKeyToRetiring()
     {
-        InProcessKeySet<HmacKey> keySet = new(new KeySet<HmacKey>
-        {
-            Current = [NewKey("kid-1")]
-        });
+        using InProcessKeySet keySet = new();
+        keySet.AddCurrent(KidA, CreateHmacMaterial());
 
-        keySet.RetireCurrent("kid-1");
+        keySet.RetireCurrent(KidA);
 
-        KeySet<HmacKey> snap = keySet.Snapshot();
+        KeySet snap = keySet.Snapshot();
         Assert.IsTrue(snap.Current.IsEmpty);
         Assert.HasCount(1, snap.Retiring);
     }
@@ -68,14 +71,13 @@ internal sealed class InProcessKeySetTests
     [TestMethod]
     public void ArchiveRetiringMovesKeyToHistorical()
     {
-        InProcessKeySet<HmacKey> keySet = new(new KeySet<HmacKey>
-        {
-            Retiring = [NewKey("kid-1")]
-        });
+        using InProcessKeySet keySet = new();
+        keySet.AddCurrent(KidA, CreateHmacMaterial());
+        keySet.RetireCurrent(KidA);
 
-        keySet.ArchiveRetiring("kid-1");
+        keySet.ArchiveRetiring(KidA);
 
-        KeySet<HmacKey> snap = keySet.Snapshot();
+        KeySet snap = keySet.Snapshot();
         Assert.IsTrue(snap.Retiring.IsEmpty);
         Assert.HasCount(1, snap.Historical);
     }
@@ -84,59 +86,57 @@ internal sealed class InProcessKeySetTests
     [TestMethod]
     public void PromoteIncomingThrowsForUnknownKid()
     {
-        InProcessKeySet<HmacKey> keySet = new();
+        using InProcessKeySet keySet = new();
 
         Assert.ThrowsExactly<InvalidOperationException>(
-            () => keySet.PromoteIncomingToCurrent("kid-missing"));
+            () => keySet.PromoteIncomingToCurrent(new KeyId("kid-missing")));
     }
 
 
     [TestMethod]
     public void RetireCurrentThrowsForUnknownKid()
     {
-        InProcessKeySet<HmacKey> keySet = new();
+        using InProcessKeySet keySet = new();
 
         Assert.ThrowsExactly<InvalidOperationException>(
-            () => keySet.RetireCurrent("kid-missing"));
+            () => keySet.RetireCurrent(new KeyId("kid-missing")));
     }
 
 
     [TestMethod]
-    public void ResolveByKidFindsKeyInAnySlot()
+    public void ResolveMaterialFindsKeyAcrossAllSlots()
     {
-        HmacKey incoming = NewKey("k-incoming");
-        HmacKey current = NewKey("k-current");
-        HmacKey retiring = NewKey("k-retiring");
-        HmacKey historical = NewKey("k-historical");
+        using InProcessKeySet keySet = new();
+        SymmetricKey matA = CreateHmacMaterial();
+        SymmetricKey matB = CreateHmacMaterial();
+        SymmetricKey matC = CreateHmacMaterial();
 
-        InProcessKeySet<HmacKey> keySet = new(new KeySet<HmacKey>
-        {
-            Incoming = [incoming],
-            Current = [current],
-            Retiring = [retiring],
-            Historical = [historical]
-        });
+        //KidA: Incoming. KidB: Current → Retiring. KidC: never added.
+        keySet.AddIncoming(KidA, matA);
+        keySet.AddCurrent(KidB, matB);
+        keySet.RetireCurrent(KidB);
 
-        Assert.AreSame(incoming, keySet.ResolveByKid("k-incoming"));
-        Assert.AreSame(current, keySet.ResolveByKid("k-current"));
-        Assert.AreSame(retiring, keySet.ResolveByKid("k-retiring"));
-        Assert.AreSame(historical, keySet.ResolveByKid("k-historical"));
-        Assert.IsNull(keySet.ResolveByKid("k-unknown"));
+        Assert.AreSame(matA, keySet.ResolveMaterial(KidA));
+        Assert.AreSame(matB, keySet.ResolveMaterial(KidB));
+        Assert.IsNull(keySet.ResolveMaterial(KidC));
+
+        //Side material store retains entries through slot transitions —
+        //including past archival.
+        keySet.ArchiveRetiring(KidB);
+        Assert.AreSame(matB, keySet.ResolveMaterial(KidB));
     }
 
 
     [TestMethod]
     public void SnapshotIsImmutableAcrossTransitions()
     {
-        InProcessKeySet<HmacKey> keySet = new();
-        keySet.AddIncoming(NewKey("kid-1"));
+        using InProcessKeySet keySet = new();
+        keySet.AddIncoming(KidA, CreateHmacMaterial());
 
-        KeySet<HmacKey> snap1 = keySet.Snapshot();
+        KeySet snap1 = keySet.Snapshot();
 
-        keySet.PromoteIncomingToCurrent("kid-1");
+        keySet.PromoteIncomingToCurrent(KidA);
 
-        //snap1 was captured before the promotion and must still reflect
-        //the pre-promotion state.
         Assert.HasCount(1, snap1.Incoming);
         Assert.IsTrue(snap1.Current.IsEmpty);
     }
@@ -145,71 +145,62 @@ internal sealed class InProcessKeySetTests
     [TestMethod]
     public void IsKidValidForVerificationAcceptsCurrentAndRetiring()
     {
-        InProcessKeySet<HmacKey> keySet = new(new KeySet<HmacKey>
-        {
-            Incoming = [NewKey("k-incoming")],
-            Current = [NewKey("k-current")],
-            Retiring = [NewKey("k-retiring")],
-            Historical = [NewKey("k-historical")]
-        });
+        using InProcessKeySet keySet = new();
+        keySet.AddIncoming(new KeyId("k-incoming"), CreateHmacMaterial());
+        keySet.AddCurrent(new KeyId("k-current"), CreateHmacMaterial());
+        keySet.AddCurrent(new KeyId("k-retiring"), CreateHmacMaterial());
+        keySet.RetireCurrent(new KeyId("k-retiring"));
+        keySet.AddCurrent(new KeyId("k-historical"), CreateHmacMaterial());
+        keySet.RetireCurrent(new KeyId("k-historical"));
+        keySet.ArchiveRetiring(new KeyId("k-historical"));
 
-        KeySet<HmacKey> snap = keySet.Snapshot();
+        KeySet snap = keySet.Snapshot();
 
-        Assert.IsFalse(snap.IsKidValidForVerification("k-incoming"));
-        Assert.IsTrue(snap.IsKidValidForVerification("k-current"));
-        Assert.IsTrue(snap.IsKidValidForVerification("k-retiring"));
-        Assert.IsFalse(snap.IsKidValidForVerification("k-historical"));
-        Assert.IsFalse(snap.IsKidValidForVerification("k-unknown"));
+        Assert.IsFalse(snap.IsKidValidForVerification(new KeyId("k-incoming")));
+        Assert.IsTrue(snap.IsKidValidForVerification(new KeyId("k-current")));
+        Assert.IsTrue(snap.IsKidValidForVerification(new KeyId("k-retiring")));
+        Assert.IsFalse(snap.IsKidValidForVerification(new KeyId("k-historical")));
+        Assert.IsFalse(snap.IsKidValidForVerification(new KeyId("k-unknown")));
     }
 
 
     [TestMethod]
     public void ValidForVerificationEnumeratesCurrentAndRetiring()
     {
-        InProcessKeySet<HmacKey> keySet = new(new KeySet<HmacKey>
-        {
-            Incoming = [NewKey("k-incoming")],
-            Current = [NewKey("k-current")],
-            Retiring = [NewKey("k-retiring")],
-            Historical = [NewKey("k-historical")]
-        });
+        using InProcessKeySet keySet = new();
+        keySet.AddIncoming(new KeyId("k-incoming"), CreateHmacMaterial());
+        keySet.AddCurrent(new KeyId("k-current"), CreateHmacMaterial());
+        keySet.AddCurrent(new KeyId("k-retiring"), CreateHmacMaterial());
+        keySet.RetireCurrent(new KeyId("k-retiring"));
 
-        string[] valid = keySet.Snapshot().ValidForVerification()
-            .Select(k => k.Kid).ToArray();
+        KeyId[] valid = keySet.Snapshot().ValidForVerification().ToArray();
 
         Assert.HasCount(2, valid);
-        Assert.Contains("k-current", valid);
-        Assert.Contains("k-retiring", valid);
+        Assert.Contains(new KeyId("k-current"), valid);
+        Assert.Contains(new KeyId("k-retiring"), valid);
     }
 
 
     [TestMethod]
     public void PublishableEnumeratesIncomingCurrentRetiring()
     {
-        InProcessKeySet<HmacKey> keySet = new(new KeySet<HmacKey>
-        {
-            Incoming = [NewKey("k-incoming")],
-            Current = [NewKey("k-current")],
-            Retiring = [NewKey("k-retiring")],
-            Historical = [NewKey("k-historical")]
-        });
+        using InProcessKeySet keySet = new();
+        keySet.AddIncoming(new KeyId("k-incoming"), CreateHmacMaterial());
+        keySet.AddCurrent(new KeyId("k-current"), CreateHmacMaterial());
+        keySet.AddCurrent(new KeyId("k-retiring"), CreateHmacMaterial());
+        keySet.RetireCurrent(new KeyId("k-retiring"));
+        keySet.AddCurrent(new KeyId("k-historical"), CreateHmacMaterial());
+        keySet.RetireCurrent(new KeyId("k-historical"));
+        keySet.ArchiveRetiring(new KeyId("k-historical"));
 
-        string[] publishable = keySet.Snapshot().Publishable()
-            .Select(k => k.Kid).ToArray();
+        KeyId[] publishable = keySet.Snapshot().Publishable().ToArray();
 
         Assert.HasCount(3, publishable);
-        Assert.Contains("k-incoming", publishable);
-        Assert.Contains("k-current", publishable);
-        Assert.Contains("k-retiring", publishable);
-        Assert.DoesNotContain("k-historical", publishable);
+        Assert.Contains(new KeyId("k-incoming"), publishable);
+        Assert.Contains(new KeyId("k-current"), publishable);
+        Assert.Contains(new KeyId("k-retiring"), publishable);
+        Assert.DoesNotContain(new KeyId("k-historical"), publishable);
     }
-
-
-    private static HmacKey NewKey(string kid) => new()
-    {
-        Kid = kid,
-        Material = CreateHmacMaterial()
-    };
 
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKeyMemory ownership transfers to the returned SymmetricKey, owned by the InProcessKeySet under test.")]

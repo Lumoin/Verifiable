@@ -11,6 +11,7 @@ using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth.Dpop;
 
+[SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKey ownership transfers from CreateHmacKey() to the InProcessKeySet via AddCurrent/AddIncoming; the keyset is held in a using and disposes all materials.")]
 [TestClass]
 internal sealed class DpopRotationTests
 {
@@ -30,16 +31,17 @@ internal sealed class DpopRotationTests
         //in flight. The keyset keeps retired keys in the Retiring slot for the
         //overlap window; nonces signed under the retired kid still validate
         //while a fresh issuance under the new Current kid is wire-distinguishable.
-        HmacKey keyA = new() { Kid = "kid-A", Material = CreateHmacKey() };
-        InProcessKeySet<HmacKey> keySet = new(new KeySet<HmacKey> { Current = [keyA] });
+        using InProcessKeySet keySet = new();
+        KeyId kidA = new("kid-A");
+        keySet.AddCurrent(kidA, CreateHmacKey());
 
         string nonceUnderA = await IssueAsync(keySet).ConfigureAwait(false);
 
         //Rotate: kid-A → Retiring, kid-B → Current.
-        HmacKey keyB = new() { Kid = "kid-B", Material = CreateHmacKey() };
-        keySet.AddIncoming(keyB);
-        keySet.PromoteIncomingToCurrent("kid-B");
-        keySet.RetireCurrent("kid-A");
+        KeyId kidB = new("kid-B");
+        keySet.AddIncoming(kidB, CreateHmacKey());
+        keySet.PromoteIncomingToCurrent(kidB);
+        keySet.RetireCurrent(kidA);
 
         DpopNonceValidationResult retiredResult = await ValidateAsync(keySet, nonceUnderA).ConfigureAwait(false);
 
@@ -62,16 +64,17 @@ internal sealed class DpopRotationTests
     {
         //After a key is archived from Retiring to Historical, nonces signed
         //under it are rejected — the slot-membership check excludes Historical.
-        HmacKey keyA = new() { Kid = "kid-A", Material = CreateHmacKey() };
-        InProcessKeySet<HmacKey> keySet = new(new KeySet<HmacKey> { Current = [keyA] });
+        using InProcessKeySet keySet = new();
+        KeyId kidA = new("kid-A");
+        keySet.AddCurrent(kidA, CreateHmacKey());
 
         string nonceUnderA = await IssueAsync(keySet).ConfigureAwait(false);
 
-        HmacKey keyB = new() { Kid = "kid-B", Material = CreateHmacKey() };
-        keySet.AddIncoming(keyB);
-        keySet.PromoteIncomingToCurrent("kid-B");
-        keySet.RetireCurrent("kid-A");
-        keySet.ArchiveRetiring("kid-A");
+        KeyId kidB = new("kid-B");
+        keySet.AddIncoming(kidB, CreateHmacKey());
+        keySet.PromoteIncomingToCurrent(kidB);
+        keySet.RetireCurrent(kidA);
+        keySet.ArchiveRetiring(kidA);
 
         DpopNonceValidationResult result = await ValidateAsync(keySet, nonceUnderA).ConfigureAwait(false);
 
@@ -80,14 +83,14 @@ internal sealed class DpopRotationTests
     }
 
 
-    private async Task<string> IssueAsync(InProcessKeySet<HmacKey> keySet) =>
+    private async Task<string> IssueAsync(InProcessKeySet keySet) =>
         await DefaultDpopNonceIssuance.IssueAsync(
             DefaultAudience,
             TestTenant,
             new RequestContext(),
             (tenantId, ctx, ct) => ValueTask.FromResult(keySet.Snapshot()),
             selectHmacKey: null,
-            (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveByKid(kid)),
+            (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveMaterial(kid)),
             TimeProvider,
             TestHostShell.Base64UrlEncoder,
             TestHostShell.MemoryPool,
@@ -95,14 +98,14 @@ internal sealed class DpopRotationTests
 
 
     private async Task<DpopNonceValidationResult> ValidateAsync(
-        InProcessKeySet<HmacKey> keySet, string nonce) =>
+        InProcessKeySet keySet, string nonce) =>
         await DefaultDpopNonceValidation.ValidateAsync(
             nonce,
             DefaultAudience,
             TestTenant,
             new RequestContext(),
             (tenantId, ctx, ct) => ValueTask.FromResult(keySet.Snapshot()),
-            (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveByKid(kid)),
+            (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveMaterial(kid)),
             TimeProvider,
             WellKnownDpopValues.DefaultNonceValidityWindow,
             TestHostShell.Base64UrlDecoder,

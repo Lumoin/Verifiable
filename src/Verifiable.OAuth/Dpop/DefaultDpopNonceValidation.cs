@@ -87,7 +87,23 @@ public static class DefaultDpopNonceValidation
                 return DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.Malformed);
             }
 
-            string kid = Encoding.UTF8.GetString(decodedSpan.Slice(offset, kidLength));
+            //Reject zero-length kid before constructing a KeyId — its
+            //constructor rejects empty values.
+            if(kidLength == 0)
+            {
+                return DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.Malformed);
+            }
+
+            string kidString = Encoding.UTF8.GetString(decodedSpan.Slice(offset, kidLength));
+            KeyId kid;
+            try
+            {
+                kid = new KeyId(kidString);
+            }
+            catch(ArgumentException)
+            {
+                return DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.Malformed);
+            }
             offset += kidLength;
 
             long issuedAtUnixSeconds = BinaryPrimitives.ReadInt64BigEndian(decodedSpan[offset..]);
@@ -126,11 +142,10 @@ public static class DefaultDpopNonceValidation
                 return DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.AudienceMismatch);
             }
 
-            //Slot-membership check — only Current and Retiring kids are valid for
-            //verification. Incoming kids are pre-published but not yet usable;
-            //Historical kids are archived. A presented nonce whose kid is outside
-            //the verification slots is rejected before incurring HMAC work.
-            KeySet<HmacKey> keySet = await getHmacKeySet(
+            //Slot-membership check — only Current and Retiring kids are valid
+            //for verification. Incoming kids are pre-published but not yet
+            //usable; Historical kids are archived.
+            KeySet keySet = await getHmacKeySet(
                 tenantId, context, cancellationToken).ConfigureAwait(false);
             if(!keySet.IsKidValidForVerification(kid))
             {
@@ -138,16 +153,16 @@ public static class DefaultDpopNonceValidation
             }
 
             //Resolver lookup — could hit a backend (Vault, KMS) on cold cache.
-            HmacKey? key = await resolveServerHmacKey(
+            SymmetricKey? material = await resolveServerHmacKey(
                 kid, tenantId, context, cancellationToken).ConfigureAwait(false);
-            if(key is null)
+            if(material is null)
             {
                 return DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.UnknownKid);
             }
 
             //Recompute HMAC over the payload bytes and verify in constant time.
             ReadOnlyMemory<byte> hmacMessage = decoded[..payloadLength];
-            bool hmacValid = await key.Material.VerifyHmacAsync(
+            bool hmacValid = await material.VerifyHmacAsync(
                 hmacMessage,
                 presentedHmacTag,
                 pool: memoryPool,
@@ -159,7 +174,7 @@ public static class DefaultDpopNonceValidation
 
             return DpopNonceValidationResult.Success(new DpopNoncePayload
             {
-                Kid = kid,
+                Kid = kid.Value,
                 IssuedAt = issuedAt
             });
         }

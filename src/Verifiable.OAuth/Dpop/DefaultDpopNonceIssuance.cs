@@ -24,9 +24,7 @@ namespace Verifiable.OAuth.Dpop;
 /// </para>
 /// <para>
 /// Paired with <see cref="DefaultDpopNonceValidation.ValidateAsync"/>;
-/// both must agree on the format. Applications wanting a different wire
-/// shape (HTTP-signing binding, attestation-bound nonces, JWT-shaped
-/// nonces for human inspection) provide their own end-to-end pair.
+/// both must agree on the format.
 /// </para>
 /// </remarks>
 public static class DefaultDpopNonceIssuance
@@ -56,10 +54,10 @@ public static class DefaultDpopNonceIssuance
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
-        KeySet<HmacKey> keySet = await getHmacKeySet(
+        KeySet keySet = await getHmacKeySet(
             tenantId, context, cancellationToken).ConfigureAwait(false);
 
-        string? chosenKid = selectHmacKey is not null
+        KeyId? chosenKid = selectHmacKey is not null
             ? await selectHmacKey(keySet, WellKnownHmacPurposes.DpopNonce, tenantId, context, cancellationToken)
                 .ConfigureAwait(false)
             : DefaultSelectCurrent(keySet);
@@ -69,19 +67,20 @@ public static class DefaultDpopNonceIssuance
                 "No current HMAC key available for nonce issuance.");
         }
 
-        HmacKey? key = await resolveServerHmacKey(
-            chosenKid, tenantId, context, cancellationToken).ConfigureAwait(false);
-        if(key is null)
+        KeyId kid = chosenKid.Value;
+        SymmetricKey? material = await resolveServerHmacKey(
+            kid, tenantId, context, cancellationToken).ConfigureAwait(false);
+        if(material is null)
         {
             throw new InvalidOperationException(
-                $"HMAC key for kid '{chosenKid}' could not be resolved.");
+                $"HMAC key for kid '{kid.Value}' could not be resolved.");
         }
 
-        byte[] kidBytes = Encoding.UTF8.GetBytes(key.Kid);
+        byte[] kidBytes = Encoding.UTF8.GetBytes(kid.Value);
         if(kidBytes.Length > byte.MaxValue)
         {
             throw new InvalidOperationException(
-                $"Kid '{key.Kid}' is too long; the binary nonce format requires <=255 UTF-8 bytes.");
+                $"Kid '{kid.Value}' is too long; the binary nonce format requires <=255 UTF-8 bytes.");
         }
 
         long issuedAtUnixSeconds = timeProvider.GetUtcNow().ToUnixTimeSeconds();
@@ -125,7 +124,7 @@ public static class DefaultDpopNonceIssuance
         //HMAC over the first payloadLength bytes; result fills the trailing 32-byte tag region.
         ReadOnlyMemory<byte> hmacMessage = packedMemory[..payloadLength];
 
-        using HmacValue hmacTag = await key.Material.ComputeHmacAsync(
+        using HmacValue hmacTag = await material.ComputeHmacAsync(
             hmacMessage,
             outputByteLength: WellKnownDpopValues.NonceHmacTagByteLength,
             pool: memoryPool,
@@ -138,11 +137,11 @@ public static class DefaultDpopNonceIssuance
     }
 
 
-    private static string? DefaultSelectCurrent(KeySet<HmacKey> keySet)
+    private static KeyId? DefaultSelectCurrent(KeySet keySet)
     {
-        foreach(HmacKey k in keySet.Current)
+        foreach(KeyId kid in keySet.Current)
         {
-            return k.Kid;
+            return kid;
         }
         return null;
     }

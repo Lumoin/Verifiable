@@ -1,20 +1,20 @@
-using Verifiable.OAuth.Server.Keys;
+using Verifiable.Cryptography;
 
 namespace Verifiable.OAuth.Server;
 
 /// <summary>
-/// Loads the HMAC key material for a specific kid. Parallel to
-/// <see cref="ServerSigningKeyResolverDelegate"/> for asymmetric signing
-/// keys — pure byte-loading with no rotation or selection logic.
+/// Loads the symmetric key material for a specific <see cref="KeyId"/>.
+/// Parallel to <see cref="ServerSigningKeyResolverDelegate"/> for
+/// asymmetric signing keys — pure byte-loading with no rotation or
+/// selection logic.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The kid is chosen at the call site by <see cref="SelectHmacKeyDelegate"/>
-/// (issuance) or extracted from the wire artefact (validation), then passed
-/// here for material lookup. Returning <see langword="null"/> indicates the
-/// kid is unknown to the application's key store; the caller treats this
-/// as an operational failure (issuance) or a verification failure
-/// (validation).
+/// The kid is chosen at the call site by
+/// <see cref="Keys.SelectHmacKeyDelegate"/> (issuance) or extracted from
+/// the wire artefact (validation), then passed here for material lookup.
+/// Returning <see langword="null"/> indicates the kid is unknown to the
+/// application's key store.
 /// </para>
 /// <para>
 /// Implementations MUST cache in-process on the hot path; nonce issuance
@@ -25,8 +25,8 @@ namespace Verifiable.OAuth.Server;
 /// isolation; applications that don't need it ignore the value.
 /// </para>
 /// </remarks>
-public delegate ValueTask<HmacKey?> ResolveServerHmacKeyDelegate(
-    string kid,
+public delegate ValueTask<SymmetricKey?> ResolveServerHmacKeyDelegate(
+    KeyId kid,
     TenantId tenantId,
     RequestContext context,
     CancellationToken cancellationToken);
