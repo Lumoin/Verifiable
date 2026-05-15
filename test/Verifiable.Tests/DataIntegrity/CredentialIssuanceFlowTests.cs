@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using VDS.RDF.JsonLd;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
@@ -161,36 +160,6 @@ internal sealed class CredentialIssuanceFlowTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    /// <summary>
-    /// Creates a dotNetRdf document loader that delegates to our context resolver.
-    /// </summary>
-    private static Func<Uri, JsonLdLoaderOptions?, RemoteDocument> CreateDotNetRdfContextLoader(
-        ContextResolverDelegate? contextResolver)
-    {
-        return (uri, options) =>
-        {
-            string? contextJson = null;
-
-            if(contextResolver != null)
-            {
-                //Synchronously wait since dotNetRdf's loader is synchronous.
-                contextJson = contextResolver(uri, CancellationToken.None).AsTask().GetAwaiter().GetResult();
-            }
-
-            if(contextJson == null)
-            {
-                throw new JsonLdProcessorException(
-                    JsonLdErrorCode.LoadingDocumentFailed,
-                    $"Unknown context URI: {uri}");
-            }
-
-            return new RemoteDocument
-            {
-                DocumentUrl = uri,
-                Document = contextJson
-            };
-        };
-    }
 
 
     /// <summary>
