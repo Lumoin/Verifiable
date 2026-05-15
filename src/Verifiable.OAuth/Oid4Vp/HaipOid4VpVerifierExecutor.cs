@@ -223,7 +223,7 @@ public static class HaipOid4VpVerifierExecutor
                     "Tenant identifier not found in context.");
 
             PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
-                action.SigningKeyId.Value, tenantId, context, ct).ConfigureAwait(false);
+                action.SigningKeyId, tenantId, context, ct).ConfigureAwait(false);
 
             if(signingKey is null)
             {

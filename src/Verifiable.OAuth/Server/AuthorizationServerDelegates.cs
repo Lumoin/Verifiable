@@ -117,10 +117,11 @@ public delegate ValueTask<(OAuthFlowState? State, int StepCount)> LoadServerFlow
 
 
 /// <summary>
-/// Resolves a private signing key by identifier. Parallel to
+/// Resolves a private signing key by <see cref="KeyId"/>. Parallel to
 /// <see cref="ResolveServerHmacKeyDelegate"/> for symmetric HMAC keys —
 /// pure byte-loading with no rotation or selection logic. The kid is chosen
-/// at the call site by <see cref="SelectSigningKeyDelegate"/> (or its default).
+/// at the call site by <see cref="SelectSigningKeyDelegate"/> (or its default)
+/// and passed here as a typed identifier.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -134,14 +135,14 @@ public delegate ValueTask<(OAuthFlowState? State, int StepCount)> LoadServerFlow
 /// </para>
 /// </remarks>
 public delegate ValueTask<PrivateKeyMemory?> ServerSigningKeyResolverDelegate(
-    string keyId,
+    KeyId keyId,
     TenantId tenantId,
     RequestContext context,
     CancellationToken cancellationToken);
 
 
 /// <summary>
-/// Resolves a public verification key by identifier. Mirrors
+/// Resolves a public verification key by <see cref="KeyId"/>. Mirrors
 /// <see cref="ServerSigningKeyResolverDelegate"/> for the verification side.
 /// </summary>
 /// <remarks>
@@ -149,7 +150,7 @@ public delegate ValueTask<PrivateKeyMemory?> ServerSigningKeyResolverDelegate(
 /// applications that don't need it ignore the value.
 /// </remarks>
 public delegate ValueTask<PublicKeyMemory?> ServerVerificationKeyResolverDelegate(
-    string keyId,
+    KeyId keyId,
     TenantId tenantId,
     RequestContext context,
     CancellationToken cancellationToken);
