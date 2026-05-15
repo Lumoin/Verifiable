@@ -162,6 +162,32 @@ public static class AuthCodeServerFlowTransitions
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerTokenIssued"),
 
+                    //ServerRefreshTokenIssued + ServerTokenExchangeSucceeded →
+                    //ServerTokenIssued. Refresh-token rotation per RFC 9700 §2.2.2
+                    //replaces the loaded refresh state at the same flow id with the
+                    //new access-token issuance audit set. The new rotated refresh
+                    //token has already been side-saved at a fresh flow id by
+                    //BuildRefreshToken.BuildInputAsync; the old refresh token's
+                    //flow record persists only momentarily before
+                    //DeleteFlowStateAsync removes it.
+                    (ServerRefreshTokenIssuedState refresh, ServerTokenExchangeSucceeded token) =>
+                        Transition(
+                            new ServerTokenIssuedState
+                            {
+                                FlowId = refresh.FlowId,
+                                ExpectedIssuer = refresh.ExpectedIssuer,
+                                EnteredAt = token.IssuedAt,
+                                ExpiresAt = token.ExpiresAt,
+                                Kind = FlowKind.AuthCodeServer,
+                                IssuedTokens = token.IssuedTokens,
+                                SubjectId = refresh.SubjectId,
+                                Scope = refresh.Scope,
+                                IssuedAt = token.IssuedAt,
+                                Confirmation = token.Confirmation
+                            },
+                            StackAction<AuthCodeServerStackSymbol>.None,
+                            "ServerTokenIssued"),
+
                     //Terminal states produce no transition — the PDA halts.
                     (ServerTokenIssuedState, _) => null,
                     (ServerFlowFailedState, _) => null,

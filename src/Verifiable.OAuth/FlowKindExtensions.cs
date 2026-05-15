@@ -92,5 +92,16 @@ public static class FlowKindExtensions
         /// </summary>
         public static JtiReplayFlowKind JtiReplay =>
             JtiReplayFlowKind.Instance;
+
+
+        /// <summary>
+        /// Marker for refresh-token storage. The application's
+        /// <see cref="ResolveCorrelationKeyDelegate"/> matches on this kind
+        /// to look up a refresh token's persisted flow id from its
+        /// secondary index. See
+        /// <see cref="AuthCode.Server.RefreshTokenFlowKind"/>.
+        /// </summary>
+        public static AuthCode.Server.RefreshTokenFlowKind RefreshToken =>
+            AuthCode.Server.RefreshTokenFlowKind.Instance;
     }
 }

@@ -82,6 +82,13 @@ public static class PolicyContextKeys
     public static readonly string IdTokenLifetime = "policy.idTokenLifetime";
 
     /// <summary>
+    /// Default lifetime of refresh tokens issued at the token endpoint per
+    /// RFC 6749 §6. Value type: <see cref="TimeSpan"/>. Audit row:
+    /// "Refresh token lifetime".
+    /// </summary>
+    public static readonly string RefreshTokenLifetime = "policy.refreshTokenLifetime";
+
+    /// <summary>
     /// Lifetime of <c>request_uri</c> handles issued by PAR per RFC 9126 §2.2.
     /// Value type: <see cref="TimeSpan"/>. Audit row: "AuthCode PAR
     /// <c>request_uri</c> lifetime".

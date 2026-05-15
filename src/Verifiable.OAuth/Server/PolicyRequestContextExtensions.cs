@@ -134,6 +134,23 @@ public static class PolicyRequestContextExtensions
 
 
         /// <summary>
+        /// Gets the default refresh-token lifetime per RFC 6749 §6. Defaults
+        /// to 30 days. Deployments range from 24 hours (high-security) to
+        /// 90 days (long-lived sessions); per-deployment override via the
+        /// policy resolver.
+        /// </summary>
+        public TimeSpan RefreshTokenLifetime =>
+            context.TryGetValue(PolicyContextKeys.RefreshTokenLifetime, out object? v)
+                && v is TimeSpan t ? t : TimeSpan.FromDays(30);
+
+        /// <summary>Sets the default refresh-token lifetime.</summary>
+        public void SetRefreshTokenLifetime(TimeSpan value)
+        {
+            context[PolicyContextKeys.RefreshTokenLifetime] = value;
+        }
+
+
+        /// <summary>
         /// Gets the <c>request_uri</c> handle lifetime issued by PAR. Defaults
         /// to 60 seconds (HAIP / FAPI 2.0 alignment).
         /// </summary>

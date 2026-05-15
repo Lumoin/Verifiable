@@ -61,6 +61,16 @@ public sealed class AuthorizationServerIntegration
     public SaveServerFlowStateDelegate? SaveFlowStateAsync { get; set; }
 
     /// <summary>
+    /// Deletes a previously-saved flow state, scoped by tenant. Required
+    /// when the registration uses refresh-token grant
+    /// (<see cref="ServerCapabilityName.AuthorizationCode"/> capability
+    /// implicitly enables refresh per RFC 6749 §6) so the AS can rotate
+    /// refresh tokens per RFC 9700 §2.2.2. Optional otherwise; flows that
+    /// never invalidate state can leave this null.
+    /// </summary>
+    public DeleteServerFlowStateDelegate? DeleteFlowStateAsync { get; set; }
+
+    /// <summary>
     /// Loads an <see cref="OAuthFlowState"/> and step count by the internal
     /// <c>flowId</c>. Required. The key has already been resolved from any
     /// external handle by <see cref="ResolveCorrelationKeyAsync"/>.

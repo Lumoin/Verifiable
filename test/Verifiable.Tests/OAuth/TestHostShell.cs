@@ -78,6 +78,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     private ConcurrentDictionary<string, string> CodeIndex { get; } = new();
     private ConcurrentDictionary<string, string> JtiIndex { get; } = new();
     private ConcurrentDictionary<string, string> AccessTokenIndex { get; } = new();
+    private ConcurrentDictionary<string, string> RefreshTokenIndex { get; } = new();
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> SigningKeys { get; } = new();
     private ConcurrentDictionary<KeyId, PublicKeyMemory> VerificationKeys { get; } = new();
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> DecryptionKeys { get; } = new();
@@ -206,6 +207,20 @@ internal sealed class TestHostShell: IAsyncDisposable
                     Registrations.TryGetValue(tenantId, out ClientRecord? reg)
                         ? reg : null),
 
+            DeleteFlowStateAsync = (tenantId, flowId, ctx, ct) =>
+            {
+                //Refresh-token rotation invokes this to invalidate the
+                //presented refresh state. Also remove from the secondary
+                //refresh-token index so the next presentation of the rotated-
+                //out token cleanly fails the correlation lookup.
+                if(FlowStates.TryRemove(flowId, out var removed)
+                    && removed.State is ServerRefreshTokenIssuedState removedRefresh)
+                {
+                    RefreshTokenIndex.TryRemove(removedRefresh.RefreshToken, out _);
+                }
+                return ValueTask.CompletedTask;
+            },
+
             SaveFlowStateAsync = (tenantId, flowId, state, stepCount, ctx, ct) =>
             {
                 FlowStates[flowId] = (state, stepCount);
@@ -268,6 +283,13 @@ internal sealed class TestHostShell: IAsyncDisposable
 
                         break;
                     }
+                    case ServerRefreshTokenIssuedState refresh:
+                    {
+                        //Refresh tokens index by their wire string. Rotation
+                        //replaces the entry on every refresh-grant call.
+                        RefreshTokenIndex[refresh.RefreshToken] = flowId;
+                        break;
+                    }
                 }
 
                 return ValueTask.CompletedTask;
@@ -289,6 +311,15 @@ internal sealed class TestHostShell: IAsyncDisposable
                     return ValueTask.FromResult<string?>(
                         JtiIndex.TryGetValue(externalHandle, out string? jtiFlowId)
                             ? jtiFlowId : null);
+                }
+
+                //Refresh-token grant — the endpoint Kind is FlowKind.RefreshToken
+                //and the external handle is the opaque refresh-token string.
+                if(flowKind == FlowKind.RefreshToken)
+                {
+                    return ValueTask.FromResult<string?>(
+                        RefreshTokenIndex.TryGetValue(externalHandle, out string? refreshFlowId)
+                            ? refreshFlowId : null);
                 }
 
                 //Try each secondary index. The application knows which handle

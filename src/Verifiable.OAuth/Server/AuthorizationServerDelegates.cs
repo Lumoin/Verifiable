@@ -61,6 +61,32 @@ public delegate ValueTask SaveServerFlowStateDelegate(
 
 
 /// <summary>
+/// Deletes a previously-saved flow state, scoped by tenant.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Required for protocol paths that rotate or invalidate state — most
+/// notably refresh-token rotation per
+/// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.2.2">RFC 9700 §2.2.2</see>.
+/// On a successful refresh exchange the AS invalidates the presented
+/// refresh token by calling this delegate against the token's flow id;
+/// the application's lambda removes the secondary-index entry and the
+/// flow record from storage.
+/// </para>
+/// <para>
+/// Implementations are idempotent: a delete against an unknown
+/// <paramref name="correlationKey"/> is a no-op, not an error. The
+/// dispatcher relies on this for clean retry semantics.
+/// </para>
+/// </remarks>
+public delegate ValueTask DeleteServerFlowStateDelegate(
+    TenantId tenantId,
+    string correlationKey,
+    RequestContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
 /// Loads an <see cref="OAuthFlowState"/> and step count from durable storage by
 /// correlation key, scoped by tenant.
 /// </summary>

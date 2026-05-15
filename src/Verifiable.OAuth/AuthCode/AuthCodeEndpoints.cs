@@ -117,6 +117,14 @@ public static class AuthCodeEndpoints
             endpoints.Add(BuildToken());
         }
 
+        //Refresh-token grant per RFC 6749 §6 is enabled whenever the
+        //registration allows AuthorizationCode capability. RFC 9700 §2.2.2
+        //rotation is enforced unconditionally on every successful refresh.
+        if(registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode))
+        {
+            endpoints.Add(BuildRefreshToken());
+        }
+
         if(registration.IsCapabilityAllowed(ServerCapabilityName.TokenRevocation))
         {
             endpoints.Add(BuildRevocation());
@@ -1232,129 +1240,24 @@ public static class AuthCodeEndpoints
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
-                //RFC 9449 DPoP enforcement at the token endpoint. Runs before any
-                //token-producer work so a malformed or replayed proof rejects without
-                //touching signing keys or storage beyond the JTI seen marker.
+                //RFC 9449 DPoP enforcement at the token endpoint. The helper
+                //returns a shaped failure response on any rejection path
+                //(missing proof, nonce challenge, invalid proof, jti replay)
+                //and the established Confirmation on success. Code-grant
+                //passes expectedThumbprint=null because the binding is being
+                //established here; refresh-grant verifies against the stored
+                //thumbprint in BuildRefreshToken.
                 bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
-                string? dpopProofString = null;
-                context.IncomingRequest?.Headers.TryGetSingle(
-                    WellKnownHttpHeaderNames.DPoP, out dpopProofString);
+                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
+                    server, context, registration, issuerUri, now,
+                    expectedThumbprint: null, dpopRequired, ct).ConfigureAwait(false);
 
-                ConfirmationMethod? confirmation = null;
-                if(dpopProofString is not null || dpopRequired)
+                if(!dpopOutcome.IsSuccess)
                 {
-                    if(server.Integration.ValidateDpopProofAsync is null
-                        || server.Integration.IssueDpopNonceAsync is null
-                        || server.Integration.ValidateDpopNonceAsync is null
-                        || server.Integration.ResolveServerHmacKeyAsync is null)
-                    {
-                        return (null, ServerHttpResponse.ServerError(
-                            OAuthErrors.ServerError,
-                            "DPoP enforcement is required by policy but DPoP delegates are not wired."));
-                    }
-
-                    if(dpopProofString is null)
-                    {
-                        string freshNonce = await server.Integration.IssueDpopNonceAsync(
-                            issuerUri, registration.TenantId, context, ct).ConfigureAwait(false);
-                        return (null, ServerHttpResponse
-                            .BadRequest(WellKnownDpopValues.UseDpopNonceError, "DPoP proof required.")
-                            .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
-                    }
-
-                    string tokenEndpointHtu = $"{issuerUri.GetLeftPart(UriPartial.Authority)}{context.IncomingRequest!.Path}";
-                    DpopProofValidationRequest validationRequest = new()
-                    {
-                        Proof = dpopProofString,
-                        HttpMethod = WellKnownHttpMethods.Post,
-                        HttpUrl = tokenEndpointHtu,
-                        NonceRequired = false
-                    };
-
-                    DpopValidationResult proofResult = await server.Integration.ValidateDpopProofAsync(
-                        validationRequest, ct).ConfigureAwait(false);
-
-                    if(!proofResult.IsSuccess)
-                    {
-                        if(proofResult.FailureReason is DpopValidationFailureReason.NonceMissing
-                            or DpopValidationFailureReason.NonceMismatch)
-                        {
-                            string freshNonce = await server.Integration.IssueDpopNonceAsync(
-                                issuerUri, registration.TenantId, context, ct).ConfigureAwait(false);
-                            return (null, ServerHttpResponse
-                                .BadRequest(WellKnownDpopValues.UseDpopNonceError, "DPoP nonce required.")
-                                .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
-                        }
-                        return (null, ServerHttpResponse.BadRequest(
-                            WellKnownDpopValues.InvalidDpopProofError,
-                            $"DPoP proof validation failed: {proofResult.FailureReason}."));
-                    }
-
-                    if(proofResult.Claims!.Nonce is not null)
-                    {
-                        DpopNonceValidationResult nonceResult = await server.Integration.ValidateDpopNonceAsync(
-                            proofResult.Claims.Nonce, issuerUri, registration.TenantId, context, ct)
-                            .ConfigureAwait(false);
-                        if(!nonceResult.IsSuccess)
-                        {
-                            string freshNonce = await server.Integration.IssueDpopNonceAsync(
-                                issuerUri, registration.TenantId, context, ct).ConfigureAwait(false);
-                            return (null, ServerHttpResponse
-                                .BadRequest(WellKnownDpopValues.UseDpopNonceError,
-                                    $"DPoP nonce invalid: {nonceResult.FailureReason}.")
-                                .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
-                        }
-                    }
-                    else if(dpopRequired)
-                    {
-                        string freshNonce = await server.Integration.IssueDpopNonceAsync(
-                            issuerUri, registration.TenantId, context, ct).ConfigureAwait(false);
-                        return (null, ServerHttpResponse
-                            .BadRequest(WellKnownDpopValues.UseDpopNonceError, "DPoP nonce required.")
-                            .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
-                    }
-
-                    //JTI replay check. Storage-backed; only after signature + nonce succeed.
-                    string jtiCorrelationKey = $"{issuerUri.OriginalString}:{proofResult.Claims.Jti}";
-                    if(server.Integration.ResolveCorrelationKeyAsync is not null)
-                    {
-                        string? existingJtiFlowId = await server.Integration.ResolveCorrelationKeyAsync(
-                            registration.TenantId, FlowKind.JtiReplay, jtiCorrelationKey, context, ct)
-                            .ConfigureAwait(false);
-                        if(existingJtiFlowId is not null)
-                        {
-                            return (null, ServerHttpResponse.BadRequest(
-                                WellKnownDpopValues.InvalidDpopProofError,
-                                "DPoP proof jti has been seen previously."));
-                        }
-                    }
-
-                    if(server.Integration.SaveFlowStateAsync is not null)
-                    {
-                        JtiSeenState jtiState = new()
-                        {
-                            FlowId = Guid.NewGuid().ToString("N"),
-                            ExpectedIssuer = issuerUri.OriginalString,
-                            EnteredAt = now,
-                            ExpiresAt = now + WellKnownDpopValues.DefaultReplayWindow,
-                            Kind = FlowKind.JtiReplay,
-                            Issuer = issuerUri.OriginalString,
-                            Jti = proofResult.Claims.Jti,
-                            SeenAt = now
-                        };
-                        await server.Integration.SaveFlowStateAsync(
-                            registration.TenantId, jtiCorrelationKey, jtiState, stepCount: 0, context, ct)
-                            .ConfigureAwait(false);
-                    }
-
-                    if(proofResult.JwkThumbprint is not null)
-                    {
-                        confirmation = new ConfirmationMethod
-                        {
-                            JwkThumbprint = proofResult.JwkThumbprint
-                        };
-                    }
+                    return (null, dpopOutcome.FailureResponse!);
                 }
+
+                ConfirmationMethod? confirmation = dpopOutcome.Confirmation;
 
                 IssuanceContext issuance = new()
                 {
@@ -1471,6 +1374,40 @@ public static class AuthCodeEndpoints
                         OAuthErrors.ServerError, "No applicable token producers."));
                 }
 
+                //RFC 6749 §6 — issue a refresh token alongside the access
+                //token. Refresh tokens are opaque random strings (not JWTs),
+                //stored as ServerRefreshTokenIssuedState in flow storage.
+                //RFC 9700 §2.2.2 requires rotation on every use; the
+                //BuildRefreshToken endpoint handles the rotation when the
+                //refresh is presented.
+                string refreshToken = Convert.ToHexString(
+                    System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+                DateTimeOffset refreshExpiresAt = now + context.RefreshTokenLifetime;
+
+                if(server.Integration.SaveFlowStateAsync is not null)
+                {
+                    string refreshFlowId = Guid.NewGuid().ToString("N");
+                    ServerRefreshTokenIssuedState refreshState = new()
+                    {
+                        FlowId = refreshFlowId,
+                        ExpectedIssuer = issuerUri.OriginalString,
+                        EnteredAt = now,
+                        ExpiresAt = refreshExpiresAt,
+                        Kind = FlowKind.AuthCodeServer,
+                        ClientId = codeState.ClientId,
+                        RefreshToken = refreshToken,
+                        IssuedAt = now,
+                        SubjectId = codeState.SubjectId,
+                        Scope = codeState.Scope,
+                        Confirmation = confirmation
+                    };
+                    await server.Integration.SaveFlowStateAsync(
+                        registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, ct)
+                        .ConfigureAwait(false);
+                }
+
+                issuedTokens[WellKnownTokenTypes.RefreshToken] = refreshToken;
+
                 IssuedTokenSet tokenSet = new() { Tokens = issuedTokens };
                 context.SetIssuedTokens(tokenSet);
 
@@ -1556,6 +1493,349 @@ public static class AuthCodeEndpoints
                 sb.Append('}');
                 //OAuth 2.1 §3.2.3 — token-bearing response MUST set
                 //Cache-Control: no-store. RFC 7234 §5.2.2.3.
+                return ServerHttpResponse
+                    .Ok(sb.ToString(), WellKnownMediaTypes.Application.Json)
+                    .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
+            }
+        };
+
+
+    /// <summary>
+    /// Refresh-token grant per RFC 6749 §6 + RFC 9700 §2.2.2 rotation.
+    /// Endpoint Kind is <see cref="FlowKind.RefreshToken"/> so the AS's
+    /// correlation-key resolver looks up the refresh-token string in the
+    /// refresh-token secondary index. The matcher is path+method+grant_type-
+    /// disjoint from BuildToken (which handles authorization_code grant).
+    /// </summary>
+    private static ServerEndpoint BuildRefreshToken() =>
+        new()
+        {
+            Name = "AuthCode.RefreshToken",
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = ServerCapabilityName.AuthorizationCode,
+            StartsNewFlow = false,
+            Kind = FlowKind.RefreshToken,
+
+            MatchesRequest = static (fields, context, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                ClientRecord? registration = context.Registration;
+                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Token, registration.TenantId.Value))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!fields.TryGetValue(OAuthRequestParameters.GrantType, out string? grantType)
+                    || !string.Equals(grantType, OAuthRequestParameters.GrantTypeRefreshToken, StringComparison.Ordinal))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!fields.ContainsKey(OAuthRequestParameters.RefreshToken))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            ExtractCorrelationKey = static (path, fields, context) =>
+                fields.TryGetValue(OAuthRequestParameters.RefreshToken, out string? refreshToken)
+                    && !string.IsNullOrWhiteSpace(refreshToken) ? refreshToken : null,
+
+            BuildInputAsync = static async (fields, context, currentState, server, ct) =>
+            {
+                //ResolveCorrelationKeyAsync + LoadFlowStateAsync delivered
+                //the persisted refresh-token state; pattern-match to recover
+                //its slots. If the loaded state has the wrong type, the
+                //refresh-token-index entry has gone stale (a rotated-out
+                //token still maps to a flow id whose current state is the
+                //ServerTokenIssuedState replacement).
+                if(currentState is not ServerRefreshTokenIssuedState storedRefresh)
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidGrant, "refresh_token is not valid."));
+                }
+
+                ClientRecord? registration = context.Registration;
+                if(registration is null)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Unknown client."));
+                }
+
+                //RFC 6749 §6 — client_id on the refresh request must match
+                //the client the refresh token was originally issued to.
+                if(!fields.TryGetValue(OAuthRequestParameters.ClientId, out string? clientId)
+                    || !string.Equals(clientId, storedRefresh.ClientId, StringComparison.Ordinal))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidGrant,
+                        "client_id does not match the refresh token's bound client."));
+                }
+
+                Uri issuerUri;
+                try
+                {
+                    issuerUri = server.Integration.ResolveIssuerAsync is not null
+                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false)
+                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
+                }
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                //RFC 9449 §5 — when the refresh token was issued under a
+                //DPoP-bound flow, the refresh exchange MUST present a proof
+                //whose thumbprint matches the stored binding. The helper
+                //rejects on thumbprint mismatch with invalid_dpop_proof.
+                ConfirmationMethod? boundConfirmation = storedRefresh.Confirmation;
+                bool dpopRequired = boundConfirmation is { IsEmpty: false };
+                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
+                    server, context, registration, issuerUri, now,
+                    expectedThumbprint: boundConfirmation?.JwkThumbprint,
+                    dpopRequired, ct).ConfigureAwait(false);
+
+                if(!dpopOutcome.IsSuccess)
+                {
+                    return (null, dpopOutcome.FailureResponse!);
+                }
+
+                //Inherit the binding from the stored refresh state, not the
+                //fresh validation outcome — the validated proof matched the
+                //bound thumbprint, so they're equal, but conceptually the
+                //binding is owned by the original issuance.
+                ConfirmationMethod? confirmation = boundConfirmation;
+
+                IssuanceContext issuance = new()
+                {
+                    Registration = registration,
+                    Context = context,
+                    IssuerUri = issuerUri,
+                    Subject = storedRefresh.SubjectId,
+                    Scope = storedRefresh.Scope,
+                    ClientId = storedRefresh.ClientId,
+                    IssuedAt = now,
+                    Confirmation = confirmation
+                };
+
+                IReadOnlyList<TokenProducer> producers =
+                    server.Configuration.TokenProducers.Count > 0
+                        ? server.Configuration.TokenProducers
+                        : DefaultTokenProducers;
+                IReadOnlyList<ClaimContributor> contributors = server.Configuration.ClaimContributors;
+
+                Dictionary<string, string> issuedTokens = new(producers.Count);
+                Dictionary<string, IssuedTokenAudit> issuedAudits = new(producers.Count);
+                DateTimeOffset latestExpiry = now;
+
+                foreach(TokenProducer producer in producers)
+                {
+                    if(!await server.CheckCapabilityAsync(
+                        registration, producer.RequiredCapability, context, ct).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+
+                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
+                        server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
+                    PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
+                        signingKeyId.Value, context, ct).ConfigureAwait(false);
+                    if(signingKey is null)
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError,
+                            $"Signing key unavailable for producer '{producer.Name}'."));
+                    }
+
+                    string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+                    TokenProducerOutput output = await producer.BuildAsync(
+                        issuance, server, signingKeyId, algorithm, ct).ConfigureAwait(false);
+                    JwtPayload payload = output.Payload;
+
+                    foreach(ClaimContributor contributor in contributors)
+                    {
+                        if(!await contributor.IsApplicable(issuance, producer, ct).ConfigureAwait(false))
+                        {
+                            continue;
+                        }
+                        ClaimContribution contributed = await contributor.BuildAsync(issuance, producer, ct)
+                            .ConfigureAwait(false);
+                        foreach(ClaimEntry entry in contributed.Entries)
+                        {
+                            payload[entry.Name] = entry.Value;
+                        }
+                    }
+
+                    UnsignedJwt unsigned = new(output.Header, payload);
+                    using JwsMessage jws = await unsigned.SignAsync(
+                        signingKey,
+                        server.Codecs.JwtHeaderSerializer!,
+                        server.Codecs.JwtPayloadSerializer!,
+                        server.Codecs.Encoder!,
+                        SensitiveMemoryPool<byte>.Shared,
+                        ct).ConfigureAwait(false);
+
+                    string compactJws = JwsSerialization.SerializeCompact(jws, server.Codecs.Encoder!);
+                    issuedTokens[producer.ResponseField] = compactJws;
+
+                    string jti = ExtractJti(payload);
+                    DateTimeOffset issuedAt = ExtractInstant(payload, WellKnownJwtClaims.Iat, now);
+                    DateTimeOffset expiresAt = ExtractInstant(payload, WellKnownJwtClaims.Exp, now);
+
+                    issuedAudits[producer.ResponseField] = new IssuedTokenAudit
+                    {
+                        Jti = jti,
+                        SigningKeyId = signingKeyId.Value,
+                        IssuedAt = issuedAt,
+                        ExpiresAt = expiresAt
+                    };
+
+                    if(expiresAt > latestExpiry)
+                    {
+                        latestExpiry = expiresAt;
+                    }
+                }
+
+                if(issuedTokens.Count == 0)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "No applicable token producers."));
+                }
+
+                //RFC 9700 §2.2.2 rotation: invalidate the presented refresh
+                //token by deleting its flow state, then issue a fresh refresh
+                //token under a new flow id. Subsequent presentation of the
+                //old refresh token resolves to a missing entry and returns
+                //invalid_grant naturally.
+                string newRefreshToken = Convert.ToHexString(
+                    System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+                DateTimeOffset newRefreshExpiresAt = now + context.RefreshTokenLifetime;
+
+                if(server.Integration.SaveFlowStateAsync is not null)
+                {
+                    string newRefreshFlowId = Guid.NewGuid().ToString("N");
+                    ServerRefreshTokenIssuedState newRefreshState = new()
+                    {
+                        FlowId = newRefreshFlowId,
+                        ExpectedIssuer = issuerUri.OriginalString,
+                        EnteredAt = now,
+                        ExpiresAt = newRefreshExpiresAt,
+                        Kind = FlowKind.AuthCodeServer,
+                        ClientId = storedRefresh.ClientId,
+                        RefreshToken = newRefreshToken,
+                        IssuedAt = now,
+                        SubjectId = storedRefresh.SubjectId,
+                        Scope = storedRefresh.Scope,
+                        Confirmation = confirmation
+                    };
+                    await server.Integration.SaveFlowStateAsync(
+                        registration.TenantId, newRefreshFlowId, newRefreshState, stepCount: 0, context, ct)
+                        .ConfigureAwait(false);
+                }
+
+                //Delete the old refresh state. The dispatcher will overwrite
+                //the loaded state's flow id with the transition's result
+                //anyway, but the refresh-token-index entry persists until
+                //the application's delegate prunes it. DeleteFlowStateAsync
+                //is the standardised mechanism for that pruning.
+                if(server.Integration.DeleteFlowStateAsync is not null)
+                {
+                    await server.Integration.DeleteFlowStateAsync(
+                        registration.TenantId, storedRefresh.FlowId, context, ct)
+                        .ConfigureAwait(false);
+                }
+
+                issuedTokens[WellKnownTokenTypes.RefreshToken] = newRefreshToken;
+
+                IssuedTokenSet tokenSet = new() { Tokens = issuedTokens };
+                context.SetIssuedTokens(tokenSet);
+
+                IssuedTokenAuditSet auditSet = new() { Audits = issuedAudits };
+
+                return (new ServerTokenExchangeSucceeded(
+                    IssuedTokens: auditSet,
+                    IssuedAt: now,
+                    ExpiresAt: latestExpiry)
+                {
+                    Confirmation = confirmation
+                }, null);
+            },
+
+            BuildResponse = static (state, _, context) =>
+            {
+                if(state is not ServerTokenIssuedState issued)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Unexpected state after refresh exchange.");
+                }
+
+                IssuedTokenSet? tokenSet = context.IssuedTokens;
+                if(tokenSet is null || tokenSet.AccessToken is null)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Issued tokens not found in context.");
+                }
+
+                IssuedTokenAudit? accessAudit = issued.IssuedTokens.AccessTokenAudit;
+                if(accessAudit is null)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "Access token audit missing alongside an issued access token — library invariant violation.");
+                }
+
+                int expiresIn = (int)(accessAudit.ExpiresAt - accessAudit.IssuedAt).TotalSeconds;
+
+                string tokenTypeWireName = issued.Confirmation is { IsEmpty: false }
+                    ? WellKnownAuthenticationSchemes.DPoP
+                    : WellKnownAuthenticationSchemes.Bearer;
+
+                var sb = new StringBuilder();
+                sb.Append("{\"access_token\":\"");
+                sb.Append(tokenSet.AccessToken);
+                sb.Append("\",\"token_type\":\"");
+                sb.Append(tokenTypeWireName);
+                sb.Append("\",\"expires_in\":");
+                sb.Append(expiresIn);
+
+                if(tokenSet.RefreshToken is not null)
+                {
+                    sb.Append(",\"refresh_token\":\"");
+                    sb.Append(tokenSet.RefreshToken);
+                    sb.Append('"');
+                }
+
+                if(!string.IsNullOrEmpty(issued.Scope))
+                {
+                    sb.Append(",\"scope\":\"");
+                    sb.Append(issued.Scope);
+                    sb.Append('"');
+                }
+
+                sb.Append('}');
                 return ServerHttpResponse
                     .Ok(sb.ToString(), WellKnownMediaTypes.Application.Json)
                     .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
