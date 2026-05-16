@@ -5,8 +5,8 @@ namespace Verifiable.OAuth.Dpop;
 /// <summary>
 /// The result of validating a DPoP proof.
 /// </summary>
-[DebuggerDisplay("DpopValidationResult Success={IsSuccess} Reason={FailureReason}")]
-public sealed record DpopValidationResult
+[DebuggerDisplay("DpopProofValidationResult Success={IsSuccess} Reason={FailureReason}")]
+public sealed record DpopProofValidationResult
 {
     /// <summary>The validated claims if the proof is valid; otherwise <see langword="null"/>.</summary>
     public DpopProofClaims? Claims { get; init; }
@@ -22,16 +22,16 @@ public sealed record DpopValidationResult
     /// The failure reason if the proof was rejected. <see langword="null"/>
     /// on success.
     /// </summary>
-    public DpopValidationFailureReason? FailureReason { get; init; }
+    public DpopProofValidationFailureReason? FailureReason { get; init; }
 
     /// <summary><see langword="true"/> when the proof is valid.</summary>
     public bool IsSuccess => FailureReason is null;
 
     /// <summary>Builds a success result.</summary>
-    public static DpopValidationResult Success(DpopProofClaims claims, string jwkThumbprint) =>
+    public static DpopProofValidationResult Success(DpopProofClaims claims, string jwkThumbprint) =>
         new() { Claims = claims, JwkThumbprint = jwkThumbprint };
 
     /// <summary>Builds a failure result.</summary>
-    public static DpopValidationResult Failure(DpopValidationFailureReason reason) =>
+    public static DpopProofValidationResult Failure(DpopProofValidationFailureReason reason) =>
         new() { FailureReason = reason };
 }

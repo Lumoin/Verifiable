@@ -92,13 +92,13 @@ internal static class DpopTokenEndpointValidation
             NonceRequired = false
         };
 
-        DpopValidationResult proofResult = await server.Integration.ValidateDpopProofAsync(
+        DpopProofValidationResult proofResult = await server.Integration.ValidateDpopProofAsync(
             validationRequest, cancellationToken).ConfigureAwait(false);
 
         if(!proofResult.IsSuccess)
         {
-            if(proofResult.FailureReason is DpopValidationFailureReason.NonceMissing
-                or DpopValidationFailureReason.NonceMismatch)
+            if(proofResult.FailureReason is DpopProofValidationFailureReason.NonceMissing
+                or DpopProofValidationFailureReason.NonceMismatch)
             {
                 string freshNonce = await server.Integration.IssueDpopNonceAsync(
                     issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);

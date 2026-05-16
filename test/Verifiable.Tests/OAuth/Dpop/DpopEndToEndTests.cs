@@ -170,7 +170,7 @@ internal sealed class DpopEndToEndTests
         //bound to the access token and validates it. The validator's
         //JwkThumbprint must match the binding the AS recorded.
         const string resourceUrl = "https://rs.example.com/api/profile";
-        string ath = await DpopProofValidation.ComputeAthAsync(
+        string ath = await DpopProofValidator.ComputeAthAsync(
             accessToken,
             TestHostShell.Base64UrlEncoder,
             TestHostShell.MemoryPool,
@@ -194,7 +194,7 @@ internal sealed class DpopEndToEndTests
             TestHostShell.MemoryPool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        DpopValidationResult rsResult = await DpopProofValidation.ValidateAsync(
+        DpopProofValidationResult rsResult = await DpopProofValidator.ValidateAsync(
             new DpopProofValidationRequest
             {
                 Proof = resourceProof,

@@ -9,7 +9,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth.Dpop;
 
 [TestClass]
-internal sealed class DpopProofValidationTests
+internal sealed class DpopProofValidatorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -29,7 +29,7 @@ internal sealed class DpopProofValidationTests
 
         string proof = await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false);
 
-        DpopValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"Validation must succeed; got {result.FailureReason}.");
         Assert.IsNotNull(result.Claims);
@@ -44,8 +44,8 @@ internal sealed class DpopProofValidationTests
     [TestMethod]
     public async Task ValidateAsyncRejectsMalformedProof()
     {
-        DpopValidationResult result = await ValidateAsync("not-a-jws").ConfigureAwait(false);
-        Assert.AreEqual(DpopValidationFailureReason.Malformed, result.FailureReason);
+        DpopProofValidationResult result = await ValidateAsync("not-a-jws").ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.Malformed, result.FailureReason);
     }
 
 
@@ -62,8 +62,8 @@ internal sealed class DpopProofValidationTests
                 [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
             }).ConfigureAwait(false);
 
-        DpopValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
-        Assert.AreEqual(DpopValidationFailureReason.InvalidTyp, result.FailureReason);
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.InvalidTyp, result.FailureReason);
     }
 
 
@@ -82,8 +82,8 @@ internal sealed class DpopProofValidationTests
                 [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Hs256
             }).ConfigureAwait(false);
 
-        DpopValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
-        Assert.AreEqual(DpopValidationFailureReason.InvalidAlg, result.FailureReason);
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.InvalidAlg, result.FailureReason);
     }
 
 
@@ -101,10 +101,10 @@ internal sealed class DpopProofValidationTests
                 return tampered;
             }).ConfigureAwait(false);
 
-        DpopValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
         Assert.IsTrue(
-            result.FailureReason is DpopValidationFailureReason.InvalidJwk
-                or DpopValidationFailureReason.Malformed,
+            result.FailureReason is DpopProofValidationFailureReason.InvalidJwk
+                or DpopProofValidationFailureReason.Malformed,
             $"Expected InvalidJwk or Malformed; got {result.FailureReason}.");
     }
 
@@ -132,8 +132,8 @@ internal sealed class DpopProofValidationTests
         string tamperedProof = string.Concat(
             proof.AsSpan(0, tamperIndex), tampered.ToString(), proof.AsSpan(tamperIndex + 1));
 
-        DpopValidationResult result = await ValidateAsync(tamperedProof).ConfigureAwait(false);
-        Assert.AreEqual(DpopValidationFailureReason.SignatureFailed, result.FailureReason);
+        DpopProofValidationResult result = await ValidateAsync(tamperedProof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.SignatureFailed, result.FailureReason);
     }
 
 
@@ -145,8 +145,8 @@ internal sealed class DpopProofValidationTests
 
         string proof = await BuildProofAsync(key, BuildClaims() with { Htm = "GET" }).ConfigureAwait(false);
 
-        DpopValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
-        Assert.AreEqual(DpopValidationFailureReason.HtmMismatch, result.FailureReason);
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.HtmMismatch, result.FailureReason);
     }
 
 
@@ -158,8 +158,8 @@ internal sealed class DpopProofValidationTests
 
         string proof = await BuildProofAsync(key, BuildClaims() with { Htu = "https://attacker.example.com/token" }).ConfigureAwait(false);
 
-        DpopValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
-        Assert.AreEqual(DpopValidationFailureReason.HtuMismatch, result.FailureReason);
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.HtuMismatch, result.FailureReason);
     }
 
 
@@ -172,8 +172,8 @@ internal sealed class DpopProofValidationTests
         DpopProofClaims claims = BuildClaims() with { Iat = NowInstant - TimeSpan.FromMinutes(5) };
         string proof = await BuildProofAsync(key, claims).ConfigureAwait(false);
 
-        DpopValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
-        Assert.AreEqual(DpopValidationFailureReason.IatOutOfWindow, result.FailureReason);
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.IatOutOfWindow, result.FailureReason);
     }
 
 
@@ -186,8 +186,8 @@ internal sealed class DpopProofValidationTests
         DpopProofClaims claims = BuildClaims() with { Iat = NowInstant + TimeSpan.FromMinutes(5) };
         string proof = await BuildProofAsync(key, claims).ConfigureAwait(false);
 
-        DpopValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
-        Assert.AreEqual(DpopValidationFailureReason.IatOutOfWindow, result.FailureReason);
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.IatOutOfWindow, result.FailureReason);
     }
 
 
@@ -199,9 +199,9 @@ internal sealed class DpopProofValidationTests
 
         string proof = await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false);
 
-        DpopValidationResult result = await ValidateAsync(
+        DpopProofValidationResult result = await ValidateAsync(
             proof, expectedNonce: "expected-nonce", nonceRequired: true).ConfigureAwait(false);
-        Assert.AreEqual(DpopValidationFailureReason.NonceMissing, result.FailureReason);
+        Assert.AreEqual(DpopProofValidationFailureReason.NonceMissing, result.FailureReason);
     }
 
 
@@ -213,9 +213,9 @@ internal sealed class DpopProofValidationTests
 
         string proof = await BuildProofAsync(key, BuildClaims() with { Nonce = "wrong-nonce" }).ConfigureAwait(false);
 
-        DpopValidationResult result = await ValidateAsync(
+        DpopProofValidationResult result = await ValidateAsync(
             proof, expectedNonce: "expected-nonce", nonceRequired: true).ConfigureAwait(false);
-        Assert.AreEqual(DpopValidationFailureReason.NonceMismatch, result.FailureReason);
+        Assert.AreEqual(DpopProofValidationFailureReason.NonceMismatch, result.FailureReason);
     }
 
 
@@ -227,9 +227,9 @@ internal sealed class DpopProofValidationTests
 
         string proof = await BuildProofAsync(key, BuildClaims() with { Ath = "wrong-ath" }).ConfigureAwait(false);
 
-        DpopValidationResult result = await ValidateAsync(
+        DpopProofValidationResult result = await ValidateAsync(
             proof, accessToken: "presented-token").ConfigureAwait(false);
-        Assert.AreEqual(DpopValidationFailureReason.AthMismatch, result.FailureReason);
+        Assert.AreEqual(DpopProofValidationFailureReason.AthMismatch, result.FailureReason);
     }
 
 
@@ -275,7 +275,7 @@ internal sealed class DpopProofValidationTests
     }
 
 
-    private async Task<DpopValidationResult> ValidateAsync(
+    private async Task<DpopProofValidationResult> ValidateAsync(
         string proof,
         string? expectedNonce = null,
         bool nonceRequired = false,
@@ -291,7 +291,7 @@ internal sealed class DpopProofValidationTests
             AccessToken = accessToken
         };
 
-        return await DpopProofValidation.ValidateAsync(
+        return await DpopProofValidator.ValidateAsync(
             request,
             MicrosoftCryptographicFunctions.VerifyP256Async,
             DpopTestSupport.Parser,

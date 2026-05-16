@@ -1882,7 +1882,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         Server.Integration.GetHmacKeySetAsync = (tenantId, ctx, ct) =>
             ValueTask.FromResult(DpopHmacKeySet!.Snapshot());
         Server.Integration.ValidateDpopProofAsync = (request, ct) =>
-            DpopProofValidation.ValidateAsync(
+            DpopProofValidator.ValidateAsync(
                 request,
                 MicrosoftCryptographicFunctions.VerifyP256Async,
                 DpopTestSupport.Parser,

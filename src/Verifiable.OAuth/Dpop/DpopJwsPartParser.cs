@@ -12,7 +12,7 @@ public sealed record DpopJwsPartParser
     /// Parses the JSON bytes of a header segment into a typed
     /// <see cref="DpopProofHeader"/>. The implementation throws on
     /// malformed JSON or missing required members; the validator catches
-    /// and reports as <see cref="DpopValidationFailureReason.Malformed"/>.
+    /// and reports as <see cref="DpopProofValidationFailureReason.Malformed"/>.
     /// </summary>
     public required Func<ReadOnlyMemory<byte>, DpopProofHeader> ParseHeader { get; init; }
 

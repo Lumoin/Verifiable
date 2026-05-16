@@ -4,7 +4,7 @@ namespace Verifiable.OAuth.Dpop;
 /// The discrete reasons a DPoP proof can be rejected, per RFC 9449
 /// §4.3 and §11. The set is closed; new reasons land as additional cases.
 /// </summary>
-public enum DpopValidationFailureReason
+public enum DpopProofValidationFailureReason
 {
     /// <summary>The proof string is not parseable as a compact JWS.</summary>
     Malformed,

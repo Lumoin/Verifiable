@@ -17,6 +17,6 @@ namespace Verifiable.OAuth.Dpop;
 /// store.
 /// </para>
 /// </remarks>
-public delegate ValueTask<DpopValidationResult> ValidateDpopProofDelegate(
+public delegate ValueTask<DpopProofValidationResult> ValidateDpopProofDelegate(
     DpopProofValidationRequest request,
     CancellationToken cancellationToken);

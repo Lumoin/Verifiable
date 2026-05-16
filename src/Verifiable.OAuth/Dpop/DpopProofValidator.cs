@@ -19,14 +19,14 @@ namespace Verifiable.OAuth.Dpop;
 /// <c>jti</c> replay tracking is the AS-side handler's responsibility —
 /// see the remark on <see cref="ValidateDpopProofDelegate"/>.
 /// </remarks>
-[DebuggerDisplay("DpopProofValidation")]
-public static class DpopProofValidation
+[DebuggerDisplay("DpopProofValidator")]
+public static class DpopProofValidator
 {
     /// <summary>
     /// Validates a DPoP proof against the receiver's expectations.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "PublicKeyMemory created via PublicKeyFromJwk is disposed in the finally block of the verification try; the analyzer does not trace the catch-then-finally path correctly here.")]
-    public static async ValueTask<DpopValidationResult> ValidateAsync(
+    public static async ValueTask<DpopProofValidationResult> ValidateAsync(
         DpopProofValidationRequest request,
         VerificationDelegate verificationDelegate,
         DpopJwsPartParser parser,
@@ -52,7 +52,7 @@ public static class DpopProofValidation
             || string.IsNullOrEmpty(parts[1])
             || string.IsNullOrEmpty(parts[2]))
         {
-            return DpopValidationResult.Failure(DpopValidationFailureReason.Malformed);
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
         }
 
         DpopProofHeader header;
@@ -66,21 +66,21 @@ public static class DpopProofValidation
         }
         catch
         {
-            return DpopValidationResult.Failure(DpopValidationFailureReason.Malformed);
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
         }
 
         //Header checks.
         if(!string.Equals(header.Typ, WellKnownDpopValues.ProofTypeHeader, StringComparison.Ordinal))
         {
-            return DpopValidationResult.Failure(DpopValidationFailureReason.InvalidTyp);
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidTyp);
         }
         if(string.IsNullOrEmpty(header.Alg) || !WellKnownJwaValues.IsEcdsa(header.Alg))
         {
-            return DpopValidationResult.Failure(DpopValidationFailureReason.InvalidAlg);
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidAlg);
         }
         if(header.Jwk is null || header.Jwk.Count == 0)
         {
-            return DpopValidationResult.Failure(DpopValidationFailureReason.InvalidJwk);
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidJwk);
         }
 
         //Signature verification.
@@ -92,7 +92,7 @@ public static class DpopProofValidation
         }
         catch
         {
-            return DpopValidationResult.Failure(DpopValidationFailureReason.InvalidJwk);
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidJwk);
         }
 
         bool signatureValid;
@@ -114,23 +114,23 @@ public static class DpopProofValidation
 
         if(!signatureValid)
         {
-            return DpopValidationResult.Failure(DpopValidationFailureReason.SignatureFailed);
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.SignatureFailed);
         }
 
         //Claim checks.
         if(!string.Equals(claims.Htm, request.HttpMethod, StringComparison.OrdinalIgnoreCase))
         {
-            return DpopValidationResult.Failure(DpopValidationFailureReason.HtmMismatch);
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.HtmMismatch);
         }
         if(!string.Equals(claims.Htu, request.HttpUrl, StringComparison.Ordinal))
         {
-            return DpopValidationResult.Failure(DpopValidationFailureReason.HtuMismatch);
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.HtuMismatch);
         }
 
         DateTimeOffset now = timeProvider.GetUtcNow();
         if(claims.Iat < now - iatSkew || claims.Iat > now + iatSkew)
         {
-            return DpopValidationResult.Failure(DpopValidationFailureReason.IatOutOfWindow);
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.IatOutOfWindow);
         }
 
         //Nonce check, dispatched per receiver policy.
@@ -138,19 +138,19 @@ public static class DpopProofValidation
         {
             if(claims.Nonce is null)
             {
-                return DpopValidationResult.Failure(DpopValidationFailureReason.NonceMissing);
+                return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.NonceMissing);
             }
             if(request.ExpectedNonce is null
                 || !string.Equals(claims.Nonce, request.ExpectedNonce, StringComparison.Ordinal))
             {
-                return DpopValidationResult.Failure(DpopValidationFailureReason.NonceMismatch);
+                return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.NonceMismatch);
             }
         }
         else if(claims.Nonce is not null
             && request.ExpectedNonce is not null
             && !string.Equals(claims.Nonce, request.ExpectedNonce, StringComparison.Ordinal))
         {
-            return DpopValidationResult.Failure(DpopValidationFailureReason.NonceMismatch);
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.NonceMismatch);
         }
 
         //Access-token binding check (resource-server calls).
@@ -159,7 +159,7 @@ public static class DpopProofValidation
             string expectedAth = await ComputeAthAsync(request.AccessToken, base64UrlEncoder, memoryPool, cancellationToken).ConfigureAwait(false);
             if(claims.Ath is null || !string.Equals(claims.Ath, expectedAth, StringComparison.Ordinal))
             {
-                return DpopValidationResult.Failure(DpopValidationFailureReason.AthMismatch);
+                return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.AthMismatch);
             }
         }
 
@@ -168,7 +168,7 @@ public static class DpopProofValidation
         //compares this against an access token's cnf.jkt binding.
         string thumbprint = ComputeThumbprintFromJwk(header.Jwk, base64UrlEncoder, memoryPool);
 
-        return DpopValidationResult.Success(claims, thumbprint);
+        return DpopProofValidationResult.Success(claims, thumbprint);
     }
 
 

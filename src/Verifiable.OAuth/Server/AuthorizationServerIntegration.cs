@@ -244,7 +244,7 @@ public sealed class AuthorizationServerIntegration
 
     /// <summary>
     /// Validates inbound DPoP proofs at the token endpoint per RFC 9449 §4.3.
-    /// Library default backing: <see cref="Verifiable.OAuth.Dpop.DpopProofValidation.ValidateAsync"/>
+    /// Library default backing: <see cref="Verifiable.OAuth.Dpop.DpopProofValidator.ValidateAsync"/>
     /// adapted to the <see cref="Verifiable.OAuth.Dpop.ValidateDpopProofDelegate"/>
     /// shape. Required when any registration's <see cref="PolicyProfile"/>
     /// requires DPoP (HAIP 1.0, FAPI 2.0).

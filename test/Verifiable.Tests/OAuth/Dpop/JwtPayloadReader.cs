@@ -16,7 +16,7 @@ namespace Verifiable.Tests.OAuth.Dpop;
 /// </summary>
 /// <remarks>
 /// The helper is intentionally test-side only. Production validation of
-/// access tokens goes through <see cref="DpopProofValidation"/> or the
+/// access tokens goes through <see cref="DpopProofValidator"/> or the
 /// application's JOSE layer — both of which verify the signature first.
 /// This helper does not verify the signature; it only reads what the AS
 /// emitted. Use it to assert <strong>presence and value</strong> of
