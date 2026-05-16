@@ -82,6 +82,24 @@ public readonly record struct JwsVerificationResult<TJwtPart>(bool IsValid, TJwt
 public static class Jws
 {
     /// <summary>
+    /// Default maximum length, in characters, for an incoming JWS compact
+    /// serialization accepted by the verification overloads. Bounds the
+    /// size of the pooled signing-input buffer the verifier must allocate,
+    /// mitigating large-allocation denial-of-service via attacker-supplied
+    /// JWS tokens. Generous enough for typical OAuth/OIDC tokens, SD-JWTs,
+    /// and verifiable credentials; deployments that need a different bound
+    /// pass an explicit <c>maxJwsLength</c> argument.
+    /// </summary>
+    /// <remarks>
+    /// Per RFC 8725 §3.11, "JWT implementations should consider providing
+    /// a way for applications to set a maximum size for incoming JWTs".
+    /// 1 MiB matches the upper bound common JWT libraries use as a sane
+    /// default.
+    /// </remarks>
+    public const int DefaultMaxJwsLength = 1 * 1024 * 1024;
+
+
+    /// <summary>
     /// Creates a JWS using registry-resolved signing function.
     /// </summary>
     /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
@@ -308,7 +326,8 @@ public static class Jws
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int maxJwsLength = DefaultMaxJwsLength)
     {
         ArgumentNullException.ThrowIfNull(jws);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -316,6 +335,19 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxJwsLength);
+
+        //Bound input length up-front. The pooled signing-input buffer is
+        //sized from the JWS parts, so an unbounded JWS would translate to an
+        //unbounded pool rental — a large-allocation DoS vector per RFC 8725
+        //§3.11. Rejecting early also makes the subsequent length arithmetic
+        //immune to integer overflow.
+        if(jws.Length > maxJwsLength)
+        {
+            throw new ArgumentException(
+                $"JWS length {jws.Length} exceeds the configured maximum of {maxJwsLength} characters.",
+                nameof(jws));
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -332,7 +364,10 @@ public static class Jws
         //"<header>.<payload>". Both segments are base64url-encoded (so already
         //ASCII), which means byte length equals char length and we can write
         //directly into pooled memory without an intermediate string allocation.
-        int signingInputLength = parts[0].Length + 1 + parts[1].Length;
+        //The `checked` block is belt-and-braces — the maxJwsLength gate above
+        //already rules out overflow, but defense-in-depth makes the
+        //assumption explicit.
+        int signingInputLength = checked(parts[0].Length + 1 + parts[1].Length);
         using IMemoryOwner<byte> dataToVerifyOwner = pool.Rent(signingInputLength);
         Span<byte> dataToVerifySpan = dataToVerifyOwner.Memory.Span[..signingInputLength];
         Encoding.ASCII.GetBytes(parts[0], dataToVerifySpan);
