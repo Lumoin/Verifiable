@@ -926,7 +926,7 @@ public static class AuthCodeFlowHandlers
         {
             return response;
         }
-        if(!response.Body.Contains(WellKnownDpopValues.UseDpopNonceError, StringComparison.Ordinal))
+        if(!response.Body.Contains(OAuthErrors.UseDpopNonce, StringComparison.Ordinal))
         {
             return response;
         }

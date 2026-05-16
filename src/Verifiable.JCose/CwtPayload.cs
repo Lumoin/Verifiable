@@ -13,7 +13,7 @@
 /// CWT uses integer keys for claims per
 /// <see href="https://www.rfc-editor.org/rfc/rfc8392">RFC 8392</see>, unlike
 /// JWT which uses string keys. Standard claim keys are defined in
-/// <see cref="WellKnownCwtClaims"/>.
+/// <see cref="WellKnownCwtClaimNames"/>.
 /// </para>
 /// <para>
 /// This is the CWT parallel of <see cref="JwtPayload"/> and is used throughout

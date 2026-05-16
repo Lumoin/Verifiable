@@ -46,18 +46,18 @@ internal static class DpopTestSupport
     {
         Dictionary<string, object> dict = new(StringComparer.Ordinal)
         {
-            [WellKnownDpopValues.ClaimHtm] = claims.Htm,
-            [WellKnownDpopValues.ClaimHtu] = claims.Htu,
+            [WellKnownJwtClaimNames.Htm] = claims.Htm,
+            [WellKnownJwtClaimNames.Htu] = claims.Htu,
             [WellKnownJwtClaimNames.Iat] = claims.Iat.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Jti] = claims.Jti
         };
         if(claims.Nonce is not null)
         {
-            dict[WellKnownDpopValues.ClaimNonce] = claims.Nonce;
+            dict[WellKnownJwtClaimNames.Nonce] = claims.Nonce;
         }
         if(claims.Ath is not null)
         {
-            dict[WellKnownDpopValues.ClaimAth] = claims.Ath;
+            dict[WellKnownJwtClaimNames.Ath] = claims.Ath;
         }
         return dict;
     }
@@ -108,18 +108,18 @@ internal static class DpopTestSupport
         using JsonDocument doc = JsonDocument.Parse(bytes);
         JsonElement root = doc.RootElement;
 
-        string htm = root.GetProperty(WellKnownDpopValues.ClaimHtm).GetString()
+        string htm = root.GetProperty(WellKnownJwtClaimNames.Htm).GetString()
             ?? throw new FormatException("DPoP claims are missing 'htm'.");
-        string htu = root.GetProperty(WellKnownDpopValues.ClaimHtu).GetString()
+        string htu = root.GetProperty(WellKnownJwtClaimNames.Htu).GetString()
             ?? throw new FormatException("DPoP claims are missing 'htu'.");
         long iatSeconds = root.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64();
         string jti = root.GetProperty(WellKnownJwtClaimNames.Jti).GetString()
             ?? throw new FormatException("DPoP claims are missing 'jti'.");
 
-        string? nonce = root.TryGetProperty(WellKnownDpopValues.ClaimNonce, out JsonElement nonceElement)
+        string? nonce = root.TryGetProperty(WellKnownJwtClaimNames.Nonce, out JsonElement nonceElement)
             ? nonceElement.GetString()
             : null;
-        string? ath = root.TryGetProperty(WellKnownDpopValues.ClaimAth, out JsonElement athElement)
+        string? ath = root.TryGetProperty(WellKnownJwtClaimNames.Ath, out JsonElement athElement)
             ? athElement.GetString()
             : null;
 

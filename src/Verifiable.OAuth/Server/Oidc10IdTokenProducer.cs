@@ -136,7 +136,7 @@ internal static class Oidc10IdTokenProducer
         {
             Dictionary<string, object> cnf = new(StringComparer.Ordinal)
             {
-                [WellKnownDpopValues.ConfirmationJwkThumbprint] = confirmation.JwkThumbprint
+                [WellKnownJwtClaimNames.JwkThumbprint] = confirmation.JwkThumbprint
             };
             extraClaims.Add(new KeyValuePair<string, object>(WellKnownJwtClaimNames.Cnf, cnf));
         }

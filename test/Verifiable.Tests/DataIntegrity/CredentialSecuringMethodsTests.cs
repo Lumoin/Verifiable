@@ -632,11 +632,11 @@ internal sealed class CredentialSecuringMethodsTests
     {
         var writer = new CborWriter(CborConformanceMode.Canonical);
         writer.WriteStartMap(3);
-        writer.WriteInt32(WellKnownCwtClaims.Iss);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString(credential.Issuer!.Id!);
-        writer.WriteInt32(WellKnownCwtClaims.Sub);
+        writer.WriteInt32(WellKnownCwtClaimNames.Sub);
         writer.WriteTextString(credential.CredentialSubject![0].Id!);
-        writer.WriteInt32(WellKnownCwtClaims.Iat);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iat);
         writer.WriteInt64(!string.IsNullOrEmpty(credential.ValidFrom) ? DateTimeOffset.Parse(credential.ValidFrom, CultureInfo.InvariantCulture).ToUnixTimeSeconds() : 0L);
         writer.WriteEndMap();
         return writer.Encode();

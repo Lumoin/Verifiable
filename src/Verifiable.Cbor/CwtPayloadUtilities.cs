@@ -116,48 +116,48 @@ public static class CwtPayloadUtilities
 
         //Write standard claims in numeric order for canonical encoding.
         //iss (1).
-        writer.WriteInt32(WellKnownCwtClaims.Iss);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString(issuer);
 
         //sub (2).
         if(subject is not null)
         {
-            writer.WriteInt32(WellKnownCwtClaims.Sub);
+            writer.WriteInt32(WellKnownCwtClaimNames.Sub);
             writer.WriteTextString(subject);
         }
 
         //aud (3).
         if(audience is not null)
         {
-            writer.WriteInt32(WellKnownCwtClaims.Aud);
+            writer.WriteInt32(WellKnownCwtClaimNames.Aud);
             writer.WriteTextString(audience);
         }
 
         //exp (4).
         if(expiration.HasValue)
         {
-            writer.WriteInt32(WellKnownCwtClaims.Exp);
+            writer.WriteInt32(WellKnownCwtClaimNames.Exp);
             writer.WriteInt64(expiration.Value);
         }
 
         //nbf (5).
         if(notBefore.HasValue)
         {
-            writer.WriteInt32(WellKnownCwtClaims.Nbf);
+            writer.WriteInt32(WellKnownCwtClaimNames.Nbf);
             writer.WriteInt64(notBefore.Value);
         }
 
         //iat (6).
         if(issuedAt.HasValue)
         {
-            writer.WriteInt32(WellKnownCwtClaims.Iat);
+            writer.WriteInt32(WellKnownCwtClaimNames.Iat);
             writer.WriteInt64(issuedAt.Value);
         }
 
         //cti (7).
         if(cwtId is not null)
         {
-            writer.WriteInt32(WellKnownCwtClaims.Cti);
+            writer.WriteInt32(WellKnownCwtClaimNames.Cti);
             writer.WriteByteString(cwtId);
         }
 

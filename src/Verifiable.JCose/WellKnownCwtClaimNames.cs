@@ -1,19 +1,28 @@
 namespace Verifiable.JCose;
 
 /// <summary>
-/// CWT (CBOR Web Token) claim keys as defined in
-/// <see href="https://www.iana.org/assignments/cwt/cwt.xhtml">IANA CWT Claims</see>.
+/// Well-known CWT (CBOR Web Token) claim NAMES — the CBOR integer keys
+/// that identify a claim's slot inside a CWT payload map. Sourced from
+/// <see href="https://www.iana.org/assignments/cwt/cwt.xhtml">IANA CWT Claims registry</see>
+/// and RFC 8392 §3.
 /// </summary>
 /// <remarks>
 /// <para>
-/// CWT uses integer keys for claims, unlike JWT which uses strings.
-/// Standard claims are defined in RFC 8392.
+/// These are the NAMES of claims (e.g., <c>1</c> for <c>iss</c>, <c>2</c>
+/// for <c>sub</c>, <c>3</c> for <c>aud</c>), not their VALUES. CWT uses
+/// integer keys where JWT uses string keys; the names here ARE those
+/// integer identifiers. Claim values are application- or context-defined.
 /// </para>
 /// <para>
-/// See <see href="https://www.rfc-editor.org/rfc/rfc8392">RFC 8392 - CBOR Web Token (CWT)</see>.
+/// Parallel to <see cref="WellKnownJwtClaimNames"/> for the string-keyed
+/// JWT side; <see cref="GetClaimName"/> and <see cref="GetClaimKey"/>
+/// translate between the two registries for shared semantic claims.
+/// </para>
+/// <para>
+/// See <see href="https://www.rfc-editor.org/rfc/rfc8392">RFC 8392 — CBOR Web Token (CWT)</see>.
 /// </para>
 /// </remarks>
-public static class WellKnownCwtClaims
+public static class WellKnownCwtClaimNames
 {
     /// <summary>
     /// Issuer (iss) claim.

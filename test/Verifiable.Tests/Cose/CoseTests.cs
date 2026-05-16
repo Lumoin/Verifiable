@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Cbor;
 using Verifiable.Cbor;
@@ -312,9 +312,9 @@ internal sealed class CoseTests
     {
         var writer = new CborWriter(CborConformanceMode.Canonical);
         writer.WriteStartMap(2);
-        writer.WriteInt32(WellKnownCwtClaims.Iss);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString("did:example:issuer");
-        writer.WriteInt32(WellKnownCwtClaims.Iat);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iat);
         writer.WriteInt64(1718452800);
         writer.WriteEndMap();
         return writer.Encode();

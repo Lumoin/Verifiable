@@ -42,9 +42,9 @@ internal sealed class SdCwtIssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<int, object>
         {
-            [WellKnownCwtClaims.Iss] = "https://issuer.example",
-            [WellKnownCwtClaims.Sub] = "https://device.example",
-            [WellKnownCwtClaims.Iat] = 1725244200L,
+            [WellKnownCwtClaimNames.Iss] = "https://issuer.example",
+            [WellKnownCwtClaimNames.Sub] = "https://device.example",
+            [WellKnownCwtClaimNames.Iat] = 1725244200L,
             [500] = true,
             [501] = "ABCD-123456"
         };
@@ -69,8 +69,8 @@ internal sealed class SdCwtIssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<int, object>
         {
-            [WellKnownCwtClaims.Iss] = "https://issuer.example",
-            [WellKnownCwtClaims.Iat] = 1700000000L
+            [WellKnownCwtClaimNames.Iss] = "https://issuer.example",
+            [WellKnownCwtClaimNames.Iat] = 1700000000L
         };
 
         SdTokenResult result = await claims.IssueSdCwtAsync(
@@ -89,7 +89,7 @@ internal sealed class SdCwtIssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<int, object>
         {
-            [WellKnownCwtClaims.Iss] = "https://issuer.example",
+            [WellKnownCwtClaimNames.Iss] = "https://issuer.example",
             [500] = "value-a",
             [501] = "value-b",
             [502] = "value-c"

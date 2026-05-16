@@ -60,4 +60,18 @@ public static class OAuthErrors
     /// token.
     /// </summary>
     public static readonly string InvalidToken = "invalid_token";
+
+    /// <summary>
+    /// RFC 9449 §8: the server requires the client to retry with a fresh
+    /// DPoP nonce. Emitted with HTTP 401 (token endpoint, resource server)
+    /// or HTTP 400 (other endpoints) and a <c>DPoP-Nonce</c> response header
+    /// carrying the new nonce value.
+    /// </summary>
+    public static readonly string UseDpopNonce = "use_dpop_nonce";
+
+    /// <summary>
+    /// RFC 9449 §8: the presented DPoP proof failed validation — signature,
+    /// required claims, replay defense, or thumbprint-binding mismatch.
+    /// </summary>
+    public static readonly string InvalidDpopProof = "invalid_dpop_proof";
 }

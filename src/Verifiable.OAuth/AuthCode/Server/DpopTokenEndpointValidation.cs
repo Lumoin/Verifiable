@@ -79,7 +79,7 @@ internal static class DpopTokenEndpointValidation
             string freshNonce = await server.Integration.IssueDpopNonceAsync(
                 issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
             return DpopValidationOutcome.Failure(ServerHttpResponse
-                .BadRequest(WellKnownDpopValues.UseDpopNonceError, "DPoP proof required.")
+                .BadRequest(OAuthErrors.UseDpopNonce, "DPoP proof required.")
                 .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
         }
 
@@ -103,11 +103,11 @@ internal static class DpopTokenEndpointValidation
                 string freshNonce = await server.Integration.IssueDpopNonceAsync(
                     issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
                 return DpopValidationOutcome.Failure(ServerHttpResponse
-                    .BadRequest(WellKnownDpopValues.UseDpopNonceError, "DPoP nonce required.")
+                    .BadRequest(OAuthErrors.UseDpopNonce, "DPoP nonce required.")
                     .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
             }
             return DpopValidationOutcome.Failure(ServerHttpResponse.BadRequest(
-                WellKnownDpopValues.InvalidDpopProofError,
+                OAuthErrors.InvalidDpopProof,
                 $"DPoP proof validation failed: {proofResult.FailureReason}."));
         }
 
@@ -118,7 +118,7 @@ internal static class DpopTokenEndpointValidation
             && !string.Equals(proofResult.JwkThumbprint, expectedThumbprint, StringComparison.Ordinal))
         {
             return DpopValidationOutcome.Failure(ServerHttpResponse.BadRequest(
-                WellKnownDpopValues.InvalidDpopProofError,
+                OAuthErrors.InvalidDpopProof,
                 "DPoP proof thumbprint does not match the bound thumbprint."));
         }
 
@@ -132,7 +132,7 @@ internal static class DpopTokenEndpointValidation
                 string freshNonce = await server.Integration.IssueDpopNonceAsync(
                     issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
                 return DpopValidationOutcome.Failure(ServerHttpResponse
-                    .BadRequest(WellKnownDpopValues.UseDpopNonceError,
+                    .BadRequest(OAuthErrors.UseDpopNonce,
                         $"DPoP nonce invalid: {nonceResult.FailureReason}.")
                     .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
             }
@@ -142,7 +142,7 @@ internal static class DpopTokenEndpointValidation
             string freshNonce = await server.Integration.IssueDpopNonceAsync(
                 issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
             return DpopValidationOutcome.Failure(ServerHttpResponse
-                .BadRequest(WellKnownDpopValues.UseDpopNonceError, "DPoP nonce required.")
+                .BadRequest(OAuthErrors.UseDpopNonce, "DPoP nonce required.")
                 .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
         }
 
@@ -157,7 +157,7 @@ internal static class DpopTokenEndpointValidation
             if(existingJtiFlowId is not null)
             {
                 return DpopValidationOutcome.Failure(ServerHttpResponse.BadRequest(
-                    WellKnownDpopValues.InvalidDpopProofError,
+                    OAuthErrors.InvalidDpopProof,
                     "DPoP proof jti has been seen previously."));
             }
         }

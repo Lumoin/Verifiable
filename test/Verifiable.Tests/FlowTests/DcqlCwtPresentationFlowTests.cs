@@ -335,8 +335,8 @@ internal sealed class DcqlCwtPresentationFlowTests
     {
         var claims = new Dictionary<int, object>
         {
-            [WellKnownCwtClaims.Iss] = IssuerId,
-            [WellKnownCwtClaims.Iat] = TimeProvider.GetUtcNow().ToUnixTimeSeconds(),
+            [WellKnownCwtClaimNames.Iss] = IssuerId,
+            [WellKnownCwtClaimNames.Iat] = TimeProvider.GetUtcNow().ToUnixTimeSeconds(),
             [ClaimKeyGivenName] = "Erika",
             [ClaimKeyFamilyName] = "Mustermann",
             [ClaimKeyBirthdate] = "1964-08-12",

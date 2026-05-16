@@ -4,8 +4,19 @@ namespace Verifiable.OAuth;
 
 /// <summary>
 /// Describes how a well-known URI is computed from a base identifier.
+/// One <see cref="WellKnownPath"/> instance per spec-defined rule; the
+/// instances are catalogued as static members of <see cref="WellKnownPaths"/>.
 /// </summary>
 /// <remarks>
+/// <para>
+/// <strong>Type vs. catalog:</strong> <see cref="WellKnownPath"/> (singular)
+/// is the entry TYPE — one instance per spec-defined well-known URI rule.
+/// <see cref="WellKnownPaths"/> (plural) is the static CATALOG that holds
+/// the well-known instances the library ships. The singular/plural
+/// distinction is intentional; consumers reference entries as
+/// <c>WellKnownPaths.OAuthAuthorizationServer</c>, not constants on
+/// <see cref="WellKnownPath"/> itself.
+/// </para>
 /// <para>
 /// Different specifications use different strategies for constructing well-known URIs:
 /// </para>

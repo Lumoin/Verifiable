@@ -3,9 +3,17 @@ using Verifiable.Core.Resolvers;
 namespace Verifiable.OAuth;
 
 /// <summary>
-/// Catalog of well-known URI paths used in OAuth, OpenID, and related identity specifications.
+/// Catalog of well-known URI paths used in OAuth, OpenID, and related
+/// identity specifications. Each static member is a single
+/// <see cref="WellKnownPath"/> instance describing one IANA-registered rule.
 /// </summary>
 /// <remarks>
+/// <para>
+/// <strong>Type vs. catalog:</strong> <see cref="WellKnownPath"/> (singular)
+/// is the entry type. This class (plural) is the static catalog of
+/// library-provided instances. The naming pair is deliberate; see
+/// <see cref="WellKnownPath"/> for the per-entry shape.
+/// </para>
 /// <para>
 /// Each entry provides a pure function that computes the metadata document URL
 /// from a base identifier. Consumers fetch the document using their own HTTP infrastructure

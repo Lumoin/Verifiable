@@ -88,7 +88,7 @@ internal static class JwtPayloadReader
         {
             return null;
         }
-        if(!cnf.TryGetProperty(WellKnownDpopValues.ConfirmationJwkThumbprint, out JsonElement jkt))
+        if(!cnf.TryGetProperty(WellKnownJwtClaimNames.JwkThumbprint, out JsonElement jkt))
         {
             return null;
         }

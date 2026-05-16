@@ -196,7 +196,7 @@ internal sealed class SdCwtPathOperationsTests
     {
         var writer = new CborWriter(CborConformanceMode.Canonical);
         writer.WriteStartMap(1);
-        writer.WriteInt32(WellKnownCwtClaims.Iss);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString(TestIssuer);
         writer.WriteEndMap();
         return writer.Encode();
@@ -209,7 +209,7 @@ internal sealed class SdCwtPathOperationsTests
         writer.WriteStartMap(3);
 
         //iss claim.
-        writer.WriteInt32(WellKnownCwtClaims.Iss);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString(TestIssuer);
 
         //_sd array.
@@ -236,7 +236,7 @@ internal sealed class SdCwtPathOperationsTests
         writer.WriteStartMap(2);
 
         //iss claim.
-        writer.WriteInt32(WellKnownCwtClaims.Iss);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString(TestIssuer);
 
         //_sd array.

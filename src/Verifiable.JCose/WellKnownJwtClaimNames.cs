@@ -219,6 +219,15 @@ public static class WellKnownJwtClaimNames
     /// </summary>
     public static readonly string Ath = "ath";
 
+    /// <summary>
+    /// The <c>jkt</c> member name inside the <c>cnf</c> (Confirmation)
+    /// structured claim per RFC 7800 §3.1. Carries the base64url-encoded
+    /// RFC 7638 JWK thumbprint of the proof-of-possession key the token is
+    /// sender-constrained to per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 §6.1</see>.
+    /// </summary>
+    public static readonly string JwkThumbprint = "jkt";
+
 
     /// <summary>Whether <paramref name="claim"/> is <see cref="Iss"/>.</summary>
     public static bool IsIss(string claim) => Equals(claim, Iss);
@@ -283,6 +292,9 @@ public static class WellKnownJwtClaimNames
     /// <summary>Whether <paramref name="claim"/> is <see cref="Ath"/>.</summary>
     public static bool IsAth(string claim) => Equals(claim, Ath);
 
+    /// <summary>Whether <paramref name="claim"/> is <see cref="JwkThumbprint"/>.</summary>
+    public static bool IsJwkThumbprint(string claim) => Equals(claim, JwkThumbprint);
+
 
     /// <summary>
     /// Returns the interned constant for a known claim name, or the original string if
@@ -311,6 +323,7 @@ public static class WellKnownJwtClaimNames
         _ when IsHtm(claim) => Htm,
         _ when IsHtu(claim) => Htu,
         _ when IsAth(claim) => Ath,
+        _ when IsJwkThumbprint(claim) => JwkThumbprint,
         _ => claim
     };
 

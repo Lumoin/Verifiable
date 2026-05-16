@@ -198,7 +198,7 @@ internal static class Rfc9068AccessTokenProducer
             Dictionary<string, object> cnf = new(StringComparer.Ordinal);
             if(confirmation.JwkThumbprint is not null)
             {
-                cnf[WellKnownDpopValues.ConfirmationJwkThumbprint] = confirmation.JwkThumbprint;
+                cnf[WellKnownJwtClaimNames.JwkThumbprint] = confirmation.JwkThumbprint;
             }
             payload[WellKnownJwtClaimNames.Cnf] = cnf;
         }
