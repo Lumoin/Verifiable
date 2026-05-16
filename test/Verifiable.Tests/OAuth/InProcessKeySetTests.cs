@@ -5,7 +5,7 @@ using Verifiable.Cryptography;
 using Verifiable.Microsoft;
 using Verifiable.OAuth.Server.Keys;
 
-namespace Verifiable.Tests.OAuth.Dpop;
+namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Exercises <see cref="InProcessKeySet"/>'s slot semantics: AddCurrent /

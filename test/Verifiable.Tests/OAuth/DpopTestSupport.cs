@@ -5,7 +5,7 @@ using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Dpop;
 
-namespace Verifiable.Tests.OAuth.Dpop;
+namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Shared System.Text.Json-backed serializer/parser bundles for the DPoP

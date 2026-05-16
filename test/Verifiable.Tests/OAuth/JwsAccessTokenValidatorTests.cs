@@ -6,7 +6,6 @@ using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
-using Verifiable.Tests.OAuth.Hosting;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 

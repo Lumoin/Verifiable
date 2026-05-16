@@ -9,7 +9,7 @@ using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Keys;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.OAuth.Dpop;
+namespace Verifiable.Tests.OAuth;
 
 [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKey ownership transfers from CreateHmacKey() to the InProcessKeySet via AddCurrent; the keyset is held in a using and disposes all materials.")]
 [TestClass]

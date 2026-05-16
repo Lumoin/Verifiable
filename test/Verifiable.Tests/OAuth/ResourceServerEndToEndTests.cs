@@ -9,12 +9,10 @@ using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
-using Verifiable.Tests.OAuth.Dpop;
-using Verifiable.Tests.OAuth.Hosting;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.OAuth.ResourceServer;
+namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Wire-level tests for <see cref="TestResourceServerShell"/> +

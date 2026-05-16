@@ -5,7 +5,7 @@ using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 
-namespace Verifiable.Tests.OAuth.Hosting;
+namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Test-side resource server host. Parallel of

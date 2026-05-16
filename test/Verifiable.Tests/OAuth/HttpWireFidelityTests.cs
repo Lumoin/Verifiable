@@ -10,7 +10,7 @@ using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.OAuth.Hosting;
+namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Phase 9b — three wire-fidelity tests that exercise paths the

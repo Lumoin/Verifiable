@@ -1,6 +1,6 @@
 using Verifiable.OAuth.Dpop;
 
-namespace Verifiable.Tests.OAuth.Dpop;
+namespace Verifiable.Tests.OAuth;
 
 [TestClass]
 internal sealed class InMemoryDpopNonceCacheTests

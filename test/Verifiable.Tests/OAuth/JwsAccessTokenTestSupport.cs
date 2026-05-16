@@ -2,7 +2,7 @@ using System.Text.Json;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 
-namespace Verifiable.Tests.OAuth.Hosting;
+namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// System.Text.Json-backed <see cref="JwsAccessTokenJsonParser"/> for the

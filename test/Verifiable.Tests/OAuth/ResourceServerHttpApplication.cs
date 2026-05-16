@@ -8,10 +8,9 @@ using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
-using Verifiable.Tests.OAuth.Dpop;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.OAuth.Hosting;
+namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Maps inbound HTTP requests for the test resource server to the

@@ -19,7 +19,6 @@ using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oidc;
-using Verifiable.Tests.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Server.States;
@@ -971,7 +970,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <summary>
     /// HTTP-backed counterpart to <see cref="CreateInProcessOAuthClientAndRegistration"/>.
     /// Starts the in-process Kestrel listener if not already running and
-    /// wires the <see cref="OAuthClient"/> with <see cref="Hosting.HttpClientTransport"/>
+    /// wires the <see cref="OAuthClient"/> with <see cref="HttpClientTransport"/>
     /// transport delegates against a real <see cref="System.Net.Http.HttpClient"/>.
     /// </summary>
     /// <remarks>
@@ -1019,7 +1018,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
             sendFormPostAsync: (endpoint, fields, headers, ct) =>
-                Hosting.HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct),
+                HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct),
             saveStateAsync: (state, ct) =>
             {
                 clientFlowStore[state.FlowId] = state;
@@ -2140,7 +2139,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// the registration's <see cref="ClientRecord.IssuerUri"/> to the
     /// Kestrel base address (so DPoP htu comparison agrees on both sides),
     /// and wires the <see cref="OAuthClient"/> with
-    /// <see cref="Hosting.HttpClientTransport"/>.
+    /// <see cref="HttpClientTransport"/>.
     /// </summary>
     public async ValueTask<DpopClientFixture> CreateDpopEnabledOAuthClientAsync(
         ClientRecord record,
@@ -2183,7 +2182,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
             sendFormPostAsync: (endpoint, fields, headers, ct) =>
-                Hosting.HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct),
+                HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct),
             saveStateAsync: (state, ct) =>
             {
                 clientFlowStore[state.FlowId] = state;
@@ -2275,7 +2274,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// Starts an in-process Kestrel listener bound to localhost on an
     /// OS-assigned ephemeral port and maps inbound HTTP requests to
     /// <see cref="AuthorizationServer.DispatchAsync"/> via
-    /// <see cref="Hosting.AuthorizationServerHttpApplication"/>.
+    /// <see cref="AuthorizationServerHttpApplication"/>.
     /// Idempotent — repeat calls return without re-binding.
     /// </summary>
     /// <remarks>
@@ -2309,7 +2308,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             socketFactory,
             global::Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
 
-        Hosting.AuthorizationServerHttpApplication app = new(Server);
+        AuthorizationServerHttpApplication app = new(Server);
         await kestrel.StartAsync(app, cancellationToken).ConfigureAwait(false);
 
         global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature? addresses =

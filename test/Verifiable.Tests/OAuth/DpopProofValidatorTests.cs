@@ -6,7 +6,7 @@ using Verifiable.OAuth.Dpop;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.OAuth.Dpop;
+namespace Verifiable.Tests.OAuth;
 
 [TestClass]
 internal sealed class DpopProofValidatorTests

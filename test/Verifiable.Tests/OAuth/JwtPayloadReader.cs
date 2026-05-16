@@ -5,7 +5,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth.Dpop;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.OAuth.Dpop;
+namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Wire-level JWT payload inspection for tests. Splits a compact JWS by

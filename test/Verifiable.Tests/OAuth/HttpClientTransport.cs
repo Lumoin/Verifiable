@@ -6,7 +6,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 
-namespace Verifiable.Tests.OAuth.Hosting;
+namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Implements the <see cref="OAuthClient"/> transport delegates against a

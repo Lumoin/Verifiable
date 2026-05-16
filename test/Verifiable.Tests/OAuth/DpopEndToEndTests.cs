@@ -12,7 +12,7 @@ using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
-namespace Verifiable.Tests.OAuth.Dpop;
+namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// The phase 6 gate test. Exercises the full DPoP-bound AuthCode flow end to
