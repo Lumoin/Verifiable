@@ -24,9 +24,9 @@ namespace Verifiable.Tests.TestDataProviders
         {
             static bool ValidateEcKeyFormatContentsMatchesRequested(PublicKeyJwk actualKeyFormat, Func<string, bool> curveValidator, Func<string, bool> algValidator)
             {
-                return WellKnownKeyTypeValues.IsEc((string)actualKeyFormat.Header[WellKnownJwkValues.Kty])
-                    && curveValidator((string)actualKeyFormat.Header[WellKnownJwkValues.Crv])
-                    && algValidator((string)actualKeyFormat.Header[WellKnownJwkValues.Alg]);
+                return WellKnownKeyTypeValues.IsEc((string)actualKeyFormat.Header[WellKnownJwkMemberNames.Kty])
+                    && curveValidator((string)actualKeyFormat.Header[WellKnownJwkMemberNames.Crv])
+                    && algValidator((string)actualKeyFormat.Header[WellKnownJwkMemberNames.Alg]);
             }
 
             static bool ValidateRsaKeyFormatContentsMatchesRequested(PublicKeyJwk actualKeyFormat, CryptoAlgorithm alg)
@@ -34,22 +34,22 @@ namespace Verifiable.Tests.TestDataProviders
                 //Raw modulus lengths for RSA keys (not DER-encoded)
                 const int Rsa2048RawModulusBase64UrlEncodedLength = 342; //256 bytes * 4/3 ≈ 342 chars.
                 const int Rsa4096RawModulusBase64UrlEncodedLength = 683; //512 bytes * 4/3 ≈ 683 chars.
-                return WellKnownKeyTypeValues.IsRsa((string)actualKeyFormat.Header[WellKnownJwkValues.Kty])
-                    && ((string)actualKeyFormat.Header[WellKnownJwkValues.E]).Equals(RsaUtilities.DefaultExponent, StringComparison.OrdinalIgnoreCase)
-                    && (alg == CryptoAlgorithm.Rsa2048 && actualKeyFormat.Header[WellKnownJwkValues.N] is string { Length: Rsa2048RawModulusBase64UrlEncodedLength }
-                        || alg == CryptoAlgorithm.Rsa4096 && actualKeyFormat.Header[WellKnownJwkValues.N] is string { Length: Rsa4096RawModulusBase64UrlEncodedLength });
+                return WellKnownKeyTypeValues.IsRsa((string)actualKeyFormat.Header[WellKnownJwkMemberNames.Kty])
+                    && ((string)actualKeyFormat.Header[WellKnownJwkMemberNames.E]).Equals(RsaUtilities.DefaultExponent, StringComparison.OrdinalIgnoreCase)
+                    && (alg == CryptoAlgorithm.Rsa2048 && actualKeyFormat.Header[WellKnownJwkMemberNames.N] is string { Length: Rsa2048RawModulusBase64UrlEncodedLength }
+                        || alg == CryptoAlgorithm.Rsa4096 && actualKeyFormat.Header[WellKnownJwkMemberNames.N] is string { Length: Rsa4096RawModulusBase64UrlEncodedLength });
             }
 
             static bool ValidateEd25519KeyFormatContentsMatchesRequested(PublicKeyJwk actualKeyFormat)
             {
-                return WellKnownKeyTypeValues.IsOkp((string)actualKeyFormat.Header[WellKnownJwkValues.Kty])
-                    && WellKnownCurveValues.IsEd25519((string)actualKeyFormat.Header[WellKnownJwkValues.Crv]);
+                return WellKnownKeyTypeValues.IsOkp((string)actualKeyFormat.Header[WellKnownJwkMemberNames.Kty])
+                    && WellKnownCurveValues.IsEd25519((string)actualKeyFormat.Header[WellKnownJwkMemberNames.Crv]);
             }
 
             static bool ValidateX25519KeyFormatContentsMatchesRequested(PublicKeyJwk actualKeyFormat)
             {
-                return WellKnownKeyTypeValues.IsOkp((string)actualKeyFormat.Header[WellKnownJwkValues.Kty])
-                    && WellKnownCurveValues.IsX25519((string)actualKeyFormat.Header[WellKnownJwkValues.Crv]);
+                return WellKnownKeyTypeValues.IsOkp((string)actualKeyFormat.Header[WellKnownJwkMemberNames.Kty])
+                    && WellKnownCurveValues.IsX25519((string)actualKeyFormat.Header[WellKnownJwkMemberNames.Crv]);
             }
 
             return keyFormatInTest switch

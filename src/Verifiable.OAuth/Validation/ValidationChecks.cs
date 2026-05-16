@@ -152,7 +152,7 @@ public static class ValidationChecks
         cancellationToken.ThrowIfCancellationRequested();
 
         ClaimOutcome outcome = ClaimOutcome.Failure;
-        if(context.TokenClaims!.TryGetValue(WellKnownJwtClaims.Aud, out object? aud))
+        if(context.TokenClaims!.TryGetValue(WellKnownJwtClaimNames.Aud, out object? aud))
         {
             outcome = aud switch
             {

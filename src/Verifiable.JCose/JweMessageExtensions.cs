@@ -127,12 +127,12 @@ public static class JweMessageExtensions
 
         var completeHeader = new JwtHeader(unencryptedJwe.Header)
         {
-            [WellKnownJwkValues.Epk] = new Dictionary<string, object>(4)
+            [WellKnownJoseHeaderNames.Epk] = new Dictionary<string, object>(4)
             {
-                [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
-                [WellKnownJwkValues.Crv] = crv,
-                [WellKnownJwkValues.X] = epkXB64,
-                [WellKnownJwkValues.Y] = epkYB64
+                [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Ec,
+                [WellKnownJwkMemberNames.Crv] = crv,
+                [WellKnownJwkMemberNames.X] = epkXB64,
+                [WellKnownJwkMemberNames.Y] = epkYB64
             }
         };
 
@@ -148,7 +148,7 @@ public static class JweMessageExtensions
         using AdditionalData aad = new AdditionalData(aadRawOwner, CryptoTags.AesGcmAad);
 
         //Step 3: Key derivation — pure software math, synchronous.
-        string encryptionAlgorithm = (string)unencryptedJwe.Header[WellKnownJwkValues.Enc];
+        string encryptionAlgorithm = (string)unencryptedJwe.Header[WellKnownJoseHeaderNames.Enc];
         int keydataLenBits = WellKnownJweEncryptionAlgorithms.IsA128Gcm(encryptionAlgorithm) ? 128 : 256;
 
         using ContentEncryptionKey cek = keyDerivationDelegate(

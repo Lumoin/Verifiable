@@ -21,11 +21,11 @@ internal sealed class DpopJwkUtilitiesTests
         IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
             publicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder);
 
-        Assert.AreEqual(WellKnownKeyTypeValues.Ec, jwk[WellKnownJwkValues.Kty]);
-        Assert.AreEqual(WellKnownCurveValues.P256, jwk[WellKnownJwkValues.Crv]);
-        Assert.IsTrue(jwk.ContainsKey(WellKnownJwkValues.X));
-        Assert.IsTrue(jwk.ContainsKey(WellKnownJwkValues.Y));
-        Assert.IsFalse(jwk.ContainsKey(WellKnownJwkValues.Alg),
+        Assert.AreEqual(WellKnownKeyTypeValues.Ec, jwk[WellKnownJwkMemberNames.Kty]);
+        Assert.AreEqual(WellKnownCurveValues.P256, jwk[WellKnownJwkMemberNames.Crv]);
+        Assert.IsTrue(jwk.ContainsKey(WellKnownJwkMemberNames.X));
+        Assert.IsTrue(jwk.ContainsKey(WellKnownJwkMemberNames.Y));
+        Assert.IsFalse(jwk.ContainsKey(WellKnownJwkMemberNames.Alg),
             "DPoP JWK header must not include 'alg' — alg lives separately on the JWS protected header.");
     }
 
@@ -43,10 +43,10 @@ internal sealed class DpopJwkUtilitiesTests
             publicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder);
         using IMemoryOwner<byte> directHash = JwkThumbprintUtilities.ComputeECThumbprint(
             SensitiveMemoryPool<byte>.Shared,
-            jwk[WellKnownJwkValues.Crv],
-            jwk[WellKnownJwkValues.Kty],
-            jwk[WellKnownJwkValues.X],
-            jwk[WellKnownJwkValues.Y]);
+            jwk[WellKnownJwkMemberNames.Crv],
+            jwk[WellKnownJwkMemberNames.Kty],
+            jwk[WellKnownJwkMemberNames.X],
+            jwk[WellKnownJwkMemberNames.Y]);
         string direct = TestSetup.Base64UrlEncoder(directHash.Memory.Span);
 
         Assert.AreEqual(direct, viaDpop);

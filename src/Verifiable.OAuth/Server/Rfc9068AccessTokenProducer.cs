@@ -200,7 +200,7 @@ internal static class Rfc9068AccessTokenProducer
             {
                 cnf[WellKnownDpopValues.ConfirmationJwkThumbprint] = confirmation.JwkThumbprint;
             }
-            payload[WellKnownJwtClaims.Cnf] = cnf;
+            payload[WellKnownJwtClaimNames.Cnf] = cnf;
         }
 
         return new TokenProducerOutput(header, payload);

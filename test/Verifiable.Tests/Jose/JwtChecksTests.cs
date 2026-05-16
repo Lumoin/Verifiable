@@ -27,7 +27,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void IsAlgNoneReturnsTrueWhenAlgIsNoneString()
     {
-        var header = new JwtHeader { [WellKnownJwkValues.Alg] = WellKnownJwaValues.None };
+        var header = new JwtHeader { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.None };
 
         Assert.IsTrue(header.IsAlgNone(),
             "A header with alg=none must be identified as unsafe.");
@@ -36,7 +36,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void IsAlgNoneReturnsFalseForValidAlgorithm()
     {
-        var header = new JwtHeader { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256 };
+        var header = new JwtHeader { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
 
         Assert.IsFalse(header.IsAlgNone(),
             "A header with a valid signing algorithm must not be flagged as alg=none.");
@@ -57,7 +57,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void IsAlgNoneOnUnverifiedReturnsTrueWhenAlgIsNone()
     {
-        var header = new UnverifiedJwtHeader { [WellKnownJwkValues.Alg] = WellKnownJwaValues.None };
+        var header = new UnverifiedJwtHeader { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.None };
 
         Assert.IsTrue(header.IsAlgNone());
     }
@@ -65,7 +65,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void IsAlgNoneOnUnverifiedReturnsFalseForValidAlgorithm()
     {
-        var header = new UnverifiedJwtHeader { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256 };
+        var header = new UnverifiedJwtHeader { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
 
         Assert.IsFalse(header.IsAlgNone());
     }
@@ -76,7 +76,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void HasValidAlgReturnsTrueForEs256()
     {
-        var header = new JwtHeader { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256 };
+        var header = new JwtHeader { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
 
         Assert.IsTrue(header.HasValidAlg());
     }
@@ -93,7 +93,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void HasValidAlgReturnsFalseWhenAlgIsNone()
     {
-        var header = new JwtHeader { [WellKnownJwkValues.Alg] = WellKnownJwaValues.None };
+        var header = new JwtHeader { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.None };
 
         Assert.IsFalse(header.HasValidAlg(),
             "alg=none is not a valid signing algorithm.");
@@ -105,7 +105,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void HasKtyReturnsTrueWhenKtyPresent()
     {
-        var header = new JwtHeader { [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec };
+        var header = new JwtHeader { [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Ec };
 
         Assert.IsTrue(header.HasKty());
     }
@@ -121,7 +121,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void HasKtyReturnsFalseWhenKtyIsEmptyString()
     {
-        var header = new JwtHeader { [WellKnownJwkValues.Kty] = string.Empty };
+        var header = new JwtHeader { [WellKnownJwkMemberNames.Kty] = string.Empty };
 
         Assert.IsFalse(header.HasKty(),
             "An empty kty value is not a valid key type.");
@@ -135,10 +135,10 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
-            [WellKnownJwkValues.X] = "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
-            [WellKnownJwkValues.Y] = "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+            [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Ec,
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P256,
+            [WellKnownJwkMemberNames.X] = "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+            [WellKnownJwkMemberNames.Y] = "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
         };
 
         Assert.IsTrue(header.HasRequiredEcFields());
@@ -149,9 +149,9 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
-            [WellKnownJwkValues.X] = "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
-            [WellKnownJwkValues.Y] = "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+            [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Ec,
+            [WellKnownJwkMemberNames.X] = "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+            [WellKnownJwkMemberNames.Y] = "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
         };
 
         Assert.IsFalse(header.HasRequiredEcFields(),
@@ -163,9 +163,9 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
-            [WellKnownJwkValues.Y] = "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+            [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Ec,
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P256,
+            [WellKnownJwkMemberNames.Y] = "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
         };
 
         Assert.IsFalse(header.HasRequiredEcFields(),
@@ -177,9 +177,9 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
-            [WellKnownJwkValues.X] = "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU"
+            [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Ec,
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P256,
+            [WellKnownJwkMemberNames.X] = "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU"
         };
 
         Assert.IsFalse(header.HasRequiredEcFields(),
@@ -194,8 +194,8 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256,
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256,
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P256
         };
 
         Assert.IsTrue(header.IsValidEcAlgCrvCombination());
@@ -206,8 +206,8 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es384,
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P384
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es384,
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P384
         };
 
         Assert.IsTrue(header.IsValidEcAlgCrvCombination());
@@ -218,8 +218,8 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es512,
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P521
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es512,
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P521
         };
 
         Assert.IsTrue(header.IsValidEcAlgCrvCombination());
@@ -230,8 +230,8 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256,
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P384
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256,
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P384
         };
 
         Assert.IsFalse(header.IsValidEcAlgCrvCombination(),
@@ -241,7 +241,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void IsValidEcAlgCrvCombinationReturnsFalseWhenAlgAbsent()
     {
-        var header = new JwtHeader { [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256 };
+        var header = new JwtHeader { [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P256 };
 
         Assert.IsFalse(header.IsValidEcAlgCrvCombination(),
             "An EC header without alg cannot have a valid alg/crv combination.");
@@ -253,7 +253,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void HasRequiredOkpFieldsReturnsTrueWhenCrvPresent()
     {
-        var header = new JwtHeader { [WellKnownJwkValues.Crv] = WellKnownCurveValues.Ed25519 };
+        var header = new JwtHeader { [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.Ed25519 };
 
         Assert.IsTrue(header.HasRequiredOkpFields());
     }
@@ -261,7 +261,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void HasRequiredOkpFieldsReturnsFalseWhenCrvAbsent()
     {
-        var header = new JwtHeader { [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Okp };
+        var header = new JwtHeader { [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Okp };
 
         Assert.IsFalse(header.HasRequiredOkpFields(),
             "OKP key without crv is missing the mandatory curve field.");
@@ -272,8 +272,8 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Alg] = WellKnownJwaValues.EdDsa,
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.Ed25519
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.EdDsa,
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.Ed25519
         };
 
         Assert.IsTrue(header.IsValidOkpAlgCrvCombination());
@@ -282,7 +282,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void IsValidOkpAlgCrvCombinationReturnsTrueForX25519WithNoAlg()
     {
-        var header = new JwtHeader { [WellKnownJwkValues.Crv] = WellKnownCurveValues.X25519 };
+        var header = new JwtHeader { [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.X25519 };
 
         Assert.IsTrue(header.IsValidOkpAlgCrvCombination(),
             "X25519 is a key agreement curve and must not carry an alg — absent alg is correct.");
@@ -293,8 +293,8 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Alg] = WellKnownJwaValues.EdDsa,
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.X25519
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.EdDsa,
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.X25519
         };
 
         Assert.IsFalse(header.IsValidOkpAlgCrvCombination(),
@@ -309,8 +309,8 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.E] = "AQAB",
-            [WellKnownJwkValues.N] = new string('A', 342)
+            [WellKnownJwkMemberNames.E] = "AQAB",
+            [WellKnownJwkMemberNames.N] = new string('A', 342)
         };
 
         Assert.IsTrue(header.HasValidRsaFields(),
@@ -322,8 +322,8 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.E] = "AQAB",
-            [WellKnownJwkValues.N] = new string('A', 683)
+            [WellKnownJwkMemberNames.E] = "AQAB",
+            [WellKnownJwkMemberNames.N] = new string('A', 683)
         };
 
         Assert.IsTrue(header.HasValidRsaFields(),
@@ -333,7 +333,7 @@ internal sealed class JwtChecksTests
     [TestMethod]
     public void HasValidRsaFieldsReturnsFalseWhenExponentMissing()
     {
-        var header = new JwtHeader { [WellKnownJwkValues.N] = new string('A', 342) };
+        var header = new JwtHeader { [WellKnownJwkMemberNames.N] = new string('A', 342) };
 
         Assert.IsFalse(header.HasValidRsaFields(),
             "RSA key without exponent e is invalid.");
@@ -344,8 +344,8 @@ internal sealed class JwtChecksTests
     {
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.E] = "AQAB",
-            [WellKnownJwkValues.N] = new string('A', 100)
+            [WellKnownJwkMemberNames.E] = "AQAB",
+            [WellKnownJwkMemberNames.N] = new string('A', 100)
         };
 
         Assert.IsFalse(header.HasValidRsaFields(),
@@ -359,8 +359,8 @@ internal sealed class JwtChecksTests
     public void TrustBoundaryIsStructuralAlgNoneProducesSameResultOnBothTypes()
     {
         string alg = WellKnownJwaValues.None;
-        var trusted = new JwtHeader { [WellKnownJwkValues.Alg] = alg };
-        var untrusted = new UnverifiedJwtHeader { [WellKnownJwkValues.Alg] = alg };
+        var trusted = new JwtHeader { [WellKnownJwkMemberNames.Alg] = alg };
+        var untrusted = new UnverifiedJwtHeader { [WellKnownJwkMemberNames.Alg] = alg };
 
         Assert.AreEqual(trusted.IsAlgNone(), untrusted.IsAlgNone(),
             "The trust boundary is structural only — the check result must be identical for the same input.");
@@ -371,9 +371,9 @@ internal sealed class JwtChecksTests
     {
         var trusted = new JwtHeader
         {
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
-            [WellKnownJwkValues.X] = "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
-            [WellKnownJwkValues.Y] = "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P256,
+            [WellKnownJwkMemberNames.X] = "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+            [WellKnownJwkMemberNames.Y] = "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
         };
         var untrusted = new UnverifiedJwtHeader(trusted);
 
@@ -390,7 +390,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Exp] = (long)(now.AddMinutes(5).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Exp] = (long)(now.AddMinutes(5).ToUnixTimeSeconds())
         };
 
         Assert.IsFalse(payload.IsExpired(now, TimeSpan.Zero),
@@ -403,7 +403,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Exp] = (long)(now.AddMinutes(-1).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Exp] = (long)(now.AddMinutes(-1).ToUnixTimeSeconds())
         };
 
         Assert.IsTrue(payload.IsExpired(now, TimeSpan.Zero),
@@ -426,7 +426,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Exp] = (long)(now.AddSeconds(-30).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Exp] = (long)(now.AddSeconds(-30).ToUnixTimeSeconds())
         };
 
         Assert.IsFalse(payload.IsExpired(now, TimeSpan.FromSeconds(60)),
@@ -439,7 +439,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Nbf] = (long)(now.AddMinutes(5).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Nbf] = (long)(now.AddMinutes(5).ToUnixTimeSeconds())
         };
 
         Assert.IsTrue(payload.IsNotYetValid(now, TimeSpan.Zero),
@@ -452,7 +452,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Nbf] = (long)(now.AddMinutes(-1).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Nbf] = (long)(now.AddMinutes(-1).ToUnixTimeSeconds())
         };
 
         Assert.IsFalse(payload.IsNotYetValid(now, TimeSpan.Zero),
@@ -475,7 +475,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Iat] = (long)(now.AddMinutes(5).ToUnixTimeSeconds())
+            [WellKnownJwtClaimNames.Iat] = (long)(now.AddMinutes(5).ToUnixTimeSeconds())
         };
 
         Assert.IsTrue(payload.IsIssuedInFuture(now, TimeSpan.Zero),
@@ -488,7 +488,7 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Iat] = (long)now.ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Iat] = (long)now.ToUnixTimeSeconds()
         };
 
         Assert.IsFalse(payload.IsIssuedInFuture(now, TimeSpan.Zero));
@@ -500,8 +500,8 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Nbf] = (long)now.ToUnixTimeSeconds(),
-            [WellKnownJwkValues.Exp] = (long)now.AddSeconds(120).ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Nbf] = (long)now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = (long)now.AddSeconds(120).ToUnixTimeSeconds()
         };
 
         Assert.IsTrue(payload.LifetimeExceeds(TimeSpan.FromSeconds(60)),
@@ -514,8 +514,8 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Nbf] = (long)now.ToUnixTimeSeconds(),
-            [WellKnownJwkValues.Exp] = (long)now.AddSeconds(60).ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Nbf] = (long)now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = (long)now.AddSeconds(60).ToUnixTimeSeconds()
         };
 
         Assert.IsFalse(payload.LifetimeExceeds(TimeSpan.FromSeconds(60)),
@@ -528,8 +528,8 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Iat] = (long)now.ToUnixTimeSeconds(),
-            [WellKnownJwkValues.Exp] = (long)now.AddSeconds(120).ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Iat] = (long)now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = (long)now.AddSeconds(120).ToUnixTimeSeconds()
         };
 
         Assert.IsTrue(payload.LifetimeExceeds(TimeSpan.FromSeconds(60)),
@@ -542,8 +542,8 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Nbf] = (long)now.AddSeconds(60).ToUnixTimeSeconds(),
-            [WellKnownJwkValues.Exp] = (long)now.ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Nbf] = (long)now.AddSeconds(60).ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = (long)now.ToUnixTimeSeconds()
         };
 
         Assert.IsTrue(payload.IsExpBeforeNbf(),
@@ -556,8 +556,8 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         var payload = new JwtPayload
         {
-            [WellKnownJwkValues.Nbf] = (long)now.ToUnixTimeSeconds(),
-            [WellKnownJwkValues.Exp] = (long)now.AddSeconds(60).ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Nbf] = (long)now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = (long)now.AddSeconds(60).ToUnixTimeSeconds()
         };
 
         Assert.IsFalse(payload.IsExpBeforeNbf(),
@@ -573,8 +573,8 @@ internal sealed class JwtChecksTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         long expSeconds = now.AddMinutes(-1).ToUnixTimeSeconds();
 
-        var trusted = new JwtPayload { [WellKnownJwkValues.Exp] = expSeconds };
-        var untrusted = new UnverifiedJwtPayload { [WellKnownJwkValues.Exp] = expSeconds };
+        var trusted = new JwtPayload { [WellKnownJwtClaimNames.Exp] = expSeconds };
+        var untrusted = new UnverifiedJwtPayload { [WellKnownJwtClaimNames.Exp] = expSeconds };
 
         Assert.AreEqual(
             trusted.IsExpired(now, TimeSpan.Zero),

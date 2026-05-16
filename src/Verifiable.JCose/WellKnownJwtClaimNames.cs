@@ -1,14 +1,24 @@
 namespace Verifiable.JCose;
 
 /// <summary>
-/// Well-known JWT claim names as registered at the
-/// <see href="https://www.iana.org/assignments/jwt/jwt.xhtml#claims">IANA JWT Claims registry</see>.
+/// Well-known JWT claim NAMES — strings that appear as JSON keys in the
+/// JWT payload object. Sourced from
+/// <see href="https://www.iana.org/assignments/jwt/jwt.xhtml#claims">IANA JSON Web Token Claims registry</see>
+/// plus OpenID Connect Core 1.0 §2 and §5.1.
 /// </summary>
 /// <remarks>
+/// <para>
+/// These are the NAMES of claims (<c>"sub"</c>, <c>"iss"</c>, <c>"aud"</c>),
+/// not their VALUES. Values are application- or context-defined: a subject
+/// identifier, an issuer URL, an audience list. Claim values do not live
+/// in this class.
+/// </para>
+/// <para>
 /// Claim names are case-sensitive per
 /// <see href="https://www.rfc-editor.org/rfc/rfc7519">RFC 7519</see>.
+/// </para>
 /// </remarks>
-public static class WellKnownJwtClaims
+public static class WellKnownJwtClaimNames
 {
     /// <summary>
     /// The <c>iss</c> (Issuer) claim identifies the principal that issued the JWT.
@@ -78,17 +88,34 @@ public static class WellKnownJwtClaims
 
     /// <summary>
     /// The <c>auth_time</c> claim carries the time when the End-User authentication occurred.
-    /// Its value is a JSON number representing the number of seconds from
-    /// 1970-01-01T00:00:00Z UTC until the date/time. Required when a <c>max_age</c> request
-    /// was made or when the <c>auth_time</c> claim was requested specifically.
+    /// Required when a <c>max_age</c> request was made or when the <c>auth_time</c> claim was
+    /// requested specifically.
     /// See <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OIDC Core §2</see>.
     /// </summary>
     public static readonly string AuthTime = "auth_time";
 
     /// <summary>
-    /// The <c>name</c> claim carries the end-user's full name in displayable form.
-    /// See <see href="https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims">OpenID Connect Core §5.1</see>.
+    /// The <c>acr</c> (Authentication Context Class Reference) claim per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OIDC Core §2</see>.
+    /// Value is an application-defined assurance level (e.g. an eIDAS LoA or NIST 800-63 IAL/AAL).
     /// </summary>
+    public static readonly string Acr = "acr";
+
+    /// <summary>
+    /// The <c>amr</c> (Authentication Methods References) claim per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OIDC Core §2</see>.
+    /// Value is an array of method identifiers (e.g. <c>pwd</c>, <c>mfa</c>, <c>hwk</c>).
+    /// </summary>
+    public static readonly string Amr = "amr";
+
+    /// <summary>
+    /// The <c>azp</c> (Authorized Party) claim per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OIDC Core §2</see>
+    /// — identifies the OAuth client the ID Token was issued to when different from the audience.
+    /// </summary>
+    public static readonly string Azp = "azp";
+
+    /// <summary>The <c>name</c> claim per OIDC Core §5.1 — full name in displayable form.</summary>
     public static readonly string Name = "name";
 
     /// <summary>The <c>given_name</c> claim per OIDC Core §5.1.</summary>
@@ -146,6 +173,18 @@ public static class WellKnownJwtClaims
     public static readonly string Address = "address";
 
     /// <summary>
+    /// The <c>roles</c> claim — commonly used to communicate roles a principal has been granted.
+    /// Application-defined value shape (typically a JSON array of role strings).
+    /// </summary>
+    public static readonly string Roles = "roles";
+
+    /// <summary>
+    /// The <c>tenant</c> claim — commonly used in multitenant applications to specify the
+    /// tenant the JWT is scoped to. Application-defined value shape.
+    /// </summary>
+    public static readonly string Tenant = "tenant";
+
+    /// <summary>
     /// The <c>vct</c> (Verifiable Credential Type) claim identifies the type of the SD-JWT VC.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9901#section-3.2.2.1.1">RFC 9901 §3.2.2.1.1</see>.
     /// </summary>
@@ -181,84 +220,67 @@ public static class WellKnownJwtClaims
     public static readonly string Ath = "ath";
 
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Iss"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Iss"/>.</summary>
     public static bool IsIss(string claim) => Equals(claim, Iss);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Sub"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Sub"/>.</summary>
     public static bool IsSub(string claim) => Equals(claim, Sub);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Aud"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Aud"/>.</summary>
     public static bool IsAud(string claim) => Equals(claim, Aud);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Exp"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Exp"/>.</summary>
     public static bool IsExp(string claim) => Equals(claim, Exp);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Nbf"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Nbf"/>.</summary>
     public static bool IsNbf(string claim) => Equals(claim, Nbf);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Iat"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Iat"/>.</summary>
     public static bool IsIat(string claim) => Equals(claim, Iat);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Jti"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Jti"/>.</summary>
     public static bool IsJti(string claim) => Equals(claim, Jti);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="ClientId"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="ClientId"/>.</summary>
     public static bool IsClientId(string claim) => Equals(claim, ClientId);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Nonce"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Nonce"/>.</summary>
     public static bool IsNonce(string claim) => Equals(claim, Nonce);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="AuthTime"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="AuthTime"/>.</summary>
     public static bool IsAuthTime(string claim) => Equals(claim, AuthTime);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Name"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Acr"/>.</summary>
+    public static bool IsAcr(string claim) => Equals(claim, Acr);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Amr"/>.</summary>
+    public static bool IsAmr(string claim) => Equals(claim, Amr);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Azp"/>.</summary>
+    public static bool IsAzp(string claim) => Equals(claim, Azp);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Name"/>.</summary>
     public static bool IsName(string claim) => Equals(claim, Name);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Vct"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Roles"/>.</summary>
+    public static bool IsRoles(string claim) => Equals(claim, Roles);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Tenant"/>.</summary>
+    public static bool IsTenant(string claim) => Equals(claim, Tenant);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Vct"/>.</summary>
     public static bool IsVct(string claim) => Equals(claim, Vct);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Cnf"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Cnf"/>.</summary>
     public static bool IsCnf(string claim) => Equals(claim, Cnf);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Htm"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Htm"/>.</summary>
     public static bool IsHtm(string claim) => Equals(claim, Htm);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Htu"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Htu"/>.</summary>
     public static bool IsHtu(string claim) => Equals(claim, Htu);
 
-    /// <summary>
-    /// Whether <paramref name="claim"/> is <see cref="Ath"/>.
-    /// </summary>
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Ath"/>.</summary>
     public static bool IsAth(string claim) => Equals(claim, Ath);
 
 
@@ -266,8 +288,6 @@ public static class WellKnownJwtClaims
     /// Returns the interned constant for a known claim name, or the original string if
     /// unrecognized. Enables reference-equality fast paths downstream.
     /// </summary>
-    /// <param name="claim">The claim name to canonicalize.</param>
-    /// <returns>The canonical constant, or <paramref name="claim"/> unchanged.</returns>
     public static string GetCanonicalizedValue(string claim) => claim switch
     {
         _ when IsIss(claim) => Iss,
@@ -280,7 +300,12 @@ public static class WellKnownJwtClaims
         _ when IsClientId(claim) => ClientId,
         _ when IsNonce(claim) => Nonce,
         _ when IsAuthTime(claim) => AuthTime,
+        _ when IsAcr(claim) => Acr,
+        _ when IsAmr(claim) => Amr,
+        _ when IsAzp(claim) => Azp,
         _ when IsName(claim) => Name,
+        _ when IsRoles(claim) => Roles,
+        _ when IsTenant(claim) => Tenant,
         _ when IsVct(claim) => Vct,
         _ when IsCnf(claim) => Cnf,
         _ when IsHtm(claim) => Htm,

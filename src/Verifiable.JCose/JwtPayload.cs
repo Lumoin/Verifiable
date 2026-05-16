@@ -12,7 +12,7 @@ namespace Verifiable.JCose;
 /// One of four sibling leaves under <see cref="JoseDictionary"/>. The grid
 /// position is <em>verified payload</em>: the enclosing JWS signature has
 /// been checked, and entries such as <c>iss</c>, <c>sub</c>, <c>iat</c>,
-/// <c>vct</c> (see <see cref="WellKnownJwtClaims"/>) are trustworthy.
+/// <c>vct</c> (see <see cref="WellKnownJwtClaimNames"/>) are trustworthy.
 /// </para>
 /// <para>
 /// For SD-JWT payloads, the <c>_sd</c> and <c>_sd_alg</c> claims are added

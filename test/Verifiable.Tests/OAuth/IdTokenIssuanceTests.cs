@@ -68,11 +68,11 @@ internal sealed class IdTokenIssuanceTests
         string idToken = idTokenElement.GetString()!;
         using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(idToken);
 
-        Assert.AreEqual(SubjectId, payload.RootElement.GetProperty(WellKnownJwtClaims.Sub).GetString());
-        Assert.AreEqual(ClientId, payload.RootElement.GetProperty(WellKnownJwtClaims.Aud).GetString());
-        Assert.AreEqual("Alice", payload.RootElement.GetProperty(WellKnownJwtClaims.Name).GetString());
-        Assert.AreEqual("alice@example.com", payload.RootElement.GetProperty(WellKnownJwtClaims.Email).GetString());
-        Assert.IsTrue(payload.RootElement.GetProperty(WellKnownJwtClaims.EmailVerified).GetBoolean());
+        Assert.AreEqual(SubjectId, payload.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString());
+        Assert.AreEqual(ClientId, payload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud).GetString());
+        Assert.AreEqual("Alice", payload.RootElement.GetProperty(WellKnownJwtClaimNames.Name).GetString());
+        Assert.AreEqual("alice@example.com", payload.RootElement.GetProperty(WellKnownJwtClaimNames.Email).GetString());
+        Assert.IsTrue(payload.RootElement.GetProperty(WellKnownJwtClaimNames.EmailVerified).GetBoolean());
     }
 
 
@@ -120,10 +120,10 @@ internal sealed class IdTokenIssuanceTests
         string idToken = body.RootElement.GetProperty("id_token").GetString()!;
         using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(idToken);
 
-        Assert.AreEqual(SubjectId, payload.RootElement.GetProperty(WellKnownJwtClaims.Sub).GetString());
-        Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaims.Name, out _),
+        Assert.AreEqual(SubjectId, payload.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString());
+        Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Name, out _),
             "name must not be emitted without profile scope.");
-        Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaims.Email, out _),
+        Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Email, out _),
             "email must not be emitted without email scope.");
     }
 
@@ -155,7 +155,7 @@ internal sealed class IdTokenIssuanceTests
         string idToken = body.RootElement.GetProperty("id_token").GetString()!;
         using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(idToken);
 
-        JsonElement address = payload.RootElement.GetProperty(WellKnownJwtClaims.Address);
+        JsonElement address = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Address);
         Assert.AreEqual(JsonValueKind.Object, address.ValueKind);
         Assert.AreEqual("Helsinki", address.GetProperty("locality").GetString());
         Assert.AreEqual("FI", address.GetProperty("country").GetString());
@@ -189,8 +189,8 @@ internal sealed class IdTokenIssuanceTests
         string idToken = body.RootElement.GetProperty("id_token").GetString()!;
         using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(idToken);
 
-        Assert.AreEqual("+358401234567", payload.RootElement.GetProperty(WellKnownJwtClaims.PhoneNumber).GetString());
-        Assert.IsTrue(payload.RootElement.GetProperty(WellKnownJwtClaims.PhoneNumberVerified).GetBoolean());
+        Assert.AreEqual("+358401234567", payload.RootElement.GetProperty(WellKnownJwtClaimNames.PhoneNumber).GetString());
+        Assert.IsTrue(payload.RootElement.GetProperty(WellKnownJwtClaimNames.PhoneNumberVerified).GetBoolean());
     }
 
 
@@ -210,10 +210,10 @@ internal sealed class IdTokenIssuanceTests
         string idToken = body.RootElement.GetProperty("id_token").GetString()!;
         using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(idToken);
 
-        string iss = payload.RootElement.GetProperty(WellKnownJwtClaims.Iss).GetString()!;
+        string iss = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Iss).GetString()!;
         Assert.IsTrue(iss.Contains(material.Registration.TenantId.Value, StringComparison.Ordinal),
             $"iss must carry the tenant segment, got '{iss}'.");
-        Assert.AreEqual(ClientId, payload.RootElement.GetProperty(WellKnownJwtClaims.Aud).GetString());
+        Assert.AreEqual(ClientId, payload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud).GetString());
     }
 
 
@@ -233,8 +233,8 @@ internal sealed class IdTokenIssuanceTests
         string idToken = body.RootElement.GetProperty("id_token").GetString()!;
         using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(idToken);
 
-        long iat = payload.RootElement.GetProperty(WellKnownJwtClaims.Iat).GetInt64();
-        long exp = payload.RootElement.GetProperty(WellKnownJwtClaims.Exp).GetInt64();
+        long iat = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64();
+        long exp = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Exp).GetInt64();
 
         Assert.IsGreaterThan(iat, exp,
             "exp must be strictly greater than iat.");

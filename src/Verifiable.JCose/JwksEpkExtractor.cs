@@ -61,21 +61,21 @@ public static class JwksEpkExtractor
         {
             throw new FormatException(
                 "JWKS does not contain a key with required EC fields " +
-                $"'{WellKnownJwkValues.Kty}', '{WellKnownJwkValues.Crv}', " +
-                $"'{WellKnownJwkValues.X}', and '{WellKnownJwkValues.Y}'.");
+                $"'{WellKnownJwkMemberNames.Kty}', '{WellKnownJwkMemberNames.Crv}', " +
+                $"'{WellKnownJwkMemberNames.X}', and '{WellKnownJwkMemberNames.Y}'.");
         }
 
         if(!WellKnownKeyTypeValues.IsEc(kty))
         {
             throw new FormatException(
-                $"JWKS key has '{WellKnownJwkValues.Kty}'='{kty}'. " +
+                $"JWKS key has '{WellKnownJwkMemberNames.Kty}'='{kty}'. " +
                 $"Only '{WellKnownKeyTypeValues.Ec}' keys are supported for ECDH-ES encryption.");
         }
 
         if(!WellKnownCurveValues.IsP256(crv))
         {
             throw new FormatException(
-                $"JWKS key has '{WellKnownJwkValues.Crv}'='{crv}'. " +
+                $"JWKS key has '{WellKnownJwkMemberNames.Crv}'='{crv}'. " +
                 $"Only '{WellKnownCurveValues.P256}' is supported for HAIP 1.0 ECDH-ES.");
         }
 

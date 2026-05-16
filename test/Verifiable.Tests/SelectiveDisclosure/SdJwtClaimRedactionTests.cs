@@ -39,7 +39,7 @@ internal sealed class SdJwtClaimRedactionTests
         Assert.HasCount(2, disclosures);
         Assert.IsTrue(payload.ContainsKey(SdConstants.SdClaimName), "Root must have _sd array.");
         Assert.IsTrue(payload.ContainsKey(SdConstants.SdAlgorithmClaimName), "Root must have _sd_alg.");
-        Assert.AreEqual("https://issuer.example.com", payload[WellKnownJwtClaims.Iss]);
+        Assert.AreEqual("https://issuer.example.com", payload[WellKnownJwtClaimNames.Iss]);
         Assert.IsFalse(payload.ContainsKey("given_name"), "Disclosable claim must not be in payload.");
         Assert.IsFalse(payload.ContainsKey("family_name"), "Disclosable claim must not be in payload.");
     }
@@ -163,7 +163,7 @@ internal sealed class SdJwtClaimRedactionTests
         Assert.HasCount(0, disclosures);
         Assert.IsFalse(payload.ContainsKey(SdConstants.SdClaimName), "No _sd when nothing is disclosable.");
         Assert.IsFalse(payload.ContainsKey(SdConstants.SdAlgorithmClaimName), "No _sd_alg when nothing is disclosable.");
-        Assert.AreEqual("https://issuer.example.com", payload[WellKnownJwtClaims.Iss]);
+        Assert.AreEqual("https://issuer.example.com", payload[WellKnownJwtClaimNames.Iss]);
         Assert.AreEqual("Erika", payload["given_name"]);
     }
 
@@ -189,7 +189,7 @@ internal sealed class SdJwtClaimRedactionTests
         var (payload, disclosures) = SdJwtClaimRedaction.Redact(json, disclosablePaths, TestSalts.DefaultGenerator());
 
         Assert.HasCount(2, disclosures);
-        Assert.AreEqual("https://issuer.example.com", payload[WellKnownJwtClaims.Iss]);
+        Assert.AreEqual("https://issuer.example.com", payload[WellKnownJwtClaimNames.Iss]);
         Assert.AreEqual("1964-08-12", payload["birthdate"]);
         Assert.IsFalse(payload.ContainsKey("given_name"), "Disclosable claim must not be in mandatory payload.");
         Assert.IsFalse(payload.ContainsKey("family_name"), "Disclosable claim must not be in mandatory payload.");

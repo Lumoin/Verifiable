@@ -79,7 +79,7 @@ public static class JarAttestationExtensions
 
         UnverifiedJwtHeader header = unverified.Signatures[0].ProtectedHeader;
 
-        if(header.TryGetValue(WellKnownJwkValues.Jwt, out object? jwtObj)
+        if(header.TryGetValue(WellKnownJoseHeaderNames.Jwt, out object? jwtObj)
             && jwtObj is string compactJwt
             && !string.IsNullOrWhiteSpace(compactJwt))
         {

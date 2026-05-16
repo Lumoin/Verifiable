@@ -38,9 +38,9 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            [WellKnownJwtClaims.Iss] = "did:example:76e12ec712ebc6f1c221ebfeb1f",
-            [WellKnownJwtClaims.Vct] = "ExampleDegreeCredential",
-            [WellKnownJwtClaims.Iat] = 1725244200,
+            [WellKnownJwtClaimNames.Iss] = "did:example:76e12ec712ebc6f1c221ebfeb1f",
+            [WellKnownJwtClaimNames.Vct] = "ExampleDegreeCredential",
+            [WellKnownJwtClaimNames.Iat] = 1725244200,
             ["given_name"] = "Alice",
             ["family_name"] = "Smith"
         };
@@ -75,7 +75,7 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            [WellKnownJwtClaims.Iss] = "https://issuer.example.com",
+            [WellKnownJwtClaimNames.Iss] = "https://issuer.example.com",
             ["address"] = new Dictionary<string, object>
             {
                 ["street"] = "Heidestrasse 17",
@@ -110,9 +110,9 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            [WellKnownJwtClaims.Iss] = "https://issuer.example.com",
-            [WellKnownJwtClaims.Vct] = "IdentityCredential",
-            [WellKnownJwtClaims.Iat] = 1700000000
+            [WellKnownJwtClaimNames.Iss] = "https://issuer.example.com",
+            [WellKnownJwtClaimNames.Vct] = "IdentityCredential",
+            [WellKnownJwtClaimNames.Iat] = 1700000000
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
@@ -135,7 +135,7 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            [WellKnownJwtClaims.Iss] = "https://issuer.example.com",
+            [WellKnownJwtClaimNames.Iss] = "https://issuer.example.com",
             ["address"] = new Dictionary<string, object>
             {
                 ["street"] = "Heidestrasse 17",

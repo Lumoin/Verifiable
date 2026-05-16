@@ -272,7 +272,7 @@ public static class AuthCodeEndpoints
                 }
                 scope ??= string.Empty;
 
-                fields.TryGetValue(WellKnownJwtClaims.Nonce, out string? nonce);
+                fields.TryGetValue(WellKnownJwtClaimNames.Nonce, out string? nonce);
                 nonce ??= string.Empty;
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
@@ -534,7 +534,7 @@ public static class AuthCodeEndpoints
                 fields.TryGetValue(OAuthRequestParameters.Scope, out string? scope);
                 scope ??= string.Empty;
 
-                fields.TryGetValue(WellKnownJwtClaims.Nonce, out string? nonce);
+                fields.TryGetValue(WellKnownJwtClaimNames.Nonce, out string? nonce);
                 nonce ??= string.Empty;
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
@@ -1058,7 +1058,7 @@ public static class AuthCodeEndpoints
         AuthorizationServer server,
         CancellationToken cancellationToken)
     {
-        if(!claims.ContainsKey(WellKnownJwtClaims.Aud))
+        if(!claims.ContainsKey(WellKnownJwtClaimNames.Aud))
         {
             return ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidRequestObject,
@@ -1351,8 +1351,8 @@ public static class AuthCodeEndpoints
                     issuedTokens[producer.ResponseField] = compactJws;
 
                     string jti = ExtractJti(payload);
-                    DateTimeOffset issuedAt = ExtractInstant(payload, WellKnownJwtClaims.Iat, now);
-                    DateTimeOffset expiresAt = ExtractInstant(payload, WellKnownJwtClaims.Exp, now);
+                    DateTimeOffset issuedAt = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
+                    DateTimeOffset expiresAt = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
 
                     issuedAudits[producer.ResponseField] = new IssuedTokenAudit
                     {
@@ -1702,8 +1702,8 @@ public static class AuthCodeEndpoints
                     issuedTokens[producer.ResponseField] = compactJws;
 
                     string jti = ExtractJti(payload);
-                    DateTimeOffset issuedAt = ExtractInstant(payload, WellKnownJwtClaims.Iat, now);
-                    DateTimeOffset expiresAt = ExtractInstant(payload, WellKnownJwtClaims.Exp, now);
+                    DateTimeOffset issuedAt = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
+                    DateTimeOffset expiresAt = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
 
                     issuedAudits[producer.ResponseField] = new IssuedTokenAudit
                     {
@@ -2050,7 +2050,7 @@ public static class AuthCodeEndpoints
 
     private static string ExtractJti(JwtPayload payload)
     {
-        if(payload.TryGetValue(WellKnownJwtClaims.Jti, out object? value) && value is string jti)
+        if(payload.TryGetValue(WellKnownJwtClaimNames.Jti, out object? value) && value is string jti)
         {
             return jti;
         }

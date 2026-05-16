@@ -34,9 +34,9 @@ internal static class DpopTestSupport
     {
         Dictionary<string, object> dict = new(StringComparer.Ordinal)
         {
-            [WellKnownJwkValues.Alg] = header.Alg,
-            [WellKnownJwkValues.Typ] = header.Typ,
-            [WellKnownJwkValues.Jwk] = ToObjectDictionary(header.Jwk)
+            [WellKnownJwkMemberNames.Alg] = header.Alg,
+            [WellKnownJoseHeaderNames.Typ] = header.Typ,
+            [WellKnownJoseHeaderNames.Jwk] = ToObjectDictionary(header.Jwk)
         };
         return dict;
     }
@@ -48,8 +48,8 @@ internal static class DpopTestSupport
         {
             [WellKnownDpopValues.ClaimHtm] = claims.Htm,
             [WellKnownDpopValues.ClaimHtu] = claims.Htu,
-            [WellKnownJwkValues.Iat] = claims.Iat.ToUnixTimeSeconds(),
-            [WellKnownJwkValues.Jti] = claims.Jti
+            [WellKnownJwtClaimNames.Iat] = claims.Iat.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Jti] = claims.Jti
         };
         if(claims.Nonce is not null)
         {
@@ -78,13 +78,13 @@ internal static class DpopTestSupport
         using JsonDocument doc = JsonDocument.Parse(bytes);
         JsonElement root = doc.RootElement;
 
-        string alg = root.GetProperty(WellKnownJwkValues.Alg).GetString()
+        string alg = root.GetProperty(WellKnownJwkMemberNames.Alg).GetString()
             ?? throw new FormatException("DPoP header is missing 'alg'.");
-        string typ = root.TryGetProperty(WellKnownJwkValues.Typ, out JsonElement typElement)
+        string typ = root.TryGetProperty(WellKnownJoseHeaderNames.Typ, out JsonElement typElement)
             ? typElement.GetString() ?? string.Empty
             : string.Empty;
 
-        if(!root.TryGetProperty(WellKnownJwkValues.Jwk, out JsonElement jwkElement))
+        if(!root.TryGetProperty(WellKnownJoseHeaderNames.Jwk, out JsonElement jwkElement))
         {
             throw new FormatException("DPoP header is missing 'jwk'.");
         }
@@ -112,8 +112,8 @@ internal static class DpopTestSupport
             ?? throw new FormatException("DPoP claims are missing 'htm'.");
         string htu = root.GetProperty(WellKnownDpopValues.ClaimHtu).GetString()
             ?? throw new FormatException("DPoP claims are missing 'htu'.");
-        long iatSeconds = root.GetProperty(WellKnownJwkValues.Iat).GetInt64();
-        string jti = root.GetProperty(WellKnownJwkValues.Jti).GetString()
+        long iatSeconds = root.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64();
+        string jti = root.GetProperty(WellKnownJwtClaimNames.Jti).GetString()
             ?? throw new FormatException("DPoP claims are missing 'jti'.");
 
         string? nonce = root.TryGetProperty(WellKnownDpopValues.ClaimNonce, out JsonElement nonceElement)

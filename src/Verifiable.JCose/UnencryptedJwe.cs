@@ -77,8 +77,8 @@ public sealed class UnencryptedJwe
 
         var header = new JwtHeader(capacity: 2)
         {
-            [WellKnownJwkValues.Alg] = keyManagementAlgorithm,
-            [WellKnownJwkValues.Enc] = contentEncryptionAlgorithm
+            [WellKnownJwkMemberNames.Alg] = keyManagementAlgorithm,
+            [WellKnownJoseHeaderNames.Enc] = contentEncryptionAlgorithm
         };
 
         return new UnencryptedJwe(header, plaintext);

@@ -85,7 +85,7 @@ public static class JarVerification
             // 'oauth-authz-req+jwt'; the wallet/AS MUST refuse anything else.
             UnverifiedJwtHeader unverifiedHeader = unverified.Signatures[0].ProtectedHeader;
 
-            if(!unverifiedHeader.TryGetValue(WellKnownJwkValues.Typ, out object? typObj)
+            if(!unverifiedHeader.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
                 || typObj is not string typ
                 || !WellKnownMediaTypes.Jwt.IsOauthAuthzReqJwt(typ))
             {
@@ -143,9 +143,9 @@ public static class JarVerification
             DateTimeOffset exp;
             try
             {
-                iat = JwtClaimReaders.RequireInstant(claims, WellKnownJwtClaims.Iat);
-                nbf = JwtClaimReaders.RequireInstant(claims, WellKnownJwtClaims.Nbf);
-                exp = JwtClaimReaders.RequireInstant(claims, WellKnownJwtClaims.Exp);
+                iat = JwtClaimReaders.RequireInstant(claims, WellKnownJwtClaimNames.Iat);
+                nbf = JwtClaimReaders.RequireInstant(claims, WellKnownJwtClaimNames.Nbf);
+                exp = JwtClaimReaders.RequireInstant(claims, WellKnownJwtClaimNames.Exp);
             }
             catch(FormatException ex)
             {

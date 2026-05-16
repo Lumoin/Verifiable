@@ -11,7 +11,7 @@ namespace Verifiable.Tests.Jwt
         public void Test1()
         {
             //TODO: E.g. https://stackoverflow.com/questions/43291659/usage-of-nbf-in-json-web-tokens.            
-            var headers = new Dictionary<string, object> { { WellKnownJwkValues.Alg, WellKnownJwaValues.None } };
+            var headers = new Dictionary<string, object> { { WellKnownJwkMemberNames.Alg, WellKnownJwaValues.None } };
             var validationResult = DefaultJwtValidationClaims.ValidateAlgIsNotNone(headers);
 
             Assert.IsFalse(validationResult.All(c => c.Outcome == ClaimOutcome.Success));

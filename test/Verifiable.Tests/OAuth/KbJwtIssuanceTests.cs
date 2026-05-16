@@ -90,7 +90,7 @@ internal sealed class KbJwtIssuanceTests
             memoryPool: Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        string typ = ReadHeaderStringClaim(compactKbJwt, WellKnownJwkValues.Typ);
+        string typ = ReadHeaderStringClaim(compactKbJwt, WellKnownJoseHeaderNames.Typ);
         Assert.AreEqual(WellKnownMediaTypes.Jwt.KbJwt, typ);
     }
 
@@ -119,9 +119,9 @@ internal sealed class KbJwtIssuanceTests
             memoryPool: Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(Nonce, ReadPayloadStringClaim(compactKbJwt, WellKnownJwtClaims.Nonce));
-        Assert.AreEqual(Aud, ReadPayloadStringClaim(compactKbJwt, WellKnownJwtClaims.Aud));
-        Assert.AreEqual(iat.ToUnixTimeSeconds(), ReadPayloadInt64Claim(compactKbJwt, WellKnownJwtClaims.Iat));
+        Assert.AreEqual(Nonce, ReadPayloadStringClaim(compactKbJwt, WellKnownJwtClaimNames.Nonce));
+        Assert.AreEqual(Aud, ReadPayloadStringClaim(compactKbJwt, WellKnownJwtClaimNames.Aud));
+        Assert.AreEqual(iat.ToUnixTimeSeconds(), ReadPayloadInt64Claim(compactKbJwt, WellKnownJwtClaimNames.Iat));
     }
 
 

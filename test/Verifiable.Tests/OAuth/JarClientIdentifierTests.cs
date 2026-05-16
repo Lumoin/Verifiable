@@ -155,7 +155,7 @@ internal sealed class JarClientIdentifierTests
             memoryPool: Pool,
             additionalHeaderClaims: new Dictionary<string, object>
             {
-                [WellKnownJwkValues.Jwt] = attestationCompactJwt
+                [WellKnownJoseHeaderNames.Jwt] = attestationCompactJwt
             },
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -281,7 +281,7 @@ internal sealed class JarClientIdentifierTests
             memoryPool: Pool,
             additionalHeaderClaims: new Dictionary<string, object>
             {
-                [WellKnownJwkValues.Jwt] = attestationCompactJwt
+                [WellKnownJoseHeaderNames.Jwt] = attestationCompactJwt
             },
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -416,7 +416,7 @@ internal sealed class JarClientIdentifierTests
                 memoryPool: Pool,
                 additionalHeaderClaims: new Dictionary<string, object>
                 {
-                    [WellKnownJwkValues.X5c] = x5cValues
+                    [WellKnownJwkMemberNames.X5c] = x5cValues
                 },
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -567,7 +567,7 @@ internal sealed class JarClientIdentifierTests
                 memoryPool: Pool,
                 additionalHeaderClaims: new Dictionary<string, object>
                 {
-                    [WellKnownJwkValues.X5c] = x5cValues
+                    [WellKnownJwkMemberNames.X5c] = x5cValues
                 },
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -642,7 +642,7 @@ internal sealed class JarClientIdentifierTests
 
         UnverifiedJwtHeader header = unverified.Signatures[0].ProtectedHeader;
 
-        if(!header.TryGetValue(WellKnownJwkValues.X5c, out object? x5cObj))
+        if(!header.TryGetValue(WellKnownJwkMemberNames.X5c, out object? x5cObj))
         {
             Assert.Fail("JAR header does not contain an x5c parameter.");
             throw new InvalidOperationException("Unreachable.");

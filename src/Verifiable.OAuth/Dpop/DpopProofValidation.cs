@@ -212,10 +212,10 @@ public static class DpopProofValidation
     {
         using IMemoryOwner<byte> hash = JwkThumbprintUtilities.ComputeECThumbprint(
             memoryPool,
-            jwk[WellKnownJwkValues.Crv],
-            jwk[WellKnownJwkValues.Kty],
-            jwk[WellKnownJwkValues.X],
-            jwk[WellKnownJwkValues.Y]);
+            jwk[WellKnownJwkMemberNames.Crv],
+            jwk[WellKnownJwkMemberNames.Kty],
+            jwk[WellKnownJwkMemberNames.X],
+            jwk[WellKnownJwkMemberNames.Y]);
         return base64UrlEncoder(hash.Memory.Span);
     }
 }

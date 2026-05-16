@@ -1144,7 +1144,7 @@ internal sealed class AuthorizationServerFeatureTests
             $"JWKS endpoint must return Content-Type: application/json for {displayName}.");
 
         using JsonDocument doc = JsonDocument.Parse(response.Body);
-        JsonElement keysElement = doc.RootElement.GetProperty(WellKnownJwkValues.Keys);
+        JsonElement keysElement = doc.RootElement.GetProperty(WellKnownJwkMemberNames.Keys);
         JsonElement[] jwkArray = keysElement.EnumerateArray().ToArray();
 
         Assert.HasCount(1, jwkArray,
@@ -1152,29 +1152,29 @@ internal sealed class AuthorizationServerFeatureTests
 
         JsonElement jwk = jwkArray[0];
 
-        Assert.AreEqual(expectedKty, jwk.GetProperty(WellKnownJwkValues.Kty).GetString(),
+        Assert.AreEqual(expectedKty, jwk.GetProperty(WellKnownJwkMemberNames.Kty).GetString(),
             $"Key type mismatch for {displayName}.");
 
-        Assert.AreEqual(expectedAlg, jwk.GetProperty(WellKnownJwkValues.Alg).GetString(),
+        Assert.AreEqual(expectedAlg, jwk.GetProperty(WellKnownJwkMemberNames.Alg).GetString(),
             $"Algorithm mismatch for {displayName}.");
 
         Assert.AreEqual(WellKnownJwkValues.UseSig,
-            jwk.GetProperty(WellKnownJwkValues.Use).GetString(),
+            jwk.GetProperty(WellKnownJwkMemberNames.Use).GetString(),
             $"Use must be '{WellKnownJwkValues.UseSig}' for {displayName}.");
 
         Assert.AreEqual(registration.GetDefaultSigningKeyId(KeyUsageContext.AccessTokenIssuance).Value,
-            jwk.GetProperty(WellKnownJwkValues.Kid).GetString(),
+            jwk.GetProperty(WellKnownJwkMemberNames.Kid).GetString(),
             $"Kid must match registration signing key identifier for {displayName}.");
 
         if(expectedCrv is not null)
         {
             Assert.AreEqual(expectedCrv,
-                jwk.GetProperty(WellKnownJwkValues.Crv).GetString(),
+                jwk.GetProperty(WellKnownJwkMemberNames.Crv).GetString(),
                 $"Curve mismatch for {displayName}.");
         }
         else
         {
-            Assert.IsFalse(jwk.TryGetProperty(WellKnownJwkValues.Crv, out _),
+            Assert.IsFalse(jwk.TryGetProperty(WellKnownJwkMemberNames.Crv, out _),
                 $"Key type '{expectedKty}' must not have a 'crv' property for {displayName}.");
         }
     }
@@ -1203,13 +1203,13 @@ internal sealed class AuthorizationServerFeatureTests
         using JsonDocument ecDoc = JsonDocument.Parse(ecResponse.Body);
         using JsonDocument pqDoc = JsonDocument.Parse(pqResponse.Body);
 
-        string? ecKty = ecDoc.RootElement.GetProperty(WellKnownJwkValues.Keys)
+        string? ecKty = ecDoc.RootElement.GetProperty(WellKnownJwkMemberNames.Keys)
             .EnumerateArray().First()
-            .GetProperty(WellKnownJwkValues.Kty).GetString();
+            .GetProperty(WellKnownJwkMemberNames.Kty).GetString();
 
-        string? pqKty = pqDoc.RootElement.GetProperty(WellKnownJwkValues.Keys)
+        string? pqKty = pqDoc.RootElement.GetProperty(WellKnownJwkMemberNames.Keys)
             .EnumerateArray().First()
-            .GetProperty(WellKnownJwkValues.Kty).GetString();
+            .GetProperty(WellKnownJwkMemberNames.Kty).GetString();
 
         Assert.AreEqual(WellKnownKeyTypeValues.Ec, ecKty,
             "EC client JWKS must report key type 'EC'.");
@@ -1354,11 +1354,11 @@ internal sealed class AuthorizationServerFeatureTests
 
         using JsonDocument unrestrictedDoc = JsonDocument.Parse(unrestrictedResponse.Body);
         JsonElement[] unrestrictedKeys = unrestrictedDoc.RootElement
-            .GetProperty(WellKnownJwkValues.Keys).EnumerateArray().ToArray();
+            .GetProperty(WellKnownJwkMemberNames.Keys).EnumerateArray().ToArray();
 
         using JsonDocument restrictedDoc = JsonDocument.Parse(restrictedResponse.Body);
         JsonElement[] restrictedKeys = restrictedDoc.RootElement
-            .GetProperty(WellKnownJwkValues.Keys).EnumerateArray().ToArray();
+            .GetProperty(WellKnownJwkMemberNames.Keys).EnumerateArray().ToArray();
 
         Assert.IsGreaterThan(0, unrestrictedKeys.Length,
             "Unrestricted caller must receive at least one key.");
@@ -1448,7 +1448,7 @@ internal sealed class AuthorizationServerFeatureTests
 
         using JsonDocument doc = JsonDocument.Parse(response.Body);
         JsonElement[] jwkArray = doc.RootElement
-            .GetProperty(WellKnownJwkValues.Keys).EnumerateArray().ToArray();
+            .GetProperty(WellKnownJwkMemberNames.Keys).EnumerateArray().ToArray();
 
         //After rotation the routing table carries the updated registration with the
         //new SigningKeyId. BuildJwksDocumentAsync receives the updated registration
@@ -1456,7 +1456,7 @@ internal sealed class AuthorizationServerFeatureTests
         //delegate implementation — in TestHostShell it follows the current
         //registration's SigningKeyId.
         bool foundRotatedKey = jwkArray.Any(jwk =>
-            jwk.TryGetProperty(WellKnownJwkValues.Kid, out JsonElement kid) &&
+            jwk.TryGetProperty(WellKnownJwkMemberNames.Kid, out JsonElement kid) &&
             string.Equals(kid.GetString(), rotatedKeys.SigningKeyId.Value, StringComparison.Ordinal));
 
         Assert.IsTrue(foundRotatedKey,
@@ -1628,10 +1628,10 @@ internal sealed class AuthorizationServerFeatureTests
 
         using JsonDocument doc = JsonDocument.Parse(response.Body);
         JsonElement[] jwkArray = doc.RootElement
-            .GetProperty(WellKnownJwkValues.Keys).EnumerateArray().ToArray();
+            .GetProperty(WellKnownJwkMemberNames.Keys).EnumerateArray().ToArray();
 
         bool foundNewKey = jwkArray.Any(jwk =>
-            jwk.TryGetProperty(WellKnownJwkValues.Kid, out JsonElement kid) &&
+            jwk.TryGetProperty(WellKnownJwkMemberNames.Kid, out JsonElement kid) &&
             string.Equals(kid.GetString(), rotatedKeys.SigningKeyId.Value, StringComparison.Ordinal));
 
         Assert.IsTrue(foundNewKey,
@@ -1780,7 +1780,7 @@ internal sealed class AuthorizationServerFeatureTests
             TestContext.CancellationToken).ConfigureAwait(false)).Body);
 
         JsonElement[] finalKeys = doc.RootElement
-            .GetProperty(WellKnownJwkValues.Keys)
+            .GetProperty(WellKnownJwkMemberNames.Keys)
             .EnumerateArray()
             .ToArray();
 
@@ -1788,7 +1788,7 @@ internal sealed class AuthorizationServerFeatureTests
         JsonElement? matchingKey = finalKeys
             .Cast<JsonElement?>()
             .FirstOrDefault(jwk =>
-                jwk!.Value.TryGetProperty(WellKnownJwkValues.Kid, out JsonElement kid)
+                jwk!.Value.TryGetProperty(WellKnownJwkMemberNames.Kid, out JsonElement kid)
                 && string.Equals(kid.GetString(), expectedKid, StringComparison.Ordinal));
 
         Assert.IsNotNull(matchingKey,
@@ -2349,7 +2349,7 @@ internal sealed class AuthorizationServerFeatureTests
             subject: "alice", jti: "j1", scope: "read",
             issuedAt: now, expiresAt: now.AddHours(1),
             issuer: "https://issuer", audience: SingleAudience, clientId: "c1");
-        Assert.IsTrue(single.TryGetValue(WellKnownJwtClaims.Aud, out object? singleAud));
+        Assert.IsTrue(single.TryGetValue(WellKnownJwtClaimNames.Aud, out object? singleAud));
         Assert.IsInstanceOfType<string>(singleAud);
         Assert.AreEqual("https://api1", (string)singleAud!);
 
@@ -2358,14 +2358,14 @@ internal sealed class AuthorizationServerFeatureTests
             issuedAt: now, expiresAt: now.AddHours(1),
             issuer: "https://issuer",
             audience: MultiAudience, clientId: "c1");
-        Assert.IsTrue(multi.TryGetValue(WellKnownJwtClaims.Aud, out object? multiAud));
+        Assert.IsTrue(multi.TryGetValue(WellKnownJwtClaimNames.Aud, out object? multiAud));
         Assert.IsInstanceOfType<IReadOnlyList<string>>(multiAud);
 
         JwtPayload absent = JwtPayload.ForAccessToken(
             subject: "alice", jti: "j3", scope: "read",
             issuedAt: now, expiresAt: now.AddHours(1),
             issuer: "https://issuer", audience: null, clientId: "c1");
-        Assert.IsFalse(absent.ContainsKey(WellKnownJwtClaims.Aud),
+        Assert.IsFalse(absent.ContainsKey(WellKnownJwtClaimNames.Aud),
             "Null audience must omit the aud claim entirely.");
 
         JwtPayload empty = JwtPayload.ForAccessToken(
@@ -2373,7 +2373,7 @@ internal sealed class AuthorizationServerFeatureTests
             issuedAt: now, expiresAt: now.AddHours(1),
             issuer: "https://issuer",
             audience: Array.Empty<string>(), clientId: "c1");
-        Assert.IsFalse(empty.ContainsKey(WellKnownJwtClaims.Aud),
+        Assert.IsFalse(empty.ContainsKey(WellKnownJwtClaimNames.Aud),
             "Empty audience list must omit the aud claim entirely.");
     }
 

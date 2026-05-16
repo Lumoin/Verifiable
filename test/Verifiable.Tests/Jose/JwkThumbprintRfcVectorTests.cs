@@ -137,9 +137,9 @@ internal class JwkThumbprintRfcVectorTests
     {
         var jwkParams = new Dictionary<string, string>
         {
-            [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Rsa,
-            [WellKnownJwkValues.E] = JwkTemplateConstants.RsaStandardExponent,
-            [WellKnownJwkValues.N] = "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw"
+            [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Rsa,
+            [WellKnownJwkMemberNames.E] = JwkTemplateConstants.RsaStandardExponent,
+            [WellKnownJwkMemberNames.N] = "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw"
         };
 
         using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(jwkParams);
@@ -156,18 +156,18 @@ internal class JwkThumbprintRfcVectorTests
     {
         var jwkParams1 = new Dictionary<string, string>
         {
-            [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
-            [WellKnownJwkValues.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
-            [WellKnownJwkValues.Y] = "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE"
+            [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Ec,
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P256,
+            [WellKnownJwkMemberNames.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
+            [WellKnownJwkMemberNames.Y] = "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE"
         };
 
         var jwkParams2 = new Dictionary<string, string>
         {
-            [WellKnownJwkValues.Y] = "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE",
-            [WellKnownJwkValues.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
-            [WellKnownJwkValues.Crv] = WellKnownCurveValues.P256,
-            [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec
+            [WellKnownJwkMemberNames.Y] = "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE",
+            [WellKnownJwkMemberNames.X] = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
+            [WellKnownJwkMemberNames.Crv] = WellKnownCurveValues.P256,
+            [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Ec
         };
 
         using var thumbprint1 = JwkThumbprintUtilities.ComputeGenericThumbprint(jwkParams1);

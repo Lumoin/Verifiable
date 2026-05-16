@@ -59,7 +59,7 @@ internal sealed class DpopProofValidationTests
         string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
             header => new Dictionary<string, object>(header)
             {
-                [WellKnownJwkValues.Typ] = WellKnownJwkValues.TypeJwt
+                [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
             }).ConfigureAwait(false);
 
         DpopValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
@@ -79,7 +79,7 @@ internal sealed class DpopProofValidationTests
         string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
             header => new Dictionary<string, object>(header)
             {
-                [WellKnownJwkValues.Alg] = WellKnownJwaValues.Hs256
+                [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Hs256
             }).ConfigureAwait(false);
 
         DpopValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
@@ -97,7 +97,7 @@ internal sealed class DpopProofValidationTests
             header =>
             {
                 Dictionary<string, object> tampered = new(header);
-                tampered.Remove(WellKnownJwkValues.Jwk);
+                tampered.Remove(WellKnownJoseHeaderNames.Jwk);
                 return tampered;
             }).ConfigureAwait(false);
 

@@ -66,11 +66,11 @@ internal sealed class JwsMessageTests
         Assert.IsGreaterThan(0, jwsMessage.Payload.Length);
 
         var protectedHeader = jwsMessage.Signatures[0].ProtectedHeader;
-        Assert.IsTrue(protectedHeader.ContainsKey(WellKnownJwkValues.Alg));
-        Assert.IsTrue(protectedHeader.ContainsKey(WellKnownJwkValues.Typ));
-        Assert.IsTrue(protectedHeader.ContainsKey(WellKnownJwkValues.Kid));
-        Assert.AreEqual(WellKnownJwaValues.EdDsa, protectedHeader[WellKnownJwkValues.Alg]);
-        Assert.AreEqual(Ed25519VerificationMethodId, protectedHeader[WellKnownJwkValues.Kid]);
+        Assert.IsTrue(protectedHeader.ContainsKey(WellKnownJwkMemberNames.Alg));
+        Assert.IsTrue(protectedHeader.ContainsKey(WellKnownJoseHeaderNames.Typ));
+        Assert.IsTrue(protectedHeader.ContainsKey(WellKnownJwkMemberNames.Kid));
+        Assert.AreEqual(WellKnownJwaValues.EdDsa, protectedHeader[WellKnownJwkMemberNames.Alg]);
+        Assert.AreEqual(Ed25519VerificationMethodId, protectedHeader[WellKnownJwkMemberNames.Kid]);
     }
 
 
@@ -176,7 +176,7 @@ internal sealed class JwsMessageTests
     [TestMethod]
     public void JwsMessageEqualityComparesCorrectly()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256 };
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 
@@ -198,7 +198,7 @@ internal sealed class JwsMessageTests
     [TestMethod]
     public void CompactSerializationThrowsForMultipleSignatures()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256 };
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 
@@ -217,7 +217,7 @@ internal sealed class JwsMessageTests
     [TestMethod]
     public void CompactSerializationThrowsForDetachedPayload()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256 };
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 

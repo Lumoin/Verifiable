@@ -170,7 +170,7 @@ public static class JoseTokenClassifier
             }
 
             UnverifiedJwtHeader header = parsed.Signatures[0].ProtectedHeader;
-            if(header.ContainsKey(WellKnownJwkValues.Enc))
+            if(header.ContainsKey(WellKnownJoseHeaderNames.Enc))
             {
                 return ValueTask.FromResult<JoseTokenShape>(new MalformedShape(ReasonJwsHasEnc));
             }
@@ -213,7 +213,7 @@ public static class JoseTokenClassifier
                 new MalformedShape(ReasonHeaderDecodeFailed));
         }
 
-        if(!headerDict.ContainsKey(WellKnownJwkValues.Enc))
+        if(!headerDict.ContainsKey(WellKnownJoseHeaderNames.Enc))
         {
             return ValueTask.FromResult<JoseTokenShape>(new MalformedShape(ReasonJweMissingEnc));
         }

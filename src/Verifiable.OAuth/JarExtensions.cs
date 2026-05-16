@@ -124,15 +124,15 @@ public static class JarExtensions
 
             var header = new JwtHeader
             {
-                [WellKnownJwkValues.Alg] = algorithm,
-                [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt
             };
 
             if(additionalHeaderClaims is not null)
             {
                 foreach(KeyValuePair<string, object> claim in additionalHeaderClaims)
                 {
-                    if(claim.Key != WellKnownJwkValues.Alg && claim.Key != WellKnownJwkValues.Typ)
+                    if(claim.Key != WellKnownJwkMemberNames.Alg && claim.Key != WellKnownJoseHeaderNames.Typ)
                     {
                         header[claim.Key] = claim.Value;
                     }
@@ -143,13 +143,13 @@ public static class JarExtensions
             {
                 [OAuthRequestParameters.ResponseType] = request.ResponseType,
                 [OAuthRequestParameters.ResponseMode] = request.ResponseMode,
-                [WellKnownJwtClaims.ClientId] = request.ClientId,
+                [WellKnownJwtClaimNames.ClientId] = request.ClientId,
                 [AuthorizationRequestParameters.ResponseUri] = request.ResponseUri.ToString(),
-                [WellKnownJwtClaims.Nonce] = request.Nonce,
+                [WellKnownJwtClaimNames.Nonce] = request.Nonce,
                 [OAuthRequestParameters.State] = request.State,
-                [WellKnownJwtClaims.Iat] = request.Iat.ToUnixTimeSeconds(),
-                [WellKnownJwtClaims.Nbf] = request.Nbf.ToUnixTimeSeconds(),
-                [WellKnownJwtClaims.Exp] = request.Exp.ToUnixTimeSeconds()
+                [WellKnownJwtClaimNames.Iat] = request.Iat.ToUnixTimeSeconds(),
+                [WellKnownJwtClaimNames.Nbf] = request.Nbf.ToUnixTimeSeconds(),
+                [WellKnownJwtClaimNames.Exp] = request.Exp.ToUnixTimeSeconds()
             };
 
             if(request.ClientIdScheme is not null)
@@ -159,12 +159,12 @@ public static class JarExtensions
 
             if(request.Iss is not null)
             {
-                payload[WellKnownJwtClaims.Iss] = request.Iss;
+                payload[WellKnownJwtClaimNames.Iss] = request.Iss;
             }
 
             if(request.Aud is not null)
             {
-                payload[WellKnownJwtClaims.Aud] = request.Aud;
+                payload[WellKnownJwtClaimNames.Aud] = request.Aud;
             }
 
             if(request.DcqlQuery is not null)
@@ -246,7 +246,7 @@ public static class JarExtensions
 
         UnverifiedJwtHeader unverifiedHeader = unverified.Signatures[0].ProtectedHeader;
 
-        if(!unverifiedHeader.TryGetValue(WellKnownJwkValues.Typ, out object? typObj)
+        if(!unverifiedHeader.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
             || typObj is not string typ
             || !WellKnownMediaTypes.Jwt.IsOauthAuthzReqJwt(typ))
         {
@@ -258,11 +258,11 @@ public static class JarExtensions
         IReadOnlyDictionary<string, object> claims =
             payloadDeserializer(unverified.Payload.Span);
 
-        string clientId = RequireClaim(claims, WellKnownJwtClaims.ClientId);
+        string clientId = RequireClaim(claims, WellKnownJwtClaimNames.ClientId);
         string responseType = RequireClaim(claims, OAuthRequestParameters.ResponseType);
         string responseMode = RequireClaim(claims, OAuthRequestParameters.ResponseMode);
         string responseUriString = RequireClaim(claims, AuthorizationRequestParameters.ResponseUri);
-        string nonce = RequireClaim(claims, WellKnownJwtClaims.Nonce);
+        string nonce = RequireClaim(claims, WellKnownJwtClaimNames.Nonce);
         string state = RequireClaim(claims, OAuthRequestParameters.State);
 
         if(!Uri.TryCreate(responseUriString, UriKind.Absolute, out Uri? responseUri))
@@ -271,13 +271,13 @@ public static class JarExtensions
                 $"JAR '{AuthorizationRequestParameters.ResponseUri}' claim is not a valid absolute URI: '{responseUriString}'.");
         }
 
-        DateTimeOffset iat = RequireInstant(claims, WellKnownJwtClaims.Iat);
-        DateTimeOffset nbf = RequireInstant(claims, WellKnownJwtClaims.Nbf);
-        DateTimeOffset exp = RequireInstant(claims, WellKnownJwtClaims.Exp);
+        DateTimeOffset iat = RequireInstant(claims, WellKnownJwtClaimNames.Iat);
+        DateTimeOffset nbf = RequireInstant(claims, WellKnownJwtClaimNames.Nbf);
+        DateTimeOffset exp = RequireInstant(claims, WellKnownJwtClaimNames.Exp);
 
         string? clientIdScheme = OptionalClaim(claims, AuthorizationRequestParameters.ClientIdScheme);
-        string? iss = OptionalClaim(claims, WellKnownJwtClaims.Iss);
-        string? aud = OptionalClaim(claims, WellKnownJwtClaims.Aud);
+        string? iss = OptionalClaim(claims, WellKnownJwtClaimNames.Iss);
+        string? aud = OptionalClaim(claims, WellKnownJwtClaimNames.Aud);
 
         DcqlQuery? dcqlQuery = null;
         if(claims.TryGetValue(AuthorizationRequestParameters.DcqlQuery, out object? dcqlObj)

@@ -247,7 +247,7 @@ public static class JwtChecks
 
     private static bool IsAlgNoneCore(IReadOnlyDictionary<string, object> header)
     {
-        if(!header.TryGetValue(WellKnownJwkValues.Alg, out object? value) || value is not string alg)
+        if(!header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? value) || value is not string alg)
         {
             return true;
         }
@@ -257,7 +257,7 @@ public static class JwtChecks
 
     private static bool HasValidAlgCore(IReadOnlyDictionary<string, object> header)
     {
-        return header.TryGetValue(WellKnownJwkValues.Alg, out object? value)
+        return header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? value)
             && value is string alg
             && !string.IsNullOrEmpty(alg)
             && !WellKnownJwaValues.IsNone(alg);
@@ -265,29 +265,29 @@ public static class JwtChecks
 
     private static bool HasKtyCore(IReadOnlyDictionary<string, object> header)
     {
-        return header.TryGetValue(WellKnownJwkValues.Kty, out object? value)
+        return header.TryGetValue(WellKnownJwkMemberNames.Kty, out object? value)
             && value is string kty
             && !string.IsNullOrEmpty(kty);
     }
 
     private static bool HasRequiredEcFieldsCore(IReadOnlyDictionary<string, object> header)
     {
-        return header.TryGetValue(WellKnownJwkValues.Crv, out object? crv)
+        return header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crv)
             && crv is string crvStr && !string.IsNullOrEmpty(crvStr)
-            && header.TryGetValue(WellKnownJwkValues.X, out object? x)
+            && header.TryGetValue(WellKnownJwkMemberNames.X, out object? x)
             && x is string xStr && !string.IsNullOrEmpty(xStr)
-            && header.TryGetValue(WellKnownJwkValues.Y, out object? y)
+            && header.TryGetValue(WellKnownJwkMemberNames.Y, out object? y)
             && y is string yStr && !string.IsNullOrEmpty(yStr);
     }
 
     private static bool IsValidEcAlgCrvCombinationCore(IReadOnlyDictionary<string, object> header)
     {
-        if(!header.TryGetValue(WellKnownJwkValues.Crv, out object? crvValue) || crvValue is not string crv)
+        if(!header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvValue) || crvValue is not string crv)
         {
             return false;
         }
 
-        if(!header.TryGetValue(WellKnownJwkValues.Alg, out object? algValue) || algValue is not string alg)
+        if(!header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? algValue) || algValue is not string alg)
         {
             return false;
         }
@@ -300,14 +300,14 @@ public static class JwtChecks
 
     private static bool HasRequiredOkpFieldsCore(IReadOnlyDictionary<string, object> header)
     {
-        return header.TryGetValue(WellKnownJwkValues.Crv, out object? crv)
+        return header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crv)
             && crv is string crvStr
             && !string.IsNullOrEmpty(crvStr);
     }
 
     private static bool IsValidOkpAlgCrvCombinationCore(IReadOnlyDictionary<string, object> header)
     {
-        if(!header.TryGetValue(WellKnownJwkValues.Crv, out object? crvValue) || crvValue is not string crv)
+        if(!header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvValue) || crvValue is not string crv)
         {
             return false;
         }
@@ -315,13 +315,13 @@ public static class JwtChecks
         //X25519 is a key agreement curve — alg must not be present.
         if(WellKnownCurveValues.IsX25519(crv))
         {
-            return !header.ContainsKey(WellKnownJwkValues.Alg);
+            return !header.ContainsKey(WellKnownJwkMemberNames.Alg);
         }
 
         //Ed25519 requires alg=EdDSA.
         if(WellKnownCurveValues.IsEd25519(crv))
         {
-            return header.TryGetValue(WellKnownJwkValues.Alg, out object? algValue)
+            return header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? algValue)
                 && algValue is string alg
                 && WellKnownJwaValues.IsEdDsa(alg);
         }
@@ -336,14 +336,14 @@ public static class JwtChecks
         const int Rsa2048ModulusBase64UrlLength = 342;
         const int Rsa4096ModulusBase64UrlLength = 683;
 
-        if(!header.TryGetValue(WellKnownJwkValues.E, out object? eValue)
+        if(!header.TryGetValue(WellKnownJwkMemberNames.E, out object? eValue)
             || eValue is not string e
             || string.IsNullOrEmpty(e))
         {
             return false;
         }
 
-        if(!header.TryGetValue(WellKnownJwkValues.N, out object? nValue)
+        if(!header.TryGetValue(WellKnownJwkMemberNames.N, out object? nValue)
             || nValue is not string n
             || string.IsNullOrEmpty(n))
         {
@@ -359,7 +359,7 @@ public static class JwtChecks
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
-        if(!TryGetUnixTime(claims, WellKnownJwkValues.Exp, out long expSeconds))
+        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Exp, out long expSeconds))
         {
             return false;
         }
@@ -372,7 +372,7 @@ public static class JwtChecks
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
-        if(!TryGetUnixTime(claims, WellKnownJwkValues.Nbf, out long nbfSeconds))
+        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Nbf, out long nbfSeconds))
         {
             return false;
         }
@@ -385,7 +385,7 @@ public static class JwtChecks
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
-        if(!TryGetUnixTime(claims, WellKnownJwkValues.Iat, out long iatSeconds))
+        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Iat, out long iatSeconds))
         {
             return false;
         }
@@ -397,14 +397,14 @@ public static class JwtChecks
         IReadOnlyDictionary<string, object> claims,
         TimeSpan maximum)
     {
-        if(!TryGetUnixTime(claims, WellKnownJwkValues.Exp, out long expSeconds))
+        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Exp, out long expSeconds))
         {
             return false;
         }
 
         //Prefer nbf over iat as the validity window start.
-        if(!TryGetUnixTime(claims, WellKnownJwkValues.Nbf, out long startSeconds)
-            && !TryGetUnixTime(claims, WellKnownJwkValues.Iat, out startSeconds))
+        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Nbf, out long startSeconds)
+            && !TryGetUnixTime(claims, WellKnownJwtClaimNames.Iat, out startSeconds))
         {
             return false;
         }
@@ -414,8 +414,8 @@ public static class JwtChecks
 
     private static bool IsExpBeforeNbfCore(IReadOnlyDictionary<string, object> claims)
     {
-        if(!TryGetUnixTime(claims, WellKnownJwkValues.Exp, out long expSeconds)
-            || !TryGetUnixTime(claims, WellKnownJwkValues.Nbf, out long nbfSeconds))
+        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Exp, out long expSeconds)
+            || !TryGetUnixTime(claims, WellKnownJwtClaimNames.Nbf, out long nbfSeconds))
         {
             return false;
         }

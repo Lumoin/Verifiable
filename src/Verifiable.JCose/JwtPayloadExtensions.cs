@@ -88,30 +88,30 @@ public static class JwtPayloadExtensions
 
             var payload = new JwtPayload
             {
-                [WellKnownJwtClaims.Iss] = issuer,
-                [WellKnownJwtClaims.Iat] = issuedAt.ToUnixTimeSeconds()
+                [WellKnownJwtClaimNames.Iss] = issuer,
+                [WellKnownJwtClaimNames.Iat] = issuedAt.ToUnixTimeSeconds()
             };
 
             if(subject is not null)
             {
-                payload[WellKnownJwtClaims.Sub] = subject;
+                payload[WellKnownJwtClaimNames.Sub] = subject;
             }
 
             if(expiresAt.HasValue)
             {
-                payload[WellKnownJwtClaims.Exp] = expiresAt.Value.ToUnixTimeSeconds();
+                payload[WellKnownJwtClaimNames.Exp] = expiresAt.Value.ToUnixTimeSeconds();
             }
 
             if(notBefore.HasValue)
             {
-                payload[WellKnownJwtClaims.Nbf] = notBefore.Value.ToUnixTimeSeconds();
+                payload[WellKnownJwtClaimNames.Nbf] = notBefore.Value.ToUnixTimeSeconds();
             }
 
             if(holderConfirmation is not null)
             {
-                payload[WellKnownJwtClaims.Cnf] = new Dictionary<string, object>
+                payload[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>
                 {
-                    [WellKnownJwkValues.Jwk] = holderConfirmation
+                    [WellKnownJoseHeaderNames.Jwk] = holderConfirmation
                 };
             }
 
@@ -184,7 +184,7 @@ public static class JwtPayloadExtensions
                 issuer, issuedAt, holderConfirmation,
                 subject, expiresAt, notBefore, claims);
 
-            payload[WellKnownJwtClaims.Vct] = verifiableCredentialType;
+            payload[WellKnownJwtClaimNames.Vct] = verifiableCredentialType;
 
             return payload;
         }
@@ -251,16 +251,16 @@ public static class JwtPayloadExtensions
 
             var payload = new JwtPayload(capacity: 8)
             {
-                [WellKnownJwtClaims.Sub] = subject,
-                [WellKnownJwtClaims.Jti] = jti,
-                [WellKnownJwtClaims.Iat] = issuedAt.ToUnixTimeSeconds(),
-                [WellKnownJwtClaims.Exp] = expiresAt.ToUnixTimeSeconds(),
-                [WellKnownJwtClaims.Scope] = scope
+                [WellKnownJwtClaimNames.Sub] = subject,
+                [WellKnownJwtClaimNames.Jti] = jti,
+                [WellKnownJwtClaimNames.Iat] = issuedAt.ToUnixTimeSeconds(),
+                [WellKnownJwtClaimNames.Exp] = expiresAt.ToUnixTimeSeconds(),
+                [WellKnownJwtClaimNames.Scope] = scope
             };
 
             if(issuer is not null)
             {
-                payload[WellKnownJwtClaims.Iss] = issuer;
+                payload[WellKnownJwtClaimNames.Iss] = issuer;
             }
 
             //RFC 7519 §4.1.3 permits aud as either a single string or an array of
@@ -269,14 +269,14 @@ public static class JwtPayloadExtensions
             //wire as an array.
             if(audience is not null && audience.Count > 0)
             {
-                payload[WellKnownJwtClaims.Aud] = audience.Count == 1
+                payload[WellKnownJwtClaimNames.Aud] = audience.Count == 1
                     ? audience[0]
                     : audience;
             }
 
             if(clientId is not null)
             {
-                payload[WellKnownJwtClaims.ClientId] = clientId;
+                payload[WellKnownJwtClaimNames.ClientId] = clientId;
             }
 
             if(claims is not null)
@@ -368,36 +368,36 @@ public static class JwtPayloadExtensions
 
             var payload = new JwtPayload(capacity: 10)
             {
-                [WellKnownJwtClaims.Iss] = issuer,
-                [WellKnownJwtClaims.Sub] = subject,
-                [WellKnownJwtClaims.Aud] = audience,
-                [WellKnownJwtClaims.Iat] = issuedAt.ToUnixTimeSeconds(),
-                [WellKnownJwtClaims.Exp] = expiresAt.ToUnixTimeSeconds()
+                [WellKnownJwtClaimNames.Iss] = issuer,
+                [WellKnownJwtClaimNames.Sub] = subject,
+                [WellKnownJwtClaimNames.Aud] = audience,
+                [WellKnownJwtClaimNames.Iat] = issuedAt.ToUnixTimeSeconds(),
+                [WellKnownJwtClaimNames.Exp] = expiresAt.ToUnixTimeSeconds()
             };
 
             if(authTime.HasValue)
             {
-                payload[WellKnownJwtClaims.AuthTime] = authTime.Value.ToUnixTimeSeconds();
+                payload[WellKnownJwtClaimNames.AuthTime] = authTime.Value.ToUnixTimeSeconds();
             }
 
             if(nonce is not null)
             {
-                payload[WellKnownJwtClaims.Nonce] = nonce;
+                payload[WellKnownJwtClaimNames.Nonce] = nonce;
             }
 
             if(acr is not null)
             {
-                payload[WellKnownJwkValues.Acr] = acr;
+                payload[WellKnownJwtClaimNames.Acr] = acr;
             }
 
             if(amr is not null)
             {
-                payload[WellKnownJwkValues.Amr] = amr;
+                payload[WellKnownJwtClaimNames.Amr] = amr;
             }
 
             if(azp is not null)
             {
-                payload[WellKnownJwkValues.Azp] = azp;
+                payload[WellKnownJwtClaimNames.Azp] = azp;
             }
 
             if(claims is not null)

@@ -110,7 +110,7 @@ public static class VerifierAttestationKeyResolver
         Dictionary<string, object> claims = payloadDeserializer(unverified.Payload.Span);
 
         //Verify sub matches the expected client identifier.
-        if(!claims.TryGetValue(WellKnownJwtClaims.Sub, out object? subObj)
+        if(!claims.TryGetValue(WellKnownJwtClaimNames.Sub, out object? subObj)
             || subObj is not string sub
             || !string.Equals(sub, expectedClientId, StringComparison.Ordinal))
         {

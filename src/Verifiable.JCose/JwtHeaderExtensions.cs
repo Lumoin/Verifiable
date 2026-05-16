@@ -56,9 +56,9 @@ public static class JwtHeaderExtensions
         public static JwtHeader ForSigning(string algorithm, string mediaType, string keyId) =>
             new(capacity: 3)
             {
-                [WellKnownJwkValues.Alg] = algorithm,
-                [WellKnownJwkValues.Typ] = mediaType,
-                [WellKnownJwkValues.Kid] = keyId
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Typ] = mediaType,
+                [WellKnownJwkMemberNames.Kid] = keyId
             };
 
 
@@ -79,9 +79,9 @@ public static class JwtHeaderExtensions
         public static JwtHeader ForAccessToken(string algorithm, string keyId) =>
             new(capacity: 3)
             {
-                [WellKnownJwkValues.Alg] = algorithm,
-                [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Jwt.AtJwt,
-                [WellKnownJwkValues.Kid] = keyId
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.AtJwt,
+                [WellKnownJwkMemberNames.Kid] = keyId
             };
 
 
@@ -104,9 +104,9 @@ public static class JwtHeaderExtensions
         public static JwtHeader ForIdToken(string algorithm, string keyId) =>
             new(capacity: 3)
             {
-                [WellKnownJwkValues.Alg] = algorithm,
-                [WellKnownJwkValues.Typ] = WellKnownJwkValues.TypeJwt,
-                [WellKnownJwkValues.Kid] = keyId
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt,
+                [WellKnownJwkMemberNames.Kid] = keyId
             };
 
 
@@ -122,9 +122,9 @@ public static class JwtHeaderExtensions
         public static JwtHeader ForJar(string algorithm, string keyId) =>
             new(capacity: 3)
             {
-                [WellKnownJwkValues.Alg] = algorithm,
-                [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt,
-                [WellKnownJwkValues.Kid] = keyId
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt,
+                [WellKnownJwkMemberNames.Kid] = keyId
             };
 
 
@@ -140,9 +140,9 @@ public static class JwtHeaderExtensions
         public static JwtHeader ForSdJwtVc(string algorithm, string keyId) =>
             new(capacity: 3)
             {
-                [WellKnownJwkValues.Alg] = algorithm,
-                [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Jwt.DcSdJwt,
-                [WellKnownJwkValues.Kid] = keyId
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.DcSdJwt,
+                [WellKnownJwkMemberNames.Kid] = keyId
             };
 
 
@@ -157,8 +157,8 @@ public static class JwtHeaderExtensions
         public static JwtHeader ForKeyBinding(string algorithm) =>
             new(capacity: 2)
             {
-                [WellKnownJwkValues.Alg] = algorithm,
-                [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Jwt.KbJwt
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.KbJwt
             };
 
 
@@ -229,17 +229,17 @@ public static class JwtHeaderExtensions
 
             var epk = new Dictionary<string, string>(4)
             {
-                [WellKnownJwkValues.Kty] = WellKnownKeyTypeValues.Ec,
-                [WellKnownJwkValues.Crv] = crv,
-                [WellKnownJwkValues.X] = xB64,
-                [WellKnownJwkValues.Y] = yB64
+                [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Ec,
+                [WellKnownJwkMemberNames.Crv] = crv,
+                [WellKnownJwkMemberNames.X] = xB64,
+                [WellKnownJwkMemberNames.Y] = yB64
             };
 
             return new JwtHeader(capacity: 3)
             {
-                [WellKnownJwkValues.Alg] = WellKnownJweAlgorithms.EcdhEs,
-                [WellKnownJwkValues.Enc] = contentEncryptionAlgorithm,
-                [WellKnownJwkValues.Epk] = epk
+                [WellKnownJwkMemberNames.Alg] = WellKnownJweAlgorithms.EcdhEs,
+                [WellKnownJoseHeaderNames.Enc] = contentEncryptionAlgorithm,
+                [WellKnownJoseHeaderNames.Epk] = epk
             };
         }
 
@@ -258,9 +258,9 @@ public static class JwtHeaderExtensions
         public static JwtHeader ForDpop(string algorithm, object publicKeyJwk) =>
             new(capacity: 3)
             {
-                [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Jwt.DpopJwt,
-                [WellKnownJwkValues.Alg] = algorithm,
-                [WellKnownJwkValues.Jwk] = publicKeyJwk
+                [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.DpopJwt,
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Jwk] = publicKeyJwk
             };
 
 
@@ -283,9 +283,9 @@ public static class JwtHeaderExtensions
         public static JwtHeader ForX5c(string algorithm, string mediaType, string[] x5c) =>
             new(capacity: 3)
             {
-                [WellKnownJwkValues.Alg] = algorithm,
-                [WellKnownJwkValues.Typ] = mediaType,
-                [WellKnownJwkValues.X5c] = x5c
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Typ] = mediaType,
+                [WellKnownJwkMemberNames.X5c] = x5c
             };
 
 
@@ -300,8 +300,8 @@ public static class JwtHeaderExtensions
         public static JwtHeader ForVerifierAttestation(string algorithm) =>
             new(capacity: 2)
             {
-                [WellKnownJwkValues.Alg] = algorithm,
-                [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Jwt.VerifierAttestationJwt
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.VerifierAttestationJwt
             };
 
 
@@ -320,9 +320,9 @@ public static class JwtHeaderExtensions
         public static JwtHeader ForJarWithAttestation(string algorithm, string attestationCompactJwt) =>
             new(capacity: 3)
             {
-                [WellKnownJwkValues.Alg] = algorithm,
-                [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt,
-                [WellKnownJwkValues.Jwt] = attestationCompactJwt
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt,
+                [WellKnownJoseHeaderNames.Jwt] = attestationCompactJwt
             };
     }
 }

@@ -463,9 +463,9 @@ internal sealed class CredentialSecuringMethodsTests
 
         var header = new Dictionary<string, object>
         {
-            [WellKnownJwkValues.Alg] = WellKnownJwaValues.EdDsa,
-            [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Application.VcSdJwt,
-            [WellKnownJwkValues.Kid] = Ed25519VerificationMethodId
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.EdDsa,
+            [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Application.VcSdJwt,
+            [WellKnownJwkMemberNames.Kid] = Ed25519VerificationMethodId
         };
 
         var headerJson = JsonSerializerExtensions.SerializeToUtf8Bytes(header, JsonOptions);

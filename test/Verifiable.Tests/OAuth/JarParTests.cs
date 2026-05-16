@@ -184,7 +184,7 @@ internal sealed class JarParTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
         //RFC 9101 §10.2 — iss must equal client_id.
-        claims[WellKnownJwtClaims.Iss] = "https://impostor.example.com";
+        claims[WellKnownJwtClaimNames.Iss] = "https://impostor.example.com";
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -207,7 +207,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims.Remove(WellKnownJwtClaims.Iss);
+        claims.Remove(WellKnownJwtClaimNames.Iss);
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -230,7 +230,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims[WellKnownJwtClaims.Aud] = "https://different-issuer.example.com/";
+        claims[WellKnownJwtClaimNames.Aud] = "https://different-issuer.example.com/";
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -253,7 +253,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims.Remove(WellKnownJwtClaims.Aud);
+        claims.Remove(WellKnownJwtClaimNames.Aud);
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -279,7 +279,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims[WellKnownJwtClaims.Aud] = ClientId;
+        claims[WellKnownJwtClaimNames.Aud] = ClientId;
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -328,9 +328,9 @@ internal sealed class JarParTests
         DateTimeOffset farFuture = now + TimeSpan.FromMinutes(10);
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
         //Push nbf well past the clock-skew tolerance window (60s default).
-        claims[WellKnownJwtClaims.Nbf] = farFuture.ToUnixTimeSeconds();
-        claims[WellKnownJwtClaims.Exp] = (farFuture + TimeSpan.FromSeconds(30)).ToUnixTimeSeconds();
-        claims[WellKnownJwtClaims.Iat] = now.ToUnixTimeSeconds();
+        claims[WellKnownJwtClaimNames.Nbf] = farFuture.ToUnixTimeSeconds();
+        claims[WellKnownJwtClaimNames.Exp] = (farFuture + TimeSpan.FromSeconds(30)).ToUnixTimeSeconds();
+        claims[WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds();
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -354,7 +354,7 @@ internal sealed class JarParTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
         //Default policy ceiling for AuthCode JAR lifetime is 60 seconds.
-        claims[WellKnownJwtClaims.Exp] = (now + TimeSpan.FromMinutes(5)).ToUnixTimeSeconds();
+        claims[WellKnownJwtClaimNames.Exp] = (now + TimeSpan.FromMinutes(5)).ToUnixTimeSeconds();
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -446,7 +446,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims.Remove(WellKnownJwtClaims.ClientId);
+        claims.Remove(WellKnownJwtClaimNames.ClientId);
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -561,7 +561,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims.Remove(WellKnownJwtClaims.Nonce);
+        claims.Remove(WellKnownJwtClaimNames.Nonce);
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -607,7 +607,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims.Remove(WellKnownJwtClaims.Exp);
+        claims.Remove(WellKnownJwtClaimNames.Exp);
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -750,7 +750,7 @@ internal sealed class JarParTests
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
 
         string expectedAud = material.Registration.IssuerUri!.ToString();
-        claims[WellKnownJwtClaims.Aud] = new[]
+        claims[WellKnownJwtClaimNames.Aud] = new[]
         {
             "https://unrelated-aud.example",
             expectedAud,
@@ -783,19 +783,19 @@ internal sealed class JarParTests
 
         return new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            [WellKnownJwtClaims.Iss] = ClientId,
-            [WellKnownJwtClaims.Aud] = expectedAud,
-            [WellKnownJwtClaims.ClientId] = ClientId,
+            [WellKnownJwtClaimNames.Iss] = ClientId,
+            [WellKnownJwtClaimNames.Aud] = expectedAud,
+            [WellKnownJwtClaimNames.ClientId] = ClientId,
             [OAuthRequestParameters.ResponseType] = OAuthRequestParameters.ResponseTypeCode,
             [OAuthRequestParameters.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameters.Scope] = WellKnownScopes.OpenId,
             [OAuthRequestParameters.State] = "state-jar-par-01",
-            [WellKnownJwtClaims.Nonce] = "nonce-jar-par-01",
+            [WellKnownJwtClaimNames.Nonce] = "nonce-jar-par-01",
             [OAuthRequestParameters.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
             [OAuthRequestParameters.CodeChallengeMethod] = OAuthRequestParameters.CodeChallengeMethodS256,
-            [WellKnownJwtClaims.Iat] = now.ToUnixTimeSeconds(),
-            [WellKnownJwtClaims.Nbf] = now.ToUnixTimeSeconds(),
-            [WellKnownJwtClaims.Exp] = (now + TimeSpan.FromSeconds(30)).ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Nbf] = now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = (now + TimeSpan.FromSeconds(30)).ToUnixTimeSeconds()
         };
     }
 
@@ -823,8 +823,8 @@ internal sealed class JarParTests
 
         JwtHeader header = new()
         {
-            [WellKnownJwkValues.Alg] = algorithm,
-            [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt
+            [WellKnownJwkMemberNames.Alg] = algorithm,
+            [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt
         };
 
         JwtPayload payload = new();
@@ -856,8 +856,8 @@ internal sealed class JarParTests
 
         JwtHeader header = new()
         {
-            [WellKnownJwkValues.Alg] = algorithm,
-            [WellKnownJwkValues.Typ] = typValue
+            [WellKnownJwkMemberNames.Alg] = algorithm,
+            [WellKnownJoseHeaderNames.Typ] = typValue
         };
 
         JwtPayload payload = new();

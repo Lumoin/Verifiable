@@ -61,7 +61,7 @@ public static class JwtKeyTypeHeaderValidationUtilities
     {
         ArgumentNullException.ThrowIfNull(jwtHeaders);
         List<Claim> claims = [];
-        if(!jwtHeaders.TryGetValue(WellKnownJwkValues.Kty, out object? ktyValue) || ktyValue is not string kty || string.IsNullOrEmpty(kty))
+        if(!jwtHeaders.TryGetValue(WellKnownJwkMemberNames.Kty, out object? ktyValue) || ktyValue is not string kty || string.IsNullOrEmpty(kty))
         {
             claims.Add(new Claim(ClaimId.KtyMissingOrEmpty, ClaimOutcome.Failure));
             return claims;
@@ -110,7 +110,7 @@ public static class JwtKeyTypeHeaderValidationUtilities
         List<Claim> claims = new();
 
         // Check for mandatory 'crv' field (Curve)
-        if(jwtHeaders.TryGetValue(WellKnownJwkValues.Crv, out object? crvValue) && crvValue is string crv && !string.IsNullOrEmpty(crv))
+        if(jwtHeaders.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvValue) && crvValue is string crv && !string.IsNullOrEmpty(crv))
         {
             claims.Add(new Claim(ClaimId.EcMissingCurve, ClaimOutcome.Success));
         }
@@ -120,7 +120,7 @@ public static class JwtKeyTypeHeaderValidationUtilities
         }
 
         // Check for mandatory 'x' field (X Coordinate)
-        if(jwtHeaders.TryGetValue(WellKnownJwkValues.X, out object? xValue) && xValue is string x && !string.IsNullOrEmpty(x))
+        if(jwtHeaders.TryGetValue(WellKnownJwkMemberNames.X, out object? xValue) && xValue is string x && !string.IsNullOrEmpty(x))
         {
             claims.Add(new Claim(ClaimId.EcMissingXCoordinate, ClaimOutcome.Success));
         }
@@ -132,7 +132,7 @@ public static class JwtKeyTypeHeaderValidationUtilities
         // Check for mandatory 'y' field (Y Coordinate), if required
         if(isYCoordinateMandatory)
         {
-            if(jwtHeaders.TryGetValue(WellKnownJwkValues.Y, out object? yValue) && yValue is string y && !string.IsNullOrEmpty(y))
+            if(jwtHeaders.TryGetValue(WellKnownJwkMemberNames.Y, out object? yValue) && yValue is string y && !string.IsNullOrEmpty(y))
             {
                 claims.Add(new Claim(ClaimId.EcMissingYCoordinate, ClaimOutcome.Success));
             }
@@ -145,7 +145,7 @@ public static class JwtKeyTypeHeaderValidationUtilities
         // Validate 'alg' (Algorithm) and 'crv' (Curve)
         if(crvValue is string crvStr)
         {
-            if(jwtHeaders.TryGetValue(WellKnownJwkValues.Alg, out object? algValue))
+            if(jwtHeaders.TryGetValue(WellKnownJwkMemberNames.Alg, out object? algValue))
             {
                 if(algValue is string alg && !string.IsNullOrEmpty(alg))
                 {
@@ -220,14 +220,14 @@ public static class JwtKeyTypeHeaderValidationUtilities
         ArgumentNullException.ThrowIfNull(jwtHeaders);
         ArgumentNullException.ThrowIfNull(algCrvPairs);
         List<Claim> claims = [];
-        if(!jwtHeaders.TryGetValue(WellKnownJwkValues.Crv, out object? crvValue) || crvValue is not string crvStr || string.IsNullOrEmpty(crvStr))
+        if(!jwtHeaders.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvValue) || crvValue is not string crvStr || string.IsNullOrEmpty(crvStr))
         {
             claims.Add(new Claim(ClaimId.OkpMissingCurve, ClaimOutcome.Failure));
             return claims;
         }
 
         ClaimOutcome isValid = ClaimOutcome.Failure;
-        if(jwtHeaders.TryGetValue(WellKnownJwkValues.Alg, out object? algValue) && algValue is string algStr)
+        if(jwtHeaders.TryGetValue(WellKnownJwkMemberNames.Alg, out object? algValue) && algValue is string algStr)
         {
             if(WellKnownCurveValues.IsX25519(crvStr) && !string.IsNullOrEmpty(algStr))
             {

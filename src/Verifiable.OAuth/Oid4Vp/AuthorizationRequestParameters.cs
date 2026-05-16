@@ -13,7 +13,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <c>client_id</c>, <c>state</c>, <c>response_mode</c> — are defined in
 /// <see cref="Verifiable.OAuth.OAuthRequestParameters"/>. JWT claim names used
 /// in JAR payloads — <c>iss</c>, <c>aud</c>, <c>nonce</c>, <c>client_id</c> —
-/// are defined in <see cref="Verifiable.JCose.WellKnownJwtClaims"/>.
+/// are defined in <see cref="Verifiable.JCose.WellKnownJwtClaimNames"/>.
 /// </para>
 /// <para>
 /// Used when constructing or parsing a JAR JWT payload, or when encoding a

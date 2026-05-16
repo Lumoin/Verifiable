@@ -84,7 +84,7 @@ internal static class JwtPayloadReader
     public static string? ReadCnfJkt(string accessTokenJwt)
     {
         using JsonDocument doc = ParsePayloadJson(accessTokenJwt);
-        if(!doc.RootElement.TryGetProperty(WellKnownJwtClaims.Cnf, out JsonElement cnf))
+        if(!doc.RootElement.TryGetProperty(WellKnownJwtClaimNames.Cnf, out JsonElement cnf))
         {
             return null;
         }
@@ -102,7 +102,7 @@ internal static class JwtPayloadReader
     public static string? ReadIssuer(string compactJws)
     {
         using JsonDocument doc = ParsePayloadJson(compactJws);
-        return doc.RootElement.TryGetProperty(WellKnownJwtClaims.Iss, out JsonElement iss)
+        return doc.RootElement.TryGetProperty(WellKnownJwtClaimNames.Iss, out JsonElement iss)
             ? iss.GetString() : null;
     }
 
@@ -113,6 +113,6 @@ internal static class JwtPayloadReader
     public static bool HasCnfClaim(string compactJws)
     {
         using JsonDocument doc = ParsePayloadJson(compactJws);
-        return doc.RootElement.TryGetProperty(WellKnownJwtClaims.Cnf, out _);
+        return doc.RootElement.TryGetProperty(WellKnownJwtClaimNames.Cnf, out _);
     }
 }

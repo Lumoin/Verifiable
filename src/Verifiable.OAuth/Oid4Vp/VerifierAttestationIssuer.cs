@@ -90,11 +90,11 @@ public static class VerifierAttestationIssuer
 
         JwtPayload payload = new()
         {
-            [WellKnownJwtClaims.Iss] = issuer,
-            [WellKnownJwtClaims.Sub] = subject,
-            [WellKnownJwtClaims.Iat] = issuedAt.ToUnixTimeSeconds(),
-            [WellKnownJwtClaims.Exp] = expiresAt.ToUnixTimeSeconds(),
-            [WellKnownJwtClaims.Cnf] = new Dictionary<string, object> { [WellKnownJwkValues.Jwk] = cnfJwk }
+            [WellKnownJwtClaimNames.Iss] = issuer,
+            [WellKnownJwtClaimNames.Sub] = subject,
+            [WellKnownJwtClaimNames.Iat] = issuedAt.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = expiresAt.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object> { [WellKnownJoseHeaderNames.Jwk] = cnfJwk }
         };
 
         UnsignedJwt unsigned = new(header, payload);

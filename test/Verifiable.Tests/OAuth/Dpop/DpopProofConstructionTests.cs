@@ -84,10 +84,10 @@ internal sealed class DpopProofConstructionTests
             publicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder);
 
         DpopProofHeader header = DecodeHeader(proof);
-        Assert.AreEqual(expectedJwk[WellKnownJwkValues.Kty], header.Jwk[WellKnownJwkValues.Kty]);
-        Assert.AreEqual(expectedJwk[WellKnownJwkValues.Crv], header.Jwk[WellKnownJwkValues.Crv]);
-        Assert.AreEqual(expectedJwk[WellKnownJwkValues.X], header.Jwk[WellKnownJwkValues.X]);
-        Assert.AreEqual(expectedJwk[WellKnownJwkValues.Y], header.Jwk[WellKnownJwkValues.Y]);
+        Assert.AreEqual(expectedJwk[WellKnownJwkMemberNames.Kty], header.Jwk[WellKnownJwkMemberNames.Kty]);
+        Assert.AreEqual(expectedJwk[WellKnownJwkMemberNames.Crv], header.Jwk[WellKnownJwkMemberNames.Crv]);
+        Assert.AreEqual(expectedJwk[WellKnownJwkMemberNames.X], header.Jwk[WellKnownJwkMemberNames.X]);
+        Assert.AreEqual(expectedJwk[WellKnownJwkMemberNames.Y], header.Jwk[WellKnownJwkMemberNames.Y]);
     }
 
 

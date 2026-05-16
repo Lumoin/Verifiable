@@ -278,10 +278,10 @@ internal sealed class JwksRotationTests
             $"JWKS endpoint must return HTTP 200, got {response.StatusCode}.");
 
         using JsonDocument doc = JsonDocument.Parse(response.Body);
-        JsonElement keysArray = doc.RootElement.GetProperty(WellKnownJwkValues.Keys);
+        JsonElement keysArray = doc.RootElement.GetProperty(WellKnownJwkMemberNames.Keys);
 
         return keysArray.EnumerateArray()
-            .Select(k => k.GetProperty(WellKnownJwkValues.Kid).GetString()!)
+            .Select(k => k.GetProperty(WellKnownJwkMemberNames.Kid).GetString()!)
             .ToArray();
     }
 

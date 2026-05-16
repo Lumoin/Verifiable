@@ -55,13 +55,13 @@ public static class DpopJwkUtilities
 
         Dictionary<string, string> result = new(StringComparer.Ordinal)
         {
-            [WellKnownJwkValues.Kty] = jwk.Kty
+            [WellKnownJwkMemberNames.Kty] = jwk.Kty
                 ?? throw new InvalidOperationException("DefaultAlgorithmToJwkConverter must produce 'kty'."),
-            [WellKnownJwkValues.Crv] = jwk.Crv
+            [WellKnownJwkMemberNames.Crv] = jwk.Crv
                 ?? throw new InvalidOperationException("DefaultAlgorithmToJwkConverter must produce 'crv' for EC keys."),
-            [WellKnownJwkValues.X] = jwk.X
+            [WellKnownJwkMemberNames.X] = jwk.X
                 ?? throw new InvalidOperationException("DefaultAlgorithmToJwkConverter must produce 'x' for EC keys."),
-            [WellKnownJwkValues.Y] = jwk.Y
+            [WellKnownJwkMemberNames.Y] = jwk.Y
                 ?? throw new InvalidOperationException("DefaultAlgorithmToJwkConverter must produce 'y' for EC keys.")
         };
 
@@ -96,10 +96,10 @@ public static class DpopJwkUtilities
 
         using IMemoryOwner<byte> hash = JwkThumbprintUtilities.ComputeECThumbprint(
             memoryPool,
-            jwk[WellKnownJwkValues.Crv],
-            jwk[WellKnownJwkValues.Kty],
-            jwk[WellKnownJwkValues.X],
-            jwk[WellKnownJwkValues.Y]);
+            jwk[WellKnownJwkMemberNames.Crv],
+            jwk[WellKnownJwkMemberNames.Kty],
+            jwk[WellKnownJwkMemberNames.X],
+            jwk[WellKnownJwkMemberNames.Y]);
 
         return base64UrlEncoder(hash.Memory.Span);
     }

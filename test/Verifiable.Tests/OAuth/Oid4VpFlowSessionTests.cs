@@ -377,16 +377,16 @@ internal sealed class Oid4VpFlowSessionTests
 
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Alg] = WellKnownJwaValues.Es256,
-            [WellKnownJwkValues.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256,
+            [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt
         };
 
         var payload = new JwtPayload
         {
-            [WellKnownJwtClaims.Nonce] = "nonce-abc",
+            [WellKnownJwtClaimNames.Nonce] = "nonce-abc",
             [OAuthRequestParameters.ResponseType] = AuthorizationRequestParameters.ResponseTypeVpToken,
             [OAuthRequestParameters.ResponseMode] = WellKnownResponseModes.DirectPostJwt,
-            [WellKnownJwtClaims.ClientId] = "https://verifier.example.com",
+            [WellKnownJwtClaimNames.ClientId] = "https://verifier.example.com",
             [OAuthRequestParameters.State] = flowId
         };
 

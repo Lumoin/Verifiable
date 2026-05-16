@@ -641,9 +641,9 @@ internal sealed class DcqlPresentationFlowTests
     {
         string pidJson = JsonSerializer.Serialize(new Dictionary<string, object>
         {
-            [WellKnownJwtClaims.Iss] = IssuerId,
-            [WellKnownJwtClaims.Vct] = EudiPid.SdJwtVct,
-            [WellKnownJwtClaims.Iat] = TimeProvider.GetUtcNow().ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Iss] = IssuerId,
+            [WellKnownJwtClaimNames.Vct] = EudiPid.SdJwtVct,
+            [WellKnownJwtClaimNames.Iat] = TimeProvider.GetUtcNow().ToUnixTimeSeconds(),
             [EudiPid.SdJwt.GivenName] = "Erika",
             [EudiPid.SdJwt.FamilyName] = "Mustermann",
             [EudiPid.SdJwt.Birthdate] = "1964-08-12",

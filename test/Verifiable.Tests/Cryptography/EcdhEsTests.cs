@@ -98,11 +98,11 @@ internal sealed class EcdhEsTests
             headerJson, StringComparison.Ordinal, "Header must contain alg=ECDH-ES.");
         Assert.Contains($"\"enc\":\"{WellKnownJweEncryptionAlgorithms.A128Gcm}\"",
             headerJson, StringComparison.Ordinal, "Header must contain enc=A128GCM.");
-        Assert.Contains($"\"{WellKnownJwkValues.Epk}\"",
+        Assert.Contains($"\"{WellKnownJoseHeaderNames.Epk}\"",
             headerJson, StringComparison.Ordinal, "Header must contain the epk.");
-        Assert.Contains($"\"{WellKnownJwkValues.Kty}\":\"{WellKnownKeyTypeValues.Ec}\"",
+        Assert.Contains($"\"{WellKnownJwkMemberNames.Kty}\":\"{WellKnownKeyTypeValues.Ec}\"",
             headerJson, StringComparison.Ordinal, "EPK must have kty=EC.");
-        Assert.Contains($"\"{WellKnownJwkValues.Crv}\":\"{WellKnownCurveValues.P256}\"",
+        Assert.Contains($"\"{WellKnownJwkMemberNames.Crv}\":\"{WellKnownCurveValues.P256}\"",
             headerJson, StringComparison.Ordinal, "EPK must have crv=P-256.");
     }
 

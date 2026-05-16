@@ -186,26 +186,26 @@ public static class JweParsing
         if(alg is null)
         {
             throw new FormatException(
-                $"JWE protected header must contain the '{WellKnownJwkValues.Alg}' parameter.");
+                $"JWE protected header must contain the '{WellKnownJwkMemberNames.Alg}' parameter.");
         }
 
         if(!string.Equals(alg, expectedAlgorithm, StringComparison.Ordinal))
         {
             throw new FormatException(
-                $"JWE '{WellKnownJwkValues.Alg}' value '{alg}' does not match the expected " +
+                $"JWE '{WellKnownJwkMemberNames.Alg}' value '{alg}' does not match the expected " +
                 $"algorithm '{expectedAlgorithm}'.");
         }
 
         if(enc is null)
         {
             throw new FormatException(
-                $"JWE protected header must contain the '{WellKnownJwkValues.Enc}' parameter.");
+                $"JWE protected header must contain the '{WellKnownJoseHeaderNames.Enc}' parameter.");
         }
 
         if(!string.Equals(enc, expectedEncryption, StringComparison.Ordinal))
         {
             throw new FormatException(
-                $"JWE '{WellKnownJwkValues.Enc}' value '{enc}' does not match the expected " +
+                $"JWE '{WellKnownJoseHeaderNames.Enc}' value '{enc}' does not match the expected " +
                 $"encryption '{expectedEncryption}'.");
         }
 
@@ -222,14 +222,14 @@ public static class JweParsing
         if(kty is null || crv is null || x is null || y is null)
         {
             throw new FormatException(
-                $"JWE '{WellKnownJwkValues.Epk}' must contain '{WellKnownJwkValues.Kty}', " +
-                $"'{WellKnownJwkValues.Crv}', '{WellKnownJwkValues.X}', and '{WellKnownJwkValues.Y}'.");
+                $"JWE '{WellKnownJoseHeaderNames.Epk}' must contain '{WellKnownJwkMemberNames.Kty}', " +
+                $"'{WellKnownJwkMemberNames.Crv}', '{WellKnownJwkMemberNames.X}', and '{WellKnownJwkMemberNames.Y}'.");
         }
 
         if(!WellKnownKeyTypeValues.IsEc(kty))
         {
             throw new FormatException(
-                $"JWE '{WellKnownJwkValues.Epk}' must have '{WellKnownJwkValues.Kty}' equal to " +
+                $"JWE '{WellKnownJoseHeaderNames.Epk}' must have '{WellKnownJwkMemberNames.Kty}' equal to " +
                 $"'{WellKnownKeyTypeValues.Ec}'. Received '{kty}'.");
         }
 
@@ -237,17 +237,17 @@ public static class JweParsing
 
         var epkDict = new Dictionary<string, object>(4)
         {
-            [WellKnownJwkValues.Kty] = kty,
-            [WellKnownJwkValues.Crv] = crv,
-            [WellKnownJwkValues.X] = x,
-            [WellKnownJwkValues.Y] = y
+            [WellKnownJwkMemberNames.Kty] = kty,
+            [WellKnownJwkMemberNames.Crv] = crv,
+            [WellKnownJwkMemberNames.X] = x,
+            [WellKnownJwkMemberNames.Y] = y
         };
 
         var header = new Dictionary<string, object>(3)
         {
-            [WellKnownJwkValues.Alg] = alg,
-            [WellKnownJwkValues.Enc] = enc,
-            [WellKnownJwkValues.Epk] = epkDict
+            [WellKnownJwkMemberNames.Alg] = alg,
+            [WellKnownJoseHeaderNames.Enc] = enc,
+            [WellKnownJoseHeaderNames.Epk] = epkDict
         };
 
         return (header, epk);
@@ -273,7 +273,7 @@ public static class JweParsing
         if(!EllipticCurveUtilities.CheckPointOnCurve(xSpan, ySpan, curveType))
         {
             throw new FormatException(
-                $"JWE '{WellKnownJwkValues.Epk}' point is not on the {crv} curve. " +
+                $"JWE '{WellKnownJoseHeaderNames.Epk}' point is not on the {crv} curve. " +
                 $"Possible invalid curve attack.");
         }
 

@@ -89,10 +89,10 @@ public static class CredentialJwsExtensions
 
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Alg] = algorithm,
-            [WellKnownJwkValues.Typ] = mediaType ?? WellKnownMediaTypes.Jwt.VcJwt,
-            [WellKnownJwkValues.Kid] = verificationMethodId,
-            [WellKnownJwkValues.Cty] = contentType ?? WellKnownMediaTypes.Application.Vc
+            [WellKnownJwkMemberNames.Alg] = algorithm,
+            [WellKnownJoseHeaderNames.Typ] = mediaType ?? WellKnownMediaTypes.Jwt.VcJwt,
+            [WellKnownJwkMemberNames.Kid] = verificationMethodId,
+            [WellKnownJoseHeaderNames.Cty] = contentType ?? WellKnownMediaTypes.Application.Vc
         };
 
         string headerSegment = base64UrlEncoder(headerSerializer(header));

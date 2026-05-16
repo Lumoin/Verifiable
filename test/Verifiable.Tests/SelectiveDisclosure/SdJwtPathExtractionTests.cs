@@ -161,7 +161,7 @@ internal sealed class SdJwtPathExtractionTests
             SensitiveMemoryPool<byte>.Shared);
 
         Assert.Contains(CredentialPath.Root, paths);
-        Assert.Contains(CredentialPath.Root.Append(WellKnownJwtClaims.Iss), paths);
+        Assert.Contains(CredentialPath.Root.Append(WellKnownJwtClaimNames.Iss), paths);
         Assert.Contains(CredentialPath.Root.Append("visible"), paths);
         Assert.Contains(CredentialPath.Root.Append("nested"), paths);
         Assert.Contains(CredentialPath.Root.Append("nested").Append("inner"), paths);
@@ -189,7 +189,7 @@ internal sealed class SdJwtPathExtractionTests
             SensitiveMemoryPool<byte>.Shared);
 
         Assert.Contains(CredentialPath.Root, mandatory);
-        Assert.Contains(CredentialPath.Root.Append(WellKnownJwtClaims.Iss), mandatory);
+        Assert.Contains(CredentialPath.Root.Append(WellKnownJwtClaimNames.Iss), mandatory);
         Assert.Contains(CredentialPath.Root.Append("mandatory"), mandatory);
     }
 

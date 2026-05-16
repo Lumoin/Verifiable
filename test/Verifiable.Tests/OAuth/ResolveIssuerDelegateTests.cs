@@ -210,19 +210,19 @@ internal sealed class ResolveIssuerDelegateTests
             Assert.AreEqual("at+jwt", header.RootElement.GetProperty("typ").GetString(),
                 "RFC 9068 requires typ=at+jwt on access tokens.");
 
-            Assert.AreEqual(expectedIssuer, payload.RootElement.GetProperty(WellKnownJwtClaims.Iss).GetString(),
+            Assert.AreEqual(expectedIssuer, payload.RootElement.GetProperty(WellKnownJwtClaimNames.Iss).GetString(),
                 "iss claim must equal the issuer argument passed to SignAsync.");
 
-            Assert.AreEqual(expectedClientId, payload.RootElement.GetProperty(WellKnownJwtClaims.ClientId).GetString(),
+            Assert.AreEqual(expectedClientId, payload.RootElement.GetProperty(WellKnownJwtClaimNames.ClientId).GetString(),
                 "client_id claim must equal the clientId argument passed to SignAsync.");
 
-            Assert.AreEqual(expectedSubject, payload.RootElement.GetProperty(WellKnownJwtClaims.Sub).GetString(),
+            Assert.AreEqual(expectedSubject, payload.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString(),
                 "sub claim must equal the subject argument.");
 
-            Assert.AreEqual(expectedJti, payload.RootElement.GetProperty(WellKnownJwtClaims.Jti).GetString(),
+            Assert.AreEqual(expectedJti, payload.RootElement.GetProperty(WellKnownJwtClaimNames.Jti).GetString(),
                 "jti claim must equal the jti argument.");
 
-            Assert.AreEqual(expectedScope, payload.RootElement.GetProperty(WellKnownJwtClaims.Scope).GetString(),
+            Assert.AreEqual(expectedScope, payload.RootElement.GetProperty(WellKnownJwtClaimNames.Scope).GetString(),
                 "scope claim must equal the scope argument.");
         }
     }
@@ -274,17 +274,17 @@ internal sealed class ResolveIssuerDelegateTests
         using(payload)
         {
             //Sanity check: mechanical claims are always present.
-            Assert.IsTrue(payload.RootElement.TryGetProperty(WellKnownJwtClaims.Sub, out _),
+            Assert.IsTrue(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Sub, out _),
                 "sub must always be present.");
-            Assert.IsTrue(payload.RootElement.TryGetProperty(WellKnownJwtClaims.Jti, out _),
+            Assert.IsTrue(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Jti, out _),
                 "jti must always be present.");
 
             //When the caller passes no issuer/clientId the claim is absent (not
             //an empty string). This ensures applications that don't plumb them
             //don't produce RFC-9068-looking tokens with empty-string iss.
-            Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaims.Iss, out _),
+            Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Iss, out _),
                 "iss claim must be absent when issuer parameter was null.");
-            Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaims.ClientId, out _),
+            Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.ClientId, out _),
                 "client_id claim must be absent when clientId parameter was null.");
         }
     }

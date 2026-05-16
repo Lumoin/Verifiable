@@ -56,10 +56,10 @@ internal sealed class SdJwtVcIssuanceTests
         Dictionary<string, object>? header = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span, CredentialSecuringMaterial.JsonOptions);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual("EdDSA", header[WellKnownJwkValues.Alg].ToString());
-        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcSdJwt, header[WellKnownJwkValues.Typ].ToString(),
+        Assert.AreEqual("EdDSA", header[WellKnownJwkMemberNames.Alg].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcSdJwt, header[WellKnownJoseHeaderNames.Typ].ToString(),
             "VC SD-JWT must use vc+sd-jwt media type per VC-JOSE-COSE Section 6.1.3.");
-        Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, header[WellKnownJwkValues.Kid].ToString());
+        Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, header[WellKnownJwkMemberNames.Kid].ToString());
     }
 
 

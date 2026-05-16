@@ -457,28 +457,28 @@ namespace Verifiable.JCose
         {
             ArgumentNullException.ThrowIfNull(jwk);
 
-            if(!jwk.TryGetValue(WellKnownJwkValues.Kty, out object? kty) || kty is not string keyType)
+            if(!jwk.TryGetValue(WellKnownJwkMemberNames.Kty, out object? kty) || kty is not string keyType)
             {
-                throw new ArgumentException($"JWK must contain a valid '{WellKnownJwkValues.Kty}' field.", nameof(jwk));
+                throw new ArgumentException($"JWK must contain a valid '{WellKnownJwkMemberNames.Kty}' field.", nameof(jwk));
             }
 
             ValidateRequiredFields(jwk, keyType);
 
             string algorithm = string.Empty;
-            if(jwk.TryGetValue(WellKnownJwkValues.Alg, out object? alg) && alg is string algString)
+            if(jwk.TryGetValue(WellKnownJwkMemberNames.Alg, out object? alg) && alg is string algString)
             {
                 algorithm = algString;
             }
 
             string crv = string.Empty;
-            if(jwk.TryGetValue(WellKnownJwkValues.Crv, out object? crvObj) && crvObj is string crvString)
+            if(jwk.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvObj) && crvObj is string crvString)
             {
                 crv = crvString;
             }
 
             //Resolve purpose from the optional 'use' field; default to Verification.
             Purpose explicitPurpose = Purpose.Verification;
-            if(jwk.TryGetValue(WellKnownJwkValues.Use, out object? useObj) && useObj is string use)
+            if(jwk.TryGetValue(WellKnownJwkMemberNames.Use, out object? useObj) && useObj is string use)
             {
                 explicitPurpose = use switch
                 {
@@ -501,33 +501,33 @@ namespace Verifiable.JCose
             {
                 if(WellKnownKeyTypeValues.IsEc(keyType))
                 {
-                    if(!jwk.TryGetValue(WellKnownJwkValues.X, out object? ecX) || ecX is not string)
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.X, out object? ecX) || ecX is not string)
                     {
-                        throw new ArgumentException($"EC JWK must contain a valid '{WellKnownJwkValues.X}' field.", nameof(jwk));
+                        throw new ArgumentException($"EC JWK must contain a valid '{WellKnownJwkMemberNames.X}' field.", nameof(jwk));
                     }
 
-                    if(!jwk.TryGetValue(WellKnownJwkValues.Y, out object? ecY) || ecY is not string)
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.Y, out object? ecY) || ecY is not string)
                     {
-                        throw new ArgumentException($"EC JWK must contain a valid '{WellKnownJwkValues.Y}' field.", nameof(jwk));
+                        throw new ArgumentException($"EC JWK must contain a valid '{WellKnownJwkMemberNames.Y}' field.", nameof(jwk));
                     }
                 }
                 else if(WellKnownKeyTypeValues.IsOkp(keyType))
                 {
-                    if(!jwk.TryGetValue(WellKnownJwkValues.X, out object? okpX) || okpX is not string)
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.X, out object? okpX) || okpX is not string)
                     {
-                        throw new ArgumentException($"OKP JWK must contain a valid '{WellKnownJwkValues.X}' field.", nameof(jwk));
+                        throw new ArgumentException($"OKP JWK must contain a valid '{WellKnownJwkMemberNames.X}' field.", nameof(jwk));
                     }
                 }
                 else if(WellKnownKeyTypeValues.IsRsa(keyType))
                 {
-                    if(!jwk.TryGetValue(WellKnownJwkValues.N, out object? rsaN) || rsaN is not string)
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.N, out object? rsaN) || rsaN is not string)
                     {
-                        throw new ArgumentException($"RSA JWK must contain a valid '{WellKnownJwkValues.N}' field.", nameof(jwk));
+                        throw new ArgumentException($"RSA JWK must contain a valid '{WellKnownJwkMemberNames.N}' field.", nameof(jwk));
                     }
 
-                    if(!jwk.TryGetValue(WellKnownJwkValues.E, out object? rsaE) || rsaE is not string)
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.E, out object? rsaE) || rsaE is not string)
                     {
-                        throw new ArgumentException($"RSA JWK must contain a valid '{WellKnownJwkValues.E}' field.", nameof(jwk));
+                        throw new ArgumentException($"RSA JWK must contain a valid '{WellKnownJwkMemberNames.E}' field.", nameof(jwk));
                     }
                 }
                 else
@@ -552,8 +552,8 @@ namespace Verifiable.JCose
 
             static byte[] DecodeEcKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
             {
-                using IMemoryOwner<byte> xBytes = decoder((string)jwk[WellKnownJwkValues.X], SensitiveMemoryPool<byte>.Shared);
-                using IMemoryOwner<byte> yBytes = decoder((string)jwk[WellKnownJwkValues.Y], SensitiveMemoryPool<byte>.Shared);
+                using IMemoryOwner<byte> xBytes = decoder((string)jwk[WellKnownJwkMemberNames.X], SensitiveMemoryPool<byte>.Shared);
+                using IMemoryOwner<byte> yBytes = decoder((string)jwk[WellKnownJwkMemberNames.Y], SensitiveMemoryPool<byte>.Shared);
 
                 //Compressed format is the canonical internal form for all EC public keys.
                 //Backend functions accept both compressed and uncompressed SEC1 encoding.
@@ -563,7 +563,7 @@ namespace Verifiable.JCose
 
             static byte[] DecodeOkpKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
             {
-                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkValues.X], SensitiveMemoryPool<byte>.Shared);
+                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.X], SensitiveMemoryPool<byte>.Shared);
 
                 return decoded.Memory.Span.ToArray();
             }
@@ -571,7 +571,7 @@ namespace Verifiable.JCose
 
             static byte[] DecodeRsaKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
             {
-                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkValues.N], SensitiveMemoryPool<byte>.Shared);
+                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.N], SensitiveMemoryPool<byte>.Shared);
 
                 return decoded.Memory.Span.ToArray();
             }

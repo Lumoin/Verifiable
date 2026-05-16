@@ -90,9 +90,9 @@ public sealed class UnsignedJwt: IEquatable<UnsignedJwt>
 
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Alg] = algorithm,
-            [WellKnownJwkValues.Typ] = mediaType ?? WellKnownMediaTypes.Jwt.VcLdJwt,
-            [WellKnownJwkValues.Kid] = keyId
+            [WellKnownJwkMemberNames.Alg] = algorithm,
+            [WellKnownJoseHeaderNames.Typ] = mediaType ?? WellKnownMediaTypes.Jwt.VcLdJwt,
+            [WellKnownJwkMemberNames.Kid] = keyId
         };
 
         return new UnsignedJwt(header, payload);

@@ -85,27 +85,27 @@ public static class AuthCodeJarSigning
             [OAuthRequestParameters.RedirectUri] = requestObject.RedirectUri.ToString(),
             [OAuthRequestParameters.Scope] = requestObject.Scope,
             [OAuthRequestParameters.State] = requestObject.State,
-            [WellKnownJwtClaims.Nonce] = requestObject.Nonce,
+            [WellKnownJwtClaimNames.Nonce] = requestObject.Nonce,
             [OAuthRequestParameters.CodeChallenge] = requestObject.CodeChallenge,
             [OAuthRequestParameters.CodeChallengeMethod] = requestObject.CodeChallengeMethod,
-            [WellKnownJwtClaims.Iat] = requestObject.Iat.ToUnixTimeSeconds(),
-            [WellKnownJwtClaims.Nbf] = requestObject.Nbf.ToUnixTimeSeconds(),
-            [WellKnownJwtClaims.Exp] = requestObject.Exp.ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Iat] = requestObject.Iat.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Nbf] = requestObject.Nbf.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = requestObject.Exp.ToUnixTimeSeconds()
         };
 
         if(requestObject.Iss is string iss)
         {
-            payload[WellKnownJwtClaims.Iss] = iss;
+            payload[WellKnownJwtClaimNames.Iss] = iss;
         }
 
         if(requestObject.Aud is string aud)
         {
-            payload[WellKnownJwtClaims.Aud] = aud;
+            payload[WellKnownJwtClaimNames.Aud] = aud;
         }
 
         if(requestObject.Jti is string jti)
         {
-            payload[WellKnownJwtClaims.Jti] = jti;
+            payload[WellKnownJwtClaimNames.Jti] = jti;
         }
 
         return payload;

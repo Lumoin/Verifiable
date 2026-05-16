@@ -58,7 +58,7 @@ public sealed class UnverifiedJwsSignature: IDisposable, IEquatable<UnverifiedJw
     /// resolve the algorithm from the verification key instead.
     /// </summary>
     public string? ClaimedAlgorithm =>
-        ProtectedHeader.TryGetValue(WellKnownJwkValues.Alg, out object? alg) ? alg as string : null;
+        ProtectedHeader.TryGetValue(WellKnownJwkMemberNames.Alg, out object? alg) ? alg as string : null;
 
 
     /// <summary>

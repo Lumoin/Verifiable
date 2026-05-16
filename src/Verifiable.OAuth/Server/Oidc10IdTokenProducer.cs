@@ -138,7 +138,7 @@ internal static class Oidc10IdTokenProducer
             {
                 [WellKnownDpopValues.ConfirmationJwkThumbprint] = confirmation.JwkThumbprint
             };
-            extraClaims.Add(new KeyValuePair<string, object>(WellKnownJwtClaims.Cnf, cnf));
+            extraClaims.Add(new KeyValuePair<string, object>(WellKnownJwtClaimNames.Cnf, cnf));
         }
 
         JwtHeader header = JwtHeader.ForIdToken(algorithm, signingKeyId.Value);
@@ -164,25 +164,25 @@ internal static class Oidc10IdTokenProducer
     {
         if(profile is null || !WellKnownScopes.ContainsProfile(scope)) { return; }
 
-        Add(sink, WellKnownJwtClaims.Name, profile.Name);
-        Add(sink, WellKnownJwtClaims.FamilyName, profile.FamilyName);
-        Add(sink, WellKnownJwtClaims.GivenName, profile.GivenName);
-        Add(sink, WellKnownJwtClaims.MiddleName, profile.MiddleName);
-        Add(sink, WellKnownJwtClaims.Nickname, profile.Nickname);
-        Add(sink, WellKnownJwtClaims.PreferredUsername, profile.PreferredUsername);
-        if(profile.Profile is { } p) { sink.Add(new(WellKnownJwtClaims.Profile, p.OriginalString)); }
-        if(profile.Picture is { } pic) { sink.Add(new(WellKnownJwtClaims.Picture, pic.OriginalString)); }
-        if(profile.Website is { } w) { sink.Add(new(WellKnownJwtClaims.Website, w.OriginalString)); }
-        Add(sink, WellKnownJwtClaims.Gender, profile.Gender);
+        Add(sink, WellKnownJwtClaimNames.Name, profile.Name);
+        Add(sink, WellKnownJwtClaimNames.FamilyName, profile.FamilyName);
+        Add(sink, WellKnownJwtClaimNames.GivenName, profile.GivenName);
+        Add(sink, WellKnownJwtClaimNames.MiddleName, profile.MiddleName);
+        Add(sink, WellKnownJwtClaimNames.Nickname, profile.Nickname);
+        Add(sink, WellKnownJwtClaimNames.PreferredUsername, profile.PreferredUsername);
+        if(profile.Profile is { } p) { sink.Add(new(WellKnownJwtClaimNames.Profile, p.OriginalString)); }
+        if(profile.Picture is { } pic) { sink.Add(new(WellKnownJwtClaimNames.Picture, pic.OriginalString)); }
+        if(profile.Website is { } w) { sink.Add(new(WellKnownJwtClaimNames.Website, w.OriginalString)); }
+        Add(sink, WellKnownJwtClaimNames.Gender, profile.Gender);
         if(profile.Birthdate is { } bd)
         {
-            sink.Add(new(WellKnownJwtClaims.Birthdate, bd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+            sink.Add(new(WellKnownJwtClaimNames.Birthdate, bd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
         }
-        Add(sink, WellKnownJwtClaims.Zoneinfo, profile.Zoneinfo);
-        Add(sink, WellKnownJwtClaims.Locale, profile.Locale);
+        Add(sink, WellKnownJwtClaimNames.Zoneinfo, profile.Zoneinfo);
+        Add(sink, WellKnownJwtClaimNames.Locale, profile.Locale);
         if(profile.UpdatedAt is { } ua)
         {
-            sink.Add(new(WellKnownJwtClaims.UpdatedAt, ua.ToUnixTimeSeconds()));
+            sink.Add(new(WellKnownJwtClaimNames.UpdatedAt, ua.ToUnixTimeSeconds()));
         }
     }
 
@@ -192,8 +192,8 @@ internal static class Oidc10IdTokenProducer
     {
         if(email is null || !WellKnownScopes.ContainsEmail(scope)) { return; }
 
-        sink.Add(new(WellKnownJwtClaims.Email, email.Email));
-        if(email.EmailVerified is { } v) { sink.Add(new(WellKnownJwtClaims.EmailVerified, v)); }
+        sink.Add(new(WellKnownJwtClaimNames.Email, email.Email));
+        if(email.EmailVerified is { } v) { sink.Add(new(WellKnownJwtClaimNames.EmailVerified, v)); }
     }
 
 
@@ -212,7 +212,7 @@ internal static class Oidc10IdTokenProducer
 
         if(addressClaim.Count > 0)
         {
-            sink.Add(new(WellKnownJwtClaims.Address, addressClaim));
+            sink.Add(new(WellKnownJwtClaimNames.Address, addressClaim));
         }
     }
 
@@ -222,8 +222,8 @@ internal static class Oidc10IdTokenProducer
     {
         if(phone is null || !WellKnownScopes.ContainsPhone(scope)) { return; }
 
-        sink.Add(new(WellKnownJwtClaims.PhoneNumber, phone.PhoneNumber));
-        if(phone.PhoneNumberVerified is { } v) { sink.Add(new(WellKnownJwtClaims.PhoneNumberVerified, v)); }
+        sink.Add(new(WellKnownJwtClaimNames.PhoneNumber, phone.PhoneNumber));
+        if(phone.PhoneNumberVerified is { } v) { sink.Add(new(WellKnownJwtClaimNames.PhoneNumberVerified, v)); }
     }
 
 

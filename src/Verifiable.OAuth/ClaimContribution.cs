@@ -50,7 +50,7 @@ public sealed record ClaimContribution(IReadOnlyList<ClaimEntry> Entries)
 /// </summary>
 /// <param name="Name">
 /// The claim name. Use values from
-/// <see cref="Verifiable.JCose.WellKnownJwtClaims"/> or other well-known
+/// <see cref="Verifiable.JCose.WellKnownJwtClaimNames"/> or other well-known
 /// claim-name classes rather than raw string literals.
 /// </param>
 /// <param name="Value">

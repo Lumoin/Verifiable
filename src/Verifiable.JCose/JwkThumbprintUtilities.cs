@@ -164,13 +164,13 @@ public static class JwkThumbprintUtilities
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(WellKnownJwkValues.Crv, crv);
+        writer.WriteProperty(WellKnownJwkMemberNames.Crv, crv);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
+        writer.WriteProperty(WellKnownJwkMemberNames.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.X, x);
+        writer.WriteProperty(WellKnownJwkMemberNames.X, x);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.Y, y);
+        writer.WriteProperty(WellKnownJwkMemberNames.Y, y);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -208,11 +208,11 @@ public static class JwkThumbprintUtilities
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(WellKnownJwkValues.Crv, crv);
+        writer.WriteProperty(WellKnownJwkMemberNames.Crv, crv);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
+        writer.WriteProperty(WellKnownJwkMemberNames.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.X, x);
+        writer.WriteProperty(WellKnownJwkMemberNames.X, x);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -250,11 +250,11 @@ public static class JwkThumbprintUtilities
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(WellKnownJwkValues.Crv, crv);
+        writer.WriteProperty(WellKnownJwkMemberNames.Crv, crv);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
+        writer.WriteProperty(WellKnownJwkMemberNames.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.X, x);
+        writer.WriteProperty(WellKnownJwkMemberNames.X, x);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -292,11 +292,11 @@ public static class JwkThumbprintUtilities
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(WellKnownJwkValues.E, e);
+        writer.WriteProperty(WellKnownJwkMemberNames.E, e);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
+        writer.WriteProperty(WellKnownJwkMemberNames.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.N, n);
+        writer.WriteProperty(WellKnownJwkMemberNames.N, n);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -331,9 +331,9 @@ public static class JwkThumbprintUtilities
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(WellKnownJwkValues.K, k);
+        writer.WriteProperty(WellKnownJwkMemberNames.K, k);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
+        writer.WriteProperty(WellKnownJwkMemberNames.Kty, kty);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -370,11 +370,11 @@ public static class JwkThumbprintUtilities
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(WellKnownJwkValues.Alg, alg);
+        writer.WriteProperty(WellKnownJwkMemberNames.Alg, alg);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
+        writer.WriteProperty(WellKnownJwkMemberNames.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.X, x);
+        writer.WriteProperty(WellKnownJwkMemberNames.X, x);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -411,11 +411,11 @@ public static class JwkThumbprintUtilities
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(WellKnownJwkValues.Alg, alg);
+        writer.WriteProperty(WellKnownJwkMemberNames.Alg, alg);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
+        writer.WriteProperty(WellKnownJwkMemberNames.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.X, x);
+        writer.WriteProperty(WellKnownJwkMemberNames.X, x);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);
@@ -452,11 +452,11 @@ public static class JwkThumbprintUtilities
 
         //Build canonical JSON representation with lexicographically sorted keys.
         writer.WriteObjectStart();
-        writer.WriteProperty(WellKnownJwkValues.Alg, alg);
+        writer.WriteProperty(WellKnownJwkMemberNames.Alg, alg);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.Kty, kty);
+        writer.WriteProperty(WellKnownJwkMemberNames.Kty, kty);
         writer.WritePropertySeparator();
-        writer.WriteProperty(WellKnownJwkValues.X, x);
+        writer.WriteProperty(WellKnownJwkMemberNames.X, x);
         writer.WriteObjectEnd();
 
         return ComputeSha256Hash(pool, buffer[..writer.Position]);

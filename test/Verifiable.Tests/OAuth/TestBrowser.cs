@@ -83,7 +83,7 @@ internal static class TestBrowser
                 OAuthRequestParameters.CodeChallengeMethodS256;
             fields[OAuthRequestParameters.Scope] = WellKnownScopes.OpenId;
             fields[OAuthRequestParameters.RedirectUri] = "https://client.example.com/callback";
-            fields[WellKnownJwtClaims.Nonce] = $"nonce-{Guid.NewGuid():N}";
+            fields[WellKnownJwtClaimNames.Nonce] = $"nonce-{Guid.NewGuid():N}";
         }
 
         EndpointChain chain = server.GetEndpoints(registration, context);

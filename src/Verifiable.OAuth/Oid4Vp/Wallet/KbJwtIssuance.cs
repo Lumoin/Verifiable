@@ -99,9 +99,9 @@ public static class KbJwtIssuance
 
         JwtPayload payload = new(capacity: 4)
         {
-            [WellKnownJwtClaims.Nonce] = verifierNonce,
-            [WellKnownJwtClaims.Aud] = verifierAud,
-            [WellKnownJwtClaims.Iat] = iat.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Nonce] = verifierNonce,
+            [WellKnownJwtClaimNames.Aud] = verifierAud,
+            [WellKnownJwtClaimNames.Iat] = iat.ToUnixTimeSeconds(),
             [SdConstants.SdHashClaim] = sdHash
         };
 

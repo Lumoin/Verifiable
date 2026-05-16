@@ -53,7 +53,7 @@ public static class AuthCodeRequestObjectExtensions
             //axis (policy.ScopeRequiredOnRequest) enforced at the matcher.
             string scope = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameters.Scope) ?? string.Empty;
             string state = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.State);
-            string nonce = JwtClaimReaders.RequireClaim(claims, WellKnownJwtClaims.Nonce);
+            string nonce = JwtClaimReaders.RequireClaim(claims, WellKnownJwtClaimNames.Nonce);
             string codeChallenge = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.CodeChallenge);
             string codeChallengeMethod = JwtClaimReaders.RequireClaim(
                 claims, OAuthRequestParameters.CodeChallengeMethod);
@@ -64,9 +64,9 @@ public static class AuthCodeRequestObjectExtensions
                     $"JAR '{OAuthRequestParameters.RedirectUri}' claim is not a valid absolute URI: '{redirectUriString}'.");
             }
 
-            string? iss = JwtClaimReaders.OptionalClaim(claims, WellKnownJwtClaims.Iss);
-            string? aud = JwtClaimReaders.OptionalClaim(claims, WellKnownJwtClaims.Aud);
-            string? jti = JwtClaimReaders.OptionalClaim(claims, WellKnownJwtClaims.Jti);
+            string? iss = JwtClaimReaders.OptionalClaim(claims, WellKnownJwtClaimNames.Iss);
+            string? aud = JwtClaimReaders.OptionalClaim(claims, WellKnownJwtClaimNames.Aud);
+            string? jti = JwtClaimReaders.OptionalClaim(claims, WellKnownJwtClaimNames.Jti);
 
             return new AuthCodeRequestObject
             {

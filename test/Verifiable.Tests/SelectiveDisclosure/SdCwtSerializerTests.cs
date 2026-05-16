@@ -369,12 +369,12 @@ internal sealed class SdCwtSerializerTests
     {
         var issued = DateTimeOffset.FromUnixTimeSeconds(1683000000);
 
-        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), WellKnownJwtClaims.Iat, issued);
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), WellKnownJwtClaimNames.Iat, issued);
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
         using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
-        Assert.AreEqual(WellKnownJwtClaims.Iat, parsed.ClaimName);
+        Assert.AreEqual(WellKnownJwtClaimNames.Iat, parsed.ClaimName);
         Assert.AreEqual(1683000000, parsed.ClaimValue);
     }
 }

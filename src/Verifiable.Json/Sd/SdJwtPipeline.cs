@@ -73,9 +73,9 @@ internal static class SdJwtPipeline
 
         var header = new JwtHeader
         {
-            [WellKnownJwkValues.Alg] = algorithm,
-            [WellKnownJwkValues.Typ] = resolvedMediaType,
-            [WellKnownJwkValues.Kid] = keyId
+            [WellKnownJwkMemberNames.Alg] = algorithm,
+            [WellKnownJoseHeaderNames.Typ] = resolvedMediaType,
+            [WellKnownJwkMemberNames.Kid] = keyId
         };
 
         byte[] headerBytes = SerializeDictionaryToUtf8(header);
