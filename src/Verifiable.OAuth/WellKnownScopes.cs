@@ -185,6 +185,34 @@ public static class WellKnownScopes
 
     /// <summary>
     /// Returns <see langword="true"/> when the space-separated <paramref name="scopeString"/>
+    /// contains <c>profile</c>.
+    /// </summary>
+    public static bool ContainsProfile(string scopeString) =>
+        ContainsScopeValue(scopeString, Profile);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the space-separated <paramref name="scopeString"/>
+    /// contains <c>email</c>.
+    /// </summary>
+    public static bool ContainsEmail(string scopeString) =>
+        ContainsScopeValue(scopeString, Email);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the space-separated <paramref name="scopeString"/>
+    /// contains <c>address</c>.
+    /// </summary>
+    public static bool ContainsAddress(string scopeString) =>
+        ContainsScopeValue(scopeString, Address);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the space-separated <paramref name="scopeString"/>
+    /// contains <c>phone</c>.
+    /// </summary>
+    public static bool ContainsPhone(string scopeString) =>
+        ContainsScopeValue(scopeString, Phone);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the space-separated <paramref name="scopeString"/>
     /// contains <c>offline_access</c>.
     /// </summary>
     public static bool ContainsOfflineAccess(string scopeString) =>

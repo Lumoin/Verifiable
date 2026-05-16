@@ -91,6 +91,60 @@ public static class WellKnownJwtClaims
     /// </summary>
     public static readonly string Name = "name";
 
+    /// <summary>The <c>given_name</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string GivenName = "given_name";
+
+    /// <summary>The <c>family_name</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string FamilyName = "family_name";
+
+    /// <summary>The <c>middle_name</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string MiddleName = "middle_name";
+
+    /// <summary>The <c>nickname</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string Nickname = "nickname";
+
+    /// <summary>The <c>preferred_username</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string PreferredUsername = "preferred_username";
+
+    /// <summary>The <c>profile</c> claim per OIDC Core §5.1 — URL of the end-user's profile page.</summary>
+    public static readonly string Profile = "profile";
+
+    /// <summary>The <c>picture</c> claim per OIDC Core §5.1 — URL of the end-user's profile picture.</summary>
+    public static readonly string Picture = "picture";
+
+    /// <summary>The <c>website</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string Website = "website";
+
+    /// <summary>The <c>gender</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string Gender = "gender";
+
+    /// <summary>The <c>birthdate</c> claim per OIDC Core §5.1 — <c>YYYY-MM-DD</c> string.</summary>
+    public static readonly string Birthdate = "birthdate";
+
+    /// <summary>The <c>zoneinfo</c> claim per OIDC Core §5.1 — IANA tz database string.</summary>
+    public static readonly string Zoneinfo = "zoneinfo";
+
+    /// <summary>The <c>locale</c> claim per OIDC Core §5.1 — BCP47 language tag.</summary>
+    public static readonly string Locale = "locale";
+
+    /// <summary>The <c>updated_at</c> claim per OIDC Core §5.1 — Unix seconds.</summary>
+    public static readonly string UpdatedAt = "updated_at";
+
+    /// <summary>The <c>email</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string Email = "email";
+
+    /// <summary>The <c>email_verified</c> claim per OIDC Core §5.1 — JSON boolean.</summary>
+    public static readonly string EmailVerified = "email_verified";
+
+    /// <summary>The <c>phone_number</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string PhoneNumber = "phone_number";
+
+    /// <summary>The <c>phone_number_verified</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string PhoneNumberVerified = "phone_number_verified";
+
+    /// <summary>The <c>address</c> claim per OIDC Core §5.1.1 — structured JSON object.</summary>
+    public static readonly string Address = "address";
+
     /// <summary>
     /// The <c>vct</c> (Verifiable Credential Type) claim identifies the type of the SD-JWT VC.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9901#section-3.2.2.1.1">RFC 9901 §3.2.2.1.1</see>.

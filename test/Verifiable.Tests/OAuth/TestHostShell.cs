@@ -18,6 +18,7 @@ using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.Oidc;
 using Verifiable.Tests.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
@@ -144,6 +145,15 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </summary>
     private Dictionary<string, PublicKeyMemory> IssuerTrustStore { get; } = [];
 
+    /// <summary>
+    /// Per-subject OIDC claim store. The fixture's
+    /// <see cref="AuthorizationServerIntegration.ResolveOidcClaimsAsync"/>
+    /// lambda reads from this dictionary so tests can seed claim sets and
+    /// drive flows that consume them.
+    /// </summary>
+    public Dictionary<string, OidcClaims> SubjectClaims { get; } =
+        new(StringComparer.Ordinal);
+
 
     /// <summary>
     /// Registers a trusted issuer's public key for credential signature verification.
@@ -156,6 +166,36 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(issuerPublicKey);
 
         IssuerTrustStore[issuerId] = issuerPublicKey;
+    }
+
+
+    /// <summary>
+    /// Seeds an entry in <see cref="SubjectClaims"/> for OIDC tests. Default
+    /// values populate the standard profile/email shape; pass <c>null</c> to
+    /// omit a sub-record.
+    /// </summary>
+    public OidcClaims SeedTestSubject(
+        string subject = "test-subject",
+        string? name = "Test User",
+        string? email = "test@example.com",
+        bool emailVerified = true,
+        string? acr = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(subject);
+
+        OidcClaims claims = new()
+        {
+            Subject = subject,
+            Profile = name is null ? null : new ProfileClaims { Name = name },
+            Email = email is null ? null : new EmailClaims
+            {
+                Email = email,
+                EmailVerified = emailVerified
+            },
+            AuthContext = acr is null ? null : new AuthenticationContext { Acr = acr }
+        };
+        SubjectClaims[subject] = claims;
+        return claims;
     }
 
 
@@ -202,6 +242,11 @@ internal sealed class TestHostShell: IAsyncDisposable
         {
             ExtractTenantIdAsync = (ctx, ct) =>
                 ValueTask.FromResult(ctx.TenantId),
+
+            ResolveOidcClaimsAsync = (subject, scope, tenantId, ctx, ct) =>
+                ValueTask.FromResult(
+                    SubjectClaims.TryGetValue(subject, out OidcClaims? claims)
+                        ? claims : null),
 
             LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
                 ValueTask.FromResult(
@@ -585,7 +630,11 @@ internal sealed class TestHostShell: IAsyncDisposable
                     MetadataEndpoints.Builder,
                     RegistrationEndpoints.Builder
                 ]),
-                TokenProducers = TokenProducerSet.Empty,
+                TokenProducers = new TokenProducerSet(
+                [
+                    TokenProducer.Rfc9068AccessToken,
+                    TokenProducer.Oidc10IdToken
+                ]),
                 ClaimContributors = ClaimContributorSet.Empty
             },
 
@@ -1746,7 +1795,8 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         ImmutableHashSet<ServerCapabilityName> capabilities = ImmutableHashSet.Create(
             ServerCapabilityName.AuthorizationCode,
-            ServerCapabilityName.PushedAuthorization);
+            ServerCapabilityName.PushedAuthorization,
+            ServerCapabilityName.OpenIdConnect);
 
         string segment = Guid.NewGuid().ToString("N")[..8];
         KeyId signingKeyId = new($"urn:uuid:{Guid.NewGuid()}");
@@ -1774,6 +1824,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             AllowedScopes = ImmutableHashSet.Create(WellKnownScopes.OpenId),
             SigningKeys = ImmutableDictionary<KeyUsageContext, SigningKeySet>.Empty
                 .Add(KeyUsageContext.AccessTokenIssuance,
+                    new SigningKeySet { Current = [signingKeyId] })
+                .Add(KeyUsageContext.IdTokenIssuance,
                     new SigningKeySet { Current = [signingKeyId] }),
             TokenLifetimes = ImmutableDictionary<string, TimeSpan>.Empty,
             //FAPI 2.0 / HAIP require a resolved aud on access tokens. Map the

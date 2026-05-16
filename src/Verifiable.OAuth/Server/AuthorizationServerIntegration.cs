@@ -304,6 +304,17 @@ public sealed class AuthorizationServerIntegration
 
 
     /// <summary>
+    /// Resolves the OpenID Connect claim set for an authenticated subject.
+    /// Consumed by <see cref="Oidc10IdTokenProducer"/> during ID Token
+    /// issuance and by the UserInfo endpoint per OIDC Core §5.3. Required
+    /// when the application's <see cref="TokenProducer"/> list includes
+    /// <see cref="TokenProducer.Oidc10IdToken"/> or when the UserInfo
+    /// endpoint is registered.
+    /// </summary>
+    public ResolveOidcClaimsDelegate? ResolveOidcClaimsAsync { get; set; }
+
+
+    /// <summary>
     /// Whether <see cref="Validate"/> has been called successfully on this group.
     /// </summary>
     public bool IsValidated { get; private set; }
