@@ -12,10 +12,11 @@ namespace Verifiable.OAuth;
 /// These are the NAMES of metadata parameters (<c>"issuer"</c>,
 /// <c>"authorization_endpoint"</c>, <c>"token_endpoint"</c>), not their
 /// VALUES. Values are deployment-specific URLs, capability lists, or
-/// boolean flags. Sibling registries (<c>OpenIdProviderMetadataKeys</c>,
-/// <c>FederationMetadataKeys</c>, <c>CredentialIssuerMetadataKeys</c>,
-/// <c>AuthZenMetadataKeys</c> in <c>OAuthMetadataKeys.cs</c>) currently
-/// retain the legacy <c>*Keys</c> naming pending their own audit pass.
+/// boolean flags. Sibling registries for adjacent specs live in
+/// <see cref="OpenIdProviderMetadataParameterNames"/>,
+/// <see cref="FederationMetadataParameterNames"/>,
+/// <see cref="CredentialIssuerMetadataParameterNames"/>, and
+/// <see cref="AuthZenMetadataParameterNames"/>.
 /// </remarks>
 public static class AuthorizationServerMetadataParameterNames
 {

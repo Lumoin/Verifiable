@@ -144,7 +144,7 @@ public static class JarExtensions
                 [OAuthRequestParameterNames.ResponseType] = request.ResponseType,
                 [OAuthRequestParameterNames.ResponseMode] = request.ResponseMode,
                 [WellKnownJwtClaimNames.ClientId] = request.ClientId,
-                [AuthorizationRequestParameters.ResponseUri] = request.ResponseUri.ToString(),
+                [Oid4VpAuthorizationRequestParameterNames.ResponseUri] = request.ResponseUri.ToString(),
                 [WellKnownJwtClaimNames.Nonce] = request.Nonce,
                 [OAuthRequestParameterNames.State] = request.State,
                 [WellKnownJwtClaimNames.Iat] = request.Iat.ToUnixTimeSeconds(),
@@ -154,7 +154,7 @@ public static class JarExtensions
 
             if(request.ClientIdScheme is not null)
             {
-                payload[AuthorizationRequestParameters.ClientIdScheme] = request.ClientIdScheme;
+                payload[Oid4VpAuthorizationRequestParameterNames.ClientIdScheme] = request.ClientIdScheme;
             }
 
             if(request.Iss is not null)
@@ -169,13 +169,13 @@ public static class JarExtensions
 
             if(request.DcqlQuery is not null)
             {
-                payload[AuthorizationRequestParameters.DcqlQuery] =
+                payload[Oid4VpAuthorizationRequestParameterNames.DcqlQuery] =
                     dcqlQuerySerializer(request.DcqlQuery);
             }
 
             if(request.ClientMetadata is not null)
             {
-                payload[AuthorizationRequestParameters.ClientMetadata] =
+                payload[Oid4VpAuthorizationRequestParameterNames.ClientMetadata] =
                     clientMetadataSerializer(request.ClientMetadata);
             }
 
@@ -261,33 +261,33 @@ public static class JarExtensions
         string clientId = RequireClaim(claims, WellKnownJwtClaimNames.ClientId);
         string responseType = RequireClaim(claims, OAuthRequestParameterNames.ResponseType);
         string responseMode = RequireClaim(claims, OAuthRequestParameterNames.ResponseMode);
-        string responseUriString = RequireClaim(claims, AuthorizationRequestParameters.ResponseUri);
+        string responseUriString = RequireClaim(claims, Oid4VpAuthorizationRequestParameterNames.ResponseUri);
         string nonce = RequireClaim(claims, WellKnownJwtClaimNames.Nonce);
         string state = RequireClaim(claims, OAuthRequestParameterNames.State);
 
         if(!Uri.TryCreate(responseUriString, UriKind.Absolute, out Uri? responseUri))
         {
             throw new FormatException(
-                $"JAR '{AuthorizationRequestParameters.ResponseUri}' claim is not a valid absolute URI: '{responseUriString}'.");
+                $"JAR '{Oid4VpAuthorizationRequestParameterNames.ResponseUri}' claim is not a valid absolute URI: '{responseUriString}'.");
         }
 
         DateTimeOffset iat = RequireInstant(claims, WellKnownJwtClaimNames.Iat);
         DateTimeOffset nbf = RequireInstant(claims, WellKnownJwtClaimNames.Nbf);
         DateTimeOffset exp = RequireInstant(claims, WellKnownJwtClaimNames.Exp);
 
-        string? clientIdScheme = OptionalClaim(claims, AuthorizationRequestParameters.ClientIdScheme);
+        string? clientIdScheme = OptionalClaim(claims, Oid4VpAuthorizationRequestParameterNames.ClientIdScheme);
         string? iss = OptionalClaim(claims, WellKnownJwtClaimNames.Iss);
         string? aud = OptionalClaim(claims, WellKnownJwtClaimNames.Aud);
 
         DcqlQuery? dcqlQuery = null;
-        if(claims.TryGetValue(AuthorizationRequestParameters.DcqlQuery, out object? dcqlObj)
+        if(claims.TryGetValue(Oid4VpAuthorizationRequestParameterNames.DcqlQuery, out object? dcqlObj)
             && dcqlObj is string dcqlJson)
         {
             dcqlQuery = dcqlQueryDeserializer(dcqlJson);
         }
 
         VerifierClientMetadata? clientMetadata = null;
-        if(claims.TryGetValue(AuthorizationRequestParameters.ClientMetadata, out object? metaObj)
+        if(claims.TryGetValue(Oid4VpAuthorizationRequestParameterNames.ClientMetadata, out object? metaObj)
             && metaObj is string metaJson)
         {
             clientMetadata = clientMetadataDeserializer(metaJson);

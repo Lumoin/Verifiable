@@ -20,7 +20,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </para>
 /// <para>
 /// Authorization Request parameter name constants are in
-/// <see cref="AuthorizationRequestParameters"/>. Profile-specific factory methods
+/// <see cref="Oid4VpAuthorizationRequestParameterNames"/>. Profile-specific factory methods
 /// are in <see cref="HaipProfile"/>. Serialization lives in <c>Verifiable.Json</c>.
 /// </para>
 /// <para>
@@ -61,7 +61,7 @@ public sealed class AuthorizationRequestObject: IEquatable<AuthorizationRequestO
 
     /// <summary>
     /// The response type. REQUIRED. Always
-    /// <see cref="AuthorizationRequestParameters.ResponseTypeVpToken"/> for OID4VP.
+    /// <see cref="Oid4VpAuthorizationRequestParameterValues.ResponseTypeVpToken"/> for OID4VP.
     /// </summary>
     public required string ResponseType { get; init; }
 

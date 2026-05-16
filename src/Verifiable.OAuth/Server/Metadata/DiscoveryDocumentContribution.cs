@@ -60,10 +60,10 @@ public abstract record DiscoveryField(string Name);
 /// <summary>
 /// A discovery field whose value is a JSON string. Typically a URL keyed
 /// to one of <see cref="AuthorizationServerMetadataParameterNames"/>,
-/// <see cref="OpenIdProviderMetadataKeys"/>,
-/// <see cref="FederationMetadataKeys"/>,
-/// <see cref="CredentialIssuerMetadataKeys"/>, or
-/// <see cref="AuthZenMetadataKeys"/>; or a single value field such as
+/// <see cref="OpenIdProviderMetadataParameterNames"/>,
+/// <see cref="FederationMetadataParameterNames"/>,
+/// <see cref="CredentialIssuerMetadataParameterNames"/>, or
+/// <see cref="AuthZenMetadataParameterNames"/>; or a single value field such as
 /// <c>service_documentation</c> or <c>op_policy_uri</c>.
 /// </summary>
 /// <param name="Name">The JSON property name.</param>

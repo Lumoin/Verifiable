@@ -118,7 +118,7 @@ public static class HaipProfile
         return new AuthorizationRequestObject
         {
             ClientId = clientId,
-            ResponseType = AuthorizationRequestParameters.ResponseTypeVpToken,
+            ResponseType = Oid4VpAuthorizationRequestParameterValues.ResponseTypeVpToken,
             ResponseMode = WellKnownResponseModes.DirectPostJwt,
             ResponseUri = responseUri,
             Nonce = nonce,

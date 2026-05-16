@@ -384,7 +384,7 @@ internal sealed class Oid4VpFlowSessionTests
         var payload = new JwtPayload
         {
             [WellKnownJwtClaimNames.Nonce] = "nonce-abc",
-            [OAuthRequestParameterNames.ResponseType] = AuthorizationRequestParameters.ResponseTypeVpToken,
+            [OAuthRequestParameterNames.ResponseType] = Oid4VpAuthorizationRequestParameterValues.ResponseTypeVpToken,
             [OAuthRequestParameterNames.ResponseMode] = WellKnownResponseModes.DirectPostJwt,
             [WellKnownJwtClaimNames.ClientId] = "https://verifier.example.com",
             [OAuthRequestParameterNames.State] = flowId
