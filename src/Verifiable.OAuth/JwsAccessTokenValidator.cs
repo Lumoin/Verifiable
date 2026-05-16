@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Diagnostics;
-using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
@@ -23,7 +22,7 @@ namespace Verifiable.OAuth;
 ///   <item><description>Structural parse — three base64url segments separated by <c>.</c>.</description></item>
 ///   <item><description>Header decode, alg check — reject <c>none</c> per RFC 8725 §3.1.</description></item>
 ///   <item><description><c>kid</c> resolution via the supplied resolver.</description></item>
-///   <item><description>Signature verification over <c>header.payload</c>.</description></item>
+///   <item><description>Signature verification via <see cref="Jws.VerifyAsync"/>.</description></item>
 ///   <item><description>Standard claim checks: <c>iss</c>, <c>aud</c>, <c>exp</c>, <c>nbf</c>, <c>iat</c>, <c>sub</c>.</description></item>
 ///   <item><description>Optional claim read: <c>client_id</c>, <c>scope</c>, <c>jti</c>, <c>cnf</c>.</description></item>
 /// </list>
@@ -49,12 +48,12 @@ public static class JwsAccessTokenValidator
     /// <param name="expectedIssuer">The expected <c>iss</c> value; compared by ordinal equality.</param>
     /// <param name="expectedAudience">The expected <c>aud</c> value; required to be present in the claim.</param>
     /// <param name="resolveVerificationKey">Resolves the public verification key for the header's <c>kid</c>.</param>
-    /// <param name="verifySignature">The signature-verification primitive.</param>
+    /// <param name="verifySignature">The signature-verification primitive threaded into <see cref="Jws.VerifyAsync"/>.</param>
     /// <param name="parser">JSON parser for header and payload segments.</param>
     /// <param name="base64UrlDecoder">Base64url decoder.</param>
     /// <param name="timeProvider">Time provider for <c>exp</c>/<c>nbf</c>/<c>iat</c> checks.</param>
-    /// <param name="memoryPool">Memory pool for transient decoded buffers.</param>
-    /// <param name="iatSkew">Tolerance for an <c>iat</c> claim slightly in the future. Default 60 seconds.</param>
+    /// <param name="memoryPool">Memory pool for transient decoded buffers and pooled signing-input bytes.</param>
+    /// <param name="iatSkew">Tolerance for an <c>iat</c> claim slightly in the future.</param>
     /// <param name="tenantId">Tenant identifier threaded to the key resolver.</param>
     /// <param name="context">Per-request context bag threaded to the key resolver.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -96,7 +95,8 @@ public static class JwsAccessTokenValidator
                 "Access token is not a well-formed compact JWS.");
         }
 
-        //2. Decode and parse header.
+        //2. Decode and parse header to extract alg + kid before signature
+        //verify (alg=none is rejected without touching the signature path).
         JwtHeader header;
         try
         {
@@ -110,7 +110,6 @@ public static class JwsAccessTokenValidator
                 "Failed to parse JWS header.");
         }
 
-        //2a. alg check — reject 'none', require a string value.
         if(!header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? algValue)
             || algValue is not string alg
             || string.IsNullOrEmpty(alg))
@@ -119,6 +118,7 @@ public static class JwsAccessTokenValidator
                 JwsAccessTokenValidationFailureReason.InvalidHeader,
                 "JWS header is missing the alg member.");
         }
+
         if(WellKnownJwaValues.IsNone(alg))
         {
             return JwsAccessTokenValidationResult.Failure(
@@ -126,7 +126,6 @@ public static class JwsAccessTokenValidator
                 "JWS alg 'none' is rejected per RFC 8725 §3.1.");
         }
 
-        //2b. kid must be present and resolvable.
         if(!header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidValue)
             || kidValue is not string kid
             || string.IsNullOrEmpty(kid))
@@ -136,7 +135,9 @@ public static class JwsAccessTokenValidator
                 "JWS header is missing the kid member.");
         }
 
-        //3. Resolve verification key.
+        //3. Resolve verification key. The reference is owned by the resolver
+        //(typically a shared keyset/HSM handle); the validator does not
+        //dispose it.
         PublicKeyMemory? publicKey = await resolveVerificationKey(
             new KeyId(kid), tenantId, context, cancellationToken).ConfigureAwait(false);
         if(publicKey is null)
@@ -146,19 +147,19 @@ public static class JwsAccessTokenValidator
                 "Verification key for the presented kid could not be resolved.");
         }
 
-        //4. Verify signature. The resolved key reference is owned by the
-        //resolver (typically a shared keyset/HSM handle); the validator MUST
-        //NOT dispose it — disposing would break the next request that
-        //resolves the same key.
-        using IMemoryOwner<byte> signatureBytes = base64UrlDecoder(parts[2], memoryPool);
-        byte[] dataToVerify = Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}");
-
-        bool signatureValid = await verifySignature(
-            dataToVerify,
-            signatureBytes.Memory,
-            publicKey.AsReadOnlyMemory(),
-            context: null,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        //4. Verify signature via JCose's Jws.VerifyAsync — composes the
+        //library's existing JWS verification primitive instead of duplicating
+        //the signing-input construction and signature dispatch here. The
+        //partDecoder parameter is required by the API but unused on this
+        //overload; pass a no-op.
+        bool signatureValid = await Jws.VerifyAsync(
+            accessToken,
+            base64UrlDecoder,
+            UnusedPartDecoder,
+            memoryPool,
+            publicKey,
+            verifySignature,
+            cancellationToken).ConfigureAwait(false);
 
         if(!signatureValid)
         {
@@ -188,6 +189,7 @@ public static class JwsAccessTokenValidator
                 JwsAccessTokenValidationFailureReason.MissingRequiredClaim,
                 "Access token is missing the iss claim.");
         }
+
         if(!string.Equals(iss, expectedIssuer, StringComparison.Ordinal))
         {
             return JwsAccessTokenValidationResult.Failure(
@@ -201,6 +203,7 @@ public static class JwsAccessTokenValidator
                 JwsAccessTokenValidationFailureReason.MissingRequiredClaim,
                 "Access token is missing the aud claim.");
         }
+
         if(!ContainsAudience(audience, expectedAudience))
         {
             return JwsAccessTokenValidationResult.Failure(
@@ -214,6 +217,7 @@ public static class JwsAccessTokenValidator
                 JwsAccessTokenValidationFailureReason.MissingRequiredClaim,
                 "Access token is missing the exp claim.");
         }
+
         if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat))
         {
             return JwsAccessTokenValidationResult.Failure(
@@ -228,6 +232,7 @@ public static class JwsAccessTokenValidator
                 JwsAccessTokenValidationFailureReason.Expired,
                 "Access token has expired.");
         }
+
         if(iat > now + iatSkew)
         {
             return JwsAccessTokenValidationResult.Failure(
@@ -244,6 +249,7 @@ public static class JwsAccessTokenValidator
                     JwsAccessTokenValidationFailureReason.NotYetValid,
                     "Access token nbf is in the future.");
             }
+
             nbf = nbfValue;
         }
 
@@ -278,6 +284,12 @@ public static class JwsAccessTokenValidator
     }
 
 
+    //Jws.VerifyAsync requires a partDecoder but the explicit-delegate overload
+    //does not call it. A static no-op avoids capture and silences the
+    //null-checked-required-parameter contract.
+    private static JwtHeader UnusedPartDecoder(ReadOnlySpan<byte> _) => default!;
+
+
     private static bool TryReadString(JwtPayload payload, string claimName, out string? value)
     {
         if(payload.TryGetValue(claimName, out object? raw) && raw is string s && !string.IsNullOrEmpty(s))
@@ -285,6 +297,7 @@ public static class JwsAccessTokenValidator
             value = s;
             return true;
         }
+
         value = null;
         return false;
     }
@@ -320,6 +333,7 @@ public static class JwsAccessTokenValidator
                         list.Add(s);
                     }
                 }
+
                 if(list.Count > 0)
                 {
                     audience = list;
@@ -342,6 +356,7 @@ public static class JwsAccessTokenValidator
                 return true;
             }
         }
+
         return false;
     }
 
@@ -361,9 +376,11 @@ public static class JwsAccessTokenValidator
                     value = default;
                     return false;
             }
+
             value = DateTimeOffset.FromUnixTimeSeconds(seconds);
             return true;
         }
+
         value = default;
         return false;
     }

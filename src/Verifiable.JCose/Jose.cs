@@ -327,10 +327,20 @@ public static class Jws
         }
 
         using IMemoryOwner<byte> signatureOwner = base64UrlDecoder(parts[2], pool);
-        byte[] dataToVerify = Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}");
+
+        //JWS signing input per RFC 7515 §5.1 is ASCII octets of
+        //"<header>.<payload>". Both segments are base64url-encoded (so already
+        //ASCII), which means byte length equals char length and we can write
+        //directly into pooled memory without an intermediate string allocation.
+        int signingInputLength = parts[0].Length + 1 + parts[1].Length;
+        using IMemoryOwner<byte> dataToVerifyOwner = pool.Rent(signingInputLength);
+        Span<byte> dataToVerifySpan = dataToVerifyOwner.Memory.Span[..signingInputLength];
+        Encoding.ASCII.GetBytes(parts[0], dataToVerifySpan);
+        dataToVerifySpan[parts[0].Length] = (byte)'.';
+        Encoding.ASCII.GetBytes(parts[1], dataToVerifySpan[(parts[0].Length + 1)..]);
 
         return await verificationDelegate(
-            dataToVerify,
+            dataToVerifyOwner.Memory[..signingInputLength],
             signatureOwner.Memory,
             publicKey.AsReadOnlyMemory(),
             cancellationToken: cancellationToken).ConfigureAwait(false);
