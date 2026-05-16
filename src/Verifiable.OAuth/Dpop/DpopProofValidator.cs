@@ -74,16 +74,22 @@ public static class DpopProofValidator
         {
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidTyp);
         }
+
         if(string.IsNullOrEmpty(header.Alg) || !WellKnownJwaValues.IsEcdsa(header.Alg))
         {
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidAlg);
         }
+
         if(header.Jwk is null || header.Jwk.Count == 0)
         {
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidJwk);
         }
 
-        //Signature verification.
+        //Reconstruct the proving public key from the embedded JWK. The
+        //validator owns this material and disposes it after the verify call;
+        //distinct from the resolver-owned key path
+        //in [[jws-access-token-validator]] where the caller retains the
+        //reference.
         PublicKeyMemory publicKey;
         try
         {
@@ -95,17 +101,22 @@ public static class DpopProofValidator
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidJwk);
         }
 
+        //Signature verification via JCose's Jws.VerifyAsync — composes the
+        //library's existing JWS verification primitive (including the pooled
+        //signing-input construction and RFC 8725 §3.11 length bound) instead
+        //of duplicating those mechanics here. partDecoder is required by the
+        //API but unused on this overload; a static no-op avoids capture.
         bool signatureValid;
         try
         {
-            using IMemoryOwner<byte> signatureBytes = base64UrlDecoder(parts[2], memoryPool);
-            byte[] dataToVerify = Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}");
-
-            signatureValid = await verificationDelegate(
-                dataToVerify,
-                signatureBytes.Memory,
-                publicKey.AsReadOnlyMemory(),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+            signatureValid = await Jws.VerifyAsync(
+                request.Proof,
+                base64UrlDecoder,
+                UnusedPartDecoder,
+                memoryPool,
+                publicKey,
+                verificationDelegate,
+                cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -122,6 +133,7 @@ public static class DpopProofValidator
         {
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.HtmMismatch);
         }
+
         if(!string.Equals(claims.Htu, request.HttpUrl, StringComparison.Ordinal))
         {
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.HtuMismatch);
@@ -140,6 +152,7 @@ public static class DpopProofValidator
             {
                 return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.NonceMissing);
             }
+
             if(request.ExpectedNonce is null
                 || !string.Equals(claims.Nonce, request.ExpectedNonce, StringComparison.Ordinal))
             {
@@ -170,6 +183,12 @@ public static class DpopProofValidator
 
         return DpopProofValidationResult.Success(claims, thumbprint);
     }
+
+
+    //Jws.VerifyAsync requires a partDecoder but the explicit-delegate overload
+    //does not call it. A static no-op avoids capture and silences the
+    //null-checked-required-parameter contract.
+    private static DpopProofHeader UnusedPartDecoder(ReadOnlySpan<byte> _) => default!;
 
 
     /// <summary>
@@ -216,6 +235,7 @@ public static class DpopProofValidator
             jwk[WellKnownJwkMemberNames.Kty],
             jwk[WellKnownJwkMemberNames.X],
             jwk[WellKnownJwkMemberNames.Y]);
+
         return base64UrlEncoder(hash.Memory.Span);
     }
 }
