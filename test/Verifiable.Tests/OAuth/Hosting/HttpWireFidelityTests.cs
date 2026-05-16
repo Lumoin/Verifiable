@@ -60,7 +60,7 @@ internal sealed class HttpWireFidelityTests
         const string specialScope = "openid api:read=x+y%z";
         OAuthFormEncodedFields additional = new(new Dictionary<string, string>
         {
-            [OAuthRequestParameters.Scope] = specialScope
+            [OAuthRequestParameterNames.Scope] = specialScope
         });
 
         AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
@@ -107,11 +107,11 @@ internal sealed class HttpWireFidelityTests
         //client-side result and doesn't surface response headers).
         Dictionary<string, string> parFields = new(StringComparer.Ordinal)
         {
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameters.CodeChallengeMethod] = OAuthRequestParameters.CodeChallengeMethodS256,
-            [OAuthRequestParameters.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameters.Scope] = WellKnownScopes.OpenId
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
 
         AuthorizationServerMetadata metadata = await client.Infrastructure

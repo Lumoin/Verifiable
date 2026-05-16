@@ -79,8 +79,8 @@ internal sealed class DpopEndToEndTests
         string requestUri = parCompleted.Par.RequestUri.ToString();
         RequestFields authorizeFields = new()
         {
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.RequestUri] = requestUri
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RequestUri] = requestUri
         };
 
         RequestContext authorizeContext = new();
@@ -105,9 +105,9 @@ internal sealed class DpopEndToEndTests
         //AuthorizationCodeReceivedState ready for token exchange.
         Dictionary<string, string> callbackFields = new(StringComparer.Ordinal)
         {
-            [OAuthRequestParameters.Code] = code,
-            [OAuthRequestParameters.State] = flowId,
-            [OAuthRequestParameters.Iss] = iss!
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.State] = flowId,
+            [OAuthRequestParameterNames.Iss] = iss!
         };
 
         AuthCodeFlowEndpointResult callbackResult = await fixture.Client.AuthCode.HandleCallbackAsync(
@@ -131,7 +131,7 @@ internal sealed class DpopEndToEndTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
             $"Expected token issuance success. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
         Assert.IsNotNull(tokenResult.Body);
-        Assert.IsTrue(tokenResult.Body!.TryGetValue(OAuthRequestParameters.AccessToken, out object? accessTokenObj));
+        Assert.IsTrue(tokenResult.Body!.TryGetValue(OAuthRequestParameterNames.AccessToken, out object? accessTokenObj));
         string accessToken = (string)accessTokenObj!;
         Assert.IsFalse(string.IsNullOrEmpty(accessToken));
 
@@ -140,7 +140,7 @@ internal sealed class DpopEndToEndTests
         //the token. Reading from the parsed Body dictionary is equivalent to
         //reading the wire because OAuthResponseParsers passes the JSON
         //field through unchanged.
-        Assert.IsTrue(tokenResult.Body.TryGetValue(OAuthRequestParameters.TokenType, out object? tokenTypeObj));
+        Assert.IsTrue(tokenResult.Body.TryGetValue(OAuthRequestParameterNames.TokenType, out object? tokenTypeObj));
         Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)tokenTypeObj!,
             "DPoP-bound issuance must emit token_type=DPoP per RFC 9449 §5.");
 
@@ -253,8 +253,8 @@ internal sealed class DpopEndToEndTests
 
         RequestFields authorizeFields = new()
         {
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.RequestUri] = requestUri
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RequestUri] = requestUri
         };
         RequestContext authorizeContext = new();
         authorizeContext.SetSubjectId(TestSubject);
@@ -272,12 +272,12 @@ internal sealed class DpopEndToEndTests
         //Rfc6749WithPkce sets EmitIssOnRedirect=false; iss may be null.
         Dictionary<string, string> callbackFields = new(StringComparer.Ordinal)
         {
-            [OAuthRequestParameters.Code] = code,
-            [OAuthRequestParameters.State] = flowId
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.State] = flowId
         };
         if(iss is not null)
         {
-            callbackFields[OAuthRequestParameters.Iss] = iss;
+            callbackFields[OAuthRequestParameterNames.Iss] = iss;
         }
 
         AuthCodeFlowEndpointResult callbackResult = await client.AuthCode.HandleCallbackAsync(
@@ -295,12 +295,12 @@ internal sealed class DpopEndToEndTests
         Assert.IsNotNull(tokenResult.Body);
 
         //Wire-level: token_type is Bearer per RFC 6750 §2.1.
-        Assert.IsTrue(tokenResult.Body!.TryGetValue(OAuthRequestParameters.TokenType, out object? typeObj));
+        Assert.IsTrue(tokenResult.Body!.TryGetValue(OAuthRequestParameterNames.TokenType, out object? typeObj));
         Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, (string)typeObj!,
             "Non-DPoP issuance must emit token_type=Bearer per RFC 6750 §2.1.");
 
         //Wire-level: JWT carries no cnf claim.
-        string accessToken = (string)tokenResult.Body[OAuthRequestParameters.AccessToken]!;
+        string accessToken = (string)tokenResult.Body[OAuthRequestParameterNames.AccessToken]!;
         Assert.IsFalse(JwtPayloadReader.HasCnfClaim(accessToken),
             "Non-DPoP access token must not carry cnf claim.");
 
@@ -329,10 +329,10 @@ internal sealed class DpopEndToEndTests
             parsed[pair[..eq]] = Uri.UnescapeDataString(pair[(eq + 1)..]);
         }
 
-        Assert.IsTrue(parsed.TryGetValue(OAuthRequestParameters.Code, out string? code),
+        Assert.IsTrue(parsed.TryGetValue(OAuthRequestParameterNames.Code, out string? code),
             $"Authorize redirect must carry code. Got: {location}");
 
-        parsed.TryGetValue(OAuthRequestParameters.Iss, out string? iss);
+        parsed.TryGetValue(OAuthRequestParameterNames.Iss, out string? iss);
 
         return (code!, iss);
     }

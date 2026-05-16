@@ -29,7 +29,7 @@ public static class ValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        ClaimOutcome outcome = context.Fields!.ContainsKey(OAuthRequestParameters.Code)
+        ClaimOutcome outcome = context.Fields!.ContainsKey(OAuthRequestParameterNames.Code)
             ? ClaimOutcome.Success
             : ClaimOutcome.Failure;
 
@@ -48,7 +48,7 @@ public static class ValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        ClaimOutcome outcome = context.Fields!.ContainsKey(OAuthRequestParameters.State)
+        ClaimOutcome outcome = context.Fields!.ContainsKey(OAuthRequestParameterNames.State)
             ? ClaimOutcome.Success
             : ClaimOutcome.Failure;
 
@@ -68,7 +68,7 @@ public static class ValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        ClaimOutcome outcome = context.Fields!.ContainsKey(OAuthRequestParameters.Iss)
+        ClaimOutcome outcome = context.Fields!.ContainsKey(OAuthRequestParameterNames.Iss)
             ? ClaimOutcome.Success
             : ClaimOutcome.Failure;
 
@@ -88,7 +88,7 @@ public static class ValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        bool issPresent = context.Fields!.TryGetValue(OAuthRequestParameters.Iss, out string? iss);
+        bool issPresent = context.Fields!.TryGetValue(OAuthRequestParameterNames.Iss, out string? iss);
         ClaimOutcome outcome = issPresent
             && string.Equals(iss, context.FlowState!.ExpectedIssuer, StringComparison.Ordinal)
             ? ClaimOutcome.Success
@@ -109,7 +109,7 @@ public static class ValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        bool statePresent = context.Fields!.TryGetValue(OAuthRequestParameters.State, out string? state);
+        bool statePresent = context.Fields!.TryGetValue(OAuthRequestParameterNames.State, out string? state);
         ClaimOutcome outcome = statePresent
             && string.Equals(state, context.FlowState!.FlowId, StringComparison.Ordinal)
             ? ClaimOutcome.Success

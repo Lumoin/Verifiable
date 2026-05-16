@@ -61,11 +61,11 @@ internal sealed class Phase9aResponseHeadersTests
 
         RequestFields fields = new()
         {
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameters.CodeChallengeMethod] = OAuthRequestParameters.CodeChallengeMethodS256,
-            [OAuthRequestParameters.RedirectUri] = UnregisteredRedirectUri.ToString(),
-            [OAuthRequestParameters.Scope] = WellKnownScopes.OpenId
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.RedirectUri] = UnregisteredRedirectUri.ToString(),
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
 
         ServerHttpResponse response = await host.DispatchAtPathAsync(
@@ -98,11 +98,11 @@ internal sealed class Phase9aResponseHeadersTests
 
         RequestFields fields = new()
         {
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameters.CodeChallengeMethod] = OAuthRequestParameters.CodeChallengeMethodS256,
-            [OAuthRequestParameters.RedirectUri] = RegisteredRedirectUri.ToString(),
-            [OAuthRequestParameters.Scope] = WellKnownScopes.OpenId
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
 
         ServerHttpResponse response = await host.DispatchAtPathAsync(
@@ -131,11 +131,11 @@ internal sealed class Phase9aResponseHeadersTests
 
         RequestFields fields = new()
         {
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameters.CodeChallengeMethod] = OAuthRequestParameters.CodeChallengeMethodS256,
-            [OAuthRequestParameters.RedirectUri] = RegisteredRedirectUri.ToString(),
-            [OAuthRequestParameters.Scope] = WellKnownScopes.OpenId
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
 
         ServerHttpResponse response = await host.DispatchAtPathAsync(
@@ -171,11 +171,11 @@ internal sealed class Phase9aResponseHeadersTests
         //PAR.
         RequestFields parFields = new()
         {
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.CodeChallenge] = challenge,
-            [OAuthRequestParameters.CodeChallengeMethod] = OAuthRequestParameters.CodeChallengeMethodS256,
-            [OAuthRequestParameters.RedirectUri] = RegisteredRedirectUri.ToString(),
-            [OAuthRequestParameters.Scope] = WellKnownScopes.OpenId
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = challenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
         ServerHttpResponse parResponse = await host.DispatchAtPathAsync(
             material.Registration.TenantId.Value,
@@ -188,8 +188,8 @@ internal sealed class Phase9aResponseHeadersTests
         //Authorize.
         RequestFields authorizeFields = new()
         {
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.RequestUri] = requestUri
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RequestUri] = requestUri
         };
         RequestContext authorizeContext = new();
         authorizeContext.SetSubjectId("subject-1");
@@ -204,11 +204,11 @@ internal sealed class Phase9aResponseHeadersTests
         //Token exchange.
         RequestFields tokenFields = new()
         {
-            [OAuthRequestParameters.GrantType] = OAuthRequestParameters.GrantTypeAuthorizationCode,
-            [OAuthRequestParameters.Code] = code,
-            [OAuthRequestParameters.CodeVerifier] = verifier,
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.RedirectUri] = RegisteredRedirectUri.ToString()
+            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.CodeVerifier] = verifier,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString()
         };
         ServerHttpResponse tokenResponse = await host.DispatchAtPathAsync(
             material.Registration.TenantId.Value,
@@ -275,7 +275,7 @@ internal sealed class Phase9aResponseHeadersTests
         foreach(string pair in query.Split('&'))
         {
             int eq = pair.IndexOf('=', StringComparison.Ordinal);
-            if(eq > 0 && string.Equals(pair[..eq], OAuthRequestParameters.Code, StringComparison.Ordinal))
+            if(eq > 0 && string.Equals(pair[..eq], OAuthRequestParameterNames.Code, StringComparison.Ordinal))
             {
                 return Uri.UnescapeDataString(pair[(eq + 1)..]);
             }

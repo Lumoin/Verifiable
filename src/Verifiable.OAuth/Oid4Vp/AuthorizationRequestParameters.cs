@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// Contains only parameters that do not exist in base OAuth 2.0. Parameters
 /// inherited from OAuth 2.0 without semantic change — <c>response_type</c>,
 /// <c>client_id</c>, <c>state</c>, <c>response_mode</c> — are defined in
-/// <see cref="Verifiable.OAuth.OAuthRequestParameters"/>. JWT claim names used
+/// <see cref="Verifiable.OAuth.OAuthRequestParameterNames"/>. JWT claim names used
 /// in JAR payloads — <c>iss</c>, <c>aud</c>, <c>nonce</c>, <c>client_id</c> —
 /// are defined in <see cref="Verifiable.JCose.WellKnownJwtClaimNames"/>.
 /// </para>

@@ -83,7 +83,7 @@ internal sealed class JarAuthCodeClientTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, result.Outcome,
             $"Expected Redirect outcome. ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
         Assert.IsNotNull(result.RedirectUri);
-        Assert.Contains(OAuthRequestParameters.RequestUri, result.RedirectUri!.Query, StringComparison.Ordinal,
+        Assert.Contains(OAuthRequestParameterNames.RequestUri, result.RedirectUri!.Query, StringComparison.Ordinal,
             "Authorize redirect URI must carry the PAR-issued request_uri.");
     }
 
@@ -113,9 +113,9 @@ internal sealed class JarAuthCodeClientTests
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, result.Outcome);
         Assert.IsNotNull(result.RedirectUri);
-        Assert.Contains(OAuthRequestParameters.Request, result.RedirectUri!.Query, StringComparison.Ordinal,
+        Assert.Contains(OAuthRequestParameterNames.Request, result.RedirectUri!.Query, StringComparison.Ordinal,
             "Authorize redirect URI must carry the signed JAR as the 'request' query parameter.");
-        Assert.Contains(OAuthRequestParameters.ClientId, result.RedirectUri.Query, StringComparison.Ordinal,
+        Assert.Contains(OAuthRequestParameterNames.ClientId, result.RedirectUri.Query, StringComparison.Ordinal,
             "Authorize redirect URI must carry the outer 'client_id' per RFC 9101 §6.1.");
     }
 
@@ -271,7 +271,7 @@ internal sealed class JarAuthCodeClientPqTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, result.Outcome,
             $"[{algorithm}] expected Redirect outcome. ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
         Assert.IsNotNull(result.RedirectUri);
-        Assert.Contains(OAuthRequestParameters.RequestUri, result.RedirectUri!.Query, StringComparison.Ordinal);
+        Assert.Contains(OAuthRequestParameterNames.RequestUri, result.RedirectUri!.Query, StringComparison.Ordinal);
     }
 
 

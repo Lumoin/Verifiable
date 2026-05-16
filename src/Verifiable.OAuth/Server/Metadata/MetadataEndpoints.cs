@@ -304,17 +304,17 @@ public static class MetadataEndpoints
                     await AppendEndpointAsync(
                         sb, server, registration, context,
                         ServerCapabilityName.JwksEndpoint,
-                        AuthorizationServerMetadataKeys.JwksUri, ct).ConfigureAwait(false);
+                        AuthorizationServerMetadataParameterNames.JwksUri, ct).ConfigureAwait(false);
 
                     await AppendEndpointAsync(
                         sb, server, registration, context,
                         ServerCapabilityName.PushedAuthorization,
-                        AuthorizationServerMetadataKeys.PushedAuthorizationRequestEndpoint, ct).ConfigureAwait(false);
+                        AuthorizationServerMetadataParameterNames.PushedAuthorizationRequestEndpoint, ct).ConfigureAwait(false);
 
                     await AppendEndpointAsync(
                         sb, server, registration, context,
                         ServerCapabilityName.AuthorizationCode,
-                        AuthorizationServerMetadataKeys.AuthorizationEndpoint, ct).ConfigureAwait(false);
+                        AuthorizationServerMetadataParameterNames.AuthorizationEndpoint, ct).ConfigureAwait(false);
 
                     bool hasToken =
                         registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode) ||
@@ -328,18 +328,18 @@ public static class MetadataEndpoints
                         //application is asked for the URL keyed by the discovery
                         //metadata field.
                         Uri? tokenUri = await server.Integration.ResolveEndpointUriAsync(
-                            AuthorizationServerMetadataKeys.TokenEndpoint, registration, context, ct)
+                            AuthorizationServerMetadataParameterNames.TokenEndpoint, registration, context, ct)
                             .ConfigureAwait(false);
                         if(tokenUri is not null)
                         {
-                            AppendField(sb, AuthorizationServerMetadataKeys.TokenEndpoint, tokenUri.ToString());
+                            AppendField(sb, AuthorizationServerMetadataParameterNames.TokenEndpoint, tokenUri.ToString());
                         }
                     }
 
                     await AppendEndpointAsync(
                         sb, server, registration, context,
                         ServerCapabilityName.TokenRevocation,
-                        AuthorizationServerMetadataKeys.RevocationEndpoint, ct).ConfigureAwait(false);
+                        AuthorizationServerMetadataParameterNames.RevocationEndpoint, ct).ConfigureAwait(false);
                 }
 
                 //Application-supplied additional fields merged after the base set.

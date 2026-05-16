@@ -19,8 +19,8 @@ namespace Verifiable.OAuth.AuthCode;
 /// missing or wrong-typed claims raise <see cref="FormatException"/>. The
 /// caller (the matcher's <c>BuildInputAsync</c>) catches that exception and
 /// maps it to a 400 response with <see cref="OAuthErrors.InvalidRequestObject"/>.
-/// A registered client whose JAR omits <see cref="OAuthRequestParameters.ResponseType"/>,
-/// <see cref="OAuthRequestParameters.RedirectUri"/>, or any other RFC 9101 §4
+/// A registered client whose JAR omits <see cref="OAuthRequestParameterNames.ResponseType"/>,
+/// <see cref="OAuthRequestParameterNames.RedirectUri"/>, or any other RFC 9101 §4
 /// required claim is the bug being surfaced; the exception path is the right
 /// shape for that.
 /// </para>
@@ -46,22 +46,22 @@ public static class AuthCodeRequestObjectExtensions
 
             IReadOnlyDictionary<string, object> claims = verified.Claims;
 
-            string clientId = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.ClientId);
-            string responseType = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.ResponseType);
-            string redirectUriString = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.RedirectUri);
+            string clientId = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameterNames.ClientId);
+            string responseType = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameterNames.ResponseType);
+            string redirectUriString = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameterNames.RedirectUri);
             //Scope is optional in the projection; required-ness is a policy
             //axis (policy.ScopeRequiredOnRequest) enforced at the matcher.
-            string scope = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameters.Scope) ?? string.Empty;
-            string state = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.State);
+            string scope = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.Scope) ?? string.Empty;
+            string state = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameterNames.State);
             string nonce = JwtClaimReaders.RequireClaim(claims, WellKnownJwtClaimNames.Nonce);
-            string codeChallenge = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameters.CodeChallenge);
+            string codeChallenge = JwtClaimReaders.RequireClaim(claims, OAuthRequestParameterNames.CodeChallenge);
             string codeChallengeMethod = JwtClaimReaders.RequireClaim(
-                claims, OAuthRequestParameters.CodeChallengeMethod);
+                claims, OAuthRequestParameterNames.CodeChallengeMethod);
 
             if(!Uri.TryCreate(redirectUriString, UriKind.Absolute, out Uri? redirectUri))
             {
                 throw new FormatException(
-                    $"JAR '{OAuthRequestParameters.RedirectUri}' claim is not a valid absolute URI: '{redirectUriString}'.");
+                    $"JAR '{OAuthRequestParameterNames.RedirectUri}' claim is not a valid absolute URI: '{redirectUriString}'.");
             }
 
             string? iss = JwtClaimReaders.OptionalClaim(claims, WellKnownJwtClaimNames.Iss);

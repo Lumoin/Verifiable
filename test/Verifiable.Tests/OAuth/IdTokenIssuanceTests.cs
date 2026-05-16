@@ -251,11 +251,11 @@ internal sealed class IdTokenIssuanceTests
 
         RequestFields parFields = new()
         {
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameters.CodeChallengeMethod] = OAuthRequestParameters.CodeChallengeMethodS256,
-            [OAuthRequestParameters.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameters.Scope] = scope
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = scope
         };
         ServerHttpResponse parResponse = await host.DispatchAtPathAsync(
             material.Registration.TenantId.Value,
@@ -267,8 +267,8 @@ internal sealed class IdTokenIssuanceTests
 
         RequestFields authorizeFields = new()
         {
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.RequestUri] = requestUri
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RequestUri] = requestUri
         };
         RequestContext authorizeContext = new();
         authorizeContext.SetSubjectId(SubjectId);
@@ -282,11 +282,11 @@ internal sealed class IdTokenIssuanceTests
 
         RequestFields tokenFields = new()
         {
-            [OAuthRequestParameters.GrantType] = OAuthRequestParameters.GrantTypeAuthorizationCode,
-            [OAuthRequestParameters.Code] = code,
-            [OAuthRequestParameters.CodeVerifier] = pkce.EncodedVerifier,
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.RedirectUri] = RedirectUri.OriginalString
+            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
         };
         return await host.DispatchAtPathAsync(
             material.Registration.TenantId.Value,
@@ -310,7 +310,7 @@ internal sealed class IdTokenIssuanceTests
         {
             int eq = pair.IndexOf('=', StringComparison.Ordinal);
             if(eq > 0 && string.Equals(
-                pair[..eq], OAuthRequestParameters.Code, StringComparison.Ordinal))
+                pair[..eq], OAuthRequestParameterNames.Code, StringComparison.Ordinal))
             {
                 return Uri.UnescapeDataString(pair[(eq + 1)..]);
             }

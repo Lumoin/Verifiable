@@ -59,7 +59,7 @@ public abstract record DiscoveryField(string Name);
 
 /// <summary>
 /// A discovery field whose value is a JSON string. Typically a URL keyed
-/// to one of <see cref="AuthorizationServerMetadataKeys"/>,
+/// to one of <see cref="AuthorizationServerMetadataParameterNames"/>,
 /// <see cref="OpenIdProviderMetadataKeys"/>,
 /// <see cref="FederationMetadataKeys"/>,
 /// <see cref="CredentialIssuerMetadataKeys"/>, or

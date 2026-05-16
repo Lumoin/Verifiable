@@ -68,21 +68,21 @@ internal static class TestBrowser
 
         RequestFields fields = new()
         {
-            [OAuthRequestParameters.ClientId] = registration.ClientId
+            [OAuthRequestParameterNames.ClientId] = registration.ClientId
         };
 
         if(requestUri is not null)
         {
-            fields[OAuthRequestParameters.RequestUri] = requestUri;
+            fields[OAuthRequestParameterNames.RequestUri] = requestUri;
         }
 
         if(codeChallenge is not null)
         {
-            fields[OAuthRequestParameters.CodeChallenge] = codeChallenge;
-            fields[OAuthRequestParameters.CodeChallengeMethod] =
-                OAuthRequestParameters.CodeChallengeMethodS256;
-            fields[OAuthRequestParameters.Scope] = WellKnownScopes.OpenId;
-            fields[OAuthRequestParameters.RedirectUri] = "https://client.example.com/callback";
+            fields[OAuthRequestParameterNames.CodeChallenge] = codeChallenge;
+            fields[OAuthRequestParameterNames.CodeChallengeMethod] =
+                OAuthRequestParameterValues.CodeChallengeMethodS256;
+            fields[OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId;
+            fields[OAuthRequestParameterNames.RedirectUri] = "https://client.example.com/callback";
             fields[WellKnownJwtClaimNames.Nonce] = $"nonce-{Guid.NewGuid():N}";
         }
 

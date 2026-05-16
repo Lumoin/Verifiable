@@ -400,7 +400,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims[OAuthRequestParameters.RedirectUri] = "https://attacker.example.com/steal";
+        claims[OAuthRequestParameterNames.RedirectUri] = "https://attacker.example.com/steal";
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -423,7 +423,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims[OAuthRequestParameters.CodeChallengeMethod] = "plain";
+        claims[OAuthRequestParameterNames.CodeChallengeMethod] = "plain";
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -469,7 +469,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims.Remove(OAuthRequestParameters.ResponseType);
+        claims.Remove(OAuthRequestParameterNames.ResponseType);
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -492,7 +492,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims.Remove(OAuthRequestParameters.RedirectUri);
+        claims.Remove(OAuthRequestParameterNames.RedirectUri);
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -515,7 +515,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims.Remove(OAuthRequestParameters.Scope);
+        claims.Remove(OAuthRequestParameterNames.Scope);
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -538,7 +538,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims.Remove(OAuthRequestParameters.State);
+        claims.Remove(OAuthRequestParameterNames.State);
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -584,7 +584,7 @@ internal sealed class JarParTests
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = BuildBaseClaims(material, now);
-        claims.Remove(OAuthRequestParameters.CodeChallenge);
+        claims.Remove(OAuthRequestParameterNames.CodeChallenge);
 
         string compactJar = await BuildSignedJarAsync(
             material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -665,11 +665,11 @@ internal sealed class JarParTests
 
         RequestFields fields = new()
         {
-            [OAuthRequestParameters.ClientId] = ClientId,
-            [OAuthRequestParameters.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameters.CodeChallengeMethod] = OAuthRequestParameters.CodeChallengeMethodS256,
-            [OAuthRequestParameters.RedirectUri] = RegisteredRedirectUri.ToString(),
-            [OAuthRequestParameters.Scope] = WellKnownScopes.OpenId
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
 
         RequestContext context = new();
@@ -706,11 +706,11 @@ internal sealed class JarParTests
 
         RequestFields fields = new()
         {
-            [OAuthRequestParameters.Request] = compactJar,
-            [OAuthRequestParameters.ClientId] = ClientId,
+            [OAuthRequestParameterNames.Request] = compactJar,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
             //Outer PKCE fields the JAR matcher must ignore.
-            [OAuthRequestParameters.CodeChallenge] = "outer-challenge-should-be-ignored",
-            [OAuthRequestParameters.CodeChallengeMethod] = OAuthRequestParameters.CodeChallengeMethodS256
+            [OAuthRequestParameterNames.CodeChallenge] = "outer-challenge-should-be-ignored",
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256
         };
 
         RequestContext context = new();
@@ -786,13 +786,13 @@ internal sealed class JarParTests
             [WellKnownJwtClaimNames.Iss] = ClientId,
             [WellKnownJwtClaimNames.Aud] = expectedAud,
             [WellKnownJwtClaimNames.ClientId] = ClientId,
-            [OAuthRequestParameters.ResponseType] = OAuthRequestParameters.ResponseTypeCode,
-            [OAuthRequestParameters.RedirectUri] = RegisteredRedirectUri.ToString(),
-            [OAuthRequestParameters.Scope] = WellKnownScopes.OpenId,
-            [OAuthRequestParameters.State] = "state-jar-par-01",
+            [OAuthRequestParameterNames.ResponseType] = OAuthRequestParameterValues.ResponseTypeCode,
+            [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.State] = "state-jar-par-01",
             [WellKnownJwtClaimNames.Nonce] = "nonce-jar-par-01",
-            [OAuthRequestParameters.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameters.CodeChallengeMethod] = OAuthRequestParameters.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
             [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Nbf] = now.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Exp] = (now + TimeSpan.FromSeconds(30)).ToUnixTimeSeconds()
@@ -888,12 +888,12 @@ internal sealed class JarParTests
     {
         RequestFields fields = new()
         {
-            [OAuthRequestParameters.Request] = compactJar
+            [OAuthRequestParameterNames.Request] = compactJar
         };
 
         if(outerClientId is not null)
         {
-            fields[OAuthRequestParameters.ClientId] = outerClientId;
+            fields[OAuthRequestParameterNames.ClientId] = outerClientId;
         }
 
         return await host.DispatchAtPathAsync(

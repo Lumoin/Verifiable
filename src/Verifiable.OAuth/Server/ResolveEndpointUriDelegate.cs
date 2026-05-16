@@ -19,10 +19,10 @@ namespace Verifiable.OAuth.Server;
 /// <para>
 /// The <paramref name="endpointKey"/> is a stable string identifier for the
 /// endpoint role being asked about. Library call sites pass values from
-/// <see cref="AuthorizationServerMetadataKeys"/> for endpoints that appear in
-/// the discovery document — <see cref="AuthorizationServerMetadataKeys.JwksUri"/>,
-/// <see cref="AuthorizationServerMetadataKeys.AuthorizationEndpoint"/>,
-/// <see cref="AuthorizationServerMetadataKeys.TokenEndpoint"/>, and the like.
+/// <see cref="AuthorizationServerMetadataParameterNames"/> for endpoints that appear in
+/// the discovery document — <see cref="AuthorizationServerMetadataParameterNames.JwksUri"/>,
+/// <see cref="AuthorizationServerMetadataParameterNames.AuthorizationEndpoint"/>,
+/// <see cref="AuthorizationServerMetadataParameterNames.TokenEndpoint"/>, and the like.
 /// Endpoint-role identifier rather than capability identifier because one
 /// capability can expose several endpoints (e.g.,
 /// <see cref="ServerCapabilityName.AuthorizationCode"/> exposes both the
@@ -45,7 +45,7 @@ namespace Verifiable.OAuth.Server;
 /// </remarks>
 /// <param name="endpointKey">
 /// The endpoint-role identifier whose URL is being requested. Library call
-/// sites pass <see cref="AuthorizationServerMetadataKeys"/> values for
+/// sites pass <see cref="AuthorizationServerMetadataParameterNames"/> values for
 /// discovery-document fields; application code may pass custom identifiers
 /// for non-discovery endpoint URLs.
 /// </param>

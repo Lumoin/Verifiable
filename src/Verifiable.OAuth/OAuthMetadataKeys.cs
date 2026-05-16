@@ -1,75 +1,16 @@
 namespace Verifiable.OAuth;
 
 /// <summary>
-/// Core OAuth 2.0 Authorization Server metadata keys (RFC 8414).
-/// </summary>
-public static class AuthorizationServerMetadataKeys
-{
-    /// <summary>
-    /// URL of the authorization server's issuer identifier.
-    /// </summary>
-    public static readonly string Issuer = "issuer";
-
-    /// <summary>
-    /// URL of the authorization server's authorization endpoint.
-    /// </summary>
-    public static readonly string AuthorizationEndpoint = "authorization_endpoint";
-
-    /// <summary>
-    /// URL of the authorization server's token endpoint.
-    /// </summary>
-    public static readonly string TokenEndpoint = "token_endpoint";
-
-    /// <summary>
-    /// URL of the authorization server's JWK Set document.
-    /// </summary>
-    public static readonly string JwksUri = "jwks_uri";
-
-    /// <summary>
-    /// URL of the authorization server's dynamic client registration endpoint.
-    /// </summary>
-    public static readonly string RegistrationEndpoint = "registration_endpoint";
-
-    /// <summary>
-    /// JSON array of supported scope values.
-    /// </summary>
-    public static readonly string ScopesSupported = "scopes_supported";
-
-    /// <summary>
-    /// JSON array of supported response types.
-    /// </summary>
-    public static readonly string ResponseTypesSupported = "response_types_supported";
-
-    /// <summary>
-    /// JSON array of supported grant types.
-    /// </summary>
-    public static readonly string GrantTypesSupported = "grant_types_supported";
-
-    /// <summary>
-    /// URL of the authorization server's token revocation endpoint (RFC 7009).
-    /// </summary>
-    public static readonly string RevocationEndpoint = "revocation_endpoint";
-
-    /// <summary>
-    /// URL of the authorization server's token introspection endpoint (RFC 7662).
-    /// </summary>
-    public static readonly string IntrospectionEndpoint = "introspection_endpoint";
-
-    /// <summary>
-    /// URL of the authorization server's pushed authorization request endpoint (RFC 9126).
-    /// </summary>
-    public static readonly string PushedAuthorizationRequestEndpoint = "pushed_authorization_request_endpoint";
-
-    /// <summary>
-    /// URL of the Status List Aggregation endpoint (draft-ietf-oauth-status-list).
-    /// </summary>
-    public static readonly string StatusListAggregationEndpoint = "status_list_aggregation_endpoint";
-}
-
-
-/// <summary>
 /// OpenID Connect Discovery metadata keys (OpenID.Discovery).
 /// </summary>
+/// <remarks>
+/// Retains the legacy <c>*Keys</c> naming pending a future audit pass.
+/// The OAuth AS-side equivalent has been split off to
+/// <see cref="AuthorizationServerMetadataParameterNames"/> following the
+/// post-7733df3 / 879d550 <c>*Names</c> convention; this class and the
+/// other registries in this file (Federation, CredentialIssuer, AuthZen)
+/// are queued for the same treatment.
+/// </remarks>
 public static class OpenIdProviderMetadataKeys
 {
     /// <summary>

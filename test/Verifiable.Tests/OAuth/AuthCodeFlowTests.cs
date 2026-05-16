@@ -30,7 +30,7 @@ internal sealed class AuthCodeFlowTests
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:abc", 60));
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
-            new Dictionary<string, string> { [OAuthRequestParameters.Scope] = "openid" },
+            new Dictionary<string, string> { [OAuthRequestParameterNames.Scope] = "openid" },
             DefaultRedirectUri,
             infrastructure,
             registration,
@@ -109,7 +109,7 @@ internal sealed class AuthCodeFlowTests
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(new Dictionary<string, OAuthFlowState>());
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
-            new Dictionary<string, string> { [OAuthRequestParameters.Code] = "abc" },
+            new Dictionary<string, string> { [OAuthRequestParameterNames.Code] = "abc" },
             infrastructure,
             registration,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -127,9 +127,9 @@ internal sealed class AuthCodeFlowTests
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "auth-code-xyz",
-                [OAuthRequestParameters.State] = "unknown-flow-id",
-                [OAuthRequestParameters.Iss] = "https://as.example.com"
+                [OAuthRequestParameterNames.Code] = "auth-code-xyz",
+                [OAuthRequestParameterNames.State] = "unknown-flow-id",
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
             },
             infrastructure,
             registration,
@@ -152,9 +152,9 @@ internal sealed class AuthCodeFlowTests
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "code-abc",
-                [OAuthRequestParameters.State] = flowId,
-                [OAuthRequestParameters.Iss] = "https://attacker.example.com"
+                [OAuthRequestParameterNames.Code] = "code-abc",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://attacker.example.com"
             },
             infrastructure,
             registration,
@@ -177,9 +177,9 @@ internal sealed class AuthCodeFlowTests
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "code-xyz",
-                [OAuthRequestParameters.State] = flowId,
-                [OAuthRequestParameters.Iss] = "https://as.example.com"
+                [OAuthRequestParameterNames.Code] = "code-xyz",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
             },
             infrastructure,
             registration,
@@ -242,9 +242,9 @@ internal sealed class AuthCodeFlowTests
         await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "code-happy",
-                [OAuthRequestParameters.State] = flowId,
-                [OAuthRequestParameters.Iss] = "https://as.example.com"
+                [OAuthRequestParameterNames.Code] = "code-happy",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
             },
             infrastructure,
             registration,

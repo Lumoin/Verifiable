@@ -3,9 +3,21 @@ using System.Diagnostics;
 namespace Verifiable.OAuth;
 
 /// <summary>
-/// Parameter name constants for OAuth 2.0 authorization and token endpoint requests.
+/// Well-known parameter NAMES for OAuth 2.0 wire requests per RFC 6749
+/// + extensions. These are form-urlencoded field names, query-string
+/// parameter names, and JSON-object keys inside JAR request objects.
 /// </summary>
 /// <remarks>
+/// <para>
+/// These are the NAMES of request parameters (e.g., <c>"code_challenge"</c>,
+/// <c>"response_type"</c>, <c>"client_id"</c>), not their VALUES. Most
+/// parameter values are flow-specific (codes, identifiers, URIs, scope
+/// strings); the small enumerated-set values
+/// (<c>grant_type</c> = <c>authorization_code</c> | <c>refresh_token</c>,
+/// <c>code_challenge_method</c> = <c>S256</c>,
+/// <c>response_type</c> = <c>code</c>) live in
+/// <see cref="OAuthRequestParameterValues"/>.
+/// </para>
 /// <para>
 /// All names are defined in the following specifications:
 /// </para>
@@ -17,8 +29,8 @@ namespace Verifiable.OAuth;
 ///   <item><description><see href="https://www.rfc-editor.org/rfc/rfc9700">RFC 9700</see> — OAuth 2.0 Security Best Current Practice.</description></item>
 /// </list>
 /// </remarks>
-[DebuggerDisplay("OAuthRequestParameters")]
-public static class OAuthRequestParameters
+[DebuggerDisplay("OAuthRequestParameterNames")]
+public static class OAuthRequestParameterNames
 {
     //Authorization request parameters — RFC 6749 §4.1.1.
 
@@ -193,28 +205,7 @@ public static class OAuthRequestParameters
     /// </summary>
     public static readonly string Request = "request";
 
-    //Grant type values — RFC 6749.
-
-    /// <summary>
-    /// The <c>authorization_code</c> grant type value.
-    /// </summary>
-    public static readonly string GrantTypeAuthorizationCode = "authorization_code";
-
-    /// <summary>
-    /// The <c>refresh_token</c> grant type value.
-    /// </summary>
-    public static readonly string GrantTypeRefreshToken = "refresh_token";
-
-    //Code challenge method values — RFC 7636.
-
-    /// <summary>
-    /// The <c>S256</c> code challenge method value.
-    /// The only permitted value per HAIP 1.0 and RFC 9700 §2.1.1. The plain method
-    /// must not be used as it negates PKCE's protection against downgrade attacks.
-    /// </summary>
-    public static readonly string CodeChallengeMethodS256 = "S256";
-
-    //OID4VP response parameter — OID4VP 1.0 §8.2.
+    //Device authorization parameters — RFC 8628.
 
     /// <summary>
     /// The <c>device_code</c> parameter.
@@ -226,6 +217,8 @@ public static class OAuthRequestParameters
     /// </summary>
     public static readonly string DeviceCode = "device_code";
 
+    //OID4VP response parameter — OID4VP 1.0 §8.2.
+
     /// <summary>
     /// The <c>response</c> parameter.
     /// The encrypted Authorization Response JWE POSTed by the Wallet to the
@@ -233,9 +226,4 @@ public static class OAuthRequestParameters
     /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html">OID4VP 1.0 §8.2</see>.
     /// </summary>
     public static readonly string Response = "response";
-
-    //Response type values — RFC 6749.
-
-    /// <summary>The <c>code</c> response type value.</summary>
-    public static readonly string ResponseTypeCode = "code";
 }

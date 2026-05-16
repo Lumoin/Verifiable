@@ -71,9 +71,9 @@ internal sealed class OAuthAttackMitigationTests
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "auth-code",
-                [OAuthRequestParameters.State] = flowId,
-                [OAuthRequestParameters.Iss] = "https://attacker.example.com"
+                [OAuthRequestParameterNames.Code] = "auth-code",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://attacker.example.com"
             },
             infrastructure,
             registration,
@@ -97,8 +97,8 @@ internal sealed class OAuthAttackMitigationTests
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "auth-code",
-                [OAuthRequestParameters.State] = flowId
+                [OAuthRequestParameterNames.Code] = "auth-code",
+                [OAuthRequestParameterNames.State] = flowId
                 //iss deliberately absent — HAIP 1.0 requires it.
             },
             infrastructure,
@@ -124,8 +124,8 @@ internal sealed class OAuthAttackMitigationTests
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "auth-code",
-                [OAuthRequestParameters.State] = flowId
+                [OAuthRequestParameterNames.Code] = "auth-code",
+                [OAuthRequestParameterNames.State] = flowId
             },
             infrastructure,
             registration,
@@ -148,9 +148,9 @@ internal sealed class OAuthAttackMitigationTests
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "auth-code",
-                [OAuthRequestParameters.State] = flowId,
-                [OAuthRequestParameters.Iss] = "https://as.example.com"
+                [OAuthRequestParameterNames.Code] = "auth-code",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
             },
             infrastructure,
             registration,
@@ -179,9 +179,9 @@ internal sealed class OAuthAttackMitigationTests
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "attacker-code",
-                [OAuthRequestParameters.State] = "no-such-flow-id",
-                [OAuthRequestParameters.Iss] = "https://as.example.com"
+                [OAuthRequestParameterNames.Code] = "attacker-code",
+                [OAuthRequestParameterNames.State] = "no-such-flow-id",
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
             },
             infrastructure,
             registration,
@@ -203,8 +203,8 @@ internal sealed class OAuthAttackMitigationTests
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "auth-code",
-                [OAuthRequestParameters.Iss] = "https://as.example.com"
+                [OAuthRequestParameterNames.Code] = "auth-code",
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
                 //state deliberately absent.
             },
             infrastructure,
@@ -243,11 +243,11 @@ internal sealed class OAuthAttackMitigationTests
             .ConfigureAwait(false);
 
         Assert.IsTrue(
-            capturedFields.ContainsKey(OAuthRequestParameters.CodeChallenge),
+            capturedFields.ContainsKey(OAuthRequestParameterNames.CodeChallenge),
             "PAR request body must always contain code_challenge.");
         Assert.AreEqual(
-            OAuthRequestParameters.CodeChallengeMethodS256,
-            capturedFields[OAuthRequestParameters.CodeChallengeMethod],
+            OAuthRequestParameterValues.CodeChallengeMethodS256,
+            capturedFields[OAuthRequestParameterNames.CodeChallengeMethod],
             "code_challenge_method must be S256.");
     }
 
@@ -273,9 +273,9 @@ internal sealed class OAuthAttackMitigationTests
         await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "code-abc",
-                [OAuthRequestParameters.State] = flowId,
-                [OAuthRequestParameters.Iss] = "https://as.example.com"
+                [OAuthRequestParameterNames.Code] = "code-abc",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
             },
             infrastructure,
             registration,
@@ -288,7 +288,7 @@ internal sealed class OAuthAttackMitigationTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(
-            tokenCaptured.ContainsKey(OAuthRequestParameters.CodeVerifier),
+            tokenCaptured.ContainsKey(OAuthRequestParameterNames.CodeVerifier),
             "Token request must always contain code_verifier.");
     }
 
@@ -317,8 +317,8 @@ internal sealed class OAuthAttackMitigationTests
             .ConfigureAwait(false);
 
         Assert.AreEqual(
-            OAuthRequestParameters.CodeChallengeMethodS256,
-            capturedFields[OAuthRequestParameters.CodeChallengeMethod],
+            OAuthRequestParameterValues.CodeChallengeMethodS256,
+            capturedFields[OAuthRequestParameterNames.CodeChallengeMethod],
             "The plain method must never be used; only S256 is permitted per RFC 9700 §2.1.1.");
     }
 
@@ -347,9 +347,9 @@ internal sealed class OAuthAttackMitigationTests
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameters.Code] = "stale-code",
-                [OAuthRequestParameters.State] = flowId,
-                [OAuthRequestParameters.Iss] = "https://as.example.com"
+                [OAuthRequestParameterNames.Code] = "stale-code",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
             },
             infrastructure,
             registration,

@@ -98,7 +98,7 @@ public static class AuthCodeFlowHandlers
 
         PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder);
 
-        ImmutableArray<string> scopes = fields.TryGetValue(OAuthRequestParameters.Scope, out string? scopeValue)
+        ImmutableArray<string> scopes = fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scopeValue)
             ? [.. scopeValue.Split(' ', StringSplitOptions.RemoveEmptyEntries)]
             : ["openid"];
 
@@ -196,8 +196,8 @@ public static class AuthCodeFlowHandlers
             .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, cancellationToken)
             .ConfigureAwait(false);
 
-        if(!fields.TryGetValue(OAuthRequestParameters.Code, out string? code) ||
-           !fields.TryGetValue(OAuthRequestParameters.State, out string? state))
+        if(!fields.TryGetValue(OAuthRequestParameterNames.Code, out string? code) ||
+           !fields.TryGetValue(OAuthRequestParameterNames.State, out string? state))
         {
             return new AuthCodeFlowEndpointResult
             {
@@ -253,7 +253,7 @@ public static class AuthCodeFlowHandlers
             };
         }
 
-        string? iss = fields.TryGetValue(OAuthRequestParameters.Iss, out string? issValue)
+        string? iss = fields.TryGetValue(OAuthRequestParameterNames.Iss, out string? issValue)
             ? issValue
             : null;
 
@@ -383,10 +383,10 @@ public static class AuthCodeFlowHandlers
             Outcome = AuthCodeFlowEndpointOutcome.Ok,
             Body = new Dictionary<string, object>
             {
-                [OAuthRequestParameters.AccessToken] = tokenResponse.AccessToken,
-                [OAuthRequestParameters.TokenType] = tokenResponse.TokenType,
-                [OAuthRequestParameters.ExpiresIn] = tokenResponse.ExpiresIn ?? 0,
-                [OAuthRequestParameters.Scope] = tokenResponse.Scope ?? string.Empty
+                [OAuthRequestParameterNames.AccessToken] = tokenResponse.AccessToken,
+                [OAuthRequestParameterNames.TokenType] = tokenResponse.TokenType,
+                [OAuthRequestParameterNames.ExpiresIn] = tokenResponse.ExpiresIn ?? 0,
+                [OAuthRequestParameterNames.Scope] = tokenResponse.Scope ?? string.Empty
             }
         };
     }
@@ -426,7 +426,7 @@ public static class AuthCodeFlowHandlers
             };
         }
 
-        if(!fields.TryGetValue(OAuthRequestParameters.Token, out string? token))
+        if(!fields.TryGetValue(OAuthRequestParameterNames.Token, out string? token))
         {
             return new AuthCodeFlowEndpointResult
             {
@@ -438,13 +438,13 @@ public static class AuthCodeFlowHandlers
 
         var revocationFields = new Dictionary<string, string>
         {
-            [OAuthRequestParameters.ClientId] = registration.ClientId.Value,
-            [OAuthRequestParameters.Token] = token
+            [OAuthRequestParameterNames.ClientId] = registration.ClientId.Value,
+            [OAuthRequestParameterNames.Token] = token
         };
 
-        if(fields.TryGetValue(OAuthRequestParameters.TokenTypeHint, out string? hint))
+        if(fields.TryGetValue(OAuthRequestParameterNames.TokenTypeHint, out string? hint))
         {
-            revocationFields[OAuthRequestParameters.TokenTypeHint] = hint;
+            revocationFields[OAuthRequestParameterNames.TokenTypeHint] = hint;
         }
 
         //RFC 7009 §2.2 — the revocation endpoint returns 200 with an empty body on
@@ -487,14 +487,14 @@ public static class AuthCodeFlowHandlers
 
         var fields = new Dictionary<string, string>
         {
-            [OAuthRequestParameters.GrantType] = OAuthRequestParameters.GrantTypeRefreshToken,
-            [OAuthRequestParameters.ClientId] = registration.ClientId.Value,
-            [OAuthRequestParameters.RefreshToken] = request.RefreshToken
+            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeRefreshToken,
+            [OAuthRequestParameterNames.ClientId] = registration.ClientId.Value,
+            [OAuthRequestParameterNames.RefreshToken] = request.RefreshToken
         };
 
         if(request.Scope is not null)
         {
-            fields[OAuthRequestParameters.Scope] = request.Scope;
+            fields[OAuthRequestParameterNames.Scope] = request.Scope;
         }
 
         HttpResponseData refreshHttpResponse = await infrastructure.SendFormPostAsync(
@@ -518,11 +518,11 @@ public static class AuthCodeFlowHandlers
             Outcome = AuthCodeFlowEndpointOutcome.Ok,
             Body = new Dictionary<string, object>
             {
-                [OAuthRequestParameters.AccessToken] = tokenResponse.AccessToken,
-                [OAuthRequestParameters.TokenType] = tokenResponse.TokenType,
-                [OAuthRequestParameters.ExpiresIn] = tokenResponse.ExpiresIn ?? 0,
-                [OAuthRequestParameters.RefreshToken] = tokenResponse.RefreshToken ?? string.Empty,
-                [OAuthRequestParameters.Scope] = tokenResponse.Scope ?? string.Empty
+                [OAuthRequestParameterNames.AccessToken] = tokenResponse.AccessToken,
+                [OAuthRequestParameterNames.TokenType] = tokenResponse.TokenType,
+                [OAuthRequestParameterNames.ExpiresIn] = tokenResponse.ExpiresIn ?? 0,
+                [OAuthRequestParameterNames.RefreshToken] = tokenResponse.RefreshToken ?? string.Empty,
+                [OAuthRequestParameterNames.Scope] = tokenResponse.Scope ?? string.Empty
             }
         };
     }
@@ -574,8 +574,8 @@ public static class AuthCodeFlowHandlers
 
         Dictionary<string, string> parBody = new(StringComparer.Ordinal)
         {
-            [OAuthRequestParameters.ClientId] = registration.ClientId.Value,
-            [OAuthRequestParameters.Request] = compactJar
+            [OAuthRequestParameterNames.ClientId] = registration.ClientId.Value,
+            [OAuthRequestParameterNames.Request] = compactJar
         };
         foreach((string key, string value) in jarOptions.AdditionalFields.Fields)
         {
@@ -671,7 +671,7 @@ public static class AuthCodeFlowHandlers
         AuthCodeRequestObject requestObject = new()
         {
             ClientId = registration.ClientId.Value,
-            ResponseType = OAuthRequestParameters.ResponseTypeCode,
+            ResponseType = OAuthRequestParameterValues.ResponseTypeCode,
             RedirectUri = jarOptions.RedirectUri,
             Scope = jarOptions.Scope,
             State = state,
@@ -734,7 +734,7 @@ public static class AuthCodeFlowHandlers
         DateTimeOffset now) => new()
     {
         ClientId = registration.ClientId.Value,
-        ResponseType = OAuthRequestParameters.ResponseTypeCode,
+        ResponseType = OAuthRequestParameterValues.ResponseTypeCode,
         RedirectUri = jarOptions.RedirectUri,
         Scope = jarOptions.Scope,
         State = state,
@@ -758,11 +758,11 @@ public static class AuthCodeFlowHandlers
         StringBuilder builder = new();
         builder.Append(authorizationEndpoint);
         builder.Append('?');
-        builder.Append(OAuthRequestParameters.ClientId);
+        builder.Append(OAuthRequestParameterNames.ClientId);
         builder.Append('=');
         builder.Append(Uri.EscapeDataString(clientId));
         builder.Append('&');
-        builder.Append(OAuthRequestParameters.Request);
+        builder.Append(OAuthRequestParameterNames.Request);
         builder.Append('=');
         builder.Append(Uri.EscapeDataString(compactJar));
 
@@ -787,13 +787,13 @@ public static class AuthCodeFlowHandlers
     {
         return new Dictionary<string, string>
         {
-            [OAuthRequestParameters.ClientId] = body.ClientId,
-            [OAuthRequestParameters.ResponseType] = body.ResponseType,
-            [OAuthRequestParameters.RedirectUri] = body.RedirectUri.ToString(),
-            [OAuthRequestParameters.Scope] = string.Join(' ', body.Scopes),
-            [OAuthRequestParameters.State] = body.State,
-            [OAuthRequestParameters.CodeChallenge] = body.CodeChallenge,
-            [OAuthRequestParameters.CodeChallengeMethod] = body.CodeChallengeMethod.ToString().ToUpperInvariant()
+            [OAuthRequestParameterNames.ClientId] = body.ClientId,
+            [OAuthRequestParameterNames.ResponseType] = body.ResponseType,
+            [OAuthRequestParameterNames.RedirectUri] = body.RedirectUri.ToString(),
+            [OAuthRequestParameterNames.Scope] = string.Join(' ', body.Scopes),
+            [OAuthRequestParameterNames.State] = body.State,
+            [OAuthRequestParameterNames.CodeChallenge] = body.CodeChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = body.CodeChallengeMethod.ToString().ToUpperInvariant()
         };
     }
 
@@ -805,11 +805,11 @@ public static class AuthCodeFlowHandlers
     {
         return new Dictionary<string, string>
         {
-            [OAuthRequestParameters.GrantType] = OAuthRequestParameters.GrantTypeAuthorizationCode,
-            [OAuthRequestParameters.ClientId] = clientId,
-            [OAuthRequestParameters.Code] = code,
-            [OAuthRequestParameters.RedirectUri] = redirectUri.ToString(),
-            [OAuthRequestParameters.CodeVerifier] = pkce.EncodedVerifier
+            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+            [OAuthRequestParameterNames.ClientId] = clientId,
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.RedirectUri] = redirectUri.ToString(),
+            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier
         };
     }
 
@@ -818,8 +818,8 @@ public static class AuthCodeFlowHandlers
         string clientId,
         Uri requestUri)
     {
-        string uri = $"{authorizationEndpoint}?{OAuthRequestParameters.ClientId}={Uri.EscapeDataString(clientId)}" +
-                     $"&{OAuthRequestParameters.RequestUri}={Uri.EscapeDataString(requestUri.ToString())}";
+        string uri = $"{authorizationEndpoint}?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}" +
+                     $"&{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUri.ToString())}";
         return new Uri(uri);
     }
 

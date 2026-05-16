@@ -882,8 +882,8 @@ internal sealed class AuthorizationServerFeatureTests
             "POST",
             new RequestFields
             {
-                [OAuthRequestParameters.Response] = compactJwe,
-                [OAuthRequestParameters.State] = parHandle
+                [OAuthRequestParameterNames.Response] = compactJwe,
+                [OAuthRequestParameterNames.State] = parHandle
             },
             context,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -950,8 +950,8 @@ internal sealed class AuthorizationServerFeatureTests
             "POST",
             new RequestFields
             {
-                [OAuthRequestParameters.Response] = compactJwe,
-                [OAuthRequestParameters.State] = parHandle
+                [OAuthRequestParameterNames.Response] = compactJwe,
+                [OAuthRequestParameterNames.State] = parHandle
             },
             context,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -1400,7 +1400,7 @@ internal sealed class AuthorizationServerFeatureTests
         Assert.IsTrue(root.TryGetProperty("issuer", out _),
             "Discovery document must contain issuer.");
         Assert.IsTrue(root.TryGetProperty(
-                AuthorizationServerMetadataKeys.JwksUri, out JsonElement jwksUriEl),
+                AuthorizationServerMetadataParameterNames.JwksUri, out JsonElement jwksUriEl),
             "Discovery document must advertise the JWKS URI.");
 
         //The advertised JWKS URI must match the computed URI for this segment.
@@ -1416,7 +1416,7 @@ internal sealed class AuthorizationServerFeatureTests
         //own OID4VP PAR. The discovery document reflects the actual capability set.
         Assert.IsFalse(
             root.TryGetProperty(
-                AuthorizationServerMetadataKeys.PushedAuthorizationRequestEndpoint, out _),
+                AuthorizationServerMetadataParameterNames.PushedAuthorizationRequestEndpoint, out _),
             "OID4VP-only registration must not advertise PAR in the Auth Code sense.");
     }
 

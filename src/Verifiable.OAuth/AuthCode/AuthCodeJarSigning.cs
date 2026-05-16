@@ -80,14 +80,14 @@ public static class AuthCodeJarSigning
     {
         JwtPayload payload = new(capacity: 13)
         {
-            [OAuthRequestParameters.ClientId] = requestObject.ClientId,
-            [OAuthRequestParameters.ResponseType] = requestObject.ResponseType,
-            [OAuthRequestParameters.RedirectUri] = requestObject.RedirectUri.ToString(),
-            [OAuthRequestParameters.Scope] = requestObject.Scope,
-            [OAuthRequestParameters.State] = requestObject.State,
+            [OAuthRequestParameterNames.ClientId] = requestObject.ClientId,
+            [OAuthRequestParameterNames.ResponseType] = requestObject.ResponseType,
+            [OAuthRequestParameterNames.RedirectUri] = requestObject.RedirectUri.ToString(),
+            [OAuthRequestParameterNames.Scope] = requestObject.Scope,
+            [OAuthRequestParameterNames.State] = requestObject.State,
             [WellKnownJwtClaimNames.Nonce] = requestObject.Nonce,
-            [OAuthRequestParameters.CodeChallenge] = requestObject.CodeChallenge,
-            [OAuthRequestParameters.CodeChallengeMethod] = requestObject.CodeChallengeMethod,
+            [OAuthRequestParameterNames.CodeChallenge] = requestObject.CodeChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = requestObject.CodeChallengeMethod,
             [WellKnownJwtClaimNames.Iat] = requestObject.Iat.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Nbf] = requestObject.Nbf.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Exp] = requestObject.Exp.ToUnixTimeSeconds()

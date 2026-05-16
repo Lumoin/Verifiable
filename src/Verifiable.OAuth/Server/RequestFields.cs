@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.Server;
 /// at compile time.
 /// </para>
 /// <para>
-/// Keys are the OAuth parameter names defined in <see cref="OAuthRequestParameters"/>.
+/// Keys are the OAuth parameter names defined in <see cref="OAuthRequestParameterNames"/>.
 /// Values are the raw string values from the HTTP request. No decoding, validation,
 /// or transformation is applied by this type — that is the responsibility of the
 /// <see cref="BuildInputDelegate"/> on each <see cref="ServerEndpoint"/>.

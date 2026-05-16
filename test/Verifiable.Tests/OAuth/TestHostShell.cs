@@ -421,27 +421,27 @@ internal sealed class TestHostShell: IAsyncDisposable
                 //for cross-assembly data-block sharing, so the dispatch is written
                 //as an equality chain instead.
                 string? suffix;
-                if(endpointKey == AuthorizationServerMetadataKeys.JwksUri)
+                if(endpointKey == AuthorizationServerMetadataParameterNames.JwksUri)
                 {
                     suffix = "jwks";
                 }
-                else if(endpointKey == AuthorizationServerMetadataKeys.PushedAuthorizationRequestEndpoint)
+                else if(endpointKey == AuthorizationServerMetadataParameterNames.PushedAuthorizationRequestEndpoint)
                 {
                     suffix = "par";
                 }
-                else if(endpointKey == AuthorizationServerMetadataKeys.AuthorizationEndpoint)
+                else if(endpointKey == AuthorizationServerMetadataParameterNames.AuthorizationEndpoint)
                 {
                     suffix = "authorize";
                 }
-                else if(endpointKey == AuthorizationServerMetadataKeys.TokenEndpoint)
+                else if(endpointKey == AuthorizationServerMetadataParameterNames.TokenEndpoint)
                 {
                     suffix = "token";
                 }
-                else if(endpointKey == AuthorizationServerMetadataKeys.RevocationEndpoint)
+                else if(endpointKey == AuthorizationServerMetadataParameterNames.RevocationEndpoint)
                 {
                     suffix = "revoke";
                 }
-                else if(endpointKey == AuthorizationServerMetadataKeys.IntrospectionEndpoint)
+                else if(endpointKey == AuthorizationServerMetadataParameterNames.IntrospectionEndpoint)
                 {
                     suffix = "introspect";
                 }
@@ -1551,8 +1551,8 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         RequestFields fields = new()
         {
-            [OAuthRequestParameters.Response] = compactJwe,
-            [OAuthRequestParameters.State] = externalToken
+            [OAuthRequestParameterNames.Response] = compactJwe,
+            [OAuthRequestParameterNames.State] = externalToken
         };
 
         string segment = keyMaterial.Registration.TenantId.Value;

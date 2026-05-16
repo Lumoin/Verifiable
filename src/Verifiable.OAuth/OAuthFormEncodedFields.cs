@@ -24,7 +24,7 @@ namespace Verifiable.OAuth;
 /// (<c>client_id</c>, <c>scope</c>, <c>state</c>, <c>code</c>, etc.) live in
 /// <see cref="OAuthFormEncodedFieldsExtensions"/>. The accessor names mirror
 /// the camelCased parameter constant names from
-/// <see cref="OAuthRequestParameters"/> so the typed surface and the wire
+/// <see cref="OAuthRequestParameterNames"/> so the typed surface and the wire
 /// surface stay aligned.
 /// </para>
 /// <para>

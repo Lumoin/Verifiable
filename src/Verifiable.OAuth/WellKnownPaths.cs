@@ -18,7 +18,7 @@ namespace Verifiable.OAuth;
 /// Each entry provides a pure function that computes the metadata document URL
 /// from a base identifier. Consumers fetch the document using their own HTTP infrastructure
 /// and extract endpoint URIs using the metadata key constants such as
-/// <see cref="AuthorizationServerMetadataKeys"/>.
+/// <see cref="AuthorizationServerMetadataParameterNames"/>.
 /// </para>
 /// <para>
 /// This catalog corresponds to a subset of the IANA Well-Known URIs registry,

@@ -21,7 +21,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </para>
 /// <para>
 /// Discovery-document field URLs use the static keys on
-/// <see cref="AuthorizationServerMetadataKeys"/> instead. The two key
+/// <see cref="AuthorizationServerMetadataParameterNames"/> instead. The two key
 /// families are kept distinct so a delegate switching on the key value can
 /// recognize per-flow versus static endpoints unambiguously.
 /// </para>

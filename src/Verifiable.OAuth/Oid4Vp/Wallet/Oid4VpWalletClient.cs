@@ -179,7 +179,7 @@ public sealed class Oid4VpWalletClient<TCredential> where TCredential : SdJwtVcC
         };
         if(!string.IsNullOrEmpty(request.State))
         {
-            postFields[OAuthRequestParameters.State] = request.State;
+            postFields[OAuthRequestParameterNames.State] = request.State;
         }
 
         HttpResponseData postResponse = await infrastructure.SendFormPostAsync(

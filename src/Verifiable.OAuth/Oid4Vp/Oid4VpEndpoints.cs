@@ -428,12 +428,12 @@ public static class Oid4VpEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameters.Response))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Response))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameters.State))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.State))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -446,7 +446,7 @@ public static class Oid4VpEndpoints
             //per-flow request_uri token; the application's ResolveCorrelationKeyAsync
             //maps it back to the internal flow identifier.
             ExtractCorrelationKey = static (path, fields, context) =>
-                fields.TryGetValue(OAuthRequestParameters.State, out string? state)
+                fields.TryGetValue(OAuthRequestParameterNames.State, out string? state)
                     && !string.IsNullOrWhiteSpace(state) ? state : null,
 
             BuildInputAsync = static (fields, context, currentState, server, ct) =>
@@ -459,7 +459,7 @@ public static class Oid4VpEndpoints
                             "Flow not in expected state for direct_post.")));
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameters.Response,
+                if(!fields.TryGetValue(OAuthRequestParameterNames.Response,
                     out string? compactJwe)
                     || string.IsNullOrWhiteSpace(compactJwe))
                 {

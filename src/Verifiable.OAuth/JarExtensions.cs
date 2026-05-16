@@ -141,12 +141,12 @@ public static class JarExtensions
 
             var payload = new JwtPayload
             {
-                [OAuthRequestParameters.ResponseType] = request.ResponseType,
-                [OAuthRequestParameters.ResponseMode] = request.ResponseMode,
+                [OAuthRequestParameterNames.ResponseType] = request.ResponseType,
+                [OAuthRequestParameterNames.ResponseMode] = request.ResponseMode,
                 [WellKnownJwtClaimNames.ClientId] = request.ClientId,
                 [AuthorizationRequestParameters.ResponseUri] = request.ResponseUri.ToString(),
                 [WellKnownJwtClaimNames.Nonce] = request.Nonce,
-                [OAuthRequestParameters.State] = request.State,
+                [OAuthRequestParameterNames.State] = request.State,
                 [WellKnownJwtClaimNames.Iat] = request.Iat.ToUnixTimeSeconds(),
                 [WellKnownJwtClaimNames.Nbf] = request.Nbf.ToUnixTimeSeconds(),
                 [WellKnownJwtClaimNames.Exp] = request.Exp.ToUnixTimeSeconds()
@@ -259,11 +259,11 @@ public static class JarExtensions
             payloadDeserializer(unverified.Payload.Span);
 
         string clientId = RequireClaim(claims, WellKnownJwtClaimNames.ClientId);
-        string responseType = RequireClaim(claims, OAuthRequestParameters.ResponseType);
-        string responseMode = RequireClaim(claims, OAuthRequestParameters.ResponseMode);
+        string responseType = RequireClaim(claims, OAuthRequestParameterNames.ResponseType);
+        string responseMode = RequireClaim(claims, OAuthRequestParameterNames.ResponseMode);
         string responseUriString = RequireClaim(claims, AuthorizationRequestParameters.ResponseUri);
         string nonce = RequireClaim(claims, WellKnownJwtClaimNames.Nonce);
-        string state = RequireClaim(claims, OAuthRequestParameters.State);
+        string state = RequireClaim(claims, OAuthRequestParameterNames.State);
 
         if(!Uri.TryCreate(responseUriString, UriKind.Absolute, out Uri? responseUri))
         {

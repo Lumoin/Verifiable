@@ -190,7 +190,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameters.CodeChallenge))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.CodeChallenge))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -199,7 +199,7 @@ public static class AuthCodeEndpoints
                 //routes to BuildJarPar regardless of any code_challenge/code_challenge_method
                 //the client also (incorrectly) included. RFC 9101 §6.1 requires
                 //outer parameters to be ignored when the JAR is present.
-                if(fields.ContainsKey(OAuthRequestParameters.Request))
+                if(fields.ContainsKey(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -215,7 +215,7 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static (fields, context, currentState, server, ct) =>
             {
-                if(!fields.TryGetValue(OAuthRequestParameters.ClientId, out string? clientId)
+                if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
                     || string.IsNullOrWhiteSpace(clientId))
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
@@ -223,7 +223,7 @@ public static class AuthCodeEndpoints
                             OAuthErrors.InvalidRequest, "Missing client_id.")));
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameters.CodeChallenge, out string? challenge)
+                if(!fields.TryGetValue(OAuthRequestParameterNames.CodeChallenge, out string? challenge)
                     || string.IsNullOrWhiteSpace(challenge))
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
@@ -231,7 +231,7 @@ public static class AuthCodeEndpoints
                             OAuthErrors.InvalidRequest, "Missing code_challenge.")));
                 }
 
-                fields.TryGetValue(OAuthRequestParameters.CodeChallengeMethod, out string? method);
+                fields.TryGetValue(OAuthRequestParameterNames.CodeChallengeMethod, out string? method);
                 if(!IsAcceptedPkceMethod(method, context))
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
@@ -240,7 +240,7 @@ public static class AuthCodeEndpoints
                             "code_challenge_method is not accepted under the active policy.")));
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameters.RedirectUri, out string? redirectUriString)
+                if(!fields.TryGetValue(OAuthRequestParameterNames.RedirectUri, out string? redirectUriString)
                     || !Uri.TryCreate(redirectUriString, UriKind.Absolute, out Uri? redirectUri))
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
@@ -262,7 +262,7 @@ public static class AuthCodeEndpoints
                             $"redirect_uri '{redirectUri}' is not among the registered redirect URIs.")));
                 }
 
-                fields.TryGetValue(OAuthRequestParameters.Scope, out string? scope);
+                fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scope);
                 if(context.ScopeRequiredOnRequest && string.IsNullOrEmpty(scope))
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
@@ -333,7 +333,7 @@ public static class AuthCodeEndpoints
 
             ExtractCorrelationKey = static (path, fields, context) =>
             {
-                if(fields.TryGetValue(OAuthRequestParameters.RequestUri, out string? requestUri)
+                if(fields.TryGetValue(OAuthRequestParameterNames.RequestUri, out string? requestUri)
                     && !string.IsNullOrWhiteSpace(requestUri))
                 {
                     const string urnPrefix = "urn:ietf:params:oauth:request_uri:";
@@ -370,7 +370,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameters.RequestUri))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -409,7 +409,7 @@ public static class AuthCodeEndpoints
 
                 ParRequestReceivedState parState = (ParRequestReceivedState)currentState;
 
-                fields.TryGetValue(OAuthRequestParameters.Scope, out string? scope);
+                fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scope);
 
                 OAuthFlowInput input = new ServerAuthorizeCompleted(
                     CodeHash: codeHash,
@@ -468,19 +468,19 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(fields.ContainsKey(OAuthRequestParameters.RequestUri))
+                if(fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
                 //Disjointness vs JAR-by-value Authorize — a query carrying a
                 //'request' parameter routes to BuildAuthorizeJarByValue.
-                if(fields.ContainsKey(OAuthRequestParameters.Request))
+                if(fields.ContainsKey(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameters.CodeChallenge))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.CodeChallenge))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -490,7 +490,7 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static (fields, context, currentState, server, ct) =>
             {
-                if(!fields.TryGetValue(OAuthRequestParameters.ClientId, out string? clientId)
+                if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
                     || string.IsNullOrWhiteSpace(clientId))
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
@@ -498,7 +498,7 @@ public static class AuthCodeEndpoints
                             OAuthErrors.InvalidRequest, "Missing client_id.")));
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameters.CodeChallenge, out string? challenge)
+                if(!fields.TryGetValue(OAuthRequestParameterNames.CodeChallenge, out string? challenge)
                     || string.IsNullOrWhiteSpace(challenge))
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
@@ -506,7 +506,7 @@ public static class AuthCodeEndpoints
                             OAuthErrors.InvalidRequest, "Missing code_challenge.")));
                 }
 
-                fields.TryGetValue(OAuthRequestParameters.CodeChallengeMethod, out string? method);
+                fields.TryGetValue(OAuthRequestParameterNames.CodeChallengeMethod, out string? method);
                 if(!IsAcceptedPkceMethod(method, context))
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
@@ -515,7 +515,7 @@ public static class AuthCodeEndpoints
                             "code_challenge_method is not accepted under the active policy.")));
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameters.RedirectUri, out string? redirectUriString)
+                if(!fields.TryGetValue(OAuthRequestParameterNames.RedirectUri, out string? redirectUriString)
                     || !Uri.TryCreate(redirectUriString, UriKind.Absolute, out Uri? redirectUri))
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
@@ -531,7 +531,7 @@ public static class AuthCodeEndpoints
                             OAuthErrors.ServerError, "Subject not authenticated.")));
                 }
 
-                fields.TryGetValue(OAuthRequestParameters.Scope, out string? scope);
+                fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scope);
                 scope ??= string.Empty;
 
                 fields.TryGetValue(WellKnownJwtClaimNames.Nonce, out string? nonce);
@@ -636,7 +636,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameters.Request))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -755,12 +755,12 @@ public static class AuthCodeEndpoints
                 //RFC 9101 §6.1 — request and request_uri MUST NOT both be present.
                 //When both arrive, neither JAR matcher accepts; the request 404s
                 //rather than silently picking one parameter over the other.
-                if(fields.ContainsKey(OAuthRequestParameters.RequestUri))
+                if(fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameters.Request))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Request))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -867,7 +867,7 @@ public static class AuthCodeEndpoints
             AuthorizationServer server,
             CancellationToken cancellationToken)
     {
-        if(!fields.TryGetValue(OAuthRequestParameters.Request, out string? compactJar)
+        if(!fields.TryGetValue(OAuthRequestParameterNames.Request, out string? compactJar)
             || string.IsNullOrWhiteSpace(compactJar))
         {
             return (null, ServerHttpResponse.BadRequest(
@@ -878,7 +878,7 @@ public static class AuthCodeEndpoints
         //pre-verification client identification. Requiring it sidesteps the
         //"identify the registration before the JAR is verified" problem cleanly
         //and defends against substitution per RFC 9700 §4.6.
-        if(!fields.TryGetValue(OAuthRequestParameters.ClientId, out string? outerClientId)
+        if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? outerClientId)
             || string.IsNullOrWhiteSpace(outerClientId))
         {
             return (null, ServerHttpResponse.BadRequest(
@@ -1159,13 +1159,13 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameters.GrantType, out string? grantType)
-                    || !string.Equals(grantType, OAuthRequestParameters.GrantTypeAuthorizationCode, StringComparison.Ordinal))
+                if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
+                    || !string.Equals(grantType, OAuthRequestParameterValues.GrantTypeAuthorizationCode, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameters.Code))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Code))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1174,7 +1174,7 @@ public static class AuthCodeEndpoints
             },
 
             ExtractCorrelationKey = static (path, fields, context) =>
-                fields.TryGetValue(OAuthRequestParameters.Code, out string? code)
+                fields.TryGetValue(OAuthRequestParameterNames.Code, out string? code)
                     && !string.IsNullOrWhiteSpace(code) ? code : null,
             BuildInputAsync = static async (fields, context, currentState, server, ct) =>
             {
@@ -1184,7 +1184,7 @@ public static class AuthCodeEndpoints
                         OAuthErrors.InvalidGrant, "Flow not in expected state."));
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameters.CodeVerifier, out string? verifier)
+                if(!fields.TryGetValue(OAuthRequestParameterNames.CodeVerifier, out string? verifier)
                     || string.IsNullOrWhiteSpace(verifier))
                 {
                     return (null, ServerHttpResponse.BadRequest(
@@ -1205,7 +1205,7 @@ public static class AuthCodeEndpoints
                         OAuthErrors.InvalidGrant, "PKCE verification failed."));
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameters.ClientId, out string? clientId)
+                if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
                     || !string.Equals(clientId, codeState.ClientId, StringComparison.Ordinal))
                 {
                     return (null, ServerHttpResponse.BadRequest(
@@ -1537,13 +1537,13 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameters.GrantType, out string? grantType)
-                    || !string.Equals(grantType, OAuthRequestParameters.GrantTypeRefreshToken, StringComparison.Ordinal))
+                if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
+                    || !string.Equals(grantType, OAuthRequestParameterValues.GrantTypeRefreshToken, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameters.RefreshToken))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.RefreshToken))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1552,7 +1552,7 @@ public static class AuthCodeEndpoints
             },
 
             ExtractCorrelationKey = static (path, fields, context) =>
-                fields.TryGetValue(OAuthRequestParameters.RefreshToken, out string? refreshToken)
+                fields.TryGetValue(OAuthRequestParameterNames.RefreshToken, out string? refreshToken)
                     && !string.IsNullOrWhiteSpace(refreshToken) ? refreshToken : null,
 
             BuildInputAsync = static async (fields, context, currentState, server, ct) =>
@@ -1578,7 +1578,7 @@ public static class AuthCodeEndpoints
 
                 //RFC 6749 §6 — client_id on the refresh request must match
                 //the client the refresh token was originally issued to.
-                if(!fields.TryGetValue(OAuthRequestParameters.ClientId, out string? clientId)
+                if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
                     || !string.Equals(clientId, storedRefresh.ClientId, StringComparison.Ordinal))
                 {
                     return (null, ServerHttpResponse.BadRequest(
@@ -1875,7 +1875,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameters.Token))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Token))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1924,7 +1924,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
 
-                if(!fields.ContainsKey(OAuthRequestParameters.Token))
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Token))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -1987,7 +1987,7 @@ public static class AuthCodeEndpoints
             return false;
         }
 
-        if(string.Equals(method, OAuthRequestParameters.CodeChallengeMethodS256,
+        if(string.Equals(method, OAuthRequestParameterValues.CodeChallengeMethodS256,
             StringComparison.Ordinal))
         {
             return true;

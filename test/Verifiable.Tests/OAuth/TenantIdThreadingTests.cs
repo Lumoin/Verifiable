@@ -132,11 +132,11 @@ internal sealed class TenantIdThreadingTests
 
         RequestFields parFields = new()
         {
-            [OAuthRequestParameters.ClientId] = clientId,
-            [OAuthRequestParameters.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameters.CodeChallengeMethod] = OAuthRequestParameters.CodeChallengeMethodS256,
-            [OAuthRequestParameters.RedirectUri] = redirectUri.OriginalString,
-            [OAuthRequestParameters.Scope] = WellKnownScopes.OpenId
+            [OAuthRequestParameterNames.ClientId] = clientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.RedirectUri] = redirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
         ServerHttpResponse parResponse = await host.DispatchAtPathAsync(
             tenant, ServerEndpointPaths.Par, "POST",
@@ -147,8 +147,8 @@ internal sealed class TenantIdThreadingTests
 
         RequestFields authorizeFields = new()
         {
-            [OAuthRequestParameters.ClientId] = clientId,
-            [OAuthRequestParameters.RequestUri] = requestUri
+            [OAuthRequestParameterNames.ClientId] = clientId,
+            [OAuthRequestParameterNames.RequestUri] = requestUri
         };
         RequestContext authorizeContext = new();
         authorizeContext.SetSubjectId("subject-1");
@@ -161,11 +161,11 @@ internal sealed class TenantIdThreadingTests
 
         RequestFields tokenFields = new()
         {
-            [OAuthRequestParameters.GrantType] = OAuthRequestParameters.GrantTypeAuthorizationCode,
-            [OAuthRequestParameters.Code] = code,
-            [OAuthRequestParameters.CodeVerifier] = pkce.EncodedVerifier,
-            [OAuthRequestParameters.ClientId] = clientId,
-            [OAuthRequestParameters.RedirectUri] = redirectUri.OriginalString
+            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.ClientId] = clientId,
+            [OAuthRequestParameterNames.RedirectUri] = redirectUri.OriginalString
         };
         ServerHttpResponse tokenResponse = await host.DispatchAtPathAsync(
             tenant, ServerEndpointPaths.Token, "POST",
@@ -189,7 +189,7 @@ internal sealed class TenantIdThreadingTests
         {
             int eq = pair.IndexOf('=', StringComparison.Ordinal);
             if(eq > 0 && string.Equals(
-                pair[..eq], OAuthRequestParameters.Code, StringComparison.Ordinal))
+                pair[..eq], OAuthRequestParameterNames.Code, StringComparison.Ordinal))
             {
                 return Uri.UnescapeDataString(pair[(eq + 1)..]);
             }
