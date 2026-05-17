@@ -123,19 +123,6 @@ public sealed class AuthorizationServerIntegration
     public ResolveIssuerDelegate? ResolveIssuerAsync { get; set; }
 
     /// <summary>
-    /// Context-sensitive capability check. When <see langword="null"/>, falls
-    /// back to <see cref="ClientRecord.IsCapabilityAllowed"/>. Optional.
-    /// </summary>
-    /// <remarks>
-    /// Slated for deletion in Phase 9h chunk 8 when the chain-build filter via
-    /// <see cref="ResolveCapabilitiesAsync"/> subsumes per-call capability
-    /// gating; left in place for now so existing callers (
-    /// <see cref="AuthorizationServer.CheckCapabilityAsync"/>, removed in the
-    /// same chunk) continue to compile.
-    /// </remarks>
-    public IsCapabilityAllowedDelegate? IsCapabilityAllowedAsync { get; set; }
-
-    /// <summary>
     /// Resolves the per-request capability set active for a registration.
     /// Consulted once per request by
     /// <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/>; the returned
@@ -384,6 +371,9 @@ public sealed class AuthorizationServerIntegration
         if(SaveFlowStateAsync is null) { missing.Add(nameof(SaveFlowStateAsync)); }
         if(LoadFlowStateAsync is null) { missing.Add(nameof(LoadFlowStateAsync)); }
         if(ResolvePolicyAsync is null) { missing.Add(nameof(ResolvePolicyAsync)); }
+        if(ResolveCapabilitiesAsync is null) { missing.Add(nameof(ResolveCapabilitiesAsync)); }
+        if(InspectAsync is null) { missing.Add(nameof(InspectAsync)); }
+        if(ResolveSubjectIdentifierAsync is null) { missing.Add(nameof(ResolveSubjectIdentifierAsync)); }
 
         if(missing.Count > 0)
         {

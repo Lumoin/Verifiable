@@ -103,23 +103,32 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
 
     /// <summary>
     /// Builds the chain of active endpoints for a registration and inbound
-    /// request by invoking each <see cref="EndpointBuilderDelegate"/> in
-    /// <see cref="ServerConfiguration.EndpointBuilders"/> with the registration,
-    /// the per-request <paramref name="context"/>, and the server, then
-    /// concatenating the contributed endpoints.
+    /// request. Calls
+    /// <see cref="AuthorizationServerIntegration.ResolveCapabilitiesAsync"/>
+    /// once to obtain the per-call active capability set, then invokes each
+    /// <see cref="EndpointBuilderDelegate"/> on
+    /// <see cref="ServerConfiguration.EndpointBuilders"/>, filters the
+    /// produced <see cref="EndpointCandidate"/> instances by capability
+    /// membership, and asks
+    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// for each survivor's absolute URL. Candidates with no resolvable URL
+    /// are dropped silently. Surviving candidates are projected to
+    /// <see cref="ServerEndpoint"/> records with the resolved URI attached.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Builders may read <paramref name="context"/> to gate on per-request
-    /// signals (the typed <see cref="IncomingRequest"/> envelope, tenant
-    /// configuration, feature flags, per-client policy) when deciding which
-    /// endpoints to contribute for this request. Library-provided builders
-    /// today gate only on registration capabilities; the parameter is threaded
-    /// so future builders can compose without changing this signature.
+    /// The chain is fresh per request — the same registration may produce
+    /// different chains in different requests when a builder gates on
+    /// context or when <c>ResolveCapabilitiesAsync</c> attenuates
+    /// capabilities based on CAEP/RISC signals or other per-request state.
     /// </para>
     /// <para>
-    /// The chain is fresh per request — the same registration may produce
-    /// different chains in different requests when a builder gates on context.
+    /// <see cref="RequestContextExtensions.Server"/> on
+    /// <paramref name="context"/> must be set before this call; the
+    /// dispatcher places it on the context at
+    /// <see cref="AuthorizationServer.DispatchAsync"/> entry. Callers
+    /// driving the chain outside the dispatcher must call
+    /// <see cref="RequestContextExtensions.SetServer"/> themselves.
     /// </para>
     /// </remarks>
     /// <param name="registration">
@@ -127,107 +136,86 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// each module produces.
     /// </param>
     /// <param name="context">
-    /// The per-request context, carrying the typed
+    /// The per-request context, carrying the active
+    /// <see cref="AuthorizationServer"/> via
+    /// <see cref="RequestContextExtensions.Server"/>, the typed
     /// <see cref="IncomingRequest"/> envelope, resolved
     /// <see cref="ClientRecord"/>, and any application-supplied
     /// request-scoped state.
     /// </param>
-    /// <param name="server">
-    /// The <see cref="AuthorizationServer"/> instance carrying the registered
-    /// endpoint builders and the integration, cryptography, and codec delegate
-    /// groups.
-    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// The chain of endpoints for this registration and request. May be empty
-    /// when no modules produce endpoints.
+    /// when no modules produce candidates or when capability filtering /
+    /// URL resolution eliminate every candidate.
     /// </returns>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when any argument is <see langword="null"/>.
+    /// Thrown when <paramref name="registration"/> or
+    /// <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
-    public static async ValueTask<EndpointChain> BuildForRequestInterimAsync(
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <see cref="RequestContextExtensions.Server"/> on
+    /// <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    public static async ValueTask<EndpointChain> BuildForRequestAsync(
         ClientRecord registration,
         RequestContext context,
-        AuthorizationServer server)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(server);
+
+        AuthorizationServer server = context.Server
+            ?? throw new InvalidOperationException(
+                "context.Server must be set before BuildForRequestAsync. "
+                + "DispatchAsync sets this at entry; callers that drive the "
+                + "chain outside the dispatcher must call context.SetServer "
+                + "before invoking this method.");
 
         EndpointBuilderSet builders = server.Configuration.EndpointBuilders;
-        if(builders.Count == 0)
-        {
-            return Empty;
-        }
+        if(builders.Count == 0) { return Empty; }
 
-        //Phase 9h interim scaffolding — bridges chunk 6 (builders now return
-        //EndpointCandidate) with chunk 8 (DispatchAsync rewrite that calls
-        //ResolveCapabilitiesAsync + ResolveEndpointUriAsync). Synthesises
-        //ResolvedUri from a WellKnownEndpointNames-keyed switch using the
-        //library's library-internal /connect/{segment}/<suffix> path family;
-        //the proper async BuildForRequestAsync (chunk 8) calls
-        //Integration.ResolveEndpointUriAsync. Delete alongside that work.
-        List<ServerEndpoint> endpoints = [];
+        //Per-call capability set — CAEP/RISC attenuation point. The library
+        //default returns registration.AllowedCapabilities unchanged; custom
+        //wirings narrow the set in response to per-request signals.
+        IReadOnlySet<ServerCapabilityName> allowedCapabilities =
+            await server.Integration.ResolveCapabilitiesAsync!(
+                registration, context, cancellationToken).ConfigureAwait(false);
+
+        List<ServerEndpoint> resolved = [];
         foreach(EndpointBuilderDelegate builder in builders)
         {
             IReadOnlyList<EndpointCandidate> candidates = await builder(
-                registration, context, CancellationToken.None).ConfigureAwait(false);
+                registration, context, cancellationToken).ConfigureAwait(false);
 
-            string segment = registration.TenantId.Value;
             foreach(EndpointCandidate candidate in candidates)
             {
-                Uri? uri = SynthesiseInterimUri(candidate.Name, segment);
+                if(!allowedCapabilities.Contains(candidate.Capability)) { continue; }
+
+                Uri? uri = await server.Integration.ResolveEndpointUriAsync!(
+                    candidate.Name, registration, context, cancellationToken)
+                    .ConfigureAwait(false);
+
                 if(uri is null) { continue; }
 
-                endpoints.Add(new ServerEndpoint
+                resolved.Add(new ServerEndpoint
                 {
                     Name = candidate.Name,
-                    HttpMethod = candidate.HttpMethod,
                     Capability = candidate.Capability,
+                    HttpMethod = candidate.HttpMethod,
                     Kind = candidate.Kind,
                     StartsNewFlow = candidate.StartsNewFlow,
                     MatchesRequest = candidate.MatchesRequest,
                     BuildInputAsync = candidate.BuildInputAsync,
                     BuildResponse = candidate.BuildResponse,
                     ExtractCorrelationKey = candidate.ExtractCorrelationKey,
-                    ResolvedUri = uri,
-                    DiscoveryMetadataKey = candidate.DiscoveryMetadataKey
+                    DiscoveryMetadataKey = candidate.DiscoveryMetadataKey,
+                    ResolvedUri = uri
                 });
             }
         }
 
-        return new EndpointChain(endpoints.ToArray());
-    }
-
-
-    //Phase 9h interim — see BuildForRequestInterimAsync.
-    private static Uri? SynthesiseInterimUri(string endpointName, string segment)
-    {
-        string? suffix;
-        if(endpointName == WellKnownEndpointNames.AuthCodePar) { suffix = "par"; }
-        else if(endpointName == WellKnownEndpointNames.AuthCodeJarPar) { suffix = "par"; }
-        else if(endpointName == WellKnownEndpointNames.AuthCodeAuthorize) { suffix = "authorize"; }
-        else if(endpointName == WellKnownEndpointNames.AuthCodeDirectAuthorize) { suffix = "authorize"; }
-        else if(endpointName == WellKnownEndpointNames.AuthCodeAuthorizeJarByValue) { suffix = "authorize"; }
-        else if(endpointName == WellKnownEndpointNames.AuthCodeToken) { suffix = "token"; }
-        else if(endpointName == WellKnownEndpointNames.AuthCodeRefreshToken) { suffix = "token"; }
-        else if(endpointName == WellKnownEndpointNames.AuthCodeRevoke) { suffix = "revoke"; }
-        else if(endpointName == WellKnownEndpointNames.AuthCodeIntrospect) { suffix = "introspect"; }
-        else if(endpointName == WellKnownEndpointNames.MetadataJwks) { suffix = "jwks"; }
-        else if(endpointName == WellKnownEndpointNames.MetadataDiscovery) { suffix = ".well-known/openid-configuration"; }
-        else if(endpointName == WellKnownEndpointNames.RegistrationRegister) { suffix = "register"; }
-        //OID4VP endpoints aren't path-matched against ResolvedUri (their
-        //matchers are context-state-driven on TransactionNonce/CorrelationKey),
-        //but the chain build still needs a non-null URI so the candidates
-        //land in the chain. The synthesised URIs match the library's path
-        //convention without claiming to be deployment-correct.
-        else if(endpointName == WellKnownEndpointNames.Oid4VpPar) { suffix = "par"; }
-        else if(endpointName == WellKnownEndpointNames.Oid4VpJarRequest) { suffix = "request"; }
-        else if(endpointName == WellKnownEndpointNames.Oid4VpDirectPost) { suffix = "cb"; }
-        else { suffix = null; }
-
-        if(suffix is null) { return null; }
-
-        return new Uri($"https://interim.local/connect/{segment}/{suffix}");
+        return new EndpointChain(resolved.ToArray());
     }
 
 

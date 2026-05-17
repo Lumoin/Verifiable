@@ -1909,21 +1909,24 @@ internal sealed class AuthorizationServerFeatureTests
 
 
     [TestMethod]
-    public async Task CapabilityRejectionByIntegrationDelegateReturns403UnauthorizedClient()
+    public async Task CapabilityAttenuationByResolveCapabilitiesAsyncRemovesEndpointFromChain()
     {
         await using TestHostShell app = new(TimeProvider);
 
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        // Veto JwksEndpoint specifically so the matcher accepts the request and the
-        // post-match capability check is the layer that rejects. Distinguishes 403
-        // (matcher accepted, capability check rejected) from 404 (no matcher accepted).
-        app.Server.Integration.IsCapabilityAllowedAsync = static (registration, capability, context, ct) =>
+        // Phase 9h chunk 8 — the per-request capability gate moved into
+        // EndpointChain.BuildForRequestAsync. Attenuating the capability set
+        // at chain-build time drops candidates whose capability isn't in the
+        // active set; the dispatcher never sees the endpoint, so the chain
+        // walk finds no match and the response is 404 (not 403 as under the
+        // old post-match capability-check model).
+        app.Server.Integration.ResolveCapabilitiesAsync = static (registration, context, ct) =>
         {
-            bool allowed = capability != ServerCapabilityName.JwksEndpoint
-                && registration.IsCapabilityAllowed(capability);
-            return ValueTask.FromResult(allowed);
+            HashSet<ServerCapabilityName> attenuated =
+                [.. registration.AllowedCapabilities.Where(c => c != ServerCapabilityName.JwksEndpoint)];
+            return ValueTask.FromResult<IReadOnlySet<ServerCapabilityName>>(attenuated);
         };
 
         ServerHttpResponse response = await app.DispatchAtPathAsync(
@@ -1932,7 +1935,7 @@ internal sealed class AuthorizationServerFeatureTests
             new RequestFields(), new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(403, response.StatusCode);
+        Assert.AreEqual(404, response.StatusCode);
     }
 
 
@@ -2052,22 +2055,28 @@ internal sealed class AuthorizationServerFeatureTests
 
 
     [TestMethod]
-    public async Task DispatchPlacesMatchPayloadOnContextBeforeCapabilityCheck()
+    public async Task DispatchPlacesMatchPayloadOnContextBeforeHandlerFires()
     {
         await using TestHostShell app = new(TimeProvider);
 
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        MatchPayload? capturedAtCapabilityCheck = null;
+        MatchPayload? capturedAtMatchedStage = null;
 
-        // IsCapabilityAllowedAsync runs after match-payload placement and before
-        // BuildInputAsync; capturing here proves the payload is on the context for
-        // any handler-side delegate.
-        app.Server.Integration.IsCapabilityAllowedAsync = (registration, capability, context, ct) =>
+        // Phase 9h chunk 8 — the InspectAsync(MatchedStage) hook fires after
+        // the dispatcher placed the match payload on the context and before
+        // the matched endpoint's handler runs. Capturing context.MatchPayload
+        // here proves the payload is visible to anything that fires
+        // post-match-pre-handler.
+        app.Server.Integration.InspectAsync = (stage, context, ct) =>
         {
-            capturedAtCapabilityCheck = context.MatchPayload;
-            return ValueTask.FromResult(registration.IsCapabilityAllowed(capability));
+            if(stage is MatchedStage)
+            {
+                capturedAtMatchedStage = context.MatchPayload;
+            }
+
+            return ValueTask.CompletedTask;
         };
 
         ServerHttpResponse response = await app.DispatchAtPathAsync(
@@ -2077,7 +2086,7 @@ internal sealed class AuthorizationServerFeatureTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode);
-        Assert.IsNotNull(capturedAtCapabilityCheck);
+        Assert.IsNotNull(capturedAtMatchedStage);
     }
 
 
@@ -2098,10 +2107,11 @@ internal sealed class AuthorizationServerFeatureTests
             return await originalLoadReg(tenantId, ctx, ct).ConfigureAwait(false);
         };
 
-        app.Server.Integration.IsCapabilityAllowedAsync = (registration, capability, ctx, ct) =>
+        InspectDelegate originalInspect = app.Server.Integration.InspectAsync!;
+        app.Server.Integration.InspectAsync = (stage, ctx, ct) =>
         {
             captured.Add(ctx);
-            return ValueTask.FromResult(registration.IsCapabilityAllowed(capability));
+            return originalInspect(stage, ctx, ct);
         };
 
         RequestContext outerContext = new();

@@ -380,7 +380,6 @@ public static class RegistrationEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);

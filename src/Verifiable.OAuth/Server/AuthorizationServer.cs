@@ -255,60 +255,6 @@ public sealed class AuthorizationServer: IDisposable
 
 
     /// <summary>
-    /// Returns the active endpoint chain for a registration and inbound request
-    /// based on the registered <see cref="ServerConfiguration.EndpointBuilders"/>,
-    /// the registration's capabilities, and any per-request signals each builder
-    /// chooses to read from <paramref name="context"/>.
-    /// </summary>
-    /// <remarks>
-    /// The chain is built fresh per request. Builders that gate on per-request
-    /// state (feature flags, tenant configuration, the typed
-    /// <see cref="IncomingRequest"/> envelope on the context) may produce
-    /// different endpoints across calls for the same registration.
-    /// </remarks>
-    /// <param name="registration">
-    /// The client registration whose capabilities determine which endpoints to
-    /// build.
-    /// </param>
-    /// <param name="context">
-    /// The per-request context threaded through to each builder.
-    /// </param>
-    public ValueTask<EndpointChain> GetEndpointsAsync(ClientRecord registration, RequestContext context)
-    {
-        ArgumentNullException.ThrowIfNull(registration);
-        ArgumentNullException.ThrowIfNull(context);
-
-        return EndpointChain.BuildForRequestInterimAsync(registration, context, this);
-    }
-
-
-    /// <summary>
-    /// Evaluates whether the given client registration is allowed to use a
-    /// capability. Uses
-    /// <see cref="AuthorizationServerIntegration.IsCapabilityAllowedAsync"/>
-    /// when set, otherwise falls back to
-    /// <see cref="ClientRecord.IsCapabilityAllowed"/>.
-    /// </summary>
-    public ValueTask<bool> CheckCapabilityAsync(
-        ClientRecord registration,
-        ServerCapabilityName capability,
-        RequestContext context,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(registration);
-        ArgumentNullException.ThrowIfNull(context);
-
-        if(Integration.IsCapabilityAllowedAsync is not null)
-        {
-            return Integration.IsCapabilityAllowedAsync(
-                registration, capability, context, cancellationToken);
-        }
-
-        return ValueTask.FromResult(registration.IsCapabilityAllowed(capability));
-    }
-
-
-    /// <summary>
     /// Dispatches an inbound request to the matching endpoint and returns the
     /// HTTP response.
     /// </summary>
@@ -372,11 +318,17 @@ public sealed class AuthorizationServer: IDisposable
             Diagnostics.OAuthActivityNames.Handle);
 
         //Place the active server and typed request envelope on the context.
-        //Matchers and handlers reach backend delegates via context.Server!;
-        //chunk 8 will rewrite DispatchAsync to also fire InspectAsync stages
-        //around this entry point.
+        //Matchers and handlers reach backend delegates via context.Server!.
         context.SetServer(this);
         context.SetIncomingRequest(request);
+
+        //Inspection stage 1 of 4 — fires once at dispatch entry on every
+        //request, including ones that fail validation or match no endpoint.
+        //Inspectors record raw inbound traffic for audit, telemetry, and
+        //replay capture from this point.
+        await Integration.InspectAsync!(
+            new IncomingRequestStage(request), context, cancellationToken)
+            .ConfigureAwait(false);
 
         //Single response variable so the status code tag below covers every
         //return path, including early exits for missing tenant, missing
@@ -426,15 +378,53 @@ public sealed class AuthorizationServer: IDisposable
                 await Integration.ResolvePolicyAsync!(
                     registration, context, cancellationToken).ConfigureAwait(false);
 
+                //2.6 Resolve the issuer URI for downstream emitters (token
+                //producers, discovery, redirect-issuance). Per-request issuer
+                //resolution overrides any application-skin precomputed value.
+                Uri? issuer = Integration.ResolveIssuerAsync is not null
+                    ? await Integration.ResolveIssuerAsync(
+                        registration, context, cancellationToken).ConfigureAwait(false)
+                    : await DefaultIssuerResolver.ResolveAsync(
+                        registration, context, cancellationToken).ConfigureAwait(false);
+
+                if(issuer is not null) { context.SetIssuer(issuer); }
+
                 //3. Build the registration's active endpoint chain and walk it.
-                //The chain is built fresh per request — builders may gate on
-                //per-request signals on the context (feature flags, tenant
-                //config, the typed IncomingRequest envelope). The walk does
-                //not pre-filter on capability or method; each matcher's body
+                //Each candidate's capability is filtered through
+                //ResolveCapabilitiesAsync, URI-resolved through
+                //ResolveEndpointUriAsync, and projected to a ServerEndpoint
+                //with ResolvedUri attached. The chain walk does not
+                //pre-filter on capability or method; each matcher's body
                 //declares its complete acceptance test.
-                EndpointChain chain = await GetEndpointsAsync(registration, context).ConfigureAwait(false);
+                EndpointChain chain = await EndpointChain.BuildForRequestAsync(
+                    registration, context, cancellationToken).ConfigureAwait(false);
+                context.SetEndpointChain(chain);
+
                 MatchedEndpoint? matched = await chain.MatchAsync(
                     request.Fields, context, cancellationToken).ConfigureAwait(false);
+
+                if(matched is not null)
+                {
+                    //Place match state on the context BEFORE firing the
+                    //MatchedStage inspection so post-match observers see the
+                    //payload, capability, and telemetry tags through the
+                    //typed context accessors rather than re-deriving them
+                    //from the stage record.
+                    context.SetMatchPayload(matched.Payload);
+                    context.SetCapability(matched.Endpoint.Capability);
+
+                    activity?.SetTag(Diagnostics.OAuthTagNames.FlowKind, matched.Endpoint.Kind.Name);
+                    activity?.SetTag(Diagnostics.OAuthTagNames.HttpMethod, matched.Endpoint.HttpMethod);
+                    activity?.SetTag(Diagnostics.OAuthTagNames.StartsNewFlow, matched.Endpoint.StartsNewFlow);
+                }
+
+                //Inspection stage 2 of 4 — match decision. Fires before the
+                //handler runs and on the unmatched-request case so inspectors
+                //observe 404 responses too. Endpoint and Payload are null
+                //when no endpoint accepted.
+                await Integration.InspectAsync!(
+                    new MatchedStage(matched?.Endpoint, matched?.Payload),
+                    context, cancellationToken).ConfigureAwait(false);
 
                 if(matched is null)
                 {
@@ -442,27 +432,21 @@ public sealed class AuthorizationServer: IDisposable
                 }
                 else
                 {
-                    //Place the typed match payload on the context so downstream
-                    //handlers that consume classification data can pattern-match
-                    //to the subtype their endpoint produced.
-                    context.SetMatchPayload(matched.Payload);
-
-                    //Place the matched endpoint's capability on the context for
-                    //post-match telemetry. Capability is descriptive metadata
-                    //under the Phase 4 model; this is the post-match telemetry
-                    //hand-off, not a routing input.
-                    context.SetCapability(matched.Endpoint.Capability);
-
-                    activity?.SetTag(Diagnostics.OAuthTagNames.FlowKind, matched.Endpoint.Kind.Name);
-                    activity?.SetTag(Diagnostics.OAuthTagNames.HttpMethod, matched.Endpoint.HttpMethod);
-                    activity?.SetTag(Diagnostics.OAuthTagNames.StartsNewFlow, matched.Endpoint.StartsNewFlow);
-
                     response = await HandleAsync(
                         matched.Endpoint, request.Fields, context, activity, cancellationToken)
                         .ConfigureAwait(false);
                 }
             }
         }
+
+        //Inspection stage 4 of 4 — fired immediately before the response
+        //returns to the skin. Always fires regardless of status code.
+        //Stage 3 (StateTransitionStage) is emitted from FlowRunner per
+        //successful PDA transition; that lives inside HandleAsync's call
+        //tree, not directly here.
+        await Integration.InspectAsync!(
+            new OutgoingResponseStage(response), context, cancellationToken)
+            .ConfigureAwait(false);
 
         //Status code tag is set on every return path so observability tooling
         //sees a non-empty value regardless of whether dispatch reached a
@@ -500,17 +484,13 @@ public sealed class AuthorizationServer: IDisposable
         Activity? activity,
         CancellationToken cancellationToken)
     {
-        //1. Check capability.
-        bool allowed = await CheckCapabilityAsync(
-            registration, endpoint.Capability, context, cancellationToken).ConfigureAwait(false);
+        //Capability gating now lives inside EndpointChain.BuildForRequestAsync,
+        //which calls ResolveCapabilitiesAsync and drops candidates whose
+        //capability is not in the active set. An endpoint reaching
+        //HandleCoreAsync has already passed that filter — re-checking here
+        //would be redundant.
 
-        if(!allowed)
-        {
-            return ServerHttpResponse.Forbidden(
-                OAuthErrors.UnauthorizedClient, "Capability not allowed for this client.");
-        }
-
-        //2. Stateless endpoints short-circuit here: no PDA, no persistence.
+        //1. Stateless endpoints short-circuit here: no PDA, no persistence.
         //The endpoint's BuildInputAsync returns an early-exit response directly.
         //A disposable sentinel state is passed only to satisfy the non-nullable
         //BuildInputDelegate signature; the endpoint ignores it.
@@ -547,7 +527,10 @@ public sealed class AuthorizationServer: IDisposable
                     $"Endpoint kind '{endpoint.Kind.GetType().Name}' cannot start a flow.");
             }
 
-            flowId = Guid.NewGuid().ToString("N");
+            //Phase 9h chunk 8 — v7 GUIDs sort lexicographically by creation
+            //time, which gives forensic-archive readers and persistence-layer
+            //indexes time-locality for free.
+            flowId = Guid.CreateVersion7().ToString("N");
             context.SetFlowId(flowId);
 
             (currentState, currentStepCount) = await statefulKind.CreateAsync(

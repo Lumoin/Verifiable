@@ -444,6 +444,30 @@ internal sealed class TestHostShell: IAsyncDisposable
                 {
                     suffix = "introspect";
                 }
+                //Phase 9h chunk 8 — EndpointChain.BuildForRequestAsync calls
+                //this delegate keyed on WellKnownEndpointNames (the candidate
+                //Name). The metadata-parameter-name branches above stay for
+                //MetadataEndpoints.AppendEndpointAsync's existing emission
+                //path; chunk 9 ports that to chain-walk emission and the
+                //metadata-key branches above become removable.
+                else if(endpointKey == WellKnownEndpointNames.AuthCodePar) { suffix = "par"; }
+                else if(endpointKey == WellKnownEndpointNames.AuthCodeJarPar) { suffix = "par"; }
+                else if(endpointKey == WellKnownEndpointNames.AuthCodeAuthorize) { suffix = "authorize"; }
+                else if(endpointKey == WellKnownEndpointNames.AuthCodeDirectAuthorize) { suffix = "authorize"; }
+                else if(endpointKey == WellKnownEndpointNames.AuthCodeAuthorizeJarByValue) { suffix = "authorize"; }
+                else if(endpointKey == WellKnownEndpointNames.AuthCodeToken) { suffix = "token"; }
+                else if(endpointKey == WellKnownEndpointNames.AuthCodeRefreshToken) { suffix = "token"; }
+                else if(endpointKey == WellKnownEndpointNames.AuthCodeRevoke) { suffix = "revoke"; }
+                else if(endpointKey == WellKnownEndpointNames.AuthCodeIntrospect) { suffix = "introspect"; }
+                else if(endpointKey == WellKnownEndpointNames.Oid4VpPar) { suffix = "par"; }
+                else if(endpointKey == WellKnownEndpointNames.Oid4VpJarRequest) { suffix = "jar"; }
+                else if(endpointKey == WellKnownEndpointNames.Oid4VpDirectPost) { suffix = "cb"; }
+                else if(endpointKey == WellKnownEndpointNames.MetadataJwks) { suffix = "jwks"; }
+                else if(endpointKey == WellKnownEndpointNames.MetadataDiscovery)
+                {
+                    suffix = ".well-known/openid-configuration";
+                }
+                else if(endpointKey == WellKnownEndpointNames.RegistrationRegister) { suffix = "register"; }
                 else
                 {
                     suffix = null;
@@ -482,6 +506,15 @@ internal sealed class TestHostShell: IAsyncDisposable
             //an unset Profile falls back to PolicyProfile.Fapi20
             //(FAPI 2.0 / HAIP-aligned).
             ResolvePolicyAsync = PolicyProfiles.DefaultResolvePolicyAsync,
+
+            //Phase 9h chunk 4/8 — per-call decision points. Wired to the
+            //library defaults: full registration capability set (no
+            //attenuation), no-op inspection, public-subject identity.
+            //Applications that need CAEP/RISC attenuation, audit emission,
+            //or pairwise subjects supply their own delegate.
+            ResolveCapabilitiesAsync = DefaultCapabilityResolver.ResolveAsync,
+            InspectAsync = DefaultInspector.NoOpAsync,
+            ResolveSubjectIdentifierAsync = DefaultSubjectIdentifierResolver.PublicAsync,
 
             //Dynamic registration delegates. The parser uses JsonDocument to
             //read the few fields the canonical test exercises directly into a
@@ -1397,7 +1430,17 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// the call site.
     /// </summary>
     public ValueTask<EndpointChain> GetEndpointsAsync(ClientRecord registration, RequestContext context)
-        => Server.GetEndpointsAsync(registration, context);
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        //Phase 9h chunk 8 — AuthorizationServer no longer exposes a public
+        //GetEndpointsAsync. Tests inspect the chain directly via the proper
+        //BuildForRequestAsync entry point; the context must carry the active
+        //server so capability resolution and URL resolution can reach the
+        //integration delegates.
+        context.SetServer(Server);
+        return EndpointChain.BuildForRequestAsync(registration, context, CancellationToken.None);
+    }
 
 
     /// <summary>

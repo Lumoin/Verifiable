@@ -134,8 +134,8 @@ public readonly struct ServerCapabilityName: IEquatable<ServerCapabilityName>
     /// advertise its endpoints via a discovery document can enable this capability.
     /// The discovery document lists only the endpoints that are active for this
     /// registration based on its <see cref="ClientRecord.AllowedCapabilities"/>
-    /// and the per-request <see cref="AuthorizationServerIntegration.IsCapabilityAllowedAsync"/>
-    /// delegate result.
+    /// attenuated through
+    /// <see cref="AuthorizationServerIntegration.ResolveCapabilitiesAsync"/>.
     /// </para>
     /// </remarks>
     public static ServerCapabilityName DiscoveryEndpoint { get; } = new(17);

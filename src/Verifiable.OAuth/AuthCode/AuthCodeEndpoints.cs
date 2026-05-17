@@ -172,7 +172,6 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
@@ -341,7 +340,6 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
@@ -434,7 +432,6 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
@@ -590,7 +587,6 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
@@ -697,7 +693,6 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
@@ -1094,7 +1089,6 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
@@ -1224,9 +1218,14 @@ public static class AuthCodeEndpoints
 
                 foreach(TokenProducer producer in producers)
                 {
-                    if(!await server.CheckCapabilityAsync(
-                        registration, producer.RequiredCapability, context, ct)
-                        .ConfigureAwait(false))
+                    //Per-producer capability filter. The chain-level filter via
+                    //ResolveCapabilitiesAsync gated the token *endpoint* itself
+                    //on the AuthorizationCode capability; the producer loop here
+                    //gates each individual token producer (access token, ID
+                    //token, refresh token) on its own RequiredCapability so the
+                    //response contains only the token shapes this registration
+                    //is allowed to issue.
+                    if(!registration.IsCapabilityAllowed(producer.RequiredCapability))
                     {
                         continue;
                     }
@@ -1468,7 +1467,6 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
@@ -1585,8 +1583,9 @@ public static class AuthCodeEndpoints
 
                 foreach(TokenProducer producer in producers)
                 {
-                    if(!await server.CheckCapabilityAsync(
-                        registration, producer.RequiredCapability, context, ct).ConfigureAwait(false))
+                    //Per-producer capability filter — see BuildToken for the
+                    //rationale on filtering producers (not the endpoint) here.
+                    if(!registration.IsCapabilityAllowed(producer.RequiredCapability))
                     {
                         continue;
                     }
@@ -1799,7 +1798,6 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
@@ -1840,7 +1838,6 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);

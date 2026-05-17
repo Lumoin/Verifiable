@@ -86,7 +86,9 @@ internal static class TestBrowser
             fields[WellKnownJwtClaimNames.Nonce] = $"nonce-{Guid.NewGuid():N}";
         }
 
-        EndpointChain chain = await server.GetEndpointsAsync(registration, context).ConfigureAwait(false);
+        context.SetServer(server);
+        EndpointChain chain = await EndpointChain.BuildForRequestAsync(
+            registration, context, CancellationToken.None).ConfigureAwait(false);
         if(chain.Count == 0)
         {
             throw new InvalidOperationException(

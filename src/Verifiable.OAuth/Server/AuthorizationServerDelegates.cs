@@ -205,22 +205,6 @@ public delegate ValueTask<JwksDocument> BuildJwksDocumentDelegate(
 
 
 /// <summary>
-/// Determines whether the given <see cref="ClientRecord"/> is allowed to use
-/// <paramref name="capability"/> for the current request.
-/// </summary>
-/// <remarks>
-/// Return <see langword="false"/> to have the handler respond with
-/// <c>unauthorized_client</c>. The default when this delegate is null is to check
-/// <see cref="ClientRecord.IsCapabilityAllowed"/> only.
-/// </remarks>
-public delegate ValueTask<bool> IsCapabilityAllowedDelegate(
-    ClientRecord registration,
-    ServerCapabilityName capability,
-    RequestContext context,
-    CancellationToken cancellationToken);
-
-
-/// <summary>
 /// Fetches and validates a Client ID Metadata Document for CIMD clients.
 /// </summary>
 /// <remarks>

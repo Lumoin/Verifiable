@@ -182,13 +182,7 @@ public sealed record ServerEndpoint
     /// themselves; discovery emission reads it for the
     /// <see cref="DiscoveryMetadataKey"/> field publication.
     /// </summary>
-    /// <remarks>
-    /// Phase 9h interim: nullable while builders still construct
-    /// <see cref="ServerEndpoint"/> directly. Tightens to <c>required</c>
-    /// in chunk 8 when <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/>
-    /// becomes the sole construction site.
-    /// </remarks>
-    public Uri? ResolvedUri { get; init; }
+    public required Uri ResolvedUri { get; init; }
 
     /// <summary>
     /// The discovery-document field name under which this endpoint's
