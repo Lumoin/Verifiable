@@ -60,14 +60,15 @@ public static class RegistrationEndpoints
     /// Endpoints are emitted only when the registration's capability set
     /// includes <see cref="ServerCapabilityName.DynamicClientRegistration"/>.
     /// </remarks>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, server) =>
+    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
         if(!registration.IsCapabilityAllowed(ServerCapabilityName.DynamicClientRegistration))
         {
-            return [];
+            return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>([]);
         }
 
-        return [BuildRead(), BuildUpdate(), BuildDelete()];
+        return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>(
+            [BuildRead(), BuildUpdate(), BuildDelete()]);
     };
 
 
@@ -336,66 +337,44 @@ public static class RegistrationEndpoints
     }
 
 
-    private static ServerEndpoint BuildRead() => BuildManagementEndpoint(
-        name: "Registration.Read",
+    private static EndpointCandidate BuildRead() => BuildManagementEndpoint(
         httpMethod: WellKnownHttpMethods.Get,
         handler: HandleReadAsync);
 
 
-    private static ServerEndpoint BuildUpdate() => BuildManagementEndpoint(
-        name: "Registration.Update",
+    private static EndpointCandidate BuildUpdate() => BuildManagementEndpoint(
         httpMethod: WellKnownHttpMethods.Put,
         handler: HandleUpdateAsync);
 
 
-    private static ServerEndpoint BuildDelete() => BuildManagementEndpoint(
-        name: "Registration.Delete",
+    private static EndpointCandidate BuildDelete() => BuildManagementEndpoint(
         httpMethod: WellKnownHttpMethods.Delete,
         handler: HandleDeleteAsync);
 
 
-    private static ServerEndpoint BuildManagementEndpoint(
-        string name,
+    private static EndpointCandidate BuildManagementEndpoint(
         string httpMethod,
         ManagementHandlerDelegate handler) =>
         new()
         {
-            Name = name,
+            //RFC 7592 management endpoints (GET/PUT/DELETE) share a single role
+            //identifier — they answer at the same URL distinguished only by
+            //method. The discovery document advertises the create endpoint
+            //(handled outside the chain in HandleCreateAsync), so these three
+            //carry DiscoveryMetadataKey=null.
+            Name = WellKnownEndpointNames.RegistrationRegister,
             HttpMethod = httpMethod,
             Capability = ServerCapabilityName.DynamicClientRegistration,
             StartsNewFlow = true,
             Kind = FlowKind.Stateless,
 
-            MatchesRequest = (fields, context, ct) =>
-            {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null)
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-                if(!WellKnownHttpMethods.Equals(req.Method, httpMethod))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-                ClientRecord? registration = context.Registration;
-                if(registration is null)
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.DynamicClientRegistration))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-                if(!ServerPaths.IsEndpoint(req.Path,
-                    ServerEndpointPaths.RegistrationManagement, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
 
-            BuildInputAsync = async (fields, context, currentState, server, ct) =>
+            BuildInputAsync = async (fields, context, currentState, ct) =>
             {
+                AuthorizationServer server = context.Server!;
                 ServerHttpResponse response = await handler(context, server, ct).ConfigureAwait(false);
                 return ((OAuthFlowInput?)null, (ServerHttpResponse?)response);
             },

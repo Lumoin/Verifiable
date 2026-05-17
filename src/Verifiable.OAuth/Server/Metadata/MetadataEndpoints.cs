@@ -75,21 +75,21 @@ public static class MetadataEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="AuthorizationServer.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, server) =>
+    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
-        List<ServerEndpoint> endpoints = [];
+        List<EndpointCandidate> candidates = [];
 
         if(registration.IsCapabilityAllowed(ServerCapabilityName.JwksEndpoint))
         {
-            endpoints.Add(BuildJwks());
+            candidates.Add(BuildJwks());
         }
 
         if(registration.IsCapabilityAllowed(ServerCapabilityName.DiscoveryEndpoint))
         {
-            endpoints.Add(BuildDiscovery());
+            candidates.Add(BuildDiscovery());
         }
 
-        return endpoints;
+        return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>(candidates);
     };
 
 
@@ -113,48 +113,30 @@ public static class MetadataEndpoints
     /// rationale.
     /// </para>
     /// </remarks>
-    private static ServerEndpoint BuildJwks() =>
+    private static EndpointCandidate BuildJwks() =>
         new()
         {
-            Name = "Metadata.Jwks",
+            Name = WellKnownEndpointNames.MetadataJwks,
             HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.JwksEndpoint,
             StartsNewFlow = true,
             Kind = FlowKind.Stateless,
+            DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.JwksUri,
 
-            //Acceptance test: GET to /jwks for this registration when JWKS is
-            //in the registration's capability set. Path comparison goes through
-            //ServerPaths.IsEndpoint so query strings, fragments, and trailing
-            //slashes are all handled uniformly.
-            MatchesRequest = static (fields, context, ct) =>
-            {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsGet(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.JwksEndpoint))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Jwks, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
+            //Stub matcher — real port lands in chunk 7. Returning null
+            //means this endpoint matches nothing while chunks 5-6 sit at
+            //the half-cascade state; the suite only re-runs at chunk 7's
+            //green-build.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
 
             //The JWKS endpoint is stateless — it does not step the PDA. BuildInputAsync
             //builds the complete response and returns it as an early exit. BuildResponse
             //is never reached.
-            BuildInputAsync = static async (fields, context, currentState, server, ct) =>
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
+                AuthorizationServer server = context.Server!;
+
                 if(server.Cryptography.BuildJwksDocumentAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -218,43 +200,25 @@ public static class MetadataEndpoints
     /// <see cref="MetadataEndpoints"/> for the rationale.
     /// </para>
     /// </remarks>
-    private static ServerEndpoint BuildDiscovery() =>
+    private static EndpointCandidate BuildDiscovery() =>
         new()
         {
-            Name = "Metadata.Discovery",
+            Name = WellKnownEndpointNames.MetadataDiscovery,
             HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.DiscoveryEndpoint,
             StartsNewFlow = true,
             Kind = FlowKind.Stateless,
+            //DiscoveryMetadataKey is null — the discovery endpoint isn't itself
+            //advertised in the discovery document; clients hit a well-known URL.
 
-            //Acceptance test: GET to the discovery URL for this registration
-            //when Discovery is in the registration's capability set.
-            MatchesRequest = static (fields, context, ct) =>
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsGet(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
+                AuthorizationServer server = context.Server!;
 
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.DiscoveryEndpoint))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Discovery, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
-
-            BuildInputAsync = static async (fields, context, currentState, server, ct) =>
-            {
                 ClientRecord? registration = context.Registration;
                 if(registration is null)
                 {

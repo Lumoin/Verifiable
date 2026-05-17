@@ -76,35 +76,35 @@ public static class AuthCodeEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="AuthorizationServer.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, server) =>
+    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
-        List<ServerEndpoint> endpoints = [];
+        List<EndpointCandidate> candidates = [];
 
         if(registration.IsCapabilityAllowed(ServerCapabilityName.PushedAuthorization))
         {
-            endpoints.Add(BuildPar());
+            candidates.Add(BuildPar());
         }
 
         if(registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode))
         {
-            endpoints.Add(BuildAuthorize());
+            candidates.Add(BuildAuthorize());
         }
 
         if(registration.IsCapabilityAllowed(ServerCapabilityName.DirectAuthorization))
         {
-            endpoints.Add(BuildDirectAuthorize());
+            candidates.Add(BuildDirectAuthorize());
         }
 
         if(registration.IsCapabilityAllowed(ServerCapabilityName.PushedAuthorization)
             && registration.IsCapabilityAllowed(ServerCapabilityName.JwtSecuredAuthorizationRequest))
         {
-            endpoints.Add(BuildJarPar());
+            candidates.Add(BuildJarPar());
         }
 
         if(registration.IsCapabilityAllowed(ServerCapabilityName.DirectAuthorization)
             && registration.IsCapabilityAllowed(ServerCapabilityName.JwtSecuredAuthorizationRequest))
         {
-            endpoints.Add(BuildAuthorizeJarByValue());
+            candidates.Add(BuildAuthorizeJarByValue());
         }
 
         bool hasTokenCapability =
@@ -114,7 +114,7 @@ public static class AuthCodeEndpoints
 
         if(hasTokenCapability)
         {
-            endpoints.Add(BuildToken());
+            candidates.Add(BuildToken());
         }
 
         //Refresh-token grant per RFC 6749 §6 is enabled whenever the
@@ -122,20 +122,20 @@ public static class AuthCodeEndpoints
         //rotation is enforced unconditionally on every successful refresh.
         if(registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode))
         {
-            endpoints.Add(BuildRefreshToken());
+            candidates.Add(BuildRefreshToken());
         }
 
         if(registration.IsCapabilityAllowed(ServerCapabilityName.TokenRevocation))
         {
-            endpoints.Add(BuildRevocation());
+            candidates.Add(BuildRevocation());
         }
 
         if(registration.IsCapabilityAllowed(ServerCapabilityName.TokenIntrospection))
         {
-            endpoints.Add(BuildIntrospection());
+            candidates.Add(BuildIntrospection());
         }
 
-        return endpoints;
+        return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>(candidates);
     };
 
 
@@ -150,71 +150,24 @@ public static class AuthCodeEndpoints
     /// paragraph in the remarks on <see cref="AuthCodeEndpoints"/> for the
     /// rationale.
     /// </remarks>
-    private static ServerEndpoint BuildPar() =>
+    private static EndpointCandidate BuildPar() =>
         new()
         {
-            Name = "AuthCode.Par",
+            Name = WellKnownEndpointNames.AuthCodePar,
             HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.PushedAuthorization,
             StartsNewFlow = true,
             Kind = FlowKind.AuthCodeServer,
+            DiscoveryMetadataKey = OpenIdProviderMetadataParameterNames.PushedAuthorizationRequestEndpoint,
 
-            //Acceptance test: POST to /par for this registration with the
-            //PKCE PAR signature in the body (code_challenge + redirect_uri,
-            //no request JAR parameter). Disjointness vs OID4VP PAR: PKCE PAR
-            //is wire-driven (body fields), OID4VP PAR is context-driven
-            //(TransactionNonce on context). The TransactionNonce-absent check
-            //below is belt-and-braces — under correct application setup the
-            //two never collide, but the explicit negative check makes the
-            //disjointness assertion in DEBUG builds catch any deployment
-            //bug where the verifier code path leaks context state into a
-            //PKCE PAR request.
-            MatchesRequest = static (fields, context, ct) =>
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
+
+            BuildInputAsync = static (fields, context, currentState, ct) =>
             {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsPost(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
+                AuthorizationServer server = context.Server!;
 
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.PushedAuthorization))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Par, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.ContainsKey(OAuthRequestParameterNames.CodeChallenge))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                //Disjointness vs JAR-PAR — a body carrying a 'request' parameter
-                //routes to BuildJarPar regardless of any code_challenge/code_challenge_method
-                //the client also (incorrectly) included. RFC 9101 §6.1 requires
-                //outer parameters to be ignored when the JAR is present.
-                if(fields.ContainsKey(OAuthRequestParameterNames.Request))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                //Disjointness vs OID4VP PAR — see remarks above.
-                if(context.TransactionNonce is not null)
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
-
-            BuildInputAsync = static (fields, context, currentState, server, ct) =>
-            {
                 if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
                     || string.IsNullOrWhiteSpace(clientId))
                 {
@@ -322,14 +275,15 @@ public static class AuthCodeEndpoints
         };
 
 
-    private static ServerEndpoint BuildAuthorize() =>
+    private static EndpointCandidate BuildAuthorize() =>
         new()
         {
-            Name = "AuthCode.Authorize",
+            Name = WellKnownEndpointNames.AuthCodeAuthorize,
             HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.AuthorizationCode,
             StartsNewFlow = false,
             Kind = FlowKind.AuthCodeServer,
+            DiscoveryMetadataKey = OpenIdProviderMetadataParameterNames.AuthorizationEndpoint,
 
             ExtractCorrelationKey = static (path, fields, context) =>
             {
@@ -345,41 +299,14 @@ public static class AuthCodeEndpoints
                 return null;
             },
 
-            //Acceptance test: GET to /authorize for this registration with a
-            //request_uri query parameter. The request_uri presence is what
-            //distinguishes the PAR-completed Authorize from the direct
-            //Authorize (PKCE in query string) which has the inverse signature.
-            MatchesRequest = static (fields, context, ct) =>
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
+
+            BuildInputAsync = static (fields, context, currentState, ct) =>
             {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsGet(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
+                AuthorizationServer server = context.Server!;
 
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Authorize, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
-
-            BuildInputAsync = static (fields, context, currentState, server, ct) =>
-            {
                 if(currentState is not ParRequestReceivedState)
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
@@ -433,63 +360,26 @@ public static class AuthCodeEndpoints
         };
 
 
-    private static ServerEndpoint BuildDirectAuthorize() =>
+    private static EndpointCandidate BuildDirectAuthorize() =>
         new()
         {
-            Name = "AuthCode.DirectAuthorize",
+            Name = WellKnownEndpointNames.AuthCodeDirectAuthorize,
             HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.DirectAuthorization,
             StartsNewFlow = true,
             Kind = FlowKind.AuthCodeServer,
+            //DiscoveryMetadataKey null — direct authorize shares the URL with
+            //AuthCodeAuthorize which is advertised; emitting twice would be
+            //wrong.
 
-            //Acceptance test: GET to /authorize for this registration with
-            //code_challenge in the query (direct PKCE) and no request_uri.
-            //The request_uri-absence check is what distinguishes this matcher
-            //from the PAR-completed Authorize at the same path-and-method;
-            //the disjointness assertion in DEBUG builds catches any drift.
-            MatchesRequest = static (fields, context, ct) =>
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
+
+            BuildInputAsync = static (fields, context, currentState, ct) =>
             {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsGet(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
+                AuthorizationServer server = context.Server!;
 
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.DirectAuthorization))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Authorize, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                //Disjointness vs JAR-by-value Authorize — a query carrying a
-                //'request' parameter routes to BuildAuthorizeJarByValue.
-                if(fields.ContainsKey(OAuthRequestParameterNames.Request))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.ContainsKey(OAuthRequestParameterNames.CodeChallenge))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
-
-            BuildInputAsync = static (fields, context, currentState, server, ct) =>
-            {
                 if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
                     || string.IsNullOrWhiteSpace(clientId))
                 {
@@ -598,54 +488,26 @@ public static class AuthCodeEndpoints
     /// passes.
     /// </para>
     /// </remarks>
-    private static ServerEndpoint BuildJarPar() =>
+    private static EndpointCandidate BuildJarPar() =>
         new()
         {
-            Name = "AuthCode.JarPar",
+            Name = WellKnownEndpointNames.AuthCodePar,
             HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.PushedAuthorization,
             StartsNewFlow = true,
             Kind = FlowKind.AuthCodeServer,
+            //DiscoveryMetadataKey null — JAR-PAR shares the URL with the
+            //non-JAR PAR endpoint which advertises; emitting twice would be
+            //wrong.
 
-            //Acceptance test: POST to /par for this registration with both PAR
-            //and JAR capabilities allowed and the request body carrying a JAR
-            //in the 'request' parameter.
-            MatchesRequest = static (fields, context, ct) =>
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsPost(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
+                AuthorizationServer server = context.Server!;
 
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.PushedAuthorization))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.JwtSecuredAuthorizationRequest))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Par, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Request))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
-
-            BuildInputAsync = static async (fields, context, currentState, server, ct) =>
-            {
                 (AuthCodeRequestObject? requestObject, ServerHttpResponse? earlyExit) =
                     await VerifyAndValidateAuthCodeJarAsync(fields, context, server, ct)
                         .ConfigureAwait(false);
@@ -713,63 +575,25 @@ public static class AuthCodeEndpoints
     /// <c>request_uri</c> is present; the PAR-completed matcher matches when
     /// <c>request_uri</c> is present.
     /// </remarks>
-    private static ServerEndpoint BuildAuthorizeJarByValue() =>
+    private static EndpointCandidate BuildAuthorizeJarByValue() =>
         new()
         {
-            Name = "AuthCode.AuthorizeJarByValue",
+            Name = WellKnownEndpointNames.AuthCodeAuthorize,
             HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.DirectAuthorization,
             StartsNewFlow = true,
             Kind = FlowKind.AuthCodeServer,
+            //DiscoveryMetadataKey null — JAR-by-value shares the URL with the
+            //non-JAR authorize endpoint which advertises.
 
-            //Acceptance test: GET to /authorize for this registration with both
-            //direct-authorize and JAR capabilities allowed, the query carrying a
-            //JAR in the 'request' parameter, and no 'request_uri' (which would
-            //route to BuildAuthorize per RFC 9101 §6.1).
-            MatchesRequest = static (fields, context, ct) =>
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsGet(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
+                AuthorizationServer server = context.Server!;
 
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.DirectAuthorization))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.JwtSecuredAuthorizationRequest))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Authorize, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                //RFC 9101 §6.1 — request and request_uri MUST NOT both be present.
-                //When both arrive, neither JAR matcher accepts; the request 404s
-                //rather than silently picking one parameter over the other.
-                if(fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Request))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
-
-            BuildInputAsync = static async (fields, context, currentState, server, ct) =>
-            {
                 (AuthCodeRequestObject? requestObject, ServerHttpResponse? earlyExit) =
                     await VerifyAndValidateAuthCodeJarAsync(fields, context, server, ct)
                         .ConfigureAwait(false);
@@ -1123,61 +947,27 @@ public static class AuthCodeEndpoints
     /// the serialization-firewall paragraph in the remarks on
     /// <see cref="AuthCodeEndpoints"/> for the rationale.
     /// </remarks>
-    private static ServerEndpoint BuildToken() =>
+    private static EndpointCandidate BuildToken() =>
         new()
         {
-            Name = "AuthCode.Token",
+            Name = WellKnownEndpointNames.AuthCodeToken,
             HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.AuthorizationCode,
             StartsNewFlow = false,
             Kind = FlowKind.AuthCodeServer,
+            DiscoveryMetadataKey = OpenIdProviderMetadataParameterNames.TokenEndpoint,
 
-            //Acceptance test: POST to /token for this registration with
-            //grant_type=authorization_code and a code parameter. Other grants
-            //(refresh_token, client_credentials) would arrive at the same
-            //path but with different grant_type values and would route to
-            //sibling matchers; this one is specific to the authorization_code
-            //grant.
-            MatchesRequest = static (fields, context, ct) =>
-            {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsPost(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Token, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
-                    || !string.Equals(grantType, OAuthRequestParameterValues.GrantTypeAuthorizationCode, StringComparison.Ordinal))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Code))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
 
             ExtractCorrelationKey = static (path, fields, context) =>
                 fields.TryGetValue(OAuthRequestParameterNames.Code, out string? code)
                     && !string.IsNullOrWhiteSpace(code) ? code : null,
-            BuildInputAsync = static async (fields, context, currentState, server, ct) =>
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
+                AuthorizationServer server = context.Server!;
+
                 if(currentState is not ServerCodeIssuedState codeState)
                 {
                     return (null, ServerHttpResponse.BadRequest(
@@ -1507,56 +1297,28 @@ public static class AuthCodeEndpoints
     /// refresh-token secondary index. The matcher is path+method+grant_type-
     /// disjoint from BuildToken (which handles authorization_code grant).
     /// </summary>
-    private static ServerEndpoint BuildRefreshToken() =>
+    private static EndpointCandidate BuildRefreshToken() =>
         new()
         {
-            Name = "AuthCode.RefreshToken",
+            Name = WellKnownEndpointNames.AuthCodeRefreshToken,
             HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.AuthorizationCode,
             StartsNewFlow = false,
             Kind = FlowKind.RefreshToken,
+            //DiscoveryMetadataKey null — refresh shares the token endpoint URL.
 
-            MatchesRequest = static (fields, context, ct) =>
-            {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsPost(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Token, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
-                    || !string.Equals(grantType, OAuthRequestParameterValues.GrantTypeRefreshToken, StringComparison.Ordinal))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.ContainsKey(OAuthRequestParameterNames.RefreshToken))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
 
             ExtractCorrelationKey = static (path, fields, context) =>
                 fields.TryGetValue(OAuthRequestParameterNames.RefreshToken, out string? refreshToken)
                     && !string.IsNullOrWhiteSpace(refreshToken) ? refreshToken : null,
 
-            BuildInputAsync = static async (fields, context, currentState, server, ct) =>
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
+                AuthorizationServer server = context.Server!;
+
                 //ResolveCorrelationKeyAsync + LoadFlowStateAsync delivered
                 //the persisted refresh-token state; pattern-match to recover
                 //its slots. If the loaded state has the wrong type, the
@@ -1843,47 +1605,21 @@ public static class AuthCodeEndpoints
         };
 
 
-    private static ServerEndpoint BuildRevocation() =>
+    private static EndpointCandidate BuildRevocation() =>
         new()
         {
-            Name = "AuthCode.Revocation",
+            Name = WellKnownEndpointNames.AuthCodeRevoke,
             HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.TokenRevocation,
             StartsNewFlow = false,
             Kind = FlowKind.AuthCodeServer,
+            DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.RevocationEndpoint,
 
-            //Acceptance test: POST to /revoke for this registration with a
-            //token body parameter per RFC 7009 §2.1.
-            MatchesRequest = static (fields, context, ct) =>
-            {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsPost(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
 
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.TokenRevocation))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Revoke, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Token))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
-
-            BuildInputAsync = static (fields, context, currentState, server, ct) =>
+            BuildInputAsync = static (fields, context, currentState, ct) =>
                 ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>(
                     (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError, "Revocation not yet implemented."))),
@@ -1892,47 +1628,21 @@ public static class AuthCodeEndpoints
         };
 
 
-    private static ServerEndpoint BuildIntrospection() =>
+    private static EndpointCandidate BuildIntrospection() =>
         new()
         {
-            Name = "AuthCode.Introspection",
+            Name = WellKnownEndpointNames.AuthCodeIntrospect,
             HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.TokenIntrospection,
             StartsNewFlow = false,
             Kind = FlowKind.AuthCodeServer,
+            DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.IntrospectionEndpoint,
 
-            //Acceptance test: POST to /introspect for this registration with
-            //a token body parameter per RFC 7662 §2.1.
-            MatchesRequest = static (fields, context, ct) =>
-            {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsPost(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
 
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.TokenIntrospection))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.Introspect, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Token))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
-
-            BuildInputAsync = static (fields, context, currentState, server, ct) =>
+            BuildInputAsync = static (fields, context, currentState, ct) =>
                 ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>(
                     (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError, "Introspection not yet implemented."))),

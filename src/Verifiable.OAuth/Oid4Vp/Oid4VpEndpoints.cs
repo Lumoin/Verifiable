@@ -97,19 +97,19 @@ public static class Oid4VpEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="AuthorizationServer.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, server) =>
+    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
         if(!registration.IsCapabilityAllowed(ServerCapabilityName.VerifiablePresentation))
         {
-            return [];
+            return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>([]);
         }
 
-        return
+        return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>(
         [
             BuildOid4VpPar(),
             BuildOid4VpJarRequest(),
             BuildOid4VpDirectPost()
-        ];
+        ]);
     };
 
 
@@ -126,46 +126,28 @@ public static class Oid4VpEndpoints
     /// paragraph in the remarks on <see cref="Oid4VpEndpoints"/> for the
     /// rationale.
     /// </remarks>
-    private static ServerEndpoint BuildOid4VpPar() =>
+    private static EndpointCandidate BuildOid4VpPar() =>
         new()
         {
-            Name = "Oid4Vp.Par",
+            Name = WellKnownEndpointNames.Oid4VpPar,
             HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.VerifiablePresentation,
             StartsNewFlow = true,
             Kind = FlowKind.Oid4VpVerifierServer,
+            //DiscoveryMetadataKey null per v2 MD Step 12 table — OID4VP
+            //endpoints aren't advertised in the OAuth discovery document.
 
-            //Acceptance test: this endpoint is invoked internally by the
-            //verifier application — not from a wire HTTP request. The signal
-            //is the application having pre-populated a transaction nonce, a
-            //prepared DCQL query, and a decryption key identifier on the
-            //context. The matcher's acceptance test is purely context-state
-            //plus capability; it does not check path or method because the
-            //internal invocation path is not constrained to /par + POST.
-            //
-            //Disjointness from the wire-driven AuthCode PAR matcher is enforced
-            //by the inverse signal: that matcher requires a wire IncomingRequest
-            //with code_challenge in the body and TransactionNonce absent from
-            //context. A request that satisfies one matcher cannot satisfy the
-            //other.
-            MatchesRequest = static (fields, context, ct) =>
+            //Stub matcher — real port lands in chunk 7. The original
+            //acceptance test was context-state-driven (TransactionNonce,
+            //PreparedQuery, DecryptionKeyId presence) and survives the
+            //port intact.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
+
+            BuildInputAsync = async (fields, context, currentState, ct) =>
             {
-                if(context.TransactionNonce is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(context.PreparedQuery is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(context.DecryptionKeyId is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                AuthorizationServer server = context.Server!;
 
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.VerifiablePresentation))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
-
-            BuildInputAsync = async (fields, context, currentState, server, ct) =>
-            {
                 ClientRecord? registration = context.Registration;
                 if(registration is null)
                 {
@@ -293,52 +275,24 @@ public static class Oid4VpEndpoints
         };
 
 
-    private static ServerEndpoint BuildOid4VpJarRequest() =>
+    private static EndpointCandidate BuildOid4VpJarRequest() =>
         new()
         {
-            Name = "Oid4Vp.JarRequest",
+            Name = WellKnownEndpointNames.Oid4VpJarRequest,
             HttpMethod = WellKnownHttpMethods.Get,
             Capability = ServerCapabilityName.VerifiablePresentation,
             StartsNewFlow = false,
             Kind = FlowKind.Oid4VpVerifierServer,
+            //DiscoveryMetadataKey null per v2 MD Step 12 table.
 
-            //Acceptance test: GET to a path that carries a flow handle, and
-            //the application has placed that handle on context.CorrelationKey.
-            //The skin is responsible for extracting the {flowId} segment from
-            //the JAR URL into the correlation key — the matcher does not
-            //path-parse the handle out itself, because the handle position is
-            //not fixed across deployments (some skins might place the JAR URL
-            //at a different mount, e.g. /jar-objects/{handle}).
-            //
-            //The CorrelationKey signal is also what distinguishes this matcher
-            //from any other GET endpoint at request time. Other VP-flow GETs
-            //would not have CorrelationKey populated.
-            MatchesRequest = static (fields, context, ct) =>
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsGet(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
+                AuthorizationServer server = context.Server!;
 
-                if(string.IsNullOrWhiteSpace(context.CorrelationKey))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.VerifiablePresentation))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
-
-            BuildInputAsync = static async (fields, context, currentState, server, ct) =>
-            {
                 if(currentState is not VerifierParReceivedState parReceived)
                 {
                     return (null, ServerHttpResponse.BadRequest(
@@ -359,7 +313,6 @@ public static class Oid4VpEndpoints
                         parReceived.Query,
                         parReceived.SigningKeyId),
                     context,
-                    server,
                     ct).ConfigureAwait(false);
 
                 return (signed, null);
@@ -392,54 +345,19 @@ public static class Oid4VpEndpoints
     /// paragraph in the remarks on <see cref="Oid4VpEndpoints"/> for the
     /// rationale.
     /// </remarks>
-    private static ServerEndpoint BuildOid4VpDirectPost() =>
+    private static EndpointCandidate BuildOid4VpDirectPost() =>
         new()
         {
-            Name = "Oid4Vp.DirectPost",
+            Name = WellKnownEndpointNames.Oid4VpDirectPost,
             HttpMethod = WellKnownHttpMethods.Post,
             Capability = ServerCapabilityName.VerifiablePresentation,
             StartsNewFlow = false,
             Kind = FlowKind.Oid4VpVerifierServer,
+            //DiscoveryMetadataKey null per v2 MD Step 12 table.
 
-            //Acceptance test: POST to /cb for this registration, with
-            //response (encrypted JWE per HAIP) and state (the request_uri
-            //token echo per OID4VP §6.1) both present in the body. The
-            //response field is the load-bearing wire signal; state is the
-            //correlation handle the verifier server uses to retrieve the
-            //flow.
-            MatchesRequest = static (fields, context, ct) =>
-            {
-                IncomingRequest? req = context.IncomingRequest;
-                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsPost(req.Method))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                ClientRecord? registration = context.Registration;
-                if(registration is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!registration.IsCapabilityAllowed(ServerCapabilityName.VerifiablePresentation))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!ServerPaths.IsEndpoint(req.Path, ServerEndpointPaths.DirectPost, registration.TenantId.Value))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.ContainsKey(OAuthRequestParameterNames.Response))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                if(!fields.ContainsKey(OAuthRequestParameterNames.State))
-                {
-                    return ValueTask.FromResult<MatchPayload?>(null);
-                }
-
-                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
-            },
+            //Stub matcher — real port lands in chunk 7.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+                ValueTask.FromResult<MatchPayload?>(null),
 
             //The Wallet echoes the JAR's state claim as the state form field per
             //OID4VP 1.0 §6.1 and RFC 6749 §4.1.1. The state value equals the
@@ -449,8 +367,10 @@ public static class Oid4VpEndpoints
                 fields.TryGetValue(OAuthRequestParameterNames.State, out string? state)
                     && !string.IsNullOrWhiteSpace(state) ? state : null,
 
-            BuildInputAsync = static (fields, context, currentState, server, ct) =>
+            BuildInputAsync = static (fields, context, currentState, ct) =>
             {
+                AuthorizationServer server = context.Server!;
+
                 if(currentState is not VerifierJarServedState)
                 {
                     return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
