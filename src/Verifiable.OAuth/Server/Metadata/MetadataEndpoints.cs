@@ -198,18 +198,20 @@ public static class MetadataEndpoints
     /// <see cref="ServerEndpoint.BuildResponse"/> is never reached.
     /// </para>
     /// <para>
-    /// The library never composes paths; each advertised URL is the URL the
-    /// application returns. Without
+    /// The library never composes paths; each advertised URL comes from the
+    /// per-request <see cref="EndpointChain"/> the dispatcher placed on the
+    /// context. Endpoints are projected through
     /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
-    /// the document still returns valid JSON carrying just the issuer plus
-    /// any application-contributed fields.
+    /// at chain-build time; discovery emission then reads
+    /// <see cref="ServerEndpoint.ResolvedUri"/> directly, guaranteeing the
+    /// advertised URL is the same URL the matcher will match against.
     /// </para>
     /// <para>
     /// The JSON body is assembled by hand using <see cref="StringBuilder"/>
-    /// via the helpers <see cref="AppendEndpointAsync"/>,
-    /// <see cref="AppendField"/>, and <see cref="AppendContributedField"/>.
-    /// See the serialization-firewall paragraph in the remarks on
-    /// <see cref="MetadataEndpoints"/> for the rationale.
+    /// via the helpers <see cref="AppendField"/> and
+    /// <see cref="AppendContributedField"/>. See the serialization-firewall
+    /// paragraph in the remarks on <see cref="MetadataEndpoints"/> for the
+    /// rationale.
     /// </para>
     /// </remarks>
     private static EndpointCandidate BuildDiscovery() =>
@@ -277,57 +279,39 @@ public static class MetadataEndpoints
                 sb.Append(issuerValue);
                 sb.Append('"');
 
-                //Endpoint URLs are emitted only when the application has wired
-                //ResolveEndpointUriAsync. Without it the library cannot know what
-                //paths the application serves; the discovery document still
-                //returns valid JSON with only the issuer field, plus any
-                //application-contributed fields. Wire ResolveEndpointUriAsync to
-                //advertise jwks_uri, authorization_endpoint, token_endpoint, and
-                //the rest.
-                if(server.Integration.ResolveEndpointUriAsync is not null)
+                //Phase 9h chunk 9 — endpoint emission walks the per-request
+                //EndpointChain. The dispatcher places it on the context after
+                //ResolveCapabilitiesAsync attenuation and per-candidate URL
+                //resolution, so this loop emits exactly the endpoints active
+                //for this request: capability-vetoed endpoints are absent,
+                //and the advertised URL is the same Uri the matcher will
+                //match against (no drift possible because both read
+                //ServerEndpoint.ResolvedUri).
+                //
+                //Endpoints share a DiscoveryMetadataKey when they share a URL
+                //(JAR variants of PAR/Authorize advertise under their non-JAR
+                //sibling's key; refresh-token shares the token endpoint URL).
+                //Per chunk 6 the JAR variants and refresh-token carry
+                //DiscoveryMetadataKey=null specifically to avoid double-
+                //emission, so the skip-null guard below is the only
+                //deduplication this loop needs.
+                EndpointChain? chain = context.EndpointChain;
+                if(chain is null)
                 {
-                    //For each advertisable capability the registration has, ask
-                    //the application for the absolute URL keyed by the metadata
-                    //field name and emit it. The library never builds paths.
-                    await AppendEndpointAsync(
-                        sb, server, registration, context,
-                        ServerCapabilityName.JwksEndpoint,
-                        AuthorizationServerMetadataParameterNames.JwksUri, ct).ConfigureAwait(false);
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "EndpointChain not on context for discovery emission. "
+                        + "DispatchAsync sets this; this code path is only "
+                        + "reachable through dispatch."));
+                }
 
-                    await AppendEndpointAsync(
-                        sb, server, registration, context,
-                        ServerCapabilityName.PushedAuthorization,
-                        AuthorizationServerMetadataParameterNames.PushedAuthorizationRequestEndpoint, ct).ConfigureAwait(false);
-
-                    await AppendEndpointAsync(
-                        sb, server, registration, context,
-                        ServerCapabilityName.AuthorizationCode,
-                        AuthorizationServerMetadataParameterNames.AuthorizationEndpoint, ct).ConfigureAwait(false);
-
-                    bool hasToken =
-                        registration.IsCapabilityAllowed(ServerCapabilityName.AuthorizationCode) ||
-                        registration.IsCapabilityAllowed(ServerCapabilityName.ClientCredentials) ||
-                        registration.IsCapabilityAllowed(ServerCapabilityName.TokenExchange);
-
-                    if(hasToken)
-                    {
-                        //The token endpoint applies whenever any token-issuing
-                        //grant is enabled; it is not capability-scoped, so the
-                        //application is asked for the URL keyed by the discovery
-                        //metadata field.
-                        Uri? tokenUri = await server.Integration.ResolveEndpointUriAsync(
-                            AuthorizationServerMetadataParameterNames.TokenEndpoint, registration, context, ct)
-                            .ConfigureAwait(false);
-                        if(tokenUri is not null)
-                        {
-                            AppendField(sb, AuthorizationServerMetadataParameterNames.TokenEndpoint, tokenUri.ToString());
-                        }
-                    }
-
-                    await AppendEndpointAsync(
-                        sb, server, registration, context,
-                        ServerCapabilityName.TokenRevocation,
-                        AuthorizationServerMetadataParameterNames.RevocationEndpoint, ct).ConfigureAwait(false);
+                foreach(ServerEndpoint chainEndpoint in chain)
+                {
+                    if(chainEndpoint.DiscoveryMetadataKey is null) { continue; }
+                    AppendField(
+                        sb,
+                        chainEndpoint.DiscoveryMetadataKey,
+                        chainEndpoint.ResolvedUri.ToString());
                 }
 
                 //Application-supplied additional fields merged after the base set.
@@ -354,52 +338,6 @@ public static class MetadataEndpoints
 
 
     //Helpers go below the public surface.
-
-    /// <summary>
-    /// Appends a single discovery-document field whose value is an absolute
-    /// endpoint URL, asking the application's
-    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
-    /// for the URL keyed by <paramref name="metadataKey"/>. No-op when the
-    /// registration does not have <paramref name="capability"/> allowed or
-    /// when the application returns <see langword="null"/> for the URL.
-    /// </summary>
-    /// <remarks>
-    /// Part of the hand-written JSON-construction surface for the discovery
-    /// document; see the serialization-firewall paragraph in the remarks on
-    /// <see cref="MetadataEndpoints"/> for the rationale.
-    /// </remarks>
-    /// <param name="sb">The <see cref="StringBuilder"/> the field is written to.</param>
-    /// <param name="server">The <see cref="AuthorizationServer"/> whose integration delegate composes the URL.</param>
-    /// <param name="registration">The client registration whose capabilities gate field emission.</param>
-    /// <param name="context">The per-request context bag the application's URL composer reads.</param>
-    /// <param name="capability">The capability that must be allowed for this field to be emitted.</param>
-    /// <param name="metadataKey">The discovery-document JSON property name and the endpoint-role key passed to <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    private static async ValueTask AppendEndpointAsync(
-        StringBuilder sb,
-        AuthorizationServer server,
-        ClientRecord registration,
-        RequestContext context,
-        ServerCapabilityName capability,
-        string metadataKey,
-        CancellationToken cancellationToken)
-    {
-        if(!registration.IsCapabilityAllowed(capability))
-        {
-            return;
-        }
-
-        Uri? uri = await server.Integration.ResolveEndpointUriAsync!(
-            metadataKey, registration, context, cancellationToken).ConfigureAwait(false);
-
-        if(uri is null)
-        {
-            return;
-        }
-
-        AppendField(sb, metadataKey, uri.ToString());
-    }
-
 
     /// <summary>
     /// Appends a single string-valued JSON field to the discovery-document

@@ -415,42 +415,16 @@ internal sealed class TestHostShell: IAsyncDisposable
                         new Uri($"{authority}/connect/{segment}/request/{handle}"));
                 }
 
-                //Switch expressions over string require constant patterns; these
-                //metadata keys moved from `const string` to `static readonly string`
-                //for cross-assembly data-block sharing, so the dispatch is written
-                //as an equality chain instead.
+                //Phase 9h chunk 9 — the library asks for endpoint URLs solely
+                //by WellKnownEndpointNames key, both for chain-build URL
+                //resolution and (after the chunk 9 discovery-emission port)
+                //for metadata field emission via the chain walk. Switch
+                //expressions over string require constant patterns; these
+                //identifiers are static readonly strings for cross-assembly
+                //data-block sharing, so the dispatch is written as an
+                //equality chain.
                 string? suffix;
-                if(endpointKey == AuthorizationServerMetadataParameterNames.JwksUri)
-                {
-                    suffix = "jwks";
-                }
-                else if(endpointKey == AuthorizationServerMetadataParameterNames.PushedAuthorizationRequestEndpoint)
-                {
-                    suffix = "par";
-                }
-                else if(endpointKey == AuthorizationServerMetadataParameterNames.AuthorizationEndpoint)
-                {
-                    suffix = "authorize";
-                }
-                else if(endpointKey == AuthorizationServerMetadataParameterNames.TokenEndpoint)
-                {
-                    suffix = "token";
-                }
-                else if(endpointKey == AuthorizationServerMetadataParameterNames.RevocationEndpoint)
-                {
-                    suffix = "revoke";
-                }
-                else if(endpointKey == AuthorizationServerMetadataParameterNames.IntrospectionEndpoint)
-                {
-                    suffix = "introspect";
-                }
-                //Phase 9h chunk 8 — EndpointChain.BuildForRequestAsync calls
-                //this delegate keyed on WellKnownEndpointNames (the candidate
-                //Name). The metadata-parameter-name branches above stay for
-                //MetadataEndpoints.AppendEndpointAsync's existing emission
-                //path; chunk 9 ports that to chain-walk emission and the
-                //metadata-key branches above become removable.
-                else if(endpointKey == WellKnownEndpointNames.AuthCodePar) { suffix = "par"; }
+                if(endpointKey == WellKnownEndpointNames.AuthCodePar) { suffix = "par"; }
                 else if(endpointKey == WellKnownEndpointNames.AuthCodeJarPar) { suffix = "par"; }
                 else if(endpointKey == WellKnownEndpointNames.AuthCodeAuthorize) { suffix = "authorize"; }
                 else if(endpointKey == WellKnownEndpointNames.AuthCodeDirectAuthorize) { suffix = "authorize"; }
