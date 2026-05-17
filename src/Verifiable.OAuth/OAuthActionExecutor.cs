@@ -34,7 +34,7 @@ public sealed class OAuthActionExecutor
 {
     //Keyed by the concrete OAuthAction subtype. Each value is a delegate
     //that accepts the action as OAuthAction and downcasts internally.
-    private readonly Dictionary<Type, Func<OAuthAction, RequestContext, AuthorizationServer, CancellationToken, ValueTask<OAuthFlowInput>>> handlers = new();
+    private readonly Dictionary<Type, Func<OAuthAction, RequestContext, CancellationToken, ValueTask<OAuthFlowInput>>> handlers = new();
 
 
     /// <summary>
@@ -57,7 +57,7 @@ public sealed class OAuthActionExecutor
         //The downcast is safe because ExecuteAsync dispatches by typeof(action).
         if(!handlers.TryAdd(
             typeof(TAction),
-            (action, context, server, ct) => handler((TAction)action, context, server, ct)))
+            (action, context, ct) => handler((TAction)action, context, ct)))
         {
             throw new ArgumentException(
                 $"A handler is already registered for '{typeof(TAction).Name}'.",
@@ -71,10 +71,10 @@ public sealed class OAuthActionExecutor
     /// the <see cref="OAuthFlowInput"/> to feed into the next pure PDA transition.
     /// </summary>
     /// <param name="action">The action to execute.</param>
-    /// <param name="context">The per-request context bag.</param>
-    /// <param name="server">
-    /// The Authorization Server instance carrying all integration, cryptography,
-    /// and codec delegates.
+    /// <param name="context">
+    /// The per-request context bag. Handlers reach the active
+    /// <see cref="AuthorizationServer"/> via
+    /// <see cref="RequestContextExtensions.Server"/>.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="InvalidOperationException">
@@ -83,12 +83,10 @@ public sealed class OAuthActionExecutor
     public ValueTask<OAuthFlowInput> ExecuteAsync(
         OAuthAction action,
         RequestContext context,
-        AuthorizationServer server,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(action);
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(server);
 
         Type actionType = action.GetType();
 
@@ -99,6 +97,6 @@ public sealed class OAuthActionExecutor
                 $"Call Register<{actionType.Name}>() on the executor.");
         }
 
-        return handler(action, context, server, cancellationToken);
+        return handler(action, context, cancellationToken);
     }
 }

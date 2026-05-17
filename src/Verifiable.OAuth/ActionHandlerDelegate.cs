@@ -15,24 +15,21 @@ namespace Verifiable.OAuth;
 /// type in its registry.
 /// </para>
 /// <para>
-/// The handler receives the <see cref="AuthorizationServer"/> instance so it can
-/// read key resolvers, encoder delegates, and other server configuration at call
-/// time without closure capture. Read from the appropriate group:
-/// <c>server.Cryptography.SigningKeyResolver</c>, <c>server.Codecs.Encoder</c>,
-/// and so on.
+/// The handler reaches the <see cref="AuthorizationServer"/> instance for key
+/// resolvers, encoder delegates, and other server configuration via
+/// <see cref="RequestContextExtensions.Server"/> on
+/// <paramref name="context"/>; the dispatcher places the active server on the
+/// context at entry. Read from the appropriate group:
+/// <c>context.Server!.Cryptography.SigningKeyResolver</c>,
+/// <c>context.Server!.Codecs.Encoder</c>, and so on.
 /// </para>
 /// </remarks>
 /// <typeparam name="TAction">The concrete action type this handler processes.</typeparam>
 /// <param name="action">The action to execute.</param>
 /// <param name="context">The per-request context bag.</param>
-/// <param name="server">
-/// The Authorization Server instance carrying all integration, cryptography, and
-/// codec delegates.
-/// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>The input to feed into the next PDA transition.</returns>
 public delegate ValueTask<OAuthFlowInput> ActionHandlerDelegate<in TAction>(
     TAction action,
     RequestContext context,
-    AuthorizationServer server,
     CancellationToken cancellationToken) where TAction: OAuthAction;

@@ -129,14 +129,17 @@ internal static class Rfc9068AccessTokenProducer
 
     private static async ValueTask<TokenProducerOutput> BuildAsync(
         IssuanceContext context,
-        AuthorizationServer server,
         KeyId signingKeyId,
         string algorithm,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(server);
         ArgumentException.ThrowIfNullOrWhiteSpace(algorithm);
+
+        AuthorizationServer server = context.Context.Server
+            ?? throw new InvalidOperationException(
+                "IssuanceContext.Context.Server must be set before "
+                + nameof(Rfc9068AccessTokenProducer) + "." + nameof(BuildAsync) + ".");
 
         TimeSpan lifetime =
             context.Registration.GetTokenLifetime(WellKnownTokenTypes.AccessToken)

@@ -17,18 +17,18 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 /// <param name="fields">The parsed request fields from the HTTP form body or query string.</param>
-/// <param name="context">Application-defined request context parameter bag.</param>
-/// <param name="currentState">The current PDA state before the step.</param>
-/// <param name="server">
-/// The <see cref="AuthorizationServer"/> instance carrying the integration,
-/// cryptography, and codec delegates the implementation needs.
+/// <param name="context">
+/// Application-defined request context parameter bag. Backend access (the
+/// <see cref="AuthorizationServer"/> instance carrying integration,
+/// cryptography, and codec delegates) is reached through
+/// <see cref="RequestContextExtensions.Server"/>.
 /// </param>
+/// <param name="currentState">The current PDA state before the step.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
 public delegate ValueTask<(OAuthFlowInput? Input, ServerHttpResponse? EarlyExit)> BuildInputDelegate(
     RequestFields fields,
     RequestContext context,
     OAuthFlowState currentState,
-    AuthorizationServer server,
     CancellationToken cancellationToken);
 
 

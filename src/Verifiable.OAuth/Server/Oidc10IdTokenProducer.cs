@@ -65,14 +65,17 @@ internal static class Oidc10IdTokenProducer
 
     private static async ValueTask<TokenProducerOutput> BuildAsync(
         IssuanceContext context,
-        AuthorizationServer server,
         KeyId signingKeyId,
         string algorithm,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(server);
         ArgumentException.ThrowIfNullOrWhiteSpace(algorithm);
+
+        AuthorizationServer server = context.Context.Server
+            ?? throw new InvalidOperationException(
+                "IssuanceContext.Context.Server must be set before "
+                + nameof(Oidc10IdTokenProducer) + "." + nameof(BuildAsync) + ".");
 
         TimeSpan lifetime =
             context.Registration.GetTokenLifetime(WellKnownTokenTypes.IdToken)

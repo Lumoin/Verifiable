@@ -135,10 +135,11 @@ public delegate ValueTask<bool> TokenProducerIsApplicableDelegate(
 /// instances that run after the producer.
 /// </para>
 /// </remarks>
-/// <param name="context">The per-request issuance context.</param>
-/// <param name="server">
-/// The Authorization Server instance carrying the integration, cryptography, and
-/// codec delegate groups. Read from the appropriate group for delegate access.
+/// <param name="context">
+/// The per-request issuance context. Producers reach the active
+/// <see cref="AuthorizationServer"/> via
+/// <see cref="RequestContextExtensions.Server"/> on
+/// <see cref="IssuanceContext.Context"/>.
 /// </param>
 /// <param name="signingKeyId">The signing <see cref="KeyId"/> resolved by the endpoint.</param>
 /// <param name="algorithm">The JWA algorithm identifier derived from the resolved key.</param>
@@ -146,7 +147,6 @@ public delegate ValueTask<bool> TokenProducerIsApplicableDelegate(
 /// <returns>The header and base payload for the token.</returns>
 public delegate ValueTask<TokenProducerOutput> TokenProducerBuildDelegate(
     IssuanceContext context,
-    AuthorizationServer server,
     KeyId signingKeyId,
     string algorithm,
     CancellationToken cancellationToken);
