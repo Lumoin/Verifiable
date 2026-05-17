@@ -368,9 +368,25 @@ public static class RegistrationEndpoints
             StartsNewFlow = true,
             Kind = FlowKind.Stateless,
 
-            //Stub matcher — real port lands in chunk 7.
-            MatchesRequest = static (fields, context, endpoint, ct) =>
-                ValueTask.FromResult<MatchPayload?>(null),
+            //Acceptance test: the management endpoints all share the same URL
+            //distinguished only by HTTP method; each chain entry's endpoint
+            //carries its own HttpMethod so a single Read/Update/Delete entry
+            //only accepts its own verb.
+            MatchesRequest = (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.Equals(req.Method, httpMethod))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
 
             BuildInputAsync = async (fields, context, currentState, ct) =>
             {

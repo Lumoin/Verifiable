@@ -24,8 +24,10 @@ public static class WellKnownEndpointNames
 {
     //AuthCode family
     public static readonly string AuthCodePar = "AuthCode.Par";
+    public static readonly string AuthCodeJarPar = "AuthCode.JarPar";
     public static readonly string AuthCodeAuthorize = "AuthCode.Authorize";
     public static readonly string AuthCodeDirectAuthorize = "AuthCode.DirectAuthorize";
+    public static readonly string AuthCodeAuthorizeJarByValue = "AuthCode.AuthorizeJarByValue";
     public static readonly string AuthCodeToken = "AuthCode.Token";
     public static readonly string AuthCodeRefreshToken = "AuthCode.RefreshToken";
     public static readonly string AuthCodeRevoke = "AuthCode.Revoke";

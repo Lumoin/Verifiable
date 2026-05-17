@@ -1396,8 +1396,8 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// in flight) construct a fresh empty <see cref="RequestContext"/> at
     /// the call site.
     /// </summary>
-    public EndpointChain GetEndpoints(ClientRecord registration, RequestContext context)
-        => Server.GetEndpoints(registration, context);
+    public ValueTask<EndpointChain> GetEndpointsAsync(ClientRecord registration, RequestContext context)
+        => Server.GetEndpointsAsync(registration, context);
 
 
     /// <summary>

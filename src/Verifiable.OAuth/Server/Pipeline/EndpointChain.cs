@@ -144,7 +144,7 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// <exception cref="ArgumentNullException">
     /// Thrown when any argument is <see langword="null"/>.
     /// </exception>
-    public static EndpointChain BuildForRequest(
+    public static async ValueTask<EndpointChain> BuildForRequestInterimAsync(
         ClientRecord registration,
         RequestContext context,
         AuthorizationServer server)
@@ -159,13 +159,75 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
             return Empty;
         }
 
+        //Phase 9h interim scaffolding — bridges chunk 6 (builders now return
+        //EndpointCandidate) with chunk 8 (DispatchAsync rewrite that calls
+        //ResolveCapabilitiesAsync + ResolveEndpointUriAsync). Synthesises
+        //ResolvedUri from a WellKnownEndpointNames-keyed switch using the
+        //library's library-internal /connect/{segment}/<suffix> path family;
+        //the proper async BuildForRequestAsync (chunk 8) calls
+        //Integration.ResolveEndpointUriAsync. Delete alongside that work.
         List<ServerEndpoint> endpoints = [];
         foreach(EndpointBuilderDelegate builder in builders)
         {
-            endpoints.AddRange(builder(registration, context, server));
+            IReadOnlyList<EndpointCandidate> candidates = await builder(
+                registration, context, CancellationToken.None).ConfigureAwait(false);
+
+            string segment = registration.TenantId.Value;
+            foreach(EndpointCandidate candidate in candidates)
+            {
+                Uri? uri = SynthesiseInterimUri(candidate.Name, segment);
+                if(uri is null) { continue; }
+
+                endpoints.Add(new ServerEndpoint
+                {
+                    Name = candidate.Name,
+                    HttpMethod = candidate.HttpMethod,
+                    Capability = candidate.Capability,
+                    Kind = candidate.Kind,
+                    StartsNewFlow = candidate.StartsNewFlow,
+                    MatchesRequest = candidate.MatchesRequest,
+                    BuildInputAsync = candidate.BuildInputAsync,
+                    BuildResponse = candidate.BuildResponse,
+                    ExtractCorrelationKey = candidate.ExtractCorrelationKey,
+                    ResolvedUri = uri,
+                    DiscoveryMetadataKey = candidate.DiscoveryMetadataKey
+                });
+            }
         }
 
         return new EndpointChain(endpoints.ToArray());
+    }
+
+
+    //Phase 9h interim — see BuildForRequestInterimAsync.
+    private static Uri? SynthesiseInterimUri(string endpointName, string segment)
+    {
+        string? suffix;
+        if(endpointName == WellKnownEndpointNames.AuthCodePar) { suffix = "par"; }
+        else if(endpointName == WellKnownEndpointNames.AuthCodeJarPar) { suffix = "par"; }
+        else if(endpointName == WellKnownEndpointNames.AuthCodeAuthorize) { suffix = "authorize"; }
+        else if(endpointName == WellKnownEndpointNames.AuthCodeDirectAuthorize) { suffix = "authorize"; }
+        else if(endpointName == WellKnownEndpointNames.AuthCodeAuthorizeJarByValue) { suffix = "authorize"; }
+        else if(endpointName == WellKnownEndpointNames.AuthCodeToken) { suffix = "token"; }
+        else if(endpointName == WellKnownEndpointNames.AuthCodeRefreshToken) { suffix = "token"; }
+        else if(endpointName == WellKnownEndpointNames.AuthCodeRevoke) { suffix = "revoke"; }
+        else if(endpointName == WellKnownEndpointNames.AuthCodeIntrospect) { suffix = "introspect"; }
+        else if(endpointName == WellKnownEndpointNames.MetadataJwks) { suffix = "jwks"; }
+        else if(endpointName == WellKnownEndpointNames.MetadataDiscovery) { suffix = ".well-known/openid-configuration"; }
+        else if(endpointName == WellKnownEndpointNames.RegistrationRegister) { suffix = "register"; }
+        //OID4VP endpoints aren't path-matched against ResolvedUri (their
+        //matchers are context-state-driven on TransactionNonce/CorrelationKey),
+        //but the chain build still needs a non-null URI so the candidates
+        //land in the chain. The synthesised URIs match the library's path
+        //convention without claiming to be deployment-correct.
+        else if(endpointName == WellKnownEndpointNames.Oid4VpPar) { suffix = "par"; }
+        else if(endpointName == WellKnownEndpointNames.Oid4VpJarRequest) { suffix = "request"; }
+        else if(endpointName == WellKnownEndpointNames.Oid4VpDirectPost) { suffix = "cb"; }
+        else { suffix = null; }
+
+        if(suffix is null) { return null; }
+
+        return new Uri($"https://interim.local/connect/{segment}/{suffix}");
     }
 
 
@@ -235,7 +297,7 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
         {
             ServerEndpoint endpoint = Endpoints[i];
 
-            MatchPayload? payload = await endpoint.MatchesRequest(fields, context, cancellationToken)
+            MatchPayload? payload = await endpoint.MatchesRequest(fields, context, endpoint, cancellationToken)
                 .ConfigureAwait(false);
             if(payload is null)
             {
@@ -265,7 +327,7 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
         {
             ServerEndpoint endpoint = Endpoints[i];
 
-            MatchPayload? payload = await endpoint.MatchesRequest(fields, context, cancellationToken)
+            MatchPayload? payload = await endpoint.MatchesRequest(fields, context, endpoint, cancellationToken)
                 .ConfigureAwait(false);
             if(payload is null)
             {

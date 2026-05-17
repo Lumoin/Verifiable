@@ -137,12 +137,20 @@ public static class Oid4VpEndpoints
             //DiscoveryMetadataKey null per v2 MD Step 12 table — OID4VP
             //endpoints aren't advertised in the OAuth discovery document.
 
-            //Stub matcher — real port lands in chunk 7. The original
-            //acceptance test was context-state-driven (TransactionNonce,
-            //PreparedQuery, DecryptionKeyId presence) and survives the
-            //port intact.
+            //Acceptance test: context-state driven (TransactionNonce +
+            //PreparedQuery + DecryptionKeyId). This endpoint is invoked
+            //internally by the verifier application, not from a wire HTTP
+            //request, so it does not path-match against ResolvedUri.
+            //Disjointness vs the wire-driven AuthCode PAR matcher is enforced
+            //by inverse signals (AuthCode PAR requires CodeChallenge in the
+            //body and TransactionNonce absent from context).
             MatchesRequest = static (fields, context, endpoint, ct) =>
-                ValueTask.FromResult<MatchPayload?>(null),
+            {
+                if(context.TransactionNonce is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(context.PreparedQuery is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(context.DecryptionKeyId is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
 
             BuildInputAsync = async (fields, context, currentState, ct) =>
             {
@@ -285,9 +293,24 @@ public static class Oid4VpEndpoints
             Kind = FlowKind.Oid4VpVerifierServer,
             //DiscoveryMetadataKey null per v2 MD Step 12 table.
 
-            //Stub matcher — real port lands in chunk 7.
+            //Acceptance test: GET to the JAR fetch URL with the application's
+            //CorrelationKey populated on context. The skin extracts the
+            //{flowId} path segment into CorrelationKey before dispatch since
+            //the JAR-URL mount point is not fixed across deployments.
             MatchesRequest = static (fields, context, endpoint, ct) =>
-                ValueTask.FromResult<MatchPayload?>(null),
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsGet(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(string.IsNullOrWhiteSpace(context.CorrelationKey))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
@@ -355,9 +378,32 @@ public static class Oid4VpEndpoints
             Kind = FlowKind.Oid4VpVerifierServer,
             //DiscoveryMetadataKey null per v2 MD Step 12 table.
 
-            //Stub matcher — real port lands in chunk 7.
+            //Acceptance test: POST to /cb for this registration with response
+            //(encrypted JWE per HAIP) and state (the request_uri token echo
+            //per OID4VP §6.1) both present in the body.
             MatchesRequest = static (fields, context, endpoint, ct) =>
-                ValueTask.FromResult<MatchPayload?>(null),
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Response))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.State))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
 
             //The Wallet echoes the JAR's state claim as the state form field per
             //OID4VP 1.0 §6.1 and RFC 6749 §4.1.1. The state value equals the

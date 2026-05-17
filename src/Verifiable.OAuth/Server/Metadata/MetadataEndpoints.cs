@@ -123,12 +123,25 @@ public static class MetadataEndpoints
             Kind = FlowKind.Stateless,
             DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.JwksUri,
 
-            //Stub matcher — real port lands in chunk 7. Returning null
-            //means this endpoint matches nothing while chunks 5-6 sit at
-            //the half-cascade state; the suite only re-runs at chunk 7's
-            //green-build.
+            //Acceptance test: GET to the JWKS URL for this registration. The
+            //chain build guarantees registration is loaded and capability is
+            //allowed before any matcher runs; path comparison goes against the
+            //endpoint's per-request ResolvedUri.
             MatchesRequest = static (fields, context, endpoint, ct) =>
-                ValueTask.FromResult<MatchPayload?>(null),
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsGet(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
 
             //The JWKS endpoint is stateless — it does not step the PDA. BuildInputAsync
             //builds the complete response and returns it as an early exit. BuildResponse
@@ -211,9 +224,22 @@ public static class MetadataEndpoints
             //DiscoveryMetadataKey is null — the discovery endpoint isn't itself
             //advertised in the discovery document; clients hit a well-known URL.
 
-            //Stub matcher — real port lands in chunk 7.
+            //Acceptance test: GET to the discovery URL for this registration.
             MatchesRequest = static (fields, context, endpoint, ct) =>
-                ValueTask.FromResult<MatchPayload?>(null),
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsGet(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(endpoint.ResolvedUri is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {

@@ -309,7 +309,7 @@ internal sealed class JarAuthorizeByValueTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, DirectOnlyCapabilities);
 
-        EndpointChain chain = host.GetEndpoints(material.Registration, new RequestContext());
+        EndpointChain chain = await host.GetEndpointsAsync(material.Registration, new RequestContext()).ConfigureAwait(false);
 
         bool hasJarAuthorize = chain.Any(e => string.Equals(
             e.Name, "AuthCode.AuthorizeJarByValue", StringComparison.Ordinal));
@@ -325,7 +325,7 @@ internal sealed class JarAuthorizeByValueTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarOnlyCapabilities);
 
-        EndpointChain chain = host.GetEndpoints(material.Registration, new RequestContext());
+        EndpointChain chain = await host.GetEndpointsAsync(material.Registration, new RequestContext()).ConfigureAwait(false);
 
         bool hasJarAuthorize = chain.Any(e => string.Equals(
             e.Name, "AuthCode.AuthorizeJarByValue", StringComparison.Ordinal));

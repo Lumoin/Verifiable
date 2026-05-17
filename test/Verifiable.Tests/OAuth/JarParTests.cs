@@ -628,7 +628,7 @@ internal sealed class JarParTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, ParOnlyCapabilities);
 
-        EndpointChain chain = host.GetEndpoints(material.Registration, new RequestContext());
+        EndpointChain chain = await host.GetEndpointsAsync(material.Registration, new RequestContext()).ConfigureAwait(false);
 
         bool hasJarPar = chain.Any(e => string.Equals(
             e.Name, "AuthCode.JarPar", StringComparison.Ordinal));
@@ -644,7 +644,7 @@ internal sealed class JarParTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarOnlyCapabilities);
 
-        EndpointChain chain = host.GetEndpoints(material.Registration, new RequestContext());
+        EndpointChain chain = await host.GetEndpointsAsync(material.Registration, new RequestContext()).ConfigureAwait(false);
 
         bool hasJarPar = chain.Any(e => string.Equals(
             e.Name, "AuthCode.JarPar", StringComparison.Ordinal));

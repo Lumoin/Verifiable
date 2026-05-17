@@ -216,8 +216,10 @@ public static class HaipOid4VpVerifierExecutor
     {
         var executor = new OAuthActionExecutor();
 
-        executor.Register<SignJarAction>(async (action, context, server, ct) =>
+        executor.Register<SignJarAction>(async (action, context, ct) =>
         {
+            AuthorizationServer server = context.Server!;
+
             TenantId tenantId = context.TenantId
                 ?? throw new InvalidOperationException(
                     "Tenant identifier not found in context.");
@@ -289,8 +291,10 @@ public static class HaipOid4VpVerifierExecutor
             return new ServerJarSigned(jarInput.Jar, compactJar, servedAt);
         });
 
-        executor.Register<DecryptResponseAction>(async (action, context, server, ct) =>
+        executor.Register<DecryptResponseAction>(async (action, context, ct) =>
         {
+            AuthorizationServer server = context.Server!;
+
             PrivateKeyMemory? decryptionKey = await server.Cryptography.DecryptionKeyResolver!(
                 action.DecryptionKeyId, context, ct).ConfigureAwait(false);
 

@@ -273,12 +273,12 @@ public sealed class AuthorizationServer: IDisposable
     /// <param name="context">
     /// The per-request context threaded through to each builder.
     /// </param>
-    public EndpointChain GetEndpoints(ClientRecord registration, RequestContext context)
+    public ValueTask<EndpointChain> GetEndpointsAsync(ClientRecord registration, RequestContext context)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
 
-        return EndpointChain.BuildForRequest(registration, context, this);
+        return EndpointChain.BuildForRequestInterimAsync(registration, context, this);
     }
 
 
@@ -371,8 +371,11 @@ public sealed class AuthorizationServer: IDisposable
         using Activity? activity = Diagnostics.OAuthActivitySource.Source.StartActivity(
             Diagnostics.OAuthActivityNames.Handle);
 
-        //Place the typed request envelope on the context. Matchers and handlers
-        //read path, method, headers, and route values from here.
+        //Place the active server and typed request envelope on the context.
+        //Matchers and handlers reach backend delegates via context.Server!;
+        //chunk 8 will rewrite DispatchAsync to also fire InspectAsync stages
+        //around this entry point.
+        context.SetServer(this);
         context.SetIncomingRequest(request);
 
         //Single response variable so the status code tag below covers every
@@ -429,7 +432,7 @@ public sealed class AuthorizationServer: IDisposable
                 //config, the typed IncomingRequest envelope). The walk does
                 //not pre-filter on capability or method; each matcher's body
                 //declares its complete acceptance test.
-                EndpointChain chain = GetEndpoints(registration, context);
+                EndpointChain chain = await GetEndpointsAsync(registration, context).ConfigureAwait(false);
                 MatchedEndpoint? matched = await chain.MatchAsync(
                     request.Fields, context, cancellationToken).ConfigureAwait(false);
 
@@ -518,7 +521,7 @@ public sealed class AuthorizationServer: IDisposable
 
             (OAuthFlowInput? _, ServerHttpResponse? statelessEarlyExit) =
                 await endpoint.BuildInputAsync(
-                    fields, context, statelessSentinel, this, cancellationToken)
+                    fields, context, statelessSentinel, cancellationToken)
                     .ConfigureAwait(false);
 
             return statelessEarlyExit ?? ServerHttpResponse.ServerError(
@@ -622,7 +625,7 @@ public sealed class AuthorizationServer: IDisposable
         //5. Build the input — effectful work happens here, outside the PDA.
         (OAuthFlowInput? input, ServerHttpResponse? earlyExit) =
             await endpoint.BuildInputAsync(
-                fields, context, currentState, this, cancellationToken).ConfigureAwait(false);
+                fields, context, currentState, cancellationToken).ConfigureAwait(false);
 
         if(earlyExit is not null)
         {
@@ -637,7 +640,6 @@ public sealed class AuthorizationServer: IDisposable
                 input!,
                 ActionExecutor,
                 context,
-                this,
                 TimeProvider,
                 cancellationToken).ConfigureAwait(false);
 
