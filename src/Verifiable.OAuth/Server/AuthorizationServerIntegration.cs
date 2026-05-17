@@ -126,7 +126,56 @@ public sealed class AuthorizationServerIntegration
     /// Context-sensitive capability check. When <see langword="null"/>, falls
     /// back to <see cref="ClientRecord.IsCapabilityAllowed"/>. Optional.
     /// </summary>
+    /// <remarks>
+    /// Slated for deletion in Phase 9h chunk 8 when the chain-build filter via
+    /// <see cref="ResolveCapabilitiesAsync"/> subsumes per-call capability
+    /// gating; left in place for now so existing callers (
+    /// <see cref="AuthorizationServer.CheckCapabilityAsync"/>, removed in the
+    /// same chunk) continue to compile.
+    /// </remarks>
     public IsCapabilityAllowedDelegate? IsCapabilityAllowedAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the per-request capability set active for a registration.
+    /// Consulted once per request by
+    /// <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/>; the returned
+    /// set filters which builder-produced candidates land in the chain. Wire
+    /// to <see cref="DefaultCapabilityResolver.ResolveAsync"/> for the
+    /// no-attenuation default (every registration capability is active).
+    /// </summary>
+    /// <remarks>
+    /// Becomes required at <see cref="Validate"/> time in Phase 9h chunk 12
+    /// once <c>TestHostShell</c> wires the library default; until then the
+    /// slot is nullable and unread by dispatch.
+    /// </remarks>
+    public ResolveCapabilitiesDelegate? ResolveCapabilitiesAsync { get; set; }
+
+    /// <summary>
+    /// Invoked at each pipeline inspection stage (see
+    /// <see cref="InspectionStage"/>). Wire to
+    /// <see cref="DefaultInspector.NoOpAsync"/> for deployments that don't
+    /// need observation; supply a custom delegate to record audit trails,
+    /// emit OpenTelemetry events, or forward SSF/CAEP signals.
+    /// </summary>
+    /// <remarks>
+    /// Becomes required at <see cref="Validate"/> time in Phase 9h chunk 12.
+    /// </remarks>
+    public InspectDelegate? InspectAsync { get; set; }
+
+    /// <summary>
+    /// Maps the authenticated end-user identifier to the subject identifier
+    /// emitted in tokens for a registration — public (identity) or pairwise
+    /// (per-sector hash) per OIDC Core §8. Wire to
+    /// <see cref="DefaultSubjectIdentifierResolver.PublicAsync"/> for the
+    /// identity default.
+    /// </summary>
+    /// <remarks>
+    /// Added in Phase 9h chunk 4 structurally so Phase A's UserInfo wiring
+    /// does not have to revisit this surface. Becomes required at
+    /// <see cref="Validate"/> time in Phase 9h chunk 12; no library
+    /// producer reads it in 9h.
+    /// </remarks>
+    public ResolveSubjectIdentifierDelegate? ResolveSubjectIdentifierAsync { get; set; }
 
     /// <summary>
     /// Fetches and validates Client ID Metadata Documents for CIMD clients.

@@ -172,4 +172,29 @@ public sealed record ServerEndpoint
     /// logging.
     /// </summary>
     public required BuildResponseDelegate BuildResponse { get; init; }
+
+    /// <summary>
+    /// The per-request absolute URL this endpoint is reachable at, computed
+    /// by <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/> via
+    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// once per request. Matchers compare the inbound path against
+    /// <see cref="Uri.AbsolutePath"/> rather than carrying path templates
+    /// themselves; discovery emission reads it for the
+    /// <see cref="DiscoveryMetadataKey"/> field publication.
+    /// </summary>
+    /// <remarks>
+    /// Phase 9h interim: nullable while builders still construct
+    /// <see cref="ServerEndpoint"/> directly. Tightens to <c>required</c>
+    /// in chunk 8 when <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/>
+    /// becomes the sole construction site.
+    /// </remarks>
+    public Uri? ResolvedUri { get; init; }
+
+    /// <summary>
+    /// The discovery-document field name under which this endpoint's
+    /// <see cref="ResolvedUri"/> is published (e.g. <c>token_endpoint</c>,
+    /// <c>jwks_uri</c>). <see langword="null"/> for endpoints that do not
+    /// appear in discovery.
+    /// </summary>
+    public string? DiscoveryMetadataKey { get; init; }
 }
