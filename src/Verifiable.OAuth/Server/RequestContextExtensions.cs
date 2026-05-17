@@ -344,5 +344,92 @@ public static class RequestContextExtensions
             ArgumentNullException.ThrowIfNull(payload);
             context[AuthorizationServerHandlers.MatchPayloadKey] = payload;
         }
+
+
+        /// <summary>
+        /// Gets the active <see cref="AuthorizationServer"/> placed on the
+        /// context at <see cref="AuthorizationServer.DispatchAsync"/> entry.
+        /// Every per-request delegate that needs backend access (cryptography,
+        /// codecs, integration delegates) reads it from here rather than
+        /// receiving the server as a separate parameter.
+        /// </summary>
+        /// <returns>
+        /// The active <see cref="AuthorizationServer"/>, or
+        /// <see langword="null"/> when the dispatcher has not yet stamped it
+        /// (the typical state for the brief window before dispatch begins).
+        /// </returns>
+        public AuthorizationServer? Server =>
+            context.TryGetValue(AuthorizationServerHandlers.ServerKey, out object? v)
+                && v is AuthorizationServer server ? server : null;
+
+        /// <summary>
+        /// Sets the active <see cref="AuthorizationServer"/> on the request
+        /// context. Called by the dispatcher at the start of every request;
+        /// not normally called from application code.
+        /// </summary>
+        /// <param name="server">The active authorization server.</param>
+        public void SetServer(AuthorizationServer server)
+        {
+            ArgumentNullException.ThrowIfNull(server);
+            context[AuthorizationServerHandlers.ServerKey] = server;
+        }
+
+
+        /// <summary>
+        /// Gets the per-request <see cref="EndpointChain"/> the dispatcher
+        /// built via <see cref="EndpointChain.BuildForRequestAsync"/>.
+        /// Available to inspectors, discovery emission, and any delegate
+        /// that needs to project the chain (e.g., to compute capability-
+        /// derived discovery flags from chain membership).
+        /// </summary>
+        /// <returns>
+        /// The per-request chain, or <see langword="null"/> when the
+        /// dispatcher has not yet built it.
+        /// </returns>
+        public EndpointChain? EndpointChain =>
+            context.TryGetValue(AuthorizationServerHandlers.EndpointChainKey, out object? v)
+                && v is EndpointChain chain ? chain : null;
+
+        /// <summary>
+        /// Sets the per-request <see cref="EndpointChain"/>. Called by the
+        /// dispatcher after the chain is built; not normally called from
+        /// application code.
+        /// </summary>
+        /// <param name="chain">The per-request endpoint chain.</param>
+        public void SetEndpointChain(EndpointChain chain)
+        {
+            ArgumentNullException.ThrowIfNull(chain);
+            context[AuthorizationServerHandlers.EndpointChainKey] = chain;
+        }
+
+
+        /// <summary>
+        /// Gets the <see cref="ConfirmationMethod"/> binding the issuance
+        /// pipeline established for the current request (typically the DPoP
+        /// <c>jkt</c> thumbprint per RFC 9449 §6.1). Claim contributors
+        /// emitting confirmation-related claims (e.g., <c>cnf.jkt</c> in an
+        /// ID Token) read from this single per-request source rather than
+        /// chasing producer-specific fields.
+        /// </summary>
+        /// <returns>
+        /// The confirmation method, or <see langword="null"/> when no
+        /// binding was established (Bearer issuance).
+        /// </returns>
+        public ConfirmationMethod? Confirmation =>
+            context.TryGetValue(AuthorizationServerHandlers.ConfirmationKey, out object? v)
+                && v is ConfirmationMethod confirmation ? confirmation : null;
+
+        /// <summary>
+        /// Sets the <see cref="ConfirmationMethod"/> binding on the request
+        /// context. Called by the issuance pipeline before walking claim
+        /// contributors so contributors read from the same per-request
+        /// source as every other resolved value.
+        /// </summary>
+        /// <param name="confirmation">The confirmation method.</param>
+        public void SetConfirmation(ConfirmationMethod confirmation)
+        {
+            ArgumentNullException.ThrowIfNull(confirmation);
+            context[AuthorizationServerHandlers.ConfirmationKey] = confirmation;
+        }
     }
 }

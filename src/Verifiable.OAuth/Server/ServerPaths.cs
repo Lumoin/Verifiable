@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.OAuth.Server.Routing;
 
 namespace Verifiable.OAuth.Server;
 
@@ -129,35 +130,11 @@ public static class ServerPaths
     }
 
 
-    /// <summary>
-    /// Strips query string and fragment from <paramref name="path"/>, then
-    /// strips trailing slash, then compares for exact equality with
-    /// <paramref name="other"/> (which is assumed already-normalized — it
-    /// comes from a library-defined template).
-    /// </summary>
-    private static bool PathEquals(string path, string other)
-    {
-        ReadOnlySpan<char> pathSpan = path.AsSpan();
-
-        //Strip query string and fragment.
-        int queryStart = pathSpan.IndexOf('?');
-        if(queryStart >= 0)
-        {
-            pathSpan = pathSpan[..queryStart];
-        }
-
-        int fragmentStart = pathSpan.IndexOf('#');
-        if(fragmentStart >= 0)
-        {
-            pathSpan = pathSpan[..fragmentStart];
-        }
-
-        //Strip a single trailing slash, but not the root slash itself.
-        if(pathSpan.Length > 1 && pathSpan[^1] == '/')
-        {
-            pathSpan = pathSpan[..^1];
-        }
-
-        return pathSpan.SequenceEqual(other.AsSpan());
-    }
+    //The private PathEquals helper that lived here previously now forwards
+    //to the public Routing.PathEquals so there's a single implementation.
+    //ServerPaths itself is slated for deletion in Phase 9h chunk 7 once the
+    //matchers stop calling IsEndpoint/IsGlobalEndpoint; until then this
+    //forwarder keeps the existing surface working without code duplication.
+    private static bool PathEquals(string path, string other) =>
+        Routing.PathEquals.Equals(path, other);
 }

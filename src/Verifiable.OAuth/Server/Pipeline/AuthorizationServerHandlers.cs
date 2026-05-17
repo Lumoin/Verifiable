@@ -131,4 +131,32 @@ internal static class AuthorizationServerHandlers
     /// delegate) get <see cref="MatchPayload.Empty"/>.
     /// </remarks>
     public const string MatchPayloadKey = "server.matchPayload";
+
+    /// <summary>
+    /// Key for the active <see cref="AuthorizationServer"/> placed on the
+    /// context at <see cref="AuthorizationServer.DispatchAsync"/> entry so
+    /// every downstream per-request delegate can read it via
+    /// <see cref="RequestContextExtensions.Server"/> rather than receiving
+    /// it as a separate parameter. Phase 9h's server-on-context discipline.
+    /// </summary>
+    public const string ServerKey = "server.authorizationServer";
+
+    /// <summary>
+    /// Key for the per-request <see cref="EndpointChain"/> placed on the
+    /// context after <see cref="EndpointChain.BuildForRequestAsync"/>
+    /// completes. Read by discovery emission (which walks the chain) and by
+    /// inspectors that need to know which endpoints survived the capability
+    /// filter for the current registration. Phase 9h.
+    /// </summary>
+    public const string EndpointChainKey = "server.endpointChain";
+
+    /// <summary>
+    /// Key for the <see cref="ConfirmationMethod"/> binding the issuance
+    /// pipeline established for the current request (typically the DPoP
+    /// <c>jkt</c> thumbprint per RFC 9449 §6.1). Producer code sets this
+    /// before walking claim contributors so contributors that emit
+    /// confirmation-related claims read it from the same per-request
+    /// source as every other resolved value. Phase 9h.
+    /// </summary>
+    public const string ConfirmationKey = "server.confirmation";
 }
