@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Verifiable.OAuth.Server;
+namespace Verifiable.OAuth.Server.Pipeline;
 
 /// <summary>
 /// Library default backing for
