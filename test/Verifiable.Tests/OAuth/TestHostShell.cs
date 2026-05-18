@@ -615,7 +615,6 @@ internal sealed class TestHostShell: IAsyncDisposable
                     TokenProducer.Rfc9068AccessToken,
                     TokenProducer.Oidc10IdToken
                 ]),
-                ClaimContributors = ClaimContributorSet.Empty,
                 ClaimIssuer = ContributionProfiles.StandardClaimIssuer(timeProvider)
             },
 

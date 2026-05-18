@@ -25,11 +25,11 @@ namespace Verifiable.OAuth.Server;
 /// <para>
 /// The composable surface — <see cref="ServerConfiguration.EndpointBuilders"/>,
 /// <see cref="ServerConfiguration.TokenProducers"/>,
-/// <see cref="ServerConfiguration.ClaimContributors"/> — lives on
+/// <see cref="ServerConfiguration.ClaimIssuer"/> — lives on
 /// <see cref="Configuration"/>, an immutable snapshot that the running server
 /// can swap atomically via <see cref="ApplyConfiguration"/>. Endpoint modules
-/// can be added or removed, new token producers can be registered, claim
-/// contributors can be reordered — each change commits as a new
+/// can be added or removed, new token producers can be registered, the
+/// composed claim issuer can be swapped — each change commits as a new
 /// <see cref="ServerConfiguration"/>. <see cref="ActionExecutor"/> remains
 /// directly mutable.
 /// </para>
@@ -57,7 +57,7 @@ namespace Verifiable.OAuth.Server;
 ///             MetadataEndpoints.Builder
 ///         ]),
 ///         TokenProducers = TokenProducerSet.Empty,
-///         ClaimContributors = ClaimContributorSet.Empty
+///         ClaimIssuer = ContributionProfiles.StandardClaimIssuer(timeProvider)
 ///     }
 /// };
 ///
@@ -222,16 +222,6 @@ public sealed class AuthorizationServer: IDisposable
                 $"{nameof(AuthorizationServer)} requires at least one entry in {nameof(ServerConfiguration)}.{nameof(ServerConfiguration.EndpointBuilders)}.");
         }
 
-        if(Configuration.ClaimIssuer is null)
-        {
-            throw new InvalidOperationException(
-                $"{nameof(ServerConfiguration)}.{nameof(ServerConfiguration.ClaimIssuer)} must be set. "
-                + "Application code wires "
-                + "ContributionProfiles.StandardClaimIssuer(timeProvider) for the standard "
-                + "OIDC contributor set, or composes a "
-                + "ClaimIssuer<ClaimContributionTarget> with a custom rule list.");
-        }
-
         IsValidated = true;
     }
 
@@ -249,11 +239,11 @@ public sealed class AuthorizationServer: IDisposable
     /// <remarks>
     /// <para>
     /// Use to commit multiple correlated changes — adding a builder, adding a
-    /// producer, adding a contributor — atomically. Compose the new
+    /// producer, swapping the claim issuer — atomically. Compose the new
     /// configuration off-line via the
     /// <see cref="ServerConfiguration.WithEndpointBuilders"/>,
     /// <see cref="ServerConfiguration.WithTokenProducers"/>, and
-    /// <see cref="ServerConfiguration.WithClaimContributors"/> non-destructive
+    /// <see cref="ServerConfiguration.WithClaimIssuer"/> non-destructive
     /// updates, then commit it through this method.
     /// </para>
     /// </remarks>

@@ -7,25 +7,26 @@ namespace Verifiable.OAuth.Server;
 /// <summary>
 /// An immutable snapshot of the <see cref="AuthorizationServer"/>'s composable
 /// configuration: the endpoint builders that contribute protocol flows, the
-/// token producers that compose token-endpoint responses, and the claim
-/// contributors that decorate token payloads.
+/// token producers that compose token-endpoint responses, and the composed
+/// <see cref="ClaimIssuer{T}"/> that emits the additional claims merged into
+/// token payloads.
 /// </summary>
 /// <remarks>
 /// <para>
 /// <see cref="ServerConfiguration"/> is the unit of atomic change. Mutating
-/// the running server's set of endpoint builders, token producers, or claim
-/// contributors happens by constructing a new <see cref="ServerConfiguration"/>
+/// the running server's set of endpoint builders, token producers, or the
+/// claim issuer happens by constructing a new <see cref="ServerConfiguration"/>
 /// and calling <see cref="AuthorizationServer.ApplyConfiguration"/>. The
 /// reference swap is atomic; in-flight dispatches that captured the previous
 /// configuration finish on it; new dispatches see the new one. Multiple
-/// correlated changes — adding a builder, adding a producer, adding a
-/// contributor — commit together.
+/// correlated changes — adding a builder, adding a producer, swapping the
+/// issuer — commit together.
 /// </para>
 /// <para>
-/// The three set types (<see cref="EndpointBuilderSet"/>,
-/// <see cref="TokenProducerSet"/>, <see cref="ClaimContributorSet"/>) are
-/// themselves immutable; this configuration is a value-shaped wrapper around
-/// references to those sets.
+/// The two set types (<see cref="EndpointBuilderSet"/> and
+/// <see cref="TokenProducerSet"/>) are themselves immutable; this
+/// configuration is a value-shaped wrapper around references to those sets
+/// plus the immutable <see cref="ClaimIssuer{T}"/>.
 /// </para>
 /// <para>
 /// <strong>Concurrency.</strong>
@@ -37,19 +38,30 @@ namespace Verifiable.OAuth.Server;
 /// reference is fully visible to subsequent reads.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("ServerConfiguration EndpointBuilders={EndpointBuilders.Count} TokenProducers={TokenProducers.Count} ClaimContributors={ClaimContributors.Count}")]
+[DebuggerDisplay("ServerConfiguration EndpointBuilders={EndpointBuilders.Count} TokenProducers={TokenProducers.Count}")]
 public sealed record ServerConfiguration
 {
     /// <summary>
-    /// An empty configuration carrying empty sets for all three surfaces.
-    /// Useful as a starting point for compositional construction:
+    /// An empty configuration carrying empty builder and producer sets and
+    /// an empty (rule-less) <see cref="ClaimIssuer{T}"/>. Useful as a
+    /// starting point for compositional construction:
     /// <c>ServerConfiguration.Empty.WithEndpointBuilders(...)</c>.
     /// </summary>
+    /// <remarks>
+    /// The empty issuer carries no rules — equivalent to "no claim
+    /// contributions are produced." Applications composing from
+    /// <see cref="Empty"/> typically replace the issuer via
+    /// <c>this with { ClaimIssuer = ContributionProfiles.StandardClaimIssuer(timeProvider) }</c>
+    /// before applying the configuration.
+    /// </remarks>
     public static ServerConfiguration Empty { get; } = new()
     {
         EndpointBuilders = EndpointBuilderSet.Empty,
         TokenProducers = TokenProducerSet.Empty,
-        ClaimContributors = ClaimContributorSet.Empty
+        ClaimIssuer = new ClaimIssuer<ClaimContributionTarget>(
+            WellKnownAssessorIds.ClaimContributors,
+            [],
+            TimeProvider.System)
     };
 
 
@@ -65,12 +77,6 @@ public sealed record ServerConfiguration
     /// </summary>
     public required TokenProducerSet TokenProducers { get; init; }
 
-    /// <summary>
-    /// The claim contributors that decorate token payloads with additional
-    /// claims during the token-endpoint pipeline.
-    /// </summary>
-    public required ClaimContributorSet ClaimContributors { get; init; }
-
 
     /// <summary>
     /// Composed claim-contribution issuer running every claim-contribution
@@ -79,22 +85,17 @@ public sealed record ServerConfiguration
     /// <see cref="ClaimContributionTarget"/> that pattern-matches on the
     /// target subtype to decide applicability; rules emit
     /// <see cref="Core.Assessment.Claim"/>s carrying
-    /// <see cref="ClaimContributionContext"/> payloads. Dispatching code
-    /// merges <see cref="Core.Assessment.ClaimOutcome.Success"/>
+    /// <see cref="ClaimContributionContext"/> payloads. The token endpoint's
+    /// walking site merges <see cref="Core.Assessment.ClaimOutcome.Success"/>
     /// contributions into the response payload.
     /// </summary>
     /// <remarks>
-    /// Phase A introduces this slot alongside the legacy
-    /// <see cref="ClaimContributors"/> set. The slot is nullable during
-    /// the migration window (chunks 3–5); once the walking sites and
-    /// producer migrate to consume this issuer (chunk 4b) and the
-    /// legacy surface is deleted (chunk 6), this becomes <c>required</c>
-    /// and <see cref="ClaimContributors"/> is removed. Wire via
-    /// <see cref="ContributionProfiles.StandardClaimIssuer"/> for the
-    /// library's standard OIDC contributor set, or compose a custom
-    /// issuer.
+    /// Wire via <see cref="ContributionProfiles.StandardClaimIssuer"/> for
+    /// the library's standard OIDC contributor set (profile / email /
+    /// address / phone / cnf / acr+amr+auth_time), or compose a custom
+    /// <see cref="ClaimIssuer{T}"/> with an application-specific rule list.
     /// </remarks>
-    public ClaimIssuer<ClaimContributionTarget>? ClaimIssuer { get; init; }
+    public required ClaimIssuer<ClaimContributionTarget> ClaimIssuer { get; init; }
 
 
     /// <summary>
@@ -132,16 +133,16 @@ public sealed record ServerConfiguration
 
     /// <summary>
     /// Returns a copy of this configuration with a different
-    /// <see cref="ClaimContributors"/> set.
+    /// <see cref="ClaimIssuer"/>.
     /// </summary>
-    /// <param name="contributors">The replacement contributor set.</param>
+    /// <param name="issuer">The replacement issuer.</param>
     /// <returns>A new <see cref="ServerConfiguration"/> instance.</returns>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="contributors"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="issuer"/> is <see langword="null"/>.
     /// </exception>
-    public ServerConfiguration WithClaimContributors(ClaimContributorSet contributors)
+    public ServerConfiguration WithClaimIssuer(ClaimIssuer<ClaimContributionTarget> issuer)
     {
-        ArgumentNullException.ThrowIfNull(contributors);
-        return this with { ClaimContributors = contributors };
+        ArgumentNullException.ThrowIfNull(issuer);
+        return this with { ClaimIssuer = issuer };
     }
 }

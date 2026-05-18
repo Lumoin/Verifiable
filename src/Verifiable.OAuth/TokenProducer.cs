@@ -131,8 +131,10 @@ public delegate ValueTask<bool> TokenProducerIsApplicableDelegate(
 /// </para>
 /// <para>
 /// Producers must populate only the spec-mandated claims for their token type.
-/// Optional or extension claims are added by <see cref="ClaimContributor"/>
-/// instances that run after the producer.
+/// Optional or extension claims are added by the composed
+/// <see cref="Verifiable.Core.Assessment.ClaimIssuer{T}"/> on
+/// <see cref="Server.ServerConfiguration.ClaimIssuer"/>, whose rules
+/// run after the producer.
 /// </para>
 /// </remarks>
 /// <param name="context">

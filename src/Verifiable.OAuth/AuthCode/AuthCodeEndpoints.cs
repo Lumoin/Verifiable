@@ -1297,8 +1297,6 @@ public static class AuthCodeEndpoints
                 IReadOnlyList<TokenProducer> producers =
                     server.Configuration.TokenProducers.Count > 0 ? server.Configuration.TokenProducers : DefaultTokenProducers;
 
-                IReadOnlyList<ClaimContributor> contributors = server.Configuration.ClaimContributors;
-
                 //One-time OidcClaims resolution per request — every
                 //IdTokenTarget / UserInfoTarget built below in the producer
                 //loop reads from the same resolved instance so per-rule
@@ -1354,29 +1352,11 @@ public static class AuthCodeEndpoints
                     //Composed contributor walk via ServerConfiguration.ClaimIssuer.
                     //Replaces the producer's pre-Phase-A inline scope-driven
                     //emission (profile / email / address / phone / cnf / acr /
-                    //amr). No-op when the issuer is unwired.
+                    //amr).
                     ClaimContributionTarget? contributionTarget =
                         BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
                     await MergeContributedClaimsAsync(
                         server, contributionTarget, payload, ct).ConfigureAwait(false);
-
-                    foreach(ClaimContributor contributor in contributors)
-                    {
-                        if(!await contributor.IsApplicable(issuance, producer, ct)
-                            .ConfigureAwait(false))
-                        {
-                            continue;
-                        }
-
-                        ClaimContribution contributed =
-                            await contributor.BuildAsync(issuance, producer, ct)
-                                .ConfigureAwait(false);
-
-                        foreach(ClaimEntry entry in contributed.Entries)
-                        {
-                            payload[entry.Name] = entry.Value;
-                        }
-                    }
 
                     UnsignedJwt unsigned = new(output.Header, payload);
 
@@ -1678,7 +1658,6 @@ public static class AuthCodeEndpoints
                     server.Configuration.TokenProducers.Count > 0
                         ? server.Configuration.TokenProducers
                         : DefaultTokenProducers;
-                IReadOnlyList<ClaimContributor> contributors = server.Configuration.ClaimContributors;
 
                 //One-time OidcClaims resolution per request — see BuildToken
                 //for rationale.
@@ -1724,20 +1703,6 @@ public static class AuthCodeEndpoints
                         BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
                     await MergeContributedClaimsAsync(
                         server, contributionTarget, payload, ct).ConfigureAwait(false);
-
-                    foreach(ClaimContributor contributor in contributors)
-                    {
-                        if(!await contributor.IsApplicable(issuance, producer, ct).ConfigureAwait(false))
-                        {
-                            continue;
-                        }
-                        ClaimContribution contributed = await contributor.BuildAsync(issuance, producer, ct)
-                            .ConfigureAwait(false);
-                        foreach(ClaimEntry entry in contributed.Entries)
-                        {
-                            payload[entry.Name] = entry.Value;
-                        }
-                    }
 
                     UnsignedJwt unsigned = new(output.Header, payload);
                     using JwsMessage jws = await unsigned.SignAsync(
