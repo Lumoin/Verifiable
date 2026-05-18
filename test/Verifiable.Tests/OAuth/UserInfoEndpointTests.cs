@@ -4,6 +4,7 @@ using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Routing;
@@ -138,14 +139,18 @@ internal sealed class UserInfoEndpointTests
     }
 
 
-    //Chunk-10 token-validation tests — drive a full PAR / Authorize / Token
-    //exchange to mint a real access token, then present it to /userinfo.
+    //Chunk-10 + chunk-11 token-validation + contributor-walk tests — drive a
+    //full PAR / Authorize / Token exchange to mint a real access token, then
+    //present it to /userinfo.
 
     [TestMethod]
-    public async Task ValidAccessTokenReturnsSubject()
+    public async Task ValidAccessTokenWithOpenidOnlyReturnsOnlySubject()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId, name: "Alice");
+        //Subject is seeded with profile + email, but the access token's
+        //granted scope is openid only — UserInfo must emit just sub, no
+        //scope-driven claims.
+        host.SeedTestSubject(subject: SubjectId, name: "Alice", email: "alice@example.com");
 
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
@@ -158,13 +163,113 @@ internal sealed class UserInfoEndpointTests
             authorizationHeader: "Bearer " + accessToken)
             .ConfigureAwait(false);
 
-        Assert.AreEqual(200, response.StatusCode,
-            $"Valid access token must reach 200. Body: {response.Body}");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
 
         using JsonDocument body = JsonDocument.Parse(response.Body);
         Assert.AreEqual(SubjectId,
-            body.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString(),
-            "Chunk-10 response body must carry the validated sub.");
+            body.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString());
+        Assert.IsFalse(body.RootElement.TryGetProperty(WellKnownJwtClaimNames.Name, out _),
+            "name must not appear without the profile scope.");
+        Assert.IsFalse(body.RootElement.TryGetProperty(WellKnownJwtClaimNames.Email, out _),
+            "email must not appear without the email scope.");
+    }
+
+
+    [TestMethod]
+    public async Task ValidAccessTokenWithProfileScopeReturnsProfileClaims()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        host.SeedTestSubject(subject: SubjectId, name: "Alice");
+
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        string scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Profile}";
+        string accessToken = await IssueAccessTokenAsync(host, material, scope)
+            .ConfigureAwait(false);
+
+        ServerHttpResponse response = await DispatchUserInfoAsync(
+            host, material, WellKnownHttpMethods.Post,
+            authorizationHeader: "Bearer " + accessToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        Assert.AreEqual(SubjectId,
+            body.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString());
+        Assert.AreEqual("Alice",
+            body.RootElement.GetProperty(WellKnownJwtClaimNames.Name).GetString(),
+            "profile scope must trigger the OidcStandardClaimsContributor profile rule.");
+    }
+
+
+    [TestMethod]
+    public async Task ValidAccessTokenWithEmailScopeReturnsEmailClaims()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        host.SeedTestSubject(
+            subject: SubjectId,
+            email: "alice@example.com",
+            emailVerified: true);
+
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        string scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Email}";
+        string accessToken = await IssueAccessTokenAsync(host, material, scope)
+            .ConfigureAwait(false);
+
+        ServerHttpResponse response = await DispatchUserInfoAsync(
+            host, material, WellKnownHttpMethods.Post,
+            authorizationHeader: "Bearer " + accessToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("alice@example.com",
+            body.RootElement.GetProperty(WellKnownJwtClaimNames.Email).GetString());
+        Assert.IsTrue(body.RootElement.GetProperty(WellKnownJwtClaimNames.EmailVerified).GetBoolean());
+    }
+
+
+    [TestMethod]
+    public async Task ValidAccessTokenWithAddressScopeReturnsStructuredAddress()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        host.SubjectClaims[SubjectId] = new OidcClaims
+        {
+            Subject = SubjectId,
+            Address = new AddressClaims
+            {
+                Locality = "Helsinki",
+                Country = "FI",
+                PostalCode = "00100"
+            }
+        };
+
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        string scope = $"{WellKnownScopes.OpenId} {WellKnownScopes.Address}";
+        string accessToken = await IssueAccessTokenAsync(host, material, scope)
+            .ConfigureAwait(false);
+
+        ServerHttpResponse response = await DispatchUserInfoAsync(
+            host, material, WellKnownHttpMethods.Post,
+            authorizationHeader: "Bearer " + accessToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        JsonElement address = body.RootElement.GetProperty(WellKnownJwtClaimNames.Address);
+        Assert.AreEqual(JsonValueKind.Object, address.ValueKind,
+            "address must serialise as a nested JSON object per OIDC Core §5.1.1.");
+        Assert.AreEqual("Helsinki", address.GetProperty("locality").GetString());
+        Assert.AreEqual("FI", address.GetProperty("country").GetString());
+        Assert.AreEqual("00100", address.GetProperty("postal_code").GetString());
     }
 
 

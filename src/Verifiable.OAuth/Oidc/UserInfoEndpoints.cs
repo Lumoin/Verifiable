@@ -1,5 +1,7 @@
 using System.Buffers;
 using System.Diagnostics;
+using System.Globalization;
+using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Jar;
@@ -157,9 +159,47 @@ public static class UserInfoEndpoints
                         "Validated access token does not carry a sub claim."));
                 }
 
-                //Chunk-10 minimal response shape. Chunk 11 replaces this with
-                //the contributor walk's full claim set.
-                string body = BuildMinimalResponseBody(subject);
+                //One-time OidcClaims resolution before the contributor walk —
+                //mirrors the token-endpoint walking site's PreResolveOidcClaimsAsync
+                //pattern so per-rule contributors don't each re-issue the
+                //resolver call.
+                Oidc.OidcClaims? preResolvedClaims = null;
+                ResolveOidcClaimsDelegate? resolve = server.Integration.ResolveOidcClaimsAsync;
+                if(resolve is not null)
+                {
+                    preResolvedClaims = await resolve(
+                        subject, scope, registration.TenantId, context, ct)
+                        .ConfigureAwait(false);
+                }
+
+                //Compose the response body via the standard contributor walk
+                //against UserInfoTarget. The sub claim is always present per
+                //OIDC Core §5.3.2; scope-driven extension claims (profile /
+                //email / address / phone) flow through the contributors
+                //registered on ServerConfiguration.ClaimIssuer.
+                UserInfoTarget target = new(registration, subject, scope, context)
+                {
+                    ResolvedOidcClaims = preResolvedClaims
+                };
+
+                Dictionary<string, object> responseClaims =
+                    new(StringComparer.Ordinal) { [WellKnownJwtClaimNames.Sub] = subject };
+
+                ClaimIssueResult contributionResult =
+                    await server.Configuration.ClaimIssuer.GenerateClaimsAsync(
+                        target, Guid.NewGuid().ToString("N"), ct)
+                        .ConfigureAwait(false);
+
+                foreach(Claim claim in contributionResult.Claims)
+                {
+                    if(claim.Outcome == ClaimOutcome.Success
+                        && claim.Context is ClaimContributionContext ctx)
+                    {
+                        responseClaims[ctx.ClaimName] = ctx.ClaimValue;
+                    }
+                }
+
+                string body = BuildResponseBody(responseClaims);
                 return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Ok(
                     body, WellKnownMediaTypes.Application.Json));
             },
@@ -377,18 +417,171 @@ public static class UserInfoEndpoints
 
 
     /// <summary>
-    /// Composes the chunk-10 minimal JSON response body carrying only the
-    /// validated <c>sub</c>. Chunk 11 replaces this with the contributor
-    /// walk's emitted claim set.
+    /// Composes the UserInfo JSON response body from the merged claim
+    /// dictionary. Claim names are sorted lexicographically for
+    /// deterministic wire output. Handles the runtime value shapes the
+    /// standard contributors produce: <see cref="string"/>,
+    /// <see cref="long"/>, <see cref="int"/>, <see cref="bool"/>,
+    /// <see cref="IReadOnlyList{T}"/> of <see cref="string"/> for
+    /// <c>amr</c>, and nested
+    /// <see cref="IDictionary{TKey, TValue}"/> for the <c>address</c>
+    /// structured claim. Hand-written via
+    /// <see cref="System.Text.StringBuilder"/> per the serialization
+    /// firewall.
     /// </summary>
-    private static string BuildMinimalResponseBody(string subject)
+    private static string BuildResponseBody(IDictionary<string, object> claims)
     {
         System.Text.StringBuilder sb = new();
-        sb.Append('{');
-        sb.Append('"').Append(WellKnownJwtClaimNames.Sub).Append("\":\"");
-        sb.Append(subject);
-        sb.Append('"');
-        sb.Append('}');
+        AppendObject(sb, claims);
         return sb.ToString();
+    }
+
+
+    private static void AppendObject(System.Text.StringBuilder sb, IDictionary<string, object> map)
+    {
+        sb.Append('{');
+        bool first = true;
+        foreach(KeyValuePair<string, object> entry in map.OrderBy(
+            e => e.Key, StringComparer.Ordinal))
+        {
+            if(!first) { sb.Append(','); }
+            first = false;
+
+            sb.Append('"');
+            AppendJsonString(sb, entry.Key);
+            sb.Append("\":");
+            AppendValue(sb, entry.Value);
+        }
+
+        sb.Append('}');
+    }
+
+
+    private static void AppendValue(System.Text.StringBuilder sb, object value)
+    {
+        switch(value)
+        {
+            case string s:
+            {
+                sb.Append('"');
+                AppendJsonString(sb, s);
+                sb.Append('"');
+                break;
+            }
+
+            case long l:
+            {
+                sb.Append(l.ToString(CultureInfo.InvariantCulture));
+                break;
+            }
+
+            case int i:
+            {
+                sb.Append(i.ToString(CultureInfo.InvariantCulture));
+                break;
+            }
+
+            case bool b:
+            {
+                sb.Append(b ? "true" : "false");
+                break;
+            }
+
+            case IReadOnlyList<string> list:
+            {
+                sb.Append('[');
+                for(int idx = 0; idx < list.Count; idx++)
+                {
+                    if(idx > 0) { sb.Append(','); }
+                    sb.Append('"');
+                    AppendJsonString(sb, list[idx]);
+                    sb.Append('"');
+                }
+                sb.Append(']');
+                break;
+            }
+
+            case IDictionary<string, object> nested:
+            {
+                AppendObject(sb, nested);
+                break;
+            }
+
+            default:
+            {
+                //Conservative: serialise unknown types as quoted strings to
+                //avoid emitting broken JSON. The standard contributors
+                //produce only the shapes above; new contributor types should
+                //prefer one of those shapes for wire compatibility.
+                sb.Append('"');
+                AppendJsonString(sb, value.ToString() ?? string.Empty);
+                sb.Append('"');
+                break;
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Escapes a string for inclusion inside a JSON string literal. Covers
+    /// the RFC 8259 §7 mandatory escapes: <c>"</c>, <c>\</c>, and the
+    /// control characters U+0000 through U+001F. Everything else is
+    /// emitted verbatim.
+    /// </summary>
+    private static void AppendJsonString(System.Text.StringBuilder sb, string value)
+    {
+        foreach(char c in value)
+        {
+            switch(c)
+            {
+                case '"':
+                {
+                    sb.Append("\\\"");
+                    break;
+                }
+                case '\\':
+                {
+                    sb.Append("\\\\");
+                    break;
+                }
+                case '\b':
+                {
+                    sb.Append("\\b");
+                    break;
+                }
+                case '\f':
+                {
+                    sb.Append("\\f");
+                    break;
+                }
+                case '\n':
+                {
+                    sb.Append("\\n");
+                    break;
+                }
+                case '\r':
+                {
+                    sb.Append("\\r");
+                    break;
+                }
+                case '\t':
+                {
+                    sb.Append("\\t");
+                    break;
+                }
+                default:
+                {
+                    if(c < 0x20)
+                    {
+                        sb.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                    }
+                    else
+                    {
+                        sb.Append(c);
+                    }
+                    break;
+                }
+            }
+        }
     }
 }
