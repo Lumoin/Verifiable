@@ -608,7 +608,8 @@ internal sealed class TestHostShell: IAsyncDisposable
                     AuthCodeEndpoints.Builder,
                     Oid4VpEndpoints.Builder,
                     MetadataEndpoints.Builder,
-                    RegistrationEndpoints.Builder
+                    RegistrationEndpoints.Builder,
+                    UserInfoEndpoints.Builder
                 ]),
                 TokenProducers = new TokenProducerSet(
                 [
@@ -2424,6 +2425,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         if(endpointName == WellKnownEndpointNames.MetadataJwks) { return "jwks"; }
         if(endpointName == WellKnownEndpointNames.MetadataDiscovery) { return ".well-known/openid-configuration"; }
         if(endpointName == WellKnownEndpointNames.RegistrationRegister) { return "register"; }
+        if(endpointName == WellKnownEndpointNames.UserInfo) { return "userinfo"; }
         return null;
     }
 

@@ -44,4 +44,7 @@ public static class WellKnownEndpointNames
 
     //Registration family
     public static readonly string RegistrationRegister = "Registration.Register";
+
+    //OIDC family
+    public static readonly string UserInfo = "Oidc.UserInfo";
 }
