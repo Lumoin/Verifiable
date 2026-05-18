@@ -124,7 +124,7 @@ internal sealed class AcrAmrClaimContributorTests
 
         Dictionary<string, object> emitted = ContributorTestFixtures.ExtractEmitted(claims);
         Assert.IsFalse(emitted.ContainsKey(WellKnownJwtClaimNames.Amr),
-            "Empty amr list must be treated as 'not populated' per the producer's pre-Phase-A shape.");
+            "Empty amr list must be treated as 'not populated'; the OIDC Core §2 amr claim is omitted rather than emitted as an empty JSON array.");
         Assert.AreEqual("loa-low", emitted[WellKnownJwtClaimNames.Acr]);
     }
 
@@ -144,6 +144,6 @@ internal sealed class AcrAmrClaimContributorTests
             target, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(claims.All(c => c.Outcome == ClaimOutcome.NotApplicable),
-            "AcrAmr applies only to IdTokenTarget per chunk 4a.");
+            "AcrAmr applies only to IdTokenTarget — UserInfo responses don't carry authentication-context claims.");
     }
 }

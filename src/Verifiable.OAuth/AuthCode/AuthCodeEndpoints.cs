@@ -1350,9 +1350,9 @@ public static class AuthCodeEndpoints
                     JwtPayload payload = output.Payload;
 
                     //Composed contributor walk via ServerConfiguration.ClaimIssuer.
-                    //Replaces the producer's pre-Phase-A inline scope-driven
-                    //emission (profile / email / address / phone / cnf / acr /
-                    //amr).
+                    //Emits scope-driven extension claims (profile / email /
+                    //address / phone / cnf / acr / amr) after the producer
+                    //returned its spec-mandated baseline.
                     ClaimContributionTarget? contributionTarget =
                         BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
                     await MergeContributedClaimsAsync(

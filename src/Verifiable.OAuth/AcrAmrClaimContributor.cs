@@ -20,11 +20,11 @@ namespace Verifiable.OAuth;
 /// <see cref="ClaimOutcome.NotApplicable"/>.
 /// </para>
 /// <para>
-/// Behaviour mirrors the producer's pre-Phase-A inline emission. The
-/// <c>acr</c> and <c>amr</c> claims come exclusively from
+/// The <c>acr</c> and <c>amr</c> claims come exclusively from
 /// <see cref="OidcClaims.AuthContext"/>; the <c>auth_time</c> claim has
 /// the documented fallback chain — <see cref="AuthenticationContext.AuthTime"/>
-/// when populated, otherwise <see cref="IssuanceContext.AuthTime"/>.
+/// when populated, otherwise <see cref="IssuanceContext.AuthTime"/> (the
+/// instant the End-User authenticated as observed by the AS).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AcrAmrClaimContributor")]

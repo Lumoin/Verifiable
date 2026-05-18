@@ -14,10 +14,10 @@ namespace Verifiable.OAuth;
 /// <remarks>
 /// <para>
 /// At present <see cref="Server.ConfirmationMethod.JwkThumbprint"/> is
-/// the only populated member, matching the producers' pre-Phase-A inline
-/// emission. Future binding methods (RFC 8705 <c>x5t#S256</c>,
-/// RFC 7800 <c>jwk</c>) extend the contributor without changing the
-/// shape — the wire-format <c>cnf</c> object accumulates members.
+/// the only populated member. Future binding methods (RFC 8705
+/// <c>x5t#S256</c>, RFC 7800 <c>jwk</c>) extend the contributor without
+/// changing the shape — the wire-format <c>cnf</c> object accumulates
+/// members.
 /// </para>
 /// <para>
 /// Applies to <see cref="IdTokenTarget"/> (mirroring per
