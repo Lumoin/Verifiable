@@ -39,16 +39,35 @@ public static class ContributionProfiles
     /// so the application can extend it without affecting future calls.
     /// </summary>
     /// <remarks>
-    /// Populated by chunk 4a; returns an empty list until then. The
-    /// empty list is well-formed for
-    /// <see cref="StandardClaimIssuer"/> — the resulting issuer produces
-    /// zero claims, equivalent to the pre-Phase-A
-    /// <see cref="Server.ServerConfiguration.ClaimContributors"/> being
-    /// <c>ClaimContributorSet.Empty</c> (which is the test fixture's
-    /// default today).
+    /// Six rules: profile / email / address / phone (OIDC Core §5.4), the
+    /// RFC 7800 / RFC 9449 §6.1 <c>cnf</c> confirmation claim, and the
+    /// OIDC Core §2 authentication-context family (<c>acr</c>, <c>amr</c>,
+    /// <c>auth_time</c>). Rules return
+    /// <see cref="ClaimOutcome.NotApplicable"/> for targets they don't
+    /// apply to and for scope-gated claims when the granted scope omits
+    /// their family.
     /// </remarks>
     public static List<ClaimDelegate<ClaimContributionTarget>> StandardRules() =>
-        [];
+    [
+        new ClaimDelegate<ClaimContributionTarget>(
+            OidcStandardClaimsContributor.GenerateProfileClaims,
+            [WellKnownClaimIds.OidcProfile]),
+        new ClaimDelegate<ClaimContributionTarget>(
+            OidcStandardClaimsContributor.GenerateEmailClaims,
+            [WellKnownClaimIds.OidcEmail]),
+        new ClaimDelegate<ClaimContributionTarget>(
+            OidcStandardClaimsContributor.GenerateAddressClaims,
+            [WellKnownClaimIds.OidcAddress]),
+        new ClaimDelegate<ClaimContributionTarget>(
+            OidcStandardClaimsContributor.GeneratePhoneClaims,
+            [WellKnownClaimIds.OidcPhone]),
+        new ClaimDelegate<ClaimContributionTarget>(
+            CnfClaimContributor.GenerateCnfClaim,
+            [WellKnownClaimIds.CnfBinding]),
+        new ClaimDelegate<ClaimContributionTarget>(
+            AcrAmrClaimContributor.GenerateAuthClassClaims,
+            [WellKnownClaimIds.OidcAuthClass, WellKnownClaimIds.OidcAuthTime])
+    ];
 
 
     /// <summary>
