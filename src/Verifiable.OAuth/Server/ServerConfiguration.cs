@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using Verifiable.Core.Assessment;
 
 namespace Verifiable.OAuth.Server;
 
@@ -69,6 +70,31 @@ public sealed record ServerConfiguration
     /// claims during the token-endpoint pipeline.
     /// </summary>
     public required ClaimContributorSet ClaimContributors { get; init; }
+
+
+    /// <summary>
+    /// Composed claim-contribution issuer running every claim-contribution
+    /// rule against the target requested by dispatching code. Each rule
+    /// is a <see cref="Core.Assessment.ClaimDelegate{T}"/> over
+    /// <see cref="ClaimContributionTarget"/> that pattern-matches on the
+    /// target subtype to decide applicability; rules emit
+    /// <see cref="Core.Assessment.Claim"/>s carrying
+    /// <see cref="ClaimContributionContext"/> payloads. Dispatching code
+    /// merges <see cref="Core.Assessment.ClaimOutcome.Success"/>
+    /// contributions into the response payload.
+    /// </summary>
+    /// <remarks>
+    /// Phase A introduces this slot alongside the legacy
+    /// <see cref="ClaimContributors"/> set. The slot is nullable during
+    /// the migration window (chunks 3–5); once the walking sites and
+    /// producer migrate to consume this issuer (chunk 4b) and the
+    /// legacy surface is deleted (chunk 6), this becomes <c>required</c>
+    /// and <see cref="ClaimContributors"/> is removed. Wire via
+    /// <see cref="ContributionProfiles.StandardClaimIssuer"/> for the
+    /// library's standard OIDC contributor set, or compose a custom
+    /// issuer.
+    /// </remarks>
+    public ClaimIssuer<ClaimContributionTarget>? ClaimIssuer { get; init; }
 
 
     /// <summary>

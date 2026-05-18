@@ -222,6 +222,16 @@ public sealed class AuthorizationServer: IDisposable
                 $"{nameof(AuthorizationServer)} requires at least one entry in {nameof(ServerConfiguration)}.{nameof(ServerConfiguration.EndpointBuilders)}.");
         }
 
+        if(Configuration.ClaimIssuer is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(ServerConfiguration)}.{nameof(ServerConfiguration.ClaimIssuer)} must be set. "
+                + "Application code wires "
+                + "ContributionProfiles.StandardClaimIssuer(timeProvider) for the standard "
+                + "OIDC contributor set, or composes a "
+                + "ClaimIssuer<ClaimContributionTarget> with a custom rule list.");
+        }
+
         IsValidated = true;
     }
 
