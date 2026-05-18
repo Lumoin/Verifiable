@@ -307,11 +307,23 @@ public static class MetadataEndpoints
                 }
 
                 bool authorizationCodeOnChain = false;
+                bool refreshTokenOnChain = false;
+                bool tokenEndpointOnChain = false;
                 foreach(ServerEndpoint chainEndpoint in chain)
                 {
                     if(chainEndpoint.Capability == ServerCapabilityName.AuthorizationCode)
                     {
                         authorizationCodeOnChain = true;
+                    }
+                    if(string.Equals(chainEndpoint.Name,
+                        WellKnownEndpointNames.AuthCodeRefreshToken, StringComparison.Ordinal))
+                    {
+                        refreshTokenOnChain = true;
+                    }
+                    if(string.Equals(chainEndpoint.Name,
+                        WellKnownEndpointNames.AuthCodeToken, StringComparison.Ordinal))
+                    {
+                        tokenEndpointOnChain = true;
                     }
 
                     if(chainEndpoint.DiscoveryMetadataKey is null) { continue; }
@@ -357,6 +369,48 @@ public static class MetadataEndpoints
                         sb,
                         OpenIdProviderMetadataParameterNames.IdTokenSigningAlgValuesSupported,
                         idTokenAlgs);
+                }
+
+                //grant_types_supported (RFC 8414 §2 OPTIONAL). The library
+                //ships the authorization_code grant; refresh_token is added
+                //when the registration enables refresh-token endpoints.
+                //Defaults from RFC 6749 / OIDC Core (authorization_code +
+                //implicit) intentionally not used — implicit is out of scope
+                //per OAuth 2.1 / FAPI 2.0.
+                if(authorizationCodeOnChain)
+                {
+                    IReadOnlyList<string> grantTypes = refreshTokenOnChain
+                        ? GrantTypesAuthCodeAndRefresh
+                        : GrantTypesAuthCodeOnly;
+                    AppendStringArrayField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.GrantTypesSupported,
+                        grantTypes);
+                }
+
+                //code_challenge_methods_supported (RFC 7636 §6.2.1). The
+                //library only implements S256 — plain is forbidden per OAuth
+                //2.1 §7.5.1.
+                if(authorizationCodeOnChain)
+                {
+                    AppendStringArrayField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.CodeChallengeMethodsSupported,
+                        CodeChallengeMethodS256);
+                }
+
+                //token_endpoint_auth_methods_supported (RFC 8414 §2 OPTIONAL).
+                //The library's token endpoint accepts PKCE-only public clients
+                //per OAuth 2.1 — auth method "none". Deployments that add
+                //client_secret_basic / private_key_jwt / mTLS auth advertise
+                //those via ContributeDiscoveryFieldsAsync; the library default
+                //reflects what the token endpoint code actually accepts today.
+                if(tokenEndpointOnChain)
+                {
+                    AppendStringArrayField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.TokenEndpointAuthMethodsSupported,
+                        TokenEndpointAuthMethodNone);
                 }
 
                 //Application-supplied additional fields merged after the base set.
@@ -438,6 +492,10 @@ public static class MetadataEndpoints
     //Static well-known value sets emitted by the discovery endpoint.
     private static readonly IReadOnlyList<string> SubjectTypePublic = ["public"];
     private static readonly IReadOnlyList<string> ResponseTypeCode = ["code"];
+    private static readonly IReadOnlyList<string> GrantTypesAuthCodeOnly = ["authorization_code"];
+    private static readonly IReadOnlyList<string> GrantTypesAuthCodeAndRefresh = ["authorization_code", "refresh_token"];
+    private static readonly IReadOnlyList<string> CodeChallengeMethodS256 = ["S256"];
+    private static readonly IReadOnlyList<string> TokenEndpointAuthMethodNone = ["none"];
 
 
     /// <summary>

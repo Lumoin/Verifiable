@@ -79,4 +79,21 @@ public static class AuthorizationServerMetadataParameterNames
     /// URL of the Status List Aggregation endpoint (draft-ietf-oauth-status-list).
     /// </summary>
     public static readonly string StatusListAggregationEndpoint = "status_list_aggregation_endpoint";
+
+    /// <summary>
+    /// JSON array of client authentication methods the token endpoint
+    /// accepts. RFC 8414 §2. IANA registry: <c>"none"</c>,
+    /// <c>"client_secret_basic"</c>, <c>"client_secret_post"</c>,
+    /// <c>"client_secret_jwt"</c>, <c>"private_key_jwt"</c>,
+    /// <c>"tls_client_auth"</c>, <c>"self_signed_tls_client_auth"</c>,
+    /// <c>"attest_jwt_client_auth"</c>.
+    /// </summary>
+    public static readonly string TokenEndpointAuthMethodsSupported = "token_endpoint_auth_methods_supported";
+
+    /// <summary>
+    /// JSON array of PKCE code challenge methods the authorization server
+    /// supports per RFC 7636 §6.2.1. Registered values: <c>"plain"</c> and
+    /// <c>"S256"</c>.
+    /// </summary>
+    public static readonly string CodeChallengeMethodsSupported = "code_challenge_methods_supported";
 }

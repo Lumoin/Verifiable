@@ -103,6 +103,78 @@ internal sealed class DiscoveryEndpointTests
 
 
     [TestMethod]
+    public async Task DiscoveryEmitsGrantTypesSupportedIncludingAuthorizationCodeAndRefreshToken()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        JsonElement grantTypes = body.RootElement.GetProperty(
+            AuthorizationServerMetadataParameterNames.GrantTypesSupported);
+
+        Assert.AreEqual(JsonValueKind.Array, grantTypes.ValueKind);
+        List<string> values = EnumerateStrings(grantTypes);
+        Assert.Contains("authorization_code", values,
+            "AuthorizationCode capability advertises the authorization_code grant per RFC 8414 §2.");
+        Assert.Contains("refresh_token", values,
+            "AuthCodeRefreshToken endpoint on chain advertises refresh_token per RFC 6749 §6.");
+    }
+
+
+    [TestMethod]
+    public async Task DiscoveryEmitsCodeChallengeMethodsAsS256Only()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        JsonElement methods = body.RootElement.GetProperty(
+            AuthorizationServerMetadataParameterNames.CodeChallengeMethodsSupported);
+
+        Assert.AreEqual(JsonValueKind.Array, methods.ValueKind);
+        List<string> values = EnumerateStrings(methods);
+        Assert.HasCount(1, values,
+            "OAuth 2.1 §7.5.1 forbids the plain PKCE method; the library advertises S256 only.");
+        Assert.AreEqual("S256", values[0]);
+    }
+
+
+    [TestMethod]
+    public async Task DiscoveryEmitsTokenEndpointAuthMethodsAsNone()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        JsonElement methods = body.RootElement.GetProperty(
+            AuthorizationServerMetadataParameterNames.TokenEndpointAuthMethodsSupported);
+
+        Assert.AreEqual(JsonValueKind.Array, methods.ValueKind);
+        List<string> values = EnumerateStrings(methods);
+        Assert.Contains("none", values,
+            "The library's token endpoint accepts PKCE-only public clients (auth method 'none'); deployments adding client_secret_basic / private_key_jwt / mTLS advertise those via ContributeDiscoveryFieldsAsync.");
+    }
+
+
+    [TestMethod]
     public async Task DiscoveryStillCarriesIssuerAndEndpointUrls()
     {
         //Regression guard — the chunk-12 additions must not displace the
