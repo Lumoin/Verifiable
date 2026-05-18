@@ -413,6 +413,22 @@ public static class MetadataEndpoints
                         TokenEndpointAuthMethodNone);
                 }
 
+                //scopes_supported (OIDC Discovery §3 RECOMMENDED). Derived
+                //from the registration's per-tenant AllowedScopes set; sorted
+                //lexicographically for deterministic wire output across
+                //ImmutableHashSet's iteration order. Omitted when the
+                //registration has no scopes configured.
+                if(registration.AllowedScopes.Count > 0)
+                {
+                    string[] sortedScopes = registration.AllowedScopes
+                        .OrderBy(static s => s, StringComparer.Ordinal)
+                        .ToArray();
+                    AppendStringArrayField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.ScopesSupported,
+                        sortedScopes);
+                }
+
                 //Application-supplied additional fields merged after the base set.
                 if(server.Integration.ContributeDiscoveryFieldsAsync is not null)
                 {

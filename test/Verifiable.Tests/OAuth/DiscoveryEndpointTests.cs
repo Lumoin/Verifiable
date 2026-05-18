@@ -175,6 +175,45 @@ internal sealed class DiscoveryEndpointTests
 
 
     [TestMethod]
+    public async Task DiscoveryEmitsScopesSupportedFromRegistrationAllowedScopes()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        JsonElement scopes = body.RootElement.GetProperty(
+            AuthorizationServerMetadataParameterNames.ScopesSupported);
+
+        Assert.AreEqual(JsonValueKind.Array, scopes.ValueKind);
+        List<string> values = EnumerateStrings(scopes);
+
+        //RegisterDpopClient seeds the OIDC Core §5.4 standard scope set on
+        //AllowedScopes; discovery must surface each.
+        Assert.Contains(WellKnownScopes.OpenId, values);
+        Assert.Contains(WellKnownScopes.Profile, values);
+        Assert.Contains(WellKnownScopes.Email, values);
+        Assert.Contains(WellKnownScopes.Address, values);
+        Assert.Contains(WellKnownScopes.Phone, values);
+
+        //Sorted lexicographically for deterministic wire output across
+        //ImmutableHashSet iteration order.
+        for(int i = 1; i < values.Count; i++)
+        {
+            Assert.IsLessThan(
+                0,
+                StringComparer.Ordinal.Compare(values[i - 1], values[i]),
+                $"scopes_supported must be sorted ordinally; '{values[i - 1]}' came before '{values[i]}'.");
+        }
+    }
+
+
+    [TestMethod]
     public async Task DiscoveryStillCarriesIssuerAndEndpointUrls()
     {
         //Regression guard — the chunk-12 additions must not displace the

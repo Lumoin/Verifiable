@@ -1821,7 +1821,12 @@ internal sealed class TestHostShell: IAsyncDisposable
             AllowedCapabilities = capabilities,
             AllowedRedirectUris = ImmutableHashSet.Create(
                 new Uri("https://client.example.com/callback")),
-            AllowedScopes = ImmutableHashSet.Create(WellKnownScopes.OpenId),
+            AllowedScopes = ImmutableHashSet.Create(
+                WellKnownScopes.OpenId,
+                WellKnownScopes.Profile,
+                WellKnownScopes.Email,
+                WellKnownScopes.Address,
+                WellKnownScopes.Phone),
             SigningKeys = ImmutableDictionary<KeyUsageContext, SigningKeySet>.Empty
                 .Add(KeyUsageContext.AccessTokenIssuance,
                     new SigningKeySet { Current = [signingKeyId] })
