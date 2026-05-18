@@ -28,4 +28,12 @@ public static class OpenIdProviderMetadataParameterNames
     /// JSON array of supported subject identifier types.
     /// </summary>
     public static readonly string SubjectTypesSupported = "subject_types_supported";
+
+    /// <summary>
+    /// JSON array of the Claim Names of the Claims that the OpenID Provider
+    /// MAY be able to supply values for per OIDC Discovery 1.0 §3. Clients
+    /// use the list to decide which claims to request; the OP is not
+    /// guaranteed to populate every advertised claim for every request.
+    /// </summary>
+    public static readonly string ClaimsSupported = "claims_supported";
 }

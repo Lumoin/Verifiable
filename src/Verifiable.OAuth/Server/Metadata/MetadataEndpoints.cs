@@ -429,6 +429,25 @@ public static class MetadataEndpoints
                         sortedScopes);
                 }
 
+                //claims_supported (OIDC Discovery §3 RECOMMENDED). Lists the
+                //JWT claim names the standard
+                //ContributionProfiles.StandardClaimIssuer rules can emit, plus
+                //the spec-required sub. The list is aspirational per OIDC
+                //Discovery §3 — the OP is not guaranteed to populate every
+                //advertised claim for every request; scope / authentication-
+                //context drives actual emission. Deployments that install
+                //custom contributors extend the list via
+                //ContributeDiscoveryFieldsAsync; the library default reflects
+                //what the standard rules emit. Gated on authorization_code
+                //chain presence because the field is OIDC-specific.
+                if(authorizationCodeOnChain)
+                {
+                    AppendStringArrayField(
+                        sb,
+                        OpenIdProviderMetadataParameterNames.ClaimsSupported,
+                        StandardClaimsSupported);
+                }
+
                 //Application-supplied additional fields merged after the base set.
                 if(server.Integration.ContributeDiscoveryFieldsAsync is not null)
                 {
@@ -512,6 +531,56 @@ public static class MetadataEndpoints
     private static readonly IReadOnlyList<string> GrantTypesAuthCodeAndRefresh = ["authorization_code", "refresh_token"];
     private static readonly IReadOnlyList<string> CodeChallengeMethodS256 = ["S256"];
     private static readonly IReadOnlyList<string> TokenEndpointAuthMethodNone = ["none"];
+
+    /// <summary>
+    /// JWT claim names the standard
+    /// <see cref="ContributionProfiles.StandardClaimIssuer"/> rules can emit,
+    /// plus the spec-required <c>sub</c>. Sorted ordinally for deterministic
+    /// wire output. Synchronisation invariant: every name added to or removed
+    /// from the standard contributors (chunks 4a / 4b / 5) must update this
+    /// list. The <see cref="ContributorChainRegressionTests"/> baseline pins
+    /// the contributor output; this list pins the wire advertisement.
+    /// </summary>
+    private static readonly IReadOnlyList<string> StandardClaimsSupported =
+    [
+        //OIDC Core §2 spec-required.
+        WellKnownJwtClaimNames.Sub,
+
+        //OIDC Core §2 authentication-context (AcrAmrClaimContributor).
+        WellKnownJwtClaimNames.Acr,
+        WellKnownJwtClaimNames.Amr,
+        WellKnownJwtClaimNames.AuthTime,
+
+        //OIDC Core §5.4 profile scope (OidcStandardClaimsContributor.GenerateProfileClaims).
+        WellKnownJwtClaimNames.Name,
+        WellKnownJwtClaimNames.FamilyName,
+        WellKnownJwtClaimNames.GivenName,
+        WellKnownJwtClaimNames.MiddleName,
+        WellKnownJwtClaimNames.Nickname,
+        WellKnownJwtClaimNames.PreferredUsername,
+        WellKnownJwtClaimNames.Profile,
+        WellKnownJwtClaimNames.Picture,
+        WellKnownJwtClaimNames.Website,
+        WellKnownJwtClaimNames.Gender,
+        WellKnownJwtClaimNames.Birthdate,
+        WellKnownJwtClaimNames.Zoneinfo,
+        WellKnownJwtClaimNames.Locale,
+        WellKnownJwtClaimNames.UpdatedAt,
+
+        //OIDC Core §5.4 email scope.
+        WellKnownJwtClaimNames.Email,
+        WellKnownJwtClaimNames.EmailVerified,
+
+        //OIDC Core §5.4 / §5.1.1 address scope (structured object).
+        WellKnownJwtClaimNames.Address,
+
+        //OIDC Core §5.4 phone scope.
+        WellKnownJwtClaimNames.PhoneNumber,
+        WellKnownJwtClaimNames.PhoneNumberVerified,
+
+        //RFC 7800 / RFC 9449 §6.1 confirmation (CnfClaimContributor).
+        WellKnownJwtClaimNames.Cnf
+    ];
 
 
     /// <summary>

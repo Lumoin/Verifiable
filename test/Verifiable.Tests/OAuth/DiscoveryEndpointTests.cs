@@ -214,6 +214,57 @@ internal sealed class DiscoveryEndpointTests
 
 
     [TestMethod]
+    public async Task DiscoveryEmitsClaimsSupportedMatchingStandardContributors()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        JsonElement claims = body.RootElement.GetProperty(
+            OpenIdProviderMetadataParameterNames.ClaimsSupported);
+
+        Assert.AreEqual(JsonValueKind.Array, claims.ValueKind);
+        List<string> values = EnumerateStrings(claims);
+
+        //sub is spec-required; the rest reflect the standard contributors'
+        //wire output. Any change to ContributionProfiles.StandardRules must
+        //also update the StandardClaimsSupported list in MetadataEndpoints
+        //so discovery's advertisement stays honest.
+        Assert.Contains(WellKnownJwtClaimNames.Sub, values);
+
+        //Profile family.
+        Assert.Contains(WellKnownJwtClaimNames.Name, values);
+        Assert.Contains(WellKnownJwtClaimNames.FamilyName, values);
+        Assert.Contains(WellKnownJwtClaimNames.UpdatedAt, values);
+
+        //Email family.
+        Assert.Contains(WellKnownJwtClaimNames.Email, values);
+        Assert.Contains(WellKnownJwtClaimNames.EmailVerified, values);
+
+        //Address (structured).
+        Assert.Contains(WellKnownJwtClaimNames.Address, values);
+
+        //Phone family.
+        Assert.Contains(WellKnownJwtClaimNames.PhoneNumber, values);
+        Assert.Contains(WellKnownJwtClaimNames.PhoneNumberVerified, values);
+
+        //Authentication-context.
+        Assert.Contains(WellKnownJwtClaimNames.Acr, values);
+        Assert.Contains(WellKnownJwtClaimNames.Amr, values);
+        Assert.Contains(WellKnownJwtClaimNames.AuthTime, values);
+
+        //Confirmation (RFC 7800 / RFC 9449 §6.1).
+        Assert.Contains(WellKnownJwtClaimNames.Cnf, values);
+    }
+
+
+    [TestMethod]
     public async Task DiscoveryStillCarriesIssuerAndEndpointUrls()
     {
         //Regression guard — the chunk-12 additions must not displace the
