@@ -138,8 +138,8 @@ internal sealed class TenantIdThreadingTests
             [OAuthRequestParameterNames.RedirectUri] = redirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
-        ServerHttpResponse parResponse = await host.DispatchAtPathAsync(
-            tenant, ServerEndpointPaths.Par, "POST",
+        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
+            tenant, WellKnownEndpointNames.AuthCodePar, "POST",
             parFields, new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, parResponse.StatusCode);
@@ -152,8 +152,8 @@ internal sealed class TenantIdThreadingTests
         };
         RequestContext authorizeContext = new();
         authorizeContext.SetSubjectId("subject-1");
-        ServerHttpResponse authorizeResponse = await host.DispatchAtPathAsync(
-            tenant, ServerEndpointPaths.Authorize, WellKnownHttpMethods.Get,
+        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
+            tenant, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
             authorizeFields, authorizeContext,
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(302, authorizeResponse.StatusCode);
@@ -167,8 +167,8 @@ internal sealed class TenantIdThreadingTests
             [OAuthRequestParameterNames.ClientId] = clientId,
             [OAuthRequestParameterNames.RedirectUri] = redirectUri.OriginalString
         };
-        ServerHttpResponse tokenResponse = await host.DispatchAtPathAsync(
-            tenant, ServerEndpointPaths.Token, "POST",
+        ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
+            tenant, WellKnownEndpointNames.AuthCodeToken, "POST",
             tokenFields, new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);

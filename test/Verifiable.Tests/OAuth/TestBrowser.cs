@@ -98,8 +98,7 @@ internal static class TestBrowser
         }
 
         string segment = registration.TenantId.Value;
-        string authorizePath = ServerEndpointPaths.Authorize
-            .Replace("{segment}", segment, StringComparison.Ordinal);
+        string authorizePath = TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment);
 
         IncomingRequest request = new(
             Path: authorizePath,

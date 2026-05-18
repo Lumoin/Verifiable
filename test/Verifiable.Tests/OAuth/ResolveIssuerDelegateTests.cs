@@ -132,9 +132,9 @@ internal sealed class ResolveIssuerDelegateTests
         context.SetTenantId(segment);
         context.SetIssuer(new Uri("https://wrong.context.example"));
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Discovery,
+            WellKnownEndpointNames.MetadataDiscovery,
             "GET",
             new RequestFields(),
             context,

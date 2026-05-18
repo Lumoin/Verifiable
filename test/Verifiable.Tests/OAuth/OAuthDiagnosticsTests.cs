@@ -52,9 +52,9 @@ internal sealed class OAuthDiagnosticsTests
         context.SetTenantId(registration.TenantId);
         context.SetIssuer(IssuerUri);
 
-        await app.DispatchAtPathAsync(
+        await app.DispatchAtEndpointAsync(
             registration.TenantId,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,
@@ -97,9 +97,9 @@ internal sealed class OAuthDiagnosticsTests
 
         await using TestHostShell app = new(TimeProvider);
 
-        await app.DispatchAtPathAsync(
+        await app.DispatchAtEndpointAsync(
             "nonexistent",
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             new RequestContext(),
@@ -110,7 +110,7 @@ internal sealed class OAuthDiagnosticsTests
                 a.OperationName, OAuthActivityNames.Handle, StringComparison.Ordinal))
             .ToArray();
 
-        //A 404 from DispatchAtPathAsync happens during registration load
+        //A 404 from DispatchAtEndpointAsync happens during registration load
         //(the registration isn't found) — before any matcher runs and before
         //HandleAsync is called. If the library emits an activity for
         //dispatch-level errors, assert on it. Otherwise this test documents

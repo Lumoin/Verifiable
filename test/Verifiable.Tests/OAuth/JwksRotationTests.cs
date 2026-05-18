@@ -266,9 +266,9 @@ internal sealed class JwksRotationTests
         context.SetTenantId(segment);
         context.SetIssuer(BaseUri);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,

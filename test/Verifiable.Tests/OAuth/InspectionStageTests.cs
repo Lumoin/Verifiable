@@ -117,9 +117,9 @@ internal sealed class InspectionStageTests
         context.SetTenantId(segment);
         context.SetIssuer(VerifierBaseUri);
 
-        ServerHttpResponse response = await host.DispatchAtPathAsync(
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,

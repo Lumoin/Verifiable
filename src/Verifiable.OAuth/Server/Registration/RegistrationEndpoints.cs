@@ -52,9 +52,10 @@ public static class RegistrationEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate for the per-registration RFC 7592
-    /// management endpoints (GET / PUT / DELETE on
-    /// <see cref="ServerEndpointPaths.RegistrationManagement"/>). Pass this
-    /// to <see cref="ServerConfiguration.EndpointBuilders"/>.
+    /// management endpoints (GET / PUT / DELETE on the URL the application's
+    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// returns for <see cref="WellKnownEndpointNames.RegistrationRegister"/>).
+    /// Pass this to <see cref="ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     /// <remarks>
     /// Endpoints are emitted only when the registration's capability set
@@ -74,8 +75,8 @@ public static class RegistrationEndpoints
 
     /// <summary>
     /// Handles the global RFC 7591 §3 POST request. Invoked by the application
-    /// skin from its routing layer when a request arrives at
-    /// <see cref="ServerEndpointPaths.GlobalRegistration"/>.
+    /// skin from its routing layer when a request arrives at the deployment's
+    /// global registration endpoint (typically <c>/connect/register</c>).
     /// </summary>
     /// <remarks>
     /// <para>

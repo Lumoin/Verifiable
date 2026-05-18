@@ -355,9 +355,9 @@ internal sealed class JarAuthorizeByValueTests
 
         RequestContext context = new();
         context.SetSubjectId(TestSubject);
-        ServerHttpResponse response = await host.DispatchAtPathAsync(
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Authorize,
+            WellKnownEndpointNames.AuthCodeAuthorize,
             "GET",
             fields,
             context,
@@ -399,9 +399,9 @@ internal sealed class JarAuthorizeByValueTests
 
         RequestContext context = new();
         context.SetSubjectId(TestSubject);
-        ServerHttpResponse response = await host.DispatchAtPathAsync(
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Authorize,
+            WellKnownEndpointNames.AuthCodeAuthorize,
             "GET",
             fields,
             context,
@@ -610,9 +610,9 @@ internal sealed class JarAuthorizeByValueTests
         RequestContext context = new();
         context.SetSubjectId(TestSubject);
 
-        return await host.DispatchAtPathAsync(
+        return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Authorize,
+            WellKnownEndpointNames.AuthCodeAuthorize,
             "GET",
             fields,
             context,

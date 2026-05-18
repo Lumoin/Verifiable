@@ -18,7 +18,7 @@ namespace Verifiable.Tests.OAuth;
 /// <remarks>
 /// Drives PAR → Authorize → Token with <c>openid</c> in the requested scope
 /// and asserts the wire-level shape of the issued <c>id_token</c>. Tests
-/// dispatch directly via <see cref="TestHostShell.DispatchAtPathAsync"/>
+/// dispatch directly via <see cref="TestHostShell.DispatchAtEndpointAsync"/>
 /// rather than through the HTTP transport — same pattern as
 /// <see cref="RefreshGrantTests"/>, sufficient for asserting the AS's
 /// response body. DPoP-bound ID Token (RFC 9449 §6 cnf-on-ID-Token)
@@ -256,9 +256,9 @@ internal sealed class IdTokenIssuanceTests
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = scope
         };
-        ServerHttpResponse parResponse = await host.DispatchAtPathAsync(
+        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Par, "POST",
+            WellKnownEndpointNames.AuthCodePar, "POST",
             parFields, new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, parResponse.StatusCode, parResponse.Body);
@@ -271,9 +271,9 @@ internal sealed class IdTokenIssuanceTests
         };
         RequestContext authorizeContext = new();
         authorizeContext.SetSubjectId(SubjectId);
-        ServerHttpResponse authorizeResponse = await host.DispatchAtPathAsync(
+        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Authorize, WellKnownHttpMethods.Get,
+            WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
             authorizeFields, authorizeContext,
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(302, authorizeResponse.StatusCode);
@@ -287,9 +287,9 @@ internal sealed class IdTokenIssuanceTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
         };
-        return await host.DispatchAtPathAsync(
+        return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Token, "POST",
+            WellKnownEndpointNames.AuthCodeToken, "POST",
             tokenFields, new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
     }

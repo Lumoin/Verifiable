@@ -416,37 +416,11 @@ internal sealed class TestHostShell: IAsyncDisposable
                 }
 
                 //Phase 9h chunk 9 — the library asks for endpoint URLs solely
-                //by WellKnownEndpointNames key, both for chain-build URL
-                //resolution and (after the chunk 9 discovery-emission port)
-                //for metadata field emission via the chain walk. Switch
-                //expressions over string require constant patterns; these
-                //identifiers are static readonly strings for cross-assembly
-                //data-block sharing, so the dispatch is written as an
-                //equality chain.
-                string? suffix;
-                if(endpointKey == WellKnownEndpointNames.AuthCodePar) { suffix = "par"; }
-                else if(endpointKey == WellKnownEndpointNames.AuthCodeJarPar) { suffix = "par"; }
-                else if(endpointKey == WellKnownEndpointNames.AuthCodeAuthorize) { suffix = "authorize"; }
-                else if(endpointKey == WellKnownEndpointNames.AuthCodeDirectAuthorize) { suffix = "authorize"; }
-                else if(endpointKey == WellKnownEndpointNames.AuthCodeAuthorizeJarByValue) { suffix = "authorize"; }
-                else if(endpointKey == WellKnownEndpointNames.AuthCodeToken) { suffix = "token"; }
-                else if(endpointKey == WellKnownEndpointNames.AuthCodeRefreshToken) { suffix = "token"; }
-                else if(endpointKey == WellKnownEndpointNames.AuthCodeRevoke) { suffix = "revoke"; }
-                else if(endpointKey == WellKnownEndpointNames.AuthCodeIntrospect) { suffix = "introspect"; }
-                else if(endpointKey == WellKnownEndpointNames.Oid4VpPar) { suffix = "par"; }
-                else if(endpointKey == WellKnownEndpointNames.Oid4VpJarRequest) { suffix = "jar"; }
-                else if(endpointKey == WellKnownEndpointNames.Oid4VpDirectPost) { suffix = "cb"; }
-                else if(endpointKey == WellKnownEndpointNames.MetadataJwks) { suffix = "jwks"; }
-                else if(endpointKey == WellKnownEndpointNames.MetadataDiscovery)
-                {
-                    suffix = ".well-known/openid-configuration";
-                }
-                else if(endpointKey == WellKnownEndpointNames.RegistrationRegister) { suffix = "register"; }
-                else
-                {
-                    suffix = null;
-                }
-
+                //The path-suffix dispatch lives in a private static helper
+                //(EndpointPathSuffix) shared with ComposeEndpointPath /
+                //ComposeEndpointUri — fixture code that needs concrete URIs
+                //synchronously calls the same source-of-truth.
+                string? suffix = EndpointPathSuffix(endpointKey);
                 if(suffix is null)
                 {
                     return ValueTask.FromResult<Uri?>(null);
@@ -718,8 +692,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             ? BuildClientMetadata(clientId, exchangeKeyPair.PublicKey, encryptionKeyId)
             : null;
 
-        Uri responseUri = new(baseUri, ServerEndpointPaths.DirectPost
-            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri responseUri = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VpDirectPost, segment));
 
         ClientRecord registration = new()
         {
@@ -818,8 +791,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             SigningKeys = ImmutableDictionary<KeyUsageContext, SigningKeySet>.Empty
                 .Add(KeyUsageContext.JarSigning, new SigningKeySet { Current = [signingKeyId] }),
             TokenLifetimes = ImmutableDictionary<string, TimeSpan>.Empty,
-            ResponseUri = new Uri(baseUri, ServerEndpointPaths.DirectPost
-                .Replace("{segment}", segment, StringComparison.Ordinal))
+            ResponseUri = new Uri(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VpDirectPost, segment))
         };
 
         Registrations[segment] = registration;
@@ -910,12 +882,9 @@ internal sealed class TestHostShell: IAsyncDisposable
         string segment = record.TenantId.Value;
         Uri baseUri = new("https://verifier.example.com");
 
-        Uri parEndpoint = new(baseUri, ServerEndpointPaths.Par
-            .Replace("{segment}", segment, StringComparison.Ordinal));
-        Uri authEndpoint = new(baseUri, ServerEndpointPaths.Authorize
-            .Replace("{segment}", segment, StringComparison.Ordinal));
-        Uri tokenEndpoint = new(baseUri, ServerEndpointPaths.Token
-            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri parEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
+        Uri authEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment));
+        Uri tokenEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
         Uri issuerUriValue = new(issuerUri);
 
         AuthorizationServerMetadata metadata = new()
@@ -1005,12 +974,9 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         string segment = alignedRecord.TenantId.Value;
         Uri baseUri = HttpBaseAddress!;
-        Uri parEndpoint = new(baseUri, ServerEndpointPaths.Par
-            .Replace("{segment}", segment, StringComparison.Ordinal));
-        Uri authEndpoint = new(baseUri, ServerEndpointPaths.Authorize
-            .Replace("{segment}", segment, StringComparison.Ordinal));
-        Uri tokenEndpoint = new(baseUri, ServerEndpointPaths.Token
-            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri parEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
+        Uri authEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment));
+        Uri tokenEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
         Uri issuerUriValue = alignedRecord.IssuerUri!;
 
         AuthorizationServerMetadata metadata = new()
@@ -1137,12 +1103,9 @@ internal sealed class TestHostShell: IAsyncDisposable
         Dictionary<string, OAuthFlowState> clientFlowStore = [];
 
         Uri baseUri = new("https://verifier.example.com");
-        Uri parEndpoint = new(baseUri, ServerEndpointPaths.Par
-            .Replace("{segment}", DynamicRegistrationTenant, StringComparison.Ordinal));
-        Uri authEndpoint = new(baseUri, ServerEndpointPaths.Authorize
-            .Replace("{segment}", DynamicRegistrationTenant, StringComparison.Ordinal));
-        Uri tokenEndpoint = new(baseUri, ServerEndpointPaths.Token
-            .Replace("{segment}", DynamicRegistrationTenant, StringComparison.Ordinal));
+        Uri parEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, DynamicRegistrationTenant));
+        Uri authEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, DynamicRegistrationTenant));
+        Uri tokenEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, DynamicRegistrationTenant));
 
         AuthorizationServerMetadata metadata = new()
         {
@@ -1471,7 +1434,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         //a real verifier deployment that exposed this endpoint internally
         //would do the same.
         string segment = keyMaterial.Registration.TenantId.Value;
-        string parPath = ServerEndpointPaths.Par.Replace("{segment}", segment, StringComparison.Ordinal);
+        string parPath = TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment);
 
         IncomingRequest request = new(
             Path: parPath,
@@ -1520,8 +1483,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         //URL routing layer extracted the {flowId} segment from the JAR URL
         //and placed it on context before dispatching.
         string segment = keyMaterial.Registration.TenantId.Value;
-        string jarPath = ServerEndpointPaths.JarRequest
-            .Replace("{segment}", segment, StringComparison.Ordinal)
+        string jarPath = TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VpJarRequest, segment)
             .Replace("{flowId}", externalToken, StringComparison.Ordinal);
 
         IncomingRequest request = new(
@@ -1572,8 +1534,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         };
 
         string segment = keyMaterial.Registration.TenantId.Value;
-        string directPostPath = ServerEndpointPaths.DirectPost
-            .Replace("{segment}", segment, StringComparison.Ordinal);
+        string directPostPath = TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VpDirectPost, segment);
 
         IncomingRequest request = new(
             Path: directPostPath,
@@ -1614,30 +1575,49 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
-    /// Test-side convenience: dispatches a request at the given
-    /// <paramref name="pathTemplate"/> for <paramref name="segment"/>, building
-    /// the <see cref="IncomingRequest"/> from the template (with
-    /// <c>{segment}</c> substituted), the supplied HTTP method, and fields.
-    /// Tests pass <see cref="ServerEndpointPaths"/> constants directly.
+    /// Test-side convenience: dispatches a request at the URL the
+    /// application's
+    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// resolves for <paramref name="endpointName"/> and
+    /// <paramref name="segment"/>, builds the <see cref="IncomingRequest"/>
+    /// from that URL's <see cref="Uri.AbsolutePath"/> plus the supplied HTTP
+    /// method and fields, and dispatches. Tests pass
+    /// <see cref="WellKnownEndpointNames"/> constants directly.
     /// </summary>
-    public async ValueTask<ServerHttpResponse> DispatchAtPathAsync(
+    /// <remarks>
+    /// Routing through <c>ResolveEndpointUriAsync</c> means tests exercise
+    /// the same URL-resolution path the production AS uses. The
+    /// <see cref="ResolveEndpointUriAsync"/> lambda wired in this fixture is
+    /// the single test-side source of URL shape; changes to URL shape happen
+    /// there, not in every test.
+    /// </remarks>
+    public async ValueTask<ServerHttpResponse> DispatchAtEndpointAsync(
         string segment,
-        string pathTemplate,
+        string endpointName,
         string httpMethod,
         RequestFields fields,
         RequestContext context,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(segment);
-        ArgumentException.ThrowIfNullOrWhiteSpace(pathTemplate);
+        ArgumentException.ThrowIfNullOrWhiteSpace(endpointName);
         ArgumentException.ThrowIfNullOrWhiteSpace(httpMethod);
         ArgumentNullException.ThrowIfNull(fields);
         ArgumentNullException.ThrowIfNull(context);
 
-        string concretePath = pathTemplate.Replace("{segment}", segment, StringComparison.Ordinal);
+        //The fixture's URL-shape choice lives in ComposeEndpointPath /
+        //ResolveEndpointUriAsync — both call the same EndpointPathSuffix
+        //helper. ComposeEndpointPath is the synchronous form; we use it
+        //here so DispatchAtEndpointAsync works for unknown segments
+        //(negative-path tests verifying 404 behaviour for unregistered
+        //tenants). The dispatcher's own AuthorizationServer.DispatchAsync
+        //invokes Integration.ResolveEndpointUriAsync at chain-build time
+        //for the happy path, so the lambda is end-to-end exercised
+        //regardless of whether this helper calls it explicitly.
+        string path = ComposeEndpointPath(endpointName, segment);
 
         IncomingRequest request = new(
-            Path: concretePath,
+            Path: path,
             Method: httpMethod,
             Fields: fields,
             Headers: RequestHeaders.Empty,
@@ -2069,12 +2049,9 @@ internal sealed class TestHostShell: IAsyncDisposable
         //path (it has no direct access to the externally-visible URL); pin the
         //client-side endpoint URLs to the same authority so both sides agree.
         Uri baseUri = new(issuerUriValue.GetLeftPart(UriPartial.Authority));
-        Uri parEndpoint = new(baseUri, ServerEndpointPaths.Par
-            .Replace("{segment}", segment, StringComparison.Ordinal));
-        Uri authEndpoint = new(baseUri, ServerEndpointPaths.Authorize
-            .Replace("{segment}", segment, StringComparison.Ordinal));
-        Uri tokenEndpoint = new(baseUri, ServerEndpointPaths.Token
-            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri parEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
+        Uri authEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment));
+        Uri tokenEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
 
         AuthorizationServerMetadata metadata = new()
         {
@@ -2179,12 +2156,9 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         string segment = alignedRecord.TenantId.Value;
         Uri baseUri = HttpBaseAddress!;
-        Uri parEndpoint = new(baseUri, ServerEndpointPaths.Par
-            .Replace("{segment}", segment, StringComparison.Ordinal));
-        Uri authEndpoint = new(baseUri, ServerEndpointPaths.Authorize
-            .Replace("{segment}", segment, StringComparison.Ordinal));
-        Uri tokenEndpoint = new(baseUri, ServerEndpointPaths.Token
-            .Replace("{segment}", segment, StringComparison.Ordinal));
+        Uri parEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
+        Uri authEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment));
+        Uri tokenEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
         Uri issuerUriValue = alignedRecord.IssuerUri!;
 
         AuthorizationServerMetadata metadata = new()
@@ -2383,6 +2357,74 @@ internal sealed class TestHostShell: IAsyncDisposable
         {
             key.Dispose();
         }
+    }
+
+
+    /// <summary>
+    /// Composes the absolute path for a
+    /// <see cref="WellKnownEndpointNames"/> role at a given tenant segment,
+    /// using the same path scheme the
+    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// lambda this fixture wires produces. Use this from synchronous test
+    /// code (registration construction, expected-URL builders) that needs
+    /// the path without going through the async resolver.
+    /// </summary>
+    /// <remarks>
+    /// Both this helper and the resolver lambda call
+    /// <see cref="EndpointPathSuffix"/> so the two stay in sync. The
+    /// <c>/connect/{segment}/&lt;suffix&gt;</c> scheme is the test
+    /// fixture's URL-shape choice and lives in one place.
+    /// </remarks>
+    public static string ComposeEndpointPath(string endpointName, string segment)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(endpointName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+
+        string suffix = EndpointPathSuffix(endpointName)
+            ?? throw new ArgumentException(
+                $"No fixture path mapping registered for endpoint role '{endpointName}'.",
+                nameof(endpointName));
+
+        return $"/connect/{segment}/{suffix}";
+    }
+
+
+    /// <summary>
+    /// <see cref="Uri"/>-returning companion to
+    /// <see cref="ComposeEndpointPath"/>. Resolves the absolute URL against
+    /// <paramref name="baseUri"/>; the host part comes from
+    /// <paramref name="baseUri"/>'s authority.
+    /// </summary>
+    public static Uri ComposeEndpointUri(Uri baseUri, string segment, string endpointName)
+    {
+        ArgumentNullException.ThrowIfNull(baseUri);
+        return new Uri(baseUri, ComposeEndpointPath(endpointName, segment));
+    }
+
+
+    //Shared suffix dispatch — read by ResolveEndpointUriAsync and by the
+    //synchronous Compose* helpers. The fixture's URL-shape contract lives
+    //here in one place. New endpoint roles get added to both
+    //WellKnownEndpointNames (in the library) and to this switch (in this
+    //fixture).
+    private static string? EndpointPathSuffix(string endpointName)
+    {
+        if(endpointName == WellKnownEndpointNames.AuthCodePar) { return "par"; }
+        if(endpointName == WellKnownEndpointNames.AuthCodeJarPar) { return "par"; }
+        if(endpointName == WellKnownEndpointNames.AuthCodeAuthorize) { return "authorize"; }
+        if(endpointName == WellKnownEndpointNames.AuthCodeAuthorizeJarByValue) { return "authorize"; }
+        if(endpointName == WellKnownEndpointNames.AuthCodeDirectAuthorize) { return "authorize"; }
+        if(endpointName == WellKnownEndpointNames.AuthCodeToken) { return "token"; }
+        if(endpointName == WellKnownEndpointNames.AuthCodeRefreshToken) { return "token"; }
+        if(endpointName == WellKnownEndpointNames.AuthCodeRevoke) { return "revoke"; }
+        if(endpointName == WellKnownEndpointNames.AuthCodeIntrospect) { return "introspect"; }
+        if(endpointName == WellKnownEndpointNames.Oid4VpPar) { return "par"; }
+        if(endpointName == WellKnownEndpointNames.Oid4VpJarRequest) { return "jar"; }
+        if(endpointName == WellKnownEndpointNames.Oid4VpDirectPost) { return "cb"; }
+        if(endpointName == WellKnownEndpointNames.MetadataJwks) { return "jwks"; }
+        if(endpointName == WellKnownEndpointNames.MetadataDiscovery) { return ".well-known/openid-configuration"; }
+        if(endpointName == WellKnownEndpointNames.RegistrationRegister) { return "register"; }
+        return null;
     }
 
 

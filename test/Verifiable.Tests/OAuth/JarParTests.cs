@@ -673,9 +673,9 @@ internal sealed class JarParTests
         };
 
         RequestContext context = new();
-        ServerHttpResponse response = await host.DispatchAtPathAsync(
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Par,
+            WellKnownEndpointNames.AuthCodePar,
             "POST",
             fields,
             context,
@@ -714,9 +714,9 @@ internal sealed class JarParTests
         };
 
         RequestContext context = new();
-        ServerHttpResponse response = await host.DispatchAtPathAsync(
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Par,
+            WellKnownEndpointNames.AuthCodePar,
             "POST",
             fields,
             context,
@@ -896,9 +896,9 @@ internal sealed class JarParTests
             fields[OAuthRequestParameterNames.ClientId] = outerClientId;
         }
 
-        return await host.DispatchAtPathAsync(
+        return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Par,
+            WellKnownEndpointNames.AuthCodePar,
             "POST",
             fields,
             new RequestContext(),

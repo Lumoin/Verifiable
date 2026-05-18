@@ -86,9 +86,9 @@ internal sealed class DpopEndToEndTests
         RequestContext authorizeContext = new();
         authorizeContext.SetSubjectId(TestSubject);
 
-        ServerHttpResponse authorizeResponse = await host.DispatchAtPathAsync(
+        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Authorize,
+            WellKnownEndpointNames.AuthCodeAuthorize,
             WellKnownHttpMethods.Get,
             authorizeFields,
             authorizeContext,
@@ -259,9 +259,9 @@ internal sealed class DpopEndToEndTests
         RequestContext authorizeContext = new();
         authorizeContext.SetSubjectId(TestSubject);
 
-        ServerHttpResponse authorizeResponse = await host.DispatchAtPathAsync(
+        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Authorize,
+            WellKnownEndpointNames.AuthCodeAuthorize,
             WellKnownHttpMethods.Get,
             authorizeFields,
             authorizeContext,

@@ -22,7 +22,7 @@ namespace Verifiable.Tests.OAuth;
 /// </list>
 /// <remarks>
 /// Tests dispatch directly against the AS via
-/// <see cref="TestHostShell.DispatchAtPathAsync"/> and inspect
+/// <see cref="TestHostShell.DispatchAtEndpointAsync"/> and inspect
 /// <see cref="ServerHttpResponse.Headers"/> rather than threading
 /// through a client-side accessor. Both gaps are observable at the
 /// server-side response shape; the wire-level fidelity test
@@ -68,9 +68,9 @@ internal sealed class Phase9aResponseHeadersTests
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
 
-        ServerHttpResponse response = await host.DispatchAtPathAsync(
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Par,
+            WellKnownEndpointNames.AuthCodePar,
             "POST",
             fields,
             new RequestContext(),
@@ -105,9 +105,9 @@ internal sealed class Phase9aResponseHeadersTests
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
 
-        ServerHttpResponse response = await host.DispatchAtPathAsync(
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Par,
+            WellKnownEndpointNames.AuthCodePar,
             "POST",
             fields,
             new RequestContext(),
@@ -138,9 +138,9 @@ internal sealed class Phase9aResponseHeadersTests
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
 
-        ServerHttpResponse response = await host.DispatchAtPathAsync(
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Par,
+            WellKnownEndpointNames.AuthCodePar,
             "POST",
             fields,
             new RequestContext(),
@@ -177,9 +177,9 @@ internal sealed class Phase9aResponseHeadersTests
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
-        ServerHttpResponse parResponse = await host.DispatchAtPathAsync(
+        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Par,
+            WellKnownEndpointNames.AuthCodePar,
             "POST", parFields, new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, parResponse.StatusCode);
@@ -193,9 +193,9 @@ internal sealed class Phase9aResponseHeadersTests
         };
         RequestContext authorizeContext = new();
         authorizeContext.SetSubjectId("subject-1");
-        ServerHttpResponse authorizeResponse = await host.DispatchAtPathAsync(
+        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Authorize,
+            WellKnownEndpointNames.AuthCodeAuthorize,
             WellKnownHttpMethods.Get, authorizeFields, authorizeContext,
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(302, authorizeResponse.StatusCode);
@@ -210,9 +210,9 @@ internal sealed class Phase9aResponseHeadersTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString()
         };
-        ServerHttpResponse tokenResponse = await host.DispatchAtPathAsync(
+        ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Token,
+            WellKnownEndpointNames.AuthCodeToken,
             "POST", tokenFields, new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
 

@@ -17,7 +17,7 @@ namespace Verifiable.Tests.OAuth;
 /// expiry, client-id binding, and the unknown-grant_type failure mode.
 /// </summary>
 /// <remarks>
-/// Tests dispatch directly via <see cref="TestHostShell.DispatchAtPathAsync"/>
+/// Tests dispatch directly via <see cref="TestHostShell.DispatchAtEndpointAsync"/>
 /// — the refresh endpoint is server-side. Per the phase 9b norm, AS-
 /// touching tests use <c>await using</c> with the async-disposable host.
 /// </remarks>
@@ -135,9 +135,9 @@ internal sealed class RefreshGrantTests
             [OAuthRequestParameterNames.ClientId] = "https://attacker.example.com"
         };
 
-        ServerHttpResponse response = await host.DispatchAtPathAsync(
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Token, "POST",
+            WellKnownEndpointNames.AuthCodeToken, "POST",
             refreshFields, new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -164,9 +164,9 @@ internal sealed class RefreshGrantTests
             [OAuthRequestParameterNames.ClientId] = ClientId
         };
 
-        ServerHttpResponse response = await host.DispatchAtPathAsync(
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Token, "POST",
+            WellKnownEndpointNames.AuthCodeToken, "POST",
             fields, new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -193,9 +193,9 @@ internal sealed class RefreshGrantTests
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
-        ServerHttpResponse parResponse = await host.DispatchAtPathAsync(
+        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Par, "POST",
+            WellKnownEndpointNames.AuthCodePar, "POST",
             parFields, new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, parResponse.StatusCode);
@@ -209,9 +209,9 @@ internal sealed class RefreshGrantTests
         };
         RequestContext authorizeContext = new();
         authorizeContext.SetSubjectId("subject-1");
-        ServerHttpResponse authorizeResponse = await host.DispatchAtPathAsync(
+        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Authorize, WellKnownHttpMethods.Get,
+            WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
             authorizeFields, authorizeContext,
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(302, authorizeResponse.StatusCode);
@@ -226,9 +226,9 @@ internal sealed class RefreshGrantTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
         };
-        ServerHttpResponse tokenResponse = await host.DispatchAtPathAsync(
+        ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Token, "POST",
+            WellKnownEndpointNames.AuthCodeToken, "POST",
             tokenFields, new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode,
@@ -250,9 +250,9 @@ internal sealed class RefreshGrantTests
             [OAuthRequestParameterNames.RefreshToken] = refreshToken,
             [OAuthRequestParameterNames.ClientId] = ClientId
         };
-        return await host.DispatchAtPathAsync(
+        return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
-            ServerEndpointPaths.Token, "POST",
+            WellKnownEndpointNames.AuthCodeToken, "POST",
             refreshFields, new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
     }

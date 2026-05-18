@@ -158,9 +158,9 @@ internal sealed class JwkMicrosoftInteropTests
         context.SetTenantId(segment);
         context.SetIssuer(new Uri("https://issuer.example.com"));
 
-        return await app.DispatchAtPathAsync(
+        return await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,

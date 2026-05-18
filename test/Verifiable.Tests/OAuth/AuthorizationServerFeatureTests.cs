@@ -445,9 +445,9 @@ internal sealed class AuthorizationServerFeatureTests
             "ClientDeregistered must carry the deregistration reason.");
 
         //A dispatch to the deregistered segment must return 404.
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Par,
+            WellKnownEndpointNames.AuthCodePar,
             "POST",
             new RequestFields(),
             new RequestContext(),
@@ -763,9 +763,9 @@ internal sealed class AuthorizationServerFeatureTests
         context.SetDecryptionKeyId(keys.EncryptionKeyId);
         context.SetTenantId(segment);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Par,
+            WellKnownEndpointNames.AuthCodePar,
             "POST",
             new RequestFields(),
             context,
@@ -807,9 +807,9 @@ internal sealed class AuthorizationServerFeatureTests
         context.SetTenantId(keys.Registration.TenantId);
         context.SetCorrelationKey(parHandle);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId,
-            ServerEndpointPaths.JarRequest,
+            WellKnownEndpointNames.Oid4VpJarRequest,
             "GET",
             new RequestFields(),
             context,
@@ -876,9 +876,9 @@ internal sealed class AuthorizationServerFeatureTests
         RequestContext context = new();
         context.SetTenantId(keys.Registration.TenantId);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId,
-            ServerEndpointPaths.DirectPost,
+            WellKnownEndpointNames.Oid4VpDirectPost,
             "POST",
             new RequestFields
             {
@@ -944,9 +944,9 @@ internal sealed class AuthorizationServerFeatureTests
         context.SetTenantId(keys.Registration.TenantId);
         context.SetOid4VpRedirectUri(sameDeviceRedirectUri);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId,
-            ServerEndpointPaths.DirectPost,
+            WellKnownEndpointNames.Oid4VpDirectPost,
             "POST",
             new RequestFields
             {
@@ -976,9 +976,9 @@ internal sealed class AuthorizationServerFeatureTests
     {
         await using TestHostShell app = new(TimeProvider);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             "doesnotexist",
-            ServerEndpointPaths.Par,
+            WellKnownEndpointNames.AuthCodePar,
             "POST",
             new RequestFields(),
             new RequestContext(),
@@ -1022,37 +1022,45 @@ internal sealed class AuthorizationServerFeatureTests
 
         string segment = keys.Registration.TenantId;
 
-        Uri parUri = ServerEndpointPaths.ComputeUri(
-            VerifierBaseUri, segment, ServerEndpointPaths.Par);
-        Uri jarUri = ServerEndpointPaths.ComputeUri(
-            VerifierBaseUri, segment, ServerEndpointPaths.JarRequest);
-        Uri directPostUri = ServerEndpointPaths.ComputeUri(
-            VerifierBaseUri, segment, ServerEndpointPaths.DirectPost);
-        Uri jwksUri = ServerEndpointPaths.ComputeUri(
-            VerifierBaseUri, segment, ServerEndpointPaths.Jwks);
-        Uri discoveryUri = ServerEndpointPaths.ComputeUri(
-            VerifierBaseUri, segment, ServerEndpointPaths.Discovery);
+        //Phase 9h chunk 12 — URL shape is the application's choice (the
+        //ResolveEndpointUriAsync lambda), no longer the library's baked-in
+        //path template. This test now verifies the fixture's lambda produces
+        //the expected /connect/{segment}/<suffix> shape for each endpoint
+        //role, which is the same contract any production application
+        //provides through its own ResolveEndpointUriAsync wiring.
+        Uri parUri = TestHostShell.ComposeEndpointUri(
+            VerifierBaseUri, segment, WellKnownEndpointNames.AuthCodePar);
+        Uri jarUri = TestHostShell.ComposeEndpointUri(
+            VerifierBaseUri, segment, WellKnownEndpointNames.Oid4VpJarRequest);
+        Uri directPostUri = TestHostShell.ComposeEndpointUri(
+            VerifierBaseUri, segment, WellKnownEndpointNames.Oid4VpDirectPost);
+        Uri jwksUri = TestHostShell.ComposeEndpointUri(
+            VerifierBaseUri, segment, WellKnownEndpointNames.MetadataJwks);
+        Uri discoveryUri = TestHostShell.ComposeEndpointUri(
+            VerifierBaseUri, segment, WellKnownEndpointNames.MetadataDiscovery);
 
         Assert.AreEqual(
             $"https://verifier.example.com/connect/{segment}/par",
             parUri.ToString(),
-            "PAR URI must follow the /connect/{segment}/par pattern.");
+            "PAR URI must follow the fixture's /connect/{segment}/par pattern.");
         Assert.AreEqual(
-            $"https://verifier.example.com/connect/{segment}/request/{{flowId}}",
+            $"https://verifier.example.com/connect/{segment}/jar",
             jarUri.ToString(),
-            "JAR request URI must follow the /connect/{segment}/request/{flowId} pattern.");
+            "JAR request URI must follow the fixture's /connect/{segment}/jar pattern. "
+            + "The library no longer bakes a per-flow {flowId} into the path; the "
+            + "request_uri the wallet receives carries the per-flow handle, not the URL.");
         Assert.AreEqual(
             $"https://verifier.example.com/connect/{segment}/cb",
             directPostUri.ToString(),
-            "Direct-post URI must follow the /connect/{segment}/cb pattern.");
+            "Direct-post URI must follow the fixture's /connect/{segment}/cb pattern.");
         Assert.AreEqual(
             $"https://verifier.example.com/connect/{segment}/jwks",
             jwksUri.ToString(),
-            "JWKS URI must follow the /connect/{segment}/jwks pattern.");
+            "JWKS URI must follow the fixture's /connect/{segment}/jwks pattern.");
         Assert.AreEqual(
             $"https://verifier.example.com/connect/{segment}/.well-known/openid-configuration",
             discoveryUri.ToString(),
-            "Discovery URI must follow the /connect/{segment}/.well-known/openid-configuration pattern.");
+            "Discovery URI must follow the fixture's /connect/{segment}/.well-known/openid-configuration pattern.");
     }
 
 
@@ -1073,9 +1081,9 @@ internal sealed class AuthorizationServerFeatureTests
         context.SetDecryptionKeyId(keys.EncryptionKeyId);
         context.SetTenantId(segment);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Par,
+            WellKnownEndpointNames.AuthCodePar,
             "POST",
             new RequestFields(),
             context,
@@ -1268,9 +1276,9 @@ internal sealed class AuthorizationServerFeatureTests
         context["app.tenantId"] = tenantId;
         context["app.callerTier"] = callerTier;
 
-        await app.DispatchAtPathAsync(
+        await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,
@@ -1326,9 +1334,9 @@ internal sealed class AuthorizationServerFeatureTests
         unrestrictedContext.SetTenantId(segment);
         unrestrictedContext.SetIssuer(VerifierBaseUri);
         unrestrictedContext["app.restricted"] = false;
-        ServerHttpResponse unrestrictedResponse = await app.DispatchAtPathAsync(
+        ServerHttpResponse unrestrictedResponse = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             unrestrictedContext,
@@ -1339,9 +1347,9 @@ internal sealed class AuthorizationServerFeatureTests
         restrictedContext.SetTenantId(segment);
         restrictedContext.SetIssuer(VerifierBaseUri);
         restrictedContext["app.restricted"] = true;
-        ServerHttpResponse restrictedResponse = await app.DispatchAtPathAsync(
+        ServerHttpResponse restrictedResponse = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             restrictedContext,
@@ -1381,9 +1389,9 @@ internal sealed class AuthorizationServerFeatureTests
         context.SetTenantId(segment);
         context.SetIssuer(VerifierBaseUri);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Discovery,
+            WellKnownEndpointNames.MetadataDiscovery,
             "GET",
             new RequestFields(),
             context,
@@ -1407,8 +1415,8 @@ internal sealed class AuthorizationServerFeatureTests
         //The discovery handler resolves the issuer via the library resolver, which
         //prefers the registration's IssuerUri over the context's request-scoped
         //fallback. Build the expectation from the same source.
-        Uri expectedJwksUri = ServerEndpointPaths.ComputeUri(
-            keys.Registration.IssuerUri!, segment, ServerEndpointPaths.Jwks);
+        Uri expectedJwksUri = TestHostShell.ComposeEndpointUri(
+            keys.Registration.IssuerUri!, segment, WellKnownEndpointNames.MetadataJwks);
         Assert.AreEqual(expectedJwksUri.ToString(), jwksUriEl.GetString(),
             "Advertised JWKS URI must match the computed URI for this segment.");
 
@@ -1435,9 +1443,9 @@ internal sealed class AuthorizationServerFeatureTests
         context.SetTenantId(segment);
         context.SetIssuer(VerifierBaseUri);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,
@@ -1477,17 +1485,17 @@ internal sealed class AuthorizationServerFeatureTests
         context.SetTenantId(segment);
         context.SetIssuer(VerifierBaseUri);
 
-        ServerHttpResponse jwksResponse = await app.DispatchAtPathAsync(
+        ServerHttpResponse jwksResponse = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        ServerHttpResponse discoveryResponse = await app.DispatchAtPathAsync(
+        ServerHttpResponse discoveryResponse = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Discovery,
+            WellKnownEndpointNames.MetadataDiscovery,
             "GET",
             new RequestFields(),
             context,
@@ -1539,9 +1547,9 @@ internal sealed class AuthorizationServerFeatureTests
         const int requestCount = 3;
         for(int i = 0; i < requestCount; i++)
         {
-            await app.DispatchAtPathAsync(
+            await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,
@@ -1615,9 +1623,9 @@ internal sealed class AuthorizationServerFeatureTests
         context.SetTenantId(segment);
         context.SetIssuer(VerifierBaseUri);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,
@@ -1675,9 +1683,9 @@ internal sealed class AuthorizationServerFeatureTests
             context.SetTenantId(segment);
             context.SetIssuer(VerifierBaseUri);
             context["app.region"] = region;
-            await app.DispatchAtPathAsync(
+            await app.DispatchAtEndpointAsync(
             segment,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,
@@ -1753,9 +1761,9 @@ internal sealed class AuthorizationServerFeatureTests
 
         for(int i = 0; i < 10; i++)
         {
-            ServerHttpResponse response = await app.DispatchAtPathAsync(
+            ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment2,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,
@@ -1771,9 +1779,9 @@ internal sealed class AuthorizationServerFeatureTests
             "no recomputation was needed.");
 
         using JsonDocument doc = JsonDocument.Parse(
-            (await app.DispatchAtPathAsync(
+            (await app.DispatchAtEndpointAsync(
             segment2,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,
@@ -1891,13 +1899,13 @@ internal sealed class AuthorizationServerFeatureTests
 
         string segment = keys.Registration.TenantId.Value;
 
-        ServerHttpResponse first = await app.DispatchAtPathAsync(
-            segment, ServerEndpointPaths.Jwks, "GET",
+        ServerHttpResponse first = await app.DispatchAtEndpointAsync(
+            segment, WellKnownEndpointNames.MetadataJwks, "GET",
             new RequestFields(), new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        ServerHttpResponse second = await app.DispatchAtPathAsync(
-            segment, ServerEndpointPaths.Jwks, "GET",
+        ServerHttpResponse second = await app.DispatchAtEndpointAsync(
+            segment, WellKnownEndpointNames.MetadataJwks, "GET",
             new RequestFields(), new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1929,9 +1937,9 @@ internal sealed class AuthorizationServerFeatureTests
             return ValueTask.FromResult<IReadOnlySet<ServerCapabilityName>>(attenuated);
         };
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
-            ServerEndpointPaths.Jwks, "GET",
+            WellKnownEndpointNames.MetadataJwks, "GET",
             new RequestFields(), new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1949,9 +1957,9 @@ internal sealed class AuthorizationServerFeatureTests
 
         int flowsBefore = app.FlowStore.Count;
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
-            ServerEndpointPaths.Jwks, "GET",
+            WellKnownEndpointNames.MetadataJwks, "GET",
             new RequestFields(), new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1985,9 +1993,9 @@ internal sealed class AuthorizationServerFeatureTests
         RequestContext context = new();
         context.SetCorrelationKey(parHandle);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
-            ServerEndpointPaths.JarRequest, "GET",
+            WellKnownEndpointNames.Oid4VpJarRequest, "GET",
             new RequestFields(), context,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -2005,9 +2013,9 @@ internal sealed class AuthorizationServerFeatureTests
 
         RequestContext context = new();
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
-            ServerEndpointPaths.Jwks, "GET",
+            WellKnownEndpointNames.MetadataJwks, "GET",
             new RequestFields(), context,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -2041,9 +2049,9 @@ internal sealed class AuthorizationServerFeatureTests
         RequestContext context = new();
         context.SetCorrelationKey(parHandle);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
-            ServerEndpointPaths.JarRequest, "GET",
+            WellKnownEndpointNames.Oid4VpJarRequest, "GET",
             new RequestFields(), context,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -2079,9 +2087,9 @@ internal sealed class AuthorizationServerFeatureTests
             return ValueTask.CompletedTask;
         };
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
-            ServerEndpointPaths.Jwks, "GET",
+            WellKnownEndpointNames.MetadataJwks, "GET",
             new RequestFields(), new RequestContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -2116,9 +2124,9 @@ internal sealed class AuthorizationServerFeatureTests
 
         RequestContext outerContext = new();
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
-            ServerEndpointPaths.Jwks, "GET",
+            WellKnownEndpointNames.MetadataJwks, "GET",
             new RequestFields(), outerContext,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -2183,9 +2191,9 @@ internal sealed class AuthorizationServerFeatureTests
         RequestContext context = new();
         context.SetCorrelationKey(parHandle);
 
-        ServerHttpResponse response = await app.DispatchAtPathAsync(
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
-            ServerEndpointPaths.JarRequest, "GET",
+            WellKnownEndpointNames.Oid4VpJarRequest, "GET",
             new RequestFields(), context,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -2203,9 +2211,9 @@ internal sealed class AuthorizationServerFeatureTests
         context.SetTenantId(registration.TenantId);
         context.SetIssuer(VerifierBaseUri);
 
-        return await app.DispatchAtPathAsync(
+        return await app.DispatchAtEndpointAsync(
             registration.TenantId,
-            ServerEndpointPaths.Jwks,
+            WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
             context,
