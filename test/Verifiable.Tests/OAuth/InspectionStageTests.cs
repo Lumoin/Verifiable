@@ -93,6 +93,137 @@ internal sealed class InspectionStageTests
 
 
     [TestMethod]
+    public async Task InspectAsyncFiresAtAllFourStages()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        List<InspectionStage> recorded = [];
+        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
+        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        {
+            recorded.Add(stage);
+            return previousInspect(stage, ctx, ct);
+        };
+
+        using VerifierKeyMaterial keys = host.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        //OID4VP PAR drives a stateful flow (ParFlowKind) — exercises the full
+        //dispatch envelope: IncomingRequestStage at entry, MatchedStage after
+        //the chain walk picks the OID4VP PAR endpoint, one or more
+        //StateTransitionStage from FlowRunner, OutgoingResponseStage before
+        //the 200 returns to the caller.
+        (Uri _, string _) = await host.HandleParAsync(
+            keys,
+            new TransactionNonce("nonce-four-stage-01"),
+            CreatePreparedQuery(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsInstanceOfType<IncomingRequestStage>(recorded[0],
+            "First inspection stage of a successful dispatch must be IncomingRequestStage.");
+        Assert.IsInstanceOfType<OutgoingResponseStage>(recorded[^1],
+            "Last inspection stage of a successful dispatch must be OutgoingResponseStage.");
+
+        int matchedIndex = recorded.FindIndex(s => s is MatchedStage);
+        int outgoingIndex = recorded.FindIndex(s => s is OutgoingResponseStage);
+        Assert.IsGreaterThan(0, matchedIndex,
+            "MatchedStage must appear after IncomingRequestStage.");
+        Assert.IsLessThan(outgoingIndex, matchedIndex,
+            "MatchedStage must appear before OutgoingResponseStage.");
+
+        int transitionCount = recorded.OfType<StateTransitionStage>().Count();
+        Assert.IsGreaterThan(0, transitionCount,
+            "At least one StateTransitionStage must fire between MatchedStage and "
+            + "OutgoingResponseStage for a stateful endpoint.");
+    }
+
+
+    [TestMethod]
+    public async Task InspectAsyncMatchedStageHasNullEndpointOnNoMatch()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        MatchedStage? recordedMatched = null;
+        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
+        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        {
+            if(stage is MatchedStage matched) { recordedMatched = matched; }
+            return previousInspect(stage, ctx, ct);
+        };
+
+        using VerifierKeyMaterial keys = host.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        //Dispatch to a path that's served by no endpoint in this registration's
+        //chain — every matcher's acceptance test returns null.
+        string segment = keys.Registration.TenantId.Value;
+        IncomingRequest request = new(
+            Path: $"/connect/{segment}/unknown-endpoint",
+            Method: "POST",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty);
+
+        RequestContext context = new();
+        context.SetTenantId(segment);
+        ServerHttpResponse response = await host.Server.DispatchAsync(
+            request, context, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(404, response.StatusCode,
+            "Precondition: unmatched-path dispatch returns 404.");
+        Assert.IsNotNull(recordedMatched,
+            "MatchedStage must fire even when no endpoint matched — inspectors "
+            + "need to observe 404 dispatches too.");
+        Assert.IsNull(recordedMatched.Endpoint,
+            "MatchedStage.Endpoint must be null when the chain walk produced no match.");
+        Assert.IsNull(recordedMatched.Payload,
+            "MatchedStage.Payload must be null when the chain walk produced no match.");
+    }
+
+
+    [TestMethod]
+    public async Task InspectAsyncFiresEnvelopeStagesEvenOnUnmatchedRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        List<InspectionStage> recorded = [];
+        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
+        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        {
+            recorded.Add(stage);
+            return previousInspect(stage, ctx, ct);
+        };
+
+        using VerifierKeyMaterial keys = host.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        string segment = keys.Registration.TenantId.Value;
+        IncomingRequest request = new(
+            Path: $"/connect/{segment}/unknown-endpoint",
+            Method: "POST",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty);
+
+        RequestContext context = new();
+        context.SetTenantId(segment);
+        await host.Server.DispatchAsync(request, context, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.IsInstanceOfType<IncomingRequestStage>(recorded[0],
+            "IncomingRequestStage must fire even on an unmatched request — "
+            + "audit and replay tooling see every inbound request, not just "
+            + "the ones that found a handler.");
+        Assert.IsInstanceOfType<OutgoingResponseStage>(recorded[^1],
+            "OutgoingResponseStage must fire even on the 404 path — observers "
+            + "see the response envelope on every code path.");
+        Assert.HasCount(0, recorded.OfType<StateTransitionStage>(),
+            "StateTransitionStage must not fire when no endpoint matched — "
+            + "no flow ran, so no transition could have happened.");
+    }
+
+
+    [TestMethod]
     public async Task StateTransitionStageDoesNotFireForStatelessEndpointDispatch()
     {
         await using TestHostShell host = new(TimeProvider);

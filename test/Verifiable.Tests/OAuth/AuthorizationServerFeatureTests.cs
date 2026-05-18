@@ -1430,6 +1430,57 @@ internal sealed class AuthorizationServerFeatureTests
 
 
     [TestMethod]
+    public async Task DiscoveryEmissionDropsFieldsForCapabilitiesAttenuatedByResolveCapabilitiesAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        //Veto JwksEndpoint via the per-request capability resolver — the
+        //chain build drops the JWKS endpoint candidate; discovery emission
+        //walks the chain, so jwks_uri must be absent from the document.
+        //The library default keeps every other capability the registration
+        //allows, so the issuer and any other advertised endpoint (e.g.
+        //pushed_authorization_request_endpoint if it were in the set)
+        //still emit.
+        app.Server.Integration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        {
+            HashSet<ServerCapabilityName> attenuated =
+                [.. registration.AllowedCapabilities.Where(c => c != ServerCapabilityName.JwksEndpoint)];
+            return ValueTask.FromResult<IReadOnlySet<ServerCapabilityName>>(attenuated);
+        };
+
+        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+        string segment = keys.Registration.TenantId;
+
+        RequestContext context = new();
+        context.SetTenantId(segment);
+        context.SetIssuer(VerifierBaseUri);
+
+        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
+            segment,
+            WellKnownEndpointNames.MetadataDiscovery,
+            "GET",
+            new RequestFields(),
+            context,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode,
+            "Discovery endpoint must still return 200 — only JWKS was vetoed.");
+
+        using JsonDocument doc = JsonDocument.Parse(response.Body);
+        JsonElement root = doc.RootElement;
+
+        Assert.IsTrue(root.TryGetProperty("issuer", out _),
+            "Issuer is request-scoped, not capability-derived — must still emit.");
+        Assert.IsFalse(
+            root.TryGetProperty(AuthorizationServerMetadataParameterNames.JwksUri, out _),
+            "jwks_uri must be absent from discovery when ResolveCapabilitiesAsync "
+            + "attenuated JwksEndpoint out of the active set. The chain-walk "
+            + "emission reads endpoint.DiscoveryMetadataKey for every chain "
+            + "entry; an absent endpoint produces no entry to emit.");
+    }
+
+
+    [TestMethod]
     public async Task AfterKeyRotationJwksContainsNewKid()
     {
         await using TestHostShell app = new(TimeProvider);
