@@ -62,6 +62,13 @@ public static class OAuthErrors
     public static readonly string InvalidToken = "invalid_token";
 
     /// <summary>
+    /// RFC 6750 §3.1: the request requires higher privileges than provided by
+    /// the access token. Emitted by the OIDC Core §5.3 UserInfo endpoint when
+    /// the validated access token does not carry the <c>openid</c> scope.
+    /// </summary>
+    public static readonly string InsufficientScope = "insufficient_scope";
+
+    /// <summary>
     /// RFC 9449 §8: the server requires the client to retry with a fresh
     /// DPoP nonce. Emitted with HTTP 401 (token endpoint, resource server)
     /// or HTTP 400 (other endpoints) and a <c>DPoP-Nonce</c> response header

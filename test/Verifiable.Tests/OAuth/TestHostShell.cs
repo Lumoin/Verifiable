@@ -1793,7 +1793,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         ImmutableHashSet<ServerCapabilityName> capabilities = ImmutableHashSet.Create(
             ServerCapabilityName.AuthorizationCode,
             ServerCapabilityName.PushedAuthorization,
-            ServerCapabilityName.OpenIdConnect);
+            ServerCapabilityName.OpenIdConnect,
+            ServerCapabilityName.UserInfo);
 
         string segment = Guid.NewGuid().ToString("N")[..8];
         KeyId signingKeyId = new($"urn:uuid:{Guid.NewGuid()}");
