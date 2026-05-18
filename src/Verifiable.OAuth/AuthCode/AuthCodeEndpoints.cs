@@ -12,6 +12,7 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Jar;
 using Verifiable.OAuth.Oid4Vp;
+using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Validation;
 
 using Verifiable.OAuth.Server;
@@ -1056,6 +1057,92 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// Pre-resolves the OIDC claim set for the current issuance once per token
+    /// request, before the producer loop. The resolved value flows through every
+    /// <see cref="IdTokenTarget"/> and <see cref="UserInfoTarget"/> the
+    /// contributor walk constructs in this request, so per-rule contributors
+    /// don't each re-issue the resolver call.
+    /// </summary>
+    private static async ValueTask<OidcClaims?> PreResolveOidcClaimsAsync(
+        AuthorizationServer server,
+        IssuanceContext issuance,
+        CancellationToken cancellationToken)
+    {
+        ResolveOidcClaimsDelegate? resolve = server.Integration.ResolveOidcClaimsAsync;
+        if(resolve is null)
+        {
+            return null;
+        }
+
+        return await resolve(
+            issuance.Subject,
+            issuance.Scope,
+            issuance.Registration.TenantId,
+            issuance.Context,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Builds the <see cref="ClaimContributionTarget"/> appropriate to a
+    /// <paramref name="producer"/>'s response field, or <see langword="null"/>
+    /// when the producer's token type has no contributor walk wired in this
+    /// phase (refresh tokens, custom producers).
+    /// </summary>
+    private static ClaimContributionTarget? BuildTargetForProducer(
+        TokenProducer producer,
+        IssuanceContext issuance,
+        OidcClaims? preResolvedClaims)
+    {
+        if(string.Equals(producer.ResponseField, WellKnownTokenTypes.IdToken, StringComparison.Ordinal))
+        {
+            return new IdTokenTarget(issuance) { ResolvedOidcClaims = preResolvedClaims };
+        }
+
+        if(string.Equals(producer.ResponseField, WellKnownTokenTypes.AccessToken, StringComparison.Ordinal))
+        {
+            return new AccessTokenTarget(issuance);
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Runs the configured <see cref="ServerConfiguration.ClaimIssuer"/>
+    /// against <paramref name="target"/> and merges every
+    /// <see cref="ClaimOutcome.Success"/> contribution into
+    /// <paramref name="payload"/> via the indexer. No-op when the
+    /// configuration has no issuer wired.
+    /// </summary>
+    private static async ValueTask MergeContributedClaimsAsync(
+        AuthorizationServer server,
+        ClaimContributionTarget? target,
+        JwtPayload payload,
+        CancellationToken cancellationToken)
+    {
+        if(target is null || server.Configuration.ClaimIssuer is not { } issuer)
+        {
+            return;
+        }
+
+        ClaimIssueResult result = await issuer.GenerateClaimsAsync(
+            target,
+            Guid.NewGuid().ToString("N"),
+            cancellationToken).ConfigureAwait(false);
+
+        foreach(Claim claim in result.Claims)
+        {
+            if(claim.Outcome == ClaimOutcome.Success
+                && claim.Context is ClaimContributionContext ctx)
+            {
+                payload[ctx.ClaimName] = ctx.ClaimValue;
+            }
+        }
+    }
+
+
+    /// <summary>
     /// Builds the Token endpoint per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
@@ -1212,6 +1299,13 @@ public static class AuthCodeEndpoints
 
                 IReadOnlyList<ClaimContributor> contributors = server.Configuration.ClaimContributors;
 
+                //One-time OidcClaims resolution per request — every
+                //IdTokenTarget / UserInfoTarget built below in the producer
+                //loop reads from the same resolved instance so per-rule
+                //contributors don't each re-issue the resolver call.
+                OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
+                    server, issuance, ct).ConfigureAwait(false);
+
                 Dictionary<string, string> issuedTokens = new(producers.Count);
                 Dictionary<string, IssuedTokenAudit> issuedAudits = new(producers.Count);
                 DateTimeOffset latestExpiry = now;
@@ -1256,6 +1350,15 @@ public static class AuthCodeEndpoints
                         issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
 
                     JwtPayload payload = output.Payload;
+
+                    //Composed contributor walk via ServerConfiguration.ClaimIssuer.
+                    //Replaces the producer's pre-Phase-A inline scope-driven
+                    //emission (profile / email / address / phone / cnf / acr /
+                    //amr). No-op when the issuer is unwired.
+                    ClaimContributionTarget? contributionTarget =
+                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
+                    await MergeContributedClaimsAsync(
+                        server, contributionTarget, payload, ct).ConfigureAwait(false);
 
                     foreach(ClaimContributor contributor in contributors)
                     {
@@ -1577,6 +1680,11 @@ public static class AuthCodeEndpoints
                         : DefaultTokenProducers;
                 IReadOnlyList<ClaimContributor> contributors = server.Configuration.ClaimContributors;
 
+                //One-time OidcClaims resolution per request — see BuildToken
+                //for rationale.
+                OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
+                    server, issuance, ct).ConfigureAwait(false);
+
                 Dictionary<string, string> issuedTokens = new(producers.Count);
                 Dictionary<string, IssuedTokenAudit> issuedAudits = new(producers.Count);
                 DateTimeOffset latestExpiry = now;
@@ -1609,6 +1717,13 @@ public static class AuthCodeEndpoints
                     TokenProducerOutput output = await producer.BuildAsync(
                         issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
                     JwtPayload payload = output.Payload;
+
+                    //Composed contributor walk via ServerConfiguration.ClaimIssuer.
+                    //See BuildToken for rationale.
+                    ClaimContributionTarget? contributionTarget =
+                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
+                    await MergeContributedClaimsAsync(
+                        server, contributionTarget, payload, ct).ConfigureAwait(false);
 
                     foreach(ClaimContributor contributor in contributors)
                     {
