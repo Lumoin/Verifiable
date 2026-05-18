@@ -36,4 +36,14 @@ public static class OpenIdProviderMetadataParameterNames
     /// guaranteed to populate every advertised claim for every request.
     /// </summary>
     public static readonly string ClaimsSupported = "claims_supported";
+
+    /// <summary>
+    /// JSON array of the Claim Types that the OpenID Provider supports per
+    /// OIDC Core 1.0 §5.6. Defined values: <c>"normal"</c> (claim values
+    /// supplied directly by the OP), <c>"aggregated"</c>, and
+    /// <c>"distributed"</c>. Default per OIDC Discovery §3 when the field
+    /// is absent: <c>["normal"]</c>. The library emits the explicit field
+    /// because aggregated / distributed claims are not implemented.
+    /// </summary>
+    public static readonly string ClaimTypesSupported = "claim_types_supported";
 }

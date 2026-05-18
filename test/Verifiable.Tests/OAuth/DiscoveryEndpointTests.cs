@@ -265,6 +265,84 @@ internal sealed class DiscoveryEndpointTests
 
 
     [TestMethod]
+    public async Task DiscoveryEmitsClaimTypesSupportedAsNormalOnly()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        JsonElement types = body.RootElement.GetProperty(
+            OpenIdProviderMetadataParameterNames.ClaimTypesSupported);
+
+        Assert.AreEqual(JsonValueKind.Array, types.ValueKind);
+        List<string> values = EnumerateStrings(types);
+        Assert.HasCount(1, values,
+            "Aggregated and distributed claim types are not implemented.");
+        Assert.AreEqual("normal", values[0]);
+    }
+
+
+    [TestMethod]
+    public async Task DiscoveryEmitsCompleteOidcMetadataSet()
+    {
+        //Phase A discovery-completion smoke test: every Phase A discovery
+        //chunk's field must appear in the document for an OIDC-capable
+        //registration. Chunks 12-16 each pinned individual fields; this
+        //assertion ensures the additions compose end-to-end.
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+
+        //Phase 9h endpoint URLs.
+        AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.Issuer);
+        AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.AuthorizationEndpoint);
+        AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.TokenEndpoint);
+        AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.JwksUri);
+        AssertFieldPresent(body, OpenIdProviderMetadataParameterNames.UserinfoEndpoint);
+
+        //Chunk 12 — REQUIRED OIDC fields.
+        AssertFieldPresent(body, OpenIdProviderMetadataParameterNames.SubjectTypesSupported);
+        AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.ResponseTypesSupported);
+        AssertFieldPresent(body, OpenIdProviderMetadataParameterNames.IdTokenSigningAlgValuesSupported);
+
+        //Chunk 13 — capability-derived OPTIONAL fields.
+        AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.GrantTypesSupported);
+        AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.CodeChallengeMethodsSupported);
+        AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.TokenEndpointAuthMethodsSupported);
+
+        //Chunk 14 — scopes.
+        AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.ScopesSupported);
+
+        //Chunk 15 — claims advertisement.
+        AssertFieldPresent(body, OpenIdProviderMetadataParameterNames.ClaimsSupported);
+
+        //Chunk 16 — claim_types.
+        AssertFieldPresent(body, OpenIdProviderMetadataParameterNames.ClaimTypesSupported);
+    }
+
+
+    private static void AssertFieldPresent(JsonDocument body, string fieldName)
+    {
+        Assert.IsTrue(
+            body.RootElement.TryGetProperty(fieldName, out _),
+            $"Discovery document is missing required field '{fieldName}'.");
+    }
+
+
+    [TestMethod]
     public async Task DiscoveryStillCarriesIssuerAndEndpointUrls()
     {
         //Regression guard — the chunk-12 additions must not displace the

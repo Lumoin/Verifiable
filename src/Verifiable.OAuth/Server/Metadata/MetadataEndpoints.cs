@@ -446,6 +446,17 @@ public static class MetadataEndpoints
                         sb,
                         OpenIdProviderMetadataParameterNames.ClaimsSupported,
                         StandardClaimsSupported);
+
+                    //claim_types_supported (OIDC Core §5.6 / OIDC Discovery §3
+                    //OPTIONAL). The library supplies claim values directly
+                    //(normal claim type per §5.6.1); aggregated and distributed
+                    //claim types are not implemented. Default per OIDC
+                    //Discovery §3 is ["normal"] when the field is absent;
+                    //emitting it explicitly is the unambiguous form.
+                    AppendStringArrayField(
+                        sb,
+                        OpenIdProviderMetadataParameterNames.ClaimTypesSupported,
+                        ClaimTypeNormal);
                 }
 
                 //Application-supplied additional fields merged after the base set.
@@ -531,6 +542,7 @@ public static class MetadataEndpoints
     private static readonly IReadOnlyList<string> GrantTypesAuthCodeAndRefresh = ["authorization_code", "refresh_token"];
     private static readonly IReadOnlyList<string> CodeChallengeMethodS256 = ["S256"];
     private static readonly IReadOnlyList<string> TokenEndpointAuthMethodNone = ["none"];
+    private static readonly IReadOnlyList<string> ClaimTypeNormal = ["normal"];
 
     /// <summary>
     /// JWT claim names the standard
