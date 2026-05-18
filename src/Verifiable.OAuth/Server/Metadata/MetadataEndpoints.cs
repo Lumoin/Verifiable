@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Verifiable.Cryptography;
 using Verifiable.JCose;
 
 using Verifiable.OAuth.Server.Routing;
@@ -305,13 +306,57 @@ public static class MetadataEndpoints
                         + "reachable through dispatch."));
                 }
 
+                bool authorizationCodeOnChain = false;
                 foreach(ServerEndpoint chainEndpoint in chain)
                 {
+                    if(chainEndpoint.Capability == ServerCapabilityName.AuthorizationCode)
+                    {
+                        authorizationCodeOnChain = true;
+                    }
+
                     if(chainEndpoint.DiscoveryMetadataKey is null) { continue; }
                     AppendField(
                         sb,
                         chainEndpoint.DiscoveryMetadataKey,
                         chainEndpoint.ResolvedUri.ToString());
+                }
+
+                //OIDC Discovery 1.0 §3 REQUIRED fields. The library's subject
+                //identifier story is "public" by default (the application
+                //installs a custom ResolveSubjectIdentifierAsync to add the
+                //pairwise option); chunks 12-16 will iterate on the
+                //tenant-specific subject-type set in a follow-up.
+                AppendStringArrayField(
+                    sb,
+                    OpenIdProviderMetadataParameterNames.SubjectTypesSupported,
+                    SubjectTypePublic);
+
+                //response_types_supported — derived from the per-request chain
+                //to match the existing endpoint-URL emission's attenuation
+                //semantics. Authorization Code is the only OAuth 2.1-conformant
+                //response type the library ships; hybrid / implicit flows are
+                //out of scope.
+                if(authorizationCodeOnChain)
+                {
+                    AppendStringArrayField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.ResponseTypesSupported,
+                        ResponseTypeCode);
+                }
+
+                //id_token_signing_alg_values_supported — derived from the
+                //registration's IdTokenIssuance signing keys. Each KeyId is
+                //resolved through the verification-key resolver and its tag
+                //mapped to a JWA identifier; the deduped set forms the
+                //advertised list.
+                IReadOnlyList<string> idTokenAlgs = await ResolveIdTokenSigningAlgValuesAsync(
+                    server, registration, context, ct).ConfigureAwait(false);
+                if(idTokenAlgs.Count > 0)
+                {
+                    AppendStringArrayField(
+                        sb,
+                        OpenIdProviderMetadataParameterNames.IdTokenSigningAlgValuesSupported,
+                        idTokenAlgs);
                 }
 
                 //Application-supplied additional fields merged after the base set.
@@ -360,6 +405,90 @@ public static class MetadataEndpoints
         sb.Append("\":\"");
         sb.Append(value);
         sb.Append('"');
+    }
+
+
+    /// <summary>
+    /// Appends a string-array field to the discovery-document builder,
+    /// formatted as <c>,"key":["v1","v2",…]</c>. Always emits the leading
+    /// comma; callers must have written the opening brace and at least the
+    /// <c>issuer</c> field before calling. No-ops on an empty list to avoid
+    /// emitting <c>"key":[]</c> for fields that should be omitted entirely
+    /// when no values are available.
+    /// </summary>
+    private static void AppendStringArrayField(
+        StringBuilder sb, string key, IReadOnlyList<string> values)
+    {
+        if(values.Count == 0) { return; }
+
+        sb.Append(",\"");
+        sb.Append(key);
+        sb.Append("\":[");
+        for(int i = 0; i < values.Count; i++)
+        {
+            if(i > 0) { sb.Append(','); }
+            sb.Append('"');
+            sb.Append(values[i]);
+            sb.Append('"');
+        }
+        sb.Append(']');
+    }
+
+
+    //Static well-known value sets emitted by the discovery endpoint.
+    private static readonly IReadOnlyList<string> SubjectTypePublic = ["public"];
+    private static readonly IReadOnlyList<string> ResponseTypeCode = ["code"];
+
+
+    /// <summary>
+    /// Derives <c>id_token_signing_alg_values_supported</c> from the
+    /// registration's <see cref="KeyUsageContext.IdTokenIssuance"/> signing
+    /// keys. Each <see cref="KeyId"/> in the rotation-aware
+    /// <see cref="SigningKeySet"/> is resolved through the verification-key
+    /// resolver and its <see cref="PublicKeyMemory.Tag"/> mapped to a JWA
+    /// identifier via <see cref="CryptoFormatConversions.DefaultTagToJwaConverter"/>.
+    /// The set is deduplicated by ordinal equality and stable across the
+    /// rotation-slot order.
+    /// </summary>
+    /// <remarks>
+    /// Returns an empty list when the registration has no IdTokenIssuance
+    /// signing keys configured (the OIDC ID Token producer would not run for
+    /// such a registration anyway). The discovery emitter omits the field
+    /// entirely in that case rather than emitting an empty array.
+    /// </remarks>
+    private static async ValueTask<IReadOnlyList<string>> ResolveIdTokenSigningAlgValuesAsync(
+        AuthorizationServer server,
+        ClientRecord registration,
+        RequestContext context,
+        CancellationToken cancellationToken)
+    {
+        if(!registration.SigningKeys.TryGetValue(
+                Verifiable.Cryptography.Context.KeyUsageContext.IdTokenIssuance,
+                out SigningKeySet? signingKeySet))
+        {
+            return [];
+        }
+
+        ServerVerificationKeyResolverDelegate? resolver =
+            server.Cryptography.VerificationKeyResolver;
+        if(resolver is null)
+        {
+            return [];
+        }
+
+        HashSet<string> algorithms = new(StringComparer.Ordinal);
+        foreach(KeyId keyId in signingKeySet.Current)
+        {
+            Verifiable.Cryptography.PublicKeyMemory? key =
+                await resolver(keyId, registration.TenantId, context, cancellationToken)
+                    .ConfigureAwait(false);
+            if(key is null) { continue; }
+
+            string jwa = Verifiable.JCose.CryptoFormatConversions.DefaultTagToJwaConverter(key.Tag);
+            algorithms.Add(jwa);
+        }
+
+        return algorithms.Count == 0 ? [] : algorithms.ToArray();
     }
 
 
