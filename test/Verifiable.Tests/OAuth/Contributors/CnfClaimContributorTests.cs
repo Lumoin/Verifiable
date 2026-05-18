@@ -78,11 +78,31 @@ internal sealed class CnfClaimContributorTests
 
 
     [TestMethod]
-    public async Task ReturnsNotApplicableForAccessTokenTarget()
+    public async Task EmitsCnfForAccessTokenTargetWhenConfirmationCarriesJkt()
     {
-        //Chunk 4a applies only to IdTokenTarget; the access-token producer
-        //composes cnf inline today. Phase A follow-up extends the
-        //contributor to AccessTokenTarget; until then it must be inert.
+        const string FixedThumbprint = "dpop-jkt-base64url-access-token";
+
+        AccessTokenTarget target = ContributorTestFixtures.BuildAccessTokenTarget(
+            "openid",
+            confirmation: new ConfirmationMethod { JwkThumbprint = FixedThumbprint });
+
+        List<Claim> claims = await CnfClaimContributor.GenerateCnfClaim(
+            target, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.HasCount(1, claims);
+        Assert.AreEqual(ClaimOutcome.Success, claims[0].Outcome);
+
+        ClaimContributionContext ctx = (ClaimContributionContext)claims[0].Context;
+        Assert.AreEqual(WellKnownJwtClaimNames.Cnf, ctx.ClaimName);
+
+        Dictionary<string, object> cnf = (Dictionary<string, object>)ctx.ClaimValue;
+        Assert.AreEqual(FixedThumbprint, cnf[WellKnownJwtClaimNames.JwkThumbprint]);
+    }
+
+
+    [TestMethod]
+    public async Task ReturnsNotApplicableForAccessTokenTargetWithoutConfirmation()
+    {
         AccessTokenTarget target = ContributorTestFixtures.BuildAccessTokenTarget("openid");
 
         List<Claim> claims = await CnfClaimContributor.GenerateCnfClaim(

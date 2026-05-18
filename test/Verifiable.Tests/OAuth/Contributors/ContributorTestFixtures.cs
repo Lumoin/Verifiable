@@ -92,8 +92,10 @@ internal static class ContributorTestFixtures
     }
 
 
-    public static AccessTokenTarget BuildAccessTokenTarget(string scope) =>
-        new(BuildIssuance(scope));
+    public static AccessTokenTarget BuildAccessTokenTarget(
+        string scope,
+        ConfirmationMethod? confirmation = null) =>
+        new(BuildIssuance(scope, confirmation));
 
 
     public static IntrospectionTarget BuildIntrospectionTarget(string scope) =>

@@ -1,7 +1,6 @@
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.OAuth.Dpop;
 
 namespace Verifiable.OAuth.Server;
 
@@ -189,22 +188,6 @@ internal static class Rfc9068AccessTokenProducer
             issuer: issuerValue,
             audience: audiences,
             clientId: context.ClientId);
-
-        //RFC 9449 §6.1 — sender-constrained access tokens carry the cnf claim
-        //with the proof key's RFC 7638 thumbprint. The enforcement block at
-        //the token endpoint populates context.Confirmation when a DPoP proof
-        //was validated; producers other than the access-token producer ignore
-        //the binding (refresh-token rotation per RFC 9700 §2.2.2 will read
-        //the same slot when that grant lands).
-        if(context.Confirmation is { IsEmpty: false } confirmation)
-        {
-            Dictionary<string, object> cnf = new(StringComparer.Ordinal);
-            if(confirmation.JwkThumbprint is not null)
-            {
-                cnf[WellKnownJwtClaimNames.JwkThumbprint] = confirmation.JwkThumbprint;
-            }
-            payload[WellKnownJwtClaimNames.Cnf] = cnf;
-        }
 
         return new TokenProducerOutput(header, payload);
     }
