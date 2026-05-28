@@ -114,7 +114,7 @@ jobs:
         fetch-tags: true
 
     - name: Set up .NET SDK
-      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+      uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
@@ -354,7 +354,7 @@ jobs:
         fetch-tags: true
 
     - name: Set up .NET SDK
-      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+      uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
@@ -476,7 +476,7 @@ jobs:
         fetch-tags: true
 
     - name: Set up .NET SDK
-      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+      uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
