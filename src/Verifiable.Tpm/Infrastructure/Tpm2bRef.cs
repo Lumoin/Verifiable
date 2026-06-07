@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tpm.Infrastructure;

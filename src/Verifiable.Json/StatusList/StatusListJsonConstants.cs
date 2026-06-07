@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Json.StatusList;
+namespace Verifiable.Json.StatusList;
 
 /// <summary>
 /// JWT claim names and JSON member names for the Token Status List specification.

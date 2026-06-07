@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Core;
 using Rfc6901JsonPointer = Verifiable.JsonPointer.JsonPointer;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -39,6 +40,11 @@ public delegate string SelectJsonLdFragmentsDelegate(string document, IEnumerabl
 /// Optional delegate for resolving JSON-LD contexts during canonicalization.
 /// Required for RDFC canonicalization, ignored by JCS canonicalization.
 /// </param>
+/// <param name="context">
+/// The per-operation <see cref="ExchangeContext"/>, forwarded to
+/// <paramref name="canonicalize"/> and <paramref name="contextResolver"/> so a
+/// network-fetching resolver applies the SSRF <c>OutboundFetchPolicy</c> it carries.
+/// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>A task that resolves to the partition result containing statements and their indexes.</returns>
 public delegate ValueTask<StatementPartitionResult> PartitionStatementsDelegate(
@@ -46,6 +52,7 @@ public delegate ValueTask<StatementPartitionResult> PartitionStatementsDelegate(
     IReadOnlyList<Rfc6901JsonPointer> mandatoryPointers,
     CanonicalizationDelegate canonicalize,
     ContextResolverDelegate? contextResolver,
+    ExchangeContext context,
     CancellationToken cancellationToken = default);
 
 

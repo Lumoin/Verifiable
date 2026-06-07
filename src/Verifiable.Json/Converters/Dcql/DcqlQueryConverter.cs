@@ -1,4 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
@@ -43,12 +45,12 @@ public sealed class DcqlQueryConverter: JsonConverter<DcqlQuery>
 
             switch(propertyName)
             {
-                case DcqlQuery.CredentialsPropertyName:
+                case var name when DcqlParameterNames.IsCredentials(name):
                 {
                     credentials = ReadArray<CredentialQuery>(ref reader, options);
                     break;
                 }
-                case DcqlQuery.CredentialSetsPropertyName:
+                case var name when DcqlParameterNames.IsCredentialSets(name):
                 {
                     credentialSets = ReadArray<CredentialSetQuery>(ref reader, options);
                     break;
@@ -84,13 +86,13 @@ public sealed class DcqlQueryConverter: JsonConverter<DcqlQuery>
 
         if(value.Credentials is not null)
         {
-            writer.WritePropertyName(DcqlQuery.CredentialsPropertyName);
+            writer.WritePropertyName(DcqlParameterNames.Credentials);
             WriteArray(writer, value.Credentials, options);
         }
 
         if(value.CredentialSets is not null)
         {
-            writer.WritePropertyName(DcqlQuery.CredentialSetsPropertyName);
+            writer.WritePropertyName(DcqlParameterNames.CredentialSets);
             WriteArray(writer, value.CredentialSets, options);
         }
 

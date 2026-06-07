@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Core.StatusList;
+namespace Verifiable.Core.StatusList;
 
 /// <summary>
 /// Defines the standard status type values for Referenced Tokens as specified

@@ -28,21 +28,6 @@ namespace Verifiable.Core.Model.Dcql;
 public record CredentialSetQuery
 {
     /// <summary>
-    /// The JSON property name for <see cref="Options"/>.
-    /// </summary>
-    public const string OptionsPropertyName = "options";
-
-    /// <summary>
-    /// The JSON property name for <see cref="Required"/>.
-    /// </summary>
-    public const string RequiredPropertyName = "required";
-
-    /// <summary>
-    /// The JSON property name for <see cref="Purpose"/>.
-    /// </summary>
-    public const string PurposePropertyName = "purpose";
-
-    /// <summary>
     /// Alternative sets of credential IDs that can satisfy this query.
     /// </summary>
     /// <remarks>

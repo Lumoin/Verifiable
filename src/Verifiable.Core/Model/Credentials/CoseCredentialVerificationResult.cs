@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace Verifiable.Core.Model.Credentials;
 
@@ -7,13 +7,17 @@ namespace Verifiable.Core.Model.Credentials;
 /// </summary>
 /// <param name="IsValid">Whether the signature is valid.</param>
 /// <param name="ProtectedHeader">The decoded protected header with integer keys.</param>
-/// <param name="Credential">The decoded credential.</param>
+/// <param name="Credential">
+/// The verified credential, or <see langword="null"/> when verification failed. A non-null value
+/// is a <see cref="Verified{T}"/> minted by the verify path, so it cannot be a credential that was
+/// merely deserialized without its signature being checked.
+/// </param>
 /// <param name="Algorithm">The COSE algorithm identifier from the header.</param>
 /// <param name="KeyId">The key ID from the header, if present.</param>
 public readonly record struct CoseCredentialVerificationResult(
     bool IsValid,
     IReadOnlyDictionary<int, object>? ProtectedHeader,
-    VerifiableCredential? Credential,
+    Verified<VerifiableCredential>? Credential,
     int? Algorithm = null,
     string? KeyId = null)
 {
@@ -21,13 +25,13 @@ public readonly record struct CoseCredentialVerificationResult(
     /// Creates a successful verification result.
     /// </summary>
     /// <param name="protectedHeader">The decoded protected header.</param>
-    /// <param name="credential">The decoded credential.</param>
+    /// <param name="credential">The verified credential.</param>
     /// <param name="algorithm">The COSE algorithm identifier.</param>
     /// <param name="keyId">The key ID, if present.</param>
     /// <returns>A successful verification result.</returns>
     public static CoseCredentialVerificationResult Success(
         IReadOnlyDictionary<int, object> protectedHeader,
-        VerifiableCredential credential,
+        Verified<VerifiableCredential> credential,
         int? algorithm = null,
         string? keyId = null)
     {

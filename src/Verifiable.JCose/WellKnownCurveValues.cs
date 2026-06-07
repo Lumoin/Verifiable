@@ -1,4 +1,4 @@
-﻿namespace Verifiable.JCose
+namespace Verifiable.JCose
 {
     /// <summary>
     /// Well-known names of JSON Web Key (JWK) Elliptic Curve "crv" (Curve) parameter values
@@ -55,6 +55,34 @@
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7748">X448</see>.</remarks>
         public static readonly string X448 = "X448";
+
+        /// <summary>
+        /// Brainpool P-256r1 curve.
+        /// </summary>
+        /// <remarks>
+        /// Named per <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>;
+        /// the JWK <c>crv</c> string matches the BouncyCastle / IANA registered curve
+        /// name so a single string resolves both library lookup and on-wire identification.
+        /// </remarks>
+        public static readonly string BrainpoolP256r1 = "brainpoolP256r1";
+
+        /// <summary>
+        /// Brainpool P-320r1 curve.
+        /// </summary>
+        /// <remarks>Named per <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.</remarks>
+        public static readonly string BrainpoolP320r1 = "brainpoolP320r1";
+
+        /// <summary>
+        /// Brainpool P-384r1 curve.
+        /// </summary>
+        /// <remarks>Named per <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.</remarks>
+        public static readonly string BrainpoolP384r1 = "brainpoolP384r1";
+
+        /// <summary>
+        /// Brainpool P-512r1 curve.
+        /// </summary>
+        /// <remarks>Named per <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.</remarks>
+        public static readonly string BrainpoolP512r1 = "brainpoolP512r1";
 
 
         /// <summary>
@@ -122,6 +150,37 @@
 
 
         /// <summary>
+        /// If <paramref name="crv"/> is <see cref="BrainpoolP256r1"/> or not.
+        /// </summary>
+        public static bool IsBrainpoolP256r1(string crv) => Equals(crv, BrainpoolP256r1);
+
+
+        /// <summary>
+        /// If <paramref name="crv"/> is <see cref="BrainpoolP320r1"/> or not.
+        /// </summary>
+        public static bool IsBrainpoolP320r1(string crv) => Equals(crv, BrainpoolP320r1);
+
+
+        /// <summary>
+        /// If <paramref name="crv"/> is <see cref="BrainpoolP384r1"/> or not.
+        /// </summary>
+        public static bool IsBrainpoolP384r1(string crv) => Equals(crv, BrainpoolP384r1);
+
+
+        /// <summary>
+        /// If <paramref name="crv"/> is <see cref="BrainpoolP512r1"/> or not.
+        /// </summary>
+        public static bool IsBrainpoolP512r1(string crv) => Equals(crv, BrainpoolP512r1);
+
+
+        /// <summary>
+        /// If <paramref name="crv"/> is any Brainpool r1 curve.
+        /// </summary>
+        public static bool IsBrainpool(string crv) =>
+            IsBrainpoolP256r1(crv) || IsBrainpoolP320r1(crv) || IsBrainpoolP384r1(crv) || IsBrainpoolP512r1(crv);
+
+
+        /// <summary>
         /// Returns the equivalent static instance, or the original instance if none match.
         /// This conversion is optional but allows for performance optimizations when comparing method values elsewhere.
         /// </summary>
@@ -137,6 +196,10 @@
             string _ when IsSecp256k1(crv) => Secp256k1,
             string _ when IsX25519(crv) => X25519,
             string _ when IsX448(crv) => X448,
+            string _ when IsBrainpoolP256r1(crv) => BrainpoolP256r1,
+            string _ when IsBrainpoolP320r1(crv) => BrainpoolP320r1,
+            string _ when IsBrainpoolP384r1(crv) => BrainpoolP384r1,
+            string _ when IsBrainpoolP512r1(crv) => BrainpoolP512r1,
             string _ => crv
         };
 
@@ -152,7 +215,7 @@
         /// <remarks>This comparison is case-sensitive. See at <see href="https://www.rfc-editor.org/rfc/rfc7517">RFC 7517</see>.</remarks>
         public static bool Equals(string crvA, string crv)
         {
-            return object.ReferenceEquals(crvA, crv) || StringComparer.InvariantCulture.Equals(crvA, crv);
+            return object.ReferenceEquals(crvA, crv) || StringComparer.Ordinal.Equals(crvA, crv);
         }
     }
 }

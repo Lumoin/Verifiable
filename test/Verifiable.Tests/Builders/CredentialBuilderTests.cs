@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Tests.TestInfrastructure;
@@ -112,7 +111,7 @@ internal sealed class CredentialBuilderTests
         Assert.HasCount(1, credential.CredentialSubject);
         Assert.AreEqual(SubjectDidExample123, credential.CredentialSubject[0].Id);
         Assert.IsNotNull(credential.Id, "Credential ID should be auto-generated.");
-        Assert.IsTrue(credential.Id.StartsWith(UrnUuidPrefix, StringComparison.Ordinal), "Default ID should be a URN UUID.");
+        Assert.StartsWith(UrnUuidPrefix, credential.Id, StringComparison.Ordinal, "Default ID should be a URN UUID.");
     }
 
 
@@ -302,7 +301,7 @@ internal sealed class CredentialBuilderTests
         var exception = await Assert.ThrowsAsync<ArgumentException>(async () =>
             await CredentialBuilder.BuildAsync(issuer, emptySubjects, TestValidFrom, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
-        Assert.IsTrue(exception.Message.Contains("At least one credential subject is required", StringComparison.Ordinal));
+        Assert.Contains("At least one credential subject is required", exception.Message, StringComparison.Ordinal);
     }
 
 
@@ -652,7 +651,7 @@ internal sealed class CredentialBuilderTests
         var exception = Assert.Throws<InvalidOperationException>(
             () => AlumniCredentialClaims.FromCredentialSubject(credential.CredentialSubject![0]));
 
-        Assert.IsTrue(exception.Message.Contains("alumniOf", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("alumniOf", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 }
 
@@ -663,16 +662,12 @@ internal sealed class CredentialBuilderTests
 /// </summary>
 internal sealed class AlumniCredentialClaims
 {
-    [JsonPropertyName("alumniOf")]
     public required string AlumniOf { get; init; }
 
-    [JsonPropertyName("degree")]
     public string? Degree { get; init; }
 
-    [JsonPropertyName("graduationYear")]
     public int? GraduationYear { get; init; }
 
-    [JsonPropertyName("honors")]
     public string? Honors { get; init; }
 
 

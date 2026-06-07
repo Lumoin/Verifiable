@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Core.Assessment
+namespace Verifiable.Core.Assessment
 {
     /// <summary>
     /// Provides context information for a failed claim, enabling enhanced

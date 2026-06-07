@@ -1,46 +1,12 @@
-﻿using System;
+using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
+using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.DataIntegrity;
-
-/// <summary>
-/// Delegate for computing an HMAC over data.
-/// </summary>
-/// <param name="key">The HMAC key.</param>
-/// <param name="data">The data to compute the HMAC over.</param>
-/// <returns>The HMAC result bytes.</returns>
-/// <remarks>
-/// <para>
-/// This delegate abstracts the HMAC computation, allowing different implementations
-/// (e.g., <c>HMACSHA256.HashData</c> from System.Security.Cryptography) to be plugged in.
-/// </para>
-/// </remarks>
-public delegate byte[] HmacComputeDelegate(ReadOnlySpan<byte> key, ReadOnlySpan<byte> data);
-
-
-/// <summary>
-/// Delegate for relabeling a single blank node identifier using HMAC.
-/// </summary>
-/// <param name="blankNodeId">The original blank node identifier (e.g., "c14n0").</param>
-/// <param name="hmacKey">The HMAC key for generating the new identifier.</param>
-/// <param name="hmacCompute">The HMAC computation function.</param>
-/// <param name="base64UrlEncode">The Base64Url encoding function.</param>
-/// <returns>The relabeled blank node identifier (e.g., "uXXX...").</returns>
-/// <remarks>
-/// <para>
-/// ECDSA-SD-2023 uses HMAC-based blank node relabeling to provide unlinkability
-/// between the base proof and derived proofs. The canonical blank node identifiers
-/// (c14n0, c14n1, etc.) are replaced with HMAC-derived identifiers.
-/// </para>
-/// </remarks>
-public delegate string BlankNodeRelabelDelegate(
-    string blankNodeId,
-    ReadOnlySpan<byte> hmacKey,
-    HmacComputeDelegate hmacCompute,
-    EncodeDelegate base64UrlEncode);
-
 
 /// <summary>
 /// Utilities for blank node relabeling in selective disclosure cryptosuites.
@@ -59,6 +25,12 @@ public delegate string BlankNodeRelabelDelegate(
 /// <item><description>Base64Url encode the HMAC result.</description></item>
 /// <item><description>Replace with <c>_:uXXX</c> format.</description></item>
 /// </list>
+/// <para>
+/// HMAC computation routes through the registered
+/// <see cref="ComputeHmacDelegate"/> so the same observability, CBOM provenance,
+/// and backend substitutability apply as to every other cryptographic operation
+/// in the library.
+/// </para>
 /// <para>
 /// See <see href="https://w3c.github.io/vc-di-ecdsa/#hmac-and-signatures">
 /// W3C VC DI ECDSA §3.3.5 HMAC and Signatures</see>.
@@ -82,8 +54,14 @@ public static class BlankNodeRelabeling
     /// </summary>
     /// <param name="nquad">The N-Quad statement containing blank nodes.</param>
     /// <param name="hmacKey">The HMAC key for generating new identifiers.</param>
-    /// <param name="hmacCompute">The HMAC computation function.</param>
+    /// <param name="hmacCompute">
+    /// HMAC computation delegate. Wired to a provider-side implementation
+    /// registered on <see cref="CryptographicKeyFactory"/> such as
+    /// <c>MicrosoftHmacFunctions.ComputeHmacAsync</c>.
+    /// </param>
     /// <param name="base64UrlEncode">The Base64Url encoding function.</param>
+    /// <param name="pool">Memory pool for cryptographic allocations.</param>
+    /// <param name="cancellationToken">Token to observe while awaiting HMAC computation.</param>
     /// <returns>The N-Quad with all blank nodes relabeled.</returns>
     /// <remarks>
     /// <para>
@@ -91,13 +69,15 @@ public static class BlankNodeRelabeling
     /// and replaces them with HMAC-derived identifiers in <c>_:uXXX</c> format.
     /// </para>
     /// </remarks>
-    public static string RelabelNQuad(
+    public static ValueTask<string> RelabelNQuadAsync(
         string nquad,
-        ReadOnlySpan<byte> hmacKey,
-        HmacComputeDelegate hmacCompute,
-        EncodeDelegate base64UrlEncode)
+        ReadOnlyMemory<byte> hmacKey,
+        ComputeHmacDelegate hmacCompute,
+        EncodeDelegate base64UrlEncode,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
     {
-        return RelabelNQuadWithMap(nquad, hmacKey, hmacCompute, base64UrlEncode, labelMap: null);
+        return RelabelNQuadWithMapAsync(nquad, hmacKey, hmacCompute, base64UrlEncode, pool, labelMap: null, cancellationToken);
     }
 
 
@@ -106,52 +86,83 @@ public static class BlankNodeRelabeling
     /// </summary>
     /// <param name="nquad">The N-Quad statement containing blank nodes.</param>
     /// <param name="hmacKey">The HMAC key for generating new identifiers.</param>
-    /// <param name="hmacCompute">The HMAC computation function.</param>
+    /// <param name="hmacCompute">
+    /// HMAC computation delegate. Wired to a provider-side implementation
+    /// registered on <see cref="CryptographicKeyFactory"/>.
+    /// </param>
     /// <param name="base64UrlEncode">The Base64Url encoding function.</param>
+    /// <param name="pool">Memory pool for cryptographic allocations.</param>
     /// <param name="labelMap">
     /// Optional dictionary to populate with the label mappings. If provided, mappings
     /// from canonical identifiers (e.g., "_:c14n0") to HMAC identifiers (e.g., "_:uXYZ")
     /// will be added.
     /// </param>
+    /// <param name="cancellationToken">Token to observe while awaiting HMAC computation.</param>
     /// <returns>The N-Quad with all blank nodes relabeled.</returns>
-    public static string RelabelNQuadWithMap(
+    public static async ValueTask<string> RelabelNQuadWithMapAsync(
         string nquad,
-        ReadOnlySpan<byte> hmacKey,
-        HmacComputeDelegate hmacCompute,
+        ReadOnlyMemory<byte> hmacKey,
+        ComputeHmacDelegate hmacCompute,
         EncodeDelegate base64UrlEncode,
-        Dictionary<string, string>? labelMap)
+        MemoryPool<byte> pool,
+        Dictionary<string, string>? labelMap,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(nquad);
         ArgumentNullException.ThrowIfNull(hmacCompute);
         ArgumentNullException.ThrowIfNull(base64UrlEncode);
+        ArgumentNullException.ThrowIfNull(pool);
 
-        var result = nquad;
-        var searchStart = 0;
+        Tag hmacTag = CryptoTags.HmacSha256Value;
+        const int outputByteLength = 32;
+
+        string result = nquad;
+        int searchStart = 0;
 
         while(true)
         {
             //Find the next blank node pattern "_:c".
-            var index = result.IndexOf("_:c", searchStart, StringComparison.Ordinal);
+            int index = result.IndexOf("_:c", searchStart, StringComparison.Ordinal);
             if(index < 0)
             {
                 break;
             }
 
             //Find the end of the blank node identifier (digits after "c14n" or similar).
-            var endIndex = index + 3;
+            int endIndex = index + 3;
             while(endIndex < result.Length && (char.IsLetterOrDigit(result[endIndex]) || result[endIndex] == 'n'))
             {
                 endIndex++;
             }
 
             //Extract the blank node identifier (without the "_:" prefix).
-            var blankNodeId = result[(index + 2)..endIndex];
-            var canonicalId = blankNodeId;
+            string blankNodeId = result[(index + 2)..endIndex];
+            string canonicalId = blankNodeId;
 
-            //Compute HMAC and encode.
-            var hmacBytes = hmacCompute(hmacKey, System.Text.Encoding.UTF8.GetBytes(blankNodeId));
-            var hmacId = "u" + base64UrlEncode(hmacBytes);
-            var hmacFullId = "_:" + hmacId;
+            //Compute HMAC and encode through the registered HMAC primitive.
+            string hmacId;
+            int messageByteCount = System.Text.Encoding.UTF8.GetByteCount(blankNodeId);
+            using(IMemoryOwner<byte> messageOwner = pool.Rent(messageByteCount))
+            {
+                System.Text.Encoding.UTF8.GetBytes(blankNodeId, messageOwner.Memory.Span);
+                ReadOnlyMemory<byte> messageMemory = messageOwner.Memory[..messageByteCount];
+
+                (HmacValue hmac, _) = await hmacCompute(
+                    new ReadOnlySequence<byte>(messageMemory),
+                    hmacKey,
+                    outputByteLength,
+                    hmacTag,
+                    pool,
+                    null,
+                    cancellationToken).ConfigureAwait(false);
+
+                using(hmac)
+                {
+                    hmacId = "u" + base64UrlEncode(hmac.AsReadOnlySpan());
+                }
+            }
+
+            string hmacFullId = "_:" + hmacId;
 
             //Record the mapping if requested. Keys stored in bare format per VC DI ECDSA §3.5.5.
             labelMap?.TryAdd(canonicalId, hmacId);
@@ -170,16 +181,25 @@ public static class BlankNodeRelabeling
     /// </summary>
     /// <param name="nquads">The N-Quad statements.</param>
     /// <param name="hmacKey">The HMAC key for generating new identifiers.</param>
-    /// <param name="hmacCompute">The HMAC computation function.</param>
+    /// <param name="hmacCompute">
+    /// HMAC computation delegate. Wired to a provider-side implementation
+    /// registered on <see cref="CryptographicKeyFactory"/>.
+    /// </param>
     /// <param name="base64UrlEncode">The Base64Url encoding function.</param>
+    /// <param name="pool">Memory pool for cryptographic allocations.</param>
+    /// <param name="cancellationToken">Token to observe while awaiting HMAC computation.</param>
     /// <returns>The relabeled N-Quad statements.</returns>
-    public static IReadOnlyList<string> RelabelNQuads(
+    public static async ValueTask<IReadOnlyList<string>> RelabelNQuadsAsync(
         IEnumerable<string> nquads,
-        ReadOnlySpan<byte> hmacKey,
-        HmacComputeDelegate hmacCompute,
-        EncodeDelegate base64UrlEncode)
+        ReadOnlyMemory<byte> hmacKey,
+        ComputeHmacDelegate hmacCompute,
+        EncodeDelegate base64UrlEncode,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
     {
-        return RelabelNQuadsWithMap(nquads, hmacKey, hmacCompute, base64UrlEncode).Statements;
+        RelabelingResult relabeling = await RelabelNQuadsWithMapAsync(
+            nquads, hmacKey, hmacCompute, base64UrlEncode, pool, cancellationToken).ConfigureAwait(false);
+        return relabeling.Statements;
     }
 
 
@@ -188,8 +208,13 @@ public static class BlankNodeRelabeling
     /// </summary>
     /// <param name="nquads">The N-Quad statements.</param>
     /// <param name="hmacKey">The HMAC key for generating new identifiers.</param>
-    /// <param name="hmacCompute">The HMAC computation function.</param>
+    /// <param name="hmacCompute">
+    /// HMAC computation delegate. Wired to a provider-side implementation
+    /// registered on <see cref="CryptographicKeyFactory"/>.
+    /// </param>
     /// <param name="base64UrlEncode">The Base64Url encoding function.</param>
+    /// <param name="pool">Memory pool for cryptographic allocations.</param>
+    /// <param name="cancellationToken">Token to observe while awaiting HMAC computation.</param>
     /// <returns>
     /// A <see cref="RelabelingResult"/> containing both the relabeled statements
     /// and the mapping from canonical to HMAC-derived identifiers.
@@ -204,43 +229,26 @@ public static class BlankNodeRelabeling
     /// VC Data Integrity ECDSA Cryptosuites: Add Base Proof (ecdsa-sd-2023)</see>.
     /// </para>
     /// </remarks>
-    public static RelabelingResult RelabelNQuadsWithMap(
+    public static async ValueTask<RelabelingResult> RelabelNQuadsWithMapAsync(
         IEnumerable<string> nquads,
-        ReadOnlySpan<byte> hmacKey,
-        HmacComputeDelegate hmacCompute,
-        EncodeDelegate base64UrlEncode)
+        ReadOnlyMemory<byte> hmacKey,
+        ComputeHmacDelegate hmacCompute,
+        EncodeDelegate base64UrlEncode,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(nquads);
 
-        var statements = new List<string>();
-        var labelMap = new Dictionary<string, string>();
+        List<string> statements = new();
+        Dictionary<string, string> labelMap = new();
 
-        foreach(var nquad in nquads)
+        foreach(string nquad in nquads)
         {
-            statements.Add(RelabelNQuadWithMap(nquad, hmacKey, hmacCompute, base64UrlEncode, labelMap));
+            string relabeled = await RelabelNQuadWithMapAsync(
+                nquad, hmacKey, hmacCompute, base64UrlEncode, pool, labelMap, cancellationToken).ConfigureAwait(false);
+            statements.Add(relabeled);
         }
 
         return new RelabelingResult(statements, labelMap);
-    }
-
-
-    /// <summary>
-    /// Creates a default blank node relabeling function.
-    /// </summary>
-    /// <param name="hmacCompute">The HMAC computation function.</param>
-    /// <param name="base64UrlEncode">The Base64Url encoding function.</param>
-    /// <returns>A delegate that relabels a single blank node identifier.</returns>
-    public static BlankNodeRelabelDelegate CreateRelabeler(
-        HmacComputeDelegate hmacCompute,
-        EncodeDelegate base64UrlEncode)
-    {
-        ArgumentNullException.ThrowIfNull(hmacCompute);
-        ArgumentNullException.ThrowIfNull(base64UrlEncode);
-
-        return (blankNodeId, hmacKey, compute, encode) =>
-        {
-            var hmacBytes = compute(hmacKey, System.Text.Encoding.UTF8.GetBytes(blankNodeId));
-            return "u" + encode(hmacBytes);
-        };
     }
 }

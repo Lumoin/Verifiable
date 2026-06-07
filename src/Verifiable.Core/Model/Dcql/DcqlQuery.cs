@@ -74,16 +74,6 @@ namespace Verifiable.Core.Model.Dcql;
 public record DcqlQuery
 {
     /// <summary>
-    /// The JSON property name for <see cref="Credentials"/>.
-    /// </summary>
-    public const string CredentialsPropertyName = "credentials";
-
-    /// <summary>
-    /// The JSON property name for <see cref="CredentialSets"/>.
-    /// </summary>
-    public const string CredentialSetsPropertyName = "credential_sets";
-
-    /// <summary>
     /// The credential queries specifying requirements for individual credentials.
     /// </summary>
     public IReadOnlyList<CredentialQuery>? Credentials { get; set; }

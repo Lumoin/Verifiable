@@ -83,7 +83,7 @@ internal sealed class CoseCredentialSecuringTests
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        IReadOnlyDictionary<int, object> header = CoseSerialization.ParseProtectedHeader(message.ProtectedHeaderBytes.Span);
+        IReadOnlyDictionary<int, object> header = CoseSerialization.ParseProtectedHeader(message.ProtectedHeader.AsReadOnlySpan());
 
         Assert.AreEqual(WellKnownCoseAlgorithms.EdDsa, header[CoseHeaderParameters.Alg]);
         Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, header[CoseHeaderParameters.Kid]);
@@ -133,12 +133,12 @@ internal sealed class CoseCredentialSecuringTests
             SensitiveMemoryPool<byte>.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        byte[] coseBytes = CoseSerialization.SerializeCoseSign1(message);
-        CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes);
+        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, SensitiveMemoryPool<byte>.Shared);
+        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), SensitiveMemoryPool<byte>.Shared);
 
-        Assert.IsTrue(message.ProtectedHeaderBytes.Span.SequenceEqual(parsed.ProtectedHeaderBytes.Span), "Protected header must survive CBOR round-trip.");
+        Assert.IsTrue(message.ProtectedHeader.AsReadOnlySpan().SequenceEqual(parsed.ProtectedHeader.AsReadOnlySpan()), "Protected header must survive CBOR round-trip.");
         Assert.IsTrue(message.Payload.Span.SequenceEqual(parsed.Payload.Span), "Payload must survive CBOR round-trip.");
-        Assert.IsTrue(message.Signature.Span.SequenceEqual(parsed.Signature.Span), "Signature must survive CBOR round-trip.");
+        Assert.IsTrue(message.Signature.AsReadOnlySpan().SequenceEqual(parsed.Signature.AsReadOnlySpan()), "Signature must survive CBOR round-trip.");
 
         CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(
             parsed,
@@ -205,7 +205,7 @@ internal sealed class CoseCredentialSecuringTests
             contentType: customContentType,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        IReadOnlyDictionary<int, object> header = CoseSerialization.ParseProtectedHeader(message.ProtectedHeaderBytes.Span);
+        IReadOnlyDictionary<int, object> header = CoseSerialization.ParseProtectedHeader(message.ProtectedHeader.AsReadOnlySpan());
 
         Assert.AreEqual(customContentType, header[CoseHeaderParameters.ContentType]?.ToString());
     }

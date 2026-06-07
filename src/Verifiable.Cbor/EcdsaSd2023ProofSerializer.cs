@@ -1,5 +1,9 @@
-﻿using System.Buffers;
+using System;
+using System.Buffers;
+using System.Collections.Generic;
 using System.Formats.Cbor;
+using System.IO;
+using System.Linq;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Cryptography;
 

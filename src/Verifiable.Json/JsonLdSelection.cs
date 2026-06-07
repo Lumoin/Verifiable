@@ -1,5 +1,11 @@
-﻿using System.Text.Json;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
+using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.JsonPointer;
 using Rfc6901JsonPointer = Verifiable.JsonPointer.JsonPointer;
@@ -238,6 +244,7 @@ public static class JsonLdSelection
         IReadOnlyList<Rfc6901JsonPointer> mandatoryPointers,
         CanonicalizationDelegate canonicalize,
         ContextResolverDelegate? contextResolver,
+        ExchangeContext context,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(document);
@@ -245,7 +252,7 @@ public static class JsonLdSelection
         ArgumentNullException.ThrowIfNull(canonicalize);
 
         //Canonicalize the full document.
-        var fullResult = await canonicalize(document, contextResolver, cancellationToken).ConfigureAwait(false);
+        var fullResult = await canonicalize(document, contextResolver, context, cancellationToken).ConfigureAwait(false);
         string[] rawStatements = fullResult.CanonicalForm.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         //Each N-Quad statement must end with newline per W3C spec for correct hashing.
@@ -269,7 +276,7 @@ public static class JsonLdSelection
 
         //Select and canonicalize the mandatory fragments.
         string mandatorySelection = SelectFragments(document, mandatoryPointers);
-        var mandatoryResult = await canonicalize(mandatorySelection, contextResolver, cancellationToken).ConfigureAwait(false);
+        var mandatoryResult = await canonicalize(mandatorySelection, contextResolver, context, cancellationToken).ConfigureAwait(false);
         string[] rawMandatoryStatements = mandatoryResult.CanonicalForm.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         string[] mandatoryStatements = [.. rawMandatoryStatements.Select(s => s + "\n")];
 

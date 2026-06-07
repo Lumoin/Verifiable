@@ -22,36 +22,6 @@ namespace Verifiable.Core.Model.Dcql;
 public record CredentialQuery
 {
     /// <summary>
-    /// The JSON property name for <see cref="Id"/>.
-    /// </summary>
-    public const string IdPropertyName = "id";
-
-    /// <summary>
-    /// The JSON property name for <see cref="Format"/>.
-    /// </summary>
-    public const string FormatPropertyName = "format";
-
-    /// <summary>
-    /// The JSON property name for <see cref="Meta"/>.
-    /// </summary>
-    public const string MetaPropertyName = "meta";
-
-    /// <summary>
-    /// The JSON property name for <see cref="Claims"/>.
-    /// </summary>
-    public const string ClaimsPropertyName = "claims";
-
-    /// <summary>
-    /// The JSON property name for <see cref="ClaimSets"/>.
-    /// </summary>
-    public const string ClaimSetsPropertyName = "claim_sets";
-
-    /// <summary>
-    /// The JSON property name for <see cref="TrustedAuthorities"/>.
-    /// </summary>
-    public const string TrustedAuthoritiesPropertyName = "trusted_authorities";
-
-    /// <summary>
     /// Unique identifier for this credential query within the DCQL query.
     /// </summary>
     public string? Id { get; set; }
@@ -80,4 +50,38 @@ public record CredentialQuery
     /// Optional trusted authorities constraints.
     /// </summary>
     public IReadOnlyList<TrustedAuthoritiesQuery>? TrustedAuthorities { get; set; }
+
+    /// <summary>
+    /// Whether the Verifier accepts more than one matching credential to be
+    /// presented for this query per
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.1">OID4VP 1.0 §6.1</see>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wire-omitted (<see langword="null"/>) means the spec default applies:
+    /// at most one credential per query. The default lives at the processing
+    /// layer rather than this type, so absence on the wire round-trips to
+    /// <see langword="null"/> here. Application code that needs the spec-
+    /// default value should treat <see langword="null"/> as <c>false</c>.
+    /// </para>
+    /// </remarks>
+    public bool? Multiple { get; set; }
+
+    /// <summary>
+    /// Whether the Verifier requires the Wallet to demonstrate cryptographic
+    /// holder binding (Key Binding JWT or equivalent) for the presented
+    /// credential per
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.3">OID4VP 1.0 §6.3</see>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wire-omitted (<see langword="null"/>) means the spec default applies:
+    /// the Verifier requires cryptographic holder binding. The default lives
+    /// at the processing layer rather than this type, so absence on the wire
+    /// round-trips to <see langword="null"/> here. Application code that
+    /// needs the spec-default value should treat <see langword="null"/> as
+    /// <c>true</c>.
+    /// </para>
+    /// </remarks>
+    public bool? RequireCryptographicHolderBinding { get; set; }
 }

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Infrastructure;

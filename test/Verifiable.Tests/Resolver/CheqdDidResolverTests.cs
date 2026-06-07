@@ -1,4 +1,5 @@
-﻿using Verifiable.Core.Resolvers;
+using Verifiable.Core;
+using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -9,6 +10,10 @@ namespace Verifiable.Tests.Resolver;
 [TestClass]
 internal sealed class CheqdDidResolverTests
 {
+    //did:cheqd resolution only computes a URL — no network I/O — so a default context
+    //suffices; it exists only to satisfy the SSRF-policy-carrying parameter.
+    private static readonly ExchangeContext EmptyContext = new();
+
     public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
@@ -61,6 +66,7 @@ internal sealed class CheqdDidResolverTests
         var result = await CheqdDidResolver.ResolveAsync(
             did,
             DidResolutionOptions.Empty,
+            EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful);
@@ -80,7 +86,7 @@ internal sealed class CheqdDidResolverTests
              CheqdDidResolver.ResolveAsync)));
 
         const string did = "did:cheqd:mainnet:zF7rhDBfUt9d1gJPjx7s1JXfUY7oVWkY";
-        var result = await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken)
+        var result = await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful);

@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.StatusList;
 

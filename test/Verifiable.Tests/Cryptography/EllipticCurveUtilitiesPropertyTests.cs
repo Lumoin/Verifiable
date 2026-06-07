@@ -1,4 +1,4 @@
-﻿using CsCheck;
+using CsCheck;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Cryptography

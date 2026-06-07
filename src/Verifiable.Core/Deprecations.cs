@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Core
+namespace Verifiable.Core
 {
     /// <summary>
     /// Deprecation information for the Verifiable library.

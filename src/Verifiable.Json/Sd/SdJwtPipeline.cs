@@ -1,17 +1,16 @@
-﻿using System.Buffers;
+using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.JCose.Sd;
-using Verifiable.Jose;
 
 namespace Verifiable.Json.Sd;
 
@@ -33,19 +32,21 @@ internal static class SdJwtPipeline
     internal static (ReadOnlyMemory<byte> RedactedPayload, IReadOnlyList<SdDisclosure> Disclosures) Redact(
         ReadOnlyMemory<byte> payload,
         IReadOnlySet<CredentialPath> disclosablePaths,
-        SaltFactoryDelegate saltFactory,
-        string hashAlgorithm)
+        GenerateDisclosureSaltDelegate generateSalt,
+        string hashAlgorithm,
+        DecoyDigestOptions decoyOptions)
     {
         string json = Encoding.UTF8.GetString(payload.Span);
 
         EncodeDelegate encoder = DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyJwk);
 
         var (jwtPayload, disclosures) = SdJwtClaimRedaction.Redact(
-            json, disclosablePaths, saltFactory,
+            json, disclosablePaths, generateSalt,
             SdJwtSerializer.SerializeDisclosure,
             SdJwtPathExtraction.ComputeDisclosureDigest,
             encoder,
-            hashAlgorithm);
+            hashAlgorithm,
+            decoyOptions);
 
         byte[] redactedBytes = SerializeDictionaryToUtf8(jwtPayload);
         return (redactedBytes, disclosures);
@@ -53,9 +54,13 @@ internal static class SdJwtPipeline
 
 
     /// <summary>
-    /// Signs a redacted JSON payload as a JWS compact serialization.
+    /// Signs a redacted JSON payload as a JWS compact serialization using an explicit
+    /// <see cref="SigningDelegate"/>. Registry resolution is the caller's concern
+    /// (<see cref="SdJwtIssuance"/> resolves the function from the key's tag and
+    /// forwards here); this keeps the pipeline a pure parameter-taking body.
     /// </summary>
     internal static async ValueTask<ReadOnlyMemory<byte>> Sign(
+        SigningDelegate signingDelegate,
         ReadOnlyMemory<byte> redactedPayload,
         string hashAlgorithm,
         string mediaType,
@@ -72,9 +77,9 @@ internal static class SdJwtPipeline
 
         var header = new JwtHeader
         {
-            [JwkProperties.Alg] = algorithm,
-            [JwkProperties.Typ] = resolvedMediaType,
-            [JwkProperties.Kid] = keyId
+            [WellKnownJwkMemberNames.Alg] = algorithm,
+            [WellKnownJoseHeaderNames.Typ] = resolvedMediaType,
+            [WellKnownJwkMemberNames.Kid] = keyId
         };
 
         byte[] headerBytes = SerializeDictionaryToUtf8(header);
@@ -95,10 +100,6 @@ internal static class SdJwtPipeline
         written += Encoding.ASCII.GetBytes(payloadSegment, signingInputMemory.Span[written..]);
 
         Debug.Assert(written == signingInputLength, "Signing input length must match the expected size.");
-
-        CryptoAlgorithm cryptoAlgorithm = privateKey.Tag.Get<CryptoAlgorithm>();
-        Purpose purpose = privateKey.Tag.Get<Purpose>();
-        SigningDelegate signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(cryptoAlgorithm, purpose);
 
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),

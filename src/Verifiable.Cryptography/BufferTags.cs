@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Cryptography;
+namespace Verifiable.Cryptography;
 
 /// <summary>
 /// Pre-built <see cref="Tag"/> instances for common buffer content types.

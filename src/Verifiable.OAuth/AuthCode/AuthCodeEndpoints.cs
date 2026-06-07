@@ -1,0 +1,2447 @@
+using System.Buffers;
+using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
+using Verifiable.Core;
+using Verifiable.Core.Assessment;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
+using Verifiable.JCose;
+using Verifiable.OAuth.AuthCode.Server;
+using Verifiable.OAuth.AuthCode.Server.States;
+using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.Jar;
+using Verifiable.OAuth.Oid4Vp;
+using Verifiable.OAuth.Oidc;
+using Verifiable.OAuth.Validation;
+
+using Verifiable.OAuth.Server;
+
+using Verifiable.OAuth.Server.Audit;
+using Verifiable.OAuth.Server.Pipeline;
+using Verifiable.OAuth.Server.Routing;
+using Verifiable.OAuth.Server.States;
+namespace Verifiable.OAuth.AuthCode;
+
+/// <summary>
+/// Endpoint builder module for the OAuth 2.0 Authorization Code flow with PKCE.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Produces PAR, Authorize (PAR-backed), Direct Authorize, and Token endpoints.
+/// Register at startup via <see cref="AuthorizationServer.EndpointBuilders"/>:
+/// </para>
+/// <code>
+/// server.EndpointBuilders.AddRange([
+///     AuthCodeEndpoints.Builder,
+///     MetadataEndpoints.Builder
+/// ]);
+/// </code>
+/// <para>
+/// <strong>JSON wire format and the serialization firewall.</strong> The
+/// HTTP response bodies this module emits — the PAR response and the token
+/// response — are written as JSON by hand using
+/// <see cref="System.Text.StringBuilder"/> rather than through a serializer.
+/// This is deliberate. <c>Verifiable.OAuth</c> takes no dependency on
+/// <c>Verifiable.Json</c>, on <c>System.Text.Json</c>, or on any other JSON
+/// library, and the project's banned-symbol analyzer enforces this. The
+/// library does not impose a JSON implementation on the application.
+/// </para>
+/// <para>
+/// The wire shapes here are RFC-defined and stable: a handful of well-known
+/// field names per
+/// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>
+/// for the token response and
+/// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see>
+/// for the PAR response, all primitive values (strings, integers), no
+/// nested or schema-variable structure. For shapes like that, manual
+/// <see cref="System.Text.StringBuilder"/> construction is the simplest
+/// path that respects the firewall and stays AOT-safe without
+/// source-generator context maintenance.
+/// </para>
+/// <para>
+/// The corresponding parsing direction lives behind delegate slots so the
+/// application chooses the parser; default implementations live in
+/// <c>Verifiable.Json</c> and a CBOR-speaking or otherwise custom
+/// deployment supplies its own. The output side stays symmetric: a
+/// non-JSON-format deployment that needs to swap the response-building
+/// surface replaces these endpoint builders with its own. The library
+/// remains agnostic to wire format.
+/// </para>
+/// </remarks>
+[DebuggerDisplay("AuthCodeEndpoints")]
+public static class AuthCodeEndpoints
+{
+
+    /// <summary>
+    /// The endpoint builder delegate. Pass this to
+    /// <see cref="AuthorizationServer.EndpointBuilders"/>.
+    /// </summary>
+    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    {
+        List<EndpointCandidate> candidates = [];
+
+        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthPushedAuthorization))
+        {
+            candidates.Add(BuildPar());
+        }
+
+        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
+        {
+            candidates.Add(BuildAuthorize());
+            //RFC 9101 §5 — explicit both-present (request + request_uri) rejection on the
+            //authorize URL; the routing matchers decline that case, this one owns it.
+            candidates.Add(BuildAuthorizeRequestObjectConflict());
+        }
+
+        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization))
+        {
+            candidates.Add(BuildDirectAuthorize());
+        }
+
+        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthPushedAuthorization)
+            && registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
+        {
+            candidates.Add(BuildJarPar());
+        }
+
+        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)
+            && registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
+        {
+            candidates.Add(BuildAuthorizeJarByValue());
+        }
+
+        bool hasTokenCapability =
+            registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode) ||
+            registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials) ||
+            registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenExchange);
+
+        if(hasTokenCapability)
+        {
+            candidates.Add(BuildToken());
+        }
+
+        //client_credentials grant (RFC 6749 §4.4) — machine-to-machine token
+        //issuance (for example a Shared Signals Receiver obtaining ssf.manage).
+        //Activates only when BOTH the capability and the client-authentication
+        //seam are present: an unauthenticated client-credentials grant would
+        //mint tokens for anyone claiming a client_id.
+        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials)
+            && context.Server?.Integration.ValidateClientCredentialsAsync is not null)
+        {
+            candidates.Add(BuildClientCredentials());
+        }
+
+        //Refresh-token grant per RFC 6749 §6 is enabled whenever the
+        //registration allows AuthorizationCode capability. RFC 9700 §2.2.2
+        //rotation is enforced unconditionally on every successful refresh.
+        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
+        {
+            candidates.Add(BuildRefreshToken());
+        }
+
+        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenRevocation))
+        {
+            candidates.Add(BuildRevocation());
+        }
+
+        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection))
+        {
+            candidates.Add(BuildIntrospection());
+        }
+
+        return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>(candidates);
+    };
+
+
+    /// <summary>
+    /// Builds the PAR endpoint per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126">RFC 9126</see>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ServerEndpoint.BuildResponse"/> writes the response body —
+    /// <c>request_uri</c> and <c>expires_in</c> — directly with
+    /// <see cref="System.Text.StringBuilder"/>. See the serialization-firewall
+    /// paragraph in the remarks on <see cref="AuthCodeEndpoints"/> for the
+    /// rationale.
+    /// </remarks>
+    private static EndpointCandidate BuildPar() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.AuthCodePar,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
+            StartsNewFlow = true,
+            Kind = FlowKind.AuthCodeServer,
+            DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.PushedAuthorizationRequestEndpoint,
+
+            //Acceptance test: POST to /par with PKCE body fields, no JAR request
+            //parameter, and no TransactionNonce on context. Disjointness vs
+            //JarPar (Request present) and vs OID4VP PAR (TransactionNonce
+            //present).
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.CodeChallenge))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                //Disjointness vs JAR-PAR per RFC 9101 §6.1.
+                if(fields.ContainsKey(OAuthRequestParameterNames.Request))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                //Disjointness vs OID4VP PAR.
+                if(context.TransactionNonce is not null)
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                AuthorizationServer server = context.Server!;
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
+                    || string.IsNullOrWhiteSpace(clientId))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Missing client_id."));
+                }
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.CodeChallenge, out string? challenge)
+                    || string.IsNullOrWhiteSpace(challenge))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Missing code_challenge."));
+                }
+
+                fields.TryGetValue(OAuthRequestParameterNames.CodeChallengeMethod, out string? method);
+                if(!IsAcceptedPkceMethod(method, context))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "code_challenge_method is not accepted under the active policy."));
+                }
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.RedirectUri, out string? redirectUriString)
+                    || !Uri.TryCreate(redirectUriString, UriKind.Absolute, out Uri? redirectUri))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Missing or invalid redirect_uri."));
+                }
+
+                //RFC 9700 §2.1 + OAuth 2.1 §2.3.1 — redirect_uri exact-match
+                //against the registered set. Parallel to the JAR-PAR check
+                //around line 988; this matcher's MatchesRequest already
+                //asserts context.Registration is non-null, so the read is
+                //unconditional here.
+                ClientRecord registration = context.Registration!;
+                if(!registration.AllowedRedirectUris.Contains(redirectUri))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        $"redirect_uri '{redirectUri}' is not among the registered redirect URIs."));
+                }
+
+                fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scope);
+                if(context.ScopeRequiredOnRequest && string.IsNullOrEmpty(scope))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "scope is required under the active policy."));
+                }
+                scope ??= string.Empty;
+
+                fields.TryGetValue(WellKnownJwtClaimNames.Nonce, out string? nonce);
+                nonce ??= string.Empty;
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                string flowId = context.FlowId!;
+                string requestUriToken = await server.Integration.GenerateIdentifierAsync!(
+                    WellKnownIdentifierPurposes.OAuthRequestUriToken, context, ct)
+                    .ConfigureAwait(false);
+                Uri requestUri = new($"urn:ietf:params:oauth:request_uri:{requestUriToken}");
+
+                //RFC 9126 §2.2 leaves the request_uri lifetime implementation-defined.
+                //Library policy lives in policy.RequestUriLifetime (default 60s).
+                TimeSpan parLifetime = context.RequestUriLifetime;
+                DateTimeOffset expiresAt = now + parLifetime;
+                int expiresIn = (int)parLifetime.TotalSeconds;
+
+                return ((OAuthFlowInput?)new ServerParValidated(
+                    FlowId: flowId,
+                    RequestUri: requestUri,
+                    CodeChallenge: challenge,
+                    RedirectUri: redirectUri,
+                    Scope: scope,
+                    ClientId: clientId,
+                    Nonce: nonce,
+                    ExpectedIssuer: clientId,
+                    ReceivedAt: now,
+                    ExpiresAt: expiresAt,
+                    ExpiresIn: expiresIn), (ServerHttpResponse?)null);
+            },
+            BuildResponse = static (state, _, _) =>
+            {
+                if(state is not ParRequestReceivedState par)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Unexpected state after PAR.");
+                }
+
+                //ExpiresIn is the wire value preserved from PAR-input time so the
+                //response value is exactly what the client was promised at PAR
+                //receipt, with no recomputation drift between BuildInputAsync and
+                //BuildResponse. The source policy is TimingPolicy.AuthCodeParLifetime.
+                string body =
+                    $"{{\"request_uri\":\"{par.RequestUri}\",\"expires_in\":{par.ExpiresIn}}}";
+                //RFC 9126 §2.2: a successful PAR response MUST use HTTP 201 Created.
+                return ServerHttpResponse
+                    .Created(body, WellKnownMediaTypes.Application.Json)
+                    .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
+            }
+        };
+
+
+    private static EndpointCandidate BuildAuthorize() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.AuthCodeAuthorize,
+            HttpMethod = WellKnownHttpMethods.Get,
+            Capability = WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            StartsNewFlow = false,
+            Kind = FlowKind.AuthCodeServer,
+            DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.AuthorizationEndpoint,
+
+            ExtractCorrelationKey = static (path, fields, context) =>
+            {
+                if(fields.TryGetValue(OAuthRequestParameterNames.RequestUri, out string? requestUri)
+                    && !string.IsNullOrWhiteSpace(requestUri))
+                {
+                    const string urnPrefix = "urn:ietf:params:oauth:request_uri:";
+                    return requestUri.StartsWith(urnPrefix, StringComparison.Ordinal)
+                        ? requestUri[urnPrefix.Length..]
+                        : requestUri;
+                }
+
+                return null;
+            },
+
+            //Acceptance test: GET to /authorize with a request_uri query
+            //parameter (PAR-completed authorize). Disjointness vs the direct
+            //PKCE matcher (no request_uri) is enforced by the request_uri
+            //presence requirement here.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsGet(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                //RFC 9101 §5 — request and request_uri MUST NOT both be present. The
+                //both-present case is owned by BuildAuthorizeRequestObjectConflict, which
+                //rejects it explicitly; decline here so it doesn't route through PAR-flow
+                //correlation (which would surface a misleading "flow not found").
+                if(fields.ContainsKey(OAuthRequestParameterNames.Request))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                AuthorizationServer server = context.Server!;
+
+                if(currentState is not ParRequestReceivedState)
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Flow not in expected state."));
+                }
+
+                string? subjectId = context.SubjectId;
+                if(string.IsNullOrWhiteSpace(subjectId))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Subject not authenticated."));
+                }
+
+                DateTimeOffset authTime = context.AuthTime ?? server.TimeProvider.GetUtcNow();
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+                string rawCode = await server.Integration.GenerateIdentifierAsync!(
+                    WellKnownIdentifierPurposes.OAuthAuthorizationCode, context, ct)
+                    .ConfigureAwait(false);
+                string codeHash = ComputeDigestBase64Url(
+                    rawCode,
+                    CryptoTags.Sha256Digest,
+                    WellKnownHashAlgorithms.Sha256SizeBytes,
+                    server.Codecs.ComputeDigest!,
+                    server.Codecs.Encoder!,
+                    SensitiveMemoryPool<byte>.Shared);
+
+                ParRequestReceivedState parState = (ParRequestReceivedState)currentState;
+
+                fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scope);
+
+                OAuthFlowInput input = new ServerAuthorizeCompleted(
+                    CodeHash: codeHash,
+                    SubjectId: subjectId,
+                    AuthTime: authTime,
+                    Scope: scope ?? parState.Scope,
+                    CompletedAt: now);
+
+                return ((OAuthFlowInput?)input, (ServerHttpResponse?)null);
+            },
+            BuildResponse = static (state, _, context) =>
+            {
+                if(state is not ServerCodeIssuedState code)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Unexpected state after authorize.");
+                }
+
+                return BuildAuthorizeRedirect(code, context);
+            }
+        };
+
+
+    private static EndpointCandidate BuildDirectAuthorize() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.AuthCodeDirectAuthorize,
+            HttpMethod = WellKnownHttpMethods.Get,
+            Capability = WellKnownCapabilityIdentifiers.OAuthDirectAuthorization,
+            StartsNewFlow = true,
+            Kind = FlowKind.AuthCodeServer,
+            //DiscoveryMetadataKey null — direct authorize shares the URL with
+            //AuthCodeAuthorize which is advertised; emitting twice would be
+            //wrong.
+
+            //Acceptance test: GET to /authorize with code_challenge in the
+            //query (direct PKCE) and no request_uri (which would route to the
+            //PAR-completed Authorize) and no Request (which would route to
+            //JAR-by-value).
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsGet(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                //Disjointness vs JAR-by-value Authorize.
+                if(fields.ContainsKey(OAuthRequestParameterNames.Request))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.CodeChallenge))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                AuthorizationServer server = context.Server!;
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
+                    || string.IsNullOrWhiteSpace(clientId))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Missing client_id."));
+                }
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.CodeChallenge, out string? challenge)
+                    || string.IsNullOrWhiteSpace(challenge))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Missing code_challenge."));
+                }
+
+                fields.TryGetValue(OAuthRequestParameterNames.CodeChallengeMethod, out string? method);
+                if(!IsAcceptedPkceMethod(method, context))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "code_challenge_method is not accepted under the active policy."));
+                }
+
+                //FAPI 2.0 §5.2.2 — when the profile mandates PAR, the direct Authorize
+                //path is refused; the client must push the request first.
+                if(context.RequirePushedAuthorizationRequests)
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "This authorization server requires Pushed Authorization Requests; a direct "
+                        + "authorization request is not accepted (FAPI 2.0 §5.2.2)."));
+                }
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.RedirectUri, out string? redirectUriString)
+                    || !Uri.TryCreate(redirectUriString, UriKind.Absolute, out Uri? redirectUri))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Missing or invalid redirect_uri."));
+                }
+
+                string? subjectId = context.SubjectId;
+                if(string.IsNullOrWhiteSpace(subjectId))
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Subject not authenticated."));
+                }
+
+                fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scope);
+                scope ??= string.Empty;
+
+                fields.TryGetValue(WellKnownJwtClaimNames.Nonce, out string? nonce);
+                nonce ??= string.Empty;
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+                string flowId = context.FlowId!;
+
+                //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for
+                //authorization codes. Library policy lives in
+                //policy.AuthorizationCodeLifetime (default 600s).
+                DateTimeOffset expiresAt = now + context.AuthorizationCodeLifetime;
+
+                string rawCode = await server.Integration.GenerateIdentifierAsync!(
+                    WellKnownIdentifierPurposes.OAuthAuthorizationCode, context, ct)
+                    .ConfigureAwait(false);
+                string codeHash = ComputeDigestBase64Url(
+                    rawCode,
+                    CryptoTags.Sha256Digest,
+                    WellKnownHashAlgorithms.Sha256SizeBytes,
+                    server.Codecs.ComputeDigest!,
+                    server.Codecs.Encoder!,
+                    SensitiveMemoryPool<byte>.Shared);
+
+                return ((OAuthFlowInput?)new ServerDirectAuthorizeCompleted(
+                    FlowId: flowId,
+                    CodeHash: codeHash,
+                    CodeChallenge: challenge,
+                    RedirectUri: redirectUri,
+                    Scope: scope,
+                    ClientId: clientId,
+                    Nonce: nonce,
+                    SubjectId: subjectId,
+                    AuthTime: now,
+                    ExpectedIssuer: clientId,
+                    CompletedAt: now,
+                    ExpiresAt: expiresAt), (ServerHttpResponse?)null);
+            },
+
+            BuildResponse = static (state, _, context) =>
+            {
+                if(state is not ServerCodeIssuedState code)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Unexpected state after direct authorize.");
+                }
+
+                return BuildAuthorizeRedirect(code, context);
+            }
+        };
+
+
+    /// <summary>
+    /// Builds the matcher that enforces RFC 9101 §5: an authorization request MUST NOT
+    /// contain both <c>request</c> and <c>request_uri</c>. It uniquely matches the
+    /// both-present GET <c>/authorize</c> case the three routing matchers each decline,
+    /// and rejects it with an explicit <c>invalid_request</c> — deterministically, with
+    /// no PAR-flow correlation (which would otherwise surface a misleading "flow not
+    /// found").
+    /// </summary>
+    private static EndpointCandidate BuildAuthorizeRequestObjectConflict() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.AuthCodeRequestObjectConflict,
+            HttpMethod = WellKnownHttpMethods.Get,
+            Capability = WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            StartsNewFlow = true,
+            Kind = FlowKind.AuthCodeServer,
+            //DiscoveryMetadataKey null — this is a guard on the authorize URL, not an
+            //independently advertised endpoint.
+
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsGet(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                //Matches only when BOTH are present — the case every routing matcher declines.
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Request)
+                    || !fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static (fields, context, currentState, ct) =>
+                ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>(
+                    ((OAuthFlowInput?)null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "An authorization request MUST NOT contain both 'request' and 'request_uri' (RFC 9101 §5)."))),
+
+            //Never reached — BuildInputAsync always returns the early-exit response.
+            BuildResponse = static (_, _, _) =>
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Unreachable."),
+        };
+
+
+    /// <summary>
+    /// Builds the JAR-PAR endpoint per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101">RFC 9101</see> +
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126">RFC 9126</see>:
+    /// PAR with a signed Request Object (JAR) instead of bare PKCE fields.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Disjoint from <see cref="BuildPar"/> on a single body-field signal —
+    /// presence of the <c>request</c> parameter. The PKCE matcher's MatchesRequest
+    /// rejects a body that carries <c>request</c>, the JAR matcher's MatchesRequest
+    /// requires it; the chain remains disjoint and the DEBUG disjointness assertion
+    /// passes.
+    /// </para>
+    /// </remarks>
+    private static EndpointCandidate BuildJarPar() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.AuthCodeJarPar,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
+            StartsNewFlow = true,
+            Kind = FlowKind.AuthCodeServer,
+            //DiscoveryMetadataKey null — JAR-PAR shares the URL with the
+            //non-JAR PAR endpoint which advertises; emitting twice would be
+            //wrong.
+
+            //Acceptance test: POST to /par with the JAR Request parameter in
+            //the body. Disjointness vs PKCE PAR (no Request) is enforced by
+            //the Request presence requirement here.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Request))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                AuthorizationServer server = context.Server!;
+
+                (AuthCodeRequestObject? requestObject, ServerHttpResponse? earlyExit) =
+                    await VerifyAndValidateAuthCodeJarAsync(fields, context, server, ct)
+                        .ConfigureAwait(false);
+
+                if(earlyExit is not null)
+                {
+                    return ((OAuthFlowInput?)null, earlyExit);
+                }
+
+                AuthCodeRequestObject ro = requestObject!;
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                string flowId = context.FlowId!;
+                string requestUriToken = await server.Integration.GenerateIdentifierAsync!(
+                    WellKnownIdentifierPurposes.OAuthRequestUriToken, context, ct)
+                    .ConfigureAwait(false);
+                Uri requestUri = new($"urn:ietf:params:oauth:request_uri:{requestUriToken}");
+
+                //RFC 9126 §2.2 leaves the request_uri lifetime implementation-defined.
+                //Library policy lives in policy.RequestUriLifetime (default 60s).
+                TimeSpan parLifetime = context.RequestUriLifetime;
+                DateTimeOffset expiresAt = now + parLifetime;
+                int expiresIn = (int)parLifetime.TotalSeconds;
+
+                return ((OAuthFlowInput?)new ServerParValidated(
+                    FlowId: flowId,
+                    RequestUri: requestUri,
+                    CodeChallenge: ro.CodeChallenge,
+                    RedirectUri: ro.RedirectUri,
+                    Scope: ro.Scope,
+                    ClientId: ro.ClientId,
+                    Nonce: ro.Nonce,
+                    ExpectedIssuer: ro.ClientId,
+                    ReceivedAt: now,
+                    ExpiresAt: expiresAt,
+                    ExpiresIn: expiresIn), null);
+            },
+
+            BuildResponse = static (state, _, _) =>
+            {
+                if(state is not ParRequestReceivedState par)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Unexpected state after JAR-PAR.");
+                }
+
+                string body =
+                    $"{{\"request_uri\":\"{par.RequestUri}\",\"expires_in\":{par.ExpiresIn}}}";
+                //RFC 9126 §2.2: a successful PAR response MUST use HTTP 201 Created.
+                return ServerHttpResponse
+                    .Created(body, WellKnownMediaTypes.Application.Json)
+                    .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
+            }
+        };
+
+
+    /// <summary>
+    /// Builds the JAR-by-value direct Authorize endpoint per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.1">RFC 9101 §6.1</see>:
+    /// the authorize endpoint accepts a signed Request Object directly via the
+    /// <c>request</c> query parameter without a prior PAR.
+    /// </summary>
+    /// <remarks>
+    /// Disjoint from <see cref="BuildDirectAuthorize"/> and the PAR-completed
+    /// <see cref="BuildAuthorize"/> on body/query signals — JAR-by-value matches
+    /// when <c>request</c> is present and <c>request_uri</c> is absent; the
+    /// PKCE direct matcher matches when neither <c>request</c> nor
+    /// <c>request_uri</c> is present; the PAR-completed matcher matches when
+    /// <c>request_uri</c> is present.
+    /// </remarks>
+    private static EndpointCandidate BuildAuthorizeJarByValue() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.AuthCodeAuthorizeJarByValue,
+            HttpMethod = WellKnownHttpMethods.Get,
+            Capability = WellKnownCapabilityIdentifiers.OAuthDirectAuthorization,
+            StartsNewFlow = true,
+            Kind = FlowKind.AuthCodeServer,
+            //DiscoveryMetadataKey null — JAR-by-value shares the URL with the
+            //non-JAR authorize endpoint which advertises.
+
+            //Acceptance test: GET to /authorize with the JAR Request parameter
+            //in the query and no request_uri (which would route to the
+            //PAR-completed Authorize per RFC 9101 §6.1). Disjointness vs the
+            //direct PKCE matcher is enforced by the Request presence
+            //requirement here.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsGet(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                //RFC 9101 §5/§6.1 — request and request_uri MUST NOT both be present.
+                //This JAR-by-value matcher declines when request_uri is also present; the
+                //both-present case is matched by the PAR-completed BuildAuthorize, whose
+                //BuildInputAsync rejects it with an explicit invalid_request.
+                if(fields.ContainsKey(OAuthRequestParameterNames.RequestUri))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Request))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                AuthorizationServer server = context.Server!;
+
+                (AuthCodeRequestObject? requestObject, ServerHttpResponse? earlyExit) =
+                    await VerifyAndValidateAuthCodeJarAsync(fields, context, server, ct)
+                        .ConfigureAwait(false);
+
+                if(earlyExit is not null)
+                {
+                    return ((OAuthFlowInput?)null, earlyExit);
+                }
+
+                AuthCodeRequestObject ro = requestObject!;
+
+                //FAPI 2.0 §5.2.2 — when the profile mandates PAR, the JAR-by-value path
+                //is refused; the client must push the request first.
+                if(context.RequirePushedAuthorizationRequests)
+                {
+                    return ((OAuthFlowInput?)null,
+                        ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest,
+                            "This authorization server requires Pushed Authorization Requests; a JAR-by-value "
+                            + "authorization request is not accepted (FAPI 2.0 §5.2.2)."));
+                }
+
+                string? subjectId = context.SubjectId;
+                if(string.IsNullOrWhiteSpace(subjectId))
+                {
+                    return ((OAuthFlowInput?)null,
+                        ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError, "Subject not authenticated."));
+                }
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+                string flowId = context.FlowId!;
+
+                //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for
+                //authorization codes. Library policy lives in
+                //policy.AuthorizationCodeLifetime (default 600s).
+                DateTimeOffset expiresAt = now + context.AuthorizationCodeLifetime;
+
+                string rawCode = await server.Integration.GenerateIdentifierAsync!(
+                    WellKnownIdentifierPurposes.OAuthAuthorizationCode, context, ct)
+                    .ConfigureAwait(false);
+                string codeHash = ComputeDigestBase64Url(
+                    rawCode,
+                    CryptoTags.Sha256Digest,
+                    WellKnownHashAlgorithms.Sha256SizeBytes,
+                    server.Codecs.ComputeDigest!,
+                    server.Codecs.Encoder!,
+                    SensitiveMemoryPool<byte>.Shared);
+
+                return ((OAuthFlowInput?)new ServerDirectAuthorizeCompleted(
+                    FlowId: flowId,
+                    CodeHash: codeHash,
+                    CodeChallenge: ro.CodeChallenge,
+                    RedirectUri: ro.RedirectUri,
+                    Scope: ro.Scope,
+                    ClientId: ro.ClientId,
+                    Nonce: ro.Nonce,
+                    SubjectId: subjectId,
+                    AuthTime: now,
+                    ExpectedIssuer: ro.ClientId,
+                    CompletedAt: now,
+                    ExpiresAt: expiresAt), null);
+            },
+
+            BuildResponse = static (state, _, context) =>
+            {
+                if(state is not ServerCodeIssuedState code)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "Unexpected state after JAR-by-value direct authorize.");
+                }
+
+                return BuildAuthorizeRedirect(code, context);
+            }
+        };
+
+
+    /// <summary>
+    /// Shared validation pipeline for JAR-bearing AuthCode matchers (JAR-PAR and
+    /// JAR-by-value direct Authorize). Verifies the JAR's signature, JOSE header,
+    /// and timing claims via <see cref="JarVerification.VerifyAsync"/>; projects
+    /// onto a typed <see cref="AuthCodeRequestObject"/>; runs the protocol-shaped
+    /// claim checks RFC 9101 §10.2 and RFC 9700 §4 mandate; and validates the
+    /// outer <c>client_id</c> against the JAR's per RFC 9700 §4.6 substitution
+    /// defense.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns <c>(requestObject, null)</c> on success and <c>(null, response)</c>
+    /// when validation fails. The matchers project the returned
+    /// <see cref="AuthCodeRequestObject"/> onto their endpoint-specific input
+    /// records (<see cref="ServerParValidated"/> for JAR-PAR;
+    /// <see cref="ServerDirectAuthorizeCompleted"/> for JAR-by-value).
+    /// </para>
+    /// <para>
+    /// The <c>aud</c> check enforces the RFC 9101 §10.2 reading: <c>aud</c> must
+    /// equal the AS issuer URL resolved through
+    /// <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>. The
+    /// EUDI/Microsoft <c>aud == client_id</c> reading is rejected; tenant-divergent
+    /// audience policy is a planned future extension point and is not in scope here.
+    /// </para>
+    /// </remarks>
+    private static async ValueTask<(AuthCodeRequestObject? RequestObject, ServerHttpResponse? EarlyExit)>
+        VerifyAndValidateAuthCodeJarAsync(
+            RequestFields fields,
+            ExchangeContext context,
+            AuthorizationServer server,
+            CancellationToken cancellationToken)
+    {
+        if(!fields.TryGetValue(OAuthRequestParameterNames.Request, out string? compactJar)
+            || string.IsNullOrWhiteSpace(compactJar))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest, "Missing request parameter."));
+        }
+
+        //RFC 9101 §5 explicitly permits the AS to require an outer client_id for
+        //pre-verification client identification. Requiring it sidesteps the
+        //"identify the registration before the JAR is verified" problem cleanly
+        //and defends against substitution per RFC 9700 §4.6.
+        if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? outerClientId)
+            || string.IsNullOrWhiteSpace(outerClientId))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest,
+                "Missing outer client_id. The library requires an outer client_id alongside a JAR per RFC 9101 §5."));
+        }
+
+        ClientRecord? registration = context.Registration;
+        if(registration is null)
+        {
+            return (null, ServerHttpResponse.Unauthorized(
+                OAuthErrors.InvalidClient, "Unknown client."));
+        }
+
+        if(!string.Equals(outerClientId, registration.ClientId, StringComparison.Ordinal))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequest, "Outer client_id does not match the registered client."));
+        }
+
+        //Resolve the JAR signing public key for this registration. The library
+        //reads the JAR signing key id from the registration's JarSigning slot —
+        //never from the JAR's own header. Doing the latter would defeat the
+        //CVE-class header-key-injection defense.
+        KeyId verificationKeyId;
+        try
+        {
+            verificationKeyId = registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning);
+        }
+        catch(Exception ex) when(ex is KeyNotFoundException or InvalidOperationException)
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError,
+                $"Registration '{registration.ClientId}' has no JAR signing key configured: {ex.Message}"));
+        }
+
+        ServerVerificationKeyResolverDelegate? resolver = server.Cryptography.VerificationKeyResolver;
+        if(resolver is null)
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, "VerificationKeyResolver is not configured."));
+        }
+
+        PublicKeyMemory? signingPublicKey = await resolver(
+            verificationKeyId, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+
+        if(signingPublicKey is null)
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError,
+                $"Verification key '{verificationKeyId.Value}' is unavailable."));
+        }
+
+        JwtHeaderDeserializer? headerDeserializer = server.Codecs.JwtHeaderDeserializer;
+        JwtPayloadDeserializer? payloadDeserializer = server.Codecs.JwtPayloadDeserializer;
+        DecodeDelegate? decoder = server.Codecs.Decoder;
+
+        if(headerDeserializer is null || payloadDeserializer is null || decoder is null)
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, "Required JWT codecs are not configured."));
+        }
+
+        DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+        //Clock skew and JAR lifetime ceiling come from per-request policy
+        //(populated by ResolvePolicyAsync at dispatch entry). Defaults match
+        //the historical TimingPolicy values for the strict reading.
+        JarVerificationResult verification = await JarVerification.VerifyAsync(
+            compactJar,
+            signingPublicKey,
+            now,
+            context.ClockSkewTolerance,
+            context.JarLifetimeCeiling,
+            decoder,
+            headerDeserializer,
+            payloadDeserializer,
+            SensitiveMemoryPool<byte>.Shared,
+            cancellationToken).ConfigureAwait(false);
+
+        if(verification is JarRejected rejected)
+        {
+            return (null, ServerHttpResponse.BadRequest(rejected.ErrorCode, rejected.Reason));
+        }
+
+        JarVerified verified = (JarVerified)verification;
+
+        AuthCodeRequestObject requestObject;
+        try
+        {
+            requestObject = verified.ProjectAuthCode();
+        }
+        catch(FormatException ex)
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject, ex.Message));
+        }
+
+        //RFC 9101 §10.2 — iss MUST equal client_id when present in the JAR. The
+        //library treats iss as required for JAR per the same section; absence
+        //is rejected.
+        if(string.IsNullOrEmpty(requestObject.Iss)
+            || !string.Equals(requestObject.Iss, requestObject.ClientId, StringComparison.Ordinal))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "JAR iss must be present and equal to client_id per RFC 9101 §10.2."));
+        }
+
+        //RFC 9700 §4.6 — the JAR's client_id MUST match the registered client.
+        if(!string.Equals(requestObject.ClientId, registration.ClientId, StringComparison.Ordinal))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "JAR client_id does not match the registered client."));
+        }
+
+        //RFC 9101 §10.2, RFC 9700 §4.2 — aud MUST equal the AS issuer URL
+        //(the FAPI-conformant reading). Tenant-divergent aud policy is a
+        //planned follow-up. One call site here so the future delegate
+        //extension point replaces a single method call. The validation runs
+        //against verified.Claims rather than the projected requestObject.Aud
+        //so the array form per RFC 7519 §4.1.3 is honoured — the projection
+        //is single-string only.
+        ServerHttpResponse? audFailure = await ValidateJarAudienceAsync(
+            verified.Claims, registration, context, server, cancellationToken).ConfigureAwait(false);
+        if(audFailure is not null)
+        {
+            return (null, audFailure);
+        }
+
+        //RFC 9700 §4.1 — redirect_uri exact-match against the registered set.
+        if(!registration.AllowedRedirectUris.Contains(requestObject.RedirectUri))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                $"redirect_uri '{requestObject.RedirectUri}' is not among the registered redirect URIs."));
+        }
+
+        //Scope-required-on-request is a policy axis (Finding 4). Aligns the
+        //JAR-bearing matcher with the PKCE PAR matcher — either both require
+        //scope (the strict default) or both treat it as optional.
+        if(context.ScopeRequiredOnRequest && string.IsNullOrEmpty(requestObject.Scope))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "scope is required under the active policy."));
+        }
+
+        //FAPI 2.0 §5.2.2, HAIP §3 — code_challenge_method MUST be S256 in the
+        //strict default. Permissive deployments via policy.AllowedPkceMethods
+        //may also accept "plain".
+        if(!IsAcceptedPkceMethod(requestObject.CodeChallengeMethod, context))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "code_challenge_method is not accepted under the active policy."));
+        }
+
+        return (requestObject, null);
+    }
+
+
+    /// <summary>
+    /// Validates the JAR <c>aud</c> claim against the AS issuer URL per RFC 9101
+    /// §10.2 and RFC 9700 §4.2. Single call site so the future
+    /// <c>ValidateJarAudienceDelegate</c> extension point — see the planned-
+    /// follow-up note in the JAR brief — can replace one method call rather
+    /// than tracking sprinkled checks. Delegates the string-or-array shape
+    /// handling to <see cref="ValidationChecks.CheckTokenAudContainsExpectedIssuer"/>
+    /// so both single-string and array-form <c>aud</c> per RFC 7519 §4.1.3 work.
+    /// </summary>
+    private static async ValueTask<ServerHttpResponse?> ValidateJarAudienceAsync(
+        IReadOnlyDictionary<string, object> claims,
+        ClientRecord registration,
+        ExchangeContext context,
+        AuthorizationServer server,
+        CancellationToken cancellationToken)
+    {
+        if(!claims.ContainsKey(WellKnownJwtClaimNames.Aud))
+        {
+            return ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "JAR aud claim is required per RFC 9101 §10.2.");
+        }
+
+        Uri issuerUri;
+        try
+        {
+            issuerUri = server.Integration.ResolveIssuerAsync is not null
+                ? await server.Integration.ResolveIssuerAsync(registration, context, cancellationToken)
+                    .ConfigureAwait(false)
+                : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
+                    .ConfigureAwait(false);
+        }
+        catch(InvalidOperationException ex)
+        {
+            return ServerHttpResponse.ServerError(OAuthErrors.ServerError, ex.Message);
+        }
+
+        ValidationContext validationContext = new()
+        {
+            Context = context,
+            TokenClaims = claims,
+            ExpectedIssuer = issuerUri.ToString(),
+            Now = server.TimeProvider.GetUtcNow()
+        };
+
+        List<Claim> result = await ValidationChecks.CheckTokenAudContainsExpectedIssuer(
+            validationContext, cancellationToken).ConfigureAwait(false);
+
+        if(result[0].Outcome == ClaimOutcome.Success)
+        {
+            return null;
+        }
+
+        return ServerHttpResponse.BadRequest(
+            OAuthErrors.InvalidRequestObject,
+            $"JAR aud does not match the AS issuer '{issuerUri}' per RFC 9101 §10.2.");
+    }
+
+
+    /// <summary>
+    /// Default producer list when
+    /// <see cref="ServerConfiguration.TokenProducers"/> is empty. Single producer
+    /// matches the library's historical access-token-only response shape.
+    /// </summary>
+    private static readonly IReadOnlyList<TokenProducer> DefaultTokenProducers =
+        [TokenProducer.Rfc9068AccessToken];
+
+
+    /// <summary>
+    /// Pre-resolves the OIDC claim set for the current issuance once per token
+    /// request, before the producer loop. The resolved value flows through every
+    /// <see cref="IdTokenTarget"/> and <see cref="UserInfoTarget"/> the
+    /// contributor walk constructs in this request, so per-rule contributors
+    /// don't each re-issue the resolver call.
+    /// </summary>
+    private static async ValueTask<OidcClaims?> PreResolveOidcClaimsAsync(
+        AuthorizationServer server,
+        IssuanceContext issuance,
+        CancellationToken cancellationToken)
+    {
+        ResolveOidcClaimsDelegate? resolve = server.Integration.ResolveOidcClaimsAsync;
+        if(resolve is null)
+        {
+            return null;
+        }
+
+        return await resolve(
+            issuance.Subject,
+            issuance.Scope,
+            issuance.Registration.TenantId,
+            issuance.Context,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Builds the <see cref="ClaimContributionTarget"/> appropriate to a
+    /// <paramref name="producer"/>'s response field, or <see langword="null"/>
+    /// when the producer's token type has no contributor walk wired in this
+    /// phase (refresh tokens, custom producers).
+    /// </summary>
+    private static ClaimContributionTarget? BuildTargetForProducer(
+        TokenProducer producer,
+        IssuanceContext issuance,
+        OidcClaims? preResolvedClaims)
+    {
+        if(string.Equals(producer.ResponseField, WellKnownTokenTypes.IdToken, StringComparison.Ordinal))
+        {
+            return new IdTokenTarget(issuance) { ResolvedOidcClaims = preResolvedClaims };
+        }
+
+        if(string.Equals(producer.ResponseField, WellKnownTokenTypes.AccessToken, StringComparison.Ordinal))
+        {
+            return new AccessTokenTarget(issuance);
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Runs the configured <see cref="ServerConfiguration.ClaimIssuer"/>
+    /// against <paramref name="target"/> and merges every
+    /// <see cref="ClaimOutcome.Success"/> contribution into
+    /// <paramref name="payload"/> via the indexer. No-op when the
+    /// configuration has no issuer wired.
+    /// </summary>
+    private static async ValueTask MergeContributedClaimsAsync(
+        AuthorizationServer server,
+        ClaimContributionTarget? target,
+        JwtPayload payload,
+        CancellationToken cancellationToken)
+    {
+        if(target is null || server.Configuration.ClaimIssuer is not { } issuer)
+        {
+            return;
+        }
+
+        string correlationId = await server.Integration.GenerateIdentifierAsync!(
+            WellKnownIdentifierPurposes.OAuthCorrelationId, null, cancellationToken)
+            .ConfigureAwait(false);
+        ClaimIssueResult result = await issuer.GenerateClaimsAsync(
+            target,
+            correlationId,
+            cancellationToken).ConfigureAwait(false);
+
+        foreach(Claim claim in result.Claims)
+        {
+            if(claim.Outcome == ClaimOutcome.Success
+                && claim.Context is ClaimContributionContext ctx)
+            {
+                payload[ctx.ClaimName] = ctx.ClaimValue;
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Builds the Token endpoint per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ServerEndpoint.BuildResponse"/> writes the response body —
+    /// <c>access_token</c>, <c>token_type</c>, <c>expires_in</c>, and the
+    /// optional <c>id_token</c>, <c>refresh_token</c>, and <c>scope</c>
+    /// fields — directly with <see cref="System.Text.StringBuilder"/>. See
+    /// the serialization-firewall paragraph in the remarks on
+    /// <see cref="AuthCodeEndpoints"/> for the rationale.
+    /// </remarks>
+    private static EndpointCandidate BuildToken() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.AuthCodeToken,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            StartsNewFlow = false,
+            Kind = FlowKind.AuthCodeServer,
+            DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.TokenEndpoint,
+
+            //Acceptance test: POST to /token with grant_type=authorization_code
+            //and a code parameter. Disjointness vs the refresh-token matcher
+            //(different grant_type) and the OID4VP token matcher (different
+            //path) is enforced by the grant_type filter here.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
+                    || !string.Equals(grantType, OAuthRequestParameterValues.GrantTypeAuthorizationCode, StringComparison.Ordinal))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Code))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            ExtractCorrelationKey = static (path, fields, context) =>
+                fields.TryGetValue(OAuthRequestParameterNames.Code, out string? code)
+                    && !string.IsNullOrWhiteSpace(code) ? code : null,
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                AuthorizationServer server = context.Server!;
+
+                if(currentState is not ServerCodeIssuedState codeState)
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidGrant, "Flow not in expected state."));
+                }
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.CodeVerifier, out string? verifier)
+                    || string.IsNullOrWhiteSpace(verifier))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Missing code_verifier."));
+                }
+
+                string computedChallenge = ComputeDigestBase64Url(
+                    verifier,
+                    CryptoTags.Sha256Digest,
+                    WellKnownHashAlgorithms.Sha256SizeBytes,
+                    server.Codecs.ComputeDigest!,
+                    server.Codecs.Encoder!,
+                    SensitiveMemoryPool<byte>.Shared);
+                if(!string.Equals(computedChallenge, codeState.CodeChallenge,
+                    StringComparison.Ordinal))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidGrant, "PKCE verification failed."));
+                }
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
+                    || !string.Equals(clientId, codeState.ClientId, StringComparison.Ordinal))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidGrant, "client_id mismatch."));
+                }
+
+                //The dispatcher already loaded the registration for this tenant onto
+                //the context. Use that rather than re-loading by client_id; doing the
+                //lookup again under a different identifier would conflate clientId
+                //and tenantId, which the protocol layer keeps distinct.
+                ClientRecord? registration = context.Registration;
+                if(registration is null)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Unknown client."));
+                }
+
+                Uri issuerUri;
+                try
+                {
+                    issuerUri = server.Integration.ResolveIssuerAsync is not null
+                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false)
+                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
+                }
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                //RFC 9449 DPoP enforcement at the token endpoint. The helper
+                //returns a shaped failure response on any rejection path
+                //(missing proof, nonce challenge, invalid proof, jti replay)
+                //and the established Confirmation on success. Code-grant
+                //passes expectedThumbprint=null because the binding is being
+                //established here; refresh-grant verifies against the stored
+                //thumbprint in BuildRefreshToken.
+                bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
+                    server, context, registration, issuerUri, now,
+                    expectedThumbprint: null, dpopRequired, ct).ConfigureAwait(false);
+
+                if(!dpopOutcome.IsSuccess)
+                {
+                    return (null, dpopOutcome.FailureResponse!);
+                }
+
+                ConfirmationMethod? confirmation = dpopOutcome.Confirmation;
+
+                IssuanceContext issuance = new()
+                {
+                    Registration = registration,
+                    Context = context,
+                    IssuerUri = issuerUri,
+                    Subject = codeState.SubjectId,
+                    Scope = codeState.Scope,
+                    ClientId = codeState.ClientId,
+                    IssuedAt = now,
+                    Nonce = string.IsNullOrEmpty(codeState.Nonce) ? null : codeState.Nonce,
+                    AuthTime = codeState.AuthTime,
+                    Confirmation = confirmation
+                };
+
+                IReadOnlyList<TokenProducer> producers =
+                    server.Configuration.TokenProducers.Count > 0 ? server.Configuration.TokenProducers : DefaultTokenProducers;
+
+                //One-time OidcClaims resolution per request — every
+                //IdTokenTarget / UserInfoTarget built below in the producer
+                //loop reads from the same resolved instance so per-rule
+                //contributors don't each re-issue the resolver call.
+                OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
+                    server, issuance, ct).ConfigureAwait(false);
+
+                Dictionary<string, string> issuedTokens = new(producers.Count);
+                Dictionary<string, IssuedTokenAudit> issuedAudits = new(producers.Count);
+                DateTimeOffset latestExpiry = now;
+
+                foreach(TokenProducer producer in producers)
+                {
+                    //Per-producer capability filter. The chain-level filter via
+                    //ResolveCapabilitiesAsync gated the token *endpoint* itself
+                    //on the AuthorizationCode capability; the producer loop here
+                    //gates each individual token producer (access token, ID
+                    //token, refresh token) on its own RequiredCapability so the
+                    //response contains only the token shapes this request is
+                    //allowed to issue. Reads the resolver's per-request output
+                    //(stashed by EndpointChain.BuildForRequestAsync) rather
+                    //than the registration's static AllowedCapabilities — CAEP/
+                    //RISC attenuation between issuance steps applies here.
+                    IReadOnlySet<CapabilityIdentifier>? resolved =
+                        context.ResolvedCapabilities;
+                    if(resolved is null || !resolved.Contains(producer.RequiredCapability))
+                    {
+                        continue;
+                    }
+
+                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+
+                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
+                        server, registration, producer.KeyUsage, context, ct)
+                        .ConfigureAwait(false);
+
+                    PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
+                        signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
+
+                    if(signingKey is null)
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError,
+                            $"Signing key unavailable for producer '{producer.Name}'."));
+                    }
+
+                    string algorithm =
+                        CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+
+                    TokenProducerOutput output = await producer.BuildAsync(
+                        issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
+
+                    JwtPayload payload = output.Payload;
+
+                    //Composed contributor walk via ServerConfiguration.ClaimIssuer.
+                    //Emits scope-driven extension claims (profile / email /
+                    //address / phone / cnf / acr / amr) after the producer
+                    //returned its spec-mandated baseline.
+                    ClaimContributionTarget? contributionTarget =
+                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
+                    await MergeContributedClaimsAsync(
+                        server, contributionTarget, payload, ct).ConfigureAwait(false);
+
+                    UnsignedJwt unsigned = new(output.Header, payload);
+
+                    using JwsMessage jws = await unsigned.SignAsync(
+                        signingKey,
+                        server.Codecs.JwtHeaderSerializer!,
+                        server.Codecs.JwtPayloadSerializer!,
+                        server.Codecs.Encoder!,
+                        SensitiveMemoryPool<byte>.Shared,
+                        ct).ConfigureAwait(false);
+
+                    string compactJws = JwsSerialization.SerializeCompact(jws, server.Codecs.Encoder!);
+
+                    issuedTokens[producer.ResponseField] = compactJws;
+
+                    string jti = ExtractJti(payload);
+                    DateTimeOffset issuedAt = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
+                    DateTimeOffset expiresAt = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
+
+                    issuedAudits[producer.ResponseField] = new IssuedTokenAudit
+                    {
+                        Jti = jti,
+                        SigningKeyId = signingKeyId.Value,
+                        IssuedAt = issuedAt,
+                        ExpiresAt = expiresAt
+                    };
+
+                    if(expiresAt > latestExpiry)
+                    {
+                        latestExpiry = expiresAt;
+                    }
+                }
+
+                if(issuedTokens.Count == 0)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "No applicable token producers."));
+                }
+
+                //RFC 6749 §6 — issue a refresh token alongside the access
+                //token. Refresh tokens are opaque random strings (not JWTs),
+                //stored as ServerRefreshTokenIssuedState in flow storage.
+                //RFC 9700 §2.2.2 requires rotation on every use; the
+                //BuildRefreshToken endpoint handles the rotation when the
+                //refresh is presented. The value is a bearer secret, so it
+                //goes through the identifier seam like the authorization-code
+                //value — the application owns the entropy source and its
+                //provenance tracking; the library never fills from the OS
+                //CSPRNG directly.
+                string refreshToken = await server.Integration.GenerateIdentifierAsync!(
+                    WellKnownIdentifierPurposes.OAuthRefreshToken, context, ct)
+                    .ConfigureAwait(false);
+                DateTimeOffset refreshExpiresAt = now + context.RefreshTokenLifetime;
+
+                if(server.Integration.SaveFlowStateAsync is not null)
+                {
+                    string refreshFlowId = await server.Integration.GenerateIdentifierAsync!(
+                        WellKnownIdentifierPurposes.OAuthRefreshFlowId, context, ct)
+                        .ConfigureAwait(false);
+                    ServerRefreshTokenIssuedState refreshState = new()
+                    {
+                        FlowId = refreshFlowId,
+                        ExpectedIssuer = issuerUri.OriginalString,
+                        EnteredAt = now,
+                        ExpiresAt = refreshExpiresAt,
+                        Kind = FlowKind.AuthCodeServer,
+                        ClientId = codeState.ClientId,
+                        RefreshToken = refreshToken,
+                        IssuedAt = now,
+                        SubjectId = codeState.SubjectId,
+                        Scope = codeState.Scope,
+                        Confirmation = confirmation
+                    };
+                    await server.Integration.SaveFlowStateAsync(
+                        registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, ct)
+                        .ConfigureAwait(false);
+                }
+
+                issuedTokens[WellKnownTokenTypes.RefreshToken] = refreshToken;
+
+                IssuedTokenSet tokenSet = new() { Tokens = issuedTokens };
+                context.SetIssuedTokens(tokenSet);
+
+                IssuedTokenAuditSet auditSet = new() { Audits = issuedAudits };
+
+                return (new ServerTokenExchangeSucceeded(
+                    IssuedTokens: auditSet,
+                    IssuedAt: now,
+                    ExpiresAt: latestExpiry)
+                {
+                    Confirmation = confirmation
+                }, null);
+            },
+            BuildResponse = static (state, _, context) =>
+            {
+                if(state is not ServerTokenIssuedState issued)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Unexpected state after token exchange.");
+                }
+
+                IssuedTokenSet? tokenSet = context.IssuedTokens;
+                if(tokenSet is null || tokenSet.AccessToken is null)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Issued tokens not found in context.");
+                }
+
+                IssuedTokenAudit? accessAudit = issued.IssuedTokens.AccessTokenAudit;
+                if(accessAudit is null)
+                {
+                    //Structural invariant: the upstream check above already
+                    //returned ServerError when tokenSet.AccessToken was null.
+                    //Reaching here without an audit means the audit set was
+                    //assembled out of sync with the tokens dictionary —
+                    //library bug, not a runtime condition.
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "Access token audit missing alongside an issued access token — library invariant violation.");
+                }
+
+                int expiresIn = (int)(accessAudit.ExpiresAt - accessAudit.IssuedAt).TotalSeconds;
+
+                //RFC 9449 §5: when DPoP enforcement bound the access token,
+                //token_type is "DPoP"; otherwise the RFC 6750 "Bearer" default.
+                //The Confirmation slot on the terminal state carries the binding
+                //the producer embedded as cnf in the JWT payload; the wire-level
+                //token_type mirrors that decision so RS code can dispatch the
+                //right scheme without parsing the JWT.
+                string tokenTypeWireName = issued.Confirmation is { IsEmpty: false }
+                    ? WellKnownAuthenticationSchemes.DPoP
+                    : WellKnownAuthenticationSchemes.Bearer;
+
+                StringBuilder sb = JsonAppender.Rent();
+                string responseJson;
+                try
+                {
+                    sb.Append('{');
+                    bool first = true;
+                    JsonAppender.AppendStringField(sb, "access_token",
+                        tokenSet.AccessToken ?? string.Empty, ref first);
+                    JsonAppender.AppendStringField(sb, "token_type",
+                        tokenTypeWireName, ref first);
+                    JsonAppender.AppendInt64Field(sb, "expires_in",
+                        expiresIn, ref first);
+
+                    string? idToken = tokenSet.IdToken;
+                    if(idToken is not null)
+                    {
+                        JsonAppender.AppendStringField(sb, "id_token",
+                            idToken, ref first);
+                    }
+
+                    string? refreshToken = tokenSet.RefreshToken;
+                    if(refreshToken is not null)
+                    {
+                        JsonAppender.AppendStringField(sb, "refresh_token",
+                            refreshToken, ref first);
+                    }
+
+                    string? scope = issued.Scope;
+                    if(!string.IsNullOrEmpty(scope))
+                    {
+                        JsonAppender.AppendStringField(sb, "scope", scope, ref first);
+                    }
+
+                    sb.Append('}');
+                    responseJson = sb.ToString();
+                }
+                finally
+                {
+                    JsonAppender.Return(sb);
+                }
+
+                //OAuth 2.1 §3.2.3 — token-bearing response MUST set
+                //Cache-Control: no-store. RFC 7234 §5.2.2.3.
+                return ServerHttpResponse
+                    .Ok(responseJson, WellKnownMediaTypes.Application.Json)
+                    .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
+            }
+        };
+
+
+    /// <summary>
+    /// Refresh-token grant per RFC 6749 §6 + RFC 9700 §2.2.2 rotation.
+    /// Endpoint Kind is <see cref="FlowKind.RefreshToken"/> so the AS's
+    /// correlation-key resolver looks up the refresh-token string in the
+    /// refresh-token secondary index. The matcher is path+method+grant_type-
+    /// disjoint from BuildToken (which handles authorization_code grant).
+    /// </summary>
+    /// <summary>
+    /// Builds the <c>client_credentials</c> grant candidate (RFC 6749 §4.4) on
+    /// the shared token endpoint URL. Stateless: the client authenticates
+    /// through the application's
+    /// <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>
+    /// seam, the requested scope is validated against the registration's
+    /// allowed scopes, and the configured token producers mint the access token
+    /// directly into the response — no flow state, no refresh token, no
+    /// end-user subject (the <c>sub</c> is the client itself per RFC 9068 §3).
+    /// </summary>
+    private static EndpointCandidate BuildClientCredentials() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.ClientCredentialsToken,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = WellKnownCapabilityIdentifiers.OAuthClientCredentials,
+            StartsNewFlow = true,
+            Kind = FlowKind.Stateless,
+            //DiscoveryMetadataKey null — the grant shares the token endpoint URL.
+
+            //Disjointness vs the code and refresh grant matchers is enforced by
+            //the grant_type filter, exactly as the refresh matcher does.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
+                    || !string.Equals(grantType, OAuthRequestParameterValues.GrantTypeClientCredentials, StringComparison.Ordinal))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                AuthorizationServer server = context.Server!;
+
+                ClientRecord? registration = context.Registration;
+                if(registration is null)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Unknown client."));
+                }
+
+                //RFC 6749 §4.4.2: the client MUST authenticate. The seam owns the
+                //method (client_secret_basic/post, private_key_jwt, mTLS) and the
+                //credential comparison; the builder guarantees it is wired.
+                bool clientAuthenticated = await server.Integration.ValidateClientCredentialsAsync!(
+                    context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                if(!clientAuthenticated)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Client authentication failed."));
+                }
+
+                //RFC 6749 §3.3: requested scope tokens must each be allowed for
+                //this client; an omitted scope grants the registration's full set.
+                string grantedScope;
+                if(fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? requestedScope)
+                    && !string.IsNullOrWhiteSpace(requestedScope))
+                {
+                    string[] requested = requestedScope.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    foreach(string scopeToken in requested)
+                    {
+                        if(!registration.AllowedScopes.Contains(scopeToken))
+                        {
+                            return (null, ServerHttpResponse.BadRequest(
+                                OAuthErrors.InvalidScope,
+                                $"Scope '{scopeToken}' is not allowed for this client."));
+                        }
+                    }
+
+                    grantedScope = string.Join(' ', requested);
+                }
+                else
+                {
+                    grantedScope = string.Join(' ', registration.AllowedScopes);
+                }
+
+                Uri issuerUri;
+                try
+                {
+                    issuerUri = server.Integration.ResolveIssuerAsync is not null
+                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false)
+                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
+                }
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                //No end-user is involved: the token's subject is the client
+                //itself (RFC 9068 §3 for client_credentials), with no nonce,
+                //auth_time, or proof-of-possession binding in this grant shape.
+                IssuanceContext issuance = new()
+                {
+                    Registration = registration,
+                    Context = context,
+                    IssuerUri = issuerUri,
+                    Subject = registration.ClientId,
+                    Scope = grantedScope,
+                    ClientId = registration.ClientId,
+                    IssuedAt = now
+                };
+
+                IReadOnlyList<TokenProducer> producers =
+                    server.Configuration.TokenProducers.Count > 0
+                        ? server.Configuration.TokenProducers
+                        : DefaultTokenProducers;
+
+                OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
+                    server, issuance, ct).ConfigureAwait(false);
+
+                Dictionary<string, string> issuedTokens = new(producers.Count);
+                int expiresIn = 0;
+
+                foreach(TokenProducer producer in producers)
+                {
+                    //Per-producer capability filter — see BuildToken for the
+                    //rationale; reads the resolver's per-request output so
+                    //capability attenuation applies to this grant too.
+                    IReadOnlySet<CapabilityIdentifier>? resolved =
+                        context.ResolvedCapabilities;
+                    if(resolved is null || !resolved.Contains(producer.RequiredCapability))
+                    {
+                        continue;
+                    }
+
+                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+
+                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
+                        server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
+                    PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
+                        signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
+                    if(signingKey is null)
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError,
+                            $"Signing key unavailable for producer '{producer.Name}'."));
+                    }
+
+                    string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+                    TokenProducerOutput output = await producer.BuildAsync(
+                        issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
+                    JwtPayload payload = output.Payload;
+
+                    ClaimContributionTarget? contributionTarget =
+                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
+                    await MergeContributedClaimsAsync(
+                        server, contributionTarget, payload, ct).ConfigureAwait(false);
+
+                    UnsignedJwt unsigned = new(output.Header, payload);
+                    using JwsMessage jws = await unsigned.SignAsync(
+                        signingKey,
+                        server.Codecs.JwtHeaderSerializer!,
+                        server.Codecs.JwtPayloadSerializer!,
+                        server.Codecs.Encoder!,
+                        SensitiveMemoryPool<byte>.Shared,
+                        ct).ConfigureAwait(false);
+
+                    string compactJws = JwsSerialization.SerializeCompact(jws, server.Codecs.Encoder!);
+                    issuedTokens[producer.ResponseField] = compactJws;
+
+                    if(WellKnownTokenTypes.IsAccessToken(producer.ResponseField))
+                    {
+                        DateTimeOffset issuedAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
+                        DateTimeOffset expiresAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
+                        expiresIn = (int)(expiresAtClaim - issuedAtClaim).TotalSeconds;
+                    }
+                }
+
+                if(!issuedTokens.TryGetValue(WellKnownTokenTypes.AccessToken, out string? accessToken))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "No access token was produced for the client_credentials grant."));
+                }
+
+                //RFC 6749 §4.4.3/§5.1: access_token, token_type, expires_in, and
+                //the granted scope; the response is stateless and uncacheable.
+                StringBuilder sb = JsonAppender.Rent();
+                string responseJson;
+                try
+                {
+                    sb.Append('{');
+                    bool first = true;
+                    JsonAppender.AppendStringField(sb, WellKnownTokenTypes.AccessToken, accessToken, ref first);
+                    JsonAppender.AppendStringField(sb, "token_type",
+                        WellKnownAuthenticationSchemes.Bearer, ref first);
+                    JsonAppender.AppendInt64Field(sb, "expires_in", expiresIn, ref first);
+                    JsonAppender.AppendStringField(sb, OAuthRequestParameterNames.Scope, grantedScope, ref first);
+                    sb.Append('}');
+                    responseJson = sb.ToString();
+                }
+                finally
+                {
+                    JsonAppender.Return(sb);
+                }
+
+                return (null, ServerHttpResponse.Ok(responseJson, WellKnownMediaTypes.Application.Json)
+                    .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore));
+            },
+
+            BuildResponse = static (state, _, _) =>
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
+        };
+
+
+    private static EndpointCandidate BuildRefreshToken() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.AuthCodeRefreshToken,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            StartsNewFlow = false,
+            Kind = FlowKind.RefreshToken,
+            //DiscoveryMetadataKey null — refresh shares the token endpoint URL.
+
+            //Acceptance test: POST to /token with grant_type=refresh_token and
+            //a refresh_token parameter. Disjointness vs the code-grant matcher
+            //is enforced by the grant_type filter here.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
+                    || !string.Equals(grantType, OAuthRequestParameterValues.GrantTypeRefreshToken, StringComparison.Ordinal))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.RefreshToken))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            ExtractCorrelationKey = static (path, fields, context) =>
+                fields.TryGetValue(OAuthRequestParameterNames.RefreshToken, out string? refreshToken)
+                    && !string.IsNullOrWhiteSpace(refreshToken) ? refreshToken : null,
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                AuthorizationServer server = context.Server!;
+
+                //ResolveCorrelationKeyAsync + LoadFlowStateAsync delivered
+                //the persisted refresh-token state; pattern-match to recover
+                //its slots. If the loaded state has the wrong type, the
+                //refresh-token-index entry has gone stale (a rotated-out
+                //token still maps to a flow id whose current state is the
+                //ServerTokenIssuedState replacement).
+                if(currentState is not ServerRefreshTokenIssuedState storedRefresh)
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidGrant, "refresh_token is not valid."));
+                }
+
+                ClientRecord? registration = context.Registration;
+                if(registration is null)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Unknown client."));
+                }
+
+                //RFC 6749 §6 — client_id on the refresh request must match
+                //the client the refresh token was originally issued to.
+                if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
+                    || !string.Equals(clientId, storedRefresh.ClientId, StringComparison.Ordinal))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidGrant,
+                        "client_id does not match the refresh token's bound client."));
+                }
+
+                Uri issuerUri;
+                try
+                {
+                    issuerUri = server.Integration.ResolveIssuerAsync is not null
+                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false)
+                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
+                }
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                //RFC 9449 §5 — when the refresh token was issued under a
+                //DPoP-bound flow, the refresh exchange MUST present a proof
+                //whose thumbprint matches the stored binding. The helper
+                //rejects on thumbprint mismatch with invalid_dpop_proof.
+                ConfirmationMethod? boundConfirmation = storedRefresh.Confirmation;
+                bool dpopRequired = boundConfirmation is { IsEmpty: false };
+                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
+                    server, context, registration, issuerUri, now,
+                    expectedThumbprint: boundConfirmation?.JwkThumbprint,
+                    dpopRequired, ct).ConfigureAwait(false);
+
+                if(!dpopOutcome.IsSuccess)
+                {
+                    return (null, dpopOutcome.FailureResponse!);
+                }
+
+                //Inherit the binding from the stored refresh state, not the
+                //fresh validation outcome — the validated proof matched the
+                //bound thumbprint, so they're equal, but conceptually the
+                //binding is owned by the original issuance.
+                ConfirmationMethod? confirmation = boundConfirmation;
+
+                IssuanceContext issuance = new()
+                {
+                    Registration = registration,
+                    Context = context,
+                    IssuerUri = issuerUri,
+                    Subject = storedRefresh.SubjectId,
+                    Scope = storedRefresh.Scope,
+                    ClientId = storedRefresh.ClientId,
+                    IssuedAt = now,
+                    Confirmation = confirmation
+                };
+
+                IReadOnlyList<TokenProducer> producers =
+                    server.Configuration.TokenProducers.Count > 0
+                        ? server.Configuration.TokenProducers
+                        : DefaultTokenProducers;
+
+                //One-time OidcClaims resolution per request — see BuildToken
+                //for rationale.
+                OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
+                    server, issuance, ct).ConfigureAwait(false);
+
+                Dictionary<string, string> issuedTokens = new(producers.Count);
+                Dictionary<string, IssuedTokenAudit> issuedAudits = new(producers.Count);
+                DateTimeOffset latestExpiry = now;
+
+                foreach(TokenProducer producer in producers)
+                {
+                    //Per-producer capability filter — see BuildToken for the
+                    //rationale on filtering producers (not the endpoint) here.
+                    //Reads the resolver's per-request output rather than the
+                    //registration's static set, so CAEP/RISC attenuation
+                    //applies to refresh-exchange just as to code-exchange.
+                    IReadOnlySet<CapabilityIdentifier>? resolved =
+                        context.ResolvedCapabilities;
+                    if(resolved is null || !resolved.Contains(producer.RequiredCapability))
+                    {
+                        continue;
+                    }
+                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+
+                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
+                        server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
+                    PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
+                        signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
+                    if(signingKey is null)
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError,
+                            $"Signing key unavailable for producer '{producer.Name}'."));
+                    }
+
+                    string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+                    TokenProducerOutput output = await producer.BuildAsync(
+                        issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
+                    JwtPayload payload = output.Payload;
+
+                    //Composed contributor walk via ServerConfiguration.ClaimIssuer.
+                    //See BuildToken for rationale.
+                    ClaimContributionTarget? contributionTarget =
+                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
+                    await MergeContributedClaimsAsync(
+                        server, contributionTarget, payload, ct).ConfigureAwait(false);
+
+                    UnsignedJwt unsigned = new(output.Header, payload);
+                    using JwsMessage jws = await unsigned.SignAsync(
+                        signingKey,
+                        server.Codecs.JwtHeaderSerializer!,
+                        server.Codecs.JwtPayloadSerializer!,
+                        server.Codecs.Encoder!,
+                        SensitiveMemoryPool<byte>.Shared,
+                        ct).ConfigureAwait(false);
+
+                    string compactJws = JwsSerialization.SerializeCompact(jws, server.Codecs.Encoder!);
+                    issuedTokens[producer.ResponseField] = compactJws;
+
+                    string jti = ExtractJti(payload);
+                    DateTimeOffset issuedAt = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
+                    DateTimeOffset expiresAt = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
+
+                    issuedAudits[producer.ResponseField] = new IssuedTokenAudit
+                    {
+                        Jti = jti,
+                        SigningKeyId = signingKeyId.Value,
+                        IssuedAt = issuedAt,
+                        ExpiresAt = expiresAt
+                    };
+
+                    if(expiresAt > latestExpiry)
+                    {
+                        latestExpiry = expiresAt;
+                    }
+                }
+
+                if(issuedTokens.Count == 0)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "No applicable token producers."));
+                }
+
+                //RFC 9700 §2.2.2 rotation: invalidate the presented refresh
+                //token by deleting its flow state, then issue a fresh refresh
+                //token under a new flow id. Subsequent presentation of the
+                //old refresh token resolves to a missing entry and returns
+                //invalid_grant naturally. The value rides the identifier seam
+                //so the application owns the entropy source and its
+                //provenance tracking.
+                string newRefreshToken = await server.Integration.GenerateIdentifierAsync!(
+                    WellKnownIdentifierPurposes.OAuthRefreshToken, context, ct)
+                    .ConfigureAwait(false);
+                DateTimeOffset newRefreshExpiresAt = now + context.RefreshTokenLifetime;
+
+                if(server.Integration.SaveFlowStateAsync is not null)
+                {
+                    string newRefreshFlowId = await server.Integration.GenerateIdentifierAsync!(
+                        WellKnownIdentifierPurposes.OAuthRefreshFlowId, context, ct)
+                        .ConfigureAwait(false);
+                    ServerRefreshTokenIssuedState newRefreshState = new()
+                    {
+                        FlowId = newRefreshFlowId,
+                        ExpectedIssuer = issuerUri.OriginalString,
+                        EnteredAt = now,
+                        ExpiresAt = newRefreshExpiresAt,
+                        Kind = FlowKind.AuthCodeServer,
+                        ClientId = storedRefresh.ClientId,
+                        RefreshToken = newRefreshToken,
+                        IssuedAt = now,
+                        SubjectId = storedRefresh.SubjectId,
+                        Scope = storedRefresh.Scope,
+                        Confirmation = confirmation
+                    };
+                    await server.Integration.SaveFlowStateAsync(
+                        registration.TenantId, newRefreshFlowId, newRefreshState, stepCount: 0, context, ct)
+                        .ConfigureAwait(false);
+                }
+
+                //Delete the old refresh state. The dispatcher will overwrite
+                //the loaded state's flow id with the transition's result
+                //anyway, but the refresh-token-index entry persists until
+                //the application's delegate prunes it. DeleteFlowStateAsync
+                //is the standardised mechanism for that pruning.
+                if(server.Integration.DeleteFlowStateAsync is not null)
+                {
+                    await server.Integration.DeleteFlowStateAsync(
+                        registration.TenantId, storedRefresh.FlowId, context, ct)
+                        .ConfigureAwait(false);
+                }
+
+                issuedTokens[WellKnownTokenTypes.RefreshToken] = newRefreshToken;
+
+                IssuedTokenSet tokenSet = new() { Tokens = issuedTokens };
+                context.SetIssuedTokens(tokenSet);
+
+                IssuedTokenAuditSet auditSet = new() { Audits = issuedAudits };
+
+                return (new ServerTokenExchangeSucceeded(
+                    IssuedTokens: auditSet,
+                    IssuedAt: now,
+                    ExpiresAt: latestExpiry)
+                {
+                    Confirmation = confirmation
+                }, null);
+            },
+
+            BuildResponse = static (state, _, context) =>
+            {
+                if(state is not ServerTokenIssuedState issued)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Unexpected state after refresh exchange.");
+                }
+
+                IssuedTokenSet? tokenSet = context.IssuedTokens;
+                if(tokenSet is null || tokenSet.AccessToken is null)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Issued tokens not found in context.");
+                }
+
+                IssuedTokenAudit? accessAudit = issued.IssuedTokens.AccessTokenAudit;
+                if(accessAudit is null)
+                {
+                    return ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "Access token audit missing alongside an issued access token — library invariant violation.");
+                }
+
+                int expiresIn = (int)(accessAudit.ExpiresAt - accessAudit.IssuedAt).TotalSeconds;
+
+                string tokenTypeWireName = issued.Confirmation is { IsEmpty: false }
+                    ? WellKnownAuthenticationSchemes.DPoP
+                    : WellKnownAuthenticationSchemes.Bearer;
+
+                StringBuilder sb = JsonAppender.Rent();
+                string responseJson;
+                try
+                {
+                    sb.Append('{');
+                    bool first = true;
+                    JsonAppender.AppendStringField(sb, "access_token",
+                        tokenSet.AccessToken ?? string.Empty, ref first);
+                    JsonAppender.AppendStringField(sb, "token_type",
+                        tokenTypeWireName, ref first);
+                    JsonAppender.AppendInt64Field(sb, "expires_in",
+                        expiresIn, ref first);
+
+                    string? refreshToken = tokenSet.RefreshToken;
+                    if(refreshToken is not null)
+                    {
+                        JsonAppender.AppendStringField(sb, "refresh_token",
+                            refreshToken, ref first);
+                    }
+
+                    string? scope = issued.Scope;
+                    if(!string.IsNullOrEmpty(scope))
+                    {
+                        JsonAppender.AppendStringField(sb, "scope", scope, ref first);
+                    }
+
+                    sb.Append('}');
+                    responseJson = sb.ToString();
+                }
+                finally
+                {
+                    JsonAppender.Return(sb);
+                }
+
+                return ServerHttpResponse
+                    .Ok(responseJson, WellKnownMediaTypes.Application.Json)
+                    .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore);
+            }
+        };
+
+
+    private static EndpointCandidate BuildRevocation() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.AuthCodeRevoke,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = WellKnownCapabilityIdentifiers.OAuthTokenRevocation,
+            StartsNewFlow = false,
+            Kind = FlowKind.AuthCodeServer,
+            DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.RevocationEndpoint,
+
+            //Acceptance test: POST to /revoke with a token body parameter per
+            //RFC 7009 §2.1.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Token))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static (fields, context, currentState, ct) =>
+                ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>(
+                    (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Revocation not yet implemented."))),
+            BuildResponse = static (state, _, _) =>
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
+        };
+
+
+    private static EndpointCandidate BuildIntrospection() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.AuthCodeIntrospect,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = WellKnownCapabilityIdentifiers.OAuthTokenIntrospection,
+            StartsNewFlow = false,
+            Kind = FlowKind.AuthCodeServer,
+            DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.IntrospectionEndpoint,
+
+            //Acceptance test: POST to /introspect with a token body parameter
+            //per RFC 7662 §2.1.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!fields.ContainsKey(OAuthRequestParameterNames.Token))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static (fields, context, currentState, ct) =>
+                ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>(
+                    (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, "Introspection not yet implemented."))),
+            BuildResponse = static (state, _, _) =>
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
+        };
+
+
+    /// <summary>
+    /// Composes the Authorize-completed redirect Location, optionally
+    /// appending the RFC 9207 / FAPI 2.0 §5.3.1.2 <c>iss</c> response
+    /// parameter under <c>policy.EmitIssOnRedirect</c>. Closes audit Finding
+    /// 1 (missing <c>iss</c> on Authorize redirect).
+    /// </summary>
+    /// <remarks>
+    /// The issuer URL source order mirrors <c>DefaultIssuerResolver</c>:
+    /// <see cref="ClientRecord.IssuerUri"/> first, then the per-request
+    /// <see cref="ExchangeContextServerExtensions.Issuer"/>. When neither is
+    /// populated the parameter is omitted rather than failing the redirect —
+    /// the strict-default deployment populates one of the two and the
+    /// permissive deployment opts out via <c>policy.EmitIssOnRedirect</c>.
+    /// </remarks>
+    private static ServerHttpResponse BuildAuthorizeRedirect(
+        ServerCodeIssuedState code, ExchangeContext context)
+    {
+        string location = $"{code.RedirectUri}?code={Uri.EscapeDataString(code.CodeHash)}";
+
+        if(context.EmitIssOnRedirect)
+        {
+            Uri? issuer = context.Registration?.IssuerUri ?? context.Issuer;
+            if(issuer is not null)
+            {
+                location += $"&iss={Uri.EscapeDataString(issuer.ToString())}";
+            }
+        }
+
+        return ServerHttpResponse.Redirect(location);
+    }
+
+
+    /// <summary>
+    /// Returns whether <paramref name="method"/> is an accepted PKCE
+    /// <c>code_challenge_method</c> value under the deployment's policy. The
+    /// strict default (<see cref="PkceMethodSet.S256Only"/>) accepts only
+    /// <c>S256</c>; the permissive baseline
+    /// (<see cref="PkceMethodSet.S256AndPlain"/>) also accepts <c>plain</c>.
+    /// </summary>
+    private static bool IsAcceptedPkceMethod(string? method, ExchangeContext context)
+    {
+        if(string.IsNullOrEmpty(method))
+        {
+            return false;
+        }
+
+        if(string.Equals(method, OAuthRequestParameterValues.CodeChallengeMethodS256,
+            StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return context.AllowedPkceMethods == PkceMethodSet.S256AndPlain
+            && string.Equals(method, "plain", StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// Hashes <paramref name="input"/> as ASCII bytes and returns the digest
+    /// base64url-encoded. Used for PKCE S256 challenge recomputation per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.6">RFC 7636 §4.6</see>
+    /// and for authorization-code hashing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both the input bytes and the digest output are pool-allocated; nothing
+    /// crosses the boundary as a managed array. The algorithm is carried in
+    /// <paramref name="algorithmTag"/>; the same helper handles SHA-256 (RFC 7636
+    /// §4.2 PKCE), SHA-384, SHA-512, or future post-quantum hashes without
+    /// signature changes.
+    /// </para>
+    /// <para>
+    /// The <see cref="CryptoEvent"/> the digest delegate emits is dropped here
+    /// because the helper's two call contexts — code-hash storage and PKCE
+    /// verification — already produce flow-level events through the AS pipeline.
+    /// A separate digest event would duplicate that audit trail.
+    /// </para>
+    /// </remarks>
+    internal static string ComputeDigestBase64Url(
+        string input,
+        Tag algorithmTag,
+        int digestByteLength,
+        ComputeDigestDelegate computeDigest,
+        EncodeDelegate encoder,
+        MemoryPool<byte> pool)
+    {
+        //AuthCode endpoint handlers run inside sync endpoint-builder lambdas that
+        //don't have an await boundary at this layer; bridge to async via
+        //CryptographicKeyEvents.ComputeDigestSyncBridge. The computeDigest
+        //parameter is retained for API stability but the registered delegate is
+        //used directly via the bridge — both resolve to the same backend in
+        //practice. If a future profile needs a non-default qualifier here, the
+        //helper migrates to async at that point.
+        _ = computeDigest;
+
+        int inputByteCount = System.Text.Encoding.ASCII.GetByteCount(input);
+        using IMemoryOwner<byte> inputOwner = pool.Rent(inputByteCount);
+        Span<byte> inputBytes = inputOwner.Memory.Span[..inputByteCount];
+        System.Text.Encoding.ASCII.GetBytes(input, inputBytes);
+
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigestSyncBridge(
+            inputOwner.Memory[..inputByteCount], digestByteLength, algorithmTag, pool);
+
+        return encoder(digest.AsReadOnlySpan());
+    }
+
+
+    private static string ExtractJti(JwtPayload payload)
+    {
+        if(payload.TryGetValue(WellKnownJwtClaimNames.Jti, out object? value) && value is string jti)
+        {
+            return jti;
+        }
+
+        //A producer that does not set jti is a library bug; return an empty
+        //value rather than throwing so the request still succeeds. The audit
+        //record will carry an empty string and the absence is observable.
+        return string.Empty;
+    }
+
+
+    private static DateTimeOffset ExtractInstant(JwtPayload payload, string claim, DateTimeOffset fallback)
+    {
+        if(!payload.TryGetValue(claim, out object? value))
+        {
+            return fallback;
+        }
+
+        return value switch
+        {
+            long unixSeconds => DateTimeOffset.FromUnixTimeSeconds(unixSeconds),
+            int unixSecondsInt => DateTimeOffset.FromUnixTimeSeconds(unixSecondsInt),
+            DateTimeOffset dt => dt,
+            _ => fallback
+        };
+    }
+}

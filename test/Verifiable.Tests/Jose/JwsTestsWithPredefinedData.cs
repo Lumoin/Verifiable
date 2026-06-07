@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -53,7 +52,8 @@ internal sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -82,7 +82,8 @@ internal sealed class JwsTestsWithPredefinedData
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
             publicKey,
-            verificationDelegate).ConfigureAwait(false);
+            verificationDelegate,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Signature verification should succeed.");
     }
@@ -117,7 +118,8 @@ internal sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -156,7 +158,8 @@ internal sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -180,7 +183,8 @@ internal sealed class JwsTestsWithPredefinedData
             DecodeJwtPart,
             SensitiveMemoryPool<byte>.Shared,
             publicKey,
-            verificationDelegate).ConfigureAwait(false);
+            verificationDelegate,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "RSA-PSS signature verification should succeed.");
     }
@@ -210,7 +214,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static Tag GetEcdsaPrivateKeyTag(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkMemberNames.Alg];
 
         if(WellKnownJwaValues.IsEs256(alg))
         {
@@ -233,7 +237,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static Tag GetEcdsaPublicKeyTag(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkMemberNames.Alg];
 
         if(WellKnownJwaValues.IsEs256(alg))
         {
@@ -256,7 +260,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static Tag GetEcdsaSignatureTag(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkMemberNames.Alg];
 
         if(WellKnownJwaValues.IsEs256(alg))
         {
@@ -279,7 +283,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static HashAlgorithmName GetEcdsaHashAlgorithm(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkMemberNames.Alg];
 
         if(WellKnownJwaValues.IsEs256(alg))
         {
@@ -302,7 +306,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static ECCurve GetEcdsaCurve(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkMemberNames.Alg];
 
         if(WellKnownJwaValues.IsEs256(alg))
         {
@@ -325,7 +329,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static HashAlgorithmName GetRsaHashAlgorithm(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkMemberNames.Alg];
 
         if(WellKnownJwaValues.IsRs256(alg))
         {
@@ -348,7 +352,7 @@ internal sealed class JwsTestsWithPredefinedData
 
     private static HashAlgorithmName GetRsaPsHashAlgorithm(Dictionary<string, object> header)
     {
-        string alg = (string)header[JwkProperties.Alg];
+        string alg = (string)header[WellKnownJwkMemberNames.Alg];
 
         if(WellKnownJwaValues.IsPs256(alg))
         {

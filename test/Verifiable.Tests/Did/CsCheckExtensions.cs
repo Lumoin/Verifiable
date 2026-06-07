@@ -1,4 +1,4 @@
-﻿using CsCheck;
+using CsCheck;
 
 namespace Verifiable.Tests.Did
 {

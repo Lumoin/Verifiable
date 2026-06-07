@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Cryptography
+namespace Verifiable.Cryptography
 {
     /// <summary>
     /// Centralized constants for Verifiable.Cryptography library metrics and meter names.

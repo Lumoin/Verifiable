@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using JsonPointerType = Verifiable.JsonPointer.JsonPointer;
 
 namespace Verifiable.Core.Model.Dcql;

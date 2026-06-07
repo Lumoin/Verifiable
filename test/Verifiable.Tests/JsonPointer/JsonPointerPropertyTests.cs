@@ -1,4 +1,4 @@
-﻿using CsCheck;
+using CsCheck;
 using Ptr = Verifiable.JsonPointer.JsonPointer;
 using Seg = Verifiable.JsonPointer.JsonPointerSegment;
 

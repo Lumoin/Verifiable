@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Model.Credentials
@@ -66,6 +66,25 @@ namespace Verifiable.Core.Model.Credentials
         /// The base type for all Verifiable Presentations.
         /// </summary>
         public const string VerifiablePresentationType = "VerifiablePresentation";
+
+        /// <summary>
+        /// The type for an enveloping-secured credential carried inside a presentation,
+        /// whose <c>id</c> is a <c>data:</c> URL holding the secured credential.
+        /// </summary>
+        /// <remarks>
+        /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#presentations">VC-DM 2.0 §3.3 Presentations</see>.
+        /// </remarks>
+        public const string EnvelopedVerifiableCredentialType = "EnvelopedVerifiableCredential";
+
+        /// <summary>
+        /// The type for an enveloping-secured presentation, whose <c>id</c> is a
+        /// <c>data:</c> URL holding the secured presentation.
+        /// </summary>
+        /// <remarks>
+        /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#enveloped-verifiable-presentations">VC-DM 2.0
+        /// §4.13 Enveloped Verifiable Presentations</see>.
+        /// </remarks>
+        public const string EnvelopedVerifiablePresentationType = "EnvelopedVerifiablePresentation";
 
         /// <summary>
         /// The type identifier for Data Integrity proofs.

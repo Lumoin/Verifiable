@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.Jose;
 
 namespace Verifiable.Core.Model.Credentials;
 
@@ -66,7 +65,7 @@ public static class CredentialJwsExtensions
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The JWS message containing the signed credential.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller takes ownership of the returned JwsMessage and is responsible for disposing it.")]
-    public static async ValueTask<JwsMessage> SignJwsAsync(
+    public static ValueTask<JwsMessage> SignJwsAsync(
         this VerifiableCredential credential,
         PrivateKeyMemory privateKey,
         string verificationMethodId,
@@ -78,22 +77,76 @@ public static class CredentialJwsExtensions
         string? contentType = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(privateKey);
+
+        CryptoAlgorithm cryptoAlgorithm = privateKey.Tag.Get<CryptoAlgorithm>();
+        Purpose purpose = privateKey.Tag.Get<Purpose>();
+        SigningDelegate signingDelegate =
+            CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(cryptoAlgorithm, purpose);
+
+        return credential.SignJwsAsync(
+            privateKey,
+            verificationMethodId,
+            credentialSerializer,
+            headerSerializer,
+            base64UrlEncoder,
+            signingDelegate,
+            memoryPool,
+            mediaType,
+            contentType,
+            cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Signs the credential as a JWS using an explicit <see cref="SigningDelegate"/>.
+    /// The registry-resolving overload above delegates here after resolving the
+    /// function via <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
+    /// from <paramref name="privateKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// </summary>
+    /// <param name="credential">The credential to sign.</param>
+    /// <param name="privateKey">The private key for signing.</param>
+    /// <param name="verificationMethodId">The DID URL for the <c>kid</c> header.</param>
+    /// <param name="credentialSerializer">Delegate for serializing the credential to UTF-8 JSON bytes.</param>
+    /// <param name="headerSerializer">Delegate for serializing the JWT header to UTF-8 bytes.</param>
+    /// <param name="base64UrlEncoder">Delegate for Base64Url encoding.</param>
+    /// <param name="signingDelegate">The signing function to use.</param>
+    /// <param name="memoryPool">Memory pool for allocations.</param>
+    /// <param name="mediaType">Optional media type for the <c>typ</c> header. Defaults to <c>vc+jwt</c>.</param>
+    /// <param name="contentType">Optional content type for the <c>cty</c> header.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The JWS message containing the signed credential.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller takes ownership of the returned JwsMessage and is responsible for disposing it.")]
+    public static async ValueTask<JwsMessage> SignJwsAsync(
+        this VerifiableCredential credential,
+        PrivateKeyMemory privateKey,
+        string verificationMethodId,
+        CredentialToJsonBytesDelegate credentialSerializer,
+        JwtHeaderSerializer headerSerializer,
+        EncodeDelegate base64UrlEncoder,
+        SigningDelegate signingDelegate,
+        MemoryPool<byte> memoryPool,
+        string? mediaType = null,
+        string? contentType = null,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(credential);
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(verificationMethodId);
         ArgumentNullException.ThrowIfNull(credentialSerializer);
         ArgumentNullException.ThrowIfNull(headerSerializer);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+        ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(privateKey.Tag);
 
         var header = new JwtHeader
         {
-            [JwkProperties.Alg] = algorithm,
-            [JwkProperties.Typ] = mediaType ?? WellKnownMediaTypes.Jwt.VcJwt,
-            [JwkProperties.Kid] = verificationMethodId,
-            [JwkProperties.Cty] = contentType ?? WellKnownMediaTypes.Application.Vc
+            [WellKnownJwkMemberNames.Alg] = algorithm,
+            [WellKnownJoseHeaderNames.Typ] = mediaType ?? WellKnownMediaTypes.Jwt.VcJwt,
+            [WellKnownJwkMemberNames.Kid] = verificationMethodId,
+            [WellKnownJoseHeaderNames.Cty] = contentType ?? WellKnownMediaTypes.Application.Vc
         };
 
         string headerSegment = base64UrlEncoder(headerSerializer(header));
@@ -114,10 +167,6 @@ public static class CredentialJwsExtensions
         written += Encoding.ASCII.GetBytes(payloadSegment, signingInputMemory.Span[written..]);
 
         Debug.Assert(written == signingInputLength, "Signing input length must match the expected size.");
-
-        CryptoAlgorithm cryptoAlgorithm = privateKey.Tag.Get<CryptoAlgorithm>();
-        Purpose purpose = privateKey.Tag.Get<Purpose>();
-        SigningDelegate signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(cryptoAlgorithm, purpose);
 
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
@@ -147,7 +196,7 @@ public static class CredentialJwsExtensions
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result containing validity status and the decoded credential.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS does not have exactly three parts.</exception>
-    public static async ValueTask<JwsCredentialVerificationResult> VerifyJwsAsync(
+    public static ValueTask<JwsCredentialVerificationResult> VerifyJwsAsync(
         string jws,
         PublicKeyMemory publicKey,
         DecodeDelegate base64UrlDecoder,
@@ -156,11 +205,58 @@ public static class CredentialJwsExtensions
         MemoryPool<byte> memoryPool,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(publicKey);
+
+        CryptoAlgorithm algorithm = publicKey.Tag.Get<CryptoAlgorithm>();
+        Purpose purpose = publicKey.Tag.Get<Purpose>();
+        VerificationDelegate verificationDelegate =
+            CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose);
+
+        return VerifyJwsAsync(
+            jws,
+            publicKey,
+            base64UrlDecoder,
+            headerDeserializer,
+            credentialDeserializer,
+            verificationDelegate,
+            memoryPool,
+            cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Verifies a JWS-secured credential from compact serialization using an
+    /// explicit <see cref="VerificationDelegate"/>. The registry-resolving
+    /// overload above delegates here after resolving the function via
+    /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
+    /// from <paramref name="publicKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// </summary>
+    /// <param name="jws">The JWS compact serialization to verify.</param>
+    /// <param name="publicKey">The public key for verification.</param>
+    /// <param name="base64UrlDecoder">Delegate for Base64Url decoding.</param>
+    /// <param name="headerDeserializer">Delegate for deserializing the JWT header.</param>
+    /// <param name="credentialDeserializer">Delegate for deserializing the credential from UTF-8 JSON bytes.</param>
+    /// <param name="verificationDelegate">The verification delegate to use.</param>
+    /// <param name="memoryPool">Memory pool for allocations.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The verification result containing validity status and the decoded credential.</returns>
+    /// <exception cref="ArgumentException">Thrown when the JWS does not have exactly three parts.</exception>
+    public static async ValueTask<JwsCredentialVerificationResult> VerifyJwsAsync(
+        string jws,
+        PublicKeyMemory publicKey,
+        DecodeDelegate base64UrlDecoder,
+        JwtHeaderDeserializer headerDeserializer,
+        CredentialFromJsonBytesDelegate credentialDeserializer,
+        VerificationDelegate verificationDelegate,
+        MemoryPool<byte> memoryPool,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(jws);
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(headerDeserializer);
         ArgumentNullException.ThrowIfNull(credentialDeserializer);
+        ArgumentNullException.ThrowIfNull(verificationDelegate);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
         string[] parts = jws.Split('.');
@@ -172,9 +268,6 @@ public static class CredentialJwsExtensions
 
         using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(parts[0], memoryPool);
         Dictionary<string, object>? header = headerDeserializer(headerBytesOwner.Memory.Span);
-
-        using IMemoryOwner<byte> payloadBytesOwner = base64UrlDecoder(parts[1], memoryPool);
-        VerifiableCredential credential = credentialDeserializer(payloadBytesOwner.Memory.Span);
 
         using IMemoryOwner<byte> signatureBytesOwner = base64UrlDecoder(parts[2], memoryPool);
 
@@ -190,10 +283,6 @@ public static class CredentialJwsExtensions
 
         Debug.Assert(written == verifyInputLength, "Verification input length must match the expected size.");
 
-        CryptoAlgorithm algorithm = publicKey.Tag.Get<CryptoAlgorithm>();
-        Purpose purpose = publicKey.Tag.Get<Purpose>();
-        VerificationDelegate verificationDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose);
-
         bool isValid = await verificationDelegate(
             verifyInputMemory,
             signatureBytesOwner.Memory,
@@ -201,7 +290,19 @@ public static class CredentialJwsExtensions
             context: null,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        return new JwsCredentialVerificationResult(isValid, header, credential);
+        //Verify before interpreting the payload: a firewalled verifier must not transcode or
+        //parse bytes whose authenticity has not been established. A tampered payload may not be
+        //well-formed UTF-8/JSON, so the credential is decoded only once the signature holds.
+        if(!isValid)
+        {
+            return new JwsCredentialVerificationResult(false, header, null);
+        }
+
+        using IMemoryOwner<byte> payloadBytesOwner = base64UrlDecoder(parts[1], memoryPool);
+        VerifiableCredential credential = credentialDeserializer(payloadBytesOwner.Memory.Span);
+        var verifiedCredential = new Verified<VerifiableCredential>(credential, VerificationContextTag.Create(ExtractKeyId(header)));
+
+        return new JwsCredentialVerificationResult(true, header, verifiedCredential);
     }
 
 
@@ -216,7 +317,7 @@ public static class CredentialJwsExtensions
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result containing validity status and the decoded credential.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the message has more than one signature.</exception>
-    public static async ValueTask<JwsCredentialVerificationResult> VerifyJwsAsync(
+    public static ValueTask<JwsCredentialVerificationResult> VerifyJwsAsync(
         JwsMessage message,
         PublicKeyMemory publicKey,
         EncodeDelegate base64UrlEncoder,
@@ -224,10 +325,54 @@ public static class CredentialJwsExtensions
         MemoryPool<byte> memoryPool,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(publicKey);
+
+        CryptoAlgorithm algorithm = publicKey.Tag.Get<CryptoAlgorithm>();
+        Purpose purpose = publicKey.Tag.Get<Purpose>();
+        VerificationDelegate verificationDelegate =
+            CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose);
+
+        return VerifyJwsAsync(
+            message,
+            publicKey,
+            base64UrlEncoder,
+            credentialDeserializer,
+            verificationDelegate,
+            memoryPool,
+            cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Verifies a JWS message directly using an explicit
+    /// <see cref="VerificationDelegate"/>. The registry-resolving overload
+    /// above delegates here after resolving the function via
+    /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
+    /// from <paramref name="publicKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// </summary>
+    /// <param name="message">The JWS message to verify.</param>
+    /// <param name="publicKey">The public key for verification.</param>
+    /// <param name="base64UrlEncoder">Delegate for Base64Url encoding.</param>
+    /// <param name="credentialDeserializer">Delegate for deserializing the credential from UTF-8 JSON bytes.</param>
+    /// <param name="verificationDelegate">The verification delegate to use.</param>
+    /// <param name="memoryPool">Memory pool for allocations.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The verification result containing validity status and the decoded credential.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the message has more than one signature.</exception>
+    public static async ValueTask<JwsCredentialVerificationResult> VerifyJwsAsync(
+        JwsMessage message,
+        PublicKeyMemory publicKey,
+        EncodeDelegate base64UrlEncoder,
+        CredentialFromJsonBytesDelegate credentialDeserializer,
+        VerificationDelegate verificationDelegate,
+        MemoryPool<byte> memoryPool,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(credentialDeserializer);
+        ArgumentNullException.ThrowIfNull(verificationDelegate);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
         if(message.Signatures.Count != 1)
@@ -252,10 +397,6 @@ public static class CredentialJwsExtensions
 
         Debug.Assert(written == verifyInputLength, "Verification input length must match the expected size.");
 
-        CryptoAlgorithm algorithm = publicKey.Tag.Get<CryptoAlgorithm>();
-        Purpose purpose = publicKey.Tag.Get<Purpose>();
-        VerificationDelegate verificationDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose);
-
         bool isValid = await verificationDelegate(
             verifyInputMemory,
             signature.Signature.AsReadOnlyMemory(),
@@ -263,9 +404,27 @@ public static class CredentialJwsExtensions
             context: null,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        VerifiableCredential credential = credentialDeserializer(message.Payload.Span);
         var header = new Dictionary<string, object>(signature.ProtectedHeader);
+        if(!isValid)
+        {
+            return new JwsCredentialVerificationResult(false, header, null);
+        }
 
-        return new JwsCredentialVerificationResult(isValid, header, credential);
+        VerifiableCredential credential = credentialDeserializer(message.Payload.Span);
+        var verifiedCredential = new Verified<VerifiableCredential>(credential, VerificationContextTag.Create(ExtractKeyId(header)));
+
+        return new JwsCredentialVerificationResult(true, header, verifiedCredential);
+    }
+
+
+    //Reads the JWS 'kid' header as the verification method / key id for the verification context.
+    private static string? ExtractKeyId(Dictionary<string, object>? header)
+    {
+        if(header is not null && header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? value) && value is string keyId)
+        {
+            return keyId;
+        }
+
+        return null;
     }
 }

@@ -71,7 +71,7 @@ internal class HwTpmCreatePrimaryTests
 
 
     [TestMethod]
-    public void CreatePrimaryEccSigningKeySucceeds()
+    public async Task CreatePrimaryEccSigningKeySucceeds()
     {        
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -89,12 +89,11 @@ internal class HwTpmCreatePrimaryTests
         //Owner hierarchy typically has empty auth on fresh TPMs.
         using var ownerAuth = TpmPasswordSession.CreateEmpty(pool);
 
-        TpmResult<CreatePrimaryResponse> result = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
             Tpm,
             input,
             [ownerAuth],
-            pool,
-            registry);
+            pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(result, "CreatePrimary");
 
@@ -109,19 +108,19 @@ internal class HwTpmCreatePrimaryTests
 
         //Clean up: flush the key.
         var flushInput = FlushContextInput.ForHandle(response.ObjectHandle.Value);
-        TpmResult<FlushContextResponse> flushResult = TpmCommandExecutor.Execute<FlushContextResponse>(
+        TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
             Tpm,
             flushInput,
             [],
             pool,
-            registry);
+            registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(flushResult.IsSuccess, $"FlushContext failed: '{flushResult.ResponseCode}'.");
     }
 
 
     [TestMethod]
-    public void CreatePrimaryRsaSigningKeySucceeds()
+    public async Task CreatePrimaryRsaSigningKeySucceeds()
     {        
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -138,12 +137,12 @@ internal class HwTpmCreatePrimaryTests
 
         using var ownerAuth = TpmPasswordSession.CreateEmpty(pool);
 
-        TpmResult<CreatePrimaryResponse> result = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
             Tpm,
             input,
             [ownerAuth],
             pool,
-            registry);
+            registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(result, "CreatePrimary");
 
@@ -154,19 +153,19 @@ internal class HwTpmCreatePrimaryTests
         TestContext.WriteLine($"Key type: {response.OutPublic.PublicArea.Type}, nameAlg: {response.OutPublic.PublicArea.NameAlg}");
 
         var flushInput = FlushContextInput.ForHandle(response.ObjectHandle.Value);
-        TpmResult<FlushContextResponse> flushResult = TpmCommandExecutor.Execute<FlushContextResponse>(
+        TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
             Tpm,
             flushInput,
             [],
             pool,
-            registry);
+            registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(flushResult.IsSuccess, $"FlushContext failed: '{flushResult.ResponseCode}'.");
     }
 
 
     [TestMethod]
-    public void CreatePrimaryWithPasswordSucceeds()
+    public async Task CreatePrimaryWithPasswordSucceeds()
     {        
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -185,12 +184,12 @@ internal class HwTpmCreatePrimaryTests
         //Still need owner auth for hierarchy access.
         using var ownerAuth = TpmPasswordSession.CreateEmpty(pool);
 
-        TpmResult<CreatePrimaryResponse> result = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
             Tpm,
             input,
             [ownerAuth],
             pool,
-            registry);
+            registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(result, "CreatePrimary with password");
 
@@ -198,19 +197,19 @@ internal class HwTpmCreatePrimaryTests
         TestContext.WriteLine($"Created key with password, handle: 0x{response.ObjectHandle.Value:X8}");
 
         var flushInput = FlushContextInput.ForHandle(response.ObjectHandle.Value);
-        TpmResult<FlushContextResponse> flushResult = TpmCommandExecutor.Execute<FlushContextResponse>(
+        TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
             Tpm,
             flushInput,
             [],
             pool,
-            registry);
+            registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(flushResult.IsSuccess, $"FlushContext failed: '{flushResult.ResponseCode}'.");
     }
 
 
     [TestMethod]
-    public void CreatePrimarySameTemplateProducesSameKey()
+    public async Task CreatePrimarySameTemplateProducesSameKey()
     {        
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -232,12 +231,12 @@ internal class HwTpmCreatePrimaryTests
 
             using var ownerAuth = TpmPasswordSession.CreateEmpty(pool);
 
-            TpmResult<CreatePrimaryResponse> result = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
+            TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
                 Tpm,
                 input,
                 [ownerAuth],
                 pool,
-                registry);
+                registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             AssertUtilities.AssertSuccess(result, $"CreatePrimary iteration {i}");
 
@@ -253,7 +252,7 @@ internal class HwTpmCreatePrimaryTests
             }
 
             var flushInput = FlushContextInput.ForHandle(response.ObjectHandle.Value);
-            _ = TpmCommandExecutor.Execute<FlushContextResponse>(Tpm, flushInput, [], pool, registry);
+            _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(Tpm, flushInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         Assert.IsNotNull(firstKeyName);

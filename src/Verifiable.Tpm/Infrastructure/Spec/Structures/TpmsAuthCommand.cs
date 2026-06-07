@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
 

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 namespace Verifiable.Core.Model.DataIntegrity;
 
@@ -46,7 +46,28 @@ public enum VerificationFailureReason
     /// <summary>
     /// The domain in the proof does not match the expected domain of the verifier.
     /// </summary>
-    DomainMismatch
+    DomainMismatch,
+
+    /// <summary>
+    /// A proof in a proof chain references a previous proof that is missing or unresolved,
+    /// or the chain is otherwise not a valid dependency order.
+    /// </summary>
+    BrokenProofChain,
+
+    /// <summary>
+    /// A proof chain contains a cycle in its <c>previousProof</c> references.
+    /// </summary>
+    ProofChainCycle,
+
+    /// <summary>
+    /// The proof's <c>proofPurpose</c> does not match the purpose the verifier expects
+    /// for the document class — e.g. a presentation proof whose purpose is not
+    /// <c>authentication</c>. Mandated by
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data Integrity 1.0
+    /// §4.2 Verify Proof</see>: when an expected proof purpose is given and does not match,
+    /// an error MUST be raised.
+    /// </summary>
+    ProofPurposeMismatch
 }
 
 

@@ -1,4 +1,4 @@
-﻿using Verifiable.Core.Assessment;
+using Verifiable.Core.Assessment;
 using Verifiable.Core.Did;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.Methods;

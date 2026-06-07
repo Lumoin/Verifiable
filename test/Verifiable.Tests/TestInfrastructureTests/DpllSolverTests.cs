@@ -1,4 +1,4 @@
-﻿using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.TestInfrastructureTests;
 

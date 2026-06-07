@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
 using System.Buffers;
 using System.Diagnostics;

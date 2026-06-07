@@ -1,4 +1,4 @@
-﻿using SimpleBase;
+using SimpleBase;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;

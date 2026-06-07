@@ -1,0 +1,4 @@
+M:System.Guid.NewGuid;Use Integration.GenerateIdentifierAsync (server side) or infrastructure.GenerateIdentifierAsync (client side) for wire/correlation identifiers, or infrastructure.FillEntropy for CSRF state / OIDC nonce values. See OI-003 in documents/OpenIssues.md.
+M:System.Guid.CreateVersion7;Use Guid.CreateVersion7(timeProvider.GetUtcNow()) for internal-ephemeral v7 GUIDs (PDA runId), or route through GenerateIdentifierAsync for wire identifiers. The no-arg overload reads DateTime.UtcNow internally and bypasses the project's TimeProvider convention. See OI-003 in documents/OpenIssues.md.
+N:System.Net.Http;Verifiable.OAuth is transport-agnostic. Define a transport delegate in the library; supply the HttpClient-backed implementation in test or application code. The OAuth client's SendFormPostAsync pattern is the precedent.
+N:System.Net.Sockets;Verifiable.OAuth is transport-agnostic. No socket-level concerns in the library.

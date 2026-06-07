@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Tests.ToolTests;
+namespace Verifiable.Tests.ToolTests;
 
 /// <summary>
 /// Integration tests that execute the actual command-line tool as a process.

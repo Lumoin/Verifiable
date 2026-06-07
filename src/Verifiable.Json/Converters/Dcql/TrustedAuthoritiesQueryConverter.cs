@@ -1,4 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Dcql;
@@ -40,12 +42,12 @@ public sealed class TrustedAuthoritiesQueryConverter: JsonConverter<TrustedAutho
 
             switch(propertyName)
             {
-                case TrustedAuthoritiesQuery.TypePropertyName:
+                case var name when DcqlParameterNames.IsType(name):
                 {
                     type = reader.GetString();
                     break;
                 }
-                case TrustedAuthoritiesQuery.ValuesPropertyName:
+                case var name when DcqlParameterNames.IsValues(name):
                 {
                     values = ReadStringArray(ref reader);
                     break;
@@ -78,9 +80,9 @@ public sealed class TrustedAuthoritiesQueryConverter: JsonConverter<TrustedAutho
 
         writer.WriteStartObject();
 
-        writer.WriteString(TrustedAuthoritiesQuery.TypePropertyName, value.Type);
+        writer.WriteString(DcqlParameterNames.Type, value.Type);
 
-        writer.WritePropertyName(TrustedAuthoritiesQuery.ValuesPropertyName);
+        writer.WritePropertyName(DcqlParameterNames.Values);
         writer.WriteStartArray();
         foreach(var item in value.Values)
         {

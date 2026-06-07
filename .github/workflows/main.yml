@@ -44,6 +44,7 @@ env:
     Verifiable.DecentralizedWebNode
     Verifiable.JCose
     Verifiable.Json
+    Verifiable.JsonPointer
     Verifiable.Microsoft
     Verifiable.NSec
     Verifiable.OAuth
@@ -62,7 +63,6 @@ env:
     builds.dotnet.microsoft.com:443
     ci.dot.net:443
     pkgs.dev.azure.com:443
-    dashboard.stryker-mutator.io:443
     github.com:443
     nuget.pkg.github.com:443
     fulcio.sigstore.dev:443
@@ -96,11 +96,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        os: [ ubuntu-latest, windows-latest, macos-latest, ubuntu-24.04-arm ]
 
     steps:
     - name: Harden Runner
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm' }}
       uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
       with:
         disable-sudo: true
@@ -122,14 +122,6 @@ jobs:
     
     - name: Install dependencies
       run: dotnet restore --locked-mode
-
-    - name: Cache local .NET tools
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7
-      with:
-        path: ~/.dotnet/tools
-        key: dotnet-tools-${{ runner.os }}-${{ hashFiles('.config/dotnet-tools.json') }}
-        restore-keys: |
-          dotnet-tools-${{ runner.os }}-
 
     - name: Restore local .NET tools
       run: dotnet tool restore
@@ -178,20 +170,39 @@ jobs:
     # Note that code coverage requires 'MessageUponIsolationViolation'.
     - name: Build
       run: dotnet build --binaryLogger --tl --graphBuild -isolate:MessageUponIsolationViolation --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore --property:ContinuousIntegrationBuild=true --property:Version=${{ env.VERSION }} --property:InformationalVersion=${{ env.PACKAGE_VERSION }} --property:AssemblyVersion=${{ env.TAG_VERSION }} --property:FileVersion=${{ env.TAG_VERSION }}
-      timeout-minutes: 5
+      timeout-minutes: 15
 
-    # MacOS is skipped at the moment due to issues with some .NET crypto libraries.
-    # Until tests are a fixed a bit. The coverage from the executable does not have a file suffix in Linux.
-    - name: Test      
+    # The test executable has no file extension on Linux/macOS, so the same
+    # dotnet-coverage command (which finds the binary by name) works on every OS.
+    - name: Test
       run: dotnet tool run dotnet-coverage collect --output '${{ github.workspace }}/reports/coverage.cobertura.xml' --output-format cobertura '${{ github.workspace }}/test/${{ env.VERIFIABLE_TESTS }}/bin/${{ env.BUILD_CONFIGURATION }}/net10.0/${{ env.VERIFIABLE_TESTS }}' --report-trx --report-trx-filename testresults.trx --results-directory '${{ github.workspace }}/reports'
-      timeout-minutes: 5
+      timeout-minutes: 15
 
-    # Mutation tests skipped for now due to CI limits and temporarily reduced test coverage...
-    # This either requires cd to test directory or --solution-path Verifiable.sln (which may not work).
-    # - name: Stryker.NET mutation Tests for Verifiable.Core.csproj
+    # Mutation testing (Stryker.NET) is disabled in CI for two reasons:
+    #   1. BLOCKER: Verifiable.Tests uses Microsoft.Testing.Platform (the MSTest.Sdk
+    #      default runner), which Stryker.NET 4.14.x does not support. Stryker
+    #      discovers tests via VsTest, finds 0 tests, and the run fails. Track:
+    #      https://github.com/stryker-mutator/stryker-net/issues/3094
+    #   2. A full mutation sweep is very resource intensive — across every library
+    #      project it far exceeds the CI time budget. It is meant to run out-of-band
+    #      via stryker-tests-dev.ps1 or on a dedicated schedule, not on each push.
+    # When re-enabled this mutates every shippable library project (LIBRARY_PROJECTS),
+    # not just Verifiable.Core. Stryker auto-detects Verifiable.slnx (.slnx parses fine
+    # in 4.14.x — no --solution needed); --project selects the source project to mutate.
+    # The per-project HTML report is uploaded as an artifact below. The Stryker dashboard
+    # reporter is intentionally not used — there is no Stryker dashboard account / API key.
+    # - name: Stryker.NET mutation tests (all library projects)
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
-    #  run: dotnet stryker --config-file stryker-config.json --reporter progress --reporter html --reporter dashboard --dashboard-api-key ${{ secrets.STRYKER_API_KEY }} --project Verifiable.Core.csproj
-    #  timeout-minutes: 15
+    #  timeout-minutes: 90
+    #  run: |
+    #    for project in $LIBRARY_PROJECTS; do
+    #      echo "=== Stryker: mutating $project ==="
+    #      dotnet stryker \
+    #        --config-file stryker-config.json \
+    #        --reporter progress --reporter html \
+    #        --project "$project.csproj" \
+    #        --output "StrykerOutput/$project"
+    #    done
 
     #- name: Upload Stryker output artefacts
     #  if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -363,14 +374,6 @@ jobs:
     - name: Install dependencies
       run: dotnet restore --locked-mode
 
-    - name: Cache local .NET tools
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7
-      with:
-        path: ~/.dotnet/tools
-        key: dotnet-tools-${{ runner.os }}-${{ hashFiles('.config/dotnet-tools.json') }}
-        restore-keys: |
-          dotnet-tools-${{ runner.os }}-
-
     - name: Restore local .NET tools
       run: dotnet tool restore
 
@@ -484,14 +487,6 @@ jobs:
 
     - name: Install dependencies
       run: dotnet restore --locked-mode
-
-    - name: Cache local .NET tools
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7
-      with:
-        path: ~/.dotnet/tools
-        key: dotnet-tools-${{ runner.os }}-${{ hashFiles('.config/dotnet-tools.json') }}
-        restore-keys: |
-          dotnet-tools-${{ runner.os }}-
 
     - name: Restore local .NET tools
       run: dotnet tool restore

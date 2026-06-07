@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
@@ -61,7 +61,7 @@ public static class JwtSigningExtensions
     /// A <see cref="JwsMessage"/> containing the signed JWT. The caller owns
     /// the returned message and must dispose it.
     /// </returns>
-    public static async ValueTask<JwsMessage> SignAsync(
+    public static ValueTask<JwsMessage> SignAsync(
         this UnsignedJwt unsignedJwt,
         PrivateKeyMemory privateKey,
         JwtHeaderSerializer headerSerializer,
@@ -70,11 +70,59 @@ public static class JwtSigningExtensions
         MemoryPool<byte> memoryPool,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(privateKey);
+
+        CryptoAlgorithm cryptoAlgorithm = privateKey.Tag.Get<CryptoAlgorithm>();
+        Purpose purpose = privateKey.Tag.Get<Purpose>();
+        SigningDelegate signingDelegate =
+            CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(cryptoAlgorithm, purpose);
+
+        return unsignedJwt.SignAsync(
+            privateKey,
+            headerSerializer,
+            payloadSerializer,
+            base64UrlEncoder,
+            signingDelegate,
+            memoryPool,
+            cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Signs an <see cref="UnsignedJwt"/> as a JWS using an explicit
+    /// <see cref="SigningDelegate"/>. The registry-resolving overload above
+    /// delegates here after resolving the function via
+    /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
+    /// from <paramref name="privateKey"/>'s <see cref="Verifiable.Cryptography.SensitiveMemory.Tag"/>.
+    /// </summary>
+    /// <param name="unsignedJwt">The unsigned JWT to sign.</param>
+    /// <param name="privateKey">The private key for signing.</param>
+    /// <param name="headerSerializer">Delegate for serializing the header to UTF-8 JSON bytes.</param>
+    /// <param name="payloadSerializer">Delegate for serializing the payload to UTF-8 JSON bytes.</param>
+    /// <param name="base64UrlEncoder">Delegate for Base64Url encoding.</param>
+    /// <param name="signingDelegate">The signing function to use.</param>
+    /// <param name="memoryPool">Memory pool for signature allocation.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// A <see cref="JwsMessage"/> containing the signed JWT. The caller owns
+    /// the returned message and must dispose it.
+    /// </returns>
+    public static async ValueTask<JwsMessage> SignAsync(
+        this UnsignedJwt unsignedJwt,
+        PrivateKeyMemory privateKey,
+        JwtHeaderSerializer headerSerializer,
+        JwtPayloadSerializer payloadSerializer,
+        EncodeDelegate base64UrlEncoder,
+        SigningDelegate signingDelegate,
+        MemoryPool<byte> memoryPool,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(unsignedJwt);
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(headerSerializer);
         ArgumentNullException.ThrowIfNull(payloadSerializer);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+        ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
         //Copy header span into pooled memory since spans cannot cross await boundaries.
@@ -99,10 +147,6 @@ public static class JwtSigningExtensions
         using IMemoryOwner<byte> dataToSignOwner = memoryPool.Rent(signingInputByteCount);
         Debug.Assert(dataToSignOwner.Memory.Length == signingInputByteCount, "Pool must return exact-size allocations.");
         Encoding.ASCII.GetBytes(signingInput, dataToSignOwner.Memory.Span);
-
-        CryptoAlgorithm cryptoAlgorithm = privateKey.Tag.Get<CryptoAlgorithm>();
-        Purpose purpose = privateKey.Tag.Get<Purpose>();
-        SigningDelegate signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(cryptoAlgorithm, purpose);
 
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),

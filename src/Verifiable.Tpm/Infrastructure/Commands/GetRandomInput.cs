@@ -1,4 +1,4 @@
-﻿using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Infrastructure.Spec.Constants;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 

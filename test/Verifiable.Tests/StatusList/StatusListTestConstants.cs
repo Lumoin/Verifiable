@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Tests.StatusList;
+namespace Verifiable.Tests.StatusList;
 
 /// <summary>
 /// Shared constants for Status List tests. Provides named values for test indices,

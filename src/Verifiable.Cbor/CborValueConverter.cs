@@ -1,5 +1,8 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Formats.Cbor;
+using System.Linq;
 
 namespace Verifiable.Cbor;
 
@@ -184,6 +187,15 @@ public static class CborValueConverter
             case IReadOnlyDictionary<string, object> stringReadOnlyDict:
             {
                 WriteStringKeyedMap(writer, stringReadOnlyDict);
+                break;
+            }
+            case IDictionary<object, object?> objectDict:
+            {
+                //ReadMap produces an object-keyed dictionary, so a value re-serialized after a
+                //round-trip (e.g. a nested COSE_Key map inside a CWT cnf claim) arrives here.
+                //Each boxed key is dispatched back through WriteValue, which writes int, long,
+                //and string keys via their respective branches above.
+                WriteObjectKeyedMap(writer, objectDict);
                 break;
             }
             case IEnumerable<object?> enumerable:
@@ -505,6 +517,19 @@ public static class CborValueConverter
             writer.WriteTextString(kvp.Key);
             WriteValue(writer, kvp.Value);
         }
+        writer.WriteEndMap();
+    }
+
+
+    private static void WriteObjectKeyedMap(CborWriter writer, IDictionary<object, object?> dict)
+    {
+        writer.WriteStartMap(dict.Count);
+        foreach(var kvp in dict)
+        {
+            WriteValue(writer, kvp.Key);
+            WriteValue(writer, kvp.Value);
+        }
+
         writer.WriteEndMap();
     }
 

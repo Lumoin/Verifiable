@@ -1,4 +1,4 @@
-﻿using System.Formats.Cbor;
+using System.Formats.Cbor;
 using Verifiable.Cbor;
 
 namespace Verifiable.Tests.Serialization;

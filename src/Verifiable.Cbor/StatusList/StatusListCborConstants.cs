@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Cbor.StatusList;
+namespace Verifiable.Cbor.StatusList;
 
 /// <summary>
 /// CWT claim keys and CBOR map keys for the Token Status List specification.

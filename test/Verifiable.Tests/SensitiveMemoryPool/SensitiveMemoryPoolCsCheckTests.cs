@@ -1,4 +1,4 @@
-﻿using CsCheck;
+using CsCheck;
 using System.Buffers;
 using System.Collections.Concurrent;
 using Verifiable.Cryptography;

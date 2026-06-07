@@ -1,6 +1,10 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
@@ -57,6 +61,13 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// <para>
 /// For commands, nonceNewer is nonceCaller and nonceOlder is nonceTPM.
 /// For responses, nonceNewer is nonceTPM and nonceOlder is nonceCaller.
+/// </para>
+/// <para>
+/// HMAC routes through the registered <see cref="ComputeHmacDelegate"/>. The
+/// algorithm is carried inline in the <see cref="Tag"/> via
+/// <see cref="HashAlgorithmName"/> because TPM session-key compatibility requires
+/// dispatching SHA-1 alongside SHA-256/384/512; the convenience HMAC tags in
+/// <see cref="CryptoTags"/> deliberately omit SHA-1 for new protocol code.
 /// </para>
 /// <para>
 /// See TPM 2.0 Part 1, Section 17 - Sessions.
@@ -149,23 +160,58 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     }
 
     /// <inheritdoc/>
-    public override void WriteAuthCommand(ref TpmWriter writer, scoped ReadOnlySpan<byte> cpHash, MemoryPool<byte> pool)
+    public override async ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
+        ReadOnlyMemory<byte> cpHash,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        //Compute HMAC into stack buffer.
-        Span<byte> hmacBuffer = stackalloc byte[digestSize];
-        ComputeCommandHmac(cpHash, hmacBuffer);
+        //data = cpHash || nonceNewer || nonceOlder || sessionAttributes.
+        //For command: nonceNewer = nonceCaller, nonceOlder = nonceTPM.
+        ReadOnlyMemory<byte> nonceCallerMem = nonceCaller.AsReadOnlyMemory();
+        ReadOnlyMemory<byte> nonceTPMMem = nonceTPM.AsReadOnlyMemory();
 
-        //Create Tpm2bAuth from computed HMAC.
-        using Tpm2bAuth hmac = Tpm2bAuth.Create(hmacBuffer, pool);
+        int dataSize = cpHash.Length + nonceCallerMem.Length + nonceTPMMem.Length + sizeof(byte);
+        using IMemoryOwner<byte> dataOwner = pool.Rent(dataSize);
+        Memory<byte> dataMemory = dataOwner.Memory[..dataSize];
+        Span<byte> dataSpan = dataMemory.Span;
 
-        //Build and write the auth command using proper TPM structure.
+        int offset = 0;
+        cpHash.Span.CopyTo(dataSpan[offset..]);
+        offset += cpHash.Length;
+
+        nonceCallerMem.Span.CopyTo(dataSpan[offset..]);
+        offset += nonceCallerMem.Length;
+
+        nonceTPMMem.Span.CopyTo(dataSpan[offset..]);
+        offset += nonceTPMMem.Length;
+
+        dataSpan[offset] = (byte)SessionAttributes;
+
+        using IMemoryOwner<byte> hmacOwner = pool.Rent(digestSize);
+        Memory<byte> hmacBuffer = hmacOwner.Memory[..digestSize];
+        await ComputeSessionHmacAsync(dataMemory, hmacBuffer, pool, cancellationToken).ConfigureAwait(false);
+
+        return Tpm2bAuth.Create(hmacBuffer.Span, pool);
+    }
+
+    /// <inheritdoc/>
+    public override void WriteAuthCommand(ref TpmWriter writer, Tpm2bAuth? precomputedHmac)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        if(precomputedHmac is null)
+        {
+            throw new InvalidOperationException(
+                "TpmSession requires a precomputed HMAC produced by PrepareAuthHmacAsync.");
+        }
+
         var authCommand = new TpmsAuthCommand(
             sessionHandle,
             new Tpm2bRef<Tpm2bNonce>(nonceCaller),
             SessionAttributes,
-            new Tpm2bRef<Tpm2bAuth>(hmac));
+            new Tpm2bRef<Tpm2bAuth>(precomputedHmac));
 
         authCommand.WriteTo(ref writer);
     }
@@ -176,7 +222,11 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// <paramref name="response"/> via <see cref="TpmsAuthResponse.TakeNonceTPM"/>.
     /// The caller should still dispose the response to release the HMAC.
     /// </remarks>
-    public override bool VerifyAndUpdate(TpmsAuthResponse response, scoped ReadOnlySpan<byte> rpHash, MemoryPool<byte> pool)
+    public override async ValueTask<bool> VerifyAndUpdateAsync(
+        TpmsAuthResponse response,
+        ReadOnlyMemory<byte> rpHash,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
@@ -185,12 +235,33 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
             throw new InvalidOperationException("Response nonce or HMAC has already been taken.");
         }
 
-        //Compute expected HMAC using the new nonce from response.
-        Span<byte> expectedHmac = stackalloc byte[digestSize];
-        ComputeResponseHmac(rpHash, response.NonceTPM.AsReadOnlySpan(), response.SessionAttributes, expectedHmac);
+        //data = rpHash || nonceNewer || nonceOlder || sessionAttributes.
+        //For response: nonceNewer = nonceTPM (new), nonceOlder = nonceCaller.
+        ReadOnlyMemory<byte> newNonceTPMMem = response.NonceTPM.AsReadOnlyMemory();
+        ReadOnlyMemory<byte> nonceCallerMem = nonceCaller.AsReadOnlyMemory();
 
-        //Verify with constant-time comparison.
-        if(!CryptographicOperations.FixedTimeEquals(expectedHmac, response.Hmac.AsReadOnlySpan()))
+        int dataSize = rpHash.Length + newNonceTPMMem.Length + nonceCallerMem.Length + sizeof(byte);
+        using IMemoryOwner<byte> dataOwner = pool.Rent(dataSize);
+        Memory<byte> dataMemory = dataOwner.Memory[..dataSize];
+        Span<byte> dataSpan = dataMemory.Span;
+
+        int offset = 0;
+        rpHash.Span.CopyTo(dataSpan[offset..]);
+        offset += rpHash.Length;
+
+        newNonceTPMMem.Span.CopyTo(dataSpan[offset..]);
+        offset += newNonceTPMMem.Length;
+
+        nonceCallerMem.Span.CopyTo(dataSpan[offset..]);
+        offset += nonceCallerMem.Length;
+
+        dataSpan[offset] = (byte)response.SessionAttributes;
+
+        using IMemoryOwner<byte> expectedOwner = pool.Rent(digestSize);
+        Memory<byte> expectedHmac = expectedOwner.Memory[..digestSize];
+        await ComputeSessionHmacAsync(dataMemory, expectedHmac, pool, cancellationToken).ConfigureAwait(false);
+
+        if(!CryptographicOperations.FixedTimeEquals(expectedHmac.Span, response.Hmac.AsReadOnlySpan()))
         {
             return false;
         }
@@ -208,108 +279,59 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         return true;
     }
 
-    /// <summary>
-    /// Computes the command HMAC per spec Part 1, Section 17.6.5.
-    /// </summary>
-    /// <param name="cpHash">The command parameter hash.</param>
-    /// <param name="destination">The destination buffer for the HMAC.</param>
-    /// <remarks>
-    /// <code>
-    /// data := cpHash || nonceCaller || nonceTPM || sessionAttributes
-    /// authHMAC := HMAC_sessionAlg((sessionKey || authValue), data)
-    /// </code>
-    /// For commands, nonceNewer is nonceCaller and nonceOlder is nonceTPM.
-    /// </remarks>
-    private void ComputeCommandHmac(ReadOnlySpan<byte> cpHash, Span<byte> destination)
-    {
-        //data = cpHash || nonceNewer || nonceOlder || sessionAttributes.
-        //For command: nonceNewer = nonceCaller, nonceOlder = nonceTPM.
-        ReadOnlySpan<byte> nonceCallerSpan = nonceCaller.AsReadOnlySpan();
-        ReadOnlySpan<byte> nonceTPMSpan = nonceTPM.AsReadOnlySpan();
-
-        int dataSize = cpHash.Length + nonceCallerSpan.Length + nonceTPMSpan.Length + sizeof(byte);
-        Span<byte> data = stackalloc byte[dataSize];
-
-        int offset = 0;
-        cpHash.CopyTo(data.Slice(offset));
-        offset += cpHash.Length;
-
-        nonceCallerSpan.CopyTo(data.Slice(offset));
-        offset += nonceCallerSpan.Length;
-
-        nonceTPMSpan.CopyTo(data.Slice(offset));
-        offset += nonceTPMSpan.Length;
-
-        data[offset] = (byte)SessionAttributes;
-
-        ComputeHmac(data, destination);
-    }
-
-    /// <summary>
-    /// Computes the response HMAC per spec Part 1, Section 17.6.5.
-    /// </summary>
-    /// <param name="rpHash">The response parameter hash.</param>
-    /// <param name="newNonceTPM">The new nonceTPM from the response.</param>
-    /// <param name="responseAttributes">The session attributes from the response.</param>
-    /// <param name="destination">The destination buffer for the HMAC.</param>
-    /// <remarks>
-    /// <code>
-    /// data := rpHash || nonceTPM || nonceCaller || sessionAttributes
-    /// authHMAC := HMAC_sessionAlg((sessionKey || authValue), data)
-    /// </code>
-    /// For responses, nonceNewer is nonceTPM (the new one) and nonceOlder is nonceCaller.
-    /// </remarks>
-    private void ComputeResponseHmac(ReadOnlySpan<byte> rpHash, ReadOnlySpan<byte> newNonceTPM, TpmaSession responseAttributes, Span<byte> destination)
-    {
-        //data = rpHash || nonceNewer || nonceOlder || sessionAttributes.
-        //For response: nonceNewer = nonceTPM (new), nonceOlder = nonceCaller.
-        ReadOnlySpan<byte> nonceCallerSpan = nonceCaller.AsReadOnlySpan();
-
-        int dataSize = rpHash.Length + newNonceTPM.Length + nonceCallerSpan.Length + sizeof(byte);
-        Span<byte> data = stackalloc byte[dataSize];
-
-        int offset = 0;
-        rpHash.CopyTo(data.Slice(offset));
-        offset += rpHash.Length;
-
-        newNonceTPM.CopyTo(data.Slice(offset));
-        offset += newNonceTPM.Length;
-
-        nonceCallerSpan.CopyTo(data.Slice(offset));
-        offset += nonceCallerSpan.Length;
-
-        data[offset] = (byte)responseAttributes;
-
-        ComputeHmac(data, destination);
-    }
-
-    /// <summary>
-    /// Computes HMAC using sessionKey || authValue as the key.
-    /// </summary>
-    /// <param name="data">The data to HMAC.</param>
-    /// <param name="destination">The destination buffer.</param>
-    private void ComputeHmac(ReadOnlySpan<byte> data, Span<byte> destination)
+    private async ValueTask ComputeSessionHmacAsync(
+        ReadOnlyMemory<byte> data,
+        Memory<byte> destination,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
         //HMAC key = sessionKey || authValue (concatenated without size fields).
-        ReadOnlySpan<byte> sessionKeySpan = sessionKey.AsReadOnlySpan();
-        ReadOnlySpan<byte> authValueSpan = authValue.AsReadOnlySpan();
+        //For unbound/unsalted sessions with no authValue, the key can be empty (length 0);
+        //HMAC is still well-defined over an empty key per RFC 2104.
+        ReadOnlyMemory<byte> sessionKeyMem = sessionKey.AsReadOnlyMemory();
+        ReadOnlyMemory<byte> authValueMem = authValue.AsReadOnlyMemory();
 
-        int keySize = sessionKeySpan.Length + authValueSpan.Length;
-        Span<byte> hmacKey = stackalloc byte[keySize];
-        sessionKeySpan.CopyTo(hmacKey);
-        authValueSpan.CopyTo(hmacKey.Slice(sessionKeySpan.Length));
-
-        using IncrementalHash hmac = sessionAlg switch
+        int keySize = sessionKeyMem.Length + authValueMem.Length;
+        IMemoryOwner<byte>? keyOwner = null;
+        ReadOnlyMemory<byte> keyMemory;
+        if(keySize == 0)
         {
-            TpmAlgIdConstants.TPM_ALG_SHA1 => IncrementalHash.CreateHMAC(HashAlgorithmName.SHA1, hmacKey),
-            TpmAlgIdConstants.TPM_ALG_SHA256 => IncrementalHash.CreateHMAC(HashAlgorithmName.SHA256, hmacKey),
-            TpmAlgIdConstants.TPM_ALG_SHA384 => IncrementalHash.CreateHMAC(HashAlgorithmName.SHA384, hmacKey),
-            TpmAlgIdConstants.TPM_ALG_SHA512 => IncrementalHash.CreateHMAC(HashAlgorithmName.SHA512, hmacKey),
-            _ => throw new NotSupportedException($"Hash algorithm '{sessionAlg}' is not supported for sessions.")
-        };
+            keyMemory = ReadOnlyMemory<byte>.Empty;
+        }
+        else
+        {
+            keyOwner = pool.Rent(keySize);
+            Memory<byte> keyBuffer = keyOwner.Memory[..keySize];
+            sessionKeyMem.CopyTo(keyBuffer);
+            authValueMem.CopyTo(keyBuffer[sessionKeyMem.Length..]);
+            keyMemory = keyBuffer;
+        }
 
-        hmac.AppendData(data);
-        hmac.GetHashAndReset(destination);
+        try
+        {
+            HashAlgorithmName algorithmName = ToHashAlgorithmName(sessionAlg);
+            Tag tag = new Tag(new System.Collections.Generic.Dictionary<Type, object>
+            {
+                [typeof(HashAlgorithmName)] = algorithmName,
+                [typeof(Purpose)] = Purpose.Hmac,
+                [typeof(EncodingScheme)] = EncodingScheme.Raw,
+                [typeof(MaterialSemantics)] = MaterialSemantics.Direct
+            });
+
+            using HmacValue result = await CryptographicKeyEvents.ComputeHmacAsync(
+                data,
+                keyMemory,
+                outputByteLength: digestSize,
+                tag: tag,
+                pool: pool,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            result.AsReadOnlySpan().CopyTo(destination.Span);
+        }
+        finally
+        {
+            keyOwner?.Dispose();
+        }
     }
 
     /// <summary>
@@ -333,6 +355,15 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         TpmAlgIdConstants.TPM_ALG_SHA256 => 32,
         TpmAlgIdConstants.TPM_ALG_SHA384 => 48,
         TpmAlgIdConstants.TPM_ALG_SHA512 => 64,
+        _ => throw new NotSupportedException($"Hash algorithm '{hashAlg}' is not supported.")
+    };
+
+    private static HashAlgorithmName ToHashAlgorithmName(TpmAlgIdConstants hashAlg) => hashAlg switch
+    {
+        TpmAlgIdConstants.TPM_ALG_SHA1 => HashAlgorithmName.SHA1,
+        TpmAlgIdConstants.TPM_ALG_SHA256 => HashAlgorithmName.SHA256,
+        TpmAlgIdConstants.TPM_ALG_SHA384 => HashAlgorithmName.SHA384,
+        TpmAlgIdConstants.TPM_ALG_SHA512 => HashAlgorithmName.SHA512,
         _ => throw new NotSupportedException($"Hash algorithm '{hashAlg}' is not supported.")
     };
 }

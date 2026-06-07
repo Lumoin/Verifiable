@@ -1,11 +1,13 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
+using Verifiable.Core;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.Json;
+using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -55,11 +57,15 @@ internal sealed class DataIntegrityPresentationFlowTests
     private static FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(
         new DateTimeOffset(2024, 6, 15, 12, 0, 0, TimeSpan.Zero));
 
-    private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, cancellationToken) =>
+    private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
     {
         var canonical = Jcs.Canonicalize(json);
         return ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = canonical });
     };
+
+    //Canonicalization/signing here is in-memory; a default context yields the
+    //secure-default SSRF policy and satisfies the policy-carrying parameter.
+    private static readonly ExchangeContext EmptyContext = new();
 
     private static ProofValueEncoderDelegate ProofValueEncoder { get; } = ProofValueCodecs.EncodeBase58Btc;
     private static ProofValueDecoderDelegate ProofValueDecoder { get; } = ProofValueCodecs.DecodeBase58Btc;
@@ -141,7 +147,9 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Holder wraps the signed credential in a Verifiable Presentation.
@@ -168,7 +176,9 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Verifier validates the credential issuer signature.
@@ -178,13 +188,14 @@ internal sealed class DataIntegrityPresentationFlowTests
             contextResolver: null,
             ProofValueDecoder,
             SerializeCredential,
-            DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(CredentialVerificationResult.Success(), credentialVerificationResult);
+        Assert.IsTrue(credentialVerificationResult.IsValid);
 
         //Verifier validates the presentation holder signature, challenge, and domain.
         var presentationVerificationResult = await signedPresentation.VerifyAsync(
@@ -195,13 +206,14 @@ internal sealed class DataIntegrityPresentationFlowTests
             contextResolver: null,
             ProofValueDecoder,
             SerializePresentation,
-            DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(CredentialVerificationResult.Success(), presentationVerificationResult);
+        Assert.IsTrue(presentationVerificationResult.IsValid);
         Assert.AreEqual(holderDid, signedPresentation.Holder);
         Assert.IsNotNull(signedPresentation.VerifiableCredential);
         Assert.HasCount(1, signedPresentation.VerifiableCredential);
@@ -260,7 +272,9 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedPresentation = await new VerifiablePresentation
@@ -283,7 +297,9 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Replace the proof value with an invalid one.
@@ -297,14 +313,267 @@ internal sealed class DataIntegrityPresentationFlowTests
             contextResolver: null,
             ProofValueDecoder,
             SerializePresentation,
-            DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreNotEqual(CredentialVerificationResult.Success(), result);
         Assert.IsFalse(result.IsValid);
+        Assert.IsFalse(result.IsValid);
+    }
+
+
+    /// <summary>
+    /// A presentation that crossed the wire — serialized and re-parsed — verifies through
+    /// the received-bytes path: the parser retained the proof's wire JSON, and the proof
+    /// options canonicalize from the signer's own bytes (Data Integrity 1.0 §4.2).
+    /// </summary>
+    [TestMethod]
+    [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
+    public async Task WireRoundTrippedPresentationVerifies(DidWebTestData testData)
+    {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        var holderDidDocument = await KeyDidBuilder.BuildAsync(
+            publicKey,
+            testData.VerificationMethodTypeInfo,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        var signedPresentation = await SignMinimalPresentationAsync(
+            holderDidDocument, privateKey).ConfigureAwait(false);
+
+        //The verifier's view: wire bytes only.
+        string wire = SerializePresentation(signedPresentation);
+        var received = (DataIntegritySecuredPresentation)DeserializePresentation(wire);
+        Assert.IsNotNull(received.Proof![0].ReceivedProofJson,
+            "The parser must retain the proof's received wire JSON.");
+
+        var result = await received.VerifyAsync(
+            holderDidDocument,
+            VerifierChallenge,
+            VerifierDomain,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueDecoder,
+            SerializePresentation,
+            SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid,
+            $"The wire-round-tripped presentation must verify; got {result.FailureReason}.");
+    }
+
+
+    /// <summary>
+    /// Rewriting the challenge on the wire must fail the SIGNATURE — not merely the
+    /// challenge comparison. The verifier here expects the TAMPERED value, so the
+    /// equality gate passes; only cryptographic coverage of <c>challenge</c> in the
+    /// proof options (Data Integrity 1.0 §2.1/§4.2) can reject the replay.
+    /// </summary>
+    [TestMethod]
+    [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
+    public async Task WireTamperedChallengeFailsTheSignatureItself(DidWebTestData testData)
+    {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        var holderDidDocument = await KeyDidBuilder.BuildAsync(
+            publicKey,
+            testData.VerificationMethodTypeInfo,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        var signedPresentation = await SignMinimalPresentationAsync(
+            holderDidDocument, privateKey).ConfigureAwait(false);
+
+        //An attacker replaying the captured presentation to a different interaction
+        //rewrites the challenge to the one that verifier issued.
+        const string AttackerChallenge = "attacker-challenge-zzz999";
+        string wire = SerializePresentation(signedPresentation)
+            .Replace(VerifierChallenge, AttackerChallenge, StringComparison.Ordinal);
+        var received = (DataIntegritySecuredPresentation)DeserializePresentation(wire);
+
+        var result = await received.VerifyAsync(
+            holderDidDocument,
+            AttackerChallenge,
+            VerifierDomain,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueDecoder,
+            SerializePresentation,
+            SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid);
+        Assert.AreEqual(VerificationFailureReason.SignatureInvalid, result.FailureReason,
+            "A rewritten challenge must break the signature, not just the comparison.");
+    }
+
+
+    /// <summary>
+    /// Rewriting the domain on the wire must fail the SIGNATURE — the cross-domain
+    /// replay protection is cryptographic coverage, not the equality gate.
+    /// </summary>
+    [TestMethod]
+    [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
+    public async Task WireTamperedDomainFailsTheSignatureItself(DidWebTestData testData)
+    {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        var holderDidDocument = await KeyDidBuilder.BuildAsync(
+            publicKey,
+            testData.VerificationMethodTypeInfo,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        var signedPresentation = await SignMinimalPresentationAsync(
+            holderDidDocument, privateKey).ConfigureAwait(false);
+
+        const string AttackerDomain = "attacker.example";
+        string wire = SerializePresentation(signedPresentation)
+            .Replace(VerifierDomain, AttackerDomain, StringComparison.Ordinal);
+        var received = (DataIntegritySecuredPresentation)DeserializePresentation(wire);
+
+        var result = await received.VerifyAsync(
+            holderDidDocument,
+            VerifierChallenge,
+            AttackerDomain,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueDecoder,
+            SerializePresentation,
+            SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid);
+        Assert.AreEqual(VerificationFailureReason.SignatureInvalid, result.FailureReason,
+            "A rewritten domain must break the signature, not just the comparison.");
+    }
+
+
+    /// <summary>
+    /// Signs a minimal holder-only presentation with the standard challenge and domain.
+    /// </summary>
+    private async Task<DataIntegritySecuredPresentation> SignMinimalPresentationAsync(
+        DidDocument holderDidDocument, PrivateKeyMemory privateKey)
+    {
+        var holderVerificationMethodId = holderDidDocument.VerificationMethod![0].Id!;
+        var holderDid = holderDidDocument.Id!.ToString();
+        var proofCreated = TimeProvider.GetUtcNow().UtcDateTime;
+
+        return await new VerifiablePresentation
+        {
+            Context = new Context { Contexts = [Context.Credentials20] },
+            Type = ["VerifiablePresentation"],
+            Holder = holderDid
+        }.SignAsync(
+            privateKey,
+            holderVerificationMethodId,
+            EddsaJcs2022CryptosuiteInfo.Instance,
+            proofCreated,
+            VerifierChallenge,
+            VerifierDomain,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueEncoder,
+            SerializePresentation,
+            DeserializePresentation,
+            SerializeProofOptions,
+            TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A presentation proof whose <c>proofPurpose</c> is not <c>authentication</c> must be
+    /// rejected with <see cref="VerificationFailureReason.ProofPurposeMismatch"/> even when
+    /// the signing key also appears in the holder's <c>authentication</c> relationship —
+    /// Data Integrity 1.0 §4.2 mandates the expected-purpose comparison, and the check runs
+    /// before any cryptographic work so the reason names the purpose, not the signature.
+    /// </summary>
+    [TestMethod]
+    [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
+    public async Task WrongProofPurposeFailsVerification(DidWebTestData testData)
+    {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        var holderDidDocument = await KeyDidBuilder.BuildAsync(
+            publicKey,
+            testData.VerificationMethodTypeInfo,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderVerificationMethodId = holderDidDocument.VerificationMethod![0].Id!;
+        var holderDid = holderDidDocument.Id!.ToString();
+        var proofCreated = TimeProvider.GetUtcNow().UtcDateTime;
+
+        var signedPresentation = await new VerifiablePresentation
+        {
+            Context = new Context { Contexts = [Context.Credentials20] },
+            Type = ["VerifiablePresentation"],
+            Holder = holderDid
+        }.SignAsync(
+            privateKey,
+            holderVerificationMethodId,
+            EddsaJcs2022CryptosuiteInfo.Instance,
+            proofCreated,
+            VerifierChallenge,
+            VerifierDomain,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueEncoder,
+            SerializePresentation,
+            DeserializePresentation,
+            SerializeProofOptions,
+            TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        //Forge the purpose: the same key, the same signature, but a proof minted
+        //for assertion rather than authentication.
+        signedPresentation.Proof![0].ProofPurpose = AssertionMethod.Purpose;
+
+        var result = await signedPresentation.VerifyAsync(
+            holderDidDocument,
+            VerifierChallenge,
+            VerifierDomain,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueDecoder,
+            SerializePresentation,
+            SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid);
+        Assert.AreEqual(VerificationFailureReason.ProofPurposeMismatch, result.FailureReason,
+            "The §4.2 purpose comparison must reject before signature work.");
     }
 
 
@@ -361,7 +630,9 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedPresentation = await new VerifiablePresentation
@@ -384,7 +655,9 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Verify with a different challenge than was used when signing.
@@ -396,10 +669,11 @@ internal sealed class DataIntegrityPresentationFlowTests
             contextResolver: null,
             ProofValueDecoder,
             SerializePresentation,
-            DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
@@ -460,7 +734,9 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var signedPresentation = await new VerifiablePresentation
@@ -483,7 +759,9 @@ internal sealed class DataIntegrityPresentationFlowTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Verify with a different domain than was used when signing.
@@ -495,10 +773,11 @@ internal sealed class DataIntegrityPresentationFlowTests
             contextResolver: null,
             ProofValueDecoder,
             SerializePresentation,
-            DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);

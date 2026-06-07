@@ -2,7 +2,6 @@ using System.Text.Json;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -67,11 +66,11 @@ internal sealed class JwsMessageTests
         Assert.IsGreaterThan(0, jwsMessage.Payload.Length);
 
         var protectedHeader = jwsMessage.Signatures[0].ProtectedHeader;
-        Assert.IsTrue(protectedHeader.ContainsKey(JwkProperties.Alg));
-        Assert.IsTrue(protectedHeader.ContainsKey(JwkProperties.Typ));
-        Assert.IsTrue(protectedHeader.ContainsKey(JwkProperties.Kid));
-        Assert.AreEqual(WellKnownJwaValues.EdDsa, protectedHeader[JwkProperties.Alg]);
-        Assert.AreEqual(Ed25519VerificationMethodId, protectedHeader[JwkProperties.Kid]);
+        Assert.IsTrue(protectedHeader.ContainsKey(WellKnownJwkMemberNames.Alg));
+        Assert.IsTrue(protectedHeader.ContainsKey(WellKnownJoseHeaderNames.Typ));
+        Assert.IsTrue(protectedHeader.ContainsKey(WellKnownJwkMemberNames.Kid));
+        Assert.AreEqual(WellKnownJwaValues.EdDsa, protectedHeader[WellKnownJwkMemberNames.Alg]);
+        Assert.AreEqual(Ed25519VerificationMethodId, protectedHeader[WellKnownJwkMemberNames.Kid]);
     }
 
 
@@ -108,7 +107,7 @@ internal sealed class JwsMessageTests
 
         Assert.IsTrue(verificationResult.IsValid, "JWS signature verification must succeed.");
         Assert.IsNotNull(verificationResult.Credential);
-        Assert.AreEqual(credential.Id, verificationResult.Credential.Id);
+        Assert.AreEqual(credential.Id, verificationResult.Credential!.Value.Value.Id);
     }
 
 
@@ -138,7 +137,7 @@ internal sealed class JwsMessageTests
 
         Assert.IsTrue(verificationResult.IsValid, "JWS message verification must succeed.");
         Assert.IsNotNull(verificationResult.Credential);
-        Assert.AreEqual(credential.Id, verificationResult.Credential.Id);
+        Assert.AreEqual(credential.Id, verificationResult.Credential!.Value.Value.Id);
     }
 
 
@@ -177,7 +176,7 @@ internal sealed class JwsMessageTests
     [TestMethod]
     public void JwsMessageEqualityComparesCorrectly()
     {
-        var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256 };
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 
@@ -199,7 +198,7 @@ internal sealed class JwsMessageTests
     [TestMethod]
     public void CompactSerializationThrowsForMultipleSignatures()
     {
-        var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256 };
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 
@@ -218,7 +217,7 @@ internal sealed class JwsMessageTests
     [TestMethod]
     public void CompactSerializationThrowsForDetachedPayload()
     {
-        var header = new Dictionary<string, object> { [JwkProperties.Alg] = WellKnownJwaValues.Es256 };
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 

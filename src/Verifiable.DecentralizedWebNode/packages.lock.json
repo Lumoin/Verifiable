@@ -2,11 +2,17 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
+      "Microsoft.CodeAnalysis.BannedApiAnalyzers": {
+        "type": "Direct",
+        "requested": "[3.12.0-beta1.25218.8, )",
+        "resolved": "3.12.0-beta1.25218.8",
+        "contentHash": "Hl/CiTNuFm43+DdMDpmm9lSFnlwISwtgGKmByWdwZoGgtJfefKP6fPwnmOVsW/s42ahOEhPpIYFlZJ2+AqeJEQ=="
+      },
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[10.0.6, )",
-        "resolved": "10.0.6",
-        "contentHash": "QKuvS0LWX4fjFqeDkyM7Kqt8P3wYTiPD4nwU+9y59n0sCiG714fxDgbbN82vDnzq89AF/PiHl92TP2C4aFDUQA=="
+        "requested": "[10.0.8, )",
+        "resolved": "10.0.8",
+        "contentHash": "dVbSXGIFNR5nZcv2tOLoWI+a9T4jtFd77IYjuND+QVe360qWgAF7H0WtoopYhRw/+SgpGUTyrkrh+65+ClNnfw=="
       },
       "Microsoft.Sbom.Targets": {
         "type": "Direct",
@@ -108,9 +114,9 @@
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "CentralTransitive",
-        "requested": "[10.0.6, )",
-        "resolved": "10.0.6",
-        "contentHash": "XsGj3pcZ4PIqz9Vhk7ymbL9iNQzOAnDzHmMBqK1rzjjfQBJ4AUZVJQWbDmTKUS8BIXX53QBDRrdiCpwdWfZM9A=="
+        "requested": "[10.0.8, )",
+        "resolved": "10.0.8",
+        "contentHash": "/ldVgSfImIBp6fLWS7sLH0BnmtFj0ZwGlZo4Xx2q0K3ZhJNDbW45kj2f6zPoC+L+BTINuHdMzTsopuwmkbgcNA=="
       },
       "System.Security.Cryptography.Xml": {
         "type": "CentralTransitive",

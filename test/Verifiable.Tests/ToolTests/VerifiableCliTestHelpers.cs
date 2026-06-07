@@ -1,4 +1,4 @@
-﻿using System.CommandLine;
+using System.CommandLine;
 using System.Diagnostics;
 
 namespace Verifiable.Tests.ToolTests;
@@ -40,7 +40,9 @@ internal static class VerifiableCliTestHelpers
     /// </summary>
     public static bool IsUnsuitableForCliArgument(string value)
     {
-        return string.IsNullOrWhiteSpace(value) || ContainsCliSpecialCharacters(value);
+        //A leading '-' makes System.CommandLine treat the token as an option rather than a
+        //positional argument value, so such inputs are not valid unquoted CLI arguments.
+        return string.IsNullOrWhiteSpace(value) || ContainsCliSpecialCharacters(value) || value.StartsWith('-');
     }
 
 

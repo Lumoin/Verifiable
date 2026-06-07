@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -69,7 +69,7 @@ internal class HwTpmSessionTests
 
 
     [TestMethod]
-    public void StartAuthSessionCreatesValidSession()
+    public async Task StartAuthSessionCreatesValidSession()
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -80,12 +80,11 @@ internal class HwTpmSessionTests
         //Create an unbound, unsalted HMAC session.
         var startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256);
 
-        TpmResult<StartAuthSessionResponse> startResult = TpmCommandExecutor.Execute<StartAuthSessionResponse>(
+        TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             Tpm,
             startInput,
             [],
-            pool,
-            registry);
+            pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
 
@@ -97,19 +96,19 @@ internal class HwTpmSessionTests
 
         //Clean up: flush the session.
         var flushInput = FlushContextInput.ForHandle(response.SessionHandle.Value);
-        TpmResult<FlushContextResponse> flushResult = TpmCommandExecutor.Execute<FlushContextResponse>(
+        TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
             Tpm,
             flushInput,
             [],
             pool,
-            registry);
+            registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(flushResult.IsSuccess, $"FlushContext failed: '{flushResult.ResponseCode}'.");
     }
 
 
     [TestMethod]
-    public void GetRandomWithAuditSessionVerifiesIntegrity()
+    public async Task GetRandomWithAuditSessionVerifiesIntegrity()
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -121,12 +120,12 @@ internal class HwTpmSessionTests
         //Step 1: Create an HMAC session.
         var startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256);
 
-        TpmResult<StartAuthSessionResponse> startResult = TpmCommandExecutor.Execute<StartAuthSessionResponse>(
+        TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             Tpm,
             startInput,
             [],
             pool,
-            registry);
+            registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
 
@@ -148,12 +147,12 @@ internal class HwTpmSessionTests
         const int NumberOfRandomBytes = 32;
         var getRandomInput = new GetRandomInput(NumberOfRandomBytes);
 
-        TpmResult<GetRandomResponse> randomResult = TpmCommandExecutor.Execute<GetRandomResponse>(
+        TpmResult<GetRandomResponse> randomResult = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
             Tpm,
             getRandomInput,
             [session],
             pool,
-            registry);
+            registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(randomResult.IsSuccess, $"GetRandom with session failed: '{randomResult.ResponseCode}'.");
 
@@ -164,19 +163,19 @@ internal class HwTpmSessionTests
 
         //Step 4: Clean up.
         var flushInput = FlushContextInput.ForHandle(startResponse.SessionHandle.Value);
-        TpmResult<FlushContextResponse> flushResult = TpmCommandExecutor.Execute<FlushContextResponse>(
+        TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
             Tpm,
             flushInput,
             [],
             pool,
-            registry);
+            registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(flushResult.IsSuccess, $"FlushContext failed: '{flushResult.ResponseCode}'.");
     }
 
 
     [TestMethod]
-    public void MultipleCommandsWithSameSessionUpdateNonces()
+    public async Task MultipleCommandsWithSameSessionUpdateNonces()
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -187,8 +186,8 @@ internal class HwTpmSessionTests
 
         //Create session.
         var startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256);
-        TpmResult<StartAuthSessionResponse> startResult = TpmCommandExecutor.Execute<StartAuthSessionResponse>(
-            Tpm, startInput, [], pool, registry);
+        TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
+            Tpm, startInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
 
@@ -209,8 +208,8 @@ internal class HwTpmSessionTests
         for(int i = 0; i < NumberOfIterations; i++)
         {
             var getRandomInput = new GetRandomInput(RandomBytesPerIteration);
-            TpmResult<GetRandomResponse> result = TpmCommandExecutor.Execute<GetRandomResponse>(
-                Tpm, getRandomInput, [session], pool, registry);
+            TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
+                Tpm, getRandomInput, [session], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(result.IsSuccess, $"GetRandom iteration {i} failed: '{result.ResponseCode}'.");
 
@@ -222,8 +221,8 @@ internal class HwTpmSessionTests
 
         //Flush session.
         var flushInput = FlushContextInput.ForHandle(startResponse.SessionHandle.Value);
-        TpmResult<FlushContextResponse> flushResult = TpmCommandExecutor.Execute<FlushContextResponse>(
-            Tpm, flushInput, [], pool, registry);
+        TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            Tpm, flushInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(flushResult.IsSuccess, $"FlushContext failed: '{flushResult.ResponseCode}'.");
     }

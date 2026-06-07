@@ -1,4 +1,4 @@
-﻿namespace Verifiable.JCose;
+namespace Verifiable.JCose;
 
 /// <summary>
 /// Delegate for building the COSE Sig_structure for signing or verification.
@@ -35,20 +35,31 @@ public delegate byte[] BuildSigStructureDelegate(
 /// </summary>
 /// <remarks>
 /// <para>
-/// The output includes the CBOR tag(18) for COSE_Sign1.
+/// The output is wrapped in <see cref="EncodedCoseSign1"/>: a pool-routed
+/// semantic carrier holding the CBOR tag(18)-prefixed wire form. Caller
+/// owns the returned carrier and disposes it.
 /// </para>
 /// </remarks>
 /// <param name="message">The COSE_Sign1 message to serialize.</param>
-/// <returns>The CBOR-encoded COSE_Sign1 bytes with tag(18).</returns>
-public delegate byte[] SerializeCoseSign1Delegate(CoseSign1Message message);
+/// <param name="pool">Memory pool the carrier rents its buffer from.</param>
+/// <returns>The encoded message wrapped in a pool-routed carrier.</returns>
+public delegate EncodedCoseSign1 SerializeCoseSign1Delegate(CoseSign1Message message, System.Buffers.MemoryPool<byte> pool);
 
 
 /// <summary>
 /// Delegate for parsing COSE_Sign1 bytes into a message.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The protected header and signature inside the parsed message are
+/// pool-routed semantic carriers; the caller owns the returned message
+/// and disposes it.
+/// </para>
+/// </remarks>
 /// <param name="coseSign1Bytes">The CBOR-encoded COSE_Sign1 bytes.</param>
+/// <param name="pool">Memory pool the inner carriers rent their buffers from.</param>
 /// <returns>The parsed COSE_Sign1 message.</returns>
-public delegate CoseSign1Message ParseCoseSign1Delegate(ReadOnlyMemory<byte> coseSign1Bytes);
+public delegate CoseSign1Message ParseCoseSign1Delegate(ReadOnlyMemory<byte> coseSign1Bytes, System.Buffers.MemoryPool<byte> pool);
 
 
 /// <summary>

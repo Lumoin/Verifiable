@@ -1,4 +1,4 @@
-﻿using Verifiable.Tpm.Infrastructure;
+using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tests.Tpm;

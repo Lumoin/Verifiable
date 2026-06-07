@@ -1,8 +1,9 @@
-﻿using System.Text;
+using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using System.Text.Json;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.JCose.Sd;
+using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.TestInfrastructure;
@@ -22,6 +23,14 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// to produce full credential paths.
 /// </para>
 /// </remarks>
+[SuppressMessage(
+    "Reliability", "CA2000",
+    Justification =
+        "Test helpers (CreateDisclosure/CreateArrayElementDisclosure) construct Salt " +
+        "instances and pass them to SdDisclosure factory methods which take ownership. " +
+        "The SdToken<string> constructions take ownership of the disclosures (disposed " +
+        "via the using declaration). The analyzer cannot see ownership transfer through " +
+        "factory methods.")]
 [TestClass]
 internal sealed class SdJwtPathExtractionTests
 {
@@ -47,7 +56,7 @@ internal sealed class SdJwtPathExtractionTests
         """;
 
         string jwt = CreateMinimalJwt(payloadJson);
-        var token = new SdToken<string>(jwt, [nameDisclosure]);
+        using var token = new SdToken<string>(jwt, [nameDisclosure]);
 
         IReadOnlyDictionary<SdDisclosure, CredentialPath> paths = SdJwtPathExtraction.ExtractPaths(
             token,
@@ -81,7 +90,7 @@ internal sealed class SdJwtPathExtractionTests
         """;
 
         string jwt = CreateMinimalJwt(payloadJson);
-        var token = new SdToken<string>(jwt, [cityDisclosure]);
+        using var token = new SdToken<string>(jwt, [cityDisclosure]);
 
         IReadOnlyDictionary<SdDisclosure, CredentialPath> paths = SdJwtPathExtraction.ExtractPaths(
             token,
@@ -114,7 +123,7 @@ internal sealed class SdJwtPathExtractionTests
         """;
 
         string jwt = CreateMinimalJwt(payloadJson);
-        var token = new SdToken<string>(jwt, [arrayElementDisclosure]);
+        using var token = new SdToken<string>(jwt, [arrayElementDisclosure]);
 
         IReadOnlyDictionary<SdDisclosure, CredentialPath> paths = SdJwtPathExtraction.ExtractPaths(
             token,
@@ -143,7 +152,7 @@ internal sealed class SdJwtPathExtractionTests
         """;
 
         string jwt = CreateMinimalJwt(payloadJson);
-        var token = new SdToken<string>(jwt, []);
+        using var token = new SdToken<string>(jwt, []);
 
         IReadOnlySet<CredentialPath> paths = SdJwtPathExtraction.ExtractAllPaths(
             token,
@@ -151,7 +160,7 @@ internal sealed class SdJwtPathExtractionTests
             SensitiveMemoryPool<byte>.Shared);
 
         Assert.Contains(CredentialPath.Root, paths);
-        Assert.Contains(CredentialPath.Root.Append("iss"), paths);
+        Assert.Contains(CredentialPath.Root.Append(WellKnownJwtClaimNames.Iss), paths);
         Assert.Contains(CredentialPath.Root.Append("visible"), paths);
         Assert.Contains(CredentialPath.Root.Append("nested"), paths);
         Assert.Contains(CredentialPath.Root.Append("nested").Append("inner"), paths);
@@ -171,7 +180,7 @@ internal sealed class SdJwtPathExtractionTests
         """;
 
         string jwt = CreateMinimalJwt(payloadJson);
-        var token = new SdToken<string>(jwt, []);
+        using var token = new SdToken<string>(jwt, []);
 
         IReadOnlySet<CredentialPath> mandatory = SdJwtPathExtraction.ExtractMandatoryPaths(
             token,
@@ -179,7 +188,7 @@ internal sealed class SdJwtPathExtractionTests
             SensitiveMemoryPool<byte>.Shared);
 
         Assert.Contains(CredentialPath.Root, mandatory);
-        Assert.Contains(CredentialPath.Root.Append("iss"), mandatory);
+        Assert.Contains(CredentialPath.Root.Append(WellKnownJwtClaimNames.Iss), mandatory);
         Assert.Contains(CredentialPath.Root.Append("mandatory"), mandatory);
     }
 
@@ -202,7 +211,7 @@ internal sealed class SdJwtPathExtractionTests
         """;
 
         string jwt = CreateMinimalJwt(payloadJson);
-        var token = new SdToken<string>(jwt, [disclosure]);
+        using var token = new SdToken<string>(jwt, [disclosure]);
 
         PathLattice lattice = SdJwtPathExtraction.CreateLattice(
             token,
@@ -236,7 +245,7 @@ internal sealed class SdJwtPathExtractionTests
         """;
 
         string jwt = CreateMinimalJwt(payloadJson);
-        var token = new SdToken<string>(jwt, [disclosure1, disclosure2]);
+        using var token = new SdToken<string>(jwt, [disclosure1, disclosure2]);
 
         IReadOnlyDictionary<SdDisclosure, CredentialPath> paths = SdJwtPathExtraction.ExtractPaths(
             token,
@@ -262,7 +271,7 @@ internal sealed class SdJwtPathExtractionTests
         """;
 
         string jwt = CreateMinimalJwt(payloadJson);
-        var token = new SdToken<string>(jwt, []);
+        using var token = new SdToken<string>(jwt, []);
 
         IReadOnlyDictionary<SdDisclosure, CredentialPath> paths = SdJwtPathExtraction.ExtractPaths(
             token,
@@ -277,7 +286,7 @@ internal sealed class SdJwtPathExtractionTests
     private static SdDisclosure CreateDisclosure(string salt, string claimName, string claimValue)
     {
         return SdDisclosure.CreateProperty(
-            Encoding.UTF8.GetBytes(salt),
+            TestSalts.FromBytes(Encoding.UTF8.GetBytes(salt)),
             claimName,
             JsonDocument.Parse($"\"{claimValue}\"").RootElement);
     }
@@ -286,7 +295,7 @@ internal sealed class SdJwtPathExtractionTests
     private static SdDisclosure CreateArrayElementDisclosure(string salt, string claimValue)
     {
         return SdDisclosure.CreateArrayElement(
-            Encoding.UTF8.GetBytes(salt),
+            TestSalts.FromBytes(Encoding.UTF8.GetBytes(salt)),
             JsonDocument.Parse($"\"{claimValue}\"").RootElement);
     }
 

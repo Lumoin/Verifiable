@@ -162,6 +162,91 @@ namespace Verifiable.BouncyCastle
 
 
         /// <summary>
+        /// Signs data using ECDSA with the Brainpool P-256r1 curve and SHA-256
+        /// (RFC 9784 fully-specified ECDSA <c>ESB256</c>, COSE alg <c>-261</c>).
+        /// </summary>
+        public static ValueTask<Signature> SignBrainpoolP256r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(signaturePool);
+            return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "brainpoolP256r1", CryptoTags.BrainpoolP256r1Signature, 32);
+        }
+
+
+        /// <summary>
+        /// Verifies an ECDSA signature produced with the Brainpool P-256r1 curve and SHA-256.
+        /// </summary>
+        public static ValueTask<bool> VerifyBrainpoolP256r1Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        {
+            return VerifyEcdsaAsync(dataToVerify, signature, publicKeyMaterial, "brainpoolP256r1", 32);
+        }
+
+
+        /// <summary>
+        /// Signs data using ECDSA with the Brainpool P-320r1 curve and SHA-384
+        /// (RFC 9784 fully-specified ECDSA <c>ESB320</c>, COSE alg <c>-262</c>).
+        /// </summary>
+        /// <remarks>
+        /// The hash size (SHA-384, 48 bytes) deliberately exceeds the field size
+        /// (320 bits, 40 bytes) per RFC 9784 §5; ECDSA truncates the hash to the
+        /// field bit length internally during signing.
+        /// </remarks>
+        public static ValueTask<Signature> SignBrainpoolP320r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(signaturePool);
+            return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "brainpoolP320r1", CryptoTags.BrainpoolP320r1Signature, 40);
+        }
+
+
+        /// <summary>
+        /// Verifies an ECDSA signature produced with the Brainpool P-320r1 curve and SHA-384.
+        /// </summary>
+        public static ValueTask<bool> VerifyBrainpoolP320r1Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        {
+            return VerifyEcdsaAsync(dataToVerify, signature, publicKeyMaterial, "brainpoolP320r1", 40);
+        }
+
+
+        /// <summary>
+        /// Signs data using ECDSA with the Brainpool P-384r1 curve and SHA-384
+        /// (RFC 9784 fully-specified ECDSA <c>ESB384</c>, COSE alg <c>-263</c>).
+        /// </summary>
+        public static ValueTask<Signature> SignBrainpoolP384r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(signaturePool);
+            return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "brainpoolP384r1", CryptoTags.BrainpoolP384r1Signature, 48);
+        }
+
+
+        /// <summary>
+        /// Verifies an ECDSA signature produced with the Brainpool P-384r1 curve and SHA-384.
+        /// </summary>
+        public static ValueTask<bool> VerifyBrainpoolP384r1Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        {
+            return VerifyEcdsaAsync(dataToVerify, signature, publicKeyMaterial, "brainpoolP384r1", 48);
+        }
+
+
+        /// <summary>
+        /// Signs data using ECDSA with the Brainpool P-512r1 curve and SHA-512
+        /// (RFC 9784 fully-specified ECDSA <c>ESB512</c>, COSE alg <c>-264</c>).
+        /// </summary>
+        public static ValueTask<Signature> SignBrainpoolP512r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(signaturePool);
+            return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "brainpoolP512r1", CryptoTags.BrainpoolP512r1Signature, 64);
+        }
+
+
+        /// <summary>
+        /// Verifies an ECDSA signature produced with the Brainpool P-512r1 curve and SHA-512.
+        /// </summary>
+        public static ValueTask<bool> VerifyBrainpoolP512r1Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        {
+            return VerifyEcdsaAsync(dataToVerify, signature, publicKeyMaterial, "brainpoolP512r1", 64);
+        }
+
+
+        /// <summary>
         /// Signs data using ECDSA with the secp256k1 curve and SHA-256.
         /// </summary>
         /// <param name="privateKeyBytes">The 32-byte secp256k1 private key scalar.</param>
@@ -899,11 +984,15 @@ namespace Verifiable.BouncyCastle
         /// <exception cref="NotSupportedException">Thrown if the curve is not recognized.</exception>
         private static byte[] ComputeHash(ReadOnlySpan<byte> data, string curveName)
         {
+            //Brainpool hash bindings per RFC 9784 §5: BP-256 → SHA-256,
+            //BP-320 → SHA-384, BP-384 → SHA-384, BP-512 → SHA-512. Note that
+            //BP-320 uses SHA-384 even though SHA-384 output exceeds the field
+            //size — ECDSA truncates internally.
             return curveName switch
             {
-                "secp256r1" or "secp256k1" => SHA256.HashData(data),
-                "secp384r1" => SHA384.HashData(data),
-                "secp521r1" => SHA512.HashData(data),
+                "secp256r1" or "secp256k1" or "brainpoolP256r1" => SHA256.HashData(data),
+                "secp384r1" or "brainpoolP320r1" or "brainpoolP384r1" => SHA384.HashData(data),
+                "secp521r1" or "brainpoolP512r1" => SHA512.HashData(data),
                 _ => throw new NotSupportedException($"Curve '{curveName}' is not supported.")
             };
         }
@@ -918,11 +1007,13 @@ namespace Verifiable.BouncyCastle
         /// <exception cref="NotSupportedException">Thrown if the curve is not recognized.</exception>
         private static IDigest GetDigest(string curveName)
         {
+            //Mirrors ComputeHash's RFC 9784 §5 mapping so that the RFC 6979
+            //k-derivation uses the same hash family as the message digest.
             return curveName switch
             {
-                "secp256r1" or "secp256k1" => new Sha256Digest(),
-                "secp384r1" => new Sha384Digest(),
-                "secp521r1" => new Sha512Digest(),
+                "secp256r1" or "secp256k1" or "brainpoolP256r1" => new Sha256Digest(),
+                "secp384r1" or "brainpoolP320r1" or "brainpoolP384r1" => new Sha384Digest(),
+                "secp521r1" or "brainpoolP512r1" => new Sha512Digest(),
                 _ => throw new NotSupportedException($"Curve '{curveName}' is not supported.")
             };
         }

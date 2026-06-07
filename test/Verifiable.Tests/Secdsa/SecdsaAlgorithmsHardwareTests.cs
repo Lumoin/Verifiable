@@ -272,7 +272,7 @@ internal sealed class SecdsaAlgorithmsHardwareTests
     }
 
     [TestMethod]
-    public void TpmEcdhZGenProducesValidOutputPoint()
+    public async Task TpmEcdhZGenProducesValidOutputPoint()
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -290,8 +290,8 @@ internal sealed class SecdsaAlgorithmsHardwareTests
 
         using var ownerAuth = TpmPasswordSession.CreateEmpty(pool);
 
-        TpmResult<CreatePrimaryResponse> createResult = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
-            Tpm, createInput, [ownerAuth], pool, registry);
+        TpmResult<CreatePrimaryResponse> createResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            Tpm, createInput, [ownerAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(createResult, "CreatePrimary for ECDH key");
 
@@ -305,13 +305,13 @@ internal sealed class SecdsaAlgorithmsHardwareTests
             createResult.Value.Dispose();
 
             var earlyFlush = FlushContextInput.ForHandle(staleHandle.Value);
-            _ = TpmCommandExecutor.Execute<FlushContextResponse>(Tpm, earlyFlush, [], pool, registry);
+            _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(Tpm, earlyFlush, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             using CreatePrimaryInput retryInput = CreatePrimaryInput.ForEccKeyAgreementKey(
                 TpmRh.TPM_RH_OWNER, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool);
             using var retryAuth = TpmPasswordSession.CreateEmpty(pool);
-            createResult = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
-                Tpm, retryInput, [retryAuth], pool, registry);
+            createResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+                Tpm, retryInput, [retryAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             AssertUtilities.AssertSuccess(createResult, "CreatePrimary retry");
         }
 
@@ -321,8 +321,8 @@ internal sealed class SecdsaAlgorithmsHardwareTests
 
         //Read back the key to confirm what the TPM actually stored.
         ReadPublicInput readInput = ReadPublicInput.ForHandle(keyHandle);
-        TpmResult<ReadPublicResponse> readResult = TpmCommandExecutor.Execute<ReadPublicResponse>(
-            Tpm, readInput, [], pool, registry);
+        TpmResult<ReadPublicResponse> readResult = await TpmCommandExecutor.ExecuteAsync<ReadPublicResponse>(
+            Tpm, readInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         if(readResult.IsSuccess)
         {
@@ -363,8 +363,8 @@ internal sealed class SecdsaAlgorithmsHardwareTests
             capturedResponse = exchange.Response;
         }));
 
-        TpmResult<EcdhZGenResponse> ecdhResult = TpmCommandExecutor.Execute<EcdhZGenResponse>(
-            Tpm, ecdhInput, [keyAuth], pool, registry);
+        TpmResult<EcdhZGenResponse> ecdhResult = await TpmCommandExecutor.ExecuteAsync<EcdhZGenResponse>(
+            Tpm, ecdhInput, [keyAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         if(!capturedCommand.IsEmpty)
         {
@@ -394,11 +394,11 @@ internal sealed class SecdsaAlgorithmsHardwareTests
         TestContext.WriteLine($"ECDH output Y = {Convert.ToHexString(outPoint.AsSpan(1 + EllipticCurveConstants.P256.PointArrayLength, EllipticCurveConstants.P256.PointArrayLength))}");
 
         var flushInput = FlushContextInput.ForHandle(keyHandle.Value);
-        _ = TpmCommandExecutor.Execute<FlushContextResponse>(Tpm, flushInput, [], pool, registry);
+        _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(Tpm, flushInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     [TestMethod]
-    public void TpmSignsAndPureNetVerifiesFullSecdsaPath()
+    public async Task TpmSignsAndPureNetVerifiesFullSecdsaPath()
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -416,8 +416,8 @@ internal sealed class SecdsaAlgorithmsHardwareTests
 
         using var ownerAuth = TpmPasswordSession.CreateEmpty(pool);
 
-        TpmResult<CreatePrimaryResponse> createResult = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
-            Tpm, createInput, [ownerAuth], pool, registry);
+        TpmResult<CreatePrimaryResponse> createResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            Tpm, createInput, [ownerAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(createResult, "CreatePrimary");
 
@@ -436,8 +436,8 @@ internal sealed class SecdsaAlgorithmsHardwareTests
             keyHandle, adjustedDigest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
 
         using var keyAuth = TpmPasswordSession.CreateEmpty(pool);
-        TpmResult<SignResponse> signResult = TpmCommandExecutor.Execute<SignResponse>(
-            Tpm, signInput, [keyAuth], pool, registry);
+        TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            Tpm, signInput, [keyAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(signResult, "TPM2_Sign");
 
@@ -455,7 +455,7 @@ internal sealed class SecdsaAlgorithmsHardwareTests
         Assert.IsTrue(valid, "SECDSA signature (TPM signs, pure .NET verifies) must be valid.");
 
         var flushInput = FlushContextInput.ForHandle(keyHandle.Value);
-        _ = TpmCommandExecutor.Execute<FlushContextResponse>(Tpm, flushInput, [], pool, registry);
+        _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(Tpm, flushInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -526,7 +526,7 @@ internal sealed class SecdsaAlgorithmsHardwareTests
     /// </list>
     /// </remarks>
     [TestMethod]
-    public void TpmFullSecdsaProtocolFlowBothHardwareBoundariesHold()
+    public async Task TpmFullSecdsaProtocolFlowBothHardwareBoundariesHold()
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -562,8 +562,8 @@ internal sealed class SecdsaAlgorithmsHardwareTests
             pool);
 
         using var ownerAuthSigning = TpmPasswordSession.CreateEmpty(pool);
-        TpmResult<CreatePrimaryResponse> signingKeyResult = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
-            Tpm, signingKeyInput, [ownerAuthSigning], pool, registry);
+        TpmResult<CreatePrimaryResponse> signingKeyResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            Tpm, signingKeyInput, [ownerAuthSigning], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(signingKeyResult, "CreatePrimary for NCH signing key");
         using CreatePrimaryResponse signingKeyResponse = signingKeyResult.Value;
@@ -586,8 +586,8 @@ internal sealed class SecdsaAlgorithmsHardwareTests
             pool);
 
         using var ownerAuthEcdh = TpmPasswordSession.CreateEmpty(pool);
-        TpmResult<CreatePrimaryResponse> ecdhKeyResult = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
-            Tpm, ecdhKeyInput, [ownerAuthEcdh], pool, registry);
+        TpmResult<CreatePrimaryResponse> ecdhKeyResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            Tpm, ecdhKeyInput, [ownerAuthEcdh], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(ecdhKeyResult, "CreatePrimary for HSM ECDH key");
 
@@ -599,13 +599,13 @@ internal sealed class SecdsaAlgorithmsHardwareTests
             ecdhKeyResult.Value.Dispose();
 
             var earlyFlush = FlushContextInput.ForHandle(staleHandle.Value);
-            _ = TpmCommandExecutor.Execute<FlushContextResponse>(Tpm, earlyFlush, [], pool, registry);
+            _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(Tpm, earlyFlush, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             using CreatePrimaryInput retryInput = CreatePrimaryInput.ForEccKeyAgreementKey(
                 TpmRh.TPM_RH_OWNER, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool);
             using var retryAuth = TpmPasswordSession.CreateEmpty(pool);
-            ecdhKeyResult = TpmCommandExecutor.Execute<CreatePrimaryResponse>(
-                Tpm, retryInput, [retryAuth], pool, registry);
+            ecdhKeyResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+                Tpm, retryInput, [retryAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             AssertUtilities.AssertSuccess(ecdhKeyResult, "CreatePrimary ECDH key retry");
         }
 
@@ -635,8 +635,8 @@ internal sealed class SecdsaAlgorithmsHardwareTests
         byte[] yblBytes = EcMath.EncodePointUncompressed(Ybl);
         using EcdhZGenInput blindingInput = EcdhZGenInput.FromUncompressedPoint(ecdhKeyHandle, yblBytes, pool);
         using var ecdhAuthBlinding = TpmPasswordSession.CreateEmpty(pool);
-        TpmResult<EcdhZGenResponse> blindingResult = TpmCommandExecutor.Execute<EcdhZGenResponse>(
-            Tpm, blindingInput, [ecdhAuthBlinding], pool, registry);
+        TpmResult<EcdhZGenResponse> blindingResult = await TpmCommandExecutor.ExecuteAsync<EcdhZGenResponse>(
+            Tpm, blindingInput, [ecdhAuthBlinding], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(blindingResult, "TPM2_ECDH_ZGen for Y'bl = aU*Ybl");
         using EcdhZGenResponse blindingResponse = blindingResult.Value;
@@ -698,8 +698,8 @@ internal sealed class SecdsaAlgorithmsHardwareTests
             signingKeyHandle, adjustedDigest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
 
         using var keyAuth = TpmPasswordSession.CreateEmpty(pool);
-        TpmResult<SignResponse> signResult = TpmCommandExecutor.Execute<SignResponse>(
-            Tpm, signInput, [keyAuth], pool, registry);
+        TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            Tpm, signInput, [keyAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(signResult, "TPM2_Sign for NCH signing step");
         using SignResponse signResponse = signResult.Value;
@@ -722,17 +722,21 @@ internal sealed class SecdsaAlgorithmsHardwareTests
         EcPoint Gdouble = EcMath.Multiply(Gprime, sInv);
         EcPoint Ydouble = EcMath.Multiply(Yprime, sInv);
 
-        SchnorrZkProof zkp = SchnorrZkp.Generate(
+        SchnorrZkProof zkp = await SchnorrZkp.GenerateAsync(
             generators: [Gprime, Yprime],
             publicKeys: [Gdouble, Ydouble],
             witness: sInv,
-            challengeBinding: ReadOnlySpan<byte>.Empty);
+            challengeBinding: ReadOnlyMemory<byte>.Empty,
+            pool: pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(SchnorrZkp.Verify(
+        Assert.IsTrue(await SchnorrZkp.VerifyAsync(
             proof: zkp,
             generators: [Gprime, Yprime],
             publicKeys: [Gdouble, Ydouble],
-            challengeBinding: ReadOnlySpan<byte>.Empty),
+            challengeBinding: ReadOnlyMemory<byte>.Empty,
+            pool: pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
             "Schnorr ZKP must confirm G'' and Y'' share the same discrete log s^-1.");
 
         //-- WSCD boundary: ECDH verification equation R' = aU*R via TPM2_ECDH_ZGen --
@@ -745,8 +749,8 @@ internal sealed class SecdsaAlgorithmsHardwareTests
         byte[] rBytes = EcMath.EncodePointUncompressed(fullSig.RPoint);
         using EcdhZGenInput verificationInput = EcdhZGenInput.FromUncompressedPoint(ecdhKeyHandle, rBytes, pool);
         using var ecdhAuthVerification = TpmPasswordSession.CreateEmpty(pool);
-        TpmResult<EcdhZGenResponse> verificationResult = TpmCommandExecutor.Execute<EcdhZGenResponse>(
-            Tpm, verificationInput, [ecdhAuthVerification], pool, registry);
+        TpmResult<EcdhZGenResponse> verificationResult = await TpmCommandExecutor.ExecuteAsync<EcdhZGenResponse>(
+            Tpm, verificationInput, [ecdhAuthVerification], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(verificationResult, "TPM2_ECDH_ZGen for aU*R verification");
         using EcdhZGenResponse verificationResponse = verificationResult.Value;
@@ -775,10 +779,10 @@ internal sealed class SecdsaAlgorithmsHardwareTests
         //-- Cleanup ---------------------------------------------------------------
 
         var flushSigning = FlushContextInput.ForHandle(signingKeyHandle.Value);
-        _ = TpmCommandExecutor.Execute<FlushContextResponse>(Tpm, flushSigning, [], pool, registry);
+        _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(Tpm, flushSigning, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         var flushEcdh = FlushContextInput.ForHandle(ecdhKeyHandle.Value);
-        _ = TpmCommandExecutor.Execute<FlushContextResponse>(Tpm, flushEcdh, [], pool, registry);
+        _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(Tpm, flushEcdh, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     private static byte[] ExtractEccPublicPoint(Tpm2bPublic publicArea)

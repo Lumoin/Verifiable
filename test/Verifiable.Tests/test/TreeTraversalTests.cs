@@ -1,4 +1,4 @@
-﻿using Verifiable.Core.Assessment;
+using Verifiable.Core.Assessment;
 
 
 namespace Verifiable.Tests.test

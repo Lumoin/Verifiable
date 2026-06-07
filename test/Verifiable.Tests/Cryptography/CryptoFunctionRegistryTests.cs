@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Microsoft;

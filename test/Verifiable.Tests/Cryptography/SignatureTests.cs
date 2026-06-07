@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Cryptography;

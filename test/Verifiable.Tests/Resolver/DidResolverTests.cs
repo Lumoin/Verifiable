@@ -1,3 +1,4 @@
+using Verifiable.Core;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Core.Resolvers;
@@ -14,6 +15,10 @@ internal sealed class DidResolverTests
     //Prefix used for test-only DID strings that have no well-known method type.
     private const string ExampleDidPrefix = "did:example";
 
+    //DID resolution does no network I/O at this layer, so a default context suffices;
+    //it exists only to satisfy the SSRF-policy-carrying parameter.
+    private static readonly ExchangeContext Context = new();
+
     public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
@@ -21,7 +26,7 @@ internal sealed class DidResolverTests
     {
         var resolver = CreateResolver();
         var result = await resolver.ResolveAsync(
-            "not-a-did", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            "not-a-did", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.IsNotNull(result.ResolutionMetadata.Error);
@@ -34,7 +39,7 @@ internal sealed class DidResolverTests
     {
         var resolver = CreateResolver();
         var result = await resolver.ResolveAsync(
-            "", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            "", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDid, result.ResolutionMetadata.Error);
@@ -45,7 +50,7 @@ internal sealed class DidResolverTests
     {
         var resolver = CreateResolver();
         var result = await resolver.ResolveAsync(
-            "did:unknown:123", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            "did:unknown:123", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.MethodNotSupported, result.ResolutionMetadata.Error);
@@ -60,11 +65,11 @@ internal sealed class DidResolverTests
             (WellKnownDidMethodPrefixes.KeyDidMethodPrefix, ResolveKeyWithContentTypeAsync)));
 
         var webResult = await resolver.ResolveAsync(
-            "did:web:example.com", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            "did:web:example.com", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var keyResult = await resolver.ResolveAsync(
             "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual("application/did+json; method=web", webResult.ResolutionMetadata.ContentType);
         Assert.AreEqual("application/did+json; method=key", keyResult.ResolutionMetadata.ContentType);
@@ -78,7 +83,7 @@ internal sealed class DidResolverTests
 
         var keyResult = await resolver.ResolveAsync(
             "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(keyResult.IsSuccessful);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.MethodNotSupported, keyResult.ResolutionMetadata.Error);
@@ -91,7 +96,7 @@ internal sealed class DidResolverTests
             (ExampleDidPrefix, ResolveWithFixedMetadataAsync)));
 
         var result = await resolver.ResolveAsync(
-            "did:example:123", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            "did:example:123", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful);
         Assert.IsNotNull(result.Document);
@@ -108,7 +113,7 @@ internal sealed class DidResolverTests
             (ExampleDidPrefix, ResolveAlwaysThrowsAsync)));
 
         var result = await resolver.ResolveAsync(
-            "did:example:123", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            "did:example:123", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InternalError, result.ResolutionMetadata.Error);
@@ -125,7 +130,7 @@ internal sealed class DidResolverTests
 
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
             await resolver.ResolveAsync(
-                "did:example:123", cancellationToken: cts.Token).ConfigureAwait(false)).ConfigureAwait(false);
+                "did:example:123", Context, cancellationToken: cts.Token).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
     [TestMethod]
@@ -137,7 +142,7 @@ internal sealed class DidResolverTests
 
         var options = new DidResolutionOptions { Accept = "application/did+ld+json" };
         var result = await resolver.ResolveAsync(
-            "did:example:123", options, TestContext.CancellationToken).ConfigureAwait(false);
+            "did:example:123", Context, options, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful);
         Assert.AreEqual("application/did+ld+json", result.ResolutionMetadata.ContentType);
@@ -152,7 +157,7 @@ internal sealed class DidResolverTests
 
         var options = new DidResolutionOptions { VersionId = "42" };
         var result = await resolver.ResolveAsync(
-            "did:example:123", options, TestContext.CancellationToken).ConfigureAwait(false);
+            "did:example:123", Context, options, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful);
         Assert.AreEqual("42", result.DocumentMetadata.VersionId);
@@ -167,7 +172,7 @@ internal sealed class DidResolverTests
             (ExampleDidPrefix, ResolveConfirmsEmptyOptionsAsync)));
 
         var result = await resolver.ResolveAsync(
-            "did:example:123", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            "did:example:123", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful);
         Assert.AreEqual("options-were-empty", result.ResolutionMetadata.ContentType);
@@ -180,7 +185,7 @@ internal sealed class DidResolverTests
             (ExampleDidPrefix, ResolveDeactivatedAsync)));
 
         var result = await resolver.ResolveAsync(
-            "did:example:deactivated", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            "did:example:deactivated", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.DocumentMetadata.Deactivated);
         Assert.IsNull(result.Document);
@@ -191,7 +196,7 @@ internal sealed class DidResolverTests
     {
         var resolver = CreateResolver();
         var result = await resolver.DereferenceAsync(
-            "not-a-did-url", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            "not-a-did-url", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidUrl, result.DereferencingMetadata.Error);
@@ -202,7 +207,7 @@ internal sealed class DidResolverTests
     {
         var resolver = CreateResolver();
         var result = await resolver.DereferenceAsync(
-            "#key-1", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            "#key-1", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful);
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDidUrl, result.DereferencingMetadata.Error);
@@ -360,6 +365,7 @@ internal sealed class DidResolverTests
     private static ValueTask<DidResolutionResult> ResolveExampleDidAsync(
         string did,
         DidResolutionOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         return ValueTask.FromResult(
@@ -369,6 +375,7 @@ internal sealed class DidResolverTests
     private static ValueTask<DidResolutionResult> ResolveWebWithContentTypeAsync(
         string did,
         DidResolutionOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         return ValueTask.FromResult(
@@ -381,6 +388,7 @@ internal sealed class DidResolverTests
     private static ValueTask<DidResolutionResult> ResolveKeyWithContentTypeAsync(
         string did,
         DidResolutionOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         return ValueTask.FromResult(
@@ -393,6 +401,7 @@ internal sealed class DidResolverTests
     private static ValueTask<DidResolutionResult> ResolveWithFixedMetadataAsync(
         string did,
         DidResolutionOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         return ValueTask.FromResult(
@@ -405,6 +414,7 @@ internal sealed class DidResolverTests
     private static ValueTask<DidResolutionResult> ResolveAlwaysThrowsAsync(
         string did,
         DidResolutionOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         throw new InvalidOperationException("Simulated failure.");
@@ -413,6 +423,7 @@ internal sealed class DidResolverTests
     private static ValueTask<DidResolutionResult> ResolveChecksCancellationAsync(
         string did,
         DidResolutionOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -423,6 +434,7 @@ internal sealed class DidResolverTests
     private static ValueTask<DidResolutionResult> ResolveEchoesAcceptAsync(
         string did,
         DidResolutionOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         //Echo options.Accept back as ContentType so the test can verify it was received correctly.
@@ -436,6 +448,7 @@ internal sealed class DidResolverTests
     private static ValueTask<DidResolutionResult> ResolveEchoesVersionIdAsync(
         string did,
         DidResolutionOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         //Echo options.VersionId back as DocumentMetadata.VersionId so the test can verify it was received correctly.
@@ -448,6 +461,7 @@ internal sealed class DidResolverTests
     private static ValueTask<DidResolutionResult> ResolveConfirmsEmptyOptionsAsync(
         string did,
         DidResolutionOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         //Return a sentinel ContentType confirming that options were non-null with a null Accept,
@@ -463,6 +477,7 @@ internal sealed class DidResolverTests
     private static ValueTask<DidResolutionResult> ResolveDeactivatedAsync(
         string did,
         DidResolutionOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         return ValueTask.FromResult(new DidResolutionResult
@@ -478,6 +493,7 @@ internal sealed class DidResolverTests
         string? path,
         string? query,
         DidDereferencingOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         return ValueTask.FromResult(

@@ -1,4 +1,4 @@
-﻿using System.Collections.Frozen;
+using System.Collections.Frozen;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -56,11 +56,11 @@ internal class FakeTpmHandleTests
         var testData = Encoding.UTF8.GetBytes("Hello TPM!");
         using var fakeSignature = new Signature(SensitiveMemoryPool<byte>.Shared.Rent(64), Tag.Empty);
         //Verify using TPM key - should work transparently.
-        bool verified = await tpmPublicKey.VerifyAsync(testData, fakeSignature).ConfigureAwait(false);
+        bool isVerified = await tpmPublicKey.VerifyAsync(testData, fakeSignature).ConfigureAwait(false);
         bool verifiedWithExtension = await handleMemory.VerifyAsync(testData, fakeSignature, tpmVerificationDelegate)
             .ConfigureAwait(false);
 
-        Assert.IsTrue(verified, "TPM verification should succeed.");
+        Assert.IsTrue(isVerified, "TPM verification should succeed.");
         Assert.IsTrue(verifiedWithExtension, "TPM verification with extension should succeed.");
     }
 }

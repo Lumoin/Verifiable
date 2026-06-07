@@ -1,5 +1,5 @@
-﻿using Verifiable.Core.SelectiveDisclosure;
-using Verifiable.Core.SelectiveDisclosure.Strategy;
+using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 

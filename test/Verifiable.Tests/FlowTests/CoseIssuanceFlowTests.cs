@@ -106,8 +106,8 @@ internal sealed class CoseIssuanceFlowTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Serialize to CBOR wire format and parse back (simulates network transit).
-        byte[] coseBytes = CoseSerialization.SerializeCoseSign1(message);
-        CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes);
+        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, SensitiveMemoryPool<byte>.Shared);
+        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), SensitiveMemoryPool<byte>.Shared);
 
         //Verify the signature from the parsed message.
         CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(
@@ -120,8 +120,9 @@ internal sealed class CoseIssuanceFlowTests
 
         Assert.IsTrue(result.IsValid, "COSE credential verification must succeed.");
         Assert.IsNotNull(result.Credential);
-        Assert.AreEqual(holderDid, result.Credential.CredentialSubject![0].Id);
-        Assert.AreEqual(IssuerDidWeb, result.Credential.Issuer!.Id);
+        var verifiedCredential = result.Credential!.Value.Value;
+        Assert.AreEqual(holderDid, verifiedCredential.CredentialSubject![0].Id);
+        Assert.AreEqual(IssuerDidWeb, verifiedCredential.Issuer!.Id);
     }
 
 
@@ -177,11 +178,17 @@ internal sealed class CoseIssuanceFlowTests
             tamperedPayload[10] ^= 0xFF;
         }
 
-        var tamperedMessage = new CoseSign1Message(
-            message.ProtectedHeaderBytes.ToArray(),
+        EncodedCoseProtectedHeader tamperedHeader = EncodedCoseProtectedHeader.FromBytes(
+            message.ProtectedHeader.AsReadOnlySpan(),
+            SensitiveMemoryPool<byte>.Shared);
+        Signature tamperedSignature = message.Signature.AsReadOnlySpan().ToSignature(
+            message.Signature.Tag,
+            SensitiveMemoryPool<byte>.Shared);
+        using var tamperedMessage = new CoseSign1Message(
+            tamperedHeader,
             message.UnprotectedHeader,
             tamperedPayload,
-            message.Signature.ToArray());
+            tamperedSignature);
 
         CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(
             tamperedMessage,
@@ -241,7 +248,7 @@ internal sealed class CoseIssuanceFlowTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         IReadOnlyDictionary<int, object> header = CoseSerialization.ParseProtectedHeader(
-            message.ProtectedHeaderBytes.Span);
+            message.ProtectedHeader.AsReadOnlySpan());
 
         Assert.IsTrue(header.ContainsKey(CoseHeaderParameters.Alg), "Protected header must contain algorithm.");
         Assert.AreEqual(issuerVerificationMethodId, header[CoseHeaderParameters.Kid]);

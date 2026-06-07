@@ -3,10 +3,11 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
+using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
@@ -35,6 +36,10 @@ internal sealed class EcdsaSd2023W3cVectorTests
     /// The test context.
     /// </summary>
     public TestContext TestContext { get; set; } = null!;
+
+    //Canonicalization/signing here is in-memory; a default context yields the
+    //secure-default SSRF policy and satisfies the policy-carrying parameter.
+    private static readonly ExchangeContext EmptyContext = new();
 
 
     /// <summary>
@@ -337,6 +342,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
         //Verify canonical statements match W3C Example 75.
@@ -527,10 +533,11 @@ internal sealed class EcdsaSd2023W3cVectorTests
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
         //Construct signed credential from base proof result.
-        var signedCredential = DeserializeCredential(SerializeCredential(credential));
+        var signedCredential = JsonSerializerExtensions.Deserialize<DataIntegritySecuredCredential>(SerializeCredential(credential), TestSetup.DefaultSerializationOptions)!;
         signedCredential.Proof =
         [
             new DataIntegrityProof
@@ -567,12 +574,10 @@ internal sealed class EcdsaSd2023W3cVectorTests
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(
-            CredentialVerificationResult.Success(),
-            holderVerifyResult,
-            "Holder must successfully verify base proof.");
+        Assert.IsTrue(holderVerifyResult.IsValid, "Holder must successfully verify base proof.");
 
         Assert.IsNotNull(holderContext, "Holder context must be returned on successful verification.");
 
@@ -633,6 +638,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(derivedCredential.Proof, "Derived credential must have proof.");
@@ -658,6 +664,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
         //Verify derived proof contains expected number of filtered signatures.
@@ -672,10 +679,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             parsedDerivedProof.Signatures,
             "Derived proof must contain expected number of filtered signatures.");
 
-        Assert.AreEqual(
-            CredentialVerificationResult.Success(),
-            verifierResult,
-            "Verifier must successfully verify derived proof.");
+        Assert.IsTrue(verifierResult.IsValid, "Verifier must successfully verify derived proof.");
 
         Assert.IsNotNull(verifierContext, "Verifier context must be returned on successful verification.");
 

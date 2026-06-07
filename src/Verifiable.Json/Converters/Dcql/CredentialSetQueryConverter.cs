@@ -1,4 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Dcql;
@@ -41,17 +43,17 @@ public sealed class CredentialSetQueryConverter: JsonConverter<CredentialSetQuer
 
             switch(propertyName)
             {
-                case CredentialSetQuery.OptionsPropertyName:
+                case var name when DcqlParameterNames.IsOptions(name):
                 {
                     queryOptions = ReadNestedStringArrays(ref reader);
                     break;
                 }
-                case CredentialSetQuery.RequiredPropertyName:
+                case var name when DcqlParameterNames.IsRequired(name):
                 {
                     required = reader.GetBoolean();
                     break;
                 }
-                case CredentialSetQuery.PurposePropertyName:
+                case var name when DcqlParameterNames.IsPurpose(name):
                 {
                     purpose = reader.GetString();
                     break;
@@ -85,7 +87,7 @@ public sealed class CredentialSetQueryConverter: JsonConverter<CredentialSetQuer
 
         writer.WriteStartObject();
 
-        writer.WritePropertyName(CredentialSetQuery.OptionsPropertyName);
+        writer.WritePropertyName(DcqlParameterNames.Options);
         writer.WriteStartArray();
         foreach(var option in value.Options)
         {
@@ -102,12 +104,12 @@ public sealed class CredentialSetQueryConverter: JsonConverter<CredentialSetQuer
 
         if(!value.Required)
         {
-            writer.WriteBoolean(CredentialSetQuery.RequiredPropertyName, false);
+            writer.WriteBoolean(DcqlParameterNames.Required, false);
         }
 
         if(value.Purpose is not null)
         {
-            writer.WriteString(CredentialSetQuery.PurposePropertyName, value.Purpose);
+            writer.WriteString(DcqlParameterNames.Purpose, value.Purpose);
         }
 
         writer.WriteEndObject();

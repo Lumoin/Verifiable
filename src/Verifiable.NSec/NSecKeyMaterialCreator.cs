@@ -1,4 +1,4 @@
-﻿using NSec.Cryptography;
+using NSec.Cryptography;
 using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;

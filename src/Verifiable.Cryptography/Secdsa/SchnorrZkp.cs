@@ -1,5 +1,6 @@
+using System.Buffers;
 using System.Numerics;
-using System.Security.Cryptography;
+using static Verifiable.Cryptography.EllipticCurveConstants;
 
 namespace Verifiable.Cryptography.Secdsa;
 
@@ -35,15 +36,20 @@ public static class SchnorrZkp
     /// <param name="publicKeys">The public key points D0 = d*G0, D1 = d*G1, ..., Dn = d*Gn.</param>
     /// <param name="witness">The witness scalar d.</param>
     /// <param name="challengeBinding">Optional context bytes bound into the challenge hash for domain separation.</param>
+    /// <param name="pool">Memory pool for the per-point encoding buffers fed into the digest primitive.</param>
+    /// <param name="cancellationToken">Token to observe while awaiting the digest computation.</param>
     /// <returns>The Schnorr proof (r, s).</returns>
-    public static SchnorrZkProof Generate(
+    public static async ValueTask<SchnorrZkProof> GenerateAsync(
         EcPoint[] generators,
         EcPoint[] publicKeys,
         BigInteger witness,
-        ReadOnlySpan<byte> challengeBinding)
+        ReadOnlyMemory<byte> challengeBinding,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(generators);
         ArgumentNullException.ThrowIfNull(publicKeys);
+        ArgumentNullException.ThrowIfNull(pool);
 
         //TODO: Replace with Rfc6979.DeriveScalar once implemented in Verifiable.Cryptography.
         //https://github.com/Lumoin/Verifiable/issues/529
@@ -54,7 +60,8 @@ public static class SchnorrZkp
             commitments[i] = EcMath.Multiply(generators[i], k);
         }
 
-        BigInteger challenge = ComputeChallengeHash(generators, commitments, publicKeys, challengeBinding);
+        BigInteger challenge = await ComputeChallengeHashAsync(
+            generators, commitments, publicKeys, challengeBinding, pool, cancellationToken).ConfigureAwait(false);
         BigInteger response = ((k - witness * challenge % EcMath.Q) % EcMath.Q + EcMath.Q) % EcMath.Q;
 
         return new SchnorrZkProof(challenge, response);
@@ -68,16 +75,21 @@ public static class SchnorrZkp
     /// <param name="generators">The generator points.</param>
     /// <param name="publicKeys">The claimed public key points Di = d*Gi.</param>
     /// <param name="challengeBinding">The same optional context bytes used during generation.</param>
+    /// <param name="pool">Memory pool for the per-point encoding buffers fed into the digest primitive.</param>
+    /// <param name="cancellationToken">Token to observe while awaiting the digest computation.</param>
     /// <returns><see langword="true"/> if the proof is valid; otherwise <see langword="false"/>.</returns>
-    public static bool Verify(
+    public static async ValueTask<bool> VerifyAsync(
         SchnorrZkProof proof,
         EcPoint[] generators,
         EcPoint[] publicKeys,
-        ReadOnlySpan<byte> challengeBinding)
+        ReadOnlyMemory<byte> challengeBinding,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(proof);
         ArgumentNullException.ThrowIfNull(generators);
         ArgumentNullException.ThrowIfNull(publicKeys);
+        ArgumentNullException.ThrowIfNull(pool);
 
         EcPoint[] reconstructedCommitments = new EcPoint[generators.Length];
         for(int i = 0; i < generators.Length; i++)
@@ -87,46 +99,101 @@ public static class SchnorrZkp
             reconstructedCommitments[i] = EcMath.Add(sG, cD);
         }
 
-        BigInteger expectedChallenge = ComputeChallengeHash(
+        BigInteger expectedChallenge = await ComputeChallengeHashAsync(
             generators,
             reconstructedCommitments,
             publicKeys,
-            challengeBinding);
+            challengeBinding,
+            pool,
+            cancellationToken).ConfigureAwait(false);
 
         return proof.R == expectedChallenge;
     }
 
 
-    private static BigInteger ComputeChallengeHash(
+    private static async ValueTask<BigInteger> ComputeChallengeHashAsync(
         EcPoint[] generators,
         EcPoint[] commitments,
         EcPoint[] publicKeys,
-        ReadOnlySpan<byte> challengeBinding)
+        ReadOnlyMemory<byte> challengeBinding,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
-        using IncrementalHash hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        const int pointByteLength = P256.UncompressedPointByteCount;
+        int totalPoints = generators.Length + commitments.Length + publicKeys.Length;
 
-        for(int i = 0; i < generators.Length; i++)
+        IMemoryOwner<byte>[] pointOwners = new IMemoryOwner<byte>[totalPoints];
+        int pointIndex = 0;
+        try
         {
-            hasher.AppendData(EcMath.EncodePointUncompressed(generators[i]));
-        }
+            BufferSegment? first = null;
+            BufferSegment? last = null;
 
-        for(int i = 0; i < commitments.Length; i++)
+            pointIndex = AppendPointSegments(generators, pool, pointOwners, pointIndex, ref first, ref last);
+            pointIndex = AppendPointSegments(commitments, pool, pointOwners, pointIndex, ref first, ref last);
+            pointIndex = AppendPointSegments(publicKeys, pool, pointOwners, pointIndex, ref first, ref last);
+
+            if(challengeBinding.Length > 0)
+            {
+                AppendSegment(challengeBinding, ref first, ref last);
+            }
+
+            ReadOnlySequence<byte> input = first is null
+                ? ReadOnlySequence<byte>.Empty
+                : new ReadOnlySequence<byte>(first, 0, last!, last!.Memory.Length);
+
+            using DigestValue hash = await CryptographicKeyEvents.ComputeDigestAsync(
+                input,
+                outputByteLength: 32,
+                tag: CryptoTags.Sha256Digest,
+                pool: pool,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            return new BigInteger(hash.AsReadOnlySpan(), isUnsigned: true, isBigEndian: true);
+
+            static int AppendPointSegments(
+                EcPoint[] points,
+                MemoryPool<byte> pool,
+                IMemoryOwner<byte>[] owners,
+                int startIndex,
+                ref BufferSegment? first,
+                ref BufferSegment? last)
+            {
+                for(int i = 0; i < points.Length; i++)
+                {
+                    IMemoryOwner<byte> owner = pool.Rent(pointByteLength);
+                    owners[startIndex] = owner;
+                    EcMath.EncodePointUncompressedInto(points[i], owner.Memory.Span);
+                    AppendSegment(owner.Memory[..pointByteLength], ref first, ref last);
+                    startIndex++;
+                }
+
+                return startIndex;
+            }
+
+            static void AppendSegment(
+                ReadOnlyMemory<byte> memory,
+                ref BufferSegment? first,
+                ref BufferSegment? last)
+            {
+                if(first is null)
+                {
+                    BufferSegment seg = new(memory);
+                    first = seg;
+                    last = seg;
+                }
+                else
+                {
+                    last = last!.Append(memory);
+                }
+            }
+        }
+        finally
         {
-            hasher.AppendData(EcMath.EncodePointUncompressed(commitments[i]));
+            for(int i = 0; i < pointIndex; i++)
+            {
+                pointOwners[i].Dispose();
+            }
         }
-
-        for(int i = 0; i < publicKeys.Length; i++)
-        {
-            hasher.AppendData(EcMath.EncodePointUncompressed(publicKeys[i]));
-        }
-
-        if(challengeBinding.Length > 0)
-        {
-            hasher.AppendData(challengeBinding);
-        }
-
-        byte[] hash = hasher.GetHashAndReset();
-
-        return new BigInteger(hash, isUnsigned: true, isBigEndian: true);
     }
 }

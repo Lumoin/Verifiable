@@ -24,16 +24,6 @@ namespace Verifiable.Core.Model.Dcql;
 public record CredentialQueryMeta
 {
     /// <summary>
-    /// The JSON property name for <see cref="VctValues"/>.
-    /// </summary>
-    public const string VctValuesPropertyName = "vct_values";
-
-    /// <summary>
-    /// The JSON property name for <see cref="DoctypeValue"/>.
-    /// </summary>
-    public const string DoctypeValuePropertyName = "doctype_value";
-
-    /// <summary>
     /// Acceptable Verifiable Credential Type (vct) values for SD-JWT VC format.
     /// </summary>
     public IReadOnlyList<string>? VctValues { get; init; }

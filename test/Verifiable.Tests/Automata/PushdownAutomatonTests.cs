@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Time.Testing;
 using System.Diagnostics;
 using Verifiable.Core.Automata;
 

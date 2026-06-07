@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+using System.Text.Json;
+using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
@@ -32,6 +33,10 @@ internal class JsonLdSelectionTests
     /// Offline context resolver using embedded W3C context documents.
     /// </summary>
     private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
+
+    //Canonicalization here is in-memory; a default context yields the
+    //secure-default SSRF policy and satisfies the policy-carrying parameter.
+    private static readonly ExchangeContext EmptyContext = new();
 
     /// <summary>
     /// Test credential with various property types for comprehensive testing.
@@ -267,6 +272,7 @@ internal class JsonLdSelectionTests
             pointers,
             RdfcCanonicalizer,
             ContextResolver,
+            EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //Verify all statements are accounted for.
@@ -303,6 +309,7 @@ internal class JsonLdSelectionTests
             mandatoryPointers: [],
             RdfcCanonicalizer,
             ContextResolver,
+            EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsEmpty(partition.MandatoryIndexes, "Empty pointers must produce no mandatory indexes.");
@@ -324,6 +331,7 @@ internal class JsonLdSelectionTests
             pointers,
             RdfcCanonicalizer,
             ContextResolver,
+            EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         var mandatoryStatements = partition.MandatoryStatements;
@@ -353,6 +361,7 @@ internal class JsonLdSelectionTests
             pointers,
             RdfcCanonicalizer,
             ContextResolver,
+            EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //Create a modified statement list (simulating relabeling).
@@ -397,11 +406,12 @@ internal class JsonLdSelectionTests
             selectPointers,
             RdfcCanonicalizer,
             ContextResolver,
+            EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //The mandatory statements from the original should match what we'd get
         //from canonicalizing the selection document.
-        var selectionCanonical = await RdfcCanonicalizer(selection, ContextResolver, TestContext.CancellationToken).ConfigureAwait(false);
+        var selectionCanonical = await RdfcCanonicalizer(selection, ContextResolver, EmptyContext, TestContext.CancellationToken).ConfigureAwait(false);
         var selectionStatements = selectionCanonical.CanonicalForm.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         //Selection canonical should be a subset of mandatory statements (approximately).

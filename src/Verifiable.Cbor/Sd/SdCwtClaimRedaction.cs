@@ -1,9 +1,10 @@
-﻿using System.Formats.Cbor;
+using System;
+using System.Collections.Generic;
+using System.Formats.Cbor;
 using System.Globalization;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.JCose.Sd;
 
 namespace Verifiable.Cbor.Sd;
 
@@ -66,11 +67,18 @@ public static class SdCwtClaimRedaction
     /// Paths to claims that should become selectively disclosable. For CWT, path segments
     /// are string representations of integer claim keys (e.g., <c>/501</c> for claim key 501).
     /// </param>
-    /// <param name="saltFactory">
-    /// Factory for generating cryptographic salt bytes for each disclosure.
+    /// <param name="generateSalt">
+    /// Delegate that allocates and fills a <see cref="Salt"/> per disclosable claim.
+    /// Each returned salt's ownership transfers to the produced <see cref="SdDisclosure"/>.
     /// </param>
     /// <param name="hashAlgorithm">
     /// The hash algorithm identifier in IANA format (e.g., <c>"sha-256"</c>).
+    /// </param>
+    /// <param name="decoyOptions">
+    /// Optional decoy-digest configuration (count policy plus per-call state) per RFC 9901 §4.2.5 (the
+    /// SD-CWT draft inherits the concept), applied once per <c>redacted_claim_keys</c> location.
+    /// <see cref="DecoyDigestOptions.None"/> (the default) means no decoys. A decoy is the same digest function applied to fresh
+    /// random bytes, so it is indistinguishable from a real digest and is ignored by verifiers.
     /// </param>
     /// <returns>
     /// A tuple containing the mandatory claims payload (with <c>redacted_claim_keys</c>
@@ -79,13 +87,17 @@ public static class SdCwtClaimRedaction
     public static (CwtPayload Payload, IReadOnlyList<SdDisclosure> Disclosures) Redact(
         byte[] cwtPayloadBytes,
         IReadOnlySet<CredentialPath> disclosablePaths,
-        SaltFactoryDelegate saltFactory,
-        string hashAlgorithm)
+        GenerateDisclosureSaltDelegate generateSalt,
+        string hashAlgorithm,
+        DecoyDigestOptions decoyOptions = default)
     {
         ArgumentNullException.ThrowIfNull(cwtPayloadBytes);
         ArgumentNullException.ThrowIfNull(disclosablePaths);
-        ArgumentNullException.ThrowIfNull(saltFactory);
+        ArgumentNullException.ThrowIfNull(generateSalt);
         ArgumentException.ThrowIfNullOrWhiteSpace(hashAlgorithm);
+
+        DecoyDigestCountDelegate resolvedDecoyCount = decoyOptions.Count ?? DecoyDigestPolicy.None;
+        object? decoyState = decoyOptions.State;
 
         //Phase 1: Group disclosable paths by parent.
         IReadOnlyDictionary<CredentialPath, IReadOnlySet<string>> groupedPaths =
@@ -97,20 +109,50 @@ public static class SdCwtClaimRedaction
         var payload = new CwtPayload();
 
         var reader = new CborReader(cwtPayloadBytes, CborConformanceMode.Lax);
-        WalkMap(
-            ref reader,
-            CredentialPath.Root,
-            groupedPaths,
-            saltFactory,
-            hashAlgorithm,
-            payload,
-            allDisclosures,
-            digestsByParent);
+
+        try
+        {
+            WalkMap(
+                ref reader,
+                CredentialPath.Root,
+                groupedPaths,
+                generateSalt,
+                hashAlgorithm,
+                payload,
+                allDisclosures,
+                digestsByParent);
+
+            //Phase 2b (optional): pad each redacted_claim_keys location with decoy digests
+            //(RFC 9901 §4.2.5). A decoy is the same digest function over fresh random bytes —
+            //indistinguishable from a real digest and ignored by verifiers. Inside the try so a
+            //failure here still disposes the disclosures created above.
+            DecoyDigests.Augment(digestsByParent, resolvedDecoyCount, decoyState, MakeDecoyDigest);
+        }
+        catch
+        {
+            //If walking fails partway through, dispose every disclosure already
+            //created. The caller never received them; we own them here.
+            foreach(SdDisclosure d in allDisclosures)
+            {
+                d.Dispose();
+            }
+            throw;
+        }
 
         //Phase 3: Place redacted_claim_keys arrays at the correct locations.
         CwtDigestPlacement.PlaceDigests(payload, digestsByParent);
 
         return (payload, allDisclosures);
+
+        //Produces one decoy digest: Hash(random salt bytes) — the same digest function a real
+        //disclosure digest goes through, over random bytes instead of an encoded disclosure.
+        //The decoy salt backs no disclosure, so this owns and disposes it.
+        byte[] MakeDecoyDigest()
+        {
+            using Salt decoySalt = generateSalt();
+
+            return SdCwtSerializer.ComputeDisclosureDigest(decoySalt.AsReadOnlySpan().ToArray(), hashAlgorithm);
+        }
     }
 
 
@@ -121,7 +163,7 @@ public static class SdCwtClaimRedaction
         ref CborReader reader,
         CredentialPath currentPath,
         IReadOnlyDictionary<CredentialPath, IReadOnlySet<string>> groupedPaths,
-        SaltFactoryDelegate saltFactory,
+        GenerateDisclosureSaltDelegate generateSalt,
         string hashAlgorithm,
         Dictionary<int, object> mandatoryOutput,
         List<SdDisclosure> allDisclosures,
@@ -141,9 +183,11 @@ public static class SdCwtClaimRedaction
 
             if(disclosableAtThisLevel is not null && disclosableAtThisLevel.Contains(keyString))
             {
-                //This claim is disclosable — read value, create disclosure, compute digest.
+                //This claim is disclosable — generate salt, create disclosure, compute digest.
+                //Salt ownership transfers into SdDisclosure.CreateProperty; CreateProperty
+                //disposes the salt on construction failure.
                 object? value = CborValueConverter.ReadValue(ref reader);
-                byte[] salt = saltFactory();
+                Salt salt = generateSalt();
                 SdDisclosure disclosure = SdDisclosure.CreateProperty(salt, keyString, value);
                 allDisclosures.Add(disclosure);
 
@@ -170,7 +214,7 @@ public static class SdCwtClaimRedaction
                         ref reader,
                         childPath,
                         groupedPaths,
-                        saltFactory,
+                        generateSalt,
                         hashAlgorithm,
                         nestedOutput,
                         allDisclosures,

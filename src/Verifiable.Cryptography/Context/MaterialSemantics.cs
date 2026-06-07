@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -85,7 +85,7 @@ namespace Verifiable.Cryptography.Context;
 /// Use code values above 1000 to avoid collisions with future library additions:
 /// </para>
 /// <code>
-/// // Application startup
+/// //Application startup.
 /// public static class CustomMaterialSemantics
 /// {
 ///     public static MaterialSemantics AwsKmsReference { get; } = MaterialSemantics.Create(1001);
@@ -205,7 +205,10 @@ public readonly struct MaterialSemantics: IEquatable<MaterialSemantics>
     public static MaterialSemantics TpmHandle { get; } = new(1);
 
 
-    private static readonly List<MaterialSemantics> semantics = new([Direct, TpmHandle]);
+    /// <summary>
+    /// All registered material semantics values, including any added via <see cref="Create"/>.
+    /// </summary>
+    private static readonly List<MaterialSemantics> semantics = [Direct, TpmHandle];
 
 
     /// <summary>

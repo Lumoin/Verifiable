@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
+namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
 
 /// <summary>
 /// Extension methods for <see cref="TpmAlgIdConstants"/>.

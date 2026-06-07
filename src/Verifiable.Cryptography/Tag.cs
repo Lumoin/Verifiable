@@ -1,4 +1,4 @@
-﻿using System.Collections.Frozen;
+using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -31,7 +31,9 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// Tags are immutable once created. Use <see cref="Create"/> to construct new tags
-/// with <see cref="FrozenDictionary{TKey, TValue}"/> for optimal read performance.
+/// and <see cref="With{T}"/> or <see cref="With"/> to derive new tags from existing ones.
+/// All methods return a new <see cref="Tag"/> backed by a
+/// <see cref="FrozenDictionary{TKey, TValue}"/> optimised for read-heavy access.
 /// </para>
 /// <para>
 /// <strong>Usage Examples</strong>
@@ -39,11 +41,14 @@ namespace Verifiable.Cryptography;
 /// <code>
 /// //Create a tag with multiple metadata items.
 /// var tag = Tag.Create(
-///     (typeof(BufferKind), BufferKind.JwtPayload),
-///     (typeof(EncodingFormat), EncodingFormat.Json));
+///     (typeof(CryptoAlgorithm), CryptoAlgorithm.P256),
+///     (typeof(Purpose), Purpose.Verification));
+///
+/// //Derive a new tag that adds or replaces a single entry.
+/// Tag tagged = tag.With(new KeyId("did:key:z6Mk..."));
 ///
 /// //Retrieve a value.
-/// var kind = tag.Get&lt;BufferKind&gt;();
+/// KeyId kid = tagged.Get&lt;KeyId&gt;();
 /// </code>
 /// </remarks>
 /// <seealso cref="CryptoTags"/>
@@ -62,10 +67,8 @@ public record Tag(IReadOnlyDictionary<Type, object> Data)
     /// <param name="items">The metadata items as type-value tuples.</param>
     /// <returns>A new tag containing the specified metadata.</returns>
     /// <remarks>
-    /// <para>
     /// This factory method creates an immutable <see cref="FrozenDictionary{TKey, TValue}"/>
-    /// internally, optimized for read-heavy access patterns typical of tag lookups.
-    /// </para>
+    /// internally, optimised for read-heavy access patterns typical of tag lookups.
     /// </remarks>
     /// <example>
     /// <code>
@@ -88,6 +91,111 @@ public record Tag(IReadOnlyDictionary<Type, object> Data)
         }
 
         return new Tag(dict.ToFrozenDictionary());
+    }
+
+
+    /// <summary>
+    /// Returns a new tag that contains all entries from this tag plus the provided
+    /// items, with the provided items taking precedence on key conflicts.
+    /// </summary>
+    /// <param name="items">The metadata items to add or replace.</param>
+    /// <returns>A new <see cref="Tag"/> with the merged entries.</returns>
+    /// <remarks>
+    /// Existing entries whose keys are not present in <paramref name="items"/> are
+    /// preserved unchanged. This tag is not modified.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// Tag updated = tag.With(
+    ///     (typeof(KeyId), new KeyId("did:key:z6Mk...")),
+    ///     (typeof(Purpose), Purpose.Exchange));
+    /// </code>
+    /// </example>
+    public Tag With(params ReadOnlySpan<(Type Key, object Value)> items)
+    {
+        if(items.IsEmpty)
+        {
+            return this;
+        }
+
+        var dict = new Dictionary<Type, object>(Data.Count + items.Length);
+        foreach(KeyValuePair<Type, object> existing in Data)
+        {
+            dict[existing.Key] = existing.Value;
+        }
+
+        foreach((Type key, object value) in items)
+        {
+            dict[key] = value;
+        }
+
+        return new Tag(dict.ToFrozenDictionary());
+    }
+
+
+    /// <summary>
+    /// Returns a new tag that contains all entries from this tag plus one additional
+    /// entry, inferred from the type of <paramref name="value"/>.
+    /// </summary>
+    /// <typeparam name="T">The type used as the dictionary key.</typeparam>
+    /// <param name="value">The value to add or replace.</param>
+    /// <returns>A new <see cref="Tag"/> with the entry added or replaced.</returns>
+    /// <remarks>
+    /// This is the preferred overload for single-entry updates since it avoids
+    /// spelling out the <see cref="Type"/> explicitly.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// Tag tagged = tag.With(new KeyId("did:key:z6Mk..."));
+    /// </code>
+    /// </example>
+    public Tag With<T>(T value) where T : notnull
+    {
+        var dict = new Dictionary<Type, object>(Data.Count + 1);
+        foreach(KeyValuePair<Type, object> existing in Data)
+        {
+            dict[existing.Key] = existing.Value;
+        }
+
+        dict[typeof(T)] = value;
+        return new Tag(dict.ToFrozenDictionary());
+    }
+
+
+    /// <summary>
+    /// Returns a new tag that contains all entries from this tag except the entry
+    /// keyed by <typeparamref name="T"/>. If no such entry exists the original tag
+    /// is returned unchanged.
+    /// </summary>
+    /// <typeparam name="T">The type key of the entry to remove.</typeparam>
+    /// <returns>
+    /// A new <see cref="Tag"/> without the entry for <typeparamref name="T"/>, or
+    /// this tag if no such entry was present.
+    /// </returns>
+    /// <example>
+    /// <code>
+    /// Tag stripped = tag.Without&lt;KeyId&gt;();
+    /// </code>
+    /// </example>
+    public Tag Without<T>()
+    {
+        if(!Data.ContainsKey(typeof(T)))
+        {
+            return this;
+        }
+
+        var dict = new Dictionary<Type, object>(Data.Count - 1);
+        foreach(KeyValuePair<Type, object> existing in Data)
+        {
+            if(existing.Key != typeof(T))
+            {
+                dict[existing.Key] = existing.Value;
+            }
+        }
+
+        return dict.Count == 0
+            ? Empty
+            : new Tag(dict.ToFrozenDictionary());
     }
 
 
@@ -136,7 +244,7 @@ public record Tag(IReadOnlyDictionary<Type, object> Data)
 
 
     /// <summary>
-    /// Gets the value associated with the specified key in the Tag data.
+    /// Gets the value associated with the specified key in the tag data.
     /// </summary>
     /// <param name="key">The key of the value to get.</param>
     /// <returns>The value associated with the specified key.</returns>
@@ -149,9 +257,6 @@ public record Tag(IReadOnlyDictionary<Type, object> Data)
     public override string ToString() => TagString;
 
 
-    /// <summary>
-    /// Debugging view of the Tag.
-    /// </summary>
     private string DebuggerView
     {
         get

@@ -1,15 +1,15 @@
-﻿using System.Buffers;
+using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Verifiable.Jose;
 
 
 namespace Verifiable.JCose
 {
     /// <summary>
-    /// Delegate for converting algorithm and key material to JWK format.
+    /// Delegate for converting algorithm and key material to a
+    /// <see cref="JsonWebKey"/>.
     /// </summary>
-    public delegate Dictionary<string, object> AlgorithmToJwkDelegate(CryptoAlgorithm algorithm, Purpose purpose, ReadOnlySpan<byte> keyMaterial, EncodeDelegate base64UrlEncoder);
+    public delegate JsonWebKey AlgorithmToJwkDelegate(CryptoAlgorithm algorithm, Purpose purpose, ReadOnlySpan<byte> keyMaterial, EncodeDelegate base64UrlEncoder);
 
     /// <summary>
     /// Delegate for converting algorithm and key material to Base58 format.
@@ -29,7 +29,7 @@ namespace Verifiable.JCose
     /// <summary>
     /// Delegate for converting a JWA algorithm identifier to a <see cref="Tag"/>.
     /// </summary>
-    /// <param name="jwaAlgorithm">The JWA algorithm identifier (e.g., "ES256", "RS256").</param>
+    /// <param name="jwaAlgorithm">The JWA algorithm identifier (e.g., <c>ES256</c>, <c>RS256</c>).</param>
     /// <param name="purpose">The intended purpose (signing or verification).</param>
     /// <returns>The corresponding <see cref="Tag"/>.</returns>
     public delegate Tag JwaToTagDelegate(string jwaAlgorithm, Purpose purpose);
@@ -56,10 +56,59 @@ namespace Verifiable.JCose
     /// <returns>The corresponding <see cref="Tag"/>.</returns>
     public delegate Tag CoseToTagDelegate(int coseAlgorithm, Purpose purpose);
 
+    /// <summary>
+    /// Delegate for converting a <see cref="Tag"/> to a JWK elliptic curve name string
+    /// for use in JWE EPK headers.
+    /// </summary>
+    /// <param name="tag">The tag containing algorithm information.</param>
+    /// <returns>
+    /// The JWK curve name, e.g. <c>P-256</c>, <c>P-384</c>, or <c>P-521</c>, as defined in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.2.1.1">RFC 7518 §6.2.1.1</see>.
+    /// </returns>
+    public delegate string TagToEpkCrvDelegate(Tag tag);
 
     /// <summary>
-    /// This class defines default conversions from <em>Verifiable</em> internal representation to others
-    /// and from <em>Verifiable</em> representation to other formats.
+    /// Delegate for converting a JWK elliptic curve name string from a JWE EPK header to a
+    /// <see cref="Tag"/> and its corresponding <see cref="EllipticCurveTypes"/> value.
+    /// </summary>
+    /// <param name="crv">
+    /// The JWK curve name, e.g. <c>P-256</c>, <c>P-384</c>, or <c>P-521</c>, as defined in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.2.1.1">RFC 7518 §6.2.1.1</see>.
+    /// </param>
+    /// <returns>
+    /// The corresponding exchange <see cref="Tag"/> for the EPK public key and the
+    /// <see cref="EllipticCurveTypes"/> value needed for point-on-curve validation.
+    /// </returns>
+    public delegate (Tag EpkTag, EllipticCurveTypes CurveType) EpkCrvToTagDelegate(string crv);
+
+
+    /// <summary>
+    /// Delegate for converting a COSE_Key (RFC 9052 §7) into a
+    /// <see cref="Tag"/> describing the corresponding internal key material.
+    /// Parallels <c>JwkToAlgorithmDelegate</c> for the COSE side.
+    /// </summary>
+    /// <param name="kty">
+    /// The COSE_Key <c>kty</c> parameter (RFC 9052 §7.1). <c>1 = OKP</c>,
+    /// <c>2 = EC2</c>, <c>3 = RSA</c>, <c>4 = Symmetric</c>.
+    /// </param>
+    /// <param name="curve">
+    /// The COSE_Key <c>crv</c> parameter (IANA COSE Elliptic Curves
+    /// registry) for EC2 and OKP keys; pass <see langword="null"/> for key
+    /// types where curve is not applicable.
+    /// </param>
+    /// <param name="purpose">
+    /// The intended purpose — <see cref="Purpose.Verification"/> for public
+    /// keys carried in MSO <c>DeviceKeyInfo</c>, <see cref="Purpose.Signing"/>
+    /// for private keys, <see cref="Purpose.Exchange"/> for X25519/X448 OKP
+    /// agreement keys.
+    /// </param>
+    /// <returns>The corresponding <see cref="Tag"/> for the key material.</returns>
+    public delegate Tag CoseKeyToAlgorithmDelegate(int kty, int? curve, Purpose purpose);
+
+
+    /// <summary>
+    /// Default conversions between the internal cryptographic representation and external
+    /// formats such as JWK, Base58/Multibase, JWA, and COSE.
     /// </summary>
     public static class CryptoFormatConversions
     {
@@ -79,13 +128,16 @@ namespace Verifiable.JCose
                 (string alg, Purpose p) when WellKnownJwaValues.IsEs256(alg) && p.Equals(Purpose.Signing) => CryptoTags.P256PrivateKey,
                 (string alg, Purpose p) when WellKnownJwaValues.IsEs384(alg) && p.Equals(Purpose.Signing) => CryptoTags.P384PrivateKey,
                 (string alg, Purpose p) when WellKnownJwaValues.IsEs512(alg) && p.Equals(Purpose.Signing) => CryptoTags.P521PrivateKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsEs256k1(alg) && p.Equals(Purpose.Signing) => CryptoTags.Secp256k1PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEs256K(alg) && p.Equals(Purpose.Signing) => CryptoTags.Secp256k1PrivateKey,
 
                 //ECDSA verification.
                 (string alg, Purpose p) when WellKnownJwaValues.IsEs256(alg) && p.Equals(Purpose.Verification) => CryptoTags.P256PublicKey,
                 (string alg, Purpose p) when WellKnownJwaValues.IsEs384(alg) && p.Equals(Purpose.Verification) => CryptoTags.P384PublicKey,
                 (string alg, Purpose p) when WellKnownJwaValues.IsEs512(alg) && p.Equals(Purpose.Verification) => CryptoTags.P521PublicKey,
-                (string alg, Purpose p) when WellKnownJwaValues.IsEs256k1(alg) && p.Equals(Purpose.Verification) => CryptoTags.Secp256k1PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEs256K(alg) && p.Equals(Purpose.Verification) => CryptoTags.Secp256k1PublicKey,
+
+                //ECDH key exchange — private keys (curve determined at call site from crv).
+                (string alg, Purpose p) when WellKnownJwaValues.IsEcdha(alg) && p.Equals(Purpose.Exchange) => CryptoTags.P256ExchangePrivateKey,
 
                 //EdDSA signing and verification.
                 (string alg, Purpose p) when WellKnownJwaValues.IsEdDsa(alg) && p.Equals(Purpose.Signing) => CryptoTags.Ed25519PrivateKey,
@@ -121,6 +173,18 @@ namespace Verifiable.JCose
                 (string alg, Purpose p) when WellKnownJwaValues.IsMlDsa65(alg) && p.Equals(Purpose.Verification) => CryptoTags.MlDsa65PublicKey,
                 (string alg, Purpose p) when WellKnownJwaValues.IsMlDsa87(alg) && p.Equals(Purpose.Verification) => CryptoTags.MlDsa87PublicKey,
 
+                //RFC 9784 / draft-ietf-jose-fully-specified-algorithms Brainpool ECDSA signing.
+                (string alg, Purpose p) when WellKnownJwaValues.IsEsb256(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP256r1PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEsb320(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP320r1PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEsb384(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP384r1PrivateKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEsb512(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP512r1PrivateKey,
+
+                //Brainpool ECDSA verification.
+                (string alg, Purpose p) when WellKnownJwaValues.IsEsb256(alg) && p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP256r1PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEsb320(alg) && p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP320r1PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEsb384(alg) && p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP384r1PublicKey,
+                (string alg, Purpose p) when WellKnownJwaValues.IsEsb512(alg) && p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP512r1PublicKey,
+
                 _ => throw new NotSupportedException($"JWA algorithm '{jwaAlgorithm}' with purpose '{purpose}' is not supported.")
             };
         };
@@ -130,8 +194,9 @@ namespace Verifiable.JCose
         /// Default converter from <see cref="Tag"/> to JWA algorithm identifier.
         /// </summary>
         /// <remarks>
-        /// For RSA algorithms, this returns the SHA-256 variant (RS256) by default.
-        /// Use <see cref="GetJwaAlgorithm(Tag, string?, bool)"/> for explicit hash algorithm selection.
+        /// For RSA algorithms, returns the SHA-256 variant (RS256) by default.
+        /// Use <see cref="CryptoFormatConversionsExtensions.GetJwaAlgorithm"/> for explicit
+        /// hash algorithm selection.
         /// </remarks>
         public static TagToJwaDelegate DefaultTagToJwaConverter => tag =>
         {
@@ -143,83 +208,29 @@ namespace Verifiable.JCose
                 var a when a.Equals(CryptoAlgorithm.P256) => WellKnownJwaValues.Es256,
                 var a when a.Equals(CryptoAlgorithm.P384) => WellKnownJwaValues.Es384,
                 var a when a.Equals(CryptoAlgorithm.P521) => WellKnownJwaValues.Es512,
-                var a when a.Equals(CryptoAlgorithm.Secp256k1) => WellKnownJwaValues.Es256k1,
+                var a when a.Equals(CryptoAlgorithm.Secp256k1) => WellKnownJwaValues.Es256K,
                 var a when a.Equals(CryptoAlgorithm.Ed25519) => WellKnownJwaValues.EdDsa,
                 var a when a.Equals(CryptoAlgorithm.Rsa2048) || a.Equals(CryptoAlgorithm.Rsa4096) => WellKnownJwaValues.Rs256,
                 var a when a.Equals(CryptoAlgorithm.MlDsa44) => WellKnownJwaValues.MlDsa44,
                 var a when a.Equals(CryptoAlgorithm.MlDsa65) => WellKnownJwaValues.MlDsa65,
                 var a when a.Equals(CryptoAlgorithm.MlDsa87) => WellKnownJwaValues.MlDsa87,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP256r1) => WellKnownJwaValues.Esb256,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP320r1) => WellKnownJwaValues.Esb320,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP384r1) => WellKnownJwaValues.Esb384,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP512r1) => WellKnownJwaValues.Esb512,
                 _ => throw new NotSupportedException($"CryptoAlgorithm '{algorithm}' does not have a JWA mapping.")
             };
         };
 
 
         /// <summary>
-        /// Gets the JWA algorithm identifier from a <see cref="Tag"/> with explicit hash algorithm selection for RSA.
-        /// </summary>
-        /// <param name="tag">The tag containing algorithm information.</param>
-        /// <param name="hashAlgorithm">The hash algorithm name for RSA signatures (e.g., "SHA256", "SHA384", "SHA512").</param>
-        /// <param name="usePss">Whether to use RSA-PSS padding instead of PKCS#1 v1.5.</param>
-        /// <returns>The JWA algorithm identifier.</returns>
-        /// <exception cref="NotSupportedException">Thrown when the tag does not map to a JWA algorithm.</exception>
-        public static string GetJwaAlgorithm(Tag tag, string? hashAlgorithm = null, bool usePss = false)
-        {
-            ArgumentNullException.ThrowIfNull(tag);
-
-            CryptoAlgorithm algorithm = tag.Get<CryptoAlgorithm>();
-            if(algorithm.Equals(CryptoAlgorithm.P256))
-            {
-                return WellKnownJwaValues.Es256;
-            }
-
-            if(algorithm.Equals(CryptoAlgorithm.P384))
-            {
-                return WellKnownJwaValues.Es384;
-            }
-
-            if(algorithm.Equals(CryptoAlgorithm.P521))
-            {
-                return WellKnownJwaValues.Es512;
-            }
-
-            if(algorithm.Equals(CryptoAlgorithm.Secp256k1))
-            {
-                return WellKnownJwaValues.Es256k1;
-            }
-
-            if(algorithm.Equals(CryptoAlgorithm.Ed25519))
-            {
-                return WellKnownJwaValues.EdDsa;
-            }
-
-            if(algorithm.Equals(CryptoAlgorithm.Rsa2048) || algorithm.Equals(CryptoAlgorithm.Rsa4096))
-            {
-                return (hashAlgorithm, usePss) switch
-                {
-                    ("SHA384", false) => WellKnownJwaValues.Rs384,
-                    ("SHA512", false) => WellKnownJwaValues.Rs512,
-                    (_, false) => WellKnownJwaValues.Rs256,
-                    ("SHA384", true) => WellKnownJwaValues.Ps384,
-                    ("SHA512", true) => WellKnownJwaValues.Ps512,
-                    (_, true) => WellKnownJwaValues.Ps256
-                };
-            }
-
-            throw new NotSupportedException($"CryptoAlgorithm '{algorithm}' does not have a JWA mapping.");
-        }
-
-
-        /// <summary>
         /// Default converter from <see cref="Tag"/> to COSE algorithm identifier.
         /// </summary>
         /// <remarks>
-        /// <para>
-        /// Maps internal <see cref="CryptoAlgorithm"/> values to COSE integer algorithm identifiers
-        /// as defined in <see href="https://www.iana.org/assignments/cose/cose.xhtml#algorithms">IANA COSE Algorithms</see>.
-        /// </para>
-        /// <para>
-        /// For RSA algorithms, this returns the SHA-256 PSS variant (PS256 / -37) by default.
-        /// </para>
+        /// Maps internal <see cref="CryptoAlgorithm"/> values to COSE integer algorithm
+        /// identifiers as defined in
+        /// <see href="https://www.iana.org/assignments/cose/cose.xhtml#algorithms">IANA COSE Algorithms</see>.
+        /// For RSA algorithms, returns the SHA-256 PSS variant (PS256 / -37) by default.
         /// </remarks>
         public static TagToCoseDelegate DefaultTagToCoseConverter => tag =>
         {
@@ -236,6 +247,10 @@ namespace Verifiable.JCose
                 var a when a.Equals(CryptoAlgorithm.MlDsa44) => WellKnownCoseAlgorithms.MlDsa44,
                 var a when a.Equals(CryptoAlgorithm.MlDsa65) => WellKnownCoseAlgorithms.MlDsa65,
                 var a when a.Equals(CryptoAlgorithm.MlDsa87) => WellKnownCoseAlgorithms.MlDsa87,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP256r1) => WellKnownCoseAlgorithms.Esb256,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP320r1) => WellKnownCoseAlgorithms.Esb320,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP384r1) => WellKnownCoseAlgorithms.Esb384,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP512r1) => WellKnownCoseAlgorithms.Esb512,
                 _ => throw new NotSupportedException($"CryptoAlgorithm '{algorithm}' does not have a COSE algorithm mapping.")
             };
         };
@@ -257,6 +272,32 @@ namespace Verifiable.JCose
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEs256(alg) && p.Equals(Purpose.Verification) => CryptoTags.P256PublicKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEs384(alg) && p.Equals(Purpose.Verification) => CryptoTags.P384PublicKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEs512(alg) && p.Equals(Purpose.Verification) => CryptoTags.P521PublicKey,
+
+                //RFC 9784 fully-specified ECDSA (signing). Maps to the same
+                //P-curve key tags as the non-fully-specified ES variants —
+                //ESP pins the hash explicitly but the key material is the
+                //same EC key on the same curve.
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsp256(alg) && p.Equals(Purpose.Signing) => CryptoTags.P256PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsp384(alg) && p.Equals(Purpose.Signing) => CryptoTags.P384PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsp512(alg) && p.Equals(Purpose.Signing) => CryptoTags.P521PrivateKey,
+
+                //RFC 9784 fully-specified ECDSA (verification).
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsp256(alg) && p.Equals(Purpose.Verification) => CryptoTags.P256PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsp384(alg) && p.Equals(Purpose.Verification) => CryptoTags.P384PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsp512(alg) && p.Equals(Purpose.Verification) => CryptoTags.P521PublicKey,
+
+                //RFC 9784 Brainpool ECDSA (signing). Hash binding per RFC 9784 §5:
+                //ESB256 → SHA-256, ESB320 → SHA-384, ESB384 → SHA-384, ESB512 → SHA-512.
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb256(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP256r1PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb320(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP320r1PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb384(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP384r1PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb512(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP512r1PrivateKey,
+
+                //RFC 9784 Brainpool ECDSA (verification).
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb256(alg) && p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP256r1PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb320(alg) && p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP320r1PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb384(alg) && p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP384r1PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb512(alg) && p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP512r1PublicKey,
 
                 //EdDSA signing and verification.
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEdDsa(alg) && p.Equals(Purpose.Signing) => CryptoTags.Ed25519PrivateKey,
@@ -288,340 +329,397 @@ namespace Verifiable.JCose
 
 
         /// <summary>
-        /// Gets the signing <see cref="Tag"/> for the specified JWA algorithm.
+        /// Default converter from algorithm and key material to a
+        /// <see cref="JsonWebKey"/>.
         /// </summary>
-        /// <param name="jwaAlgorithm">The JWA algorithm identifier.</param>
-        /// <returns>The corresponding signing tag.</returns>
-        public static Tag GetSigningTag(string jwaAlgorithm)
-        {
-            return DefaultJwaToTagConverter(jwaAlgorithm, Purpose.Signing);
-        }
-
-
-        /// <summary>
-        /// Gets the verification <see cref="Tag"/> for the specified JWA algorithm.
-        /// </summary>
-        /// <param name="jwaAlgorithm">The JWA algorithm identifier.</param>
-        /// <returns>The corresponding verification tag.</returns>
-        public static Tag GetVerificationTag(string jwaAlgorithm)
-        {
-            return DefaultJwaToTagConverter(jwaAlgorithm, Purpose.Verification);
-        }
-
-
-        /// <summary>
-        /// Gets the signature <see cref="Tag"/> for the specified JWA algorithm.
-        /// </summary>
-        /// <param name="jwaAlgorithm">The JWA algorithm identifier.</param>
-        /// <returns>The corresponding signature tag.</returns>
-        public static Tag GetSignatureTag(string jwaAlgorithm)
-        {
-            if(string.IsNullOrEmpty(jwaAlgorithm))
-            {
-                throw new ArgumentException("JWA algorithm cannot be null or empty.", nameof(jwaAlgorithm));
-            }
-
-            if(WellKnownJwaValues.IsEs256(jwaAlgorithm))
-            {
-                return CryptoTags.P256Signature;
-            }
-
-            if(WellKnownJwaValues.IsEs384(jwaAlgorithm))
-            {
-                return CryptoTags.P384Signature;
-            }
-
-            if(WellKnownJwaValues.IsEs512(jwaAlgorithm))
-            {
-                return CryptoTags.P521Signature;
-            }
-
-            if(WellKnownJwaValues.IsEs256k1(jwaAlgorithm))
-            {
-                return CryptoTags.Secp256k1Signature;
-            }
-
-            if(WellKnownJwaValues.IsEdDsa(jwaAlgorithm))
-            {
-                return CryptoTags.Ed25519Signature;
-            }
-
-            //RSA and HMAC signatures don't have specific tags defined in Tag class.
-            //Return Empty for now; could be extended later.
-            if(WellKnownJwaValues.IsRs256(jwaAlgorithm) || WellKnownJwaValues.IsRs384(jwaAlgorithm) || WellKnownJwaValues.IsRs512(jwaAlgorithm))
-            {
-                return Tag.Empty;
-            }
-
-            if(WellKnownJwaValues.IsPs256(jwaAlgorithm) || WellKnownJwaValues.IsPs384(jwaAlgorithm) || WellKnownJwaValues.IsPs512(jwaAlgorithm))
-            {
-                return Tag.Empty;
-            }
-
-            throw new NotSupportedException($"JWA algorithm '{jwaAlgorithm}' is not supported for signature tags.");
-        }
-
-
-        /// <summary>
-        /// Default converter from algorithm and key material to JWK format.
-        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Supports signing/verification keys for P-256, P-384, P-521, Secp256k1,
+        /// RSA-2048, RSA-4096, Ed25519, and X25519, ECDH exchange keys for P-256,
+        /// P-384, and P-521, and post-quantum signing keys for ML-DSA-44, ML-DSA-65,
+        /// and ML-DSA-87. Exchange keys are emitted without an <c>alg</c> field since
+        /// the curve name alone identifies them. ML-DSA keys are emitted with
+        /// <c>kty=AKP</c>, an <c>alg</c> identifying the variant, and the raw
+        /// public-key bytes under the <c>pub</c> parameter.
+        /// </para>
+        /// <para>
+        /// The converter sets the cryptographic fields only. Callers layer
+        /// <c>kid</c> and <c>use</c> on top by assigning the corresponding
+        /// properties on the returned <see cref="JsonWebKey"/>.
+        /// </para>
+        /// </remarks>
         public static AlgorithmToJwkDelegate DefaultAlgorithmToJwkConverter => (algorithm, purpose, keyMaterial, base64UrlEncoder) =>
         {
-            static Dictionary<string, object> AddEcHeaders(string alg, string crv, ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, EllipticCurveTypes curveType, EncodeDelegate encoder)
+            static JsonWebKey BuildEc(
+                ReadOnlySpan<byte> keyMaterial,
+                EllipticCurveTypes curveType,
+                string crv,
+                string? alg,
+                EncodeDelegate encoder)
             {
-                ReadOnlySpan<byte> compressedXAndY = keyMaterial;
-                byte[] uncompressedY = EllipticCurveUtilities.Decompress(compressedXAndY, curveType);
-                ReadOnlySpan<byte> uncompressedX = compressedXAndY.Slice(1);
+                EllipticCurveUtilities.ExtractCoordinates(
+                    keyMaterial, curveType, out ReadOnlySpan<byte> x, out ReadOnlySpan<byte> y);
 
-                var jwtX = EncodeForJwk(uncompressedX, encoder);
-                var jwtY = EncodeForJwk(uncompressedY, encoder);
-
-                headers.Add(JwkProperties.Kty, WellKnownKeyTypeValues.Ec);
-                headers.Add(JwkProperties.Alg, alg);
-                headers.Add(JwkProperties.Crv, crv);
-                headers.Add(JwkProperties.X, jwtX);
-                headers.Add(JwkProperties.Y, jwtY);
-
-                return headers;
+                return new JsonWebKey
+                {
+                    Kty = WellKnownKeyTypeValues.Ec,
+                    Alg = alg,
+                    Crv = crv,
+                    X = encoder(x),
+                    Y = encoder(y)
+                };
             }
 
-            static Dictionary<string, object> AddRsaHeaders(string alg, ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, Tag keyTag, EncodeDelegate encoder)
+            static JsonWebKey BuildRsa(
+                ReadOnlySpan<byte> keyMaterial,
+                EncodeDelegate encoder)
             {
-                var encodingScheme = keyTag.Get<EncodingScheme>();
-                byte[] rawModulus = encodingScheme switch
+                //Decode handles both raw and DER-encoded modulus input — raw
+                //pass-through for keys reconstructed from a JWK, DER-strip for
+                //keys generated through System.Security.Cryptography. The
+                //previous EncodingScheme switch hardcoded the DER path via
+                //the well-known CryptoTags.RsaXxxxPublicKey tag literal,
+                //which broke the JWK round-trip path; collapse to the single
+                //RsaUtilities.Decode call now that the function is length-
+                //tolerant.
+                byte[] rawModulus = RsaUtilities.Decode(keyMaterial);
+
+                return new JsonWebKey
                 {
-                    EncodingScheme enc when enc.Equals(EncodingScheme.Der) => RsaUtilities.Decode(keyMaterial),
-                    EncodingScheme enc when enc.Equals(EncodingScheme.Raw) => keyMaterial.ToArray(),
-                    _ => throw new ArgumentException($"Unsupported encoding scheme for RSA: {encodingScheme}")
+                    Kty = WellKnownKeyTypeValues.Rsa,
+                    Alg = WellKnownJwaValues.Rs256,
+                    N = encoder(rawModulus),
+                    E = RsaUtilities.DefaultExponent
+                };
+            }
+
+            static JsonWebKey BuildEd25519(
+                ReadOnlySpan<byte> keyMaterial,
+                EncodeDelegate encoder) => new()
+                {
+                    Kty = WellKnownKeyTypeValues.Okp,
+                    Alg = WellKnownJwaValues.EdDsa,
+                    Crv = WellKnownCurveValues.Ed25519,
+                    X = encoder(keyMaterial)
                 };
 
-                ReadOnlySpan<byte> keyBytes = rawModulus;
-                var base64UrlencodedKeyBytes = EncodeForJwk(keyBytes, encoder);
+            static JsonWebKey BuildX25519(
+                ReadOnlySpan<byte> keyMaterial,
+                EncodeDelegate encoder) => new()
+                {
+                    //Exchange keys carry no alg — crv alone identifies them per RFC 7518 §6.2.
+                    Kty = WellKnownKeyTypeValues.Okp,
+                    Crv = WellKnownCurveValues.X25519,
+                    X = encoder(keyMaterial)
+                };
 
-                headers.Add(JwkProperties.Alg, alg);
-                headers.Add(JwkProperties.Kty, WellKnownKeyTypeValues.Rsa);
-                headers.Add(JwkProperties.E, RsaUtilities.DefaultExponent);
-                headers.Add(JwkProperties.N, base64UrlencodedKeyBytes);
+            static JsonWebKey BuildMlDsa(
+                ReadOnlySpan<byte> keyMaterial,
+                string alg,
+                EncodeDelegate encoder) => new()
+                {
+                    Kty = WellKnownKeyTypeValues.Akp,
+                    Alg = alg,
+                    Pub = encoder(keyMaterial)
+                };
 
-                return headers;
-            }
-
-            static Dictionary<string, object> AddEd25519Headers(ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, EncodeDelegate encoder)
-            {
-                var base64UrlencodedKeyBytes = EncodeForJwk(keyMaterial, encoder);
-
-                headers.Add(JwkProperties.Kty, WellKnownKeyTypeValues.Okp);
-                headers.Add(JwkProperties.Alg, WellKnownJwaValues.EdDsa);
-                headers.Add(JwkProperties.Crv, WellKnownCurveValues.Ed25519);
-                headers.Add(JwkProperties.X, base64UrlencodedKeyBytes);
-
-                return headers;
-            }
-
-            static Dictionary<string, object> AddX25519Headers(ReadOnlySpan<byte> keyMaterial, Dictionary<string, object> headers, EncodeDelegate encoder)
-            {
-                var base64UrlencodedKeyBytes = EncodeForJwk(keyMaterial, encoder);
-
-                headers.Add(JwkProperties.Kty, WellKnownKeyTypeValues.Okp);
-                headers.Add(JwkProperties.Crv, WellKnownCurveValues.X25519);
-                headers.Add(JwkProperties.X, base64UrlencodedKeyBytes);
-
-                return headers;
-            }
-
-            //Helper method to encode data for JWK using the provided encoder.
-            static string EncodeForJwk(ReadOnlySpan<byte> data, EncodeDelegate encoder)
-            {
-                return encoder(data);
-            }
-
-            var jwkHeaders = new Dictionary<string, object>();
             return (algorithm, purpose) switch
             {
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) => AddEcHeaders(WellKnownJwaValues.Es256, WellKnownCurveValues.P256, keyMaterial, jwkHeaders, EllipticCurveTypes.P256, base64UrlEncoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) => AddEcHeaders(WellKnownJwaValues.Es384, WellKnownCurveValues.P384, keyMaterial, jwkHeaders, EllipticCurveTypes.P384, base64UrlEncoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) => AddEcHeaders(WellKnownJwaValues.Es512, WellKnownCurveValues.P521, keyMaterial, jwkHeaders, EllipticCurveTypes.P521, base64UrlEncoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) => AddEcHeaders(WellKnownJwaValues.Es256k1, WellKnownCurveValues.Secp256k1, keyMaterial, jwkHeaders, EllipticCurveTypes.Secp256k1, base64UrlEncoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => AddRsaHeaders(WellKnownJwaValues.Rs256, keyMaterial, jwkHeaders, CryptoTags.Rsa2048PublicKey, base64UrlEncoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => AddRsaHeaders(WellKnownJwaValues.Rs256, keyMaterial, jwkHeaders, CryptoTags.Rsa4096PublicKey, base64UrlEncoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) => AddEd25519Headers(keyMaterial, jwkHeaders, base64UrlEncoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) => AddX25519Headers(keyMaterial, jwkHeaders, base64UrlEncoder),
-                _ => throw new ArgumentException($"Unknown combination of algorithm and purpose: \"{algorithm}\", \"{purpose}\".")
+                //Signing/verification EC keys — compressed storage, alg emitted.
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) =>
+                    BuildEc(keyMaterial, EllipticCurveTypes.P256, WellKnownCurveValues.P256, WellKnownJwaValues.Es256, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) =>
+                    BuildEc(keyMaterial, EllipticCurveTypes.P384, WellKnownCurveValues.P384, WellKnownJwaValues.Es384, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) =>
+                    BuildEc(keyMaterial, EllipticCurveTypes.P521, WellKnownCurveValues.P521, WellKnownJwaValues.Es512, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) =>
+                    BuildEc(keyMaterial, EllipticCurveTypes.Secp256k1, WellKnownCurveValues.Secp256k1, WellKnownJwaValues.Es256K, base64UrlEncoder),
+
+                //Brainpool ECDSA verification keys per RFC 5639 / RFC 9784.
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP256r1) && p.Equals(Purpose.Verification) =>
+                    BuildEc(keyMaterial, EllipticCurveTypes.BrainpoolP256r1, WellKnownCurveValues.BrainpoolP256r1, WellKnownJwaValues.Esb256, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP320r1) && p.Equals(Purpose.Verification) =>
+                    BuildEc(keyMaterial, EllipticCurveTypes.BrainpoolP320r1, WellKnownCurveValues.BrainpoolP320r1, WellKnownJwaValues.Esb320, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP384r1) && p.Equals(Purpose.Verification) =>
+                    BuildEc(keyMaterial, EllipticCurveTypes.BrainpoolP384r1, WellKnownCurveValues.BrainpoolP384r1, WellKnownJwaValues.Esb384, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP512r1) && p.Equals(Purpose.Verification) =>
+                    BuildEc(keyMaterial, EllipticCurveTypes.BrainpoolP512r1, WellKnownCurveValues.BrainpoolP512r1, WellKnownJwaValues.Esb512, base64UrlEncoder),
+
+                //ECDH exchange keys — uncompressed storage, no alg emitted.
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Exchange) =>
+                    BuildEc(keyMaterial, EllipticCurveTypes.P256, WellKnownCurveValues.P256, null, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Exchange) =>
+                    BuildEc(keyMaterial, EllipticCurveTypes.P384, WellKnownCurveValues.P384, null, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Exchange) =>
+                    BuildEc(keyMaterial, EllipticCurveTypes.P521, WellKnownCurveValues.P521, null, base64UrlEncoder),
+
+                //RSA keys.
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) =>
+                    BuildRsa(keyMaterial, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) =>
+                    BuildRsa(keyMaterial, base64UrlEncoder),
+
+                //OKP keys.
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) =>
+                    BuildEd25519(keyMaterial, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) =>
+                    BuildX25519(keyMaterial, base64UrlEncoder),
+
+                //ML-DSA signing/verification keys — emitted as kty=AKP with the raw
+                //public-key bytes under the "pub" parameter per the emerging
+                //post-quantum JWK drafts.
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa44) && p.Equals(Purpose.Verification) =>
+                    BuildMlDsa(keyMaterial, WellKnownJwaValues.MlDsa44, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa65) && p.Equals(Purpose.Verification) =>
+                    BuildMlDsa(keyMaterial, WellKnownJwaValues.MlDsa65, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa87) && p.Equals(Purpose.Verification) =>
+                    BuildMlDsa(keyMaterial, WellKnownJwaValues.MlDsa87, base64UrlEncoder),
+
+                _ => throw new ArgumentException($"Unknown combination of algorithm and purpose: '{algorithm}', '{purpose}'.")
             };
         };
+
 
         /// <summary>
         /// Default converter from algorithm and key material to Base58 format.
         /// </summary>
         public static AlgorithmToBase58Delegate DefaultAlgorithmToBase58Converter => (algorithm, purpose, keyMaterial, base58Encoder) =>
         {
-            static string EncodeKey(ReadOnlySpan<byte> keyMaterial, ReadOnlySpan<byte> multicodecHeader, EncodeDelegate encoder)
+            static string EncodeKey(
+                ReadOnlySpan<byte> keyMaterial,
+                ReadOnlySpan<byte> multicodecHeader,
+                EncodeDelegate encoder)
             {
-                return MultibaseSerializer.Encode(keyMaterial, multicodecHeader, MultibaseAlgorithms.Base58Btc, encoder, SensitiveMemoryPool<byte>.Shared);
+                return MultibaseSerializer.Encode(
+                    keyMaterial,
+                    multicodecHeader,
+                    MultibaseAlgorithms.Base58Btc,
+                    encoder,
+                    SensitiveMemoryPool<byte>.Shared);
             }
 
             return (algorithm, purpose) switch
             {
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) => EncodeKey(keyMaterial, MulticodecHeaders.P256PublicKey, base58Encoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) => EncodeKey(keyMaterial, MulticodecHeaders.P384PublicKey, base58Encoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) => EncodeKey(keyMaterial, MulticodecHeaders.P521PublicKey, base58Encoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) => EncodeKey(keyMaterial, MulticodecHeaders.Secp256k1PublicKey, base58Encoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => EncodeKey(keyMaterial, MulticodecHeaders.RsaPublicKey, base58Encoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => EncodeKey(keyMaterial, MulticodecHeaders.RsaPublicKey, base58Encoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Bls12381G1) && p.Equals(Purpose.Verification) => EncodeKey(keyMaterial, MulticodecHeaders.Bls12381G1PublicKey, base58Encoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) => EncodeKey(keyMaterial, MulticodecHeaders.Ed25519PublicKey, base58Encoder),
-                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) => EncodeKey(keyMaterial, MulticodecHeaders.X25519PublicKey, base58Encoder),
-                _ => throw new ArgumentException($"Unknown combination of algorithm and purpose: \"{algorithm}\", \"{purpose}\".")
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) =>
+                    EncodeKey(keyMaterial, MulticodecHeaders.P256PublicKey, base58Encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) =>
+                    EncodeKey(keyMaterial, MulticodecHeaders.P384PublicKey, base58Encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) =>
+                    EncodeKey(keyMaterial, MulticodecHeaders.P521PublicKey, base58Encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) =>
+                    EncodeKey(keyMaterial, MulticodecHeaders.Secp256k1PublicKey, base58Encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) =>
+                    EncodeKey(keyMaterial, MulticodecHeaders.RsaPublicKey, base58Encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) =>
+                    EncodeKey(keyMaterial, MulticodecHeaders.RsaPublicKey, base58Encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Bls12381G1) && p.Equals(Purpose.Verification) =>
+                    EncodeKey(keyMaterial, MulticodecHeaders.Bls12381G1PublicKey, base58Encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) =>
+                    EncodeKey(keyMaterial, MulticodecHeaders.Ed25519PublicKey, base58Encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) =>
+                    EncodeKey(keyMaterial, MulticodecHeaders.X25519PublicKey, base58Encoder),
+
+                _ => throw new ArgumentException($"Unknown combination of algorithm and purpose: '{algorithm}', '{purpose}'.")
             };
         };
+
 
         /// <summary>
         /// Default converter from JWK to algorithm representation.
         /// </summary>
+        /// <remarks>
+        /// Resolves <see cref="Purpose"/> from the optional JWK <c>use</c> field
+        /// (<c>sig</c> → <see cref="Purpose.Verification"/>,
+        /// <c>enc</c> → <see cref="Purpose.Exchange"/>). When absent, defaults to
+        /// <see cref="Purpose.Verification"/> for EC and OKP keys, consistent with
+        /// the most common use case.
+        /// </remarks>
         public static JwkToAlgorithmDelegate DefaultJwkToAlgorithmConverter => static (jwk, memoryPool, base64UrlDecoder) =>
         {
-            if(jwk == null)
+            ArgumentNullException.ThrowIfNull(jwk);
+
+            if(!jwk.TryGetValue(WellKnownJwkMemberNames.Kty, out object? kty) || kty is not string keyType)
             {
-                throw new ArgumentNullException(nameof(jwk), "JWK cannot be null.");
+                throw new ArgumentException($"JWK must contain a valid '{WellKnownJwkMemberNames.Kty}' field.", nameof(jwk));
             }
 
-            if(!jwk.TryGetValue(JwkProperties.Kty, out var kty) || kty is not string keyType)
-            {
-                throw new ArgumentException($"JWK must contain a valid '{JwkProperties.Kty}' field.", nameof(jwk));
-            }
-
-            //Check for required fields based on key type.
             ValidateRequiredFields(jwk, keyType);
 
-            //Make 'alg' optional with fallback logic.
             string algorithm = string.Empty;
-            if(jwk.TryGetValue(JwkProperties.Alg, out var alg) && alg is string algString)
+            if(jwk.TryGetValue(WellKnownJwkMemberNames.Alg, out object? alg) && alg is string algString)
             {
                 algorithm = algString;
             }
 
-            var keyMaterial = DecodeKeyMaterial(jwk, keyType, base64UrlDecoder);
-            var (cryptoAlgorithm, purpose) = MapToAlgorithmAndPurpose(keyType, algorithm, keyMaterial.Length);
+            string crv = string.Empty;
+            if(jwk.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvObj) && crvObj is string crvString)
+            {
+                crv = crvString;
+            }
+
+            //Resolve purpose from the optional 'use' field; default to Verification.
+            Purpose explicitPurpose = Purpose.Verification;
+            if(jwk.TryGetValue(WellKnownJwkMemberNames.Use, out object? useObj) && useObj is string use)
+            {
+                explicitPurpose = use switch
+                {
+                    string u when WellKnownJwkValues.Equals(u, WellKnownJwkValues.UseEnc) => Purpose.Exchange,
+                    _ => Purpose.Verification
+                };
+            }
+
+            byte[] keyMaterial = DecodeKeyMaterial(jwk, keyType, base64UrlDecoder);
+            (CryptoAlgorithm cryptoAlgorithm, Purpose purpose) =
+                MapToAlgorithmAndPurpose(keyType, algorithm, crv, explicitPurpose, keyMaterial.Length);
 
             IMemoryOwner<byte> keyMaterialOwner = memoryPool.Rent(keyMaterial.Length);
             keyMaterial.CopyTo(keyMaterialOwner.Memory.Span);
 
             return (cryptoAlgorithm, purpose, EncodingScheme.Raw, keyMaterialOwner);
 
+
             static void ValidateRequiredFields(Dictionary<string, object> jwk, string keyType)
             {
-                switch(keyType)
+                if(WellKnownKeyTypeValues.IsEc(keyType))
                 {
-                    case string key when WellKnownKeyTypeValues.IsEc(key):
-                        //EC keys require 'x' and 'y' coordinates.
-                        if(!jwk.TryGetValue(JwkProperties.X, out var ecX) || ecX is not string)
-                        {
-                            throw new ArgumentException($"EC JWK must contain a valid '{JwkProperties.X}' field.", nameof(jwk));
-                        }
-                        if(!jwk.TryGetValue(JwkProperties.Y, out var ecY) || ecY is not string)
-                        {
-                            throw new ArgumentException($"EC JWK must contain a valid '{JwkProperties.Y}' field.", nameof(jwk));
-                        }
-                        break;
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.X, out object? ecX) || ecX is not string)
+                    {
+                        throw new ArgumentException($"EC JWK must contain a valid '{WellKnownJwkMemberNames.X}' field.", nameof(jwk));
+                    }
 
-                    case string key when WellKnownKeyTypeValues.IsOkp(key):
-                        //OKP keys require 'x' coordinate.
-                        if(!jwk.TryGetValue(JwkProperties.X, out var okpX) || okpX is not string)
-                        {
-                            throw new ArgumentException($"OKP JWK must contain a valid '{JwkProperties.X}' field.", nameof(jwk));
-                        }
-                        break;
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.Y, out object? ecY) || ecY is not string)
+                    {
+                        throw new ArgumentException($"EC JWK must contain a valid '{WellKnownJwkMemberNames.Y}' field.", nameof(jwk));
+                    }
+                }
+                else if(WellKnownKeyTypeValues.IsOkp(keyType))
+                {
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.X, out object? okpX) || okpX is not string)
+                    {
+                        throw new ArgumentException($"OKP JWK must contain a valid '{WellKnownJwkMemberNames.X}' field.", nameof(jwk));
+                    }
+                }
+                else if(WellKnownKeyTypeValues.IsRsa(keyType))
+                {
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.N, out object? rsaN) || rsaN is not string)
+                    {
+                        throw new ArgumentException($"RSA JWK must contain a valid '{WellKnownJwkMemberNames.N}' field.", nameof(jwk));
+                    }
 
-                    case string key when WellKnownKeyTypeValues.IsRsa(key):
-                        //RSA keys require 'n' (modulus) and 'e' (exponent).
-                        if(!jwk.TryGetValue(JwkProperties.N, out var rsaN) || rsaN is not string)
-                        {
-                            throw new ArgumentException($"RSA JWK must contain a valid '{JwkProperties.N}' field.", nameof(jwk));
-                        }
-                        if(!jwk.TryGetValue(JwkProperties.E, out var rsaE) || rsaE is not string)
-                        {
-                            throw new ArgumentException($"RSA JWK must contain a valid '{JwkProperties.E}' field.", nameof(jwk));
-                        }
-                        break;
-
-                    default:
-                        throw new ArgumentException($"Unsupported key type: '{keyType}'.");
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.E, out object? rsaE) || rsaE is not string)
+                    {
+                        throw new ArgumentException($"RSA JWK must contain a valid '{WellKnownJwkMemberNames.E}' field.", nameof(jwk));
+                    }
+                }
+                else
+                {
+                    throw new ArgumentException($"Unsupported key type: '{keyType}'.");
                 }
             }
 
-            static byte[] DecodeKeyMaterial(Dictionary<string, object> jwk, string keyType, DecodeDelegate decoder)
+
+            static byte[] DecodeKeyMaterial(
+                Dictionary<string, object> jwk,
+                string keyType,
+                DecodeDelegate decoder)
             {
-                return keyType switch
-                {
-                    string key when WellKnownKeyTypeValues.IsEc(key) => DecodeEcKey(jwk, decoder),
-                    string key when WellKnownKeyTypeValues.IsOkp(key) => DecodeOkpKey(jwk, decoder),
-                    string key when WellKnownKeyTypeValues.IsRsa(key) => DecodeRsaKey(jwk, decoder),
-                    _ => throw new ArgumentException($"Unsupported key type: '{keyType}'.")
-                };
+                if(WellKnownKeyTypeValues.IsEc(keyType)) { return DecodeEcKey(jwk, decoder); }
+                if(WellKnownKeyTypeValues.IsOkp(keyType)) { return DecodeOkpKey(jwk, decoder); }
+                if(WellKnownKeyTypeValues.IsRsa(keyType)) { return DecodeRsaKey(jwk, decoder); }
+
+                throw new ArgumentException($"Unsupported key type: '{keyType}'.");
             }
+
 
             static byte[] DecodeEcKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
             {
-                //Fields already validated by ValidateRequiredFields.
-                using var xBytes = DecodeForJwk((string)jwk[JwkProperties.X], decoder);
-                using var yBytes = DecodeForJwk((string)jwk[JwkProperties.Y], decoder);
+                using IMemoryOwner<byte> xBytes = decoder((string)jwk[WellKnownJwkMemberNames.X], SensitiveMemoryPool<byte>.Shared);
+                using IMemoryOwner<byte> yBytes = decoder((string)jwk[WellKnownJwkMemberNames.Y], SensitiveMemoryPool<byte>.Shared);
 
+                //Compressed format is the canonical internal form for all EC public keys.
+                //Backend functions accept both compressed and uncompressed SEC1 encoding.
                 return EllipticCurveUtilities.Compress(xBytes.Memory.Span, yBytes.Memory.Span);
             }
 
+
             static byte[] DecodeOkpKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
             {
-                //Fields already validated by ValidateRequiredFields.
-                using var decoded = DecodeForJwk((string)jwk[JwkProperties.X], decoder);
+                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.X], SensitiveMemoryPool<byte>.Shared);
+
                 return decoded.Memory.Span.ToArray();
             }
+
 
             static byte[] DecodeRsaKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
             {
-                //Fields already validated by ValidateRequiredFields.
-                //Return only the modulus for now.
-                using var decoded = DecodeForJwk((string)jwk[JwkProperties.N], decoder);
+                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.N], SensitiveMemoryPool<byte>.Shared);
+
                 return decoded.Memory.Span.ToArray();
             }
 
-            //Helper method to decode JWK data using the provided decoder.
-            static IMemoryOwner<byte> DecodeForJwk(string encodedData, DecodeDelegate decoder)
-            {
-                //For JWK, we don't have codec headers, so pass 0 as header length.
-                return decoder(encodedData, SensitiveMemoryPool<byte>.Shared);
-            }
 
-            static CryptoAlgorithm DetermineRsaAlgorithm(int keyLength)
+            static (CryptoAlgorithm, Purpose) MapToAlgorithmAndPurpose(
+                string keyType,
+                string algorithm,
+                string crv,
+                Purpose explicitPurpose,
+                int keyMaterialLength)
             {
-                return keyLength switch
+                if(WellKnownKeyTypeValues.IsEc(keyType))
                 {
-                    256 => CryptoAlgorithm.Rsa2048,  //2048 bits = 256 bytes.
-                    512 => CryptoAlgorithm.Rsa4096,  //4096 bits = 512 bytes.
-                    _ => throw new ArgumentException($"Unsupported RSA key size: '{keyLength}' bytes.")
-                };
-            }
+                    //Prefer crv for EC key identification per RFC 7518 §6.2.1.1; fall back to alg.
+                    if(WellKnownCurveValues.IsP256(crv)) { return (CryptoAlgorithm.P256, explicitPurpose); }
+                    if(WellKnownCurveValues.IsP384(crv)) { return (CryptoAlgorithm.P384, explicitPurpose); }
+                    if(WellKnownCurveValues.IsP521(crv)) { return (CryptoAlgorithm.P521, explicitPurpose); }
+                    if(WellKnownCurveValues.IsSecp256k1(crv) || WellKnownJwaValues.IsEs256K(algorithm))
+                    {
+                        return (CryptoAlgorithm.Secp256k1, Purpose.Verification);
+                    }
 
-            static (CryptoAlgorithm, Purpose) MapToAlgorithmAndPurpose(string keyType, string algorithm, int keyMaterialLength)
-            {
-                return (keyType, algorithm) switch
+                    //Brainpool curves per RFC 5639. ESB JWA fallback mirrors the ES* path
+                    //above — alg alone identifies the curve when crv is absent.
+                    if(WellKnownCurveValues.IsBrainpoolP256r1(crv)) { return (CryptoAlgorithm.BrainpoolP256r1, explicitPurpose); }
+                    if(WellKnownCurveValues.IsBrainpoolP320r1(crv)) { return (CryptoAlgorithm.BrainpoolP320r1, explicitPurpose); }
+                    if(WellKnownCurveValues.IsBrainpoolP384r1(crv)) { return (CryptoAlgorithm.BrainpoolP384r1, explicitPurpose); }
+                    if(WellKnownCurveValues.IsBrainpoolP512r1(crv)) { return (CryptoAlgorithm.BrainpoolP512r1, explicitPurpose); }
+
+                    //Fall back to alg when crv is absent.
+                    if(WellKnownJwaValues.IsEs256(algorithm)) { return (CryptoAlgorithm.P256, explicitPurpose); }
+                    if(WellKnownJwaValues.IsEs384(algorithm)) { return (CryptoAlgorithm.P384, explicitPurpose); }
+                    if(WellKnownJwaValues.IsEs512(algorithm)) { return (CryptoAlgorithm.P521, explicitPurpose); }
+                    if(WellKnownJwaValues.IsEsb256(algorithm)) { return (CryptoAlgorithm.BrainpoolP256r1, explicitPurpose); }
+                    if(WellKnownJwaValues.IsEsb320(algorithm)) { return (CryptoAlgorithm.BrainpoolP320r1, explicitPurpose); }
+                    if(WellKnownJwaValues.IsEsb384(algorithm)) { return (CryptoAlgorithm.BrainpoolP384r1, explicitPurpose); }
+                    if(WellKnownJwaValues.IsEsb512(algorithm)) { return (CryptoAlgorithm.BrainpoolP512r1, explicitPurpose); }
+                }
+
+                if(WellKnownKeyTypeValues.IsOkp(keyType))
                 {
-                    //EC keys.
-                    (string kt, string alg) when WellKnownKeyTypeValues.IsEc(kt) && WellKnownJwaValues.IsEs256(alg) => (CryptoAlgorithm.P256, Purpose.Verification),
-                    (string kt, string alg) when WellKnownKeyTypeValues.IsEc(kt) && WellKnownJwaValues.IsEs384(alg) => (CryptoAlgorithm.P384, Purpose.Verification),
-                    (string kt, string alg) when WellKnownKeyTypeValues.IsEc(kt) && WellKnownJwaValues.IsEs512(alg) => (CryptoAlgorithm.P521, Purpose.Verification),
-                    (string kt, string alg) when WellKnownKeyTypeValues.IsEc(kt) && WellKnownJwaValues.IsEs256k1(alg) => (CryptoAlgorithm.Secp256k1, Purpose.Verification),
+                    if(WellKnownCurveValues.IsEd25519(crv) || WellKnownJwaValues.IsEdDsa(algorithm))
+                    {
+                        return (CryptoAlgorithm.Ed25519, Purpose.Verification);
+                    }
 
-                    //OKP keys.
-                    (string kt, string alg) when WellKnownKeyTypeValues.IsOkp(kt) && WellKnownJwaValues.IsEdDsa(alg) => (CryptoAlgorithm.Ed25519, Purpose.Verification),
-                    (string kt, string alg) when WellKnownKeyTypeValues.IsOkp(kt) && WellKnownJwaValues.IsEcdha(alg) => (CryptoAlgorithm.X25519, Purpose.Exchange),
+                    if(WellKnownCurveValues.IsX25519(crv) || WellKnownJwaValues.IsEcdha(algorithm))
+                    {
+                        return (CryptoAlgorithm.X25519, Purpose.Exchange);
+                    }
+                }
 
-                    //RSA keys - determine algorithm based on key size if no algorithm specified.
-                    (string kt, _) when WellKnownKeyTypeValues.IsRsa(kt) => (DetermineRsaAlgorithm(keyMaterialLength), Purpose.Verification),
+                if(WellKnownKeyTypeValues.IsRsa(keyType))
+                {
+                    return keyMaterialLength switch
+                    {
+                        256 => (CryptoAlgorithm.Rsa2048, Purpose.Verification),
+                        512 => (CryptoAlgorithm.Rsa4096, Purpose.Verification),
+                        _ => throw new ArgumentException($"Unsupported RSA key size: '{keyMaterialLength}' bytes.")
+                    };
+                }
 
-                    _ => throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
-                };
+                throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.");
             }
         };
+
 
         /// <summary>
         /// Default converter from Base58 key to algorithm representation.
@@ -632,31 +730,186 @@ namespace Verifiable.JCose
             {
                 throw new ArgumentNullException(nameof(base58Key), "Base58 key cannot be null or empty.");
             }
+
             if(!base58Key[0].Equals(MultibaseAlgorithms.Base58Btc))
             {
-                throw new ArgumentException($"Base58 key must start with '{MultibaseAlgorithms.Base58Btc}' for multibase format.", nameof(base58Key));
+                throw new ArgumentException(
+                    $"Base58 key must start with '{MultibaseAlgorithms.Base58Btc}' for multibase format.",
+                    nameof(base58Key));
             }
-            //Validate and fetch canonicalized header.
+
             ReadOnlySpan<char> header = Base58BtcEncodedMulticodecHeaders.GetCanonicalizedHeader(base58Key.AsSpan(0, 4));
             if(header.SequenceEqual(base58Key))
             {
                 throw new ArgumentException("Unknown or unsupported multicodec header.", nameof(base58Key));
             }
 
-            //Determine codec header length based on the detected header type.
             int codecHeaderLength = Base58BtcEncodedMulticodecHeaders.GetMulticodecHeaderLength(header);
-            var decodedKeyMaterialWithoutHeader = MultibaseSerializer.Decode(base58Key, codecHeaderLength, base58Decoder, memoryPool);
+            IMemoryOwner<byte> decodedKeyMaterial =
+                MultibaseSerializer.Decode(base58Key, codecHeaderLength, base58Decoder, memoryPool);
+
             return header switch
             {
-                var h when Base58BtcEncodedMulticodecHeaders.IsSecp256k1PublicKey(h) => (CryptoAlgorithm.Secp256k1, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterialWithoutHeader),
-                var h when Base58BtcEncodedMulticodecHeaders.IsEd25519PublicKey(h) => (CryptoAlgorithm.Ed25519, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterialWithoutHeader),
-                var h when Base58BtcEncodedMulticodecHeaders.IsX25519PublicKey(h) => (CryptoAlgorithm.X25519, Purpose.Exchange, EncodingScheme.Raw, decodedKeyMaterialWithoutHeader),
-                var h when Base58BtcEncodedMulticodecHeaders.IsP256PublicKey(h) => (CryptoAlgorithm.P256, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterialWithoutHeader),
-                var h when Base58BtcEncodedMulticodecHeaders.IsP384PublicKey(h) => (CryptoAlgorithm.P384, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterialWithoutHeader),
-                var h when Base58BtcEncodedMulticodecHeaders.IsP521PublicKey(h) => (CryptoAlgorithm.P521, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterialWithoutHeader),
-                var h when Base58BtcEncodedMulticodecHeaders.IsRsaPublicKey2048(h) => (CryptoAlgorithm.Rsa2048, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterialWithoutHeader),
-                var h when Base58BtcEncodedMulticodecHeaders.IsRsaPublicKey4096(h) => (CryptoAlgorithm.Rsa4096, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterialWithoutHeader),
+                var h when Base58BtcEncodedMulticodecHeaders.IsSecp256k1PublicKey(h) => (CryptoAlgorithm.Secp256k1, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
+                var h when Base58BtcEncodedMulticodecHeaders.IsEd25519PublicKey(h) => (CryptoAlgorithm.Ed25519, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
+                var h when Base58BtcEncodedMulticodecHeaders.IsX25519PublicKey(h) => (CryptoAlgorithm.X25519, Purpose.Exchange, EncodingScheme.Raw, decodedKeyMaterial),
+                var h when Base58BtcEncodedMulticodecHeaders.IsP256PublicKey(h) => (CryptoAlgorithm.P256, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
+                var h when Base58BtcEncodedMulticodecHeaders.IsP384PublicKey(h) => (CryptoAlgorithm.P384, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
+                var h when Base58BtcEncodedMulticodecHeaders.IsP521PublicKey(h) => (CryptoAlgorithm.P521, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
+                var h when Base58BtcEncodedMulticodecHeaders.IsRsaPublicKey2048(h) => (CryptoAlgorithm.Rsa2048, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
+                var h when Base58BtcEncodedMulticodecHeaders.IsRsaPublicKey4096(h) => (CryptoAlgorithm.Rsa4096, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
                 _ => throw new ArgumentException($"Unsupported header: {header}", nameof(base58Key))
+            };
+        };
+
+
+        /// <summary>
+        /// Default converter from a <see cref="Tag"/> to a JWK elliptic curve name string
+        /// for embedding in a JWE <c>epk</c> header parameter.
+        /// </summary>
+        /// <remarks>
+        /// Covers both signing/verification and ECDH exchange tags for P-256, P-384, and P-521.
+        /// </remarks>
+        public static TagToEpkCrvDelegate DefaultTagToEpkCrvConverter => tag =>
+        {
+            ArgumentNullException.ThrowIfNull(tag);
+
+            CryptoAlgorithm algorithm = tag.Get<CryptoAlgorithm>();
+            return algorithm switch
+            {
+                var a when a.Equals(CryptoAlgorithm.P256) => WellKnownCurveValues.P256,
+                var a when a.Equals(CryptoAlgorithm.P384) => WellKnownCurveValues.P384,
+                var a when a.Equals(CryptoAlgorithm.P521) => WellKnownCurveValues.P521,
+
+                //Brainpool ECDH-ES exchange curves (RFC 5639). The crv name is
+                //purpose-independent, so the same mapping serves both the signing tags
+                //and the exchange tags.
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP256r1) => WellKnownCurveValues.BrainpoolP256r1,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP320r1) => WellKnownCurveValues.BrainpoolP320r1,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP384r1) => WellKnownCurveValues.BrainpoolP384r1,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP512r1) => WellKnownCurveValues.BrainpoolP512r1,
+
+                //X25519 ECDH-ES exchange (RFC 8037 OKP). The crv name carries it; the OKP
+                //single-coordinate JWK shape is decided from the key's EncodingScheme.Raw tag.
+                var a when a.Equals(CryptoAlgorithm.X25519) => WellKnownCurveValues.X25519,
+                _ => throw new NotSupportedException(
+                    $"CryptoAlgorithm '{algorithm}' does not have a JWK curve name mapping. " +
+                    $"Only EC curves P-256, P-384, P-521, Brainpool P-256r1/P-320r1/P-384r1/P-512r1 and X25519 are supported.")
+            };
+        };
+
+
+        /// <summary>
+        /// Default converter from a JWK elliptic curve name string in a JWE <c>epk</c> header
+        /// to a <see cref="Tag"/> and <see cref="EllipticCurveTypes"/> value.
+        /// </summary>
+        /// <remarks>
+        /// Returns the exchange variant of the tag for all supported curves. The curve type
+        /// is used for point-on-curve validation against invalid curve and small subgroup attacks.
+        /// </remarks>
+        public static EpkCrvToTagDelegate DefaultEpkCrvToTagConverter => crv =>
+        {
+            ArgumentNullException.ThrowIfNull(crv);
+
+            return crv switch
+            {
+                var c when WellKnownCurveValues.IsP256(c) => (CryptoTags.P256ExchangePublicKey, EllipticCurveTypes.P256),
+                var c when WellKnownCurveValues.IsP384(c) => (CryptoTags.P384ExchangePublicKey, EllipticCurveTypes.P384),
+                var c when WellKnownCurveValues.IsP521(c) => (CryptoTags.P521ExchangePublicKey, EllipticCurveTypes.P521),
+
+                //Brainpool ECDH-ES exchange curves (RFC 5639). The curve type drives the
+                //point-on-curve validation that guards against invalid-curve attacks.
+                var c when WellKnownCurveValues.IsBrainpoolP256r1(c) => (CryptoTags.BrainpoolP256r1ExchangePublicKey, EllipticCurveTypes.BrainpoolP256r1),
+                var c when WellKnownCurveValues.IsBrainpoolP320r1(c) => (CryptoTags.BrainpoolP320r1ExchangePublicKey, EllipticCurveTypes.BrainpoolP320r1),
+                var c when WellKnownCurveValues.IsBrainpoolP384r1(c) => (CryptoTags.BrainpoolP384r1ExchangePublicKey, EllipticCurveTypes.BrainpoolP384r1),
+                var c when WellKnownCurveValues.IsBrainpoolP512r1(c) => (CryptoTags.BrainpoolP512r1ExchangePublicKey, EllipticCurveTypes.BrainpoolP512r1),
+
+                //X25519 (RFC 8037 OKP). EllipticCurveTypes.None signals "no EC point-on-curve
+                //check"; the Raw-encoded tag drives the OKP single-coordinate decode path.
+                var c when WellKnownCurveValues.IsX25519(c) => (CryptoTags.X25519PublicKey, EllipticCurveTypes.None),
+                _ => throw new NotSupportedException(
+                    $"JWK curve name '{crv}' does not have a mapping. " +
+                    $"Only EC curves P-256, P-384, P-521, Brainpool P-256r1/P-320r1/P-384r1/P-512r1 and X25519 are supported.")
+            };
+        };
+
+
+        /// <summary>
+        /// Default converter from a COSE_Key's (<c>kty</c>, <c>crv</c>) tuple
+        /// to a <see cref="Tag"/> describing the corresponding internal key
+        /// material. Used by the mdoc MSO <c>DeviceKeyInfo</c> path to bridge
+        /// the parsed COSE_Key view onto the registry-resolvable tags the
+        /// crypto pipeline expects.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// COSE Key Types and Elliptic Curves use the integer assignments
+        /// from RFC 9052 §7 and the IANA COSE Elliptic Curves registry. The
+        /// converter accepts both EC2 (NIST P-curves, secp256k1, Brainpool
+        /// r1) and OKP (Ed25519, X25519, X448) keys. RSA mapping is included
+        /// for completeness but cannot pick a key size from <c>kty</c> alone —
+        /// the caller resolves size from the modulus length downstream.
+        /// </para>
+        /// </remarks>
+        public static CoseKeyToAlgorithmDelegate DefaultCoseKeyToAlgorithmConverter => (kty, curve, purpose) =>
+        {
+            //EC2 keys (RFC 9052 §7.1, kty = 2): curve discriminator is required.
+            const int Kty_Okp = 1;
+            const int Kty_Ec2 = 2;
+            const int Kty_Rsa = 3;
+
+            //COSE Elliptic Curves registry assignments. X448/Ed448 are kept
+            //alongside in the registry but no corresponding CryptoTags exist
+            //today; they fall through to the NotSupportedException arm.
+            const int Crv_P256 = 1;
+            const int Crv_P384 = 2;
+            const int Crv_P521 = 3;
+            const int Crv_X25519 = 4;
+            const int Crv_Ed25519 = 6;
+            const int Crv_Secp256k1 = 8;
+            const int Crv_BrainpoolP256r1 = 256;
+            const int Crv_BrainpoolP320r1 = 257;
+            const int Crv_BrainpoolP384r1 = 258;
+            const int Crv_BrainpoolP512r1 = 259;
+
+            return (kty, curve, purpose) switch
+            {
+                //EC2 — NIST P-curves with signing purpose pick private-key tags,
+                //verification picks public-key tags. Brainpool follows the same
+                //pattern landed in Q.2.
+                (Kty_Ec2, Crv_P256, var p) when p.Equals(Purpose.Signing) => CryptoTags.P256PrivateKey,
+                (Kty_Ec2, Crv_P256, var p) when p.Equals(Purpose.Verification) => CryptoTags.P256PublicKey,
+                (Kty_Ec2, Crv_P384, var p) when p.Equals(Purpose.Signing) => CryptoTags.P384PrivateKey,
+                (Kty_Ec2, Crv_P384, var p) when p.Equals(Purpose.Verification) => CryptoTags.P384PublicKey,
+                (Kty_Ec2, Crv_P521, var p) when p.Equals(Purpose.Signing) => CryptoTags.P521PrivateKey,
+                (Kty_Ec2, Crv_P521, var p) when p.Equals(Purpose.Verification) => CryptoTags.P521PublicKey,
+                (Kty_Ec2, Crv_Secp256k1, var p) when p.Equals(Purpose.Signing) => CryptoTags.Secp256k1PrivateKey,
+                (Kty_Ec2, Crv_Secp256k1, var p) when p.Equals(Purpose.Verification) => CryptoTags.Secp256k1PublicKey,
+                (Kty_Ec2, Crv_BrainpoolP256r1, var p) when p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP256r1PrivateKey,
+                (Kty_Ec2, Crv_BrainpoolP256r1, var p) when p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP256r1PublicKey,
+                (Kty_Ec2, Crv_BrainpoolP320r1, var p) when p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP320r1PrivateKey,
+                (Kty_Ec2, Crv_BrainpoolP320r1, var p) when p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP320r1PublicKey,
+                (Kty_Ec2, Crv_BrainpoolP384r1, var p) when p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP384r1PrivateKey,
+                (Kty_Ec2, Crv_BrainpoolP384r1, var p) when p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP384r1PublicKey,
+                (Kty_Ec2, Crv_BrainpoolP512r1, var p) when p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP512r1PrivateKey,
+                (Kty_Ec2, Crv_BrainpoolP512r1, var p) when p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP512r1PublicKey,
+
+                //OKP — Ed25519 / X25519. Ed25519 is signing/verification;
+                //X25519 is exchange. Ed448 / X448 are recognised on the COSE
+                //side but not currently registered in CryptoTags.
+                (Kty_Okp, Crv_Ed25519, var p) when p.Equals(Purpose.Signing) => CryptoTags.Ed25519PrivateKey,
+                (Kty_Okp, Crv_Ed25519, var p) when p.Equals(Purpose.Verification) => CryptoTags.Ed25519PublicKey,
+                (Kty_Okp, Crv_X25519, var p) when p.Equals(Purpose.Exchange) => CryptoTags.X25519PublicKey,
+
+                //RSA — kty alone can't pick size; caller resolves from modulus.
+                //Surface the mismatch rather than guessing.
+                (Kty_Rsa, _, _) => throw new NotSupportedException(
+                    "COSE_Key kty=3 (RSA) requires modulus-length resolution outside this delegate."),
+
+                _ => throw new NotSupportedException(
+                    $"COSE_Key (kty={kty.ToString(System.Globalization.CultureInfo.InvariantCulture)}, " +
+                    $"crv={curve?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "n/a"}, " +
+                    $"purpose={purpose}) is not supported.")
             };
         };
     }

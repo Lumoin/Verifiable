@@ -17,7 +17,7 @@ namespace Verifiable.Core.Resolvers;
 /// are available in <see cref="DidResolutionErrors"/>.
 /// </para>
 /// <para>
-/// See <see href="https://w3c.github.io/did-resolution/#did-resolution-metadata">DID Resolution §4.2</see>.
+/// See <see href="https://w3c.github.io/did-resolution/#did-resolution-metadata">DID Resolution ï¿½4.2</see>.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("Error={Error.Type.AbsoluteUri,nq} ContentType={ContentType,nq}")]

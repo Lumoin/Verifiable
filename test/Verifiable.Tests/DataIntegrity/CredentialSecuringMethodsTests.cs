@@ -7,24 +7,29 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
+using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.Methods;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.JCose.Sd;
-using Verifiable.Jose;
 using Verifiable.Json;
+using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
-using static Verifiable.JCose.Eudi.EudiPid;
 
 namespace Verifiable.Tests.DataIntegrity;
 
 /// <summary>
 /// Tests all W3C VC Data Model 2.0 securing methods using the same unsigned credential.
 /// </summary>
+[SuppressMessage(
+    "Reliability", "CA2000",
+    Justification =
+        "Tests construct Salt instances and pass them to SdDisclosure factory methods " +
+        "which take ownership; the disclosures are explicitly disposed via using " +
+        "declarations. The analyzer cannot see ownership transfer through factory methods.")]
 [TestClass]
 internal sealed class CredentialSecuringMethodsTests
 {
@@ -95,7 +100,9 @@ internal sealed class CredentialSecuringMethodsTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(signedCredential.Proof);
@@ -112,13 +119,14 @@ internal sealed class CredentialSecuringMethodsTests
             ContextResolver,
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
-            DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(CredentialVerificationResult.Success(), verificationResult);
+        Assert.IsTrue(verificationResult.IsValid);
     }
 
 
@@ -168,6 +176,7 @@ internal sealed class CredentialSecuringMethodsTests
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(signedCredential.Proof);
@@ -189,9 +198,10 @@ internal sealed class CredentialSecuringMethodsTests
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(CredentialVerificationResult.Success(), holderVerifyResult);
+        Assert.IsTrue(holderVerifyResult.IsValid);
 
         //Holder stores the credential (just the POCO, no internal state needed).
         //Later, when presenting to a verifier...
@@ -220,6 +230,7 @@ internal sealed class CredentialSecuringMethodsTests
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(derivedCredential.Proof);
@@ -240,9 +251,10 @@ internal sealed class CredentialSecuringMethodsTests
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(CredentialVerificationResult.Success(), verificationResult);
+        Assert.IsTrue(verificationResult.IsValid);
     }
 
 
@@ -276,7 +288,9 @@ internal sealed class CredentialSecuringMethodsTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(signedCredential.Proof);
@@ -293,13 +307,14 @@ internal sealed class CredentialSecuringMethodsTests
             contextResolver: null,
             ProofValueCodecs.DecodeBase58Btc,
             SerializeCredential,
-            DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(CredentialVerificationResult.Success(), verificationResult);
+        Assert.IsTrue(verificationResult.IsValid);
     }
 
 
@@ -335,7 +350,7 @@ internal sealed class CredentialSecuringMethodsTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid, "JWT signature verification must succeed.");
-        Assert.AreEqual(credential.Id, verificationResult.Credential!.Id);
+        Assert.AreEqual(credential.Id, verificationResult.Credential!.Value.Value.Id);
     }
 
 
@@ -428,12 +443,12 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
-        byte[] salt1 = SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes);
-        byte[] salt2 = SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes);
+        byte[] salt1 = RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes);
+        byte[] salt2 = RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes);
 
-        var disclosure1 = SdDisclosure.CreateProperty(salt1, "degree",
+        using SdDisclosure disclosure1 = SdDisclosure.CreateProperty(TestSalts.FromBytes(salt1), "degree",
             new Dictionary<string, object> { ["type"] = "ExampleBachelorDegree", ["name"] = "Bachelor of Science and Arts" });
-        var disclosure2 = SdDisclosure.CreateProperty(salt2, "name", "Example University");
+        using SdDisclosure disclosure2 = SdDisclosure.CreateProperty(TestSalts.FromBytes(salt2), "name", "Example University");
 
         string encodedDisclosure1 = EncodeDisclosure(disclosure1, TestSetup.Base64UrlEncoder);
         string encodedDisclosure2 = EncodeDisclosure(disclosure2, TestSetup.Base64UrlEncoder);
@@ -454,9 +469,9 @@ internal sealed class CredentialSecuringMethodsTests
 
         var header = new Dictionary<string, object>
         {
-            [JwkProperties.Alg] = WellKnownJwaValues.EdDsa,
-            [JwkProperties.Typ] = WellKnownMediaTypes.Application.VcSdJwt,
-            [JwkProperties.Kid] = Ed25519VerificationMethodId
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.EdDsa,
+            [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Application.VcSdJwt,
+            [WellKnownJwkMemberNames.Kid] = Ed25519VerificationMethodId
         };
 
         var headerJson = JsonSerializerExtensions.SerializeToUtf8Bytes(header, JsonOptions);
@@ -507,9 +522,9 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
-        var disclosure1 = SdDisclosure.CreateProperty(SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes), "degree",
+        using SdDisclosure disclosure1 = SdDisclosure.CreateProperty(TestSalts.FromBytes(RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes)), "degree",
             new Dictionary<string, object?> { ["type"] = "ExampleBachelorDegree", ["name"] = "Bachelor of Science and Arts" });
-        var disclosure2 = SdDisclosure.CreateProperty(SaltGenerator.Create(SdConstants.DefaultSaltLengthBytes), "name", "Example University");
+        using SdDisclosure disclosure2 = SdDisclosure.CreateProperty(TestSalts.FromBytes(RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes)), "name", "Example University");
 
         var protectedHeader = BuildSdCwtProtectedHeader();
         byte[] payload = BuildCwtPayload(credential);
@@ -534,7 +549,7 @@ internal sealed class CredentialSecuringMethodsTests
         Assert.IsNotNull(sdCwtBytes);
         Assert.IsGreaterThan(100, sdCwtBytes.Length, "SD-CWT should have substantial length.");
 
-        var parsedMessage = SdCwtSerializer.Parse(sdCwtBytes);
+        var parsedMessage = SdCwtSerializer.Parse(sdCwtBytes, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
         Assert.IsTrue(payload.AsSpan().SequenceEqual(parsedMessage.Payload.Span), "Payload must round-trip.");
         Assert.HasCount(2, parsedMessage.Disclosures, "Disclosures must round-trip.");
@@ -552,8 +567,12 @@ internal sealed class CredentialSecuringMethodsTests
     }
 
 
-    private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, cancellationToken) =>
+    private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
         ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
+
+    //Canonicalization/signing here is in-memory; a default context yields the
+    //secure-default SSRF policy and satisfies the policy-carrying parameter.
+    private static readonly ExchangeContext EmptyContext = new();
 
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
@@ -609,7 +628,7 @@ internal sealed class CredentialSecuringMethodsTests
         """)]
     private static string EncodeDisclosure(SdDisclosure disclosure, EncodeDelegate base64UrlEncoder)
     {
-        string saltBase64Url = base64UrlEncoder(disclosure.Salt.Span);
+        string saltBase64Url = base64UrlEncoder(disclosure.Salt.AsReadOnlySpan());
         string json = disclosure.ClaimName is not null
             ? $"[\"{saltBase64Url}\",\"{disclosure.ClaimName}\",{JsonSerializer.Serialize(disclosure.ClaimValue)}]"
             : $"[\"{saltBase64Url}\",{JsonSerializer.Serialize(disclosure.ClaimValue)}]";
@@ -623,11 +642,11 @@ internal sealed class CredentialSecuringMethodsTests
     {
         var writer = new CborWriter(CborConformanceMode.Canonical);
         writer.WriteStartMap(3);
-        writer.WriteInt32(WellKnownCwtClaims.Iss);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString(credential.Issuer!.Id!);
-        writer.WriteInt32(WellKnownCwtClaims.Sub);
+        writer.WriteInt32(WellKnownCwtClaimNames.Sub);
         writer.WriteTextString(credential.CredentialSubject![0].Id!);
-        writer.WriteInt32(WellKnownCwtClaims.Iat);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iat);
         writer.WriteInt64(!string.IsNullOrEmpty(credential.ValidFrom) ? DateTimeOffset.Parse(credential.ValidFrom, CultureInfo.InvariantCulture).ToUnixTimeSeconds() : 0L);
         writer.WriteEndMap();
         return writer.Encode();

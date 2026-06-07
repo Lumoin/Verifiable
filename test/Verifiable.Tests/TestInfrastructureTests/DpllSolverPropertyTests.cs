@@ -1,4 +1,4 @@
-﻿using CsCheck;
+using CsCheck;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.TestInfrastructureTests;

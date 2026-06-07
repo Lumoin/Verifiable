@@ -1,4 +1,4 @@
-﻿using SimpleBase;
+using SimpleBase;
 using System.Buffers.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;

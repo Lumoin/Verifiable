@@ -547,6 +547,50 @@ The library never calls `DateTime.UtcNow` directly. This enables:
 - Time travel in tests.
 - Consistent timestamps across distributed components.
 
+### Per-flow timing leeway (clock skew, KB-JWT iat freshness)
+
+Temporal validation windows resolve **per flow**, not from a single server-wide
+constant. `ResolvePolicyAsync` runs once per request on the universal dispatch
+path (for every flow, including the OID4VP verifier) and populates the policy
+bag on `RequestContext` from the registration's `PolicyProfile`. Validation
+checks then read those values via `PolicyRequestContextExtensions`, falling back
+to the `ValidationContext` field when the policy did not set the axis:
+
+- **Clock skew** — `CheckKbJwtIatNotInFuture` reads
+  `context.Context?.ClockSkewToleranceOverride ?? context.ClockSkew`. The
+  nullable `ClockSkewToleranceOverride` returns the per-flow policy value when
+  set, else null so the `ValidationContext.ClockSkew` field is the no-policy /
+  unit-test fallback. (The non-null `ClockSkewTolerance` getter — 60s default —
+  remains for AuthCode JAR verification.)
+- **KB-JWT iat max-age** — `CheckKbJwtIatNotTooOld` reads
+  `context.Context?.KbJwtMaxAgeWindow ?? context.KbJwtMaxAge`. Both KB-JWT iat
+  checks therefore follow the identical "per-flow policy, else field" shape.
+
+[RFC 9901](https://www.rfc-editor.org/rfc/rfc9901) mandates the KB-JWT `iat` be
+"within an acceptable window" but pins **no number** — it is explicitly the
+Verifier's policy, because credential replay/freshness is already guaranteed by
+the mandatory `nonce`/`aud` binding (`CheckKbJwtNonce` / `CheckKbJwtAud`). The
+`iat` window is defense-in-depth.
+
+### Policy profiles by role
+
+`PolicyProfile` is resolved per registration. The OID4VP **verifier** is a
+distinct role from the OAuth/issuance (token-endpoint) registrations:
+
+- `Fapi20` / `Haip10` — issuance / AuthCode registrations. Carry the
+  token-endpoint axes (PKCE, token lifetimes, scope-required, access/id-token
+  `aud`, JTI replay). HAIP spans issuance and presentation, so `Haip10` layers
+  on `Fapi20`.
+- `Oid4VpVerifier` — OID4VP verifier registrations (issue the signed
+  Authorization Request, verify the returned `vp_token`, expose no
+  token/authorize endpoint). It does **not** layer `Fapi20`; it sets only the
+  two presentation axes the verification pipeline actually consumes
+  (`ClockSkewTolerance`, `KbJwtMaxAgeWindow`, both 60s — RFC 7519 §4.1.4 leeway
+  and HAIP §3 ceilings). The FAPI token-endpoint axes have no meaning for a
+  presentation flow and are not applied. JAR/request-object lifetimes for the
+  verifier come from `TimingPolicy` (`Oid4VpRequestObjectLifetime` /
+  `Oid4VpRequestUriLifetime`), not the policy bag.
+
 ## Cancellation Semantics
 
 | Component | Cancellation Behavior |
@@ -584,4 +628,15 @@ Accepted.
 
 ## Revision History
 
-None.
+- Per-flow timing leeway: `CheckKbJwtIatNotInFuture` now resolves clock skew from
+  the per-request policy (`ClockSkewToleranceOverride`), aligning it with
+  `CheckKbJwtIatNotTooOld`. Added the role-based `PolicyProfile.Oid4VpVerifier`
+  (presentation timing axes only; not FAPI-2.0-token-endpoint-derived) so OID4VP
+  verifier registrations no longer resolve to the `Fapi20` default.
+- Single source of truth for timing: the policy profiles derive
+  `ClockSkewTolerance` (and the verifier's `KbJwtMaxAgeWindow`, via the new
+  `TimingPolicy.KbJwtIatMaxAge`) from the deployment's `TimingPolicy` —
+  `server.Timings` — instead of hardcoded literals, matching what AuthCode JAR
+  verification reads directly. Removed a vestigial `ValidationContext.ClockSkew`
+  assignment in the AuthCode JAR-audience path (the only check it ran does not
+  read clock skew).

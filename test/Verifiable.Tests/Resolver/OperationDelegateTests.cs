@@ -62,7 +62,7 @@ internal sealed class OperationDelegateTests
 
         Result<string, string> result = await applyDeactivate("active-state", ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(result.IsSuccess);
-        Assert.IsTrue(result.Value!.StartsWith("DEACTIVATED:", StringComparison.Ordinal));
+        Assert.StartsWith("DEACTIVATED:", result.Value!, StringComparison.Ordinal);
     }
 
 

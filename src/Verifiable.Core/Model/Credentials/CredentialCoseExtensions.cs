@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
@@ -69,7 +69,7 @@ public static class CredentialCoseExtensions
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The COSE_Sign1 message containing the signed credential.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller takes ownership of the returned CoseSign1Message.")]
-    public static async ValueTask<CoseSign1Message> SignCoseAsync(
+    public static ValueTask<CoseSign1Message> SignCoseAsync(
         this VerifiableCredential credential,
         PrivateKeyMemory privateKey,
         string verificationMethodId,
@@ -81,12 +81,78 @@ public static class CredentialCoseExtensions
         string? mediaType = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(privateKey);
+
+        CryptoAlgorithm algorithm = privateKey.Tag.Get<CryptoAlgorithm>();
+        Purpose purpose = privateKey.Tag.Get<Purpose>();
+        SigningDelegate signingDelegate =
+            CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose);
+
+        return credential.SignCoseAsync(
+            privateKey,
+            verificationMethodId,
+            credentialSerializer,
+            headerSerializer,
+            buildSigStructure,
+            signingDelegate,
+            signaturePool,
+            contentType,
+            mediaType,
+            cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Signs the credential as a COSE_Sign1 message using an explicit
+    /// <see cref="SigningDelegate"/>. The registry-resolving overload above
+    /// delegates here after resolving the function via
+    /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
+    /// from <paramref name="privateKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// </summary>
+    /// <param name="credential">The credential to sign.</param>
+    /// <param name="privateKey">The private key for signing.</param>
+    /// <param name="verificationMethodId">
+    /// The identifier for the <c>kid</c> (key ID) header parameter. Per the W3C specification,
+    /// this is typically a DID URL pointing to the public key material used for verification.
+    /// </param>
+    /// <param name="credentialSerializer">Delegate for serializing the credential to CBOR bytes.</param>
+    /// <param name="headerSerializer">Delegate for serializing the protected header to CBOR bytes.</param>
+    /// <param name="buildSigStructure">Delegate to build the Sig_structure for signing.</param>
+    /// <param name="signingDelegate">The signing function to use.</param>
+    /// <param name="signaturePool">Memory pool for signature allocation.</param>
+    /// <param name="contentType">
+    /// Optional content type for the protected header. Defaults to
+    /// <see cref="WellKnownMediaTypes.Application.ApplicationVc"/>
+    /// as recommended by the W3C VC-JOSE-COSE specification.
+    /// </param>
+    /// <param name="mediaType">
+    /// Optional <c>typ</c> (type) header parameter. Defaults to
+    /// <see cref="WellKnownMediaTypes.Application.VcCose"/>
+    /// as recommended by the W3C VC-JOSE-COSE specification.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The COSE_Sign1 message containing the signed credential.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller takes ownership of the returned CoseSign1Message.")]
+    public static async ValueTask<CoseSign1Message> SignCoseAsync(
+        this VerifiableCredential credential,
+        PrivateKeyMemory privateKey,
+        string verificationMethodId,
+        CredentialToCborBytesDelegate credentialSerializer,
+        CoseProtectedHeaderSerializer headerSerializer,
+        BuildSigStructureDelegate buildSigStructure,
+        SigningDelegate signingDelegate,
+        MemoryPool<byte> signaturePool,
+        string? contentType = null,
+        string? mediaType = null,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(credential);
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(verificationMethodId);
         ArgumentNullException.ThrowIfNull(credentialSerializer);
         ArgumentNullException.ThrowIfNull(headerSerializer);
         ArgumentNullException.ThrowIfNull(buildSigStructure);
+        ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
 
         int coseAlgorithm = CryptoFormatConversions.DefaultTagToCoseConverter(privateKey.Tag);
@@ -99,17 +165,29 @@ public static class CredentialCoseExtensions
             [CoseHeaderParameters.Typ] = mediaType ?? WellKnownMediaTypes.Application.VcCose
         };
 
-        //Copy to arrays since spans cannot cross await boundaries.
-        byte[] protectedHeaderBytes = headerSerializer(protectedHeader).ToArray();
+        //Pool-route the protected header bytes so they carry CBOM provenance
+        //(CryptoTags.CoseEncodedProtectedHeader) and are observable to the
+        //OTel allocation pipeline. The CoseSign1Message takes ownership and
+        //disposes the carrier.
+        ReadOnlySpan<byte> protectedHeaderSerialized = headerSerializer(protectedHeader);
+        IMemoryOwner<byte> protectedHeaderOwner = signaturePool.Rent(protectedHeaderSerialized.Length);
+        protectedHeaderSerialized.CopyTo(protectedHeaderOwner.Memory.Span);
+        EncodedCoseProtectedHeader protectedHeaderCarrier = new(protectedHeaderOwner, CryptoTags.CoseEncodedProtectedHeader);
+
+        //Payload bytes are borrowed by the message; the caller controls
+        //lifetime. A future chunk lifts the payload to a semantic carrier
+        //per the same pool-routing rule.
         byte[] payloadBytes = credentialSerializer(credential).ToArray();
 
         return await Cose.SignAsync(
-            protectedHeaderBytes,
+            protectedHeaderCarrier,
             unprotectedHeader: null,
             payloadBytes,
             buildSigStructure,
             privateKey,
-            signaturePool).ConfigureAwait(false);
+            signingDelegate,
+            signaturePool,
+            cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -123,7 +201,7 @@ public static class CredentialCoseExtensions
     /// <param name="headerParser">Delegate for parsing the protected header bytes.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result containing validity status and decoded credential.</returns>
-    public static async ValueTask<CoseCredentialVerificationResult> VerifyCoseAsync(
+    public static ValueTask<CoseCredentialVerificationResult> VerifyCoseAsync(
         CoseSign1Message message,
         BuildSigStructureDelegate buildSigStructure,
         PublicKeyMemory publicKey,
@@ -131,40 +209,76 @@ public static class CredentialCoseExtensions
         ParseProtectedHeaderDelegate headerParser,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(message);
-        ArgumentNullException.ThrowIfNull(buildSigStructure);
         ArgumentNullException.ThrowIfNull(publicKey);
-        ArgumentNullException.ThrowIfNull(credentialDeserializer);
-        ArgumentNullException.ThrowIfNull(headerParser);
-
-        byte[] toBeSigned = buildSigStructure(
-            message.ProtectedHeaderBytes.Span,
-            message.Payload.Span,
-            ReadOnlySpan<byte>.Empty);
 
         CryptoAlgorithm algorithm = publicKey.Tag.Get<CryptoAlgorithm>();
         Purpose purpose = publicKey.Tag.Get<Purpose>();
-        VerificationDelegate verificationDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose);
+        VerificationDelegate verificationDelegate =
+            CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose);
 
-        bool isValid = await verificationDelegate(
-            toBeSigned,
-            message.Signature,
-            publicKey.AsReadOnlyMemory(),
-            context: null,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        return VerifyCoseAsync(
+            message,
+            buildSigStructure,
+            publicKey,
+            verificationDelegate,
+            credentialDeserializer,
+            headerParser,
+            cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Verifies a COSE_Sign1-secured credential using an explicit
+    /// <see cref="VerificationDelegate"/>. The registry-resolving overload
+    /// above delegates here after resolving the function via
+    /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
+    /// from <paramref name="publicKey"/>'s <see cref="SensitiveMemory.Tag"/>.
+    /// </summary>
+    /// <param name="message">The COSE_Sign1 message to verify.</param>
+    /// <param name="buildSigStructure">Delegate to build the Sig_structure for verification.</param>
+    /// <param name="publicKey">The public key for verification.</param>
+    /// <param name="verificationDelegate">The verification delegate to use.</param>
+    /// <param name="credentialDeserializer">Delegate for deserializing the credential from the payload.</param>
+    /// <param name="headerParser">Delegate for parsing the protected header bytes.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The verification result containing validity status and decoded credential.</returns>
+    public static async ValueTask<CoseCredentialVerificationResult> VerifyCoseAsync(
+        CoseSign1Message message,
+        BuildSigStructureDelegate buildSigStructure,
+        PublicKeyMemory publicKey,
+        VerificationDelegate verificationDelegate,
+        CredentialFromJsonBytesDelegate credentialDeserializer,
+        ParseProtectedHeaderDelegate headerParser,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(buildSigStructure);
+        ArgumentNullException.ThrowIfNull(publicKey);
+        ArgumentNullException.ThrowIfNull(verificationDelegate);
+        ArgumentNullException.ThrowIfNull(credentialDeserializer);
+        ArgumentNullException.ThrowIfNull(headerParser);
+
+        bool isValid = await Cose.VerifyAsync(
+            message,
+            buildSigStructure,
+            publicKey,
+            verificationDelegate,
+            cancellationToken).ConfigureAwait(false);
 
         if(!isValid)
         {
             return CoseCredentialVerificationResult.Failed();
         }
 
-        Dictionary<int, object> header = new(headerParser(message.ProtectedHeaderBytes.Span));
+        Dictionary<int, object> header = new(headerParser(message.ProtectedHeader.AsReadOnlySpan()));
         VerifiableCredential credential = credentialDeserializer(message.Payload.Span);
 
         int? alg = header.TryGetValue(CoseHeaderParameters.Alg, out object? algValue) && algValue is int a ? a : null;
         string? kid = header.TryGetValue(CoseHeaderParameters.Kid, out object? kidValue) && kidValue is string k ? k : null;
 
-        return CoseCredentialVerificationResult.Success(header, credential, alg, kid);
+        var verifiedCredential = new Verified<VerifiableCredential>(credential, VerificationContextTag.Create(kid));
+
+        return CoseCredentialVerificationResult.Success(header, verifiedCredential, alg, kid);
     }
 
 
@@ -199,28 +313,25 @@ public static class CredentialCoseExtensions
         ArgumentNullException.ThrowIfNull(headerParser);
 
         byte[] toBeSigned = buildSigStructure(
-            message.ProtectedHeaderBytes.Span,
+            message.ProtectedHeader.AsReadOnlySpan(),
             message.Payload.Span,
             ReadOnlySpan<byte>.Empty);
 
-        IMemoryOwner<byte> signatureMemory = pool.Rent(message.Signature.Length);
-        message.Signature.Span.CopyTo(signatureMemory.Memory.Span);
-
-        using var signature = new Signature(signatureMemory, publicKey.Tag);
-
-        bool isValid = await verificationFunction(publicKey.AsReadOnlyMemory(), toBeSigned, signature).ConfigureAwait(false);
+        bool isValid = await verificationFunction(publicKey.AsReadOnlyMemory(), toBeSigned, message.Signature).ConfigureAwait(false);
 
         if(!isValid)
         {
             return CoseCredentialVerificationResult.Failed();
         }
 
-        Dictionary<int, object> header = new(headerParser(message.ProtectedHeaderBytes.Span));
+        Dictionary<int, object> header = new(headerParser(message.ProtectedHeader.AsReadOnlySpan()));
         VerifiableCredential credential = credentialDeserializer(message.Payload.Span);
 
         int? alg = header.TryGetValue(CoseHeaderParameters.Alg, out object? algValue) && algValue is int a ? a : null;
         string? kid = header.TryGetValue(CoseHeaderParameters.Kid, out object? kidValue) && kidValue is string k ? k : null;
 
-        return CoseCredentialVerificationResult.Success(header, credential, alg, kid);
+        var verifiedCredential = new Verified<VerifiableCredential>(credential, VerificationContextTag.Create(kid));
+
+        return CoseCredentialVerificationResult.Success(header, verifiedCredential, alg, kid);
     }
 }

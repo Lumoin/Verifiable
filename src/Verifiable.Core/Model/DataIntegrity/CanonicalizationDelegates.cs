@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Core;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -36,11 +37,17 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </code>
 /// </remarks>
 /// <param name="contextUri">The URI of the JSON-LD context to resolve.</param>
+/// <param name="context">
+/// The per-operation <see cref="ExchangeContext"/>. An implementation that fetches the
+/// context over the network routes the dereference through the guarded outbound fetch,
+/// which reads the SSRF <c>OutboundFetchPolicy</c> off this context — so the policy
+/// arrives as an explicit per-call argument rather than a captured closure.
+/// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>
 /// A task that resolves to the context JSON string, or <c>null</c> if the context cannot be resolved.
 /// </returns>
-public delegate ValueTask<string?> ContextResolverDelegate(Uri contextUri, CancellationToken cancellationToken = default);
+public delegate ValueTask<string?> ContextResolverDelegate(Uri contextUri, ExchangeContext context, CancellationToken cancellationToken = default);
 
 
 /// <summary>
@@ -167,11 +174,17 @@ public sealed class CanonicalizationResult
 /// Optional delegate for resolving JSON-LD contexts. Required for RDFC canonicalization,
 /// ignored by JCS canonicalization.
 /// </param>
+/// <param name="context">
+/// The per-operation <see cref="ExchangeContext"/>, forwarded to
+/// <paramref name="contextResolver"/> so a network-fetching resolver applies the SSRF
+/// <c>OutboundFetchPolicy</c> it carries.
+/// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>A task that resolves to the canonicalization result.</returns>
 public delegate ValueTask<CanonicalizationResult> CanonicalizationDelegate(
     string json,
     ContextResolverDelegate? contextResolver,
+    ExchangeContext context,
     CancellationToken cancellationToken = default);
 
 

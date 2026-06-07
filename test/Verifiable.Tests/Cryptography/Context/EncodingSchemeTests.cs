@@ -1,4 +1,4 @@
-﻿using Verifiable.Cryptography.Context;
+using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography.Context;
@@ -17,6 +17,8 @@ internal sealed class EncodingSchemeTests
     private const string Pkcs1Name = nameof(EncodingScheme.Pkcs1);
     private const string Pkcs8Name = nameof(EncodingScheme.Pkcs8);
     private const string RawName = nameof(EncodingScheme.Raw);
+    private const string CborName = nameof(EncodingScheme.Cbor);
+    private const string CoseName = nameof(EncodingScheme.Cose);
 
     private const int DerCode = 0;
     private const int PemCode = 1;
@@ -25,6 +27,8 @@ internal sealed class EncodingSchemeTests
     private const int Pkcs1Code = 4;
     private const int Pkcs8Code = 5;
     private const int RawCode = 6;
+    private const int CborCode = 7;
+    private const int CoseCode = 8;
 
     //Arbitrary code that does not conflict with predefined values.
     private const int UnknownCode = 9999;
@@ -45,6 +49,8 @@ internal sealed class EncodingSchemeTests
         yield return new object[] { EncodingScheme.Pkcs1, Pkcs1Name, Pkcs1Code };
         yield return new object[] { EncodingScheme.Pkcs8, Pkcs8Name, Pkcs8Code };
         yield return new object[] { EncodingScheme.Raw, RawName, RawCode };
+        yield return new object[] { EncodingScheme.Cbor, CborName, CborCode };
+        yield return new object[] { EncodingScheme.Cose, CoseName, CoseCode };
     }
 
 
@@ -183,14 +189,16 @@ internal sealed class EncodingSchemeTests
             EncodingScheme.EcUncompressed,
             EncodingScheme.Pkcs1,
             EncodingScheme.Pkcs8,
-            EncodingScheme.Raw);
+            EncodingScheme.Raw,
+            EncodingScheme.Cbor,
+            EncodingScheme.Cose);
     }
 
 
     [TestMethod]
     public void SchemesCollectionHasExpectedCount()
     {
-        //Seven predefined values.
-        ContextTypeTestHelpers.AssertCollectionHasExpectedCount(EncodingScheme.Schemes, 7);
+        //Nine predefined values.
+        ContextTypeTestHelpers.AssertCollectionHasExpectedCount(EncodingScheme.Schemes, 9);
     }
 }

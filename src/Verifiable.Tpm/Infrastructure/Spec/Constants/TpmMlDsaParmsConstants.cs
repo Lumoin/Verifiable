@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
+namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
 
 /// <summary>
 /// ML-DSA parameter set constants per NIST FIPS 204 and TPM 2.0 v1.85.

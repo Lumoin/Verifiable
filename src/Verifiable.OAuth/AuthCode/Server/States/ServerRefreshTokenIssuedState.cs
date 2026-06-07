@@ -1,0 +1,63 @@
+using System.Diagnostics;
+using Verifiable.OAuth.Server;
+
+namespace Verifiable.OAuth.AuthCode.Server.States;
+
+/// <summary>
+/// Records that a refresh token has been issued under an authorization
+/// code or refresh-rotation flow. Persisted via
+/// <see cref="SaveServerFlowStateDelegate"/>; the application's lambda
+/// writes a secondary index keyed by the refresh-token string for
+/// O(1) lookup on the next refresh exchange.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Refresh tokens are opaque random strings (not JWTs), generated via
+/// CSPRNG. The library stores the state under a fresh flow id; the
+/// application's index translates the wire token back to the flow id
+/// via <see cref="ResolveCorrelationKeyDelegate"/>.
+/// </para>
+/// <para>
+/// On a successful refresh exchange, the AS invalidates this state
+/// (the application's <see cref="DeleteServerFlowStateDelegate"/> removes
+/// the index entry and the flow record) and creates a new
+/// <see cref="ServerRefreshTokenIssuedState"/> for the rotated token.
+/// Reuse of an invalidated refresh token returns <c>invalid_grant</c>
+/// per RFC 6749 §5.2 and RFC 9700 §2.2.2.
+/// </para>
+/// </remarks>
+[DebuggerDisplay("ServerRefreshTokenIssued ClientId={ClientId,nq} IssuedAt={IssuedAt} Bound={Confirmation is not null}")]
+public sealed record ServerRefreshTokenIssuedState: OAuthFlowState
+{
+    /// <summary>The OAuth client identifier the refresh token was issued to.</summary>
+    public required string ClientId { get; init; }
+
+    /// <summary>The opaque refresh-token string. Wire form.</summary>
+    public required string RefreshToken { get; init; }
+
+    /// <summary>The UTC instant the refresh token was issued.</summary>
+    public required DateTimeOffset IssuedAt { get; init; }
+
+    /// <summary>
+    /// The subject identifier the refresh token was issued for. Becomes
+    /// the <c>sub</c> claim on the access token issued by the refresh
+    /// exchange.
+    /// </summary>
+    public required string SubjectId { get; init; }
+
+    /// <summary>
+    /// The scope originally granted at authorization. Refreshed access
+    /// tokens inherit this scope; per RFC 6749 §6, refresh requests
+    /// MAY narrow scope but never widen it.
+    /// </summary>
+    public required string Scope { get; init; }
+
+    /// <summary>
+    /// The RFC 7800 confirmation method established at issuance, or
+    /// <see langword="null"/> when the refresh token is Bearer (no
+    /// sender constraint). On refresh exchange, when this is non-null,
+    /// the AS validates the presented DPoP proof's thumbprint matches
+    /// <see cref="ConfirmationMethod.JwkThumbprint"/> per RFC 9449 §5.
+    /// </summary>
+    public ConfirmationMethod? Confirmation { get; init; }
+}

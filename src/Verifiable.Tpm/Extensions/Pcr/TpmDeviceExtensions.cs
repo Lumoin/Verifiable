@@ -1,7 +1,9 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
+using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
@@ -29,13 +31,15 @@ public static class TpmDeviceExtensions
         /// </para>
         /// </remarks>
         /// <returns>A result containing the PCR snapshot or an error.</returns>
-        public TpmResult<PcrSnapshot> ReadAllPcrs()
+        public ValueTask<TpmResult<PcrSnapshot>> ReadAllPcrsAsync(CancellationToken cancellationToken = default)
         {
-            return ReadAllPcrsCore(device);
+            return ReadAllPcrsCoreAsync(device, cancellationToken);
         }
     }
 
-    private static TpmResult<PcrSnapshot> ReadAllPcrsCore(TpmDevice device)
+    private static async ValueTask<TpmResult<PcrSnapshot>> ReadAllPcrsCoreAsync(
+        TpmDevice device,
+        CancellationToken cancellationToken)
     {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -45,8 +49,8 @@ public static class TpmDeviceExtensions
 
         //Discover available PCR banks.
         var capInput = GetCapabilityInput.ForPcrs();
-        TpmResult<GetCapabilityResponse> capResult = TpmCommandExecutor.Execute<GetCapabilityResponse>(
-            device, capInput, [], pool, registry);
+        TpmResult<GetCapabilityResponse> capResult = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+            device, capInput, [], pool, registry, cancellationToken).ConfigureAwait(false);
 
         if(!capResult.IsSuccess)
         {
@@ -81,8 +85,8 @@ public static class TpmDeviceExtensions
                 continue;
             }
 
-            var bankResult = ReadBankWithPagination(
-                device, pool, registry, selection.HashAlgorithm, allocatedPcrs);
+            var bankResult = await ReadBankWithPaginationAsync(
+                device, pool, registry, selection.HashAlgorithm, allocatedPcrs, cancellationToken).ConfigureAwait(false);
 
             if(!bankResult.IsSuccess)
             {
@@ -115,12 +119,13 @@ public static class TpmDeviceExtensions
             isConsistent));
     }
 
-    private static TpmResult<(PcrBank Bank, uint UpdateCounter, bool IsConsistent)> ReadBankWithPagination(
+    private static async ValueTask<TpmResult<(PcrBank Bank, uint UpdateCounter, bool IsConsistent)>> ReadBankWithPaginationAsync(
         TpmDevice device,
         MemoryPool<byte> pool,
         TpmResponseRegistry registry,
         TpmAlgIdConstants hashAlgorithm,
-        List<int> allocatedPcrs)
+        List<int> allocatedPcrs,
+        CancellationToken cancellationToken)
     {
         var values = new Dictionary<int, byte[]>();
         var remainingPcrs = new HashSet<int>(allocatedPcrs);
@@ -139,8 +144,8 @@ public static class TpmDeviceExtensions
 
             using var input = PcrReadInput.ForPcrs(hashAlgorithm, pcrArray, pool);
 
-            TpmResult<PcrReadResponse> result = TpmCommandExecutor.Execute<PcrReadResponse>(
-                device, input, [], pool, registry);
+            TpmResult<PcrReadResponse> result = await TpmCommandExecutor.ExecuteAsync<PcrReadResponse>(
+                device, input, [], pool, registry, cancellationToken).ConfigureAwait(false);
 
             if(!result.IsSuccess)
             {

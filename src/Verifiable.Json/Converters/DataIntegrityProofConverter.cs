@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.DataIntegrity;
@@ -134,7 +135,26 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
 
         if(root.TryGetProperty("domain", out var domainElement))
         {
-            proof.Domain = domainElement.GetString();
+            //Data Integrity 1.0 §2.1: a string or an unordered set of strings. The
+            //model carries the set form; the signer's scalar-versus-array wire shape
+            //survives in the raw proof JSON retained below.
+            if(domainElement.ValueKind == JsonValueKind.Array)
+            {
+                var domains = new List<string>(domainElement.GetArrayLength());
+                foreach(var entry in domainElement.EnumerateArray())
+                {
+                    if(entry.ValueKind == JsonValueKind.String)
+                    {
+                        domains.Add(entry.GetString()!);
+                    }
+                }
+
+                proof.Domain = domains;
+            }
+            else if(domainElement.ValueKind == JsonValueKind.String)
+            {
+                proof.Domain = [domainElement.GetString()!];
+            }
         }
 
         if(root.TryGetProperty("challenge", out var challengeElement))
@@ -146,6 +166,11 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
         {
             proof.Nonce = nonceElement.GetString();
         }
+
+        //Retain the received wire form: verification reconstructs the §4.2 proof
+        //options (proof minus proofValue) from these bytes so the signer's member
+        //shapes survive exactly. Parse provenance only — never written back out.
+        proof.ReceivedProofJson = root.GetRawText();
 
         if(root.TryGetProperty("previousProof", out var previousProofElement))
         {
@@ -213,7 +238,22 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
 
         if(value.Domain is not null)
         {
-            writer.WriteString("domain", value.Domain);
+            //A one-element set writes the scalar wire form (matching what this
+            //library's signer canonicalized); a multi-domain set writes the array.
+            if(value.Domain.Count == 1)
+            {
+                writer.WriteString("domain", value.Domain[0]);
+            }
+            else
+            {
+                writer.WriteStartArray("domain");
+                for(int i = 0; i < value.Domain.Count; ++i)
+                {
+                    writer.WriteStringValue(value.Domain[i]);
+                }
+
+                writer.WriteEndArray();
+            }
         }
 
         if(value.Challenge is not null)

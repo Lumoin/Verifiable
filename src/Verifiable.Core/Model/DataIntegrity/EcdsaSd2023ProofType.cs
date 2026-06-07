@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Core.Model.DataIntegrity;
+namespace Verifiable.Core.Model.DataIntegrity;
 
 
 /// <summary>

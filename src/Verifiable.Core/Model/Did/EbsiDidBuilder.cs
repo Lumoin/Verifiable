@@ -1,4 +1,4 @@
-﻿using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Model.Did
 {

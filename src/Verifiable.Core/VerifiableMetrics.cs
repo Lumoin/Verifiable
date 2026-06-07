@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Core
+namespace Verifiable.Core
 {
     /// <summary>
     /// Centralized constants for Verifiable.Core library metrics and meter names.

@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Core.Model.Did
+namespace Verifiable.Core.Model.Did
 {
     /// <summary>
     /// This class holds some general constants as specified by DID Core specification.

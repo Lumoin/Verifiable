@@ -1,4 +1,4 @@
-﻿using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Attributes;
 using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;

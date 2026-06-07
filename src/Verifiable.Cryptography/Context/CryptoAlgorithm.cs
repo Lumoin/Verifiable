@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -153,7 +153,7 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     /// </summary>
     /// <remarks>
     /// Corresponds to <c>MulticodecHeaders.Secp256k1PublicKey</c> when used
-    /// with <see cref="Purpose.Verification"/>, and <c>WellKnownJwaValues.Es256k1</c>.
+    /// with <see cref="Purpose.Verification"/>, and <c>WellKnownJwaValues.Es256K</c>.
     /// </remarks>
     [CryptoAlgorithmRegistration]
     public static CryptoAlgorithm Secp256k1 { get; } = new CryptoAlgorithm(0);
@@ -361,6 +361,58 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     public static CryptoAlgorithm MlKem1024 { get; } = new CryptoAlgorithm(23);
 
 
+    /// <summary>
+    /// Brainpool P-256r1 elliptic curve (256-bit field, twisted prime curve)
+    /// as defined in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.
+    /// </summary>
+    /// <remarks>
+    /// Paired with SHA-256 under RFC 9784 fully-specified ECDSA identifier
+    /// <c>ESB256</c> (COSE algorithm <c>-261</c>). Used by EUDI Wallet ARF
+    /// profiles that need EU-domestic curve parameters distinct from the
+    /// NIST P-256 generator.
+    /// </remarks>
+    public static CryptoAlgorithm BrainpoolP256r1 { get; } = new CryptoAlgorithm(24);
+
+
+    /// <summary>
+    /// Brainpool P-320r1 elliptic curve (320-bit field, twisted prime curve)
+    /// as defined in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.
+    /// </summary>
+    /// <remarks>
+    /// Paired with SHA-384 under RFC 9784 fully-specified ECDSA identifier
+    /// <c>ESB320</c> (COSE algorithm <c>-262</c>). The 320-bit field has no
+    /// direct NIST equivalent.
+    /// </remarks>
+    public static CryptoAlgorithm BrainpoolP320r1 { get; } = new CryptoAlgorithm(25);
+
+
+    /// <summary>
+    /// Brainpool P-384r1 elliptic curve (384-bit field, twisted prime curve)
+    /// as defined in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.
+    /// </summary>
+    /// <remarks>
+    /// Paired with SHA-384 under RFC 9784 fully-specified ECDSA identifier
+    /// <c>ESB384</c> (COSE algorithm <c>-263</c>).
+    /// </remarks>
+    public static CryptoAlgorithm BrainpoolP384r1 { get; } = new CryptoAlgorithm(26);
+
+
+    /// <summary>
+    /// Brainpool P-512r1 elliptic curve (512-bit field, twisted prime curve)
+    /// as defined in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.
+    /// </summary>
+    /// <remarks>
+    /// Paired with SHA-512 under RFC 9784 fully-specified ECDSA identifier
+    /// <c>ESB512</c> (COSE algorithm <c>-264</c>). Field size matches NIST
+    /// P-521 in practice; the curve parameters differ.
+    /// </remarks>
+    public static CryptoAlgorithm BrainpoolP512r1 { get; } = new CryptoAlgorithm(27);
+
+
     private static readonly List<CryptoAlgorithm> algorithms = new([Rsa2048]);
 
 
@@ -522,6 +574,10 @@ public static class CryptoAlgorithmNames
         var a when a == CryptoAlgorithm.MlKem512.Algorithm => nameof(CryptoAlgorithm.MlKem512),
         var a when a == CryptoAlgorithm.MlKem768.Algorithm => nameof(CryptoAlgorithm.MlKem768),
         var a when a == CryptoAlgorithm.MlKem1024.Algorithm => nameof(CryptoAlgorithm.MlKem1024),
+        var a when a == CryptoAlgorithm.BrainpoolP256r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP256r1),
+        var a when a == CryptoAlgorithm.BrainpoolP320r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP320r1),
+        var a when a == CryptoAlgorithm.BrainpoolP384r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP384r1),
+        var a when a == CryptoAlgorithm.BrainpoolP512r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP512r1),
         _ => $"Custom: ('{algorithm}')."
     };
 }

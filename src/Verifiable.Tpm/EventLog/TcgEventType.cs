@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Tpm.EventLog;
+namespace Verifiable.Tpm.EventLog;
 
 /// <summary>
 /// TCG event types as defined in the PC Client Platform Firmware Profile Specification.

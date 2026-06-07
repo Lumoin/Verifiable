@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -198,10 +199,17 @@ public sealed class DataIntegrityProof: IEquatable<DataIntegrityProof>
     /// <c>https://domain.example:8443</c> (Web origin), or custom strings.
     /// </para>
     /// <para>
+    /// Data Integrity 1.0 §2.1 allows the wire value to be either a single string or an
+    /// unordered set of strings; this model carries the set form (a parsed scalar becomes
+    /// a one-element list). Verification of a wire-parsed proof canonicalizes the proof
+    /// options from <see cref="ReceivedProofJson"/> — the signer's own bytes — so the
+    /// scalar-versus-array wire shape never has to be reconstructed from this member.
+    /// </para>
+    /// <para>
     /// See <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity 1.0 §2.1 Proofs</see>.
     /// </para>
     /// </remarks>
-    public string? Domain { get; set; }
+    public IReadOnlyList<string>? Domain { get; set; }
 
     /// <summary>
     /// A challenge value for mitigating replay attacks.
@@ -266,6 +274,26 @@ public sealed class DataIntegrityProof: IEquatable<DataIntegrityProof>
     /// </remarks>
     public string? Nonce { get; set; }
 
+    /// <summary>
+    /// The proof's received wire JSON, populated by parsers when this proof was read
+    /// from a wire document; <see langword="null"/> for proofs built in memory.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Verification reconstructs the proof options (Data Integrity 1.0 §4.2: the proof
+    /// with <c>proofValue</c> removed) from THIS value when present, so the bytes being
+    /// canonicalized are the signer's own — scalar-versus-array shapes, member presence,
+    /// and timestamp formats survive exactly as signed. Without it, verification falls
+    /// back to re-serializing the typed members, which is only guaranteed consistent for
+    /// proofs this library minted itself.
+    /// </para>
+    /// <para>
+    /// Carried as parse provenance, not data: excluded from equality and never written
+    /// back to the wire.
+    /// </para>
+    /// </remarks>
+    public string? ReceivedProofJson { get; set; }
+
 
     /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
@@ -281,6 +309,8 @@ public sealed class DataIntegrityProof: IEquatable<DataIntegrityProof>
             return true;
         }
 
+        //ReceivedProofJson is parse provenance, not proof data — deliberately excluded.
+        //Domain is an unordered set per §2.1, so it compares as a set.
         return string.Equals(Id, other.Id, StringComparison.Ordinal)
             && string.Equals(Type, other.Type, StringComparison.Ordinal)
             && string.Equals(Cryptosuite?.CryptosuiteName, other.Cryptosuite?.CryptosuiteName, StringComparison.Ordinal)
@@ -288,11 +318,48 @@ public sealed class DataIntegrityProof: IEquatable<DataIntegrityProof>
             && string.Equals(ProofPurpose, other.ProofPurpose, StringComparison.Ordinal)
             && string.Equals(Created, other.Created, StringComparison.Ordinal)
             && string.Equals(Expires, other.Expires, StringComparison.Ordinal)
-            && string.Equals(Domain, other.Domain, StringComparison.Ordinal)
+            && DomainSetEquals(Domain, other.Domain)
             && string.Equals(Challenge, other.Challenge, StringComparison.Ordinal)
             && string.Equals(ProofValue, other.ProofValue, StringComparison.Ordinal)
             && string.Equals(PreviousProof, other.PreviousProof, StringComparison.Ordinal)
             && string.Equals(Nonce, other.Nonce, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// Unordered set equality for the §2.1 <c>domain</c> value (both-null is equal).
+    /// </summary>
+    public static bool DomainSetEquals(IReadOnlyList<string>? domainA, IReadOnlyList<string>? domainB)
+    {
+        if(domainA is null || domainB is null)
+        {
+            return ReferenceEquals(domainA, domainB);
+        }
+
+        if(domainA.Count != domainB.Count)
+        {
+            return false;
+        }
+
+        for(int i = 0; i < domainA.Count; ++i)
+        {
+            bool found = false;
+            for(int j = 0; j < domainB.Count; ++j)
+            {
+                if(string.Equals(domainA[i], domainB[j], StringComparison.Ordinal))
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            if(!found)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <inheritdoc/>
@@ -329,7 +396,9 @@ public sealed class DataIntegrityProof: IEquatable<DataIntegrityProof>
         hash.Add(ProofPurpose);
         hash.Add(Created);
         hash.Add(Expires);
-        hash.Add(Domain);
+        //Domain hashes by count only: it compares as an unordered set, and order-sensitive
+        //element hashing would break the Equals/GetHashCode contract.
+        hash.Add(Domain?.Count ?? -1);
         hash.Add(Challenge);
         hash.Add(ProofValue);
         hash.Add(PreviousProof);

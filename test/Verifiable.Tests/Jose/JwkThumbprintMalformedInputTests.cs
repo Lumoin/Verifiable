@@ -1,7 +1,7 @@
 using Verifiable.JCose;
-using static Verifiable.JCose.JwkThumbprintUtilities.JwkTemplateConstants;
 
 namespace Verifiable.Tests.Jose;
+
 
 /// <summary>
 /// Tests JWK thumbprint computation with malformed, invalid, and edge case inputs.
@@ -128,7 +128,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "Should compute thumbprint even with invalid encoding since we hash the string as-is per RFC 7638.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "Should compute thumbprint even with invalid encoding since we hash the string as-is per RFC 7638.");
     }
 
     [TestMethod]
@@ -145,7 +145,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(jwkParams);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "Should handle very large parameter values without overflow.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "Should handle very large parameter values without overflow.");
     }
 
     [TestMethod]
@@ -162,7 +162,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(jwkParams);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "Should handle UTF-8 special characters correctly per RFC 7638.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "Should handle UTF-8 special characters correctly per RFC 7638.");
     }
 
     [TestMethod]
@@ -175,7 +175,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeMlDsaThumbprint(alg, kty, x);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "Thumbprint should compute even with mismatched parameters (garbage in, deterministic garbage out per RFC 7638).");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "Thumbprint should compute even with mismatched parameters (garbage in, deterministic garbage out per RFC 7638).");
     }
 
     [TestMethod]
@@ -188,7 +188,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeMlDsaThumbprint(alg, kty, x);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "ML-DSA-44 thumbprint must be 32 bytes per RFC 7638.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "ML-DSA-44 thumbprint must be 32 bytes per RFC 7638.");
     }
 
     [TestMethod]
@@ -201,7 +201,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeMlKemThumbprint(alg, kty, x);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "ML-KEM-768 thumbprint must be 32 bytes per RFC 7638.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "ML-KEM-768 thumbprint must be 32 bytes per RFC 7638.");
     }
 
     [TestMethod]
@@ -214,7 +214,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeSlhDsaThumbprint(alg, kty, x);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "SLH-DSA-128f thumbprint must be 32 bytes per RFC 7638.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SLH-DSA-128f thumbprint must be 32 bytes per RFC 7638.");
     }
 
     [TestMethod]
@@ -228,7 +228,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "Empty strings should produce valid thumbprint per RFC 7638.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "Empty strings should produce valid thumbprint per RFC 7638.");
     }
 
     [TestMethod]
@@ -239,7 +239,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(jwkParams);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "Single parameter should produce valid thumbprint.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "Single parameter should produce valid thumbprint.");
     }
 
     [TestMethod]
@@ -250,7 +250,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(jwkParams);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "Different casing should be treated as different keys.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "Different casing should be treated as different keys.");
     }
 
     [TestMethod]
@@ -263,7 +263,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeRsaThumbprint(e, kty, n);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "Whitespace should be preserved in thumbprint calculation per RFC 7638.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "Whitespace should be preserved in thumbprint calculation per RFC 7638.");
     }
 
     [TestMethod]
@@ -277,7 +277,7 @@ internal class JwkThumbprintMalformedInputTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
         
-        Assert.AreEqual(Sha256HashSizeInBytes, thumbprint.Memory.Length, "Non-ASCII characters should be UTF-8 encoded per RFC 7638.");
+        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "Non-ASCII characters should be UTF-8 encoded per RFC 7638.");
     }
 
     [TestMethod]

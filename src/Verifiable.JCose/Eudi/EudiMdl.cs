@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.JCose.Eudi;
 
@@ -24,12 +24,12 @@ public static class EudiMdl
     /// <summary>
     /// The document type for mobile driving licences per ISO/IEC 18013-5.
     /// </summary>
-    public const string Doctype = "org.iso.18013.5.1.mDL";
+    public static readonly string Doctype = "org.iso.18013.5.1.mDL";
 
     /// <summary>
     /// The primary namespace for mDL attributes per ISO/IEC 18013-5.
     /// </summary>
-    public const string Namespace = "org.iso.18013.5.1";
+    public static readonly string Namespace = "org.iso.18013.5.1";
 
     /// <summary>
     /// Attribute identifiers for the ISO/IEC 18013-5 mDL namespace.
@@ -46,166 +46,166 @@ public static class EudiMdl
         /// <summary>
         /// Last name, surname, or primary identifier of the mDL holder.
         /// </summary>
-        public const string FamilyName = "family_name";
+        public static readonly string FamilyName = "family_name";
 
         /// <summary>
         /// First name(s), other name(s), or secondary identifier of the mDL holder.
         /// </summary>
-        public const string GivenName = "given_name";
+        public static readonly string GivenName = "given_name";
 
         /// <summary>
         /// Day, month, and year on which the mDL holder was born.
         /// </summary>
-        public const string BirthDate = "birth_date";
+        public static readonly string BirthDate = "birth_date";
 
         /// <summary>
         /// Date when the document was issued.
         /// </summary>
-        public const string IssueDate = "issue_date";
+        public static readonly string IssueDate = "issue_date";
 
         /// <summary>
         /// Date when the document expires.
         /// </summary>
-        public const string ExpiryDate = "expiry_date";
+        public static readonly string ExpiryDate = "expiry_date";
 
         /// <summary>
         /// Alpha-2 country code as defined in ISO 3166-1 of the issuing authority's country.
         /// </summary>
-        public const string IssuingCountry = "issuing_country";
+        public static readonly string IssuingCountry = "issuing_country";
 
         /// <summary>
         /// Issuing authority name or code.
         /// </summary>
-        public const string IssuingAuthority = "issuing_authority";
+        public static readonly string IssuingAuthority = "issuing_authority";
 
         /// <summary>
         /// The number assigned to the mDL.
         /// </summary>
-        public const string DocumentNumber = "document_number";
+        public static readonly string DocumentNumber = "document_number";
 
         /// <summary>
         /// A reproduction of the mDL holder's portrait.
         /// </summary>
-        public const string Portrait = "portrait";
+        public static readonly string Portrait = "portrait";
 
         /// <summary>
         /// Driving privileges of the mDL holder.
         /// </summary>
-        public const string DrivingPrivileges = "driving_privileges";
+        public static readonly string DrivingPrivileges = "driving_privileges";
 
         /// <summary>
         /// Distinguishing sign of the issuing country per the 1949 and 1968 conventions.
         /// </summary>
-        public const string UnDistinguishingSign = "un_distinguishing_sign";
+        public static readonly string UnDistinguishingSign = "un_distinguishing_sign";
 
         /// <summary>
         /// Administrative number of the mDL.
         /// </summary>
-        public const string AdministrativeNumber = "administrative_number";
+        public static readonly string AdministrativeNumber = "administrative_number";
 
         /// <summary>
         /// Sex of the mDL holder per ISO/IEC 5218.
         /// </summary>
-        public const string Sex = "sex";
+        public static readonly string Sex = "sex";
 
         /// <summary>
         /// Height of the mDL holder in centimetres.
         /// </summary>
-        public const string Height = "height";
+        public static readonly string Height = "height";
 
         /// <summary>
         /// Weight of the mDL holder in kilograms.
         /// </summary>
-        public const string Weight = "weight";
+        public static readonly string Weight = "weight";
 
         /// <summary>
         /// Eye colour of the mDL holder.
         /// </summary>
-        public const string EyeColour = "eye_colour";
+        public static readonly string EyeColour = "eye_colour";
 
         /// <summary>
         /// Hair colour of the mDL holder.
         /// </summary>
-        public const string HairColour = "hair_colour";
+        public static readonly string HairColour = "hair_colour";
 
         /// <summary>
         /// Country of birth as an ISO 3166-1 alpha-2 code.
         /// </summary>
-        public const string BirthPlace = "birth_place";
+        public static readonly string BirthPlace = "birth_place";
 
         /// <summary>
         /// Country and municipality or state/province where the mDL holder lives.
         /// </summary>
-        public const string ResidentAddress = "resident_address";
+        public static readonly string ResidentAddress = "resident_address";
 
         /// <summary>
         /// Date of the portrait capture.
         /// </summary>
-        public const string PortraitCaptureDate = "portrait_capture_date";
+        public static readonly string PortraitCaptureDate = "portrait_capture_date";
 
         /// <summary>
         /// Whether the mDL holder is at least 18 years old. Per ISO/IEC 18013-5, Section 7.2.5.
         /// </summary>
-        public const string AgeOver18 = "age_over_18";
+        public static readonly string AgeOver18 = "age_over_18";
 
         /// <summary>
         /// Whether the mDL holder is at least 21 years old. Per ISO/IEC 18013-5, Section 7.2.5.
         /// </summary>
-        public const string AgeOver21 = "age_over_21";
+        public static readonly string AgeOver21 = "age_over_21";
 
         /// <summary>
         /// The age of the mDL holder in years.
         /// </summary>
-        public const string AgeInYears = "age_in_years";
+        public static readonly string AgeInYears = "age_in_years";
 
         /// <summary>
         /// The birth year of the mDL holder.
         /// </summary>
-        public const string AgeBirthYear = "age_birth_year";
+        public static readonly string AgeBirthYear = "age_birth_year";
 
         /// <summary>
         /// Country subdivision code of the issuing jurisdiction per ISO 3166-2.
         /// </summary>
-        public const string IssuingJurisdiction = "issuing_jurisdiction";
+        public static readonly string IssuingJurisdiction = "issuing_jurisdiction";
 
         /// <summary>
         /// Nationality of the mDL holder as an ISO 3166-1 alpha-2 code.
         /// </summary>
-        public const string Nationality = "nationality";
+        public static readonly string Nationality = "nationality";
 
         /// <summary>
         /// City where the mDL holder lives.
         /// </summary>
-        public const string ResidentCity = "resident_city";
+        public static readonly string ResidentCity = "resident_city";
 
         /// <summary>
         /// State, province, or district where the mDL holder lives.
         /// </summary>
-        public const string ResidentState = "resident_state";
+        public static readonly string ResidentState = "resident_state";
 
         /// <summary>
         /// Postal code of the mDL holder's place of residence.
         /// </summary>
-        public const string ResidentPostalCode = "resident_postal_code";
+        public static readonly string ResidentPostalCode = "resident_postal_code";
 
         /// <summary>
         /// Country where the mDL holder lives as an ISO 3166-1 alpha-2 code.
         /// </summary>
-        public const string ResidentCountry = "resident_country";
+        public static readonly string ResidentCountry = "resident_country";
 
         /// <summary>
         /// Last name of the mDL holder at birth.
         /// </summary>
-        public const string FamilyNameNationalCharacter = "family_name_national_character";
+        public static readonly string FamilyNameNationalCharacter = "family_name_national_character";
 
         /// <summary>
         /// First name of the mDL holder using national characters.
         /// </summary>
-        public const string GivenNameNationalCharacter = "given_name_national_character";
+        public static readonly string GivenNameNationalCharacter = "given_name_national_character";
 
         /// <summary>
         /// Image of the mDL holder's signature or usual mark.
         /// </summary>
-        public const string SignatureUsualMark = "signature_usual_mark";
+        public static readonly string SignatureUsualMark = "signature_usual_mark";
     }
 }

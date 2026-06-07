@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;

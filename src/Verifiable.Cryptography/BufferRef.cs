@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Cryptography;
+namespace Verifiable.Cryptography;
 
 /// <summary>
 /// A read-only view into owned memory buffer.

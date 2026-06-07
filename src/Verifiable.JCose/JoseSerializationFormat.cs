@@ -1,4 +1,4 @@
-﻿namespace Verifiable.JCose;
+namespace Verifiable.JCose;
 
 /// <summary>
 /// JOSE serialization formats per RFC 7515 (JWS) and RFC 7516 (JWE).

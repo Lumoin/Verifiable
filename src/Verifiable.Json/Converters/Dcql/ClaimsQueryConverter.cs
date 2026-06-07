@@ -1,4 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Dcql;
@@ -58,22 +60,22 @@ public sealed class ClaimsQueryConverter: JsonConverter<ClaimsQuery>
 
             switch(propertyName)
             {
-                case ClaimsQuery.IdPropertyName:
+                case var name when DcqlParameterNames.IsId(name):
                 {
                     id = reader.GetString();
                     break;
                 }
-                case ClaimsQuery.PathPropertyName:
+                case var name when DcqlParameterNames.IsPath(name):
                 {
                     path = ReadClaimPattern(ref reader);
                     break;
                 }
-                case ClaimsQuery.ValuesPropertyName:
+                case var name when DcqlParameterNames.IsValues(name):
                 {
                     values = ReadValues(ref reader);
                     break;
                 }
-                case ClaimsQuery.IntentToRetainPropertyName:
+                case var name when DcqlParameterNames.IsIntentToRetain(name):
                 {
                     intentToRetain = reader.GetBoolean();
                     break;
@@ -110,24 +112,24 @@ public sealed class ClaimsQueryConverter: JsonConverter<ClaimsQuery>
 
         if(value.Id is not null)
         {
-            writer.WriteString(ClaimsQuery.IdPropertyName, value.Id);
+            writer.WriteString(DcqlParameterNames.Id, value.Id);
         }
 
         if(value.Path is not null)
         {
-            writer.WritePropertyName(ClaimsQuery.PathPropertyName);
+            writer.WritePropertyName(DcqlParameterNames.Path);
             WriteClaimPattern(writer, value.Path);
         }
 
         if(value.Values is not null)
         {
-            writer.WritePropertyName(ClaimsQuery.ValuesPropertyName);
+            writer.WritePropertyName(DcqlParameterNames.Values);
             WriteValues(writer, value.Values);
         }
 
         if(value.IntentToRetain is not null)
         {
-            writer.WriteBoolean(ClaimsQuery.IntentToRetainPropertyName, value.IntentToRetain.Value);
+            writer.WriteBoolean(DcqlParameterNames.IntentToRetain, value.IntentToRetain.Value);
         }
 
         writer.WriteEndObject();

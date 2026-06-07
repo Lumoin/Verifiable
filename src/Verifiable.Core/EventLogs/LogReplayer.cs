@@ -47,6 +47,25 @@ namespace Verifiable.Core.EventLogs;
 /// continuity across systems.
 /// </para>
 /// <para>
+/// <strong>Source of truth for continuity — distinct from point-in-time assessment.</strong>
+/// This log is the authoritative, tamper-evident record of a subject's lifecycle
+/// through time: the creation, rotation, revocation, and expiration of key
+/// material, credentials, and trust bindings. Anything whose correctness depends
+/// on <em>what happened before</em> — which key is currently valid, whether a
+/// binding was rotated or revoked, how long it remains valid — belongs here, as a
+/// verified link, not as an asserted fact. This is deliberately <em>not</em> the
+/// job of the assessment pipeline (<c>ClaimIssuer&lt;TInput&gt;</c> /
+/// <c>ClaimAssessor&lt;TInput&gt;</c> in <c>Verifiable.Core.Assessment</c>): that
+/// pipeline <em>consumes</em> the replayed <c>LogState</c> as evidence and issues
+/// claims about the subject's state <em>now</em>; it does not own, persist, or
+/// reinvent the lifecycle. Modelling key material or a rotation as an ephemeral
+/// claim would put the source of truth in the wrong layer — the claim is a view
+/// derived from this log; this log is the record. Keeping that boundary crisp is
+/// what lets one lifecycle (create/rotate/revoke/expire) stay verifiable across
+/// the X.509, DID, TPM, and Trusted-List domains rather than being re-derived,
+/// differently, at each assessment.
+/// </para>
+/// <para>
 /// <strong>Connection to selective disclosure.</strong>
 /// The log and the selective disclosure structures in this library are dual in their
 /// relationship to entropy. The log accumulates trust forward through time: each

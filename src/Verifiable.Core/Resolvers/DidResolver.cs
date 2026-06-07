@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Core;
 using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Core.Resolvers;
@@ -24,8 +25,8 @@ namespace Verifiable.Core.Resolvers;
 /// ));
 /// </code>
 /// <para>
-/// See <see href="https://w3c.github.io/did-resolution/#resolving">DID Resolution §4.4</see>
-/// and <see href="https://w3c.github.io/did-resolution/#dereferencing-algorithm">§5.4</see>.
+/// See <see href="https://w3c.github.io/did-resolution/#resolving">DID Resolution Â§4.4</see>
+/// and <see href="https://w3c.github.io/did-resolution/#dereferencing-algorithm">Â§5.4</see>.
 /// </para>
 /// </remarks>
 public sealed class DidResolver
@@ -58,6 +59,10 @@ public sealed class DidResolver
     /// Resolves a DID into a DID document following the W3C DID Resolution algorithm.
     /// </summary>
     /// <param name="did">The DID to resolve.</param>
+    /// <param name="context">
+    /// The per-operation <see cref="ExchangeContext"/>, threaded to the method resolver so a
+    /// network-fetching method can apply the SSRF <c>OutboundFetchPolicy</c> it carries.
+    /// </param>
     /// <param name="options">Resolution options. A <see langword="null"/> value is treated as empty options.</param>
     /// <param name="cancellationToken">Token for cancelling the operation.</param>
     /// <returns>
@@ -67,9 +72,12 @@ public sealed class DidResolver
     /// </returns>
     public async ValueTask<DidResolutionResult> ResolveAsync(
         string did,
+        ExchangeContext context,
         DidResolutionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(context);
+
         options ??= DidResolutionOptions.Empty;
 
         //Step 1: Validate that the input conforms to DID syntax.
@@ -86,14 +94,14 @@ public sealed class DidResolver
             return DidResolutionResult.Failure(DidResolutionErrors.MethodNotSupported);
         }
 
-        //Steps 3–4: Option support and validity checking are delegated to the method-specific
+        //Steps 3â€“4: Option support and validity checking are delegated to the method-specific
         //resolver, as the set of supported and valid options varies by method.
 
         //Step 5: Execute the method-specific Read operation.
         DidResolutionResult result;
         try
         {
-            result = await methodResolver(did, options, cancellationToken).ConfigureAwait(false);
+            result = await methodResolver(did, options, context, cancellationToken).ConfigureAwait(false);
         }
         catch(OperationCanceledException)
         {
@@ -107,7 +115,7 @@ public sealed class DidResolver
         //Step 5b: A deactivated DID returns an empty document with deactivated metadata.
         //The method resolver signals deactivation via DocumentMetadata.Deactivated = true
         //and a null Document. This path is reached only when the resolver sets the flag
-        //without populating a document — the spec requires null document + deactivated metadata.
+        //without populating a document â€” the spec requires null document + deactivated metadata.
         if(result.IsSuccessful
             && result.Document is null
             && result.Kind == DidResolutionKind.Document
@@ -139,6 +147,11 @@ public sealed class DidResolver
     /// Dereferences a DID URL into a resource following the W3C DID URL Dereferencing algorithm.
     /// </summary>
     /// <param name="didUrl">The DID URL to dereference.</param>
+    /// <param name="context">
+    /// The per-operation <see cref="ExchangeContext"/>, threaded to the method dereferencer
+    /// and the base-DID resolution so a network-fetching method can apply the SSRF
+    /// <c>OutboundFetchPolicy</c> it carries.
+    /// </param>
     /// <param name="options">Dereferencing options. A <see langword="null"/> value is treated as empty options.</param>
     /// <param name="cancellationToken">Token for cancelling the operation.</param>
     /// <returns>
@@ -147,13 +160,15 @@ public sealed class DidResolver
     /// <see langword="false"/> and <see cref="DidDereferencingMetadata.Error"/> carries an
     /// RFC 9457 problem details object.
     /// </returns>
-    [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
-        Justification = "DID URLs contain method-specific syntax that System.Uri does not handle correctly.")]
+    [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings", Justification = "DID URLs contain method-specific syntax that System.Uri does not handle correctly.")]
     public async ValueTask<DidDereferencingResult> DereferenceAsync(
         string didUrl,
+        ExchangeContext context,
         DidDereferencingOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(context);
+
         options ??= DidDereferencingOptions.Empty;
 
         //Step 1: Validate that the input conforms to DID URL syntax.
@@ -178,7 +193,7 @@ public sealed class DidResolver
             try
             {
                 var methodResult = await methodDereferencer(
-                    baseDid, parsed.Path, parsed.Query, options, cancellationToken).ConfigureAwait(false);
+                    baseDid, parsed.Path, parsed.Query, options, context, cancellationToken).ConfigureAwait(false);
 
                 //Apply fragment processing when the method returned a document and a fragment is present.
                 if(methodResult.IsSuccessful && parsed.Fragment is not null && methodResult.ContentStream is DidDocument doc)
@@ -200,7 +215,7 @@ public sealed class DidResolver
 
         //Step 2: Resolve the base DID. All DID parameters and dereferencing options are
         //passed as resolution options per the spec.
-        var resolution = await ResolveAsync(baseDid, new DidResolutionOptions
+        var resolution = await ResolveAsync(baseDid, context, new DidResolutionOptions
         {
             Accept = options.Accept
         }, cancellationToken).ConfigureAwait(false);
@@ -218,7 +233,7 @@ public sealed class DidResolver
             return DidDereferencingResult.Failure(DidResolutionErrors.NotFound);
         }
 
-        //Step 6: No path and no query — return the resolved DID document.
+        //Step 6: No path and no query â€” return the resolved DID document.
         if(parsed.Path is null && parsed.Query is null && parsed.Fragment is null)
         {
             return DidDereferencingResult.Success(
@@ -247,12 +262,12 @@ public sealed class DidResolver
                 string? relativeRef = GetQueryParameter(parsed.Query, "relativeRef");
                 if(relativeRef is not null)
                 {
-                    //Append the relative reference per RFC 3986 §5 Reference Resolution.
+                    //Append the relative reference per RFC 3986 Â§5 Reference Resolution.
                     endpoint = endpoint.TrimEnd('/') + '/' + relativeRef.TrimStart('/');
                 }
 
                 //When a fragment is present on the DID URL and the result is a service endpoint
-                //URL, the fragment is appended to the endpoint URL per §5.4.2.
+                //URL, the fragment is appended to the endpoint URL per Â§5.4.2.
                 if(parsed.Fragment is not null)
                 {
                     endpoint = $"{endpoint}#{parsed.Fragment}";
@@ -262,7 +277,7 @@ public sealed class DidResolver
             }
         }
 
-        //No fragment present — return the DID document as the content stream.
+        //No fragment present â€” return the DID document as the content stream.
         if(parsed.Fragment is null)
         {
             return DidDereferencingResult.Success(
@@ -278,7 +293,7 @@ public sealed class DidResolver
     /// <summary>
     /// Expands all relative DID URLs in the services, verification methods, and verification
     /// relationships of <paramref name="document"/> to absolute DID URLs using <paramref name="baseDid"/>
-    /// as the base, per the <c>expandRelativeUrls</c> algorithm in W3C DID Resolution §4.4.
+    /// as the base, per the <c>expandRelativeUrls</c> algorithm in W3C DID Resolution Â§4.4.
     /// </summary>
     private static DidDocument ExpandRelativeUrls(DidDocument document, string baseDid)
     {

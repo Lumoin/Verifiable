@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+using System;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 
@@ -45,7 +46,7 @@ public class CryptographicSuiteJsonConverter: JsonConverter<VerificationMethodTy
     {
         string? suite = reader.GetString();
         if(suite is null)
-        {
+        {            
             JsonThrowHelper.ThrowJsonException("Crypto suite identifier must be a valid identifier string.");
         }
 

@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
+namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
 
 /// <summary>
 /// ML-KEM parameter set constants per NIST FIPS 203 and TPM 2.0 v1.85.

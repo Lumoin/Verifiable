@@ -1,7 +1,7 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography;
 
@@ -86,10 +86,6 @@ public delegate TResult VerificationFunction<TVerificationContext, TDataToVerify
 /// <see cref="Signature"/> object. Use this when the signature is already available as bytes
 /// without needing to wrap it in a <see cref="Signature"/> instance.
 /// </para>
-/// <para>
-/// The <paramref name="dataToVerify"/> parameter uses <see cref="ReadOnlySpan{T}"/> for efficiency
-/// when the data is consumed immediately without storage.
-/// </para>
 /// </remarks>
 /// <seealso cref="VerificationFunction{TVerificationContext, TDataToVerify, TSignature, TResult}"/>
 public delegate TResult VerificationFunctionWithBytes<TPublicKeyBytes, TDataToVerify, TSignatureBytes, out TResult>(
@@ -115,10 +111,6 @@ public delegate TResult VerificationFunctionWithBytes<TPublicKeyBytes, TDataToVe
 /// <c>await</c> boundaries. For the span-based registry pattern, see <c>SigningDelegate</c>
 /// in <c>CryptoFunctionRegistry.cs</c>.
 /// </para>
-/// <para>
-/// The returned signature should be allocated from <paramref name="signaturePool"/>. The caller
-/// is responsible for disposing the returned memory.
-/// </para>
 /// </remarks>
 /// <seealso cref="PrivateKey"/>
 public delegate TResult SigningFunction<TPrivateKeyBytes, TDataToSign, out TResult>(
@@ -134,12 +126,6 @@ public delegate TResult SigningFunction<TPrivateKeyBytes, TDataToSign, out TResu
 /// <typeparam name="TResult">The result type.</typeparam>
 /// <param name="input">The input span.</param>
 /// <returns>The computed result.</returns>
-/// <remarks>
-/// <para>
-/// This is a general-purpose delegate for operations that consume span data synchronously.
-/// It cannot be stored or used across <c>await</c> boundaries due to the span parameter.
-/// </para>
-/// </remarks>
 public delegate TResult ReadOnlySpanFunc<T, out TResult>(ReadOnlySpan<T> input);
 
 
@@ -176,167 +162,53 @@ public abstract class SensitiveData
 /// <para>
 /// This class is the foundation of a layered cryptographic key hierarchy designed to support
 /// multiple backends (software, TPM, HSM, cloud KMS, browser Web Crypto) through a unified API.
-/// Data flows through with minimal state; wrapping is optional convenience, not required.
-/// </para>
-/// 
-/// <para>
-/// <strong>Type Hierarchy</strong>
-/// </para>
-/// <code>
-/// SensitiveMemory                     IMemoryOwner&lt;byte&gt; + Tag
-///     |
-///     +-- PublicKeyMemory             Typed wrapper with WithKeyBytesAsync
-///     |       |
-///     |       +-- PublicKey           Memory + bound VerificationFunction + KeyId
-///     |
-///     +-- PrivateKeyMemory            Typed wrapper with WithKeyBytesAsync
-///     |       |
-///     |       +-- PrivateKey          Memory + bound SigningFunction + KeyId
-///     |
-///     +-- Signature                   Sealed. Output of signing operations.
-/// </code>
-/// <para>
-/// All cryptographic material in this library is tracked through this hierarchy.
-/// There are no naked, opaque byte buffers. Every piece of sensitive memory carries
-/// a <see cref="Tag"/> describing what it is (algorithm, purpose, encoding, semantics),
-/// is disposable to ensure cleanup, and is guarded against use-after-dispose.
-/// </para>
-/// 
-/// <para>
-/// <strong>Memory Contents: Material vs Handle</strong>
 /// </para>
 /// <para>
-/// The bytes in this memory can represent different things, indicated by
-/// <see cref="MaterialSemantics"/> in the <see cref="Tag"/>:
-/// </para>
-/// <list type="bullet">
-/// <item><description>
-/// <strong>Direct material (<see cref="MaterialSemantics.Direct"/>)</strong> - 
-/// The bytes ARE the cryptographic key material. Software implementations
-/// (BouncyCastle, NSec, Microsoft platform crypto) operate on these bytes directly.
-/// </description></item>
-/// <item><description>
-/// <strong>Handle/reference (<see cref="MaterialSemantics.TpmHandle"/> etc.)</strong> - 
-/// The bytes identify a key stored in secure hardware or remote service.
-/// The bound cryptographic function interprets the handle and delegates operations
-/// to the appropriate backend. The actual key material never leaves the secure boundary.
-/// </description></item>
-/// </list>
-/// 
-/// <para>
-/// <strong>Three-Step Key Resolution</strong>
+/// <strong>OpenTelemetry Lifetime Spans</strong>
 /// </para>
 /// <para>
-/// Using cryptographic keys involves three distinct concerns:
+/// When an <see cref="Activity"/> is supplied at construction, this class manages
+/// its lifetime — stopping it in <see cref="Dispose(bool)"/> and tagging it with
+/// <c>crypto.lifetime_ms</c> at that point. Backends start the activity before
+/// construction and stamp it with provenance attributes (<c>crypto.provider.library</c>,
+/// <c>crypto.provider.version</c>, <c>crypto.library.name</c>,
+/// <c>crypto.library.version</c>, <c>crypto.provider.class</c>,
+/// <c>crypto.provider.operation</c>, <c>crypto.byte_length</c>).
+/// </para>
+/// <para>
+/// If no OTel listener is configured, <see cref="ActivitySource.StartActivity"/> returns
+/// <see langword="null"/> and the <c>activity</c> parameter should be passed as
+/// <see langword="null"/>. The constructor accepts <see langword="null"/> and the
+/// entire path is zero-cost.
+/// </para>
+/// <para>
+/// Subscribe to lifetime spans at application startup:
 /// </para>
 /// <code>
-/// +---------------------------------------------------------------------+
-/// | 1. IDENTIFICATION                                                   |
-/// |    "Which key?"                                                     |
-/// |    -----------------------------------------------------------------|
-/// |    Inputs: kid header, verification method ID, issuer config        |
-/// |    Output: Key identifier / reference                               |
-/// +---------------------------------------------------------------------+
-///                                    |
-///                                    v
-/// +---------------------------------------------------------------------+
-/// | 2. LOADING                                                          |
-/// |    "Fetch bytes and metadata from storage"                          |
-/// |    -----------------------------------------------------------------|
-/// |    Sources: Database, file, API, in-memory cache                    |
-/// |    Output: Bytes + Tag (algorithm, purpose, semantics)              |
-/// |    Creates: PublicKeyMemory or PrivateKeyMemory                     |
-/// +---------------------------------------------------------------------+
-///                                    |
-///                                    v
-/// +---------------------------------------------------------------------+
-/// | 3. BINDING                                                          |
-/// |    "Attach appropriate cryptographic function"                      |
-/// |    -----------------------------------------------------------------|
-/// |    Uses: Tag to route via CryptoFunctionRegistry                    |
-/// |    Output: PublicKey or PrivateKey with bound function              |
-/// |    Ready for: SignAsync, VerifyAsync operations                     |
-/// +---------------------------------------------------------------------+
+/// using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+///     .AddSource(CryptoActivitySource.Name)
+///     .AddOtlpExporter()
+///     .Build();
 /// </code>
-/// 
 /// <para>
-/// <strong>Function Binding Patterns</strong>
+/// <strong>CBOM Provenance</strong>
 /// </para>
 /// <para>
-/// Cryptographic operations are performed by delegate functions. Three patterns are supported:
-/// </para>
-/// <list type="bullet">
-/// <item><description>
-/// <strong>Explicit function</strong> - Caller passes the function directly.
-/// Maximum flexibility, no registry needed. Used in tests and specialized scenarios.
-/// </description></item>
-/// <item><description>
-/// <strong>Registry-based</strong> - Function resolved from
-/// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> based on
-/// <see cref="CryptoAlgorithm"/> and <see cref="Purpose"/> from the key's <see cref="Tag"/>.
-/// </description></item>
-/// <item><description>
-/// <strong>Resolver/Binder</strong> - Uses <c>KeyMaterialResolver</c> and <c>KeyMaterialBinder</c>
-/// delegates for complex scenarios like DID resolution or database-backed key storage.
-/// </description></item>
-/// </list>
-/// 
-/// <para>
-/// <strong>Why This Design?</strong>
-/// </para>
-/// <list type="bullet">
-/// <item><description>
-/// <strong>Source agnosticism</strong> - Key material can come from any storage.
-/// The loading step is completely user-defined.
-/// </description></item>
-/// <item><description>
-/// <strong>Implementation flexibility</strong> - Swap backends (BouncyCastle to NSec to Microsoft)
-/// without changing key storage or application code.
-/// </description></item>
-/// <item><description>
-/// <strong>Dynamic routing</strong> - Different operations can use different backends.
-/// Use FIPS-certified hardware for regulated operations, fast software for others.
-/// </description></item>
-/// <item><description>
-/// <strong>Testability</strong> - Substitute implementations in tests without mocking.
-/// </description></item>
-/// <item><description>
-/// <strong>Regulatory compliance</strong> - Move to HSM/TPM when regulations require,
-/// storage schema unchanged.
-/// </description></item>
-/// <item><description>
-/// <strong>Gradual migration</strong> - Move keys to secure hardware incrementally
-/// by updating <see cref="MaterialSemantics"/> and binding.
-/// </description></item>
-/// </list>
-/// 
-/// <para>
-/// <strong>Security Considerations</strong>
-/// </para>
-/// <para>
-/// Sensitive data may be present in crash dumps, page files, or temporary variables.
-/// When possible, security-sensitive operations should be done on locked systems
-/// with restricted privileges. The <see cref="Dispose"/> method clears memory contents.
-/// For hardware-backed keys (<see cref="MaterialSemantics.TpmHandle"/>), the actual
-/// key material never enters process memory. Accessing memory after disposal throws
-/// <see cref="ObjectDisposedException"/> to guard against use-after-free bugs.
+/// The <see cref="Tag"/> on every instance carries <see cref="ProviderLibrary"/>,
+/// <see cref="CryptoLibrary"/>, <see cref="ProviderClass"/>, and
+/// <see cref="ProviderOperation"/> entries stamped by the backend at construction.
+/// These entries survive for the full lifetime of the value and are accessible
+/// to any code holding a reference — no event subscription required.
 /// </para>
 /// </remarks>
 /// <seealso cref="Tag"/>
-/// <seealso cref="PublicKeyMemory"/>
-/// <seealso cref="PrivateKeyMemory"/>
-/// <seealso cref="Signature"/>
-/// <seealso cref="PublicKey"/>
-/// <seealso cref="PrivateKey"/>
-/// <seealso cref="MaterialSemantics"/>
-/// <seealso cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-/// <seealso cref="CryptographicKeyFactory"/>
+/// <seealso cref="CryptoActivitySource"/>
+/// <seealso cref="ProviderLibrary"/>
+/// <seealso cref="CryptoLibrary"/>
 public abstract class SensitiveMemory: SensitiveData, IDisposable, IEquatable<SensitiveMemory>
 {
-    /// <summary>
-    /// Detects and prevents redundant dispose calls.
-    /// </summary>
     private bool disposed;
+    private readonly Activity? lifetime;
 
     /// <summary>
     /// The piece of sensitive data.
@@ -345,14 +217,31 @@ public abstract class SensitiveMemory: SensitiveData, IDisposable, IEquatable<Se
 
 
     /// <summary>
-    /// Sensitive memory default constructor.
+    /// Initializes a new instance of <see cref="SensitiveMemory"/>.
     /// </summary>
-    /// <param name="sensitiveMemory">The piece of sensitive memory that is wrapped and owned.</param>
-    /// <param name="tag">Tags the memory with out-of-band information such as key material information.</param>
-    protected SensitiveMemory(IMemoryOwner<byte> sensitiveMemory, Tag tag) : base(tag)
+    /// <param name="sensitiveMemory">
+    /// The memory owner holding the sensitive bytes. Ownership transfers to this instance.
+    /// </param>
+    /// <param name="tag">
+    /// Metadata describing the contents — algorithm, purpose, encoding, and provenance.
+    /// Backends stamp <see cref="ProviderLibrary"/>, <see cref="CryptoLibrary"/>,
+    /// <see cref="ProviderClass"/>, and <see cref="ProviderOperation"/> entries here
+    /// for CBOM traceability.
+    /// </param>
+    /// <param name="lifetime">
+    /// An optional OTel <see cref="Activity"/> spanning the lifetime of this value.
+    /// Started by the backend before construction; stopped by <see cref="Dispose()"/>.
+    /// Pass <see langword="null"/> when no OTel listener is active — the constructor
+    /// is zero-cost in that case.
+    /// </param>
+    protected SensitiveMemory(
+        IMemoryOwner<byte> sensitiveMemory,
+        Tag tag,
+        Activity? lifetime = null) : base(tag)
     {
         ArgumentNullException.ThrowIfNull(sensitiveMemory);
-        this.MemoryOwner = sensitiveMemory;
+        MemoryOwner = sensitiveMemory;
+        this.lifetime = lifetime;
     }
 
 
@@ -378,7 +267,7 @@ public abstract class SensitiveMemory: SensitiveData, IDisposable, IEquatable<Se
     }
 
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     public void Dispose()
     {
         Dispose(true);
@@ -387,10 +276,13 @@ public abstract class SensitiveMemory: SensitiveData, IDisposable, IEquatable<Se
 
 
     /// <summary>
-    /// Allows inherited resources to hook into application defined tasks with freeing,
-    /// releasing, or resetting unmanaged resources.
+    /// Releases resources held by this instance and stops the OTel lifetime span
+    /// if one was supplied at construction.
     /// </summary>
-    /// <param name="disposing"><see langword="true"/> if called from <see cref="Dispose()"/>; <see langword="false"/> if called from a finalizer.</param>
+    /// <param name="disposing">
+    /// <see langword="true"/> if called from <see cref="Dispose()"/>;
+    /// <see langword="false"/> if called from a finalizer.
+    /// </param>
     protected virtual void Dispose(bool disposing)
     {
         if(disposed)
@@ -411,65 +303,71 @@ public abstract class SensitiveMemory: SensitiveData, IDisposable, IEquatable<Se
             //Clearing the memory is in case there is not a pooled memory owner
             //that clears it. One example is Verifiable.Core.ExactSizeMemoryPool.
             MemoryOwner.Memory.Span.Clear();
-            MemoryOwner?.Dispose();
+            MemoryOwner.Dispose();
+
+            if(lifetime is not null)
+            {
+                lifetime.Stop();
+                lifetime.SetTag(CryptoTelemetry.LifetimeMs,
+                    lifetime.Duration.TotalMilliseconds);
+            }
         }
 
         disposed = true;
     }
 
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals([NotNullWhen(true)] SensitiveMemory? other)
     {
-        //The reason for this is that Memory<T> does not implement deep hashing
-        //due to performance concerns.
         return other is not null
-            && MemoryExtensions.SequenceEqual(MemoryOwner.Memory.Span, other.MemoryOwner.Memory.Span);
+            && MemoryExtensions.SequenceEqual(
+                MemoryOwner.Memory.Span,
+                other.MemoryOwner.Memory.Span);
     }
 
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public override bool Equals([NotNullWhen(true)] object? obj) => (obj is SensitiveMemory s) && Equals(s);
+    public override bool Equals([NotNullWhen(true)] object? obj) =>
+        obj is SensitiveMemory s && Equals(s);
 
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator ==(in SensitiveMemory s1, in SensitiveMemory s2) => Equals(s1, s2);
 
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator !=(in SensitiveMemory s1, in SensitiveMemory s2) => !Equals(s1, s2);
 
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator ==(in object s1, in SensitiveMemory s2) => Equals(s1, s2);
 
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator ==(in SensitiveMemory s1, in object s2) => Equals(s1, s2);
 
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator !=(in object s1, in SensitiveMemory s2) => !Equals(s1, s2);
 
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static bool operator !=(in SensitiveMemory s1, in object s2) => !Equals(s1, s2);
 
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public override int GetHashCode()
     {
-        //The reason for this is that Memory<T> does not implement deep hashing
-        //due to performance concerns.
         var hash = new HashCode();
         ReadOnlySpan<byte> memorySpan = MemoryOwner.Memory.Span;
         for(int i = 0; i < memorySpan.Length; ++i)

@@ -514,4 +514,156 @@ public static class EllipticCurveConstants
         public static readonly BigInteger A = 486662;
         public static readonly BigInteger B = 1;
     }
+
+
+    //Brainpool prime r1 curves per RFC 5639. Unlike NIST P-curves (a = -3) and
+    //secp256k1 (a = 0), Brainpool curves use general short-Weierstrass form
+    //y^2 = x^3 + ax + b (mod p) with arbitrary a. The Curve25519-style hex
+    //parsing is used here both because the byte literals would be unwieldy
+    //(64 hex digits per constant × 4 constants × 4 curves) and because each
+    //prime is ≡ 3 (mod 4) so PIdentity = (p + 1) / 4 falls out by computation.
+
+
+    /// <summary>
+    /// Pre-computed constants for the Brainpool P-256r1 elliptic curve per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639 §3.4</see>.
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
+    public static class BrainpoolP256r1
+    {
+        /// <summary>The length of a Brainpool P-256r1 field element in bytes.</summary>
+        public const int PointArrayLength = 32;
+
+        /// <summary>The byte length of an uncompressed Brainpool P-256r1 point encoding: 0x04 prefix + X + Y.</summary>
+        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+
+        /// <summary>The byte length of a compressed Brainpool P-256r1 point encoding: 0x02/0x03 prefix + X.</summary>
+        public const int CompressedPointByteCount = 1 + PointArrayLength;
+
+        /// <summary>The curve prime p per RFC 5639 §3.4.</summary>
+        public static readonly BigInteger Prime = BigInteger.Parse(
+            "00A9FB57DBA1EEA9BC3E660A909D838D726E3BF623D52620282013481D1F6E5377",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The curve a coefficient per RFC 5639 §3.4.</summary>
+        public static readonly BigInteger CoefficientA = BigInteger.Parse(
+            "007D5A0975FC2C3057EEF67530417AFFE7FB8055C126DC5C6CE94A4B44F330B5D9",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The curve b coefficient per RFC 5639 §3.4.</summary>
+        public static readonly BigInteger CoefficientB = BigInteger.Parse(
+            "0026DC5C6CE94A4B44F330B5D9BBD77CBF958416295CF7E1CE6BCCDC18FF8C07B6",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The square-root exponent (Prime + 1) / 4 for Tonelli–Shanks shortcut when p ≡ 3 (mod 4).</summary>
+        public static readonly BigInteger PIdentity = (Prime + 1) / 4;
+    }
+
+
+    /// <summary>
+    /// Pre-computed constants for the Brainpool P-320r1 elliptic curve per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639 §3.5</see>.
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
+    public static class BrainpoolP320r1
+    {
+        /// <summary>The length of a Brainpool P-320r1 field element in bytes.</summary>
+        public const int PointArrayLength = 40;
+
+        /// <summary>The byte length of an uncompressed Brainpool P-320r1 point encoding: 0x04 prefix + X + Y.</summary>
+        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+
+        /// <summary>The byte length of a compressed Brainpool P-320r1 point encoding: 0x02/0x03 prefix + X.</summary>
+        public const int CompressedPointByteCount = 1 + PointArrayLength;
+
+        /// <summary>The curve prime p per RFC 5639 §3.5.</summary>
+        public static readonly BigInteger Prime = BigInteger.Parse(
+            "00D35E472036BC4FB7E13C785ED201E065F98FCFA6F6F40DEF4F92B9EC7893EC28FCD412B1F1B32E27",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The curve a coefficient per RFC 5639 §3.5.</summary>
+        public static readonly BigInteger CoefficientA = BigInteger.Parse(
+            "003EE30B568FBAB0F883CCEBD46D3F3BB8A2A73513F5EB79DA66190EB085FFA9F492F375A97D860EB4",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The curve b coefficient per RFC 5639 §3.5.</summary>
+        public static readonly BigInteger CoefficientB = BigInteger.Parse(
+            "00520883949DFDBC42D3AD198640688A6FE13F41349554B49ACC31DCCD884539816F5EB4AC8FB1F1A6",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The square-root exponent (Prime + 1) / 4 for Tonelli–Shanks shortcut when p ≡ 3 (mod 4).</summary>
+        public static readonly BigInteger PIdentity = (Prime + 1) / 4;
+    }
+
+
+    /// <summary>
+    /// Pre-computed constants for the Brainpool P-384r1 elliptic curve per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639 §3.6</see>.
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
+    public static class BrainpoolP384r1
+    {
+        /// <summary>The length of a Brainpool P-384r1 field element in bytes.</summary>
+        public const int PointArrayLength = 48;
+
+        /// <summary>The byte length of an uncompressed Brainpool P-384r1 point encoding: 0x04 prefix + X + Y.</summary>
+        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+
+        /// <summary>The byte length of a compressed Brainpool P-384r1 point encoding: 0x02/0x03 prefix + X.</summary>
+        public const int CompressedPointByteCount = 1 + PointArrayLength;
+
+        /// <summary>The curve prime p per RFC 5639 §3.6.</summary>
+        public static readonly BigInteger Prime = BigInteger.Parse(
+            "008CB91E82A3386D280F5D6F7E50E641DF152F7109ED5456B412B1DA197FB71123ACD3A729901D1A71874700133107EC53",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The curve a coefficient per RFC 5639 §3.6.</summary>
+        public static readonly BigInteger CoefficientA = BigInteger.Parse(
+            "007BC382C63D8C150C3C72080ACE05AFA0C2BEA28E4FB22787139165EFBA91F90F8AA5814A503AD4EB04A8C7DD22CE2826",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The curve b coefficient per RFC 5639 §3.6.</summary>
+        public static readonly BigInteger CoefficientB = BigInteger.Parse(
+            "0004A8C7DD22CE28268B39B55416F0447C2FB77DE107DCD2A62E880EA53EEB62D57CB4390295DBC9943AB78696FA504C11",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The square-root exponent (Prime + 1) / 4 for Tonelli–Shanks shortcut when p ≡ 3 (mod 4).</summary>
+        public static readonly BigInteger PIdentity = (Prime + 1) / 4;
+    }
+
+
+    /// <summary>
+    /// Pre-computed constants for the Brainpool P-512r1 elliptic curve per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639 §3.7</see>.
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
+    public static class BrainpoolP512r1
+    {
+        /// <summary>The length of a Brainpool P-512r1 field element in bytes.</summary>
+        public const int PointArrayLength = 64;
+
+        /// <summary>The byte length of an uncompressed Brainpool P-512r1 point encoding: 0x04 prefix + X + Y.</summary>
+        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+
+        /// <summary>The byte length of a compressed Brainpool P-512r1 point encoding: 0x02/0x03 prefix + X.</summary>
+        public const int CompressedPointByteCount = 1 + PointArrayLength;
+
+        /// <summary>The curve prime p per RFC 5639 §3.7.</summary>
+        public static readonly BigInteger Prime = BigInteger.Parse(
+            "00AADD9DB8DBE9C48B3FD4E6AE33C9FC07CB308DB3B3C9D20ED6639CCA703308717D4D9B009BC66842AECDA12AE6A380E62881FF2F2D82C68528AA6056583A48F3",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The curve a coefficient per RFC 5639 §3.7.</summary>
+        public static readonly BigInteger CoefficientA = BigInteger.Parse(
+            "007830A3318B603B89E2327145AC234CC594CBDD8D3DF91610A83441CAEA9863BC2DED5D5AA8253AA10A2EF1C98B9AC8B57F1117A72BF2C7B9E7C1AC4D77FC94CA",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The curve b coefficient per RFC 5639 §3.7.</summary>
+        public static readonly BigInteger CoefficientB = BigInteger.Parse(
+            "003DF91610A83441CAEA9863BC2DED5D5AA8253AA10A2EF1C98B9AC8B57F1117A72BF2C7B9E7C1AC4D77FC94CADC083E67984050B75EBAE5DD2809BD638016F723",
+            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        /// <summary>The square-root exponent (Prime + 1) / 4 for Tonelli–Shanks shortcut when p ≡ 3 (mod 4).</summary>
+        public static readonly BigInteger PIdentity = (Prime + 1) / 4;
+    }
 }

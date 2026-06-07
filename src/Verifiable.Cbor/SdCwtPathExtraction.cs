@@ -1,9 +1,10 @@
-﻿using System.Buffers;
+using System;
+using System.Buffers;
+using System.Collections.Generic;
 using System.Formats.Cbor;
 using System.Globalization;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.JCose.Sd;
 
 namespace Verifiable.Cbor;
 
@@ -37,6 +38,35 @@ public static class SdCwtPathExtraction
         string hashAlgorithm = "sha-256")
     {
         ArgumentNullException.ThrowIfNull(message);
+
+        return ExtractPaths(message.Payload, message.Disclosures, encoder, pool, hashAlgorithm);
+    }
+
+
+    /// <summary>
+    /// Extracts the credential path each disclosure binds to, working from redacted payload
+    /// bytes and an explicit disclosure set rather than a whole <see cref="SdCwtMessage"/>.
+    /// </summary>
+    /// <remarks>
+    /// This is the seam the structural verifier uses: it parses only the payload from the
+    /// signed envelope and supplies the holder-selected disclosures, so a narrowed
+    /// presentation binds against exactly what was presented — never the original full set
+    /// that the wire form's unprotected header still carries.
+    /// </remarks>
+    /// <param name="payload">The redacted CWT payload bytes (CBOR).</param>
+    /// <param name="disclosures">The disclosures to bind against the payload's digests.</param>
+    /// <param name="encoder">Delegate for Base64Url encoding (for digest computation).</param>
+    /// <param name="pool">Memory pool for allocations.</param>
+    /// <param name="hashAlgorithm">The hash algorithm name (default: "sha-256").</param>
+    /// <returns>A dictionary mapping each bound disclosure to its credential path.</returns>
+    public static IReadOnlyDictionary<SdDisclosure, CredentialPath> ExtractPaths(
+        ReadOnlyMemory<byte> payload,
+        IReadOnlyList<SdDisclosure> disclosures,
+        EncodeDelegate encoder,
+        MemoryPool<byte> pool,
+        string hashAlgorithm = "sha-256")
+    {
+        ArgumentNullException.ThrowIfNull(disclosures);
         ArgumentNullException.ThrowIfNull(encoder);
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -44,7 +74,7 @@ public static class SdCwtPathExtraction
         //We use Base64Url encoding as the common comparison format.
         var digestToDisclosure = new Dictionary<string, SdDisclosure>(StringComparer.Ordinal);
 
-        foreach(SdDisclosure disclosure in message.Disclosures)
+        foreach(SdDisclosure disclosure in disclosures)
         {
             byte[] disclosureCbor = SdCwtSerializer.SerializeDisclosure(disclosure);
             byte[] digestBytes = SdCwtSerializer.ComputeDisclosureDigest(disclosureCbor, hashAlgorithm);
@@ -53,7 +83,7 @@ public static class SdCwtPathExtraction
         }
 
         var result = new Dictionary<SdDisclosure, CredentialPath>();
-        ExtractPathsFromCbor(message.Payload, CredentialPath.Root, digestToDisclosure, result, encoder);
+        ExtractPathsFromCbor(payload, CredentialPath.Root, digestToDisclosure, result, encoder);
 
         return result;
     }
@@ -162,6 +192,44 @@ public static class SdCwtPathExtraction
 
             while(reader.PeekState() != CborReaderState.EndMap)
             {
+                //SD-CWT places redacted object-property claim digests under the simple(59) map
+                //key, with an array of digest byte strings as the value (draft-ietf-spice-sd-cwt).
+                //The key is a CBOR simple value — not an integer or text string — so read it
+                //explicitly and collect its digests; the disclosures bind against these.
+                if(reader.PeekState() == CborReaderState.SimpleValue)
+                {
+                    int simpleKey = (int)reader.ReadSimpleValue();
+                    if(simpleKey == SdCwtConstants.RedactedClaimKeysSimpleValue
+                        && reader.PeekState() == CborReaderState.StartArray)
+                    {
+                        reader.ReadStartArray();
+                        while(reader.PeekState() != CborReaderState.EndArray)
+                        {
+                            CborReaderState redactedDigestState = reader.PeekState();
+                            if(redactedDigestState == CborReaderState.ByteString)
+                            {
+                                sdDigests.Add(encoder(reader.ReadByteString()));
+                            }
+                            else if(redactedDigestState == CborReaderState.TextString)
+                            {
+                                sdDigests.Add(reader.ReadTextString());
+                            }
+                            else
+                            {
+                                reader.SkipValue();
+                            }
+                        }
+
+                        reader.ReadEndArray();
+                    }
+                    else
+                    {
+                        reader.SkipValue();
+                    }
+
+                    continue;
+                }
+
                 //Read key (could be int or string in CWT).
                 object key;
                 if(reader.PeekState() == CborReaderState.NegativeInteger || reader.PeekState() == CborReaderState.UnsignedInteger)

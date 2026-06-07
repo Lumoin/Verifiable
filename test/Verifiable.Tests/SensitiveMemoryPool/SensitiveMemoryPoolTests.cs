@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -591,6 +591,65 @@ namespace Verifiable.Tests.SensitiveMemoryPool
             int[] results = await Task.WhenAll(tasks).ConfigureAwait(false);
 
             Assert.HasCount(50, results, "All concurrent rent-dispose cycles should complete.");
+        }
+
+
+        [TestMethod]
+        public async Task ConcurrentRentReturnNeverAliasesBackingMemory()
+        {
+            //A small per-slab capacity forces heavy segment reuse, so concurrent renters
+            //contend for the same backing slabs. The core safety invariant under test:
+            //the pool must never hand the same backing segment to two live renters. Each
+            //task fills its buffer with a value unique to that task+iteration and, after a
+            //yield that lets other renters interleave, verifies every byte still holds that
+            //value. A shared/overlapping segment would corrupt the pattern and be detected.
+            using var meter = new Meter("Test", "1.0.0");
+            using var pool = new SensitiveMemoryPool<byte>(meter, capacityStrategy: _ => 4);
+
+            const int taskCount = 64;
+            const int iterationsPerTask = 500;
+            const int bufferSize = 32;
+
+            var failures = new ConcurrentQueue<string>();
+            var cancellationToken = TestContext.CancellationToken;
+
+            var tasks = Enumerable.Range(0, taskCount).Select(taskIndex => Task.Run(async () =>
+            {
+                for(int iteration = 0; iteration < iterationsPerTask; iteration++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    byte pattern = (byte)((taskIndex * 31 + iteration) & 0xFF);
+
+                    using var owner = pool.Rent(bufferSize);
+                    if(owner.Memory.Length != bufferSize)
+                    {
+                        failures.Enqueue($"Rented length {owner.Memory.Length}, expected {bufferSize} (task {taskIndex}, iter {iteration}).");
+                        return;
+                    }
+
+                    owner.Memory.Span.Fill(pattern);
+
+                    //Yield so other renters interleave while this buffer is held and filled.
+                    await Task.Yield();
+
+                    int mismatch = owner.Memory.Span.IndexOfAnyExcept(pattern);
+                    if(mismatch >= 0)
+                    {
+                        failures.Enqueue($"Aliasing detected at byte {mismatch}: was {owner.Memory.Span[mismatch]}, expected {pattern} (task {taskIndex}, iter {iteration}).");
+                        return;
+                    }
+                }
+            }, cancellationToken)).ToArray();
+
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+
+            Assert.IsEmpty(failures, $"No renter should ever observe aliased or mis-sized memory. First failures: {string.Join(" | ", failures.Take(5))}");
+
+            //After the storm settles every rental has been returned, so the pool must be
+            //fully reusable.
+            using var afterStorm = pool.Rent(bufferSize);
+            Assert.AreEqual(bufferSize, afterStorm.Memory.Length, "Pool must remain usable after concurrent rent/return.");
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Tests;
 
@@ -158,7 +158,7 @@ internal sealed class DateTimeStampFormatTests
     {
         var exception = Assert.Throws<FormatException>(() => DateTimeStampFormat.Parse("2024-01-15T10:30:45"));
 
-        Assert.IsTrue(exception.Message.Contains("timezone", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("timezone", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
 

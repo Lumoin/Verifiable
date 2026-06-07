@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 
 namespace Verifiable.Core.Model.DataIntegrity;
 
@@ -9,40 +10,51 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// <remarks>
 /// <para>
 /// This is the intermediate artifact described in
-/// <see href="https://www.w3.org/TR/vc-data-integrity/#add-proof">W3C Data Integrity §4.2 Add Proof</see>.
-/// It contains the proof metadata fields without <c>proofValue</c>, plus an optional
-/// <c>@context</c> inherited from the secured document. The signing algorithm serializes
-/// this document, canonicalizes it, and hashes the result alongside the credential hash.
-/// The verifier reconstructs the same document from the proof to verify the signature.
+/// <see href="https://www.w3.org/TR/vc-data-integrity/#add-proof">W3C Data Integrity §4.2 Add Proof</see>
+/// and reconstructed during
+/// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">§4.2 Verify Proof</see>:
+/// the proof with <c>proofValue</c> removed, plus an optional <c>@context</c> inherited
+/// from the secured document for RDFC canonicalization. The signing algorithm serializes
+/// this document, canonicalizes it, and hashes the result alongside the document hash;
+/// the verifier reconstructs the same bytes to verify the signature.
 /// </para>
 /// <para>
-/// This type is distinct from <see cref="DataIntegrityProof"/> because:
-/// </para>
-/// <list type="bullet">
-/// <item><description>It never carries <c>proofValue</c> (which is the output of signing).</description></item>
-/// <item><description>It carries <c>@context</c> inherited from the secured document for RDFC canonicalization.</description></item>
-/// <item><description>It uses a string representation for <c>verificationMethod</c> matching the JSON wire format,
-/// while <c>cryptosuite</c> carries the full <see cref="CryptosuiteInfo"/> for type safety.</description></item>
-/// </list>
-/// <para>
-/// <strong>Challenge and domain:</strong> When present, <see cref="Challenge"/> and <see cref="Domain"/>
-/// are included in the canonicalized proof options and are therefore covered by the signature.
-/// This binds the proof to a specific verifier and interaction, preventing replay attacks.
-/// Both fields are required for presentation proofs using <c>proofPurpose: authentication</c>.
+/// There is ONE construction path — <see cref="FromProof"/> over a
+/// <see cref="DataIntegrityProof"/> — for signing and verification alike: the signer
+/// builds the complete proof skeleton (everything except <c>proofValue</c>) FIRST and
+/// derives the options from it, so every member the wire proof will carry — including
+/// <see cref="Id"/> and <see cref="PreviousProof"/> for chains — is covered by the
+/// signature, exactly as §4.2's proof-minus-proofValue reconstruction expects.
 /// </para>
 /// <para>
-/// <strong>Context handling:</strong> The <see cref="Context"/> property carries the secured
-/// document's <c>@context</c> for cryptosuites that require JSON-LD processing (e.g., RDFC-based
-/// suites). For JCS-based suites, this is <see langword="null"/>. Implementations SHOULD
-/// permanently cache context files and MUST validate them per
-/// <see href="https://www.w3.org/TR/vc-data-integrity/#validating-contexts">§2.4.1 Validating Contexts</see>
-/// and <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context Validation</see>.
-/// See also <see href="https://github.com/w3c/vc-data-integrity/issues/323">Issue #323</see>
-/// regarding external context availability and longevity.
+/// <strong>Shape preservation:</strong> when the proof was parsed from a wire document,
+/// <see cref="ReceivedProofJson"/> carries the signer's own bytes and the serializer
+/// reconstructs the options from THEM (removing <c>proofValue</c>) rather than from the
+/// typed members — scalar-versus-array shapes (e.g. a multi-domain set), member presence,
+/// and timestamp formats survive exactly as signed.
+/// </para>
+/// <para>
+/// <strong>Challenge and domain:</strong> when present, <see cref="Challenge"/> and
+/// <see cref="Domain"/> are part of the canonicalized options and therefore covered by
+/// the signature — that coverage is what makes them anti-replay bindings rather than
+/// advisory fields. Both are required for presentation proofs using
+/// <c>proofPurpose: authentication</c>.
+/// </para>
+/// <para>
+/// <strong>Context handling:</strong> the <see cref="Context"/> property carries the
+/// secured document's <c>@context</c> for cryptosuites that require JSON-LD processing
+/// (RDFC-based suites); for JCS-based suites it is <see langword="null"/>. See
+/// <see href="https://www.w3.org/TR/vc-data-integrity/#context-validation">§4.6 Context Validation</see>.
 /// </para>
 /// </remarks>
 public sealed class ProofOptionsDocument
 {
+    /// <summary>
+    /// The proof identifier, when the proof carries one (e.g. as a chain target).
+    /// Covered by the signature.
+    /// </summary>
+    public string? Id { get; init; }
+
     /// <summary>
     /// The proof type identifier. For Data Integrity proofs this is <c>"DataIntegrityProof"</c>.
     /// </summary>
@@ -67,6 +79,12 @@ public sealed class ProofOptionsDocument
     public required string Created { get; init; }
 
     /// <summary>
+    /// The proof expiry timestamp as an XML Schema 1.1 <c>dateTimeStamp</c> string,
+    /// when present. Covered by the signature.
+    /// </summary>
+    public string? Expires { get; init; }
+
+    /// <summary>
     /// The verification method identifier (typically a DID URL) as a string reference.
     /// </summary>
     public required string VerificationMethod { get; init; }
@@ -89,15 +107,16 @@ public sealed class ProofOptionsDocument
     public object? Context { get; init; }
 
     /// <summary>
-    /// The security domain binding for this proof, or <see langword="null"/> if not domain-bound.
+    /// The security domain binding for this proof, or <see langword="null"/> if not
+    /// domain-bound. Per Data Integrity 1.0 §2.1 the value is a string or an unordered
+    /// set of strings; this carries the set form.
     /// </summary>
     /// <remarks>
     /// When present, this value is included in the canonicalized proof options and is therefore
     /// covered by the signature. Verifiers must check that the domain matches their own identifier
-    /// to prevent cross-domain replay attacks. See
-    /// <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity 00a72.1 Proofs</see>.
+    /// to prevent cross-domain replay attacks.
     /// </remarks>
-    public string? Domain { get; init; }
+    public IReadOnlyList<string>? Domain { get; init; }
 
     /// <summary>
     /// The challenge value binding this proof to a specific verifier interaction,
@@ -107,20 +126,41 @@ public sealed class ProofOptionsDocument
     /// When present, this value is included in the canonicalized proof options and is therefore
     /// covered by the signature. Verifiers must check that the challenge matches the value they
     /// issued to prevent replay attacks. Required for presentation proofs where
-    /// <see cref="ProofPurpose"/> is <c>"authentication"</c>. See
-    /// <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">Data Integrity 00a72.1 Proofs</see>.
+    /// <see cref="ProofPurpose"/> is <c>"authentication"</c>.
     /// </remarks>
     public string? Challenge { get; init; }
 
+    /// <summary>
+    /// The proof's <c>nonce</c>, when present. Covered by the signature.
+    /// </summary>
+    public string? Nonce { get; init; }
 
     /// <summary>
-    /// Creates a <see cref="ProofOptionsDocument"/> from an existing <see cref="DataIntegrityProof"/>
-    /// and the secured document's context. Used during verification to reconstruct the proof
-    /// options document that was canonicalized during signing.
+    /// The chained proof reference (<c>previousProof</c>), when present. Coverage by the
+    /// signature is what makes a proof chain cryptographically chained
+    /// (Data Integrity 1.0 §2.1.2).
     /// </summary>
-    /// <param name="proof">The proof from the secured document.</param>
+    public string? PreviousProof { get; init; }
+
+    /// <summary>
+    /// The proof's received wire JSON, when the proof was parsed from a wire document.
+    /// The serializer prefers this — removing <c>proofValue</c> and injecting
+    /// <see cref="Context"/> — over re-serializing the typed members, so verification
+    /// canonicalizes the signer's own bytes. See
+    /// <see cref="DataIntegrityProof.ReceivedProofJson"/>.
+    /// </summary>
+    public string? ReceivedProofJson { get; init; }
+
+
+    /// <summary>
+    /// Creates a <see cref="ProofOptionsDocument"/> from a <see cref="DataIntegrityProof"/>
+    /// and the secured document's context. The single construction path: the signer passes
+    /// the complete proof skeleton (no <c>proofValue</c> yet) and the verifier passes the
+    /// parsed proof — both yield the same options, which is the §4.2 contract.
+    /// </summary>
+    /// <param name="proof">The proof skeleton (signing) or the parsed proof (verification).</param>
     /// <param name="context">The secured document's <c>@context</c>, or <see langword="null"/> for JCS-based suites.</param>
-    /// <returns>The reconstructed proof options document.</returns>
+    /// <returns>The proof options document.</returns>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="proof"/> is <see langword="null"/>.
     /// </exception>
@@ -138,51 +178,19 @@ public sealed class ProofOptionsDocument
 
         return new ProofOptionsDocument
         {
+            Id = proof.Id,
             Type = proof.Type ?? DataIntegrityProof.DataIntegrityProofType,
             Cryptosuite = proof.Cryptosuite,
             Created = proof.Created ?? string.Empty,
+            Expires = proof.Expires,
             VerificationMethod = proof.VerificationMethod?.Id ?? string.Empty,
             ProofPurpose = proof.ProofPurpose ?? string.Empty,
             Context = context,
             Domain = proof.Domain,
-            Challenge = proof.Challenge
-        };
-    }
-
-
-    /// <summary>
-    /// Creates a <see cref="ProofOptionsDocument"/> for signing with the specified parameters.
-    /// </summary>
-    /// <param name="cryptosuite">The cryptosuite information.</param>
-    /// <param name="created">The formatted creation timestamp.</param>
-    /// <param name="verificationMethodId">The verification method DID URL.</param>
-    /// <param name="proofPurpose">The proof purpose string.</param>
-    /// <param name="context">The secured document's <c>@context</c>, or <see langword="null"/> for JCS-based suites.</param>
-    /// <returns>A new proof options document ready for serialization and canonicalization.</returns>
-    public static ProofOptionsDocument ForSigning(
-        CryptosuiteInfo cryptosuite,
-        string created,
-        string verificationMethodId,
-        string proofPurpose,
-        object? context,
-        string? domain = null,
-        string? challenge = null)
-    {
-        ArgumentNullException.ThrowIfNull(cryptosuite);
-        ArgumentException.ThrowIfNullOrWhiteSpace(created);
-        ArgumentException.ThrowIfNullOrWhiteSpace(verificationMethodId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(proofPurpose);
-
-        return new ProofOptionsDocument
-        {
-            Type = DataIntegrityProof.DataIntegrityProofType,
-            Cryptosuite = cryptosuite,
-            Created = created,
-            VerificationMethod = verificationMethodId,
-            ProofPurpose = proofPurpose,
-            Context = context,
-            Domain = domain,
-            Challenge = challenge
+            Challenge = proof.Challenge,
+            Nonce = proof.Nonce,
+            PreviousProof = proof.PreviousProof,
+            ReceivedProofJson = proof.ReceivedProofJson
         };
     }
 }
