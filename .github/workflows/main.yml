@@ -434,6 +434,34 @@ jobs:
         done
       shell: bash
 
+    # Runtime conformance: prove the native AOT binary just produced actually runs
+    # on this platform. The managed build's IsAotCompatible analysis catches trim/AOT
+    # issues statically, but only executing the compiled, trimmed binary proves the
+    # System.CommandLine parse -> action -> output pipeline survives AOT on each RID.
+    # The host RID is derived from runner.os/runner.arch and only that native binary
+    # is run (on macOS the matrix packs both osx RIDs; only the native one executes).
+    # A real command must exit 0 and emit the expected output.
+    - name: Verify native AOT binary runs (${{ matrix.os }})
+      shell: bash
+      timeout-minutes: 5
+      run: |
+        case "${RUNNER_OS}-${RUNNER_ARCH}" in
+          Linux-X64)     rid=linux-x64 ;;
+          Linux-ARM64)   rid=linux-arm64 ;;
+          macOS-ARM64)   rid=osx-arm64 ;;
+          macOS-X64)     rid=osx-x64 ;;
+          Windows-X64)   rid=win-x64 ;;
+          Windows-ARM64) rid=win-arm64 ;;
+          *) echo "Unsupported host ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+        esac
+        bin="src/Verifiable/bin/${BUILD_CONFIGURATION}/net10.0/${rid}/publish/Verifiable"
+        if [ -f "${bin}.exe" ]; then bin="${bin}.exe"; fi
+        echo "Running native AOT binary: ${bin}"
+        out="$("${bin}" did create 42 conformance-check)"
+        echo "${out}"
+        echo "${out}" | grep -q 'Created DID document with ID: 42'
+        echo "${out}" | grep -q 'Parameter: conformance-check'
+
     - name: Upload AOT RID packages (${{ matrix.os }})
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
