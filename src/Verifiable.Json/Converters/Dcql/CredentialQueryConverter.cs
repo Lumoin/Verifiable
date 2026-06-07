@@ -1,4 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
@@ -12,6 +14,24 @@ namespace Verifiable.Json.Converters.Dcql;
 /// </summary>
 public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
 {
+    private readonly bool requireMeta;
+
+
+    /// <summary>
+    /// Creates a <see cref="CredentialQueryConverter"/>.
+    /// </summary>
+    /// <param name="requireMeta">
+    /// When <see langword="true"/> — the default and the OID4VP 1.0 §6.1-conformant
+    /// behaviour — a Credential Query lacking the <c>meta</c> member is rejected on read.
+    /// Set <see langword="false"/> only to interoperate with the (widely-seen but
+    /// non-conformant) Verifiers that omit <c>meta</c>.
+    /// </param>
+    public CredentialQueryConverter(bool requireMeta = true)
+    {
+        this.requireMeta = requireMeta;
+    }
+
+
     /// <inheritdoc/>
     [return: NotNull]
     public override CredentialQuery Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -29,6 +49,8 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
         List<ClaimsQuery>? claims = null;
         List<ClaimSetQuery>? claimSets = null;
         List<TrustedAuthoritiesQuery>? trustedAuthorities = null;
+        bool? multiple = null;
+        bool? requireCryptographicHolderBinding = null;
 
         while(reader.Read())
         {
@@ -47,35 +69,45 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
 
             switch(propertyName)
             {
-                case CredentialQuery.IdPropertyName:
+                case var name when DcqlParameterNames.IsId(name):
                 {
                     id = reader.GetString();
                     break;
                 }
-                case CredentialQuery.FormatPropertyName:
+                case var name when DcqlParameterNames.IsFormat(name):
                 {
                     format = reader.GetString();
                     break;
                 }
-                case CredentialQuery.MetaPropertyName:
+                case var name when DcqlParameterNames.IsMeta(name):
                 {
                     var typeInfo = (JsonTypeInfo<CredentialQueryMeta>)options.GetTypeInfo(typeof(CredentialQueryMeta));
                     meta = JsonSerializer.Deserialize(ref reader, typeInfo);
                     break;
                 }
-                case CredentialQuery.ClaimsPropertyName:
+                case var name when DcqlParameterNames.IsClaims(name):
                 {
                     claims = ReadArray<ClaimsQuery>(ref reader, options);
                     break;
                 }
-                case CredentialQuery.ClaimSetsPropertyName:
+                case var name when DcqlParameterNames.IsClaimSets(name):
                 {
                     claimSets = ReadClaimSets(ref reader);
                     break;
                 }
-                case CredentialQuery.TrustedAuthoritiesPropertyName:
+                case var name when DcqlParameterNames.IsTrustedAuthorities(name):
                 {
                     trustedAuthorities = ReadArray<TrustedAuthoritiesQuery>(ref reader, options);
+                    break;
+                }
+                case var name when DcqlParameterNames.IsMultiple(name):
+                {
+                    multiple = reader.GetBoolean();
+                    break;
+                }
+                case var name when DcqlParameterNames.IsRequireCryptographicHolderBinding(name):
+                {
+                    requireCryptographicHolderBinding = reader.GetBoolean();
                     break;
                 }
                 default:
@@ -96,6 +128,21 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
             throw new JsonException("The 'format' property is required.");
         }
 
+        //OID4VP 1.0 §6.1: 'meta' is REQUIRED (may be empty). Configurable via requireMeta
+        //to tolerate non-conformant Verifiers that omit it.
+        if(requireMeta && meta is null)
+        {
+            throw new JsonException("The 'meta' property is required (OID4VP 1.0 §6.1).");
+        }
+
+        //OID4VP 1.0 §6.3: a Claims Query 'id' is REQUIRED when 'claim_sets' is present,
+        //because claim_sets references claims by their id.
+        if(claimSets is not null && claims is not null && claims.Exists(static claim => claim.Id is null))
+        {
+            throw new JsonException(
+                "Each Claims Query requires an 'id' when 'claim_sets' is present (OID4VP 1.0 §6.3).");
+        }
+
         return new CredentialQuery
         {
             Id = id,
@@ -103,7 +150,9 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
             Meta = meta,
             Claims = claims,
             ClaimSets = claimSets,
-            TrustedAuthorities = trustedAuthorities
+            TrustedAuthorities = trustedAuthorities,
+            Multiple = multiple,
+            RequireCryptographicHolderBinding = requireCryptographicHolderBinding
         };
     }
 
@@ -116,32 +165,44 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
 
         writer.WriteStartObject();
 
-        writer.WriteString(CredentialQuery.IdPropertyName, value.Id);
-        writer.WriteString(CredentialQuery.FormatPropertyName, value.Format);
+        writer.WriteString(DcqlParameterNames.Id, value.Id);
+        writer.WriteString(DcqlParameterNames.Format, value.Format);
 
         if(value.Meta is not null)
         {
-            writer.WritePropertyName(CredentialQuery.MetaPropertyName);
+            writer.WritePropertyName(DcqlParameterNames.Meta);
             var typeInfo = (JsonTypeInfo<CredentialQueryMeta>)options.GetTypeInfo(typeof(CredentialQueryMeta));
             JsonSerializer.Serialize(writer, value.Meta, typeInfo);
         }
 
         if(value.Claims is not null)
         {
-            writer.WritePropertyName(CredentialQuery.ClaimsPropertyName);
+            writer.WritePropertyName(DcqlParameterNames.Claims);
             WriteArray(writer, value.Claims, options);
         }
 
         if(value.ClaimSets is not null)
         {
-            writer.WritePropertyName(CredentialQuery.ClaimSetsPropertyName);
+            writer.WritePropertyName(DcqlParameterNames.ClaimSets);
             WriteClaimSets(writer, value.ClaimSets);
         }
 
         if(value.TrustedAuthorities is not null)
         {
-            writer.WritePropertyName(CredentialQuery.TrustedAuthoritiesPropertyName);
+            writer.WritePropertyName(DcqlParameterNames.TrustedAuthorities);
             WriteArray(writer, value.TrustedAuthorities, options);
+        }
+
+        if(value.Multiple is not null)
+        {
+            writer.WriteBoolean(DcqlParameterNames.Multiple, value.Multiple.Value);
+        }
+
+        if(value.RequireCryptographicHolderBinding is not null)
+        {
+            writer.WriteBoolean(
+                DcqlParameterNames.RequireCryptographicHolderBinding,
+                value.RequireCryptographicHolderBinding.Value);
         }
 
         writer.WriteEndObject();

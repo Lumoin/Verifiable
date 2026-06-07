@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;

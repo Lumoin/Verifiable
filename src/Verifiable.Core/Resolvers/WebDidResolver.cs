@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Core;
 using Verifiable.Core.Model.Did.Methods;
 
 namespace Verifiable.Core.Resolvers;
@@ -83,6 +84,10 @@ public static class WebDidResolver
     /// </summary>
     /// <param name="did">A valid <c>did:web</c> identifier string.</param>
     /// <param name="options">Resolution options (not used by this method).</param>
+    /// <param name="context">
+    /// The per-operation context (not used by this method — it returns the URL for the
+    /// caller to fetch through the guarded outbound path rather than fetching itself).
+    /// </param>
     /// <param name="cancellationToken">Cancellation token (not used by this method).</param>
     /// <returns>
     /// A <see cref="DidResolutionResult"/> with <see cref="DidResolutionKind.DocumentUrl"/>
@@ -91,6 +96,7 @@ public static class WebDidResolver
     public static ValueTask<DidResolutionResult> ResolveAsync(
         string did,
         DidResolutionOptions options,
+        ExchangeContext context,
         CancellationToken cancellationToken)
     {
         return ValueTask.FromResult(DidResolutionResult.SuccessUrl(Resolve(did)));

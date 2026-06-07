@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Tests.TestInfrastructure;
+namespace Verifiable.Tests.TestInfrastructure;
 
 /// <summary>
 /// An extension of <see cref="TestClassAttribute"/> that automatically upgrades

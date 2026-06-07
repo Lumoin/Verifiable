@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Core.Model.DataIntegrity;
+namespace Verifiable.Core.Model.DataIntegrity;
 
 /// <summary>
 /// Factory delegate for resolving cryptosuite names to <see cref="CryptosuiteInfo"/> instances.

@@ -5,6 +5,7 @@ using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Validation;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Json;
@@ -95,37 +96,34 @@ namespace Verifiable.Tests.Builders
 
 
         [TestMethod]
-        [DynamicData(nameof(DidKeyTheoryData.GetDidTheoryTestData), typeof(DidKeyTheoryData))]
+        [DynamicData(nameof(DidKeyTheoryData.GetSigningDidTheoryTestData), typeof(DidKeyTheoryData))]
         public async ValueTask CreateAndVerifySignatureUsingDidKey(DidKeyTestData testData)
         {
+            //The data source supplies only signature-capable algorithms — the
+            //key-agreement-only X25519 curve is exercised by CreateAndPerformKeyExchangeUsingDidKey.
             var keyPair = testData.KeyPairFactory();
             using var publicKey = keyPair.PublicKey;
             using var privateKey = keyPair.PrivateKey;
 
-            if(publicKey.SupportsSigning())
-            {
-                Assert.Inconclusive($"Key pair {publicKey.Tag.Get<CryptoAlgorithm>()} does not support signing.");
+            //Create DID document.
+            var didDocument = await KeyDidBuilder.BuildAsync(
+                publicKey,
+                testData.VerificationMethodTypeInfo,
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-                //Create DID document.
-                var didDocument = await KeyDidBuilder.BuildAsync(
-                    publicKey,
-                    testData.VerificationMethodTypeInfo,
-                    cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            //Sign data.
+            var contentToSign = Encoding.UTF8.GetBytes("Hello, DID!");
+            using var signature = await privateKey.SignAsync(contentToSign, SensitiveMemoryPool<byte>.Shared)
+                .ConfigureAwait(false);
 
-                //Sign data.
-                var contentToSign = Encoding.UTF8.GetBytes("Hello, DID!");
-                using var signature = await privateKey.SignAsync(contentToSign, SensitiveMemoryPool<byte>.Shared)
-                    .ConfigureAwait(false);
+            //Verify signature using the verification method by ID.
+            var verificationMethodId = didDocument.VerificationMethod![0].Id!;
+            var verificationMethod = didDocument.ResolveVerificationMethodReference(verificationMethodId);
+            Assert.IsNotNull(verificationMethod, "Verification method should be found by ID.");
 
-                //Verify signature using the verification method by ID.
-                var verificationMethodId = didDocument.VerificationMethod![0].Id!;
-                var verificationMethod = didDocument.ResolveVerificationMethodReference(verificationMethodId);
-                Assert.IsNotNull(verificationMethod, "Verification method should be found by ID.");
-
-                bool verified = await verificationMethod.VerifySignatureAsync(contentToSign, signature, SensitiveMemoryPool<byte>.Shared)
-                    .ConfigureAwait(false);
-                Assert.IsTrue(verified);
-            }
+            bool isVerified = await verificationMethod.VerifySignatureAsync(contentToSign, signature, SensitiveMemoryPool<byte>.Shared)
+                .ConfigureAwait(false);
+            Assert.IsTrue(isVerified);
         }
 
 

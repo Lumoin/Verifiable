@@ -1,4 +1,4 @@
-﻿using Verifiable.Tpm;
+using Verifiable.Tpm;
 
 namespace Verifiable.Tests.Tpm;
 

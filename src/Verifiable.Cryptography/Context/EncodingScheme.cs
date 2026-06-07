@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -201,7 +201,31 @@ public readonly struct EncodingScheme: IEquatable<EncodingScheme>
     public static EncodingScheme Raw { get; } = new EncodingScheme(6);
 
 
-    private static readonly List<EncodingScheme> schemes = new([Der, Pem, EcCompressed, EcUncompressed, Pkcs1, Pkcs8, Raw]);
+    /// <summary>
+    /// CBOR encoding per RFC 8949.
+    /// </summary>
+    /// <remarks>
+    /// Concise Binary Object Representation. Used as the byte form for COSE
+    /// structures, CWT claim sets, mdoc Mobile Security Objects, and any
+    /// data that flows through the <c>Verifiable.Cbor</c> serializers.
+    /// </remarks>
+    public static EncodingScheme Cbor { get; } = new EncodingScheme(7);
+
+
+    /// <summary>
+    /// COSE (CBOR Object Signing and Encryption) wire encoding per RFC 9052.
+    /// </summary>
+    /// <remarks>
+    /// A specific shape of CBOR carrying signed/encrypted/MACed message
+    /// envelopes (COSE_Sign1, COSE_Mac0, COSE_Encrypt0, …). Distinguished
+    /// from plain <see cref="Cbor"/> in CBOM/OTel signals because COSE
+    /// bytes have stronger semantic meaning — they are crypto-bearing
+    /// envelopes, not arbitrary CBOR.
+    /// </remarks>
+    public static EncodingScheme Cose { get; } = new EncodingScheme(8);
+
+
+    private static readonly List<EncodingScheme> schemes = new([Der, Pem, EcCompressed, EcUncompressed, Pkcs1, Pkcs8, Raw, Cbor, Cose]);
 
 
     /// <summary>
@@ -344,6 +368,8 @@ public static class EncodingSchemeNames
         var c when c == EncodingScheme.Pkcs1.Scheme => nameof(EncodingScheme.Pkcs1),
         var c when c == EncodingScheme.Pkcs8.Scheme => nameof(EncodingScheme.Pkcs8),
         var c when c == EncodingScheme.Raw.Scheme => nameof(EncodingScheme.Raw),
+        var c when c == EncodingScheme.Cbor.Scheme => nameof(EncodingScheme.Cbor),
+        var c when c == EncodingScheme.Cose.Scheme => nameof(EncodingScheme.Cose),
         _ => $"Custom: ('{code}')."
     };
 }

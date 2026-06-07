@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Did;
 

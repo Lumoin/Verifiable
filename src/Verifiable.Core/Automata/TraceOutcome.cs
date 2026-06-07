@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Core.Automata;
+namespace Verifiable.Core.Automata;
 
 /// <summary>
 /// The outcome of a single pushdown automaton step.

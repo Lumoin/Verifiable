@@ -1,4 +1,4 @@
-﻿using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestDataProviders;

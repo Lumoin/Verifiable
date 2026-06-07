@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Tests.TestInfrastructure;
+namespace Verifiable.Tests.TestInfrastructure;
 
 /// <summary>
 /// Abstract base class for conditional test skip attributes.

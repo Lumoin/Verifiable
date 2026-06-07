@@ -1,7 +1,9 @@
 using System.Buffers;
 using System.Text;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
+using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.DataIntegrity;
 using Verifiable.Tests.TestInfrastructure;
@@ -14,7 +16,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// </summary>
 /// <remarks>
 /// <para>
-/// These tests exercise the <see cref="SdJwtExtensions"/> POCO-based issuance API for
+/// These tests exercise the <see cref="SdJwtIssuanceExtensions"/> POCO-based issuance API for
 /// arbitrary types serializable via <see cref="JsonSerializer"/>. No W3C Verifiable Credential
 /// awareness — flat and nested claim maps only.
 /// </para>
@@ -37,9 +39,9 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            ["iss"] = "did:example:76e12ec712ebc6f1c221ebfeb1f",
-            ["vct"] = "ExampleDegreeCredential",
-            ["iat"] = 1725244200,
+            [WellKnownJwtClaimNames.Iss] = "did:example:76e12ec712ebc6f1c221ebfeb1f",
+            [WellKnownJwtClaimNames.Vct] = "ExampleDegreeCredential",
+            [WellKnownJwtClaimNames.Iat] = 1725244200,
             ["given_name"] = "Alice",
             ["family_name"] = "Smith"
         };
@@ -50,12 +52,13 @@ internal sealed class SdJwtRfc9901IssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            disclosablePaths,
-            SaltGenerator.Create,
+            static (Dictionary<string, object> c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
+            SdJwtIssuance.IssueVerboseAsync,
+disclosablePaths,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
-            TestSetup.DefaultSerializationOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsGreaterThan(0, result.SignedToken.Length, "Signed token must not be empty.");
@@ -74,7 +77,7 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            ["iss"] = "https://issuer.example.com",
+            [WellKnownJwtClaimNames.Iss] = "https://issuer.example.com",
             ["address"] = new Dictionary<string, object>
             {
                 ["street"] = "Heidestrasse 17",
@@ -89,12 +92,13 @@ internal sealed class SdJwtRfc9901IssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            disclosablePaths,
-            SaltGenerator.Create,
+            static (Dictionary<string, object> c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
+            SdJwtIssuance.IssueVerboseAsync,
+disclosablePaths,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
-            TestSetup.DefaultSerializationOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(2, result.Disclosures);
@@ -109,18 +113,19 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            ["iss"] = "https://issuer.example.com",
-            ["vct"] = "IdentityCredential",
-            ["iat"] = 1700000000
+            [WellKnownJwtClaimNames.Iss] = "https://issuer.example.com",
+            [WellKnownJwtClaimNames.Vct] = "IdentityCredential",
+            [WellKnownJwtClaimNames.Iat] = 1700000000
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            new HashSet<CredentialPath>(),
-            SaltGenerator.Create,
+            static (Dictionary<string, object> c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
+            SdJwtIssuance.IssueVerboseAsync,
+new HashSet<CredentialPath>(),
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
-            TestSetup.DefaultSerializationOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(0, result.Disclosures);
@@ -134,7 +139,7 @@ internal sealed class SdJwtRfc9901IssuanceTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<string, object>
         {
-            ["iss"] = "https://issuer.example.com",
+            [WellKnownJwtClaimNames.Iss] = "https://issuer.example.com",
             ["address"] = new Dictionary<string, object>
             {
                 ["street"] = "Heidestrasse 17",
@@ -147,12 +152,13 @@ internal sealed class SdJwtRfc9901IssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            disclosablePaths,
-            SaltGenerator.Create,
+            static (Dictionary<string, object> c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
+            SdJwtIssuance.IssueVerboseAsync,
+disclosablePaths,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
-            TestSetup.DefaultSerializationOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(1, result.Disclosures);

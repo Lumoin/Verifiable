@@ -1,6 +1,9 @@
-﻿using System.Security.Cryptography;
+using System.Buffers;
+using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Cryptography;
+using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DataIntegrity;
@@ -86,16 +89,18 @@ internal sealed class BlankNodeRelabelingW3CTests
     /// From W3C Example 75 → Example 76.
     /// </summary>
     [TestMethod]
-    public void FirstStatementWithNoBlankNodesRemainsUnchanged()
+    public async Task FirstStatementWithNoBlankNodesRemainsUnchanged()
     {
         const string CanonicalStatement =
             "<did:key:zDnaegE6RR3atJtHKwTRTWHsJ3kNHqFwv7n9YjTgmU7TyfU76> <https://schema.org/image> <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2NgUPr/HwADaAIhG61j/AAAAABJRU5ErkJggg==> .\n";
 
-        string relabeled = BlankNodeRelabeling.RelabelNQuad(
+        string relabeled = await BlankNodeRelabeling.RelabelNQuadAsync(
             CanonicalStatement,
             W3CHmacKey,
-            HMACSHA256.HashData,
-            TestSetup.Base64UrlEncoder);
+            MicrosoftHmacFunctions.ComputeHmacAsync,
+            TestSetup.Base64UrlEncoder,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CanonicalStatement, relabeled);
     }
@@ -107,7 +112,7 @@ internal sealed class BlankNodeRelabelingW3CTests
     /// To W3C Example 76 (index 1): _:u3Lv2... type Person
     /// </summary>
     [TestMethod]
-    public void StatementWithC14n1SubjectIsRelabeledCorrectly()
+    public async Task StatementWithC14n1SubjectIsRelabeledCorrectly()
     {
         const string CanonicalStatement =
             "_:c14n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/Person> .\n";
@@ -115,11 +120,13 @@ internal sealed class BlankNodeRelabelingW3CTests
         const string ExpectedRelabeled =
             "_:u3Lv2QpFgo-YAegc1cQQKWJFW2sEjQF6FfuZ0VEoMKHg <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/Person> .\n";
 
-        string actual = BlankNodeRelabeling.RelabelNQuad(
+        string actual = await BlankNodeRelabeling.RelabelNQuadAsync(
             CanonicalStatement,
             W3CHmacKey,
-            HMACSHA256.HashData,
-            TestSetup.Base64UrlEncoder);
+            MicrosoftHmacFunctions.ComputeHmacAsync,
+            TestSetup.Base64UrlEncoder,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(ExpectedRelabeled, actual);
     }
@@ -131,7 +138,7 @@ internal sealed class BlankNodeRelabelingW3CTests
     /// To W3C Example 76 (index 12): _:u4YIOZn1... type EmploymentAuthorizationDocumentCredential
     /// </summary>
     [TestMethod]
-    public void StatementWithC14n0SubjectIsRelabeledCorrectly()
+    public async Task StatementWithC14n0SubjectIsRelabeledCorrectly()
     {
         const string CanonicalStatement =
             "_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/citizenship#EmploymentAuthorizationDocumentCredential> .\n";
@@ -139,11 +146,13 @@ internal sealed class BlankNodeRelabelingW3CTests
         const string ExpectedRelabeled =
             "_:u4YIOZn1MHES1Z4Ij2hWZG3R4dEYBqg5fHTyDEvYhC38 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/citizenship#EmploymentAuthorizationDocumentCredential> .\n";
 
-        string actual = BlankNodeRelabeling.RelabelNQuad(
+        string actual = await BlankNodeRelabeling.RelabelNQuadAsync(
             CanonicalStatement,
             W3CHmacKey,
-            HMACSHA256.HashData,
-            TestSetup.Base64UrlEncoder);
+            MicrosoftHmacFunctions.ComputeHmacAsync,
+            TestSetup.Base64UrlEncoder,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(ExpectedRelabeled, actual);
     }
@@ -155,7 +164,7 @@ internal sealed class BlankNodeRelabelingW3CTests
     /// To W3C Example 76: _:uVkUuBrlOaELGVQWJD4M_qW5bcKEHWGNbOrPA_qAOKKw type EmploymentAuthorizationDocument
     /// </summary>
     [TestMethod]
-    public void StatementWithC14n2SubjectIsRelabeledCorrectly()
+    public async Task StatementWithC14n2SubjectIsRelabeledCorrectly()
     {
         const string CanonicalStatement =
             "_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/citizenship#EmploymentAuthorizationDocument> .\n";
@@ -163,11 +172,13 @@ internal sealed class BlankNodeRelabelingW3CTests
         const string ExpectedRelabeled =
             "_:uVkUuBrlOaELGVQWJD4M_qW5bcKEHWGNbOrPA_qAOKKw <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/citizenship#EmploymentAuthorizationDocument> .\n";
 
-        string actual = BlankNodeRelabeling.RelabelNQuad(
+        string actual = await BlankNodeRelabeling.RelabelNQuadAsync(
             CanonicalStatement,
             W3CHmacKey,
-            HMACSHA256.HashData,
-            TestSetup.Base64UrlEncoder);
+            MicrosoftHmacFunctions.ComputeHmacAsync,
+            TestSetup.Base64UrlEncoder,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(ExpectedRelabeled, actual);
     }
@@ -179,7 +190,7 @@ internal sealed class BlankNodeRelabelingW3CTests
     /// To W3C Example 76: _:u3Lv2... employmentAuthorizationDocument _:uVkUu...
     /// </summary>
     [TestMethod]
-    public void StatementWithSubjectAndObjectBlankNodesIsRelabeledCorrectly()
+    public async Task StatementWithSubjectAndObjectBlankNodesIsRelabeledCorrectly()
     {
         const string CanonicalStatement =
             "_:c14n1 <https://w3id.org/citizenship#employmentAuthorizationDocument> _:c14n2 .\n";
@@ -187,11 +198,13 @@ internal sealed class BlankNodeRelabelingW3CTests
         const string ExpectedRelabeled =
             "_:u3Lv2QpFgo-YAegc1cQQKWJFW2sEjQF6FfuZ0VEoMKHg <https://w3id.org/citizenship#employmentAuthorizationDocument> _:uVkUuBrlOaELGVQWJD4M_qW5bcKEHWGNbOrPA_qAOKKw .\n";
 
-        string actual = BlankNodeRelabeling.RelabelNQuad(
+        string actual = await BlankNodeRelabeling.RelabelNQuadAsync(
             CanonicalStatement,
             W3CHmacKey,
-            HMACSHA256.HashData,
-            TestSetup.Base64UrlEncoder);
+            MicrosoftHmacFunctions.ComputeHmacAsync,
+            TestSetup.Base64UrlEncoder,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(ExpectedRelabeled, actual);
     }
@@ -203,7 +216,7 @@ internal sealed class BlankNodeRelabelingW3CTests
     /// Based on mappings derived from W3C Example 75 → Example 76.
     /// </summary>
     [TestMethod]
-    public void LabelMapFromRelabelingMatchesW3CTestVector()
+    public async Task LabelMapFromRelabelingMatchesW3CTestVector()
     {
         //A subset of canonical statements sufficient to establish the label map.
         var canonicalStatements = new[]
@@ -213,11 +226,13 @@ internal sealed class BlankNodeRelabelingW3CTests
             "_:c14n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://w3id.org/citizenship#EmploymentAuthorizationDocument> .\n"
         };
 
-        RelabelingResult result = BlankNodeRelabeling.RelabelNQuadsWithMap(
+        RelabelingResult result = await BlankNodeRelabeling.RelabelNQuadsWithMapAsync(
             canonicalStatements,
             W3CHmacKey,
-            HMACSHA256.HashData,
-            TestSetup.Base64UrlEncoder);
+            MicrosoftHmacFunctions.ComputeHmacAsync,
+            TestSetup.Base64UrlEncoder,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(3, result.LabelMap);
 
@@ -244,7 +259,7 @@ internal sealed class BlankNodeRelabelingW3CTests
         const string HmacIdWithHyphen = "u3Lv2QpFgo-YAegc1cQQKWJFW2sEjQF6FfuZ0VEoMKHg";
         const string HmacIdWithUnderscore = "uVkUuBrlOaELGVQWJD4M_qW5bcKEHWGNbOrPA_qAOKKw";
 
-        Assert.IsTrue(HmacIdWithHyphen.Contains('-', StringComparison.Ordinal), "W3C test vector should contain hyphen.");
+        Assert.Contains('-', HmacIdWithHyphen, "W3C test vector should contain hyphen.");
         Assert.Contains('_', HmacIdWithUnderscore, "W3C test vector should contain underscore.");
 
         //Verify these can be extracted from relabeled statements.
@@ -263,7 +278,7 @@ internal sealed class BlankNodeRelabelingW3CTests
     /// Mapping: c14n0→u4YIOZn1..., c14n1→u3Lv2..., c14n2→uVkUu...
     /// </summary>
     [TestMethod]
-    public void CompleteTransformationMatchesW3CTestVectors()
+    public async Task CompleteTransformationMatchesW3CTestVectors()
     {
         //Selected statements from W3C Example 75: Canonical Document.
         var canonicalStatements = new[]
@@ -287,11 +302,13 @@ internal sealed class BlankNodeRelabelingW3CTests
             "_:uVkUuBrlOaELGVQWJD4M_qW5bcKEHWGNbOrPA_qAOKKw <https://schema.org/identifier> \"83627465\" .\n"
         };
 
-        IReadOnlyList<string> actualRelabeled = BlankNodeRelabeling.RelabelNQuads(
+        IReadOnlyList<string> actualRelabeled = await BlankNodeRelabeling.RelabelNQuadsAsync(
             canonicalStatements,
             W3CHmacKey,
-            HMACSHA256.HashData,
-            TestSetup.Base64UrlEncoder);
+            MicrosoftHmacFunctions.ComputeHmacAsync,
+            TestSetup.Base64UrlEncoder,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(expectedRelabeled.Length, actualRelabeled);
         for(int i = 0; i < expectedRelabeled.Length; i++)

@@ -1,4 +1,4 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Verifiable.Tpm.EventLog;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 

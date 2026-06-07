@@ -1,4 +1,4 @@
-﻿using Verifiable.JsonPointer;
+using Verifiable.JsonPointer;
 using Seg = Verifiable.JsonPointer.JsonPointerSegment;
 
 namespace Verifiable.Tests.JsonPointer;

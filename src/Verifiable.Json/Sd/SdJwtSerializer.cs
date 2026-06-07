@@ -1,8 +1,12 @@
-﻿using System.Buffers;
+using System;
+using System.Buffers;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Cryptography;
-using Verifiable.JCose.Sd;
+using Verifiable.Core.Model.SelectiveDisclosure;
 
 namespace Verifiable.Json.Sd;
 
@@ -31,7 +35,7 @@ public static class SdJwtSerializer
         ArgumentNullException.ThrowIfNull(disclosure);
         ArgumentNullException.ThrowIfNull(encoder);
 
-        string saltString = encoder(disclosure.Salt.Span);
+        string saltString = encoder(disclosure.Salt.AsReadOnlySpan());
 
         using var stream = new MemoryStream();
         using(var writer = new Utf8JsonWriter(stream))
@@ -53,18 +57,34 @@ public static class SdJwtSerializer
 
 
     /// <summary>
-    /// Parses a disclosure from its Base64Url-encoded form.
+    /// Parses a disclosure from its Base64Url-encoded form. The wire-decoded salt
+    /// bytes are wrapped in a <see cref="Salt"/> with the supplied <paramref name="saltTag"/>;
+    /// the resulting disclosure owns that salt and disposes it on disposal.
     /// </summary>
     /// <param name="encoded">The Base64Url-encoded disclosure string.</param>
     /// <param name="decoder">Delegate for Base64Url decoding.</param>
     /// <param name="pool">Memory pool for allocations.</param>
+    /// <param name="saltTag">
+    /// The tag stamped on the wrapped <see cref="Salt"/>. Should record that the bytes
+    /// originated from a wire decode (no entropy operation in this process). The
+    /// application supplies a tag with appropriate <c>Purpose</c> and provenance entries.
+    /// </param>
     /// <returns>The parsed disclosure.</returns>
     /// <exception cref="FormatException">Thrown when the format is invalid.</exception>
-    public static SdDisclosure ParseDisclosure(string encoded, DecodeDelegate decoder, MemoryPool<byte> pool)
+    [SuppressMessage(
+        "Reliability", "CA2000",
+        Justification =
+            "The constructed Salt's ownership is transferred to the SdDisclosure via " +
+            "CreateProperty/CreateArrayElement. Those factories dispose the salt on " +
+            "construction failure. The remaining failure cases (claim-name validation) " +
+            "explicitly dispose `salt` before throwing. The analyzer cannot see this " +
+            "ownership transfer through factory methods.")]
+    public static SdDisclosure ParseDisclosure(string encoded, DecodeDelegate decoder, MemoryPool<byte> pool, Tag saltTag)
     {
         ArgumentException.ThrowIfNullOrEmpty(encoded);
         ArgumentNullException.ThrowIfNull(decoder);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(saltTag);
 
         IMemoryOwner<byte> jsonBytes;
         try
@@ -96,33 +116,55 @@ public static class SdJwtSerializer
             string saltString = root[0].GetString()
                 ?? throw new FormatException("Salt cannot be null.");
 
-            IMemoryOwner<byte> saltBytes;
+            IMemoryOwner<byte> saltOwner;
             try
             {
-                saltBytes = decoder(saltString, pool);
+                saltOwner = decoder(saltString, pool);
             }
             catch(Exception ex)
             {
                 throw new FormatException("Invalid Base64Url encoding in salt.", ex);
             }
 
-            using(saltBytes)
+            //Wrap the wire-decoded salt bytes in a Salt instance. Ownership of saltOwner
+            //transfers into the Salt. The Salt then transfers into the SdDisclosure via
+            //CreateProperty/CreateArrayElement; the disclosure disposes the Salt (and
+            //therefore the IMemoryOwner) when the disclosure is disposed.
+            //
+            //If wrapping or factory construction fails before the disclosure exists,
+            //we own the IMemoryOwner and must dispose it explicitly. The Salt instance
+            //itself, once constructed, takes care of its own owner via Dispose.
+            Salt salt;
+            try
             {
-                byte[] salt = saltBytes.Memory.ToArray();
+                salt = new Salt(saltOwner, saltTag, lifetime: null);
+            }
+            catch
+            {
+                saltOwner.Dispose();
+                throw;
+            }
 
-                if(length == 2)
+            //From here, ownership is with `salt`. CreateProperty/CreateArrayElement
+            //take ownership of `salt` and dispose it on construction failure (e.g.,
+            //null/empty claim name).
+            if(length == 2)
+            {
+                object? value = JsonElementConversion.Convert(root[1]);
+                return SdDisclosure.CreateArrayElement(salt, value);
+            }
+            else
+            {
+                //If GetString() throws or returns null, dispose `salt` before propagating.
+                string? claimName = root[1].GetString();
+                if(string.IsNullOrEmpty(claimName))
                 {
-                    object? value = JsonElementConversion.Convert(root[1]);
-                    return SdDisclosure.CreateArrayElement(salt, value);
+                    salt.Dispose();
+                    throw new FormatException("Claim name cannot be null.");
                 }
-                else
-                {
-                    string claimName = root[1].GetString()
-                        ?? throw new FormatException("Claim name cannot be null.");
 
-                    object? value = JsonElementConversion.Convert(root[2]);
-                    return SdDisclosure.CreateProperty(salt, claimName, value);
-                }
+                object? value = JsonElementConversion.Convert(root[2]);
+                return SdDisclosure.CreateProperty(salt, claimName, value);
             }
         }
     }
@@ -166,13 +208,18 @@ public static class SdJwtSerializer
     /// <param name="sdJwt">The SD-JWT string.</param>
     /// <param name="decoder">Delegate for Base64Url decoding.</param>
     /// <param name="pool">Memory pool for allocations.</param>
-    /// <returns>The parsed token.</returns>
+    /// <param name="saltTag">
+    /// The tag to stamp on each wire-decoded <see cref="Salt"/> (one per disclosure).
+    /// </param>
+    /// <returns>The parsed token. Caller owns the returned token; disposing it disposes
+    /// all contained disclosures and their salts.</returns>
     /// <exception cref="FormatException">Thrown when the format is invalid.</exception>
-    public static SdToken<string> ParseToken(string sdJwt, DecodeDelegate decoder, MemoryPool<byte> pool)
+    public static SdToken<string> ParseToken(string sdJwt, DecodeDelegate decoder, MemoryPool<byte> pool, Tag saltTag)
     {
         ArgumentException.ThrowIfNullOrEmpty(sdJwt);
         ArgumentNullException.ThrowIfNull(decoder);
         ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(saltTag);
 
         string[] parts = sdJwt.Split(SdConstants.JwtSeparator);
 
@@ -191,24 +238,37 @@ public static class SdJwtSerializer
         var disclosures = new List<SdDisclosure>();
         string? keyBindingJwt = null;
 
-        for(int i = 1; i < parts.Length; i++)
+        try
         {
-            string part = parts[i];
+            for(int i = 1; i < parts.Length; i++)
+            {
+                string part = parts[i];
 
-            if(string.IsNullOrEmpty(part))
-            {
-                continue;
-            }
+                if(string.IsNullOrEmpty(part))
+                {
+                    continue;
+                }
 
-            if(IsCompactJws(part))
-            {
-                keyBindingJwt = part;
+                if(IsCompactJws(part))
+                {
+                    keyBindingJwt = part;
+                }
+                else
+                {
+                    SdDisclosure disclosure = ParseDisclosure(part, decoder, pool, saltTag);
+                    disclosures.Add(disclosure);
+                }
             }
-            else
+        }
+        catch
+        {
+            //If any disclosure fails to parse, dispose every disclosure already
+            //constructed before propagating. The token never came into existence.
+            foreach(SdDisclosure d in disclosures)
             {
-                SdDisclosure disclosure = ParseDisclosure(part, decoder, pool);
-                disclosures.Add(disclosure);
+                d.Dispose();
             }
+            throw;
         }
 
         return new SdToken<string>(issuerJwt, disclosures, keyBindingJwt);
@@ -221,9 +281,12 @@ public static class SdJwtSerializer
     /// <param name="sdJwt">The SD-JWT string.</param>
     /// <param name="decoder">Delegate for Base64Url decoding.</param>
     /// <param name="pool">Memory pool for allocations.</param>
-    /// <param name="token">The parsed token if successful.</param>
+    /// <param name="saltTag">
+    /// The tag to stamp on each wire-decoded <see cref="Salt"/>.
+    /// </param>
+    /// <param name="token">The parsed token if successful. Caller owns and disposes.</param>
     /// <returns><c>true</c> if parsing succeeded; otherwise, <c>false</c>.</returns>
-    public static bool TryParseToken(string? sdJwt, DecodeDelegate decoder, MemoryPool<byte> pool, out SdToken<string>? token)
+    public static bool TryParseToken(string? sdJwt, DecodeDelegate decoder, MemoryPool<byte> pool, Tag saltTag, out SdToken<string>? token)
     {
         token = null;
 
@@ -234,7 +297,7 @@ public static class SdJwtSerializer
 
         try
         {
-            token = ParseToken(sdJwt, decoder, pool);
+            token = ParseToken(sdJwt, decoder, pool, saltTag);
             return true;
         }
         catch

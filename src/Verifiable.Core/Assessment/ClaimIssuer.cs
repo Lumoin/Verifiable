@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Core.Diagnostics;
 
 namespace Verifiable.Core.Assessment
 {
@@ -27,6 +28,22 @@ namespace Verifiable.Core.Assessment
     /// <para>
     /// This separation of concerns allows the validation logic to be decoupled from the assessment
     /// and archival steps, making it easier to maintain and extend the validation process.
+    /// </para>
+    ///
+    /// <para>
+    /// <strong>Point-in-time assessment, not the source of truth for continuity.</strong>
+    /// A <see cref="ClaimIssuer{TInput}"/> issues claims about an input <em>as it is now</em>.
+    /// Anything with temporal continuity — key material and its rotation, revocation,
+    /// expiration, or any binding whose validity depends on the history of what came
+    /// before — is deliberately <em>not</em> modelled as a claim here. Its source of
+    /// truth is the authenticated append-only cryptographic log (<c>LogReplayer</c> /
+    /// <c>LogEntry</c> in <c>Verifiable.Core.EventLogs</c>), where each lifecycle
+    /// transition is a verified link rather than an asserted fact. This issuer
+    /// <em>consumes</em> the replayed log state as evidence and turns it into
+    /// point-in-time claims; it must not reinvent the lifecycle or treat a momentary
+    /// claim as the record. Keeping that boundary crisp is what lets one lifecycle
+    /// (create/rotate/revoke/expire) stay verifiable across the X.509, DID, TPM, and
+    /// Trusted-List domains instead of being re-derived, differently, at each assessment.
     /// </para>
     ///
     /// <para>

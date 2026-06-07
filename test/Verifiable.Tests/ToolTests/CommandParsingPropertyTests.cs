@@ -1,4 +1,4 @@
-﻿using System.CommandLine;
+using System.CommandLine;
 using CsCheck;
 
 namespace Verifiable.Tests.ToolTests;
@@ -54,7 +54,7 @@ internal class CommandParsingPropertyTests
             //Filter characters that affect System.CommandLine parsing.
             //These are not bugs - they are intentional parser features (e.g. @ for response files).
             //Business logic is tested with arbitrary inputs in McpServerPropertyTests.
-            if(VerifiableCliTestHelpers.ContainsCliSpecialCharacters(param) ||
+            if(VerifiableCliTestHelpers.IsUnsuitableForCliArgument(param) ||
                VerifiableCliTestHelpers.StartsWithSystemCommandLineBuiltInOption(param))
             {
                 return;

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Handles;

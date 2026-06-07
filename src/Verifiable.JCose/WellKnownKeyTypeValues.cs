@@ -1,4 +1,4 @@
-﻿namespace Verifiable.JCose
+namespace Verifiable.JCose
 {
     /// <summary>
     /// Class containing the well-known key type (kty) values used in JSON Web Key (JWK).

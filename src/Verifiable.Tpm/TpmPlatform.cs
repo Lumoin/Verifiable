@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Tpm;
+namespace Verifiable.Tpm;
 
 /// <summary>
 /// Platform on which the TPM is accessed.

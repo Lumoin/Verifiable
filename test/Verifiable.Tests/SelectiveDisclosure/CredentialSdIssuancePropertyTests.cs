@@ -1,14 +1,14 @@
-﻿using CsCheck;
+using CsCheck;
 using Verifiable.Cbor.Sd;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Json.Sd;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
 /// <summary>
 /// Property-based tests for W3C Verifiable Credential path validation in
-/// <see cref="SdJwtExtensions.ValidateCredentialPaths"/> and
-/// <see cref="SdCwtExtensions.ValidateCredentialPaths"/>.
+/// <see cref="SdJwtIssuanceExtensions.ValidateCredentialPaths"/> and
+/// <see cref="SdCwtIssuanceExtensions.ValidateCredentialPaths"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -34,7 +34,7 @@ internal sealed class CredentialSdIssuancePropertyTests
                 CredentialPath.FromJsonPointer($"/credentialSubject/{segment}")
             };
 
-            SdJwtExtensions.ValidateCredentialPaths(paths);
+            SdJwtIssuanceExtensions.ValidateCredentialPaths(paths);
         });
     }
 
@@ -52,7 +52,7 @@ internal sealed class CredentialSdIssuancePropertyTests
             };
 
             Assert.Throws<ArgumentException>(() =>
-                SdJwtExtensions.ValidateCredentialPaths(paths));
+                SdJwtIssuanceExtensions.ValidateCredentialPaths(paths));
         });
     }
 
@@ -70,7 +70,7 @@ internal sealed class CredentialSdIssuancePropertyTests
                 CredentialPath.FromJsonPointer(path)
             };
 
-            SdJwtExtensions.ValidateCredentialPaths(paths);
+            SdJwtIssuanceExtensions.ValidateCredentialPaths(paths);
         });
     }
 
@@ -90,7 +90,7 @@ internal sealed class CredentialSdIssuancePropertyTests
             };
 
             Assert.Throws<ArgumentException>(() =>
-                SdJwtExtensions.ValidateCredentialPaths(paths));
+                SdJwtIssuanceExtensions.ValidateCredentialPaths(paths));
         });
     }
 
@@ -109,10 +109,10 @@ internal sealed class CredentialSdIssuancePropertyTests
             };
 
             Assert.Throws<ArgumentException>(() =>
-                SdJwtExtensions.ValidateCredentialPaths(paths));
+                SdJwtIssuanceExtensions.ValidateCredentialPaths(paths));
 
             Assert.Throws<ArgumentException>(() =>
-                SdCwtExtensions.ValidateCredentialPaths(paths));
+                SdCwtIssuanceExtensions.ValidateCredentialPaths(paths));
         });
     }
 }

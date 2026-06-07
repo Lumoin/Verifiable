@@ -1,4 +1,4 @@
-﻿namespace Verifiable.JCose;
+namespace Verifiable.JCose;
 
 /// <summary>
 /// COSE header parameter labels as defined in

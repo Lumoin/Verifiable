@@ -1,0 +1,655 @@
+using System.Diagnostics;
+using System.Text;
+using Verifiable.Core;
+using Verifiable.OAuth.Server.Keys;
+
+namespace Verifiable.OAuth.Server;
+
+/// <summary>
+/// Groups the integration delegates by which the Authorization Server asks the
+/// application to resolve request data and read or write persistent state.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Every delegate on this group has the same shape: <em>the library has a question,
+/// the application supplies an answer</em>. None of the delegates perform protocol
+/// logic — that lives entirely inside <see cref="AuthorizationServer"/>. They only
+/// answer questions that depend on the application's deployment choices: which
+/// signal identifies a tenant, where flow state is persisted, what URLs endpoints
+/// are exposed at, and so on.
+/// </para>
+/// <para>
+/// Wire all required delegates at construction time. <see cref="Validate"/> reports
+/// any missing delegate by name in a single error message rather than failing
+/// piecemeal at request time.
+/// </para>
+/// </remarks>
+[DebuggerDisplay("AuthorizationServerIntegration Validated={IsValidated}")]
+public sealed class AuthorizationServerIntegration
+{
+    /// <summary>
+    /// Extracts the <see cref="TenantId"/> from the inbound request. Required.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Invoked at the start of every request, before any other delegate. The
+    /// implementation reads whichever signal identifies the tenant in this
+    /// deployment — path segment, sub-domain, Host header, mTLS subject/SAN, a
+    /// claim on an upstream JWT, or a combination — from the
+    /// <see cref="ExchangeContext"/> the skin populated.
+    /// </para>
+    /// <para>
+    /// Returning <see langword="null"/> indicates the request carries no
+    /// identifiable tenant; the dispatcher responds with <c>400 invalid_request</c>
+    /// without invoking any further delegates.
+    /// </para>
+    /// </remarks>
+    public ExtractTenantIdDelegate? ExtractTenantIdAsync { get; set; }
+
+    /// <summary>
+    /// Loads a <see cref="ClientRecord"/> by tenant identifier. Required.
+    /// </summary>
+    public LoadClientRegistrationDelegate? LoadClientRegistrationAsync { get; set; }
+
+    /// <summary>
+    /// Persists an <see cref="OAuthFlowState"/> under the internal <c>flowId</c>
+    /// scoped by tenant. Required.
+    /// </summary>
+    /// <remarks>
+    /// The key is always the stable internal flow identifier — never an external
+    /// handle. The application may pattern-match on the state to build secondary
+    /// indexes, for example <c>code → flowId</c> or <c>request_uri_token → flowId</c>.
+    /// </remarks>
+    public SaveServerFlowStateDelegate? SaveFlowStateAsync { get; set; }
+
+    /// <summary>
+    /// Deletes a previously-saved flow state, scoped by tenant. Required
+    /// when the registration uses refresh-token grant
+    /// (<see cref="WellKnownCapabilityIdentifiers.OAuthAuthorizationCode"/> capability
+    /// implicitly enables refresh per RFC 6749 §6) so the AS can rotate
+    /// refresh tokens per RFC 9700 §2.2.2. Optional otherwise; flows that
+    /// never invalidate state can leave this null.
+    /// </summary>
+    public DeleteServerFlowStateDelegate? DeleteFlowStateAsync { get; set; }
+
+    /// <summary>
+    /// Loads an <see cref="OAuthFlowState"/> and step count by the internal
+    /// <c>flowId</c>. Required. The key has already been resolved from any
+    /// external handle by <see cref="ResolveCorrelationKeyAsync"/>.
+    /// </summary>
+    public LoadServerFlowStateDelegate? LoadFlowStateAsync { get; set; }
+
+    /// <summary>
+    /// Resolves an external correlation handle (request_uri token, authorization
+    /// code, device_code, etc.) to the stable internal <c>flowId</c> used as the
+    /// primary persistence key.
+    /// </summary>
+    /// <remarks>
+    /// Required for flows where the external handle differs from the
+    /// <c>flowId</c> (Auth Code with PAR, Device Authorization). Optional for
+    /// flows where the external handle <em>is</em> the <c>flowId</c>. When
+    /// <see langword="null"/>, the external handle is used directly.
+    /// </remarks>
+    public ResolveCorrelationKeyDelegate? ResolveCorrelationKeyAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the absolute URL at which a capability is reachable for a given
+    /// registration in the current request. Required when the server emits
+    /// metadata documents or tokens whose claims include endpoint URLs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Used by the discovery endpoint to populate <c>jwks_uri</c>,
+    /// <c>token_endpoint</c>, <c>authorization_endpoint</c> and similar fields,
+    /// by the PAR endpoint to compose the <c>request_uri</c> value, by token
+    /// producers to populate the <c>iss</c> claim, and by any other library call
+    /// site that has to embed an absolute URL.
+    /// </para>
+    /// <para>
+    /// The library never composes URLs from path templates. Only the application
+    /// knows the routing scheme — segmented, sub-domained, header-routed, flat —
+    /// and only the application can produce URLs that match the paths it serves.
+    /// </para>
+    /// </remarks>
+    public ResolveEndpointUriDelegate? ResolveEndpointUriAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the authorization server's issuer URI (the <c>iss</c> claim and
+    /// the base URL advertised in discovery). Optional. When
+    /// <see langword="null"/>, the library uses <see cref="DefaultIssuerResolver"/>
+    /// which reads <see cref="ClientRecord.IssuerUri"/> first and falls
+    /// back to <see cref="ExchangeContextServerExtensions.Issuer"/> on the request
+    /// context.
+    /// </summary>
+    public ResolveIssuerDelegate? ResolveIssuerAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the per-request capability set active for a registration.
+    /// Consulted once per request by
+    /// <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/>; the returned
+    /// set filters which builder-produced candidates land in the chain. Wire
+    /// to <see cref="DefaultCapabilityResolver.ResolveAsync"/> for the
+    /// no-attenuation default (every registration capability is active).
+    /// </summary>
+    /// <remarks>
+    /// Becomes required at <see cref="Validate"/> time in Phase 9h chunk 12
+    /// once <c>TestHostShell</c> wires the library default; until then the
+    /// slot is nullable and unread by dispatch.
+    /// </remarks>
+    public ResolveCapabilitiesDelegate? ResolveCapabilitiesAsync { get; set; }
+
+    /// <summary>
+    /// Invoked at each pipeline inspection stage (see
+    /// <see cref="InspectionStage"/>). Wire to
+    /// <see cref="DefaultInspector.NoOpAsync"/> for deployments that don't
+    /// need observation; supply a custom delegate to record audit trails,
+    /// emit OpenTelemetry events, or forward SSF/CAEP signals.
+    /// </summary>
+    /// <remarks>
+    /// Becomes required at <see cref="Validate"/> time in Phase 9h chunk 12.
+    /// </remarks>
+    public InspectDelegate? InspectAsync { get; set; }
+
+    /// <summary>
+    /// Maps the authenticated end-user identifier to the subject identifier
+    /// emitted in tokens for a registration — public (identity) or pairwise
+    /// (per-sector hash) per OIDC Core §8. Wire to
+    /// <see cref="DefaultSubjectIdentifierResolver.PublicAsync"/> for the
+    /// identity default.
+    /// </summary>
+    /// <remarks>
+    /// Added in Phase 9h chunk 4 structurally so Phase A's UserInfo wiring
+    /// does not have to revisit this surface. Becomes required at
+    /// <see cref="Validate"/> time in Phase 9h chunk 12; no library
+    /// producer reads it in 9h.
+    /// </remarks>
+    public ResolveSubjectIdentifierDelegate? ResolveSubjectIdentifierAsync { get; set; }
+
+    /// <summary>
+    /// Generates an identifier for a stated <see cref="IdentifierPurpose"/>.
+    /// Threaded through every wire-identifier and correlation-identifier
+    /// generation site in the library; deployments override to inject
+    /// audit-log emission, replay-deterministic identifier reads from an
+    /// event log, deployment-specific formats (ULID, KSUID, …), or any
+    /// other dispatch logic.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wire to <see cref="DefaultIdentifierGenerator.ForTimeProvider"/>
+    /// for the library default — v7 GUID's 32-character hex string per
+    /// purpose, with the v7 timestamp sourced from the supplied
+    /// <see cref="TimeProvider"/>. The default ignores the purpose
+    /// argument; custom implementations dispatch on it.
+    /// </para>
+    /// <para>
+    /// OI-003 chunk A adds the slot; chunks B–E migrate the existing
+    /// hardcoded sites onto it. Until chunk B lands the slot is wired
+    /// by the test fixture but unread by production code.
+    /// </para>
+    /// </remarks>
+    public GenerateIdentifierDelegate? GenerateIdentifierAsync { get; set; }
+
+    /// <summary>
+    /// Fetches and validates Client ID Metadata Documents for CIMD clients.
+    /// Optional.
+    /// </summary>
+    public ResolveClientMetadataDelegate? ResolveClientMetadataAsync { get; set; }
+
+    /// <summary>
+    /// Parses an incoming RFC 7591 client metadata document body into a typed
+    /// <see cref="Client.ClientMetadata"/>. Required when
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration"/> is
+    /// advertised — the default JSON implementation lives in
+    /// <c>Verifiable.OAuth.Json</c> and is wired by the application.
+    /// </summary>
+    public ParseClientMetadataServerDelegate? ParseClientMetadataAsync { get; set; }
+
+    /// <summary>
+    /// Validates a bearer token presented at an RFC 7592 management endpoint.
+    /// Required when
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration"/> is
+    /// advertised — the application implements the constant-time comparison
+    /// against its persisted form.
+    /// </summary>
+    public ValidateRegistrationAccessTokenDelegate? ValidateRegistrationAccessTokenAsync { get; set; }
+
+    /// <summary>
+    /// Contributes additional fields to the discovery document
+    /// (<c>/.well-known/openid-configuration</c> and equivalents). Optional.
+    /// </summary>
+    /// <remarks>
+    /// The library's discovery endpoint emits its base OAuth 2.0 and OIDC fields
+    /// first, then merges the contributed fields over the top. Applications use
+    /// this delegate to advertise OIDC, FAPI, OID4VP, OID4VCI, OpenID Federation
+    /// or deployment-specific capability fields without replacing the discovery
+    /// endpoint.
+    /// </remarks>
+    public ContributeDiscoveryFieldsDelegate? ContributeDiscoveryFieldsAsync { get; set; }
+
+    /// <summary>
+    /// Contributes the per-entity-type metadata blocks, authority hints, and
+    /// extension claims that populate the entity's own OpenID Federation 1.0
+    /// Entity Configuration JWT at <c>/.well-known/openid-federation</c>.
+    /// Optional.
+    /// </summary>
+    /// <remarks>
+    /// Required only for registrations carrying
+    /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishEntityConfiguration"/>.
+    /// The library emits the EC's structural claims (<c>iss</c>, <c>sub</c>,
+    /// <c>iat</c>, <c>exp</c>, <c>jwks</c>) on its own; this delegate supplies
+    /// the per-entity-type metadata blocks and federation extension claims.
+    /// </remarks>
+    public ContributeFederationMetadataDelegate? ContributeFederationMetadataAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the Subordinate Statement body the issuing entity asserts
+    /// about a queried subject. Optional.
+    /// </summary>
+    /// <remarks>
+    /// Required only for registrations carrying
+    /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishSubordinateStatement"/>.
+    /// The library emits the SS's structural claims and signs the result;
+    /// this delegate supplies the subject's <c>jwks</c> plus any per-subject
+    /// metadata-policy / metadata / constraints / extension claims.
+    /// Return <see langword="null"/> when the queried subject is not a
+    /// known subordinate — the endpoint then responds 404.
+    /// </remarks>
+    public ResolveSubordinateStatementDelegate? ResolveSubordinateStatementAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the immediate subordinates the issuing entity lists at its
+    /// <c>federation_list_endpoint</c>. Optional.
+    /// </summary>
+    /// <remarks>
+    /// Required only for registrations carrying
+    /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.ListSubordinates"/>.
+    /// The library matches the request, parses the optional
+    /// <c>entity_type</c> filter, and serialises the returned identifiers
+    /// as the unsigned JSON array OpenID Federation 1.0 §8.2 mandates; this
+    /// delegate supplies the membership list itself. Returning an empty
+    /// list is valid — the endpoint then responds with an empty JSON array.
+    /// </remarks>
+    public ResolveSubordinateListDelegate? ResolveSubordinateListAsync { get; set; }
+
+    /// <summary>
+    /// Resolves a subject's effective metadata, trust chain, and trust marks
+    /// for the <c>federation_resolve_endpoint</c>. Optional.
+    /// </summary>
+    /// <remarks>
+    /// Required only for registrations carrying
+    /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.ResolveTrustChain"/>.
+    /// The library matches the request, parses the <c>sub</c> / <c>anchor</c>
+    /// / <c>type</c> parameters, assembles the OpenID Federation 1.0 §8.3
+    /// Resolve Response from the returned contribution, and signs it with the
+    /// resolver's federation signing key; this delegate supplies the
+    /// resolution result. Return <see langword="null"/> when the subject
+    /// cannot be resolved — the endpoint then responds 404.
+    /// </remarks>
+    public ResolveSubjectTrustChainDelegate? ResolveSubjectTrustChainAsync { get; set; }
+
+    /// <summary>
+    /// Processes a Relying Party's explicit client registration request at the
+    /// <c>federation_registration_endpoint</c>. Optional.
+    /// </summary>
+    /// <remarks>
+    /// Required only for registrations carrying
+    /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly"/>.
+    /// The library hands the RP's posted Entity Configuration (raw compact
+    /// JWS) to this delegate, assembles the OpenID Federation 1.0 §12.2
+    /// Explicit Registration Response from the returned contribution, and
+    /// signs it with the OP's federation signing key. Return
+    /// <see langword="null"/> when the RP cannot be registered — the endpoint
+    /// then responds 400.
+    /// </remarks>
+    public ResolveExplicitRegistrationDelegate? ResolveExplicitRegistrationAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the entity's historical (rotated and revoked) Federation
+    /// Entity Keys for the <c>federation_historical_keys_endpoint</c>.
+    /// Optional.
+    /// </summary>
+    /// <remarks>
+    /// Required only for registrations carrying
+    /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishHistoricalKeys"/>.
+    /// The library matches the request, assembles the OpenID Federation 1.0
+    /// §8.7.3 Historical Keys payload (<c>iss</c>, <c>iat</c>, <c>keys</c>)
+    /// from the returned contribution, and signs it with the entity's
+    /// federation signing key; this delegate supplies the historical
+    /// <c>keys</c> array itself. Return <see langword="null"/> when the entity
+    /// has no historical keys to publish — the endpoint then responds 404.
+    /// </remarks>
+    public ResolveHistoricalKeysDelegate? ResolveHistoricalKeysAsync { get; set; }
+
+    /// <summary>
+    /// Parses an OpenID AuthZEN Authorization API 1.0 Access Evaluation
+    /// request JSON body into the neutral information model. Required when
+    /// <see cref="WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi"/> is
+    /// advertised — the default JSON implementation lives in
+    /// <c>Verifiable.OAuth.Json</c> and is wired by the application.
+    /// </summary>
+    public ParseAccessEvaluationRequestDelegate? ParseAccessEvaluationRequestAsync { get; set; }
+
+    /// <summary>
+    /// Parses an OpenID AuthZEN Authorization API 1.0 Access Evaluations API
+    /// (batch) request JSON body into the neutral information model. Required
+    /// for the <c>access_evaluations_endpoint</c> when
+    /// <see cref="WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi"/> is
+    /// advertised — the default JSON implementation lives in
+    /// <c>Verifiable.OAuth.Json</c> and is wired by the application. The
+    /// single-evaluation PDP seam <see cref="EvaluateAccessAsync"/> is reused
+    /// for each resolved item.
+    /// </summary>
+    public ParseAccessEvaluationsRequestDelegate? ParseAccessEvaluationsRequestAsync { get; set; }
+
+    /// <summary>
+    /// The Policy Decision Point seam — evaluates a parsed AuthZEN Access
+    /// Evaluation request and returns the decision. Required when
+    /// <see cref="WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi"/> is
+    /// advertised. The library owns the wire; this delegate owns the policy.
+    /// </summary>
+    public EvaluateAccessDelegate? EvaluateAccessAsync { get; set; }
+
+    /// <summary>
+    /// Parses an OpenID AuthZEN Authorization API 1.0 Search API request JSON
+    /// body into the neutral information model. Required for any search
+    /// endpoint that is wired. The default JSON implementation lives in
+    /// <c>Verifiable.OAuth.Json</c> and is wired by the application.
+    /// </summary>
+    public ParseAccessSearchRequestDelegate? ParseAccessSearchRequestAsync { get; set; }
+
+    /// <summary>
+    /// The Subject Search seam (§7). Optional — wiring it activates and
+    /// advertises the <c>search_subject_endpoint</c>. The library owns the
+    /// wire; this delegate owns enumeration and paging.
+    /// </summary>
+    public SearchSubjectsDelegate? SearchSubjectsAsync { get; set; }
+
+    /// <summary>
+    /// The Resource Search seam (§7). Optional — wiring it activates and
+    /// advertises the <c>search_resource_endpoint</c>.
+    /// </summary>
+    public SearchResourcesDelegate? SearchResourcesAsync { get; set; }
+
+    /// <summary>
+    /// The Action Search seam (§7). Optional — wiring it activates and
+    /// advertises the <c>search_action_endpoint</c>.
+    /// </summary>
+    public SearchActionsDelegate? SearchActionsAsync { get; set; }
+
+    /// <summary>
+    /// Contributes application-supplied values (currently <c>capabilities</c>)
+    /// to the AuthZEN §9.1 PDP metadata document. Optional.
+    /// </summary>
+    public ContributeAuthZenMetadataDelegate? ContributeAuthZenMetadataAsync { get; set; }
+
+    /// <summary>
+    /// Signs the assembled AuthZEN §9.1 PDP metadata as a <c>signed_metadata</c>
+    /// JWT. Optional — when set, the returned JWT is embedded in the metadata
+    /// document. The application owns the signing key and algorithm.
+    /// </summary>
+    public SignAuthZenMetadataDelegate? SignAuthZenMetadataAsync { get; set; }
+
+    /// <summary>
+    /// Contributes application-supplied values (delivery methods, critical subject
+    /// members, authorization schemes, default subjects) to the Shared Signals
+    /// Transmitter Configuration Metadata document (SSF 1.0 §7.1). Optional.
+    /// </summary>
+    public ContributeSsfTransmitterMetadataDelegate? ContributeSsfTransmitterMetadataAsync { get; set; }
+
+    /// <summary>
+    /// Contributes application-supplied values (authorization servers, scopes,
+    /// bearer methods, human-readable fields, feature booleans) to the OAuth 2.0
+    /// Protected Resource Metadata document (RFC 9728 §2). Optional.
+    /// </summary>
+    public ContributeProtectedResourceMetadataDelegate? ContributeProtectedResourceMetadataAsync { get; set; }
+
+    /// <summary>
+    /// Signs the assembled RFC 9728 Protected Resource Metadata as a
+    /// <c>signed_metadata</c> JWT (§2.2). Optional — when set, the returned JWT
+    /// is embedded in the metadata document. The application owns the signing
+    /// key, the algorithm, and the spec-required <c>iss</c> claim.
+    /// </summary>
+    public SignProtectedResourceMetadataDelegate? SignProtectedResourceMetadataAsync { get; set; }
+
+    /// <summary>
+    /// Parses a Create Stream request body (SSF §8.1.1.1). Wire the shipped
+    /// default with <c>UseDefaultSsfJsonParsing</c>.
+    /// </summary>
+    public Ssf.ParseSsfStreamCreateRequestDelegate? ParseSsfStreamCreateRequestAsync { get; set; }
+
+    /// <summary>
+    /// Parses an Update/Replace Stream request body (SSF §8.1.1.3/§8.1.1.4).
+    /// Wire the shipped default with <c>UseDefaultSsfJsonParsing</c>.
+    /// </summary>
+    public Ssf.ParseSsfStreamUpdateRequestDelegate? ParseSsfStreamUpdateRequestAsync { get; set; }
+
+    /// <summary>
+    /// The Transmitter's stream store: create (SSF §8.1.1.1). Optional — wiring it
+    /// (with the create parser) activates and advertises the Configuration Endpoint.
+    /// </summary>
+    public Ssf.CreateSsfStreamDelegate? CreateSsfStreamAsync { get; set; }
+
+    /// <summary>The Transmitter's stream store: read one or all (SSF §8.1.1.2). Optional.</summary>
+    public Ssf.ReadSsfStreamsDelegate? ReadSsfStreamsAsync { get; set; }
+
+    /// <summary>The Transmitter's stream store: PATCH update (SSF §8.1.1.3). Optional.</summary>
+    public Ssf.UpdateSsfStreamDelegate? UpdateSsfStreamAsync { get; set; }
+
+    /// <summary>The Transmitter's stream store: PUT replace (SSF §8.1.1.4). Optional.</summary>
+    public Ssf.ReplaceSsfStreamDelegate? ReplaceSsfStreamAsync { get; set; }
+
+    /// <summary>The Transmitter's stream store: delete (SSF §8.1.1.5). Optional.</summary>
+    public Ssf.DeleteSsfStreamDelegate? DeleteSsfStreamAsync { get; set; }
+
+    /// <summary>Parses a Stream Status update body (SSF §8.1.2.2). Wire via <c>UseDefaultSsfJsonParsing</c>.</summary>
+    public Ssf.ParseSsfStreamStatusDelegate? ParseSsfStreamStatusAsync { get; set; }
+
+    /// <summary>Parses an Add Subject body (SSF §8.1.3.2). Wire via <c>UseDefaultSsfJsonParsing</c>.</summary>
+    public Ssf.ParseSsfAddSubjectRequestDelegate? ParseSsfAddSubjectRequestAsync { get; set; }
+
+    /// <summary>Parses a Remove Subject body (SSF §8.1.3.3). Wire via <c>UseDefaultSsfJsonParsing</c>.</summary>
+    public Ssf.ParseSsfRemoveSubjectRequestDelegate? ParseSsfRemoveSubjectRequestAsync { get; set; }
+
+    /// <summary>Parses a Trigger Verification body (SSF §8.1.4.2). Wire via <c>UseDefaultSsfJsonParsing</c>.</summary>
+    public Ssf.ParseSsfVerificationRequestDelegate? ParseSsfVerificationRequestAsync { get; set; }
+
+    /// <summary>The Transmitter's stream store: read status (SSF §8.1.2.1). Optional.</summary>
+    public Ssf.ReadSsfStreamStatusDelegate? ReadSsfStreamStatusAsync { get; set; }
+
+    /// <summary>The Transmitter's stream store: update status (SSF §8.1.2.2). Optional.</summary>
+    public Ssf.UpdateSsfStreamStatusDelegate? UpdateSsfStreamStatusAsync { get; set; }
+
+    /// <summary>The Transmitter's stream store: add a subject (SSF §8.1.3.2). Optional.</summary>
+    public Ssf.AddSsfSubjectDelegate? AddSsfSubjectAsync { get; set; }
+
+    /// <summary>The Transmitter's stream store: remove a subject (SSF §8.1.3.3). Optional.</summary>
+    public Ssf.RemoveSsfSubjectDelegate? RemoveSsfSubjectAsync { get; set; }
+
+    /// <summary>The Transmitter's verification trigger (SSF §8.1.4.2). Optional.</summary>
+    public Ssf.TriggerSsfVerificationDelegate? TriggerSsfVerificationAsync { get; set; }
+
+    /// <summary>
+    /// Authorizes stream-management requests (Bearer token + <c>ssf.read</c>/<c>ssf.manage</c>
+    /// scope per CAEP Interoperability Profile §2.7.3). Optional — unset leaves the
+    /// stream-management endpoints unauthenticated.
+    /// </summary>
+    public Ssf.AuthorizeSsfRequestDelegate? AuthorizeSsfRequestAsync { get; set; }
+
+    /// <summary>
+    /// Authenticates a confidential client for the <c>client_credentials</c> grant
+    /// (RFC 6749 §4.4). The grant endpoint activates only when this seam is wired —
+    /// the application owns credential storage and the authentication method.
+    /// </summary>
+    public ValidateClientCredentialsDelegate? ValidateClientCredentialsAsync { get; set; }
+
+    /// <summary>
+    /// Classifies a raw token string into a typed
+    /// <see cref="Verifiable.JCose.JoseTokenShape"/> by structural inspection.
+    /// Optional.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Required only when token-aware matchers are registered (introspection,
+    /// revocation, userinfo, OID4VCI proof endpoints). Endpoints whose
+    /// matchers do not consume tokens (PAR, JAR, direct_post, JWKS, discovery)
+    /// run without this delegate set.
+    /// </para>
+    /// <para>
+    /// Applications typically wire
+    /// <see cref="Verifiable.JCose.JoseTokenClassifier.ClassifyAsync"/> as
+    /// the implementation, supplying their Base64Url decoder, JOSE header
+    /// deserializer, and memory pool. Deployments that issue non-JOSE token
+    /// shapes (paseto, biscuit, macaroon) supply their own classifier or
+    /// wrap the JCose default with a pre-classification step that
+    /// recognizes their shapes first.
+    /// </para>
+    /// </remarks>
+    public ClassifyTokenDelegate? ClassifyTokenAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the per-request policy values for the loaded registration and
+    /// populates them on the <see cref="ExchangeContext"/> at dispatch entry.
+    /// Required.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The dispatcher invokes this delegate once per request after the
+    /// registration is loaded but before any matcher executes. Matchers,
+    /// validators, and token producers downstream consult policy via the
+    /// typed extensions in <see cref="PolicyExchangeContextExtensions"/>.
+    /// </para>
+    /// <para>
+    /// Wire to <see cref="PolicyProfiles.DefaultResolvePolicyAsync"/> for the
+    /// library's named-profile dispatch (<c>strict</c>, <c>haip</c>,
+    /// <c>rfc6749</c>), or supply a custom delegate for bespoke policy.
+    /// </para>
+    /// </remarks>
+    public ResolvePolicyDelegate? ResolvePolicyAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the <c>aud</c> claim audience(s) for an RFC 9068 access token
+    /// at issuance time. Optional — when <see langword="null"/>, the library's
+    /// default <see cref="Rfc9068AccessTokenProducer.DefaultResolveAccessTokenAudienceAsync"/>
+    /// runs (reads from <see cref="ClientRecord.ScopeToAudience"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Closes audit Finding 2. The producer consults the active
+    /// <see cref="AccessTokenAudPolicy"/> from the resolved policy and uses
+    /// the audience(s) this delegate returns to populate the <c>aud</c> claim
+    /// per <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 §2.2</see>.
+    /// </para>
+    /// </remarks>
+    public ResolveAccessTokenAudienceDelegate? ResolveAccessTokenAudienceAsync { get; set; }
+
+
+    /// <summary>
+    /// Validates inbound DPoP proofs at the token endpoint per RFC 9449 §4.3.
+    /// Library default backing: <see cref="Verifiable.OAuth.Dpop.DpopProofValidator.ValidateAsync"/>
+    /// adapted to the <see cref="Verifiable.OAuth.Dpop.ValidateDpopProofDelegate"/>
+    /// shape. Required when any registration's <see cref="PolicyProfile"/>
+    /// requires DPoP (HAIP 1.0, FAPI 2.0).
+    /// </summary>
+    public Verifiable.OAuth.Dpop.ValidateDpopProofDelegate? ValidateDpopProofAsync { get; set; }
+
+
+    /// <summary>
+    /// Issues a fresh DPoP nonce on a 401 <c>use_dpop_nonce</c> challenge or
+    /// any other condition where the AS wants the client to refresh its
+    /// nonce. Library default backing:
+    /// <see cref="Verifiable.OAuth.Dpop.DefaultDpopNonceIssuance.IssueAsync"/>.
+    /// </summary>
+    public Verifiable.OAuth.Dpop.IssueDpopNonceDelegate? IssueDpopNonceAsync { get; set; }
+
+
+    /// <summary>
+    /// Validates a presented DPoP nonce. Library default backing:
+    /// <see cref="Verifiable.OAuth.Dpop.DefaultDpopNonceValidation.ValidateAsync"/>.
+    /// Issuance and validation must agree on the wire format.
+    /// </summary>
+    public Verifiable.OAuth.Dpop.ValidateDpopNonceDelegate? ValidateDpopNonceAsync { get; set; }
+
+
+    /// <summary>
+    /// Loads the HMAC key material for a kid chosen by
+    /// <see cref="SelectHmacKeyAsync"/> at issuance or extracted from the
+    /// wire artefact at validation. Library default backing:
+    /// <see cref="Keys.InProcessKeySet.ResolveMaterial"/> wrapped as the
+    /// delegate. Multi-instance deployments wire a Vault/KMS-backed
+    /// implementation per the same contract.
+    /// </summary>
+    public ResolveServerHmacKeyDelegate? ResolveServerHmacKeyAsync { get; set; }
+
+
+    /// <summary>
+    /// Returns the current HMAC <see cref="Keys.KeySet"/> for the given
+    /// tenant. Issuance feeds this into <see cref="SelectHmacKeyAsync"/>;
+    /// validation reads it to check slot membership
+    /// (<see cref="Keys.KeySet.IsKidValidForVerification"/>) before
+    /// accepting a presented kid; JWKS publication reads it via
+    /// <c>Publishable()</c> when the application's
+    /// <see cref="AuthorizationServerCryptography.BuildJwksDocumentAsync"/>
+    /// opts to publish HMAC keys as <c>kty=oct</c> JWKs per RFC 7518 §6.4
+    /// (typically for HS256 access-token verifiers in a private federation,
+    /// not for DPoP nonce keys which are server-internal).
+    /// </summary>
+    public GetHmacKeySetDelegate? GetHmacKeySetAsync { get; set; }
+
+
+    /// <summary>
+    /// Selects which kid to use for a given HMAC operation. When
+    /// <see langword="null"/>, the library uses the kid of the first entry
+    /// in the keyset's <see cref="Keys.KeySet.Current"/> list.
+    /// </summary>
+    public SelectHmacKeyDelegate? SelectHmacKeyAsync { get; set; }
+
+
+    /// <summary>
+    /// Resolves the OpenID Connect claim set for an authenticated subject.
+    /// Consumed by <see cref="Oidc10IdTokenProducer"/> during ID Token
+    /// issuance and by the UserInfo endpoint per OIDC Core §5.3. Required
+    /// when the application's <see cref="TokenProducer"/> list includes
+    /// <see cref="TokenProducer.Oidc10IdToken"/> or when the UserInfo
+    /// endpoint is registered.
+    /// </summary>
+    public ResolveOidcClaimsDelegate? ResolveOidcClaimsAsync { get; set; }
+
+
+    /// <summary>
+    /// Whether <see cref="Validate"/> has been called successfully on this group.
+    /// </summary>
+    public bool IsValidated { get; private set; }
+
+
+    /// <summary>
+    /// Validates that the required delegates on this group are set.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when one or more required delegates are missing.
+    /// </exception>
+    public void Validate()
+    {
+        var missing = new List<string>();
+
+        if(ExtractTenantIdAsync is null) { missing.Add(nameof(ExtractTenantIdAsync)); }
+        if(LoadClientRegistrationAsync is null) { missing.Add(nameof(LoadClientRegistrationAsync)); }
+        if(SaveFlowStateAsync is null) { missing.Add(nameof(SaveFlowStateAsync)); }
+        if(LoadFlowStateAsync is null) { missing.Add(nameof(LoadFlowStateAsync)); }
+        if(ResolvePolicyAsync is null) { missing.Add(nameof(ResolvePolicyAsync)); }
+        if(ResolveCapabilitiesAsync is null) { missing.Add(nameof(ResolveCapabilitiesAsync)); }
+        if(InspectAsync is null) { missing.Add(nameof(InspectAsync)); }
+        if(ResolveSubjectIdentifierAsync is null) { missing.Add(nameof(ResolveSubjectIdentifierAsync)); }
+        if(GenerateIdentifierAsync is null) { missing.Add(nameof(GenerateIdentifierAsync)); }
+
+        if(missing.Count > 0)
+        {
+            var sb = new StringBuilder(
+                "AuthorizationServerIntegration is missing required delegates: ");
+            sb.AppendJoin(", ", missing);
+            sb.Append('.');
+            throw new InvalidOperationException(sb.ToString());
+        }
+
+        IsValidated = true;
+    }
+}

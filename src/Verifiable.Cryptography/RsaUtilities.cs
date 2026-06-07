@@ -104,21 +104,49 @@ namespace Verifiable.Cryptography
 
 
         /// <summary>
-        /// Decodes ASN.1 DER encoded RSA public modulus bytes.
+        /// Returns the raw RSA public modulus bytes from either an already-raw
+        /// modulus (length 256 for RSA-2048, 512 for RSA-4096) or an ASN.1 DER-
+        /// encoded modulus (length 270 / 526). The two encodings produce
+        /// disjoint lengths for the two supported RSA key sizes, so the
+        /// function discriminates by length: raw input is copied through;
+        /// DER input has its envelope stripped.
         /// </summary>
-        /// <param name="encodedRsaModulusBytes"></param>
+        /// <remarks>
+        /// The two encodings reflect the two main provenance paths for an RSA
+        /// public key in this library: keys generated through
+        /// <see cref="System.Security.Cryptography"/> arrive DER-encoded (per
+        /// <see cref="CryptoTags"/>'s well-known tags), while keys
+        /// reconstructed from a JWK arrive raw (per RFC 7518 §6.3.1 which
+        /// stores the modulus as the base64url-encoded raw <c>n</c> parameter).
+        /// Callers that need to reach raw bytes — JWK emission, signature
+        /// verification — pass whatever they have and get raw back.
+        /// </remarks>
+        /// <param name="encodedRsaModulusBytes">Either raw or DER-encoded RSA modulus bytes.</param>
         /// <returns>The plain RSA public modulus bytes.</returns>
-        /// <exception cref="ArgumentException">If the encoding fails due to pre- or post-condition violation.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">The key length mush be either 270 or 526 bytes</exception>.
+        /// <exception cref="ArgumentException">If a DER input fails the envelope pre- or post-conditions.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">If the input length matches none of the four accepted shapes (256, 270, 512, 526).</exception>
         public static byte[] Decode(ReadOnlySpan<byte> encodedRsaModulusBytes)
         {
             //DID method specifications support only these RSA key lengths of 2048 and 4096 bytes.
             //They produce deterministically always the same length ASN.1 DER encoded byte arrays.
             const int Rsa2048DerEncodedBytesLength = 270;
             const int Rsa4096DerEncodedBytesLength = 526;
+
+            //Raw modulus pass-through. RSA public modulus has an algorithm-
+            //deterministic length (256 / 512); these don't collide with the
+            //DER-encoded lengths (270 / 526), so length alone discriminates.
+            if(encodedRsaModulusBytes.Length == Rsa2048ModulusLength
+               || encodedRsaModulusBytes.Length == Rsa4096ModulusLength)
+            {
+                return encodedRsaModulusBytes.ToArray();
+            }
+
             if(!(encodedRsaModulusBytes.Length == Rsa2048DerEncodedBytesLength || encodedRsaModulusBytes.Length == Rsa4096DerEncodedBytesLength))
             {
-                throw new ArgumentOutOfRangeException(nameof(encodedRsaModulusBytes), $"Length must be {Rsa2048DerEncodedBytesLength} (RSA 2048) or {Rsa4096DerEncodedBytesLength} (RSA 4096).");
+                throw new ArgumentOutOfRangeException(
+                    nameof(encodedRsaModulusBytes),
+                    $"Length must be {Rsa2048ModulusLength} or {Rsa2048DerEncodedBytesLength} (RSA 2048), "
+                    + $"or {Rsa4096ModulusLength} or {Rsa4096DerEncodedBytesLength} (RSA 4096).");
             }
 
             //The ASN.1 DER envelope prolog is not needed, so the index is adjusted to bypass it.

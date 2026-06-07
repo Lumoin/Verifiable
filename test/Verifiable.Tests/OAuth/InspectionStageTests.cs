@@ -1,0 +1,274 @@
+using System.Collections.Immutable;
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Core;
+using Verifiable.Core.Dcql;
+using Verifiable.Core.Model.Dcql;
+using Verifiable.Cryptography;
+using Verifiable.JCose;
+using Verifiable.OAuth;
+using Verifiable.OAuth.Oid4Vp;
+using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Pipeline;
+using Verifiable.Tests.TestInfrastructure;
+
+namespace Verifiable.Tests.OAuth;
+
+/// <summary>
+/// Tests for the <see cref="InspectionStage"/> emission discipline. The
+/// dispatcher fires <see cref="IncomingRequestStage"/>,
+/// <see cref="MatchedStage"/>, and <see cref="OutgoingResponseStage"/> on
+/// every request; <see cref="StateTransitionStage"/> fires from
+/// <see cref="FlowRunner.StepWithEffectsAsync"/> after every successful
+/// PDA transition.
+/// </summary>
+/// <remarks>
+/// <see cref="StateTransitionStage"/> emission is the load-bearing hook
+/// for replay-determinism event capture per
+/// <c>documents/AuthorizationServerDesign.md §2.4</c>. The two tests in
+/// this class lock in the "fires on PDA transitions, does not fire on
+/// stateless paths" invariant — any future refactor that accidentally
+/// emits on stateless paths (polluting the replay log with non-state
+/// events) or omits emission on stateful transitions (losing replay
+/// fidelity) fails one of these tests loudly.
+/// </remarks>
+[TestClass]
+internal sealed class InspectionStageTests
+{
+    public TestContext TestContext { get; set; } = null!;
+
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+
+    private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
+
+    private const string VerifierClientId = "https://verifier.example.com";
+
+    private static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
+        ImmutableHashSet.Create(
+            WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
+            WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint);
+
+
+    [TestMethod]
+    public async Task StateTransitionStageFiresOnSuccessfulPdaTransition()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        List<StateTransitionStage> recorded = [];
+        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
+        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        {
+            if(stage is StateTransitionStage transition)
+            {
+                recorded.Add(transition);
+            }
+
+            return previousInspect(stage, ctx, ct);
+        };
+
+        using VerifierKeyMaterial keys = host.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        //Drive the OID4VP PAR flow — context-state-driven, but goes through
+        //FlowRunner because the endpoint is stateful (ParFlowKind).
+        (Uri _, string _) = await host.HandleParAsync(
+            keys,
+            new TransactionNonce("nonce-state-transition-01"),
+            CreatePreparedQuery(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsGreaterThan(0, recorded.Count,
+            "FlowRunner.StepWithEffectsAsync must emit at least one StateTransitionStage "
+            + "per successful PDA transition during a PAR dispatch.");
+
+        foreach(StateTransitionStage transition in recorded)
+        {
+            Assert.IsNotNull(transition.Before,
+                "StateTransitionStage.Before must carry the pre-transition state.");
+            Assert.IsNotNull(transition.Input,
+                "StateTransitionStage.Input must carry the input that drove the transition.");
+            Assert.IsNotNull(transition.After,
+                "StateTransitionStage.After must carry the post-transition state.");
+        }
+    }
+
+
+    [TestMethod]
+    public async Task InspectAsyncFiresAtAllFourStages()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        List<InspectionStage> recorded = [];
+        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
+        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        {
+            recorded.Add(stage);
+            return previousInspect(stage, ctx, ct);
+        };
+
+        using VerifierKeyMaterial keys = host.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        //OID4VP PAR drives a stateful flow (ParFlowKind) — exercises the full
+        //dispatch envelope: IncomingRequestStage at entry, MatchedStage after
+        //the chain walk picks the OID4VP PAR endpoint, one or more
+        //StateTransitionStage from FlowRunner, OutgoingResponseStage before
+        //the 200 returns to the caller.
+        (Uri _, string _) = await host.HandleParAsync(
+            keys,
+            new TransactionNonce("nonce-four-stage-01"),
+            CreatePreparedQuery(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsInstanceOfType<IncomingRequestStage>(recorded[0],
+            "First inspection stage of a successful dispatch must be IncomingRequestStage.");
+        Assert.IsInstanceOfType<OutgoingResponseStage>(recorded[^1],
+            "Last inspection stage of a successful dispatch must be OutgoingResponseStage.");
+
+        int matchedIndex = recorded.FindIndex(s => s is MatchedStage);
+        int outgoingIndex = recorded.FindIndex(s => s is OutgoingResponseStage);
+        Assert.IsGreaterThan(0, matchedIndex,
+            "MatchedStage must appear after IncomingRequestStage.");
+        Assert.IsLessThan(outgoingIndex, matchedIndex,
+            "MatchedStage must appear before OutgoingResponseStage.");
+
+        int transitionCount = recorded.OfType<StateTransitionStage>().Count();
+        Assert.IsGreaterThan(0, transitionCount,
+            "At least one StateTransitionStage must fire between MatchedStage and "
+            + "OutgoingResponseStage for a stateful endpoint.");
+    }
+
+
+    [TestMethod]
+    public async Task InspectAsyncMatchedStageHasNullEndpointOnNoMatch()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        MatchedStage? recordedMatched = null;
+        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
+        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        {
+            if(stage is MatchedStage matched) { recordedMatched = matched; }
+            return previousInspect(stage, ctx, ct);
+        };
+
+        using VerifierKeyMaterial keys = host.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        //Dispatch to a path that's served by no endpoint in this registration's
+        //chain — every matcher's acceptance test returns null.
+        string segment = keys.Registration.TenantId.Value;
+        IncomingRequest request = new(
+            Path: $"/connect/{segment}/unknown-endpoint",
+            Method: "POST",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty);
+
+        ExchangeContext context = new();
+        context.SetTenantId(segment);
+        ServerHttpResponse response = await host.Server.DispatchAsync(
+            request, context, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(404, response.StatusCode,
+            "Precondition: unmatched-path dispatch returns 404.");
+        Assert.IsNotNull(recordedMatched,
+            "MatchedStage must fire even when no endpoint matched — inspectors "
+            + "need to observe 404 dispatches too.");
+        Assert.IsNull(recordedMatched.Endpoint,
+            "MatchedStage.Endpoint must be null when the chain walk produced no match.");
+        Assert.IsNull(recordedMatched.Payload,
+            "MatchedStage.Payload must be null when the chain walk produced no match.");
+    }
+
+
+    [TestMethod]
+    public async Task InspectAsyncFiresEnvelopeStagesEvenOnUnmatchedRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        List<InspectionStage> recorded = [];
+        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
+        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        {
+            recorded.Add(stage);
+            return previousInspect(stage, ctx, ct);
+        };
+
+        using VerifierKeyMaterial keys = host.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        string segment = keys.Registration.TenantId.Value;
+        IncomingRequest request = new(
+            Path: $"/connect/{segment}/unknown-endpoint",
+            Method: "POST",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty);
+
+        ExchangeContext context = new();
+        context.SetTenantId(segment);
+        await host.Server.DispatchAsync(request, context, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.IsInstanceOfType<IncomingRequestStage>(recorded[0],
+            "IncomingRequestStage must fire even on an unmatched request — "
+            + "audit and replay tooling see every inbound request, not just "
+            + "the ones that found a handler.");
+        Assert.IsInstanceOfType<OutgoingResponseStage>(recorded[^1],
+            "OutgoingResponseStage must fire even on the 404 path — observers "
+            + "see the response envelope on every code path.");
+        Assert.HasCount(0, recorded.OfType<StateTransitionStage>(),
+            "StateTransitionStage must not fire when no endpoint matched — "
+            + "no flow ran, so no transition could have happened.");
+    }
+
+
+    [TestMethod]
+    public async Task StateTransitionStageDoesNotFireForStatelessEndpointDispatch()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        List<StateTransitionStage> recorded = [];
+        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
+        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        {
+            if(stage is StateTransitionStage transition)
+            {
+                recorded.Add(transition);
+            }
+
+            return previousInspect(stage, ctx, ct);
+        };
+
+        using VerifierKeyMaterial keys = host.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        string segment = keys.Registration.TenantId;
+        ExchangeContext context = new();
+        context.SetTenantId(segment);
+        context.SetIssuer(VerifierBaseUri);
+
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
+            segment,
+            WellKnownEndpointNames.MetadataJwks,
+            "GET",
+            new RequestFields(),
+            context,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode,
+            "Stateless JWKS dispatch precondition for the no-emission assertion below.");
+        Assert.HasCount(0, recorded,
+            "Stateless endpoints serve computed responses without driving the PDA. "
+            + "StateTransitionStage must not fire on stateless paths because "
+            + "FlowRunner.StepWithEffectsAsync is the only emission site and "
+            + "stateless endpoints short-circuit before reaching it.");
+    }
+
+
+    //Helpers go below the public surface.
+
+    private static PreparedDcqlQuery CreatePreparedQuery() =>
+        DcqlFixtures.PidFamilyNamePrepared();
+}

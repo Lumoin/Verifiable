@@ -1,10 +1,12 @@
 using System.Buffers;
 using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.Credentials;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
+using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.DataIntegrity;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -16,7 +18,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// <remarks>
 /// <para>
 /// These tests verify the <see cref="VerifiableCredential"/>-specific overloads in
-/// <see cref="SdJwtExtensions"/> and <see cref="SdCwtExtensions"/> that enforce the W3C
+/// <see cref="SdJwtIssuanceExtensions"/> and <see cref="SdCwtIssuanceExtensions"/> that enforce the W3C
 /// requirement that only claims under <c>/credentialSubject</c> may be selectively disclosable.
 /// Top-level claims like <c>issuer</c>, <c>type</c>, and <c>validFrom</c> must remain mandatory.
 /// </para>
@@ -45,12 +47,13 @@ internal sealed class CredentialSdIssuanceTests
         };
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
-            disclosablePaths,
-            SaltGenerator.Create,
+            (CredentialToJsonBytesDelegate)(static (VerifiableCredential c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, CredentialSecuringMaterial.JsonOptions)),
+            SdJwtIssuance.IssueVerboseAsync,
+disclosablePaths,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
-            CredentialSecuringMaterial.JsonOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsGreaterThan(0, result.SignedToken.Length, "Signed token must not be empty.");
@@ -69,12 +72,13 @@ internal sealed class CredentialSdIssuanceTests
         };
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
-            disclosablePaths,
-            SaltGenerator.Create,
+            (CredentialToJsonBytesDelegate)(static (VerifiableCredential c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, CredentialSecuringMaterial.JsonOptions)),
+            SdJwtIssuance.IssueVerboseAsync,
+disclosablePaths,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
-            CredentialSecuringMaterial.JsonOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(1, result.Disclosures);
@@ -93,12 +97,13 @@ internal sealed class CredentialSdIssuanceTests
         };
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
-            disclosablePaths,
-            SaltGenerator.Create,
+            (CredentialToJsonBytesDelegate)(static (VerifiableCredential c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, CredentialSecuringMaterial.JsonOptions)),
+            SdJwtIssuance.IssueVerboseAsync,
+disclosablePaths,
+            TestSalts.DefaultGenerator(),
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             Pool,
-            CredentialSecuringMaterial.JsonOptions,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(1, result.Disclosures);
@@ -117,14 +122,14 @@ internal sealed class CredentialSdIssuanceTests
             CredentialPath.FromJsonPointer("/credentialSubject/degree/type")
         };
 
-        SdJwtExtensions.ValidateCredentialPaths(disclosablePaths);
+        SdJwtIssuanceExtensions.ValidateCredentialPaths(disclosablePaths);
     }
 
 
     [TestMethod]
     public void ValidateCredentialPathsAcceptsEmptySet()
     {
-        SdJwtExtensions.ValidateCredentialPaths(new HashSet<CredentialPath>());
+        SdJwtIssuanceExtensions.ValidateCredentialPaths(new HashSet<CredentialPath>());
     }
 
 
@@ -138,7 +143,7 @@ internal sealed class CredentialSdIssuanceTests
         };
 
         Assert.Throws<ArgumentException>(() =>
-            SdJwtExtensions.ValidateCredentialPaths(disclosablePaths));
+            SdJwtIssuanceExtensions.ValidateCredentialPaths(disclosablePaths));
     }
 
 
@@ -151,7 +156,7 @@ internal sealed class CredentialSdIssuanceTests
         };
 
         Assert.Throws<ArgumentException>(() =>
-            SdJwtExtensions.ValidateCredentialPaths(disclosablePaths));
+            SdJwtIssuanceExtensions.ValidateCredentialPaths(disclosablePaths));
     }
 
 
@@ -164,7 +169,7 @@ internal sealed class CredentialSdIssuanceTests
         };
 
         Assert.Throws<ArgumentException>(() =>
-            SdJwtExtensions.ValidateCredentialPaths(disclosablePaths));
+            SdJwtIssuanceExtensions.ValidateCredentialPaths(disclosablePaths));
     }
 
 
@@ -172,7 +177,7 @@ internal sealed class CredentialSdIssuanceTests
     public void ValidateCredentialPathsRejectsRootPath()
     {
         Assert.Throws<ArgumentException>(() =>
-            SdJwtExtensions.ValidateCredentialPaths(new HashSet<CredentialPath> { CredentialPath.Root }));
+            SdJwtIssuanceExtensions.ValidateCredentialPaths(new HashSet<CredentialPath> { CredentialPath.Root }));
     }
 
 
@@ -186,6 +191,6 @@ internal sealed class CredentialSdIssuanceTests
         };
 
         Assert.Throws<ArgumentException>(() =>
-            SdCwtExtensions.ValidateCredentialPaths(disclosablePaths));
+            SdCwtIssuanceExtensions.ValidateCredentialPaths(disclosablePaths));
     }
 }

@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using Verifiable.Core;
 using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.JCose;
 
 namespace Verifiable.Core.Model.Credentials;
 
@@ -130,6 +128,45 @@ public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialB
     [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings", Justification = "This is by design.")]
     public static CredentialIdGenerator HttpsCredentialIdGenerator(string baseUrl) => _ =>
         $"{baseUrl.TrimEnd('/')}/credentials/{Guid.NewGuid()}";
+
+
+    /// <summary>
+    /// The Data Integrity proof signing configuration applied by
+    /// <see cref="BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, string?, CancellationToken)"/>.
+    /// Set via
+    /// <see cref="CredentialBuilderExtensions.WithDataIntegritySigning(CredentialBuilder, DataIntegritySigningConfig)"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see langword="null"/> when no Data Integrity signing is configured. The
+    /// non-signing
+    /// <see cref="BuildAsync(Issuer, IEnumerable{CredentialSubjectInput}, DateTime, IEnumerable{string}?, DateTime?, string?, CancellationToken)"/>
+    /// path does not consult this field; the field is read only by
+    /// <see cref="BuildAndSignAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, string?, CancellationToken)"/>.
+    /// </para>
+    /// <para>
+    /// Setting this field directly is permitted but
+    /// <see cref="CredentialBuilderExtensions.WithDataIntegritySigning(CredentialBuilder, DataIntegritySigningConfig)"/>
+    /// is the documented surface.
+    /// </para>
+    /// </remarks>
+    public DataIntegritySigningConfig? DataIntegritySigning { get; set; }
+
+
+    /// <summary>
+    /// The JWS-envelope signing configuration applied by
+    /// <see cref="BuildJwsAsync(Issuer, CredentialSubjectInput, DateTime, CancellationToken)"/> and
+    /// <see cref="BuildJwsFullAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, CancellationToken)"/>.
+    /// Set via
+    /// <see cref="CredentialBuilderExtensions.WithJoseSigning(CredentialBuilder, JoseSigningConfig)"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see langword="null"/> when no JWS signing is configured. The
+    /// <c>BuildJws*Async</c> methods throw
+    /// <see cref="InvalidOperationException"/> when called without a
+    /// configuration.
+    /// </remarks>
+    public JoseSigningConfig? JoseSigning { get; set; }
 
 
     /// <summary>
@@ -372,5 +409,192 @@ public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialB
             seedGeneratorParameter: subjectsList,
             preBuildActionAsync: (_, _) => ValueTask.FromResult(buildState),
             cancellationToken: cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Builds a Verifiable Credential and applies a Data Integrity proof using
+    /// the configuration stored in <see cref="DataIntegritySigning"/>.
+    /// </summary>
+    /// <param name="issuer">The issuer of the credential.</param>
+    /// <param name="subject">The credential subject input containing claims.</param>
+    /// <param name="validFrom">The date and time from which the credential is valid.</param>
+    /// <param name="additionalTypes">
+    /// Additional credential types beyond the base <c>"VerifiableCredential"</c> type.
+    /// </param>
+    /// <param name="validUntil">Optional expiration date and time for the credential.</param>
+    /// <param name="credentialId">
+    /// Optional identifier for the credential. If not specified, one will be generated.
+    /// </param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>
+    /// A <see cref="VerifiableCredential"/> with a Data Integrity proof embedded
+    /// in its <see cref="DataIntegrity.DataIntegritySecuredCredential.Proof"/> array.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <see cref="DataIntegritySigning"/> is <see langword="null"/>.
+    /// Call
+    /// <see cref="CredentialBuilderExtensions.WithDataIntegritySigning(CredentialBuilder, DataIntegritySigningConfig)"/>
+    /// before calling this method.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// Building (the fold over <c>WithActions</c>) and signing are kept
+    /// separate: the fold runs first via the standard
+    /// <see cref="BuildAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, string?, CancellationToken)"/>
+    /// path, then the proof is applied via
+    /// <see cref="CredentialDataIntegrityExtensions.SignAsync"/>. This keeps
+    /// the builder's pipeline focused on credential assembly and treats
+    /// signing as a post-build operation.
+    /// </para>
+    /// <para>
+    /// Configuration is fixed across calls; per-call parameters are the
+    /// issuer, subject, validity period, and types. Reuse the configured
+    /// builder to issue many credentials with the same key and cryptosuite.
+    /// </para>
+    /// </remarks>
+    public async ValueTask<DataIntegrity.DataIntegritySecuredCredential> BuildAndSignAsync(
+        Issuer issuer,
+        CredentialSubjectInput subject,
+        DateTime validFrom,
+        IEnumerable<string>? additionalTypes = null,
+        DateTime? validUntil = null,
+        string? credentialId = null,
+        ExchangeContext? context = null,
+        CancellationToken cancellationToken = default)
+    {
+        DataIntegritySigningConfig config = DataIntegritySigning
+            ?? throw new InvalidOperationException(
+                "Data Integrity signing has not been configured. Call WithDataIntegritySigning(config) before calling BuildAndSignAsync.");
+
+        VerifiableCredential credential = await BuildAsync(
+            issuer,
+            subject,
+            validFrom,
+            additionalTypes,
+            validUntil,
+            credentialId,
+            cancellationToken).ConfigureAwait(false);
+
+        return await credential.SignAsync(
+            config.PrivateKey,
+            config.VerificationMethodId,
+            config.Cryptosuite,
+            config.ProofCreated,
+            config.Canonicalize,
+            config.ContextResolver,
+            config.EncodeProofValue,
+            config.Serialize,
+            config.Deserialize,
+            config.SerializeProofOptions,
+            config.Encoder,
+            config.ComputeDigest,
+            config.MemoryPool,
+            context ?? new ExchangeContext(),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Builds a Verifiable Credential and wraps it in a JWS envelope using the
+    /// configuration stored in <see cref="JoseSigning"/>.
+    /// </summary>
+    /// <param name="issuer">The issuer of the credential.</param>
+    /// <param name="subject">The credential subject input containing claims.</param>
+    /// <param name="validFrom">The date and time from which the credential is valid.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>
+    /// A <see cref="JwsMessage"/> containing the credential as its payload.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <see cref="JoseSigning"/> is <see langword="null"/>. Call
+    /// <see cref="CredentialBuilderExtensions.WithJoseSigning(CredentialBuilder, JoseSigningConfig)"/>
+    /// before calling this method.
+    /// </exception>
+    /// <remarks>
+    /// Use
+    /// <see cref="BuildJwsFullAsync(Issuer, CredentialSubjectInput, DateTime, IEnumerable{string}?, DateTime?, CancellationToken)"/>
+    /// when additional types or an expiration time are needed.
+    /// </remarks>
+    public async ValueTask<JwsMessage> BuildJwsAsync(
+        Issuer issuer,
+        CredentialSubjectInput subject,
+        DateTime validFrom,
+        CancellationToken cancellationToken = default)
+    {
+        JoseSigningConfig config = JoseSigning
+            ?? throw new InvalidOperationException(
+                "JOSE signing has not been configured. Call WithJoseSigning(config) before calling BuildJwsAsync.");
+
+        VerifiableCredential credential = await BuildAsync(
+            issuer,
+            subject,
+            validFrom,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return await credential.SignJwsAsync(
+            config.PrivateKey,
+            config.VerificationMethodId,
+            config.CredentialSerializer,
+            config.HeaderSerializer,
+            config.Base64UrlEncoder,
+            config.MemoryPool,
+            mediaType: config.MediaType,
+            contentType: config.ContentType,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Builds a Verifiable Credential and wraps it in a JWS envelope, with full
+    /// per-call options: additional credential types and an optional expiration
+    /// time. Uses the configuration stored in <see cref="JoseSigning"/>.
+    /// </summary>
+    /// <param name="issuer">The issuer of the credential.</param>
+    /// <param name="subject">The credential subject input containing claims.</param>
+    /// <param name="validFrom">The date and time from which the credential is valid.</param>
+    /// <param name="additionalTypes">
+    /// Additional credential types beyond the base <c>"VerifiableCredential"</c> type.
+    /// </param>
+    /// <param name="validUntil">Optional expiration date and time for the credential.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>
+    /// A <see cref="JwsMessage"/> containing the credential as its payload.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <see cref="JoseSigning"/> is <see langword="null"/>. Call
+    /// <see cref="CredentialBuilderExtensions.WithJoseSigning(CredentialBuilder, JoseSigningConfig)"/>
+    /// before calling this method.
+    /// </exception>
+    public async ValueTask<JwsMessage> BuildJwsFullAsync(
+        Issuer issuer,
+        CredentialSubjectInput subject,
+        DateTime validFrom,
+        IEnumerable<string>? additionalTypes = null,
+        DateTime? validUntil = null,
+        CancellationToken cancellationToken = default)
+    {
+        JoseSigningConfig config = JoseSigning
+            ?? throw new InvalidOperationException(
+                "JOSE signing has not been configured. Call WithJoseSigning(config) before calling BuildJwsFullAsync.");
+
+        VerifiableCredential credential = await BuildAsync(
+            issuer,
+            subject,
+            validFrom,
+            additionalTypes,
+            validUntil,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return await credential.SignJwsAsync(
+            config.PrivateKey,
+            config.VerificationMethodId,
+            config.CredentialSerializer,
+            config.HeaderSerializer,
+            config.Base64UrlEncoder,
+            config.MemoryPool,
+            mediaType: config.MediaType,
+            contentType: config.ContentType,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 }

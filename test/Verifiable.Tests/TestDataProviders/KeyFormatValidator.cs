@@ -1,4 +1,4 @@
-﻿using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tests.TestDataProviders

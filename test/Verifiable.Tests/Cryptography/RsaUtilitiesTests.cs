@@ -58,16 +58,44 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void DecodeThrowsWithCorrectMessageIfModulusNotCorrectLength()
         {
+            //OI-002 widened Decode to accept either raw modulus bytes
+            //(length 256 / 512) or DER-encoded modulus bytes (length 270 /
+            //526). The error message enumerates all four accepted shapes;
+            //inputs of any other length (including empty and 257-byte test
+            //arrays) still throw ArgumentOutOfRangeException.
             const string ParameterName = "encodedRsaModulusBytes";
-            const int Rsa2048DerEncodedBytesLength = 270;
-            const int Rsa4096DerEncodedBytesLength = 526;
+            const string ExpectedMessage =
+                "Length must be 256 or 270 (RSA 2048), or 512 or 526 (RSA 4096). "
+                + "(Parameter 'encodedRsaModulusBytes')";
+
             var exception1 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RsaUtilities.Decode(WrongSizeArray1));
             Assert.AreEqual(ParameterName, exception1.ParamName);
-            Assert.AreEqual($"Length must be {Rsa2048DerEncodedBytesLength} (RSA 2048) or {Rsa4096DerEncodedBytesLength} (RSA 4096). (Parameter '{ParameterName}')", exception1.Message);
+            Assert.AreEqual(ExpectedMessage, exception1.Message);
 
             var exception2 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RsaUtilities.Decode(WrongSizeArray2));
             Assert.AreEqual(ParameterName, exception2.ParamName);
-            Assert.AreEqual($"Length must be {Rsa2048DerEncodedBytesLength} (RSA 2048) or {Rsa4096DerEncodedBytesLength} (RSA 4096). (Parameter '{ParameterName}')", exception2.Message);
+            Assert.AreEqual(ExpectedMessage, exception2.Message);
+        }
+
+
+        [TestMethod]
+        public void DecodeAcceptsRawModulus()
+        {
+            //OI-002 — raw RSA-2048 modulus (256 bytes) and raw RSA-4096
+            //modulus (512 bytes) round-trip through Decode unchanged.
+            //Raw modulus has the MSB set per algorithm invariant; emulate
+            //by filling the first byte with 0xFF.
+            byte[] rawRsa2048 = new byte[RsaUtilities.Rsa2048ModulusLength];
+            rawRsa2048[0] = 0xFF;
+            byte[] decoded2048 = RsaUtilities.Decode(rawRsa2048);
+            Assert.HasCount(RsaUtilities.Rsa2048ModulusLength, decoded2048);
+            CollectionAssert.AreEqual(rawRsa2048, decoded2048);
+
+            byte[] rawRsa4096 = new byte[RsaUtilities.Rsa4096ModulusLength];
+            rawRsa4096[0] = 0xFF;
+            byte[] decoded4096 = RsaUtilities.Decode(rawRsa4096);
+            Assert.HasCount(RsaUtilities.Rsa4096ModulusLength, decoded4096);
+            CollectionAssert.AreEqual(rawRsa4096, decoded4096);
         }
 
 

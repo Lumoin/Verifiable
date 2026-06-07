@@ -20,10 +20,10 @@ namespace Verifiable.Core.Model.Did
     /// Due to privacy concerns, revealing public information through services (such as
     /// social media accounts, personal websites, and email addresses) is discouraged.
     /// See <see href="https://www.w3.org/TR/cid-1.0/#keep-personal-data-private">
-    /// CID 1.0 §6.1 Keep Personal Data Private</see>.
+    /// CID 1.0 ï¿½6.1 Keep Personal Data Private</see>.
     /// </para>
     /// <para>
-    /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 §2.1.4 Services</see>.
+    /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 ï¿½2.1.4 Services</see>.
     /// </para>
     /// </remarks>
     [DebuggerDisplay("Service(Id = {Id}, Type = {Type})")]
@@ -38,7 +38,7 @@ namespace Verifiable.Core.Model.Did
         /// multiple service entries with the same <c>id</c>.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 §2.1.4 Services</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 ï¿½2.1.4 Services</see>.
         /// </para>
         /// </remarks>
         public DidUrl? Id { get; set; }
@@ -57,7 +57,7 @@ namespace Verifiable.Core.Model.Did
         /// <see cref="Types"/> takes precedence during serialization.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 §2.1.4 Services</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 ï¿½2.1.4 Services</see>.
         /// </para>
         /// </remarks>
         public string? Type { get; set; }
@@ -83,7 +83,7 @@ namespace Verifiable.Core.Model.Did
         /// <see cref="ServiceEndpoints"/> instead.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 §2.1.4 Services</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 ï¿½2.1.4 Services</see>.
         /// </para>
         /// </remarks>
         public string? ServiceEndpoint { get; set; }

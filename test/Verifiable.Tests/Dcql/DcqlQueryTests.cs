@@ -1,6 +1,6 @@
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.JCose;
 
 namespace Verifiable.Tests.Dcql;

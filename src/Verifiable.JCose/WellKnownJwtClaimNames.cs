@@ -1,0 +1,337 @@
+namespace Verifiable.JCose;
+
+/// <summary>
+/// Well-known JWT claim NAMES — strings that appear as JSON keys in the
+/// JWT payload object. Sourced from
+/// <see href="https://www.iana.org/assignments/jwt/jwt.xhtml#claims">IANA JSON Web Token Claims registry</see>
+/// plus OpenID Connect Core 1.0 §2 and §5.1.
+/// </summary>
+/// <remarks>
+/// <para>
+/// These are the NAMES of claims (<c>"sub"</c>, <c>"iss"</c>, <c>"aud"</c>),
+/// not their VALUES. Values are application- or context-defined: a subject
+/// identifier, an issuer URL, an audience list. Claim values do not live
+/// in this class.
+/// </para>
+/// <para>
+/// Claim names are case-sensitive per
+/// <see href="https://www.rfc-editor.org/rfc/rfc7519">RFC 7519</see>.
+/// </para>
+/// </remarks>
+public static class WellKnownJwtClaimNames
+{
+    /// <summary>
+    /// The <c>iss</c> (Issuer) claim identifies the principal that issued the JWT.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.1">RFC 7519 §4.1.1</see>.
+    /// </summary>
+    public static readonly string Iss = "iss";
+
+    /// <summary>
+    /// The <c>sub</c> (Subject) claim identifies the principal that is the subject of the JWT.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.2">RFC 7519 §4.1.2</see>.
+    /// </summary>
+    public static readonly string Sub = "sub";
+
+    /// <summary>
+    /// The <c>aud</c> (Audience) claim identifies the recipients the JWT is intended for.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 §4.1.3</see>.
+    /// </summary>
+    public static readonly string Aud = "aud";
+
+    /// <summary>
+    /// The <c>exp</c> (Expiration Time) claim identifies the time on or after which the JWT
+    /// must not be accepted for processing.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 §4.1.4</see>.
+    /// </summary>
+    public static readonly string Exp = "exp";
+
+    /// <summary>
+    /// The <c>nbf</c> (Not Before) claim identifies the time before which the JWT must not be
+    /// accepted for processing.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">RFC 7519 §4.1.5</see>.
+    /// </summary>
+    public static readonly string Nbf = "nbf";
+
+    /// <summary>
+    /// The <c>iat</c> (Issued At) claim identifies the time at which the JWT was issued.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 §4.1.6</see>.
+    /// </summary>
+    public static readonly string Iat = "iat";
+
+    /// <summary>
+    /// The <c>jti</c> (JWT ID) claim provides a unique identifier for the JWT, used to prevent replay.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519 §4.1.7</see>.
+    /// </summary>
+    public static readonly string Jti = "jti";
+
+    /// <summary>
+    /// The <c>scope</c> claim carries the authorized scope values associated with
+    /// an access token or an authorization request.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see>
+    /// and <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.2">RFC 8693 §4.2</see>.
+    /// </summary>
+    public static readonly string Scope = "scope";
+
+    /// <summary>
+    /// The <c>client_id</c> claim identifies the OAuth client the token was issued to.
+    /// Required in OAuth 2.0 JWT access tokens per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 §2.2</see>.
+    /// </summary>
+    public static readonly string ClientId = "client_id";
+
+    /// <summary>
+    /// The <c>nonce</c> claim carries a value used to associate a request with a session
+    /// and to mitigate replay attacks.
+    /// See <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core §2</see>.
+    /// </summary>
+    public static readonly string Nonce = "nonce";
+
+    /// <summary>
+    /// The <c>auth_time</c> claim carries the time when the End-User authentication occurred.
+    /// Required when a <c>max_age</c> request was made or when the <c>auth_time</c> claim was
+    /// requested specifically.
+    /// See <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OIDC Core §2</see>.
+    /// </summary>
+    public static readonly string AuthTime = "auth_time";
+
+    /// <summary>
+    /// The <c>acr</c> (Authentication Context Class Reference) claim per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OIDC Core §2</see>.
+    /// Value is an application-defined assurance level (e.g. an eIDAS LoA or NIST 800-63 IAL/AAL).
+    /// </summary>
+    public static readonly string Acr = "acr";
+
+    /// <summary>
+    /// The <c>amr</c> (Authentication Methods References) claim per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OIDC Core §2</see>.
+    /// Value is an array of method identifiers (e.g. <c>pwd</c>, <c>mfa</c>, <c>hwk</c>).
+    /// </summary>
+    public static readonly string Amr = "amr";
+
+    /// <summary>
+    /// The <c>azp</c> (Authorized Party) claim per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OIDC Core §2</see>
+    /// — identifies the OAuth client the ID Token was issued to when different from the audience.
+    /// </summary>
+    public static readonly string Azp = "azp";
+
+    /// <summary>The <c>name</c> claim per OIDC Core §5.1 — full name in displayable form.</summary>
+    public static readonly string Name = "name";
+
+    /// <summary>The <c>given_name</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string GivenName = "given_name";
+
+    /// <summary>The <c>family_name</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string FamilyName = "family_name";
+
+    /// <summary>The <c>middle_name</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string MiddleName = "middle_name";
+
+    /// <summary>The <c>nickname</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string Nickname = "nickname";
+
+    /// <summary>The <c>preferred_username</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string PreferredUsername = "preferred_username";
+
+    /// <summary>The <c>profile</c> claim per OIDC Core §5.1 — URL of the end-user's profile page.</summary>
+    public static readonly string Profile = "profile";
+
+    /// <summary>The <c>picture</c> claim per OIDC Core §5.1 — URL of the end-user's profile picture.</summary>
+    public static readonly string Picture = "picture";
+
+    /// <summary>The <c>website</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string Website = "website";
+
+    /// <summary>The <c>gender</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string Gender = "gender";
+
+    /// <summary>The <c>birthdate</c> claim per OIDC Core §5.1 — <c>YYYY-MM-DD</c> string.</summary>
+    public static readonly string Birthdate = "birthdate";
+
+    /// <summary>The <c>zoneinfo</c> claim per OIDC Core §5.1 — IANA tz database string.</summary>
+    public static readonly string Zoneinfo = "zoneinfo";
+
+    /// <summary>The <c>locale</c> claim per OIDC Core §5.1 — BCP47 language tag.</summary>
+    public static readonly string Locale = "locale";
+
+    /// <summary>The <c>updated_at</c> claim per OIDC Core §5.1 — Unix seconds.</summary>
+    public static readonly string UpdatedAt = "updated_at";
+
+    /// <summary>The <c>email</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string Email = "email";
+
+    /// <summary>The <c>email_verified</c> claim per OIDC Core §5.1 — JSON boolean.</summary>
+    public static readonly string EmailVerified = "email_verified";
+
+    /// <summary>The <c>phone_number</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string PhoneNumber = "phone_number";
+
+    /// <summary>The <c>phone_number_verified</c> claim per OIDC Core §5.1.</summary>
+    public static readonly string PhoneNumberVerified = "phone_number_verified";
+
+    /// <summary>The <c>address</c> claim per OIDC Core §5.1.1 — structured JSON object.</summary>
+    public static readonly string Address = "address";
+
+    /// <summary>
+    /// The <c>roles</c> claim — commonly used to communicate roles a principal has been granted.
+    /// Application-defined value shape (typically a JSON array of role strings).
+    /// </summary>
+    public static readonly string Roles = "roles";
+
+    /// <summary>
+    /// The <c>tenant</c> claim — commonly used in multitenant applications to specify the
+    /// tenant the JWT is scoped to. Application-defined value shape.
+    /// </summary>
+    public static readonly string Tenant = "tenant";
+
+    /// <summary>
+    /// The <c>vct</c> (Verifiable Credential Type) claim identifies the type of the SD-JWT VC.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc9901#section-3.2.2.1.1">RFC 9901 §3.2.2.1.1</see>.
+    /// </summary>
+    public static readonly string Vct = "vct";
+
+    /// <summary>
+    /// The <c>cnf</c> (Confirmation) claim carries the holder's confirmation method,
+    /// typically the holder's public key for key binding.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc7800#section-3.1">RFC 7800 §3.1</see>.
+    /// </summary>
+    public static readonly string Cnf = "cnf";
+
+    /// <summary>
+    /// The <c>htm</c> (HTTP Method) claim in a DPoP proof JWT carries the HTTP method
+    /// of the request to which the proof is attached.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 §4.2</see>.
+    /// </summary>
+    public static readonly string Htm = "htm";
+
+    /// <summary>
+    /// The <c>htu</c> (HTTP URI) claim in a DPoP proof JWT carries the HTTP URI of
+    /// the request to which the proof is attached, without query and fragment parts.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 §4.2</see>.
+    /// </summary>
+    public static readonly string Htu = "htu";
+
+    /// <summary>
+    /// The <c>ath</c> (Access Token Hash) claim in a DPoP proof JWT carries the
+    /// base64url-encoded SHA-256 hash of the ASCII encoding of the associated access token.
+    /// Required when the DPoP proof is presented alongside an access token.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 §4.2</see>.
+    /// </summary>
+    public static readonly string Ath = "ath";
+
+    /// <summary>
+    /// The <c>jkt</c> member name inside the <c>cnf</c> (Confirmation)
+    /// structured claim per RFC 7800 §3.1. Carries the base64url-encoded
+    /// RFC 7638 JWK thumbprint of the proof-of-possession key the token is
+    /// sender-constrained to per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 §6.1</see>.
+    /// </summary>
+    public static readonly string JwkThumbprint = "jkt";
+
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Iss"/>.</summary>
+    public static bool IsIss(string claim) => Equals(claim, Iss);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Sub"/>.</summary>
+    public static bool IsSub(string claim) => Equals(claim, Sub);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Aud"/>.</summary>
+    public static bool IsAud(string claim) => Equals(claim, Aud);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Exp"/>.</summary>
+    public static bool IsExp(string claim) => Equals(claim, Exp);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Nbf"/>.</summary>
+    public static bool IsNbf(string claim) => Equals(claim, Nbf);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Iat"/>.</summary>
+    public static bool IsIat(string claim) => Equals(claim, Iat);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Jti"/>.</summary>
+    public static bool IsJti(string claim) => Equals(claim, Jti);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="ClientId"/>.</summary>
+    public static bool IsClientId(string claim) => Equals(claim, ClientId);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Nonce"/>.</summary>
+    public static bool IsNonce(string claim) => Equals(claim, Nonce);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="AuthTime"/>.</summary>
+    public static bool IsAuthTime(string claim) => Equals(claim, AuthTime);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Acr"/>.</summary>
+    public static bool IsAcr(string claim) => Equals(claim, Acr);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Amr"/>.</summary>
+    public static bool IsAmr(string claim) => Equals(claim, Amr);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Azp"/>.</summary>
+    public static bool IsAzp(string claim) => Equals(claim, Azp);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Name"/>.</summary>
+    public static bool IsName(string claim) => Equals(claim, Name);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Roles"/>.</summary>
+    public static bool IsRoles(string claim) => Equals(claim, Roles);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Tenant"/>.</summary>
+    public static bool IsTenant(string claim) => Equals(claim, Tenant);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Vct"/>.</summary>
+    public static bool IsVct(string claim) => Equals(claim, Vct);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Cnf"/>.</summary>
+    public static bool IsCnf(string claim) => Equals(claim, Cnf);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Htm"/>.</summary>
+    public static bool IsHtm(string claim) => Equals(claim, Htm);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Htu"/>.</summary>
+    public static bool IsHtu(string claim) => Equals(claim, Htu);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Ath"/>.</summary>
+    public static bool IsAth(string claim) => Equals(claim, Ath);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="JwkThumbprint"/>.</summary>
+    public static bool IsJwkThumbprint(string claim) => Equals(claim, JwkThumbprint);
+
+
+    /// <summary>
+    /// Returns the interned constant for a known claim name, or the original string if
+    /// unrecognized. Enables reference-equality fast paths downstream.
+    /// </summary>
+    public static string GetCanonicalizedValue(string claim) => claim switch
+    {
+        _ when IsIss(claim) => Iss,
+        _ when IsSub(claim) => Sub,
+        _ when IsAud(claim) => Aud,
+        _ when IsExp(claim) => Exp,
+        _ when IsNbf(claim) => Nbf,
+        _ when IsIat(claim) => Iat,
+        _ when IsJti(claim) => Jti,
+        _ when IsClientId(claim) => ClientId,
+        _ when IsNonce(claim) => Nonce,
+        _ when IsAuthTime(claim) => AuthTime,
+        _ when IsAcr(claim) => Acr,
+        _ when IsAmr(claim) => Amr,
+        _ when IsAzp(claim) => Azp,
+        _ when IsName(claim) => Name,
+        _ when IsRoles(claim) => Roles,
+        _ when IsTenant(claim) => Tenant,
+        _ when IsVct(claim) => Vct,
+        _ when IsCnf(claim) => Cnf,
+        _ when IsHtm(claim) => Htm,
+        _ when IsHtu(claim) => Htu,
+        _ when IsAth(claim) => Ath,
+        _ when IsJwkThumbprint(claim) => JwkThumbprint,
+        _ => claim
+    };
+
+
+    /// <summary>
+    /// Compares two claim names for equality. Comparison is case-sensitive per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519">RFC 7519</see>.
+    /// </summary>
+    public static bool Equals(string claimA, string claimB) =>
+        object.ReferenceEquals(claimA, claimB) || StringComparer.Ordinal.Equals(claimA, claimB);
+}

@@ -1,11 +1,8 @@
-﻿using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
+using Verifiable.Core;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
@@ -57,6 +54,7 @@ public delegate VerifiablePresentation PresentationDeserializeDelegate(string se
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with the latest syntax.")]
+[SuppressMessage("Naming", "CA1708:Identifiers should differ by more than case", Justification = "The two extension blocks differ by receiver type (VerifiablePresentation vs DataIntegritySecuredPresentation); the analyzer is not up to date with the C# extension-block syntax.")]
 public static class PresentationDataIntegrityExtensions
 {
     extension(VerifiablePresentation presentation)
@@ -91,10 +89,10 @@ public static class PresentationDataIntegrityExtensions
         /// <param name="encoder">The encoding delegate (e.g., Base58 encoder) passed to the proof value encoder.</param>
         /// <param name="memoryPool">Memory pool for signature allocation.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>A new presentation instance with the proof attached.</returns>
+        /// <returns>The embedded-secured presentation carrying the proof.</returns>
         /// <exception cref="ArgumentNullException">Thrown when any required parameter is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException">Thrown when <paramref name="verificationMethodId"/>, <paramref name="challenge"/>, or <paramref name="domain"/> is null or whitespace.</exception>
-        public async ValueTask<VerifiablePresentation> SignAsync(
+        public async ValueTask<DataIntegritySecuredPresentation> SignAsync(
             PrivateKeyMemory privateKey,
             string verificationMethodId,
             CryptosuiteInfo cryptosuite,
@@ -108,7 +106,9 @@ public static class PresentationDataIntegrityExtensions
             PresentationDeserializeDelegate deserialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
+            ComputeDigestDelegate computeDigest,
             MemoryPool<byte> memoryPool,
+            ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(privateKey);
@@ -122,30 +122,44 @@ public static class PresentationDataIntegrityExtensions
             ArgumentNullException.ThrowIfNull(deserialize);
             ArgumentNullException.ThrowIfNull(serializeProofOptions);
             ArgumentNullException.ThrowIfNull(encoder);
+            ArgumentNullException.ThrowIfNull(computeDigest);
             ArgumentNullException.ThrowIfNull(memoryPool);
 
             var proofCreatedString = DateTimeStampFormat.Format(proofCreated);
             var presentationSerialized = serialize(presentation);
 
+            //Build the complete proof skeleton before signing; the options derive from
+            //it (§4.2), so challenge and domain are covered by the signature — that
+            //coverage is the anti-replay binding, not the mere presence of the fields.
+            var newProof = new DataIntegrityProof
+            {
+                Type = DataIntegrityProof.DataIntegrityProofType,
+                Cryptosuite = cryptosuite,
+                Created = proofCreatedString,
+                VerificationMethod = new AuthenticationMethod(verificationMethodId),
+                ProofPurpose = AuthenticationMethod.Purpose,
+                Challenge = challenge,
+                Domain = [domain]
+            };
+
             var requiresContext = cryptosuite.Canonicalization.Equals(CanonicalizationAlgorithm.Rdfc10);
-            var proofOptions = ProofOptionsDocument.ForSigning(
-                cryptosuite,
-                proofCreatedString,
-                verificationMethodId,
-                AuthenticationMethod.Purpose,
-                requiresContext ? presentation.Context : null,
-                domain,
-                challenge);
+            var proofOptions = ProofOptionsDocument.FromProof(
+                newProof, requiresContext ? presentation.Context : null);
 
             var proofOptionsSerialized = serializeProofOptions(proofOptions);
 
-            var presentationCanonicalization = await canonicalize(presentationSerialized, contextResolver, cancellationToken)
+            var presentationCanonicalization = await canonicalize(presentationSerialized, contextResolver, context, cancellationToken)
                 .ConfigureAwait(false);
-            var proofOptionsCanonicalization = await canonicalize(proofOptionsSerialized, contextResolver, cancellationToken)
+            var proofOptionsCanonicalization = await canonicalize(proofOptionsSerialized, contextResolver, context, cancellationToken)
                 .ConfigureAwait(false);
 
             var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(cryptosuite.HashAlgorithm);
-            var hashFunction = DefaultHashFunctionSelector.Select(hashAlgorithm);
+            int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
+            var digestTag = new Tag(new Dictionary<Type, object>
+            {
+                [typeof(HashAlgorithmName)] = hashAlgorithm,
+                [typeof(Purpose)] = Purpose.Digest
+            });
 
             var presentationByteCount = Encoding.UTF8.GetByteCount(presentationCanonicalization.CanonicalForm);
             var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
@@ -159,39 +173,39 @@ public static class PresentationDataIntegrityExtensions
             System.Diagnostics.Debug.Assert(presentationBytesWritten == presentationByteCount, "Encoded byte count must match the pre-computed count.");
             System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
 
-            var presentationHash = hashFunction(presentationBytesOwner.Memory.Span[..presentationBytesWritten].ToArray());
-            var proofOptionsHash = hashFunction(proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten].ToArray());
+            (DigestValue presentationDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(presentationBytesOwner.Memory[..presentationBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
+            using DigestValue presentationDigest = presentationDigestValue;
+
+            (DigestValue proofOptionsDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(proofOptionsBytesOwner.Memory[..proofOptionsBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
+            using DigestValue proofOptionsDigest = proofOptionsDigestValue;
 
             //Combine hashes: proofOptionsHash || presentationHash.
-            var combinedLength = proofOptionsHash.Length + presentationHash.Length;
+            var combinedLength = proofOptionsDigest.Length + presentationDigest.Length;
             using var hashDataOwner = memoryPool.Rent(combinedLength);
             var hashData = hashDataOwner.Memory.Span;
-            proofOptionsHash.CopyTo(hashData);
-            presentationHash.CopyTo(hashData[proofOptionsHash.Length..]);
+            proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData);
+            presentationDigest.AsReadOnlySpan().CopyTo(hashData[proofOptionsDigest.Length..]);
 
             using var signature = await privateKey.SignAsync(hashDataOwner.Memory, memoryPool)
                 .ConfigureAwait(false);
 
-            var proofValue = encodeProofValue(signature.AsReadOnlySpan(), encoder, memoryPool);
+            //Attach the proof value to the pre-signed skeleton — the only member the
+            //signature cannot cover is its own value.
+            newProof.ProofValue = encodeProofValue(signature.AsReadOnlySpan(), encoder, memoryPool);
 
-            var signedPresentation = deserialize(presentationSerialized);
-            signedPresentation.Proof =
-            [
-                new DataIntegrityProof
-                {
-                    Type = DataIntegrityProof.DataIntegrityProofType,
-                    Cryptosuite = cryptosuite,
-                    Created = proofCreatedString,
-                    VerificationMethod = new AuthenticationMethod(verificationMethodId),
-                    ProofPurpose = AuthenticationMethod.Purpose,
-                    Challenge = challenge,
-                    Domain = domain,
-                    ProofValue = proofValue
-                }
-            ];
+            var signedPresentation = CloneWithProofs(deserialize(presentationSerialized), [newProof]);
 
             return signedPresentation;
         }
+    }
+
+
+    extension(DataIntegritySecuredPresentation presentation)
+    {
 
 
         /// <summary>
@@ -215,7 +229,6 @@ public static class PresentationDataIntegrityExtensions
         /// </param>
         /// <param name="decodeProofValue">Delegate for decoding the proof value string to signature bytes.</param>
         /// <param name="serialize">Delegate for serializing presentations.</param>
-        /// <param name="deserialize">Delegate for deserializing presentations.</param>
         /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
         /// <param name="decoder">The decoding delegate (e.g., Base58 decoder).</param>
         /// <param name="memoryPool">Memory pool for signature allocation.</param>
@@ -234,7 +247,7 @@ public static class PresentationDataIntegrityExtensions
         /// <see cref="VerificationFailureReason.VerificationMethodNotFound"/> to be returned.
         /// </para>
         /// </remarks>
-        public async ValueTask<CredentialVerificationResult> VerifyAsync(
+        public async ValueTask<CredentialVerificationResult<DataIntegritySecuredPresentation>> VerifyAsync(
             DidDocument holderDidDocument,
             string expectedChallenge,
             string expectedDomain,
@@ -242,10 +255,11 @@ public static class PresentationDataIntegrityExtensions
             ContextResolverDelegate? contextResolver,
             ProofValueDecoderDelegate decodeProofValue,
             PresentationSerializeDelegate serialize,
-            PresentationDeserializeDelegate deserialize,
             ProofOptionsSerializeDelegate serializeProofOptions,
             DecodeDelegate decoder,
+            ComputeDigestDelegate computeDigest,
             MemoryPool<byte> memoryPool,
+            ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(holderDidDocument);
@@ -254,37 +268,50 @@ public static class PresentationDataIntegrityExtensions
             ArgumentNullException.ThrowIfNull(canonicalize);
             ArgumentNullException.ThrowIfNull(decodeProofValue);
             ArgumentNullException.ThrowIfNull(serialize);
-            ArgumentNullException.ThrowIfNull(deserialize);
             ArgumentNullException.ThrowIfNull(serializeProofOptions);
             ArgumentNullException.ThrowIfNull(decoder);
+            ArgumentNullException.ThrowIfNull(computeDigest);
             ArgumentNullException.ThrowIfNull(memoryPool);
 
             var proof = presentation.Proof?.FirstOrDefault();
             if(proof is null)
             {
-                return CredentialVerificationResult.Failed(VerificationFailureReason.NoProof);
+                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.NoProof);
             }
 
             if(proof.Cryptosuite is null)
             {
-                return CredentialVerificationResult.Failed(VerificationFailureReason.MissingCryptosuite);
+                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.MissingCryptosuite);
+            }
+
+            //Data Integrity 1.0 §4.2: when an expected proof purpose is given and does not
+            //match proof.proofPurpose, an error MUST be raised. A presentation proof's
+            //purpose is authentication (VC-DM 2.0 §4.13); a proof minted for another
+            //purpose (e.g. assertionMethod) must not authenticate a presentation even when
+            //its key also appears in the holder's authentication relationship.
+            if(!string.Equals(proof.ProofPurpose, AuthenticationMethod.Purpose, StringComparison.Ordinal))
+            {
+                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.ProofPurposeMismatch);
             }
 
             var verificationMethodId = proof.VerificationMethod?.Id;
             if(string.IsNullOrEmpty(verificationMethodId))
             {
-                return CredentialVerificationResult.Failed(VerificationFailureReason.MissingVerificationMethod);
+                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.MissingVerificationMethod);
             }
 
             //Validate challenge and domain before performing expensive cryptographic operations.
             if(!string.Equals(proof.Challenge, expectedChallenge, StringComparison.Ordinal))
             {
-                return CredentialVerificationResult.Failed(VerificationFailureReason.ChallengeMismatch);
+                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.ChallengeMismatch);
             }
 
-            if(!string.Equals(proof.Domain, expectedDomain, StringComparison.Ordinal))
+            //§4.2: the given domain "does not contain the same strings as proof.domain
+            //(treating a single string as a set containing just that string)" is an
+            //error — set equality against the verifier's singleton expectation.
+            if(!DataIntegrityProof.DomainSetEquals(proof.Domain, [expectedDomain]))
             {
-                return CredentialVerificationResult.Failed(VerificationFailureReason.DomainMismatch);
+                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.DomainMismatch);
             }
 
             //Resolve through authentication to enforce the correct verification relationship.
@@ -292,25 +319,29 @@ public static class PresentationDataIntegrityExtensions
             var verificationMethod = holderDidDocument.GetLocalAuthenticationMethodById(verificationMethodId);
             if(verificationMethod is null)
             {
-                return CredentialVerificationResult.Failed(VerificationFailureReason.VerificationMethodNotFound);
+                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.VerificationMethodNotFound);
             }
 
-            var presentationSerialized = serialize(presentation);
-            var presentationWithoutProof = deserialize(presentationSerialized);
-            presentationWithoutProof.Proof = null;
-            var presentationWithoutProofSerialized = serialize(presentationWithoutProof);
+            //The signed document is the presentation WITHOUT its proof member — a
+            //proofless view over this secured instance's members.
+            var presentationWithoutProofSerialized = serialize(CloneWithProofs(presentation, proofs: null));
 
             var requiresContext = proof.Cryptosuite.Canonicalization.Equals(CanonicalizationAlgorithm.Rdfc10);
             var proofOptions = ProofOptionsDocument.FromProof(proof, requiresContext ? presentation.Context : null);
             var proofOptionsSerialized = serializeProofOptions(proofOptions);
 
-            var presentationCanonicalization = await canonicalize(presentationWithoutProofSerialized, contextResolver, cancellationToken)
+            var presentationCanonicalization = await canonicalize(presentationWithoutProofSerialized, contextResolver, context, cancellationToken)
                 .ConfigureAwait(false);
-            var proofOptionsCanonicalization = await canonicalize(proofOptionsSerialized, contextResolver, cancellationToken)
+            var proofOptionsCanonicalization = await canonicalize(proofOptionsSerialized, contextResolver, context, cancellationToken)
                 .ConfigureAwait(false);
 
             var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
-            var hashFunction = DefaultHashFunctionSelector.Select(hashAlgorithm);
+            int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
+            var digestTag = new Tag(new Dictionary<Type, object>
+            {
+                [typeof(HashAlgorithmName)] = hashAlgorithm,
+                [typeof(Purpose)] = Purpose.Digest
+            });
 
             var presentationByteCount = Encoding.UTF8.GetByteCount(presentationCanonicalization.CanonicalForm);
             var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
@@ -324,14 +355,21 @@ public static class PresentationDataIntegrityExtensions
             System.Diagnostics.Debug.Assert(presentationBytesWritten == presentationByteCount, "Encoded byte count must match the pre-computed count.");
             System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
 
-            var presentationHash = hashFunction(presentationBytesOwner.Memory.Span[..presentationBytesWritten].ToArray());
-            var proofOptionsHash = hashFunction(proofOptionsBytesOwner.Memory.Span[..proofOptionsBytesWritten].ToArray());
+            (DigestValue presentationDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(presentationBytesOwner.Memory[..presentationBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
+            using DigestValue presentationDigest = presentationDigestValue;
 
-            var combinedLength = proofOptionsHash.Length + presentationHash.Length;
+            (DigestValue proofOptionsDigestValue, _) = await computeDigest(
+                new ReadOnlySequence<byte>(proofOptionsBytesOwner.Memory[..proofOptionsBytesWritten]),
+                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
+            using DigestValue proofOptionsDigest = proofOptionsDigestValue;
+
+            var combinedLength = proofOptionsDigest.Length + presentationDigest.Length;
             using var hashDataOwner = memoryPool.Rent(combinedLength);
             var hashData = hashDataOwner.Memory.Span;
-            proofOptionsHash.CopyTo(hashData);
-            presentationHash.CopyTo(hashData[proofOptionsHash.Length..]);
+            proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData);
+            presentationDigest.AsReadOnlySpan().CopyTo(hashData[proofOptionsDigest.Length..]);
 
             using var signatureBytes = decodeProofValue(proof.ProofValue!, decoder, memoryPool);
 
@@ -346,11 +384,34 @@ public static class PresentationDataIntegrityExtensions
 
             if(!isValid)
             {
-                return CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid);
+                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.SignatureInvalid);
             }
 
-            return CredentialVerificationResult.Success();
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Success(
+                new Verified<DataIntegritySecuredPresentation>(presentation, VerificationContextTag.Create(verificationMethodId)));
         }
     }
 
+
+    /// <summary>
+    /// Copies the presentation's members into an embedded-secured instance carrying
+    /// <paramref name="proofs"/>. Passing <see langword="null"/> produces the proofless
+    /// document view used for canonicalization.
+    /// </summary>
+    private static DataIntegritySecuredPresentation CloneWithProofs(
+        VerifiablePresentation source, List<DataIntegrityProof>? proofs)
+    {
+        return new DataIntegritySecuredPresentation
+        {
+            Context = source.Context,
+            Id = source.Id,
+            Type = source.Type,
+            Holder = source.Holder,
+            VerifiableCredential = source.VerifiableCredential,
+            EnvelopedVerifiableCredential = source.EnvelopedVerifiableCredential,
+            TermsOfUse = source.TermsOfUse,
+            AdditionalData = source.AdditionalData,
+            Proof = proofs
+        };
+    }
 }

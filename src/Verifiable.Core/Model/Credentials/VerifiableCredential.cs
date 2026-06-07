@@ -1,10 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Common;
-using Verifiable.Core.Model.DataIntegrity;
 
 namespace Verifiable.Core.Model.Credentials;
 /// <summary>
@@ -33,6 +32,13 @@ namespace Verifiable.Core.Model.Credentials;
 /// <para>
 /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#credentials">
 /// VC Data Model 2.0 §3.2 Credentials</see>.
+/// </para>
+/// <para>
+/// This type models the <strong>unsecured</strong> credential: the medium that securing
+/// mechanisms take as input. It carries no proof member. The embedded-secured output of
+/// Data Integrity is <see cref="DataIntegrity.DataIntegritySecuredCredential"/> (a subtype
+/// that adds an in-graph proof chain); enveloping mechanisms (JOSE, COSE, SD-JWT, SD-CWT)
+/// instead carry an instance of this type as the payload of an external envelope.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("VerifiableCredential(Id = {Id}, Issuer = {Issuer?.Id})")]
@@ -191,36 +197,6 @@ public class VerifiableCredential: IEquatable<VerifiableCredential>
     public List<CredentialSchema>? CredentialSchema { get; set; }
 
     /// <summary>
-    /// One or more cryptographic proofs that make this credential verifiable.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The VC Data Model 2.0 defines two classes of securing mechanisms: embedded proofs
-    /// and enveloping proofs. This property is used for embedded proofs.
-    /// </para>
-    /// <para>
-    /// <strong>Embedded proofs (Data Integrity):</strong> When using Data Integrity securing,
-    /// this property contains one or more <see cref="DataIntegrityProof"/> instances with
-    /// the cryptosuite identifier, verification method reference, and signature value.
-    /// The proof is part of the credential itself.
-    /// </para>
-    /// <para>
-    /// <strong>Enveloping proofs (JOSE/COSE):</strong> When using envelope-based securing
-    /// mechanisms such as JOSE (JWT, SD-JWT) or COSE, this property is <c>null</c> or absent.
-    /// The credential becomes the payload of an external envelope structure that provides
-    /// the cryptographic protection.
-    /// </para>
-    /// <para>
-    /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#securing-mechanisms">
-    /// VC Data Model 2.0 §4.12 Securing Mechanisms</see> for the general framework,
-    /// <see href="https://www.w3.org/TR/vc-data-integrity/">VC Data Integrity</see> for
-    /// embedded proof details, and <see href="https://www.w3.org/TR/vc-jose-cose/">
-    /// VC-JOSE-COSE</see> for envelope-based securing.
-    /// </para>
-    /// </remarks>
-    public List<DataIntegrityProof>? Proof { get; set; }
-
-    /// <summary>
     /// Resources related to this credential with integrity protection.
     /// </summary>
     /// <remarks>
@@ -282,12 +258,27 @@ public class VerifiableCredential: IEquatable<VerifiableCredential>
     public List<Evidence>? Evidence { get; set; }
 
     /// <summary>
-    /// Additional properties as defined by the credential's JSON-LD context.
+    /// The open-world JSON-LD bucket: any member not mapped to a typed property above
+    /// (extension claims, schema references, terms defined only by an additional context).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is always round-tripped untouched so downstream JSON-LD machinery can process
+    /// open-world content a library user receives but the typed model does not name.
+    /// </para>
+    /// </remarks>
     public IDictionary<string, object>? AdditionalData { get; set; }
 
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Equality is identity-of-credential based: <see cref="Id"/>, <see cref="Issuer"/>,
+    /// and the validity window (<see cref="ValidFrom"/>/<see cref="ValidUntil"/>). This is a
+    /// deliberate choice, not an oversight — it is not polymorphic over subtypes, so derived
+    /// types with additional identity-bearing members (for example a proof chain) are
+    /// responsible for their own equality.
+    /// </summary>
+    /// <param name="other">The credential to compare against.</param>
+    /// <returns><see langword="true"/> if the credentials are equal; otherwise <see langword="false"/>.</returns>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(VerifiableCredential? other)
     {

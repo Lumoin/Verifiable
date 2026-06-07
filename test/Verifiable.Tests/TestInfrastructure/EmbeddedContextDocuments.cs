@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Tests.TestInfrastructure
+namespace Verifiable.Tests.TestInfrastructure
 {
     /// <summary>
     /// Some embedded JSON-LD context documents for testing purposes so that

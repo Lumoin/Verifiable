@@ -1,4 +1,6 @@
-﻿namespace Verifiable.Cbor;
+using System;
+
+namespace Verifiable.Cbor;
 
 /// <summary>
 /// Base class for converter factories that create <see cref="CborConverter{T}"/> instances

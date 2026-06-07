@@ -2,13 +2,12 @@ using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
+using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
-using Verifiable.Core.SelectiveDisclosure;
-using Verifiable.Core.SelectiveDisclosure.Strategy;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
-using Verifiable.JCose.Sd;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.TestDataProviders;
@@ -102,23 +101,25 @@ internal sealed class DcqlPresentationFlowTests
         Assert.IsNotNull(query.Credentials);
         Assert.HasCount(1, query.Credentials);
 
-        //Wallet evaluates the DCQL query against holdings.
-        var requestedPaths = new HashSet<CredentialPath>
-        {
-            CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.GivenName}"),
-            CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.FamilyName}")
-        };
+        //Wallet evaluates the DCQL query against its holding through the
+        //format-neutral DcqlEvaluator + SdTokenDcqlAdapter (the SD-JWT VC
+        //counterpart of MdocDcqlAdapter), then lifts the match into a
+        //DisclosureMatch for the lattice. The query constrains on vct, so the
+        //adapter's metadata carries the credential's vct for the meta match.
+        PreparedDcqlQuery prepared = DcqlPreparer.Prepare(query);
+        List<DcqlMatch<SdToken<string>>> matches = DcqlEvaluator.Evaluate(
+            prepared,
+            credentials: [issuedToken],
+            metadataExtractor: SdTokenDcqlAdapter.CreateMetadataExtractor<string>(
+                DcqlCredentialFormats.SdJwt, credentialType: EudiPid.SdJwtVct),
+            claimExtractor: SdTokenDcqlAdapter.ClaimExtractor<string>).ToList();
 
-        var match = new DisclosureMatch<SdToken<string>>
-        {
-            Credential = issuedToken,
-            QueryRequirementId = EudiPid.DefaultCredentialQueryId,
-            RequiredPaths = requestedPaths,
-            MatchedPaths = requestedPaths,
-            AllAvailablePaths = CreateAllAvailablePaths(),
-            MandatoryPaths = CreateMandatoryPaths(),
-            Format = DcqlCredentialFormats.SdJwt
-        };
+        Assert.HasCount(1, matches);
+        Assert.AreEqual(EudiPid.DefaultCredentialQueryId, matches[0].CredentialQueryId);
+        Assert.HasCount(2, matches[0].MatchedPatterns);
+
+        DisclosureMatch<SdToken<string>> match = DcqlPathResolver.ToDisclosureMatch(
+            matches[0], CreateAllAvailablePaths(), CreateMandatoryPaths(), DcqlCredentialFormats.SdJwt);
 
         //Disclosure engine computes optimal disclosure via lattice.
         var computation = new DisclosureComputation<SdToken<string>>();
@@ -155,8 +156,7 @@ internal sealed class DcqlPresentationFlowTests
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
 
-        SdToken<string> presentationToken = issuedToken.SelectDisclosures(
-            d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName));
+        SdToken<string> presentationToken = issuedToken.SelectDisclosures(d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName), Pool);
 
         Assert.IsTrue(presentationToken.Disclosures.All(
             d => selectedClaimNames.Contains(d.ClaimName!)),
@@ -172,10 +172,10 @@ internal sealed class DcqlPresentationFlowTests
         Assert.IsInstanceOfType<SdToken<string>>(vpToken[EudiPid.DefaultCredentialQueryId]);
 
         //Verifier validates the presented issuer JWT signature.
-        bool presentationValid = await Jws.VerifyAsync(
+        bool isPresentationValid = await Jws.VerifyAsync(
             presentationToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
-            publicKey).ConfigureAwait(false);
-        Assert.IsTrue(presentationValid, "Presented issuer JWT signature must be cryptographically valid.");
+            publicKey, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(isPresentationValid, "Presented issuer JWT signature must be cryptographically valid.");
 
         //Verify the decision record captured all phases.
         Assert.IsNotNull(graph.DecisionRecord);
@@ -254,7 +254,7 @@ internal sealed class DcqlPresentationFlowTests
         //Issuer JWT signature is still valid even with reduced disclosures.
         bool signatureValid = await Jws.VerifyAsync(
             issuedToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
-            publicKey).ConfigureAwait(false);
+            publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Issuer JWT signature must remain valid regardless of disclosure decisions.");
     }
 
@@ -359,10 +359,10 @@ internal sealed class DcqlPresentationFlowTests
         Assert.IsTrue(vpToken.ContainsKey("mdl"));
 
         //Verify the PID issuer signature is still valid from the serialized form.
-        SdToken<string> parsedPid = SdJwtSerializer.ParseToken(vpToken[EudiPid.DefaultCredentialQueryId], Decoder, Pool);
+        SdToken<string> parsedPid = SdJwtSerializer.ParseToken(vpToken[EudiPid.DefaultCredentialQueryId], Decoder, Pool, TestSalts.TestSaltTag);
         bool pidSignatureValid = await Jws.VerifyAsync(
             parsedPid.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
-            publicKey).ConfigureAwait(false);
+            publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(pidSignatureValid, "PID issuer JWT signature must be valid in the VP Token.");
 
         var multiRecord = graph.DecisionRecord!;
@@ -471,7 +471,7 @@ internal sealed class DcqlPresentationFlowTests
         //Issuer JWT signature is still valid after policy narrowing.
         bool signatureValid = await Jws.VerifyAsync(
             issuedToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
-            publicKey).ConfigureAwait(false);
+            publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Issuer JWT signature must remain valid after policy narrowing.");
     }
 
@@ -494,7 +494,7 @@ internal sealed class DcqlPresentationFlowTests
         Assert.EndsWith("~", wireFormat, "SD-JWT without key binding must end with tilde.");
         Assert.Contains("~", wireFormat);
 
-        SdToken<string> parsed = SdJwtSerializer.ParseToken(wireFormat, Decoder, Pool);
+        SdToken<string> parsed = SdJwtSerializer.ParseToken(wireFormat, Decoder, Pool, TestSalts.TestSaltTag);
 
         Assert.AreEqual(issuedToken.IssuerSigned, parsed.IssuerSigned);
         Assert.HasCount(issuedToken.Disclosures.Count, parsed.Disclosures);
@@ -507,7 +507,7 @@ internal sealed class DcqlPresentationFlowTests
 
         bool signatureValid = await Jws.VerifyAsync(
             parsed.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
-            publicKey).ConfigureAwait(false);
+            publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Signature must remain valid after serialization round-trip.");
     }
 
@@ -531,7 +531,7 @@ internal sealed class DcqlPresentationFlowTests
         //Verifier receives the token, verifies signature first.
         bool signatureValid = await Jws.VerifyAsync(
             issuedToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
-            publicKey).ConfigureAwait(false);
+            publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Issuer JWT signature must be valid before checking digests.");
 
         //Verifier extracts the _sd array from the payload.
@@ -579,7 +579,7 @@ internal sealed class DcqlPresentationFlowTests
 
         bool signatureValid = await Jws.VerifyAsync(
             issuedToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
-            publicKey).ConfigureAwait(false);
+            publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Ed25519 issuer JWT signature must be valid.");
 
         var query = await new DcqlQueryBuilder()
@@ -618,41 +618,46 @@ internal sealed class DcqlPresentationFlowTests
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
 
-        SdToken<string> presentationToken = issuedToken.SelectDisclosures(
-            d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName));
+        SdToken<string> presentationToken = issuedToken.SelectDisclosures(d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName), Pool);
 
-        bool presentationValid = await Jws.VerifyAsync(
+        bool isPresentationValid = await Jws.VerifyAsync(
             presentationToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
-            publicKey).ConfigureAwait(false);
-        Assert.IsTrue(presentationValid, "Ed25519 signature must be valid on the presented token.");
+            publicKey, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(isPresentationValid, "Ed25519 signature must be valid on the presented token.");
     }
 
 
     /// <summary>
     /// Issues a signed EU Digital Identity PID token with selective disclosure
-    /// using <see cref="SdJwtIssuance.IssueAsync"/>.
+    /// using <c>IssueSdJwtTokenAsync</c>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Serializes a PID document to JSON with both mandatory and disclosable claims,
-    /// then issues via the delegate-free convenience API. The caller's
-    /// <c>using Verifiable.Json.Sd</c> determines the format.
+    /// Builds the typed <see cref="SignedPidClaims"/> set and issues via the token-shaped
+    /// convenience API, which serializes the claims (with source-generated metadata) and
+    /// returns an <see cref="SdToken{TEnvelope}"/> (envelope <see cref="string"/>) that owns
+    /// its disclosures. The caller's <c>using Verifiable.Json.Sd</c> determines the format.
     /// </para>
     /// </remarks>
     private static async ValueTask<SdToken<string>> IssueSignedPidTokenAsync(
         PrivateKeyMemory privateKey, CancellationToken cancellationToken)
     {
-        string pidJson = JsonSerializer.Serialize(new Dictionary<string, object>
-        {
-            [WellKnownJwtClaims.Iss] = IssuerId,
-            [WellKnownJwtClaims.Vct] = EudiPid.SdJwtVct,
-            [WellKnownJwtClaims.Iat] = TimeProvider.GetUtcNow().ToUnixTimeSeconds(),
-            [EudiPid.SdJwt.GivenName] = "Erika",
-            [EudiPid.SdJwt.FamilyName] = "Mustermann",
-            [EudiPid.SdJwt.Birthdate] = "1964-08-12",
-            [EudiPid.SdJwt.Email] = "erika@example.de",
-            [EudiPid.SdJwt.PhoneNumber] = "+49-170-1234567"
-        });
+        JwtPayload claims = JwtPayload.ForIssuance(
+            issuer: IssuerId,
+            issuedAt: TimeProvider.GetUtcNow(),
+            claims:
+            [
+                new(EudiPid.SdJwt.GivenName, "Erika"),
+                new(EudiPid.SdJwt.FamilyName, "Mustermann"),
+                new(EudiPid.SdJwt.Birthdate, "1964-08-12"),
+                new(EudiPid.SdJwt.Email, "erika@example.de"),
+                new(EudiPid.SdJwt.PhoneNumber, "+49-170-1234567")
+            ]);
+
+        //SD-JWT VC carries vct. This scenario is deliberately non-holder-bound (no cnf /
+        //KB-JWT — see the "without key binding" assertions below), so ForIssuance + vct is
+        //the right builder; ForSdJwtVcIssuance mandates a cnf holder-binding dictionary.
+        claims[WellKnownJwtClaimNames.Vct] = EudiPid.SdJwtVct;
 
         var disclosablePaths = new HashSet<CredentialPath>
         {
@@ -663,20 +668,13 @@ internal sealed class DcqlPresentationFlowTests
             CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.PhoneNumber}")
         };
 
-        int byteCount = Encoding.UTF8.GetByteCount(pidJson);
-        using IMemoryOwner<byte> rental = Pool.Rent(byteCount);
-        int written = Encoding.UTF8.GetBytes(pidJson, rental.Memory.Span);
-
-        SdTokenResult result = await SdJwtIssuance.IssueAsync(
-            rental.Memory[..written], disclosablePaths,
-            SaltGenerator.Create,
-            privateKey, IssuerKeyId,
-            Pool,
+        return await claims.IssueSdJwtTokenAsync(
+            c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
+            SdJwtIssuance.IssueVerboseAsync,
+            disclosablePaths, TestSalts.DefaultGenerator(),
+            privateKey, IssuerKeyId, Pool,
             mediaType: WellKnownMediaTypes.Jwt.VcSdJwt,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        string compactJws = Encoding.UTF8.GetString(result.SignedToken.Span);
-        return new SdToken<string>(compactJws, result.Disclosures.ToList());
     }
 
 

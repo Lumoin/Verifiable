@@ -1,4 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Dcql;
@@ -40,12 +42,12 @@ public sealed class CredentialQueryMetaConverter: JsonConverter<CredentialQueryM
 
             switch(propertyName)
             {
-                case CredentialQueryMeta.DoctypeValuePropertyName:
+                case var name when DcqlParameterNames.IsDoctypeValue(name):
                 {
                     doctypeValue = reader.GetString();
                     break;
                 }
-                case CredentialQueryMeta.VctValuesPropertyName:
+                case var name when DcqlParameterNames.IsVctValues(name):
                 {
                     vctValues = ReadStringArray(ref reader);
                     break;
@@ -75,12 +77,12 @@ public sealed class CredentialQueryMetaConverter: JsonConverter<CredentialQueryM
 
         if(value.DoctypeValue is not null)
         {
-            writer.WriteString(CredentialQueryMeta.DoctypeValuePropertyName, value.DoctypeValue);
+            writer.WriteString(DcqlParameterNames.DoctypeValue, value.DoctypeValue);
         }
 
         if(value.VctValues is not null)
         {
-            writer.WritePropertyName(CredentialQueryMeta.VctValuesPropertyName);
+            writer.WritePropertyName(DcqlParameterNames.VctValues);
             writer.WriteStartArray();
             foreach(var vct in value.VctValues)
             {

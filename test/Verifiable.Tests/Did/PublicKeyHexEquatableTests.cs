@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Did;
 using Verifiable.Core.Model.Did;
 

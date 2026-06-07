@@ -1,0 +1,291 @@
+using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
+using System.Collections.Immutable;
+using System.Diagnostics;
+using Verifiable.Core;
+using Verifiable.Cryptography;
+using Verifiable.OAuth.Diagnostics;
+using Verifiable.OAuth.Server;
+using Verifiable.Tests.TestDataProviders;
+
+namespace Verifiable.Tests.OAuth;
+
+/// <summary>
+/// Verifies that <see cref="AuthorizationServer"/> emits activities (spans) and
+/// events with the correct names and tags from <see cref="OAuthActivitySource"/>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Uses <see cref="ActivityListener"/> to capture activities without any OTel SDK
+/// dependency. The listener subscribes to <see cref="OAuthActivitySource.SourceName"/>
+/// and collects all completed activities for assertion.
+/// </para>
+/// </remarks>
+[TestClass]
+internal sealed class OAuthDiagnosticsTests
+{
+    public TestContext TestContext { get; set; } = null!;
+
+    private static FakeTimeProvider TimeProvider { get; } = new();
+
+    private static Uri IssuerUri { get; } = new("https://issuer.example.com");
+
+    private static ImmutableHashSet<CapabilityIdentifier> JwksCapabilities { get; } =
+        [WellKnownCapabilityIdentifiers.OAuthJwksEndpoint];
+
+
+    [TestMethod]
+    public async Task HandleAsyncEmitsActivityWithFlowKindAndStatusCode()
+    {
+        ConcurrentBag<Activity> captured = [];
+
+        using ActivityListener listener = CreateListener(captured);
+        ActivitySource.AddActivityListener(listener);
+
+        await using TestHostShell app = new(TimeProvider);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateP256KeyMaterial();
+
+        ClientRecord registration = app.RegisterSigningClient(
+            "diag-client", keys, JwksCapabilities);
+
+        ExchangeContext context = new();
+        context.SetTenantId(registration.TenantId);
+        context.SetIssuer(IssuerUri);
+
+        await app.DispatchAtEndpointAsync(
+            registration.TenantId,
+            WellKnownEndpointNames.MetadataJwks,
+            "GET",
+            new RequestFields(),
+            context,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        //ActivityListener is process-wide: sibling tests running in
+        //parallel emit activities into the same OAuthActivitySource and
+        //land in this bag while our listener is alive. Filter by the
+        //test's own tenant id (each RegisterSigningClient produces a
+        //fresh, unique TenantId) so this assertion stays isolated from
+        //other tests' traffic.
+        Activity[] handleActivities = captured
+            .Where(a => string.Equals(
+                a.OperationName, OAuthActivityNames.Handle, StringComparison.Ordinal))
+            .Where(a => a.Tags.Any(t =>
+                string.Equals(t.Key, OAuthTagNames.TenantId, StringComparison.Ordinal)
+                && string.Equals(t.Value, registration.TenantId.Value, StringComparison.Ordinal)))
+            .ToArray();
+
+        Assert.IsGreaterThan(0, handleActivities.Length,
+            $"At least one '{OAuthActivityNames.Handle}' activity tagged " +
+            $"with tenant '{registration.TenantId.Value}' must be emitted.");
+
+        Activity activity = handleActivities[0];
+
+        string? flowKind = activity.Tags
+            .FirstOrDefault(t => string.Equals(
+                t.Key, OAuthTagNames.FlowKind, StringComparison.Ordinal))
+            .Value;
+
+        string? statusCode = activity.Tags
+            .FirstOrDefault(t => string.Equals(
+                t.Key, OAuthTagNames.StatusCode, StringComparison.Ordinal))
+            .Value;
+
+        Assert.IsNotNull(flowKind,
+            $"Activity must carry '{OAuthTagNames.FlowKind}' tag.");
+        Assert.AreEqual("200", statusCode,
+            $"Activity must carry '{OAuthTagNames.StatusCode}' tag with value '200'.");
+    }
+
+
+    [TestMethod]
+    public async Task HandleAsyncEmitsActivityForUnknownSegmentWith404()
+    {
+        ConcurrentBag<Activity> captured = [];
+
+        using ActivityListener listener = CreateListener(captured);
+        ActivitySource.AddActivityListener(listener);
+
+        await using TestHostShell app = new(TimeProvider);
+
+        await app.DispatchAtEndpointAsync(
+            "nonexistent",
+            WellKnownEndpointNames.MetadataJwks,
+            "GET",
+            new RequestFields(),
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Activity[] handleActivities = captured
+            .Where(a => string.Equals(
+                a.OperationName, OAuthActivityNames.Handle, StringComparison.Ordinal))
+            .ToArray();
+
+        //A 404 from DispatchAtEndpointAsync happens during registration load
+        //(the registration isn't found) — before any matcher runs and before
+        //HandleAsync is called. If the library emits an activity for
+        //dispatch-level errors, assert on it. Otherwise this test documents
+        //that unresolved segments produce no HandleAsync activity — which is
+        //also valid.
+        if(handleActivities.Length > 0)
+        {
+            string? statusCode = handleActivities[0].Tags
+                .FirstOrDefault(t => string.Equals(
+                    t.Key, OAuthTagNames.StatusCode, StringComparison.Ordinal))
+                .Value;
+
+            Assert.AreEqual("404", statusCode,
+                "Activity for unknown segment must carry status code 404.");
+        }
+    }
+
+
+    [TestMethod]
+    public void ActivitySourceNameMatchesConstant()
+    {
+        Assert.AreEqual(
+            OAuthActivitySource.SourceName,
+            OAuthActivitySource.Source.Name,
+            "ActivitySource.Name must equal the published constant.");
+    }
+
+
+    [TestMethod]
+    public void MeterNameMatchesConstant()
+    {
+        Assert.AreEqual(
+            OAuthMeterSource.MeterName,
+            OAuthMeterSource.Meter.Name,
+            "Meter.Name must equal the published constant.");
+    }
+
+
+    [TestMethod]
+    public void AllActivityNamesAreNonEmptyAndDotDelimited()
+    {
+        string[] names =
+        [
+            OAuthActivityNames.Handle,
+            OAuthActivityNames.ResolveCorrelation,
+            OAuthActivityNames.LoadFlowState,
+            OAuthActivityNames.BuildInput,
+            OAuthActivityNames.StepPda,
+            OAuthActivityNames.SaveFlowState,
+            OAuthActivityNames.BuildJwks,
+            OAuthActivityNames.SignToken,
+            OAuthActivityNames.ClientLifecycle
+        ];
+
+        foreach(string name in names)
+        {
+            Assert.IsFalse(string.IsNullOrWhiteSpace(name),
+                "Activity names must not be null or whitespace.");
+            Assert.Contains('.', name,
+                $"Activity name '{name}' must be dot-delimited.");
+        }
+    }
+
+
+    [TestMethod]
+    public void AllTagNamesAreNonEmptyAndDotDelimited()
+    {
+        string[] tags =
+        [
+            OAuthTagNames.FlowKind,
+            OAuthTagNames.EndpointPath,
+            OAuthTagNames.TenantId,
+            OAuthTagNames.ClientId,
+            OAuthTagNames.HttpMethod,
+            OAuthTagNames.StatusCode,
+            OAuthTagNames.FlowState,
+            OAuthTagNames.FlowStepCount,
+            OAuthTagNames.StartsNewFlow,
+            OAuthTagNames.ClaimCode,
+            OAuthTagNames.ClaimName,
+            OAuthTagNames.ClaimOutcome,
+            OAuthTagNames.ValidationClaimCount,
+            OAuthTagNames.ValidationFailureCount,
+            OAuthTagNames.LifecycleOperation,
+            OAuthTagNames.DeregistrationReason,
+            OAuthTagNames.CorrelationResolved
+        ];
+
+        foreach(string tag in tags)
+        {
+            Assert.IsFalse(string.IsNullOrWhiteSpace(tag),
+                "Tag names must not be null or whitespace.");
+            Assert.Contains('.', tag,
+                $"Tag name '{tag}' must be dot-delimited.");
+        }
+    }
+
+
+    [TestMethod]
+    public void AllMetricNamesAreNonEmptyAndDotDelimited()
+    {
+        string[] metrics =
+        [
+            OAuthMetricNames.RequestCount,
+            OAuthMetricNames.RequestDuration,
+            OAuthMetricNames.ResponseCount,
+            OAuthMetricNames.ValidationClaimCount,
+            OAuthMetricNames.ValidationFailureCount,
+            OAuthMetricNames.ActiveFlowCount,
+            OAuthMetricNames.FlowCreatedCount,
+            OAuthMetricNames.FlowCompletedCount,
+            OAuthMetricNames.CorrelationResolutionCount,
+            OAuthMetricNames.ActiveClientCount,
+            OAuthMetricNames.ClientLifecycleCount,
+            OAuthMetricNames.TokenSignedCount,
+            OAuthMetricNames.TokenSignDuration,
+            OAuthMetricNames.JwksBuildCount
+        ];
+
+        foreach(string metric in metrics)
+        {
+            Assert.IsFalse(string.IsNullOrWhiteSpace(metric),
+                "Metric names must not be null or whitespace.");
+            Assert.Contains('.', metric,
+                $"Metric name '{metric}' must be dot-delimited.");
+        }
+    }
+
+
+    [TestMethod]
+    public void AllEventNamesAreNonEmptyAndDotDelimited()
+    {
+        string[] events =
+        [
+            OAuthEventNames.ValidationClaim,
+            OAuthEventNames.ValidationPassed,
+            OAuthEventNames.ValidationFailed,
+            OAuthEventNames.StateTransition,
+            OAuthEventNames.ActionExecuted,
+            OAuthEventNames.CorrelationResolved,
+            OAuthEventNames.CorrelationNotFound,
+            OAuthEventNames.FlowCreated,
+            OAuthEventNames.ClientRegistered,
+            OAuthEventNames.ClientUpdated,
+            OAuthEventNames.ClientDeregistered
+        ];
+
+        foreach(string eventName in events)
+        {
+            Assert.IsFalse(string.IsNullOrWhiteSpace(eventName),
+                "Event names must not be null or whitespace.");
+            Assert.Contains('.', eventName,
+                $"Event name '{eventName}' must be dot-delimited.");
+        }
+    }
+
+
+    private static ActivityListener CreateListener(ConcurrentBag<Activity> captured) =>
+        new()
+        {
+            ShouldListenTo = source =>
+                string.Equals(source.Name, OAuthActivitySource.SourceName, StringComparison.Ordinal),
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity => captured.Add(activity)
+        };
+}

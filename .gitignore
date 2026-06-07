@@ -368,3 +368,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Claude Code local agent state (per-session, never shared)
+.claude/
+
+# Local handoff notes between agent sessions (not part of the repo)
+tempdocs/

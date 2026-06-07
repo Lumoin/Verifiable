@@ -1,6 +1,6 @@
-﻿using Verifiable.Core.Assessment;
+using Verifiable.Core.Assessment;
+using Verifiable.Core.Validation;
 using Verifiable.JCose;
-using Verifiable.Jose;
 
 namespace Verifiable.Tests.Jwt
 {
@@ -12,7 +12,7 @@ namespace Verifiable.Tests.Jwt
         {
             (WellKnownJwaValues.IsEs256, WellKnownCurveValues.IsP256),
             (WellKnownJwaValues.IsEs384, WellKnownCurveValues.IsP384),
-            (WellKnownJwaValues.IsEs256k1, WellKnownCurveValues.IsSecp256k1)
+            (WellKnownJwaValues.IsEs256K, WellKnownCurveValues.IsSecp256k1)
         };
 
         
@@ -21,11 +21,11 @@ namespace Verifiable.Tests.Jwt
         {
             var testHeaders1 = new Dictionary<string, object>
             {
-                { JwkProperties.Kty,  WellKnownKeyTypeValues.Ec},
-                { JwkProperties.Alg, WellKnownJwaValues.Es256 },
-                { JwkProperties.Crv, WellKnownCurveValues.P256 },
-                { JwkProperties.X, "abc" },
-                { JwkProperties.Y, "abc" }
+                { WellKnownJwkMemberNames.Kty,  WellKnownKeyTypeValues.Ec},
+                { WellKnownJwkMemberNames.Alg, WellKnownJwaValues.Es256 },
+                { WellKnownJwkMemberNames.Crv, WellKnownCurveValues.P256 },
+                { WellKnownJwkMemberNames.X, "abc" },
+                { WellKnownJwkMemberNames.Y, "abc" }
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: true);
@@ -39,11 +39,11 @@ namespace Verifiable.Tests.Jwt
         {
             var testHeaders1 = new Dictionary<string, object>
             {
-                { JwkProperties.Kty,  WellKnownKeyTypeValues.Ec},
-                { JwkProperties.Alg, WellKnownJwaValues.Es256 },
-                { JwkProperties.Crv, WellKnownCurveValues.P256 },
-                { JwkProperties.X, "abc" },
-                { JwkProperties.Y, "abc" }
+                { WellKnownJwkMemberNames.Kty,  WellKnownKeyTypeValues.Ec},
+                { WellKnownJwkMemberNames.Alg, WellKnownJwaValues.Es256 },
+                { WellKnownJwkMemberNames.Crv, WellKnownCurveValues.P256 },
+                { WellKnownJwkMemberNames.X, "abc" },
+                { WellKnownJwkMemberNames.Y, "abc" }
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: false);
@@ -57,10 +57,10 @@ namespace Verifiable.Tests.Jwt
         {
             var testHeaders1 = new Dictionary<string, object>
             {
-                { JwkProperties.Kty,  WellKnownKeyTypeValues.Ec},
-                { JwkProperties.Alg, WellKnownJwaValues.Es256 },
-                { JwkProperties.Crv, WellKnownCurveValues.P256 },
-                { JwkProperties.X, "abc" }
+                { WellKnownJwkMemberNames.Kty,  WellKnownKeyTypeValues.Ec},
+                { WellKnownJwkMemberNames.Alg, WellKnownJwaValues.Es256 },
+                { WellKnownJwkMemberNames.Crv, WellKnownCurveValues.P256 },
+                { WellKnownJwkMemberNames.X, "abc" }
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: false);
@@ -74,10 +74,10 @@ namespace Verifiable.Tests.Jwt
         {
             var testHeaders1 = new Dictionary<string, object>
             {
-                { JwkProperties.Kty,  WellKnownKeyTypeValues.Ec},
-                { JwkProperties.Alg, WellKnownJwaValues.Es256 },
-                { JwkProperties.Crv, WellKnownCurveValues.P256 },
-                { JwkProperties.Y, "abc" }
+                { WellKnownJwkMemberNames.Kty,  WellKnownKeyTypeValues.Ec},
+                { WellKnownJwkMemberNames.Alg, WellKnownJwaValues.Es256 },
+                { WellKnownJwkMemberNames.Crv, WellKnownCurveValues.P256 },
+                { WellKnownJwkMemberNames.Y, "abc" }
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: false);
@@ -91,10 +91,10 @@ namespace Verifiable.Tests.Jwt
         {
             var testHeaders1 = new Dictionary<string, object>
             {
-                { JwkProperties.Kty,  WellKnownKeyTypeValues.Ec},
-                { JwkProperties.Alg, WellKnownJwaValues.Es256 },
-                { JwkProperties.Crv, WellKnownCurveValues.P384 },
-                { JwkProperties.Y, "abc" }
+                { WellKnownJwkMemberNames.Kty,  WellKnownKeyTypeValues.Ec},
+                { WellKnownJwkMemberNames.Alg, WellKnownJwaValues.Es256 },
+                { WellKnownJwkMemberNames.Crv, WellKnownCurveValues.P384 },
+                { WellKnownJwkMemberNames.Y, "abc" }
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: false);
@@ -108,10 +108,10 @@ namespace Verifiable.Tests.Jwt
         {
             var testHeaders1 = new Dictionary<string, object>
             {
-                { JwkProperties.Kty,  WellKnownKeyTypeValues.Ec},
-                { JwkProperties.Alg, WellKnownJwaValues.Es512 },
-                { JwkProperties.Crv, WellKnownCurveValues.P521 },
-                { JwkProperties.Y, "abc" }
+                { WellKnownJwkMemberNames.Kty,  WellKnownKeyTypeValues.Ec},
+                { WellKnownJwkMemberNames.Alg, WellKnownJwaValues.Es512 },
+                { WellKnownJwkMemberNames.Crv, WellKnownCurveValues.P521 },
+                { WellKnownJwkMemberNames.Y, "abc" }
             };
 
             var result = JwtKeyTypeHeaderValidationUtilities.ValidateEc(testHeaders1, ValidAlgCrvPairs, isEcAlgRequired: false);

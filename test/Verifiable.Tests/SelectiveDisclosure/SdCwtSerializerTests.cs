@@ -1,7 +1,11 @@
-﻿using System.Formats.Cbor;
+using System.Diagnostics.CodeAnalysis;
+using System.Buffers;
+using System.Formats.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
-using Verifiable.JCose.Sd;
+using Verifiable.JCose;
+using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -10,6 +14,13 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// See <see href="https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html"/>.
 /// Test vectors to be added once available as byte arrays or manually converted from EDN.
 /// </summary>
+[SuppressMessage(
+    "Reliability", "CA2000",
+    Justification =
+        "Tests construct Salt instances via TestSalts.FromBytes and pass them to " +
+        "SdDisclosure factory methods which take ownership; disclosures are explicitly " +
+        "disposed via using declarations or try/finally blocks. The analyzer cannot " +
+        "see ownership transfer through factory methods.")]
 [TestClass]
 internal sealed class SdCwtSerializerTests
 {
@@ -20,8 +31,8 @@ internal sealed class SdCwtSerializerTests
     [TestMethod]
     public void SerializeDisclosureForPropertyProducesThreeElementArray()
     {
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(
-            TestSalt,
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(
+            TestSalts.FromBytes(TestSalt),
             "given_name",
             "John");
 
@@ -46,7 +57,7 @@ internal sealed class SdCwtSerializerTests
     [TestMethod]
     public void SerializeDisclosureForArrayElementProducesTwoElementArray()
     {
-        SdDisclosure disclosure = SdDisclosure.CreateArrayElement(TestSalt, "US");
+        using SdDisclosure disclosure = SdDisclosure.CreateArrayElement(TestSalts.FromBytes(TestSalt), "US");
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
 
@@ -67,41 +78,41 @@ internal sealed class SdCwtSerializerTests
     [TestMethod]
     public void RoundTripDisclosurePreservesPropertyData()
     {
-        SdDisclosure original = SdDisclosure.CreateProperty(
-            TestSalt,
+        using SdDisclosure original = SdDisclosure.CreateProperty(
+            TestSalts.FromBytes(TestSalt),
             "email",
             "john@example.com");
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(original);
-        SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
         Assert.AreEqual(original.ClaimName, parsed.ClaimName);
         Assert.AreEqual(original.ClaimValue, parsed.ClaimValue);
-        Assert.IsTrue(original.Salt.Span.SequenceEqual(parsed.Salt.Span));
+        Assert.IsTrue(original.Salt.AsReadOnlySpan().SequenceEqual(parsed.Salt.AsReadOnlySpan()));
     }
 
 
     [TestMethod]
     public void RoundTripDisclosurePreservesArrayElementData()
     {
-        SdDisclosure original = SdDisclosure.CreateArrayElement(TestSalt, "DE");
+        using SdDisclosure original = SdDisclosure.CreateArrayElement(TestSalts.FromBytes(TestSalt), "DE");
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(original);
-        SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
         Assert.IsNull(parsed.ClaimName, "Array element disclosure must have null claim name.");
         Assert.AreEqual(original.ClaimValue, parsed.ClaimValue);
-        Assert.IsTrue(original.Salt.Span.SequenceEqual(parsed.Salt.Span));
+        Assert.IsTrue(original.Salt.AsReadOnlySpan().SequenceEqual(parsed.Salt.AsReadOnlySpan()));
     }
 
 
     [TestMethod]
     public void SerializeDisclosureHandlesIntegerValue()
     {
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalt, "age", 30);
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "age", 30);
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
-        SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
         Assert.AreEqual("age", parsed.ClaimName);
         Assert.AreEqual(30, parsed.ClaimValue);
@@ -111,10 +122,10 @@ internal sealed class SdCwtSerializerTests
     [TestMethod]
     public void SerializeDisclosureHandlesBooleanValue()
     {
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalt, "verified", true);
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "verified", true);
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
-        SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
         Assert.AreEqual("verified", parsed.ClaimName);
         Assert.IsTrue((bool)parsed.ClaimValue!);
@@ -124,10 +135,10 @@ internal sealed class SdCwtSerializerTests
     [TestMethod]
     public void SerializeDisclosureHandlesNullValue()
     {
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalt, "middle_name", null);
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "middle_name", null);
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
-        SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
         Assert.AreEqual("middle_name", parsed.ClaimName);
         Assert.IsNull(parsed.ClaimValue);
@@ -144,10 +155,10 @@ internal sealed class SdCwtSerializerTests
             ["zip"] = 12345
         };
 
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalt, "address", address);
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "address", address);
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
-        SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
         Assert.AreEqual("address", parsed.ClaimName);
         Assert.IsInstanceOfType<Dictionary<object, object?>>(parsed.ClaimValue);
@@ -164,10 +175,10 @@ internal sealed class SdCwtSerializerTests
     {
         var nationalities = new List<object?> { "US", "DE", "FR" };
 
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalt, "nationalities", nationalities);
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "nationalities", nationalities);
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
-        SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
         Assert.AreEqual("nationalities", parsed.ClaimName);
         Assert.IsInstanceOfType<List<object?>>(parsed.ClaimValue);
@@ -185,10 +196,10 @@ internal sealed class SdCwtSerializerTests
     {
         byte[] binaryData = [0xDE, 0xAD, 0xBE, 0xEF];
 
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalt, "binary", binaryData);
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "binary", binaryData);
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
-        SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
         Assert.AreEqual("binary", parsed.ClaimName);
         CollectionAssert.AreEqual(binaryData, (byte[])parsed.ClaimValue!);
@@ -198,7 +209,7 @@ internal sealed class SdCwtSerializerTests
     [TestMethod]
     public void ComputeDisclosureDigestProducesConsistentOutput()
     {
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalt, "name", "John");
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "name", "John");
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
 
@@ -212,7 +223,7 @@ internal sealed class SdCwtSerializerTests
     [TestMethod]
     public void ComputeDisclosureDigestProduces32BytesForSha256()
     {
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalt, "name", "John");
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "name", "John");
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
         byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(cbor, "sha-256");
@@ -224,7 +235,7 @@ internal sealed class SdCwtSerializerTests
     [TestMethod]
     public void ComputeDisclosureDigestProduces48BytesForSha384()
     {
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalt, "name", "John");
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "name", "John");
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
         byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(cbor, "sha-384");
@@ -238,28 +249,49 @@ internal sealed class SdCwtSerializerTests
     {
         var disclosures = new List<SdDisclosure>
         {
-            SdDisclosure.CreateProperty(TestSalt, "name", "John"),
-            SdDisclosure.CreateProperty(TestSalt, "email", "john@example.com")
+            SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "name", "John"),
+            SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "email", "john@example.com")
         };
 
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteStartMap(1);
-        SdCwtSerializer.WriteSdClaimsHeader(writer, disclosures);
-        writer.WriteEndMap();
-        byte[] cbor = writer.Encode();
+        try
+        {
+            var writer = new CborWriter(CborConformanceMode.Canonical);
+            writer.WriteStartMap(1);
+            SdCwtSerializer.WriteSdClaimsHeader(writer, disclosures);
+            writer.WriteEndMap();
+            byte[] cbor = writer.Encode();
 
-        //Verify structure.
-        var reader = new CborReader(cbor, CborConformanceMode.Lax);
-        reader.ReadStartMap();
-        int key = reader.ReadInt32();
-        Assert.AreEqual(SdCwtSerializer.SdClaimsHeaderKey, key);
+            //Verify structure.
+            var reader = new CborReader(cbor, CborConformanceMode.Lax);
+            reader.ReadStartMap();
+            int key = reader.ReadInt32();
+            Assert.AreEqual(SdCwtSerializer.SdClaimsHeaderKey, key);
 
-        IReadOnlyList<SdDisclosure> parsed = SdCwtSerializer.ReadSdClaimsHeader(ref reader);
-        reader.ReadEndMap();
+            IReadOnlyList<SdDisclosure> parsed = SdCwtSerializer.ReadSdClaimsHeader(
+                ref reader, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
+            try
+            {
+                reader.ReadEndMap();
 
-        Assert.HasCount(2, parsed);
-        Assert.AreEqual("name", parsed[0].ClaimName);
-        Assert.AreEqual("email", parsed[1].ClaimName);
+                Assert.HasCount(2, parsed);
+                Assert.AreEqual("name", parsed[0].ClaimName);
+                Assert.AreEqual("email", parsed[1].ClaimName);
+            }
+            finally
+            {
+                foreach(SdDisclosure p in parsed)
+                {
+                    p.Dispose();
+                }
+            }
+        }
+        finally
+        {
+            foreach(SdDisclosure d in disclosures)
+            {
+                d.Dispose();
+            }
+        }
     }
 
 
@@ -276,15 +308,15 @@ internal sealed class SdCwtSerializerTests
         writer.WriteEndArray();
         byte[] cbor = writer.Encode();
 
-        Assert.Throws<CborContentException>(() => SdCwtSerializer.ParseDisclosure(cbor));
+        Assert.Throws<CborContentException>(() => SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared));
     }
 
 
     [TestMethod]
     public void DeterministicEncodingProducesIdenticalOutput()
     {
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(
-            TestSalt,
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(
+            TestSalts.FromBytes(TestSalt),
             "test_claim",
             "test_value");
 
@@ -300,25 +332,35 @@ internal sealed class SdCwtSerializerTests
     {
         var disclosures = new List<SdDisclosure>
         {
-            SdDisclosure.CreateProperty(TestSalt, "name", "John"),
-            SdDisclosure.CreateProperty(TestSalt, "age", 30)
+            SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "name", "John"),
+            SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), "age", 30)
         };
 
-        //Serialize sd_claims array.
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteStartArray(disclosures.Count);
-        foreach(var d in disclosures)
+        try
         {
-            byte[] encoded = SdCwtSerializer.SerializeDisclosure(d);
-            writer.WriteEncodedValue(encoded);
+            //Serialize sd_claims array.
+            var writer = new CborWriter(CborConformanceMode.Canonical);
+            writer.WriteStartArray(disclosures.Count);
+            foreach(var d in disclosures)
+            {
+                byte[] encoded = SdCwtSerializer.SerializeDisclosure(d);
+                writer.WriteEncodedValue(encoded);
+            }
+            writer.WriteEndArray();
+            byte[] sdClaimsCbor = writer.Encode();
+
+            byte[] hash1 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana);
+            byte[] hash2 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana);
+
+            CollectionAssert.AreEqual(hash1, hash2, "SD hash must be deterministic.");
         }
-        writer.WriteEndArray();
-        byte[] sdClaimsCbor = writer.Encode();
-
-        byte[] hash1 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana);
-        byte[] hash2 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana);
-
-        CollectionAssert.AreEqual(hash1, hash2, "SD hash must be deterministic.");
+        finally
+        {
+            foreach(SdDisclosure d in disclosures)
+            {
+                d.Dispose();
+            }
+        }
     }
 
 
@@ -327,12 +369,12 @@ internal sealed class SdCwtSerializerTests
     {
         var issued = DateTimeOffset.FromUnixTimeSeconds(1683000000);
 
-        SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalt, "iat", issued);
+        using SdDisclosure disclosure = SdDisclosure.CreateProperty(TestSalts.FromBytes(TestSalt), WellKnownJwtClaimNames.Iat, issued);
 
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(disclosure);
-        SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
 
-        Assert.AreEqual("iat", parsed.ClaimName);
+        Assert.AreEqual(WellKnownJwtClaimNames.Iat, parsed.ClaimName);
         Assert.AreEqual(1683000000, parsed.ClaimValue);
     }
 }

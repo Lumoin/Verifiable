@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Globalization;
 using Verifiable.Tpm.Extensions.Info;
 using Verifiable.Tpm.Extensions.Pcr;

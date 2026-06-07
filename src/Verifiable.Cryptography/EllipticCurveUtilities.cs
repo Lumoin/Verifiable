@@ -44,7 +44,32 @@ namespace Verifiable.Cryptography
         /// <summary>
         /// Curve25519. More at <see href="https://safecurves.cr.yp.to/">SafeCurves: choosing safe curves for elliptic-curve cryptography</see>.
         /// </summary>
-        Curve25519 = 1 << 4
+        Curve25519 = 1 << 4,
+
+        /// <summary>
+        /// Brainpool P-256r1 per RFC 5639. 256-bit prime field, 32-byte coordinates.
+        /// </summary>
+        BrainpoolP256r1 = 1 << 5,
+
+        /// <summary>
+        /// Brainpool P-320r1 per RFC 5639. 320-bit prime field, 40-byte coordinates.
+        /// </summary>
+        BrainpoolP320r1 = 1 << 6,
+
+        /// <summary>
+        /// Brainpool P-384r1 per RFC 5639. 384-bit prime field, 48-byte coordinates.
+        /// </summary>
+        BrainpoolP384r1 = 1 << 7,
+
+        /// <summary>
+        /// Brainpool P-512r1 per RFC 5639. 512-bit prime field, 64-byte coordinates.
+        /// </summary>
+        BrainpoolP512r1 = 1 << 8,
+
+        /// <summary>
+        /// All four Brainpool r1 curves combined. Mirrors the NistCurves family flag.
+        /// </summary>
+        BrainpoolCurves = BrainpoolP256r1 | BrainpoolP320r1 | BrainpoolP384r1 | BrainpoolP512r1
     }
 
 
@@ -53,24 +78,25 @@ namespace Verifiable.Cryptography
     /// </summary>
     public static class EllipticCurveUtilities
     {
-        /// <summary>
-        /// The compressed P-256 byte array length.
-        /// </summary>
+        //Compressed-point byte lengths by field size. The 33-byte length is shared by
+        //P-256, secp256k1, and BrainpoolP256r1; the 49-byte length by P-384 and
+        //BrainpoolP384r1. The curveType flag disambiguates within Decompress and
+        //CheckPointOnCurve. The BP-320 (41) and BP-512 (65) lengths are unique on
+        //length alone.
+
+        /// <summary>The compressed P-256 / secp256k1 / Brainpool P-256r1 byte array length.</summary>
         private const int P256CompressedByteCount = 33;
 
-        /// <summary>
-        /// The compressed Secp256k1 byte array length.
-        /// </summary>
-        private const int Secp256k1CompressedByteCount = 33;
+        /// <summary>The compressed Brainpool P-320r1 byte array length.</summary>
+        private const int BrainpoolP320r1CompressedByteCount = 41;
 
-        /// <summary>
-        /// The compressed P-384 byte array length.
-        /// </summary>
+        /// <summary>The compressed P-384 / Brainpool P-384r1 byte array length.</summary>
         private const int P384CompressedByteCount = 49;
 
-        /// <summary>
-        /// The compressed P-521 byte array length.
-        /// </summary>
+        /// <summary>The compressed Brainpool P-512r1 byte array length.</summary>
+        private const int BrainpoolP512r1CompressedByteCount = 65;
+
+        /// <summary>The compressed P-521 byte array length.</summary>
         private const int P521CompressedByteCount = 67;
 
         /// <summary>
@@ -117,29 +143,33 @@ namespace Verifiable.Cryptography
                 throw new ArgumentOutOfRangeException(nameof(compressedPoint), $"Value must start with 0x02 or 0x03. Now 0x{compressedPoint[0]:2}.");
             }
 
-            //For Secp256k1 the length is the same as for P-256.
+            //All four Brainpool curves added in Q.2.X round out the supported compressed
+            //lengths to {33, 41, 49, 65, 67}. The 33-byte length is shared by P-256,
+            //secp256k1, and BP-256r1; the 49-byte length is shared by P-384 and BP-384r1.
+            //The curveType flag disambiguates in those cases — see ResolveCurveParameters.
             if(!(compressedPoint.Length == P256CompressedByteCount
+                || compressedPoint.Length == BrainpoolP320r1CompressedByteCount
                 || compressedPoint.Length == P384CompressedByteCount
+                || compressedPoint.Length == BrainpoolP512r1CompressedByteCount
                 || compressedPoint.Length == P521CompressedByteCount))
             {
-                throw new ArgumentOutOfRangeException(nameof(compressedPoint), $"Length must be {P256CompressedByteCount}, {P384CompressedByteCount} or {P521CompressedByteCount}.");
+                throw new ArgumentOutOfRangeException(nameof(compressedPoint),
+                    $"Length must be one of {P256CompressedByteCount}, {BrainpoolP320r1CompressedByteCount}, {P384CompressedByteCount}, {BrainpoolP512r1CompressedByteCount}, {P521CompressedByteCount}.");
             }
 
-            //These local methods are used to make the code easier to follow by naming
-            //the key operations.            
-            static BigInteger CalculateYPoint(BigInteger x, BigInteger coefficientB, BigInteger pIdentity, BigInteger prime, EllipticCurveTypes curveType)
+            //Y is recovered from x via the general short-Weierstrass form
+            //y^2 = x^3 + a*x + b (mod p). NIST P-curves use a = -3 (encoded as p-3),
+            //secp256k1 uses a = 0, and Brainpool curves use arbitrary a per RFC 5639;
+            //the general formula subsumes all three cases without special-casing.
+            static BigInteger CalculateYPoint(BigInteger x, BigInteger coefficientA, BigInteger coefficientB, BigInteger pIdentity, BigInteger prime)
             {
-                //The difference between secp256k1 and NIST curves lies in the curve equation's form: y^2 = x^3 + Ax + B (mod p).
-                //For NIST curves, A = -3: y^2 = x^2 - 3x + B (mod p)
-                //For secp256k1, A = 0: y^2 = x^3 + B (mod p).                
-                if(curveType.HasFlag(EllipticCurveTypes.Secp256k1))
+                BigInteger rhs = (BigInteger.ModPow(x, 3, prime) + coefficientA * x + coefficientB) % prime;
+                if(rhs.Sign < 0)
                 {
-                    return BigInteger.ModPow(BigInteger.Pow(x, 3) + coefficientB, pIdentity, prime);
+                    rhs += prime;
                 }
-                else
-                {
-                    return BigInteger.ModPow(BigInteger.Pow(x, 3) - x * 3 + coefficientB, pIdentity, prime);
-                }
+
+                return BigInteger.ModPow(rhs, pIdentity, prime);
             }
 
             static bool CalculateIsPositiveSign(ReadOnlySpan<byte> compressedXPoint, BigInteger calculatedYPoint)
@@ -161,46 +191,10 @@ namespace Verifiable.Cryptography
             //and consequently needs to be sliced off.
             var x = new BigInteger(compressedPoint[1..], isUnsigned: true, isBigEndian: true);
 
-            //The function guards checking parameters check one of the cases are the only valid ones.
-            //Hence the last else branch needs to be 512 if it is not something else and the variables
-            //will always be initialized.
-            BigInteger coefficientB;
-            BigInteger pIdent;
-            BigInteger prime;
-            int pointArrayLength;
-            if(compressedPoint.Length == P256CompressedByteCount || compressedPoint.Length == Secp256k1CompressedByteCount)
-            {
-                if(curveType.HasFlag(EllipticCurveTypes.P256) || curveType.HasFlag(EllipticCurveTypes.NistCurves))
-                {
-                    coefficientB = P256.CoefficientB;
-                    pIdent = P256.PIdentity;
-                    prime = P256.Prime;
-                    pointArrayLength = P256.PointArrayLength;
-                }
-                else
-                {
-                    coefficientB = Secp256k1.CoefficientB;
-                    pIdent = Secp256k1.PIdentity;
-                    prime = Secp256k1.Prime;
-                    pointArrayLength = Secp256k1.PointArrayLength;
-                }
-            }
-            else if(compressedPoint.Length == P384CompressedByteCount)
-            {
-                coefficientB = P384.CoefficientB;
-                pIdent = P384.PIdentity;
-                prime = P384.Prime;
-                pointArrayLength = P384.PointArrayLength;
-            }
-            else
-            {
-                coefficientB = P521.CoefficientB;
-                pIdent = P521.PIdentity;
-                prime = P521.Prime;
-                pointArrayLength = P521.PointArrayLength;
-            }
+            (BigInteger coefficientA, BigInteger coefficientB, BigInteger pIdent, BigInteger prime, int pointArrayLength) =
+                ResolveCurveParameters(compressedPoint.Length, curveType);
 
-            var oneYPointCandidate = CalculateYPoint(x, coefficientB, pIdent, prime, curveType);
+            var oneYPointCandidate = CalculateYPoint(x, coefficientA, coefficientB, pIdent, prime);
             var anotherYPointCandidate = prime - oneYPointCandidate;
             bool isPositive = CalculateIsPositiveSign(compressedPoint, oneYPointCandidate);
 
@@ -217,6 +211,46 @@ namespace Verifiable.Cryptography
                 WriteYPointBytes(anotherYPointCandidate, returnYPointBytes, startIndexAfterPadding);
         }
 
+
+        /// <summary>
+        /// Resolves the (a, b, (p+1)/4, p, byte-length) tuple for a curve given its
+        /// compressed-point byte length and a caller-provided <see cref="EllipticCurveTypes"/>
+        /// flag set. Disambiguates the 33-byte case (P-256 / secp256k1 / BrainpoolP256r1)
+        /// and the 49-byte case (P-384 / BrainpoolP384r1) by examining flags.
+        /// </summary>
+        private static (BigInteger CoefficientA, BigInteger CoefficientB, BigInteger PIdentity, BigInteger Prime, int PointArrayLength) ResolveCurveParameters(
+            int compressedPointLength, EllipticCurveTypes curveType)
+        {
+            return compressedPointLength switch
+            {
+                P256CompressedByteCount when curveType.HasFlag(EllipticCurveTypes.BrainpoolP256r1) =>
+                    (BrainpoolP256r1.CoefficientA, BrainpoolP256r1.CoefficientB, BrainpoolP256r1.PIdentity, BrainpoolP256r1.Prime, BrainpoolP256r1.PointArrayLength),
+                P256CompressedByteCount when curveType.HasFlag(EllipticCurveTypes.Secp256k1) =>
+                    (Secp256k1.CoefficientA, Secp256k1.CoefficientB, Secp256k1.PIdentity, Secp256k1.Prime, Secp256k1.PointArrayLength),
+                P256CompressedByteCount =>
+                    //P-256 path covers explicit P256, NistCurves family, and the no-flag
+                    //default — matches the original Decompress fallback semantics.
+                    (P256.CoefficientA, P256.CoefficientB, P256.PIdentity, P256.Prime, P256.PointArrayLength),
+
+                BrainpoolP320r1CompressedByteCount =>
+                    (BrainpoolP320r1.CoefficientA, BrainpoolP320r1.CoefficientB, BrainpoolP320r1.PIdentity, BrainpoolP320r1.Prime, BrainpoolP320r1.PointArrayLength),
+
+                P384CompressedByteCount when curveType.HasFlag(EllipticCurveTypes.BrainpoolP384r1) =>
+                    (BrainpoolP384r1.CoefficientA, BrainpoolP384r1.CoefficientB, BrainpoolP384r1.PIdentity, BrainpoolP384r1.Prime, BrainpoolP384r1.PointArrayLength),
+                P384CompressedByteCount =>
+                    (P384.CoefficientA, P384.CoefficientB, P384.PIdentity, P384.Prime, P384.PointArrayLength),
+
+                BrainpoolP512r1CompressedByteCount =>
+                    (BrainpoolP512r1.CoefficientA, BrainpoolP512r1.CoefficientB, BrainpoolP512r1.PIdentity, BrainpoolP512r1.Prime, BrainpoolP512r1.PointArrayLength),
+
+                P521CompressedByteCount =>
+                    (P521.CoefficientA, P521.CoefficientB, P521.PIdentity, P521.Prime, P521.PointArrayLength),
+
+                _ => throw new ArgumentOutOfRangeException(nameof(compressedPointLength),
+                    $"No curve parameters known for compressed length {compressedPointLength}.")
+            };
+        }
+
         /// <summary>
         /// Compresses elliptic curve points. See <see href="https://www.secg.org/sec1-v2.pdf">SEC 1: Elliptic Curve Cryptography [pdf]</see> page 11.
         /// </summary>
@@ -229,20 +263,16 @@ namespace Verifiable.Cryptography
         /// Elliptic Curve Cryptography Subject Public Key Information</see>.</remarks>        
         public static byte[] Compress(ReadOnlySpan<byte> xPoint, ReadOnlySpan<byte> yPoint)
         {
-            if(!(xPoint.Length == P256.PointArrayLength
-                || xPoint.Length == P384.PointArrayLength
-                || xPoint.Length == P521.PointArrayLength))
+            if(!IsSupportedCoordinateLength(xPoint.Length))
             {
                 throw new ArgumentOutOfRangeException(nameof(xPoint),
-                    $"Length must be '{P256.PointArrayLength}', '{P384.PointArrayLength}' or '{P521.PointArrayLength}'.");
+                    $"Length must be one of {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
             }
 
-            if(!(yPoint.Length == P256.PointArrayLength
-                || yPoint.Length == P384.PointArrayLength
-                || yPoint.Length == P521.PointArrayLength))
+            if(!IsSupportedCoordinateLength(yPoint.Length))
             {
                 throw new ArgumentOutOfRangeException(nameof(yPoint),
-                    $"Length must be '{P256.PointArrayLength}', '{P384.PointArrayLength}' or '{P521.PointArrayLength}'.");
+                    $"Length must be one of {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
             }
 
             if(xPoint.Length != yPoint.Length)
@@ -282,15 +312,26 @@ namespace Verifiable.Cryptography
         /// Elliptic Curve Cryptography Subject Public Key Information</see>.</remarks>        
         public static byte CompressionSignByte(ReadOnlySpan<byte> yPoint)
         {
-            if(!(yPoint.Length == P256.PointArrayLength
-                || yPoint.Length == P384.PointArrayLength
-                || yPoint.Length == P521.PointArrayLength))
+            if(!IsSupportedCoordinateLength(yPoint.Length))
             {
-                throw new ArgumentOutOfRangeException(nameof(yPoint), $"Length must be {P256.PointArrayLength}, {P384.PointArrayLength} or {P521.PointArrayLength}.");
+                throw new ArgumentOutOfRangeException(nameof(yPoint),
+                    $"Length must be one of {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
             }
 
             return (byte)(2 + (yPoint![^1] & 1));
         }
+
+
+        //P-256, secp256k1, and BrainpoolP256r1 all use 32-byte coordinates; P-384 and
+        //BrainpoolP384r1 share 48-byte; BrainpoolP320r1 (40), BrainpoolP512r1 (64), and
+        //P-521 (66) are unambiguous on length. Curve parameters disambiguate where length
+        //alone cannot.
+        private static bool IsSupportedCoordinateLength(int length) =>
+            length == P256.PointArrayLength
+            || length == BrainpoolP320r1.PointArrayLength
+            || length == P384.PointArrayLength
+            || length == BrainpoolP512r1.PointArrayLength
+            || length == P521.PointArrayLength;
 
 
         /// <summary>
@@ -309,17 +350,17 @@ namespace Verifiable.Cryptography
                 throw new ArgumentException($"Parameters '{nameof(x)}' and '{nameof(y)}' must have the same length.");
             }
 
-            if(!(x.Length == P256.PointArrayLength
-                || x.Length == P384.PointArrayLength
-                || x.Length == P521.PointArrayLength))
+            if(!IsSupportedCoordinateLength(x.Length))
             {
-                throw new ArgumentOutOfRangeException(nameof(x), $"Length must be {P256.PointArrayLength}, {P384.PointArrayLength} or {P521.PointArrayLength}.");
+                throw new ArgumentOutOfRangeException(nameof(x),
+                    $"Length must be one of {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
             }
 
             byte[] result = new byte[1 + x.Length + y.Length];
             result[0] = UncompressedCoordinateFormat;
             x.CopyTo(result.AsSpan(1));
             y.CopyTo(result.AsSpan(1 + x.Length));
+
             return result;
         }
 
@@ -331,11 +372,10 @@ namespace Verifiable.Cryptography
                 throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), "This method supports only uncompressed coordinates (must start with 0x04).");
             }
 
-            if(!(uncompressedCoordinates.Length == P256.UncompressedPointByteCount
-                || uncompressedCoordinates.Length == P384.UncompressedPointByteCount
-                || uncompressedCoordinates.Length == P521.UncompressedPointByteCount))
+            if(!IsSupportedUncompressedLength(uncompressedCoordinates.Length))
             {
-                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256.UncompressedPointByteCount}, {P384.UncompressedPointByteCount} or {P521.UncompressedPointByteCount}.");
+                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates),
+                    $"Length must be one of {P256.UncompressedPointByteCount}, {BrainpoolP320r1.UncompressedPointByteCount}, {P384.UncompressedPointByteCount}, {BrainpoolP512r1.UncompressedPointByteCount}, {P521.UncompressedPointByteCount}.");
             }
 
             int coordinateLength = (uncompressedCoordinates.Length - 1) / 2;
@@ -350,15 +390,76 @@ namespace Verifiable.Cryptography
                 throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), "This method supports only uncompressed coordinates (must start with 0x04).");
             }
 
-            if(!(uncompressedCoordinates.Length == P256.UncompressedPointByteCount
-                || uncompressedCoordinates.Length == P384.UncompressedPointByteCount
-                || uncompressedCoordinates.Length == P521.UncompressedPointByteCount))
+            if(!IsSupportedUncompressedLength(uncompressedCoordinates.Length))
             {
-                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates), $"Length must be {P256.UncompressedPointByteCount}, {P384.UncompressedPointByteCount} or {P521.UncompressedPointByteCount}.");
+                throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates),
+                    $"Length must be one of {P256.UncompressedPointByteCount}, {BrainpoolP320r1.UncompressedPointByteCount}, {P384.UncompressedPointByteCount}, {BrainpoolP512r1.UncompressedPointByteCount}, {P521.UncompressedPointByteCount}.");
             }
 
             int coordinateLength = (uncompressedCoordinates.Length - 1) / 2;
+
             return uncompressedCoordinates.Slice(1 + coordinateLength, coordinateLength);
+        }
+
+
+        //Companion to IsSupportedCoordinateLength for the 0x04-prefixed full-point form
+        //(length 1 + 2 × field byte size).
+        private static bool IsSupportedUncompressedLength(int length) =>
+            length == P256.UncompressedPointByteCount
+            || length == BrainpoolP320r1.UncompressedPointByteCount
+            || length == P384.UncompressedPointByteCount
+            || length == BrainpoolP512r1.UncompressedPointByteCount
+            || length == P521.UncompressedPointByteCount;
+
+
+        /// <summary>
+        /// Extracts the X and Y coordinates from an elliptic curve public key point,
+        /// regardless of whether it is stored in compressed or uncompressed SEC1 encoding.
+        /// </summary>
+        /// <param name="point">
+        /// The key material. Either compressed (<c>0x02/0x03 || X</c>) or uncompressed
+        /// (<c>0x04 || X || Y</c>) SEC1 encoding. The encoding is detected from the first byte.
+        /// </param>
+        /// <param name="curveType">
+        /// The elliptic curve type. Required only for the compressed path to recover Y via
+        /// <see cref="Decompress"/>. Ignored for uncompressed input.
+        /// </param>
+        /// <param name="x">
+        /// On return, a span over the X coordinate bytes. When <paramref name="point"/> is
+        /// uncompressed this is a slice into <paramref name="point"/>; when compressed it is
+        /// a slice into <paramref name="point"/> after the prefix byte.
+        /// </param>
+        /// <param name="y">
+        /// On return, a span over the Y coordinate bytes. When <paramref name="point"/> is
+        /// uncompressed this is a slice into <paramref name="point"/>; when compressed it is
+        /// a freshly allocated array returned by <see cref="Decompress"/>.
+        /// </param>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when the first byte is not a valid SEC1 prefix (0x02, 0x03, or 0x04).
+        /// </exception>
+        public static void ExtractCoordinates(
+            ReadOnlySpan<byte> point,
+            EllipticCurveTypes curveType,
+            out ReadOnlySpan<byte> x,
+            out ReadOnlySpan<byte> y)
+        {
+            if(point[0] == UncompressedCoordinateFormat)
+            {
+                x = SliceXCoordinate(point);
+                y = SliceYCoordinate(point);
+                return;
+            }
+
+            if(point[0] == EvenYCoordinate || point[0] == OddYCoordinate)
+            {
+                x = point.Slice(1);
+                y = Decompress(point, curveType);
+                return;
+            }
+
+            throw new ArgumentOutOfRangeException(
+                nameof(point),
+                $"First byte 0x{point[0]:X2} is not a valid SEC1 prefix. Expected 0x02, 0x03, or 0x04.");
         }
 
 
@@ -372,10 +473,13 @@ namespace Verifiable.Cryptography
         public static bool IsCompressed(ReadOnlySpan<byte> maybeCompressedCoordinates)
         {
             if(!(maybeCompressedCoordinates.Length == P256CompressedByteCount
+                || maybeCompressedCoordinates.Length == BrainpoolP320r1CompressedByteCount
                 || maybeCompressedCoordinates.Length == P384CompressedByteCount
+                || maybeCompressedCoordinates.Length == BrainpoolP512r1CompressedByteCount
                 || maybeCompressedCoordinates.Length == P521CompressedByteCount))
             {
-                throw new ArgumentOutOfRangeException(nameof(maybeCompressedCoordinates), $"Length must be {P256CompressedByteCount}, {P384CompressedByteCount} or {P521CompressedByteCount}.");
+                throw new ArgumentOutOfRangeException(nameof(maybeCompressedCoordinates),
+                    $"Length must be one of {P256CompressedByteCount}, {BrainpoolP320r1CompressedByteCount}, {P384CompressedByteCount}, {BrainpoolP512r1CompressedByteCount}, {P521CompressedByteCount}.");
             }
 
             return maybeCompressedCoordinates[0] == EvenYCoordinate || maybeCompressedCoordinates[0] == OddYCoordinate;
@@ -418,8 +522,24 @@ namespace Verifiable.Cryptography
             //Step 3: Verify that the point is on an elliptic curve, e.g. y^2 == x^3 + ax + b (mod p).
             BigInteger x = new(publicKeyX, isUnsigned: true, isBigEndian: true);
             BigInteger y = new(publicKeyY, isUnsigned: true, isBigEndian: true);
+            //Brainpool 32-byte and 48-byte cases are checked first because their byte
+            //length collides with P-256/secp256k1 and P-384 respectively. The order is
+            //specificity-first: a caller passing the Brainpool flag wants Brainpool
+            //parameters even though the raw length would also match a NIST curve.
             return (publicKeyX.Length, curveType) switch
             {
+                (BrainpoolP256r1.PointArrayLength, _) when curveType.HasFlag(EllipticCurveTypes.BrainpoolP256r1) =>
+                    ValiteParametersInRange(x, y, BrainpoolP256r1.Prime) && ValidateCurve(x, y, BrainpoolP256r1.CoefficientA, BrainpoolP256r1.CoefficientB, BrainpoolP256r1.Prime),
+
+                (BrainpoolP320r1.PointArrayLength, _) when curveType.HasFlag(EllipticCurveTypes.BrainpoolP320r1) =>
+                    ValiteParametersInRange(x, y, BrainpoolP320r1.Prime) && ValidateCurve(x, y, BrainpoolP320r1.CoefficientA, BrainpoolP320r1.CoefficientB, BrainpoolP320r1.Prime),
+
+                (BrainpoolP384r1.PointArrayLength, _) when curveType.HasFlag(EllipticCurveTypes.BrainpoolP384r1) =>
+                    ValiteParametersInRange(x, y, BrainpoolP384r1.Prime) && ValidateCurve(x, y, BrainpoolP384r1.CoefficientA, BrainpoolP384r1.CoefficientB, BrainpoolP384r1.Prime),
+
+                (BrainpoolP512r1.PointArrayLength, _) when curveType.HasFlag(EllipticCurveTypes.BrainpoolP512r1) =>
+                    ValiteParametersInRange(x, y, BrainpoolP512r1.Prime) && ValidateCurve(x, y, BrainpoolP512r1.CoefficientA, BrainpoolP512r1.CoefficientB, BrainpoolP512r1.Prime),
+
                 (P256.PointArrayLength, _) when curveType.HasFlag(EllipticCurveTypes.P256) || curveType.HasFlag(EllipticCurveTypes.NistCurves) =>
                     ValiteParametersInRange(x, y, P256.Prime) && ValidateCurve(x, y, P256.CoefficientA, P256.CoefficientB, P256.Prime),
 

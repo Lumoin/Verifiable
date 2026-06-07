@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
+using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.DataIntegrity;
@@ -46,6 +47,10 @@ internal sealed class DataIntegrityTests
     /// Offline context resolver using embedded W3C context documents.
     /// </summary>
     private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
+
+    //Canonicalization here is in-memory; a default context yields the
+    //secure-default SSRF policy and satisfies the policy-carrying parameter.
+    private static readonly ExchangeContext EmptyContext = new();
 
     /// <summary>
     /// Ed25519 public key in Multikey format.
@@ -132,7 +137,7 @@ internal sealed class DataIntegrityTests
     /// </summary>
     private static async ValueTask<string> CanonicalizeAsync(string jsonLdDocument, CancellationToken cancellationToken)
     {
-        var result = await RdfcCanonicalizer(jsonLdDocument, ContextResolver, cancellationToken).ConfigureAwait(false);
+        var result = await RdfcCanonicalizer(jsonLdDocument, ContextResolver, EmptyContext, cancellationToken).ConfigureAwait(false);
         return result.CanonicalForm;
     }
 
@@ -186,7 +191,7 @@ internal sealed class DataIntegrityTests
         Assert.AreEqual(ExpectedProofValue, proofValue, "ProofValue must match W3C test vector.");
 
         //Build the signed credential with proof by deserializing a fresh copy.
-        var signedCredential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(credentialJson, JsonOptions)!;
+        var signedCredential = JsonSerializerExtensions.Deserialize<DataIntegritySecuredCredential>(credentialJson, JsonOptions)!;
         signedCredential.Proof =
         [
             new DataIntegrityProof

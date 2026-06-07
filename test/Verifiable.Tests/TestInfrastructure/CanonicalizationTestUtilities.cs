@@ -6,6 +6,7 @@ using VDS.RDF;
 using VDS.RDF.JsonLd;
 using VDS.RDF.JsonLd.Syntax;
 using VDS.RDF.Parsing;
+using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -186,10 +187,12 @@ internal static class CanonicalizationTestUtilities
             new Uri(CredentialsExamplesV2ContextUrl)
         };
 
+        //Pre-warming is policy-agnostic; a default context yields the secure-default policy.
+        var exchangeContext = new ExchangeContext();
         foreach(var contextUri in knownContexts)
         {
             //This will fetch, verify (if production resolver), and cache the context.
-            var result = await contextResolver(contextUri, cancellationToken).ConfigureAwait(false);
+            var result = await contextResolver(contextUri, exchangeContext, cancellationToken).ConfigureAwait(false);
             if(result == null)
             {
                 throw new InvalidOperationException(
@@ -276,13 +279,13 @@ internal static class CanonicalizationTestUtilities
     /// </remarks>
     public static CanonicalizationDelegate CreateRdfcCanonicalizer()
     {
-        return (json, contextResolver, cancellationToken) =>
+        return (json, contextResolver, context, cancellationToken) =>
         {
             var store = new TripleStore();
             var parserOptions = new JsonLdProcessorOptions
             {
                 ProcessingMode = JsonLdProcessingMode.JsonLd11,
-                DocumentLoader = CreateDotNetRdfContextLoader(contextResolver)
+                DocumentLoader = CreateDotNetRdfContextLoader(contextResolver, context)
             };
             var parser = new JsonLdParser(parserOptions);
 
@@ -346,7 +349,7 @@ internal static class CanonicalizationTestUtilities
     /// </remarks>
     public static ContextResolverDelegate CreateTestContextResolver()
     {
-        return (uri, cancellationToken) =>
+        return (uri, context, cancellationToken) =>
         {
             var contextJson = uri.ToString() switch
             {
@@ -423,7 +426,7 @@ internal static class CanonicalizationTestUtilities
             [CredentialsExamplesV2ContextUrl] = CredentialsExamplesV2ContextSha256
         };
 
-        return async (uri, cancellationToken) =>
+        return async (uri, context, cancellationToken) =>
         {
             var uriString = uri.ToString();
 
@@ -519,7 +522,7 @@ internal static class CanonicalizationTestUtilities
     /// If a context is not in cache, an exception is thrown rather than blocking on network I/O.
     /// </para>
     /// </remarks>
-    private static Func<Uri, JsonLdLoaderOptions?, RemoteDocument> CreateDotNetRdfContextLoader(ContextResolverDelegate? contextResolver)
+    private static Func<Uri, JsonLdLoaderOptions?, RemoteDocument> CreateDotNetRdfContextLoader(ContextResolverDelegate? contextResolver, ExchangeContext context)
     {
         return (uri, options) =>
         {
@@ -532,7 +535,7 @@ internal static class CanonicalizationTestUtilities
                 try
                 {
                     contextJson = Task.Run(async () =>
-                        await contextResolver(uri, CancellationToken.None).ConfigureAwait(false)).GetAwaiter().GetResult();
+                        await contextResolver(uri, context, CancellationToken.None).ConfigureAwait(false)).GetAwaiter().GetResult();
                 }
                 catch(Exception ex)
                 {

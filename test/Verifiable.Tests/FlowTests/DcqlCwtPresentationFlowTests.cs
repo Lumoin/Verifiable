@@ -1,15 +1,15 @@
-﻿using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Formats.Cbor;
 using System.Globalization;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
+using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
-using Verifiable.Core.SelectiveDisclosure;
-using Verifiable.Core.SelectiveDisclosure.Strategy;
+using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.JCose.Sd;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -107,23 +107,23 @@ internal sealed class DcqlCwtPresentationFlowTests
         Assert.IsNotNull(query.Credentials);
         Assert.HasCount(1, query.Credentials);
 
-        //Wallet evaluates the DCQL query against holdings.
-        var requestedPaths = new HashSet<CredentialPath>
-        {
-            CredentialPath.FromJsonPointer(GivenNamePath),
-            CredentialPath.FromJsonPointer(FamilyNamePath)
-        };
+        //Wallet evaluates the DCQL query against its holding through the
+        //format-neutral DcqlEvaluator + SdTokenDcqlAdapter (the SD-CWT counterpart
+        //of MdocDcqlAdapter), then lifts the match into a DisclosureMatch for the
+        //lattice — AllAvailablePaths / MandatoryPaths bound the lattice top/bottom.
+        PreparedDcqlQuery prepared = DcqlPreparer.Prepare(query);
+        List<DcqlMatch<SdToken<ReadOnlyMemory<byte>>>> matches = DcqlEvaluator.Evaluate(
+            prepared,
+            credentials: [issuedToken],
+            metadataExtractor: SdTokenDcqlAdapter.CreateMetadataExtractor<ReadOnlyMemory<byte>>(DcqlCredentialFormats.SdCwt),
+            claimExtractor: SdTokenDcqlAdapter.ClaimExtractor<ReadOnlyMemory<byte>>).ToList();
 
-        var match = new DisclosureMatch<SdToken<ReadOnlyMemory<byte>>>
-        {
-            Credential = issuedToken,
-            QueryRequirementId = CredentialQueryId,
-            RequiredPaths = requestedPaths,
-            MatchedPaths = requestedPaths,
-            AllAvailablePaths = CreateAllAvailablePaths(),
-            MandatoryPaths = CreateMandatoryPaths(),
-            Format = DcqlCredentialFormats.SdCwt
-        };
+        Assert.HasCount(1, matches);
+        Assert.AreEqual(CredentialQueryId, matches[0].CredentialQueryId);
+        Assert.HasCount(2, matches[0].MatchedPatterns);
+
+        DisclosureMatch<SdToken<ReadOnlyMemory<byte>>> match = DcqlPathResolver.ToDisclosureMatch(
+            matches[0], CreateAllAvailablePaths(), CreateMandatoryPaths(), DcqlCredentialFormats.SdCwt);
 
         //Disclosure engine computes optimal disclosure via lattice.
         var computation = new DisclosureComputation<SdToken<ReadOnlyMemory<byte>>>();
@@ -158,8 +158,7 @@ internal sealed class DcqlCwtPresentationFlowTests
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
 
-        SdToken<ReadOnlyMemory<byte>> presentationToken = issuedToken.SelectDisclosures(
-            d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName));
+        SdToken<ReadOnlyMemory<byte>> presentationToken = issuedToken.SelectDisclosures(d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName), Pool);
 
         Assert.IsTrue(presentationToken.Disclosures.All(
             d => selectedClaimNames.Contains(d.ClaimName!)),
@@ -177,13 +176,10 @@ internal sealed class DcqlCwtPresentationFlowTests
         //Verifier validates the COSE_Sign1 issuer signature on the presented token.
         //The signature covers protected header + payload, not the unprotected header
         //where disclosures reside, so SelectDisclosures does not invalidate it.
-        CoseSign1Message coseMessage = CoseSerialization.ParseCoseSign1(
-            presentationToken.IssuerSigned);
+        bool isSignatureValid = await presentationToken.VerifyIssuerSignatureAsync(
+            publicKey, Pool, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
-        bool signatureValid = await Verifiable.JCose.Cose.VerifyAsync(
-            coseMessage, CoseSerialization.BuildSigStructure, publicKey).ConfigureAwait(false);
-
-        Assert.IsTrue(signatureValid, "Presented COSE_Sign1 issuer signature must be cryptographically valid.");
+        Assert.IsTrue(isSignatureValid, "Presented COSE_Sign1 issuer signature must be cryptographically valid.");
 
         //Verify the decision record captured all phases.
         Assert.IsNotNull(graph.DecisionRecord);
@@ -249,13 +245,10 @@ internal sealed class DcqlCwtPresentationFlowTests
         Assert.DoesNotContain(emailPath, decision.SelectedPaths);
 
         //Even with an exclusion conflict, the token itself is still cryptographically sound.
-        CoseSign1Message coseMessage = CoseSerialization.ParseCoseSign1(
-            issuedToken.IssuerSigned);
+        bool isSignatureValid = await issuedToken.VerifyIssuerSignatureAsync(
+            publicKey, Pool, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
-        bool signatureValid = await Verifiable.JCose.Cose.VerifyAsync(
-            coseMessage, CoseSerialization.BuildSigStructure, publicKey).ConfigureAwait(false);
-
-        Assert.IsTrue(signatureValid,
+        Assert.IsTrue(isSignatureValid,
             "COSE_Sign1 signature must be valid regardless of disclosure decisions.");
     }
 
@@ -275,13 +268,10 @@ internal sealed class DcqlCwtPresentationFlowTests
             privateKey, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Verify the COSE_Sign1 signature with P-256.
-        CoseSign1Message coseMessage = CoseSerialization.ParseCoseSign1(
-            issuedToken.IssuerSigned);
+        bool isSignatureValid = await issuedToken.VerifyIssuerSignatureAsync(
+            publicKey, Pool, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
-        bool signatureValid = await Verifiable.JCose.Cose.VerifyAsync(
-            coseMessage, CoseSerialization.BuildSigStructure, publicKey).ConfigureAwait(false);
-
-        Assert.IsTrue(signatureValid, "P-256 COSE_Sign1 signature must be valid.");
+        Assert.IsTrue(isSignatureValid, "P-256 COSE_Sign1 signature must be valid.");
 
         //Run through DCQL disclosure computation.
         var requestedPaths = new HashSet<CredentialPath>
@@ -315,16 +305,12 @@ internal sealed class DcqlCwtPresentationFlowTests
             .Select(p => p.ToString().TrimStart('/'))
             .ToHashSet(StringComparer.Ordinal);
 
-        SdToken<ReadOnlyMemory<byte>> presentationToken = issuedToken.SelectDisclosures(
-            d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName));
+        SdToken<ReadOnlyMemory<byte>> presentationToken = issuedToken.SelectDisclosures(d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName), Pool);
 
-        CoseSign1Message presentedCose = CoseSerialization.ParseCoseSign1(
-            presentationToken.IssuerSigned);
+        bool isPresentationValid = await presentationToken.VerifyIssuerSignatureAsync(
+            publicKey, Pool, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
-        bool presentationValid = await Verifiable.JCose.Cose.VerifyAsync(
-            presentedCose, CoseSerialization.BuildSigStructure, publicKey).ConfigureAwait(false);
-
-        Assert.IsTrue(presentationValid, "P-256 signature must be valid on the presented token.");
+        Assert.IsTrue(isPresentationValid, "P-256 signature must be valid on the presented token.");
     }
 
 
@@ -337,8 +323,8 @@ internal sealed class DcqlCwtPresentationFlowTests
     {
         var claims = new Dictionary<int, object>
         {
-            [WellKnownCwtClaims.Iss] = IssuerId,
-            [WellKnownCwtClaims.Iat] = TimeProvider.GetUtcNow().ToUnixTimeSeconds(),
+            [WellKnownCwtClaimNames.Iss] = IssuerId,
+            [WellKnownCwtClaimNames.Iat] = TimeProvider.GetUtcNow().ToUnixTimeSeconds(),
             [ClaimKeyGivenName] = "Erika",
             [ClaimKeyFamilyName] = "Mustermann",
             [ClaimKeyBirthdate] = "1964-08-12",
@@ -355,22 +341,18 @@ internal sealed class DcqlCwtPresentationFlowTests
             CredentialPath.FromJsonPointer(PhoneNumberPath)
         };
 
-        byte[] cborBytes = SerializeCwtClaimMap(claims);
-
-        SdTokenResult result = await SdCwtIssuance.IssueAsync(
-            cborBytes, disclosablePaths,
-            SaltGenerator.Create,
+        return await claims.IssueSdCwtTokenAsync(
+            SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths,
+            TestSalts.DefaultGenerator(),
             privateKey, IssuerKeyId, Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return new SdToken<ReadOnlyMemory<byte>>(result.SignedToken, result.Disclosures.ToList());
     }
 
 
     /// <summary>
     /// Serializes a CWT claim map using <see cref="CborValueConverter"/>.
     /// </summary>
-    private static byte[] SerializeCwtClaimMap(Dictionary<int, object> claims)
+    private static ReadOnlySpan<byte> SerializeCwtClaimMap(Dictionary<int, object> claims)
     {
         var writer = new CborWriter(CborConformanceMode.Canonical);
         CborValueConverter.WriteValue(writer, claims);

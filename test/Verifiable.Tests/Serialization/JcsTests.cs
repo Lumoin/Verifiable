@@ -9,17 +9,15 @@ namespace Verifiable.Tests.Serialization;
 
 internal sealed class TestObject
 {
-    [JsonPropertyName("zebra")]
     public string? Zebra { get; set; }
 
-    [JsonPropertyName("alpha")]
     public string? Alpha { get; set; }
 
-    [JsonPropertyName("middle")]
     public string? Middle { get; set; }
 }
 
 
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(TestObject))]
 internal sealed partial class JcsTestsContext: JsonSerializerContext { }
 

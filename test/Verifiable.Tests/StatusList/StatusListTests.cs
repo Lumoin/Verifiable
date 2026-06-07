@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using Verifiable.Core.StatusList;
 
 using StatusListType = Verifiable.Core.StatusList.StatusList;

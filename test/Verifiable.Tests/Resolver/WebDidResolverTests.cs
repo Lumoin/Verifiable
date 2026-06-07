@@ -1,6 +1,7 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using Verifiable.Core;
 using Verifiable.Core.EventLogs;
 using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Core.Resolvers;
@@ -22,6 +23,10 @@ namespace Verifiable.Tests.Resolver;
 [TestClass]
 internal sealed class WebDidResolverTests
 {
+    //did:web resolution only computes a URL — no network I/O — so a default context
+    //suffices; it exists only to satisfy the SSRF-policy-carrying parameter.
+    private static readonly ExchangeContext EmptyContext = new();
+
     public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
@@ -79,6 +84,7 @@ internal sealed class WebDidResolverTests
         var result = await WebDidResolver.ResolveAsync(
             "did:web:example.com",
             DidResolutionOptions.Empty,
+            EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful);
@@ -93,6 +99,7 @@ internal sealed class WebDidResolverTests
         var result = await WebDidResolver.ResolveAsync(
             "did:web:example.com:users:alice",
             DidResolutionOptions.Empty,
+            EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful);
@@ -108,7 +115,7 @@ internal sealed class WebDidResolverTests
         var context = BuildContext(log);
 
         const string did = "did:web:example.com";
-        var resolution = await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var resolution = await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         await foreach(var result in replayer.ReplayAsync(BuildEntries([(did, resolution)]), context, TestContext.CancellationToken).ConfigureAwait(false))
         {
@@ -127,7 +134,7 @@ internal sealed class WebDidResolverTests
         var context = BuildContext(log);
 
         const string did = "did:web:example.com";
-        var resolution = await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var resolution = await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         await foreach(var _ in replayer.ReplayAsync(BuildEntries([(did, resolution)]), context, TestContext.CancellationToken).ConfigureAwait(false)) { }
 
@@ -144,7 +151,7 @@ internal sealed class WebDidResolverTests
         var context = BuildContext(log);
 
         const string did = "did:web:example.com";
-        var resolution = await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var resolution = await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         await foreach(var _ in replayer.ReplayAsync(BuildEntries([(did, resolution)]), context, TestContext.CancellationToken).ConfigureAwait(false)) { }
 
@@ -162,8 +169,8 @@ internal sealed class WebDidResolverTests
         var context = BuildContext(log);
 
         const string did = "did:web:example.com";
-        var first = await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        var second = await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var first = await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var second = await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         await foreach(var _ in replayer.ReplayAsync(BuildEntries([(did, first), (did, second)]), context, TestContext.CancellationToken).ConfigureAwait(false)) { }
 
@@ -183,7 +190,7 @@ internal sealed class WebDidResolverTests
         var resolutions = new List<(string, DidResolutionResult)>();
         for(var i = 0; i < 3; i++)
         {
-            resolutions.Add((did, await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)));
+            resolutions.Add((did, await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)));
         }
 
         await foreach(var _ in replayer.ReplayAsync(BuildEntries(resolutions), context, TestContext.CancellationToken).ConfigureAwait(false)) { }
@@ -205,8 +212,8 @@ internal sealed class WebDidResolverTests
 
         const string aliceDid = "did:web:alice.example.com";
         const string bobDid = "did:web:bob.example.com";
-        var alice = await resolver.ResolveAsync(aliceDid, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        var bob = await resolver.ResolveAsync(bobDid, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var alice = await resolver.ResolveAsync(aliceDid, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var bob = await resolver.ResolveAsync(bobDid, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         await foreach(var _ in replayer.ReplayAsync(BuildEntries([(aliceDid, alice)]), BuildContext(logAlice), TestContext.CancellationToken).ConfigureAwait(false)) { }
         await foreach(var _ in replayer.ReplayAsync(BuildEntries([(bobDid, bob)]), BuildContext(logBob), TestContext.CancellationToken).ConfigureAwait(false)) { }
@@ -223,7 +230,7 @@ internal sealed class WebDidResolverTests
         var context = BuildContext(log);
 
         const string did = "not-a-did";
-        var failure = await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var failure = await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(failure.IsSuccessful);
 
         await foreach(var _ in replayer.ReplayAsync(BuildEntries([(did, failure)]), context, TestContext.CancellationToken).ConfigureAwait(false)) { }
@@ -243,7 +250,7 @@ internal sealed class WebDidResolverTests
         var context = BuildContext(log);
 
         const string did = "did:web:example.com";
-        var resolution = await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var resolution = await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         await foreach(var _ in replayer.ReplayAsync(BuildEntries([(did, resolution)]), context, TestContext.CancellationToken).ConfigureAwait(false)) { }
 
@@ -258,7 +265,7 @@ internal sealed class WebDidResolverTests
         var context = BuildContext(log);
 
         const string did = "did:web:example.com";
-        var resolution = await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var resolution = await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         await foreach(var _ in replayer.ReplayAsync(BuildEntries([(did, resolution)]), context, TestContext.CancellationToken).ConfigureAwait(false)) { }
 
@@ -274,8 +281,8 @@ internal sealed class WebDidResolverTests
         var context = BuildContext(log);
 
         const string did = "did:web:example.com";
-        var first = await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        var second = await resolver.ResolveAsync(did, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var first = await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var second = await resolver.ResolveAsync(did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var entries = new List<LogEntry<WebResolutionOperation, WebResolutionProof>>();
         await foreach(var e in BuildEntries([(did, first), (did, second)]).WithCancellation(TestContext.CancellationToken).ConfigureAwait(false))

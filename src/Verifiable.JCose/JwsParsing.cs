@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Cryptography;
@@ -32,7 +32,6 @@ public static class JwsParsing
         ArgumentNullException.ThrowIfNull(pool);
 
         string[] parts = compact.Split('.');
-
         if(parts.Length != 3)
         {
             throw new FormatException(
@@ -42,7 +41,6 @@ public static class JwsParsing
         string protectedEncoded = parts[0];
         string payloadEncoded = parts[1];
         string signatureEncoded = parts[2];
-
         if(string.IsNullOrEmpty(protectedEncoded))
         {
             throw new FormatException("Protected header segment must not be empty.");
@@ -54,8 +52,7 @@ public static class JwsParsing
         }
 
         using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(protectedEncoded, pool);
-        IReadOnlyDictionary<string, object> protectedHeader = headerDeserializer(headerBytesOwner.Memory.Span);
-
+        var protectedHeader = new UnverifiedJwtHeader(headerDeserializer(headerBytesOwner.Memory.Span));
         bool isDetached = string.IsNullOrEmpty(payloadEncoded);
         IMemoryOwner<byte>? payloadOwner = null;
         ReadOnlyMemory<byte> payload;
@@ -71,7 +68,6 @@ public static class JwsParsing
         }
 
         IMemoryOwner<byte> signatureOwner = base64UrlDecoder(signatureEncoded, pool);
-
         var signature = new UnverifiedJwsSignature(
             protectedEncoded,
             protectedHeader,
@@ -115,12 +111,11 @@ public static class JwsParsing
         }
 
         using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(protectedEncoded, pool);
-        IReadOnlyDictionary<string, object> protectedHeader = headerDeserializer(headerBytesOwner.Memory.Span);
+        var protectedHeader = new UnverifiedJwtHeader(headerDeserializer(headerBytesOwner.Memory.Span));
 
         bool isDetached = !jsonObject.TryGetValue("payload", out object? payloadObj);
         IMemoryOwner<byte>? payloadOwner = null;
         ReadOnlyMemory<byte> payload;
-
         if(isDetached || payloadObj is not string payloadEncoded)
         {
             payload = ReadOnlyMemory<byte>.Empty;
@@ -132,11 +127,10 @@ public static class JwsParsing
             payload = payloadOwner.Memory;
         }
 
-        IReadOnlyDictionary<string, object>? unprotectedHeader = null;
-
+        UnverifiedJwtHeader? unprotectedHeader = null;
         if(jsonObject.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object> headerDict)
         {
-            unprotectedHeader = headerDict;
+            unprotectedHeader = new UnverifiedJwtHeader(headerDict);
         }
 
         IMemoryOwner<byte> signatureOwner = base64UrlDecoder(signatureEncoded, pool);
@@ -202,7 +196,6 @@ public static class JwsParsing
         }
 
         var signatures = new List<UnverifiedJwsSignature>();
-
         foreach(object sigObj in signaturesList)
         {
             if(sigObj is not Dictionary<string, object> sigDict)
@@ -221,13 +214,13 @@ public static class JwsParsing
             }
 
             using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(protectedEncoded, pool);
-            IReadOnlyDictionary<string, object> protectedHeader = headerDeserializer(headerBytesOwner.Memory.Span);
+            var protectedHeader = new UnverifiedJwtHeader(headerDeserializer(headerBytesOwner.Memory.Span));
 
-            IReadOnlyDictionary<string, object>? unprotectedHeader = null;
+            UnverifiedJwtHeader? unprotectedHeader = null;
 
             if(sigDict.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object> headerDict)
             {
-                unprotectedHeader = headerDict;
+                unprotectedHeader = new UnverifiedJwtHeader(headerDict);
             }
 
             IMemoryOwner<byte> signatureOwner = base64UrlDecoder(signatureEncoded, pool);
@@ -292,6 +285,7 @@ public static class JwsParsing
                 {
                     message = ParseFlattenedJson(input, base64UrlDecoder, headerDeserializer, jsonDeserializer, pool);
                     format = JoseSerializationFormat.FlattenedJson;
+
                     return true;
                 }
             }
@@ -307,6 +301,7 @@ public static class JwsParsing
                 string compact = Encoding.ASCII.GetString(input);
                 message = ParseCompact(compact, base64UrlDecoder, headerDeserializer, pool);
                 format = JoseSerializationFormat.Compact;
+
                 return true;
             }
             catch

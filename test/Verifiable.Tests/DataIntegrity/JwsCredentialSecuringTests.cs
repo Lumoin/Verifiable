@@ -1,10 +1,8 @@
 using System.Buffers;
-using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Jose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -65,7 +63,7 @@ internal sealed class JwsCredentialSecuringTests
 
         Assert.IsTrue(result.IsValid, "JWS credential verification must succeed.");
         Assert.IsNotNull(result.Credential);
-        Assert.AreEqual(credential.Id, result.Credential!.Id);
+        Assert.AreEqual(credential.Id, result.Credential!.Value.Value.Id);
     }
 
 
@@ -96,7 +94,7 @@ internal sealed class JwsCredentialSecuringTests
 
         Assert.IsTrue(result.IsValid, "JWS message verification must succeed.");
         Assert.IsNotNull(result.Credential);
-        Assert.AreEqual(credential.Id, result.Credential!.Id);
+        Assert.AreEqual(credential.Id, result.Credential!.Value.Value.Id);
     }
 
 
@@ -123,10 +121,10 @@ internal sealed class JwsCredentialSecuringTests
         Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual("EdDSA", header[JwkProperties.Alg].ToString());
-        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[JwkProperties.Typ].ToString());
-        Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, header[JwkProperties.Kid].ToString());
-        Assert.AreEqual(WellKnownMediaTypes.Application.Vc, header[JwkProperties.Cty].ToString());
+        Assert.AreEqual(WellKnownJwaValues.EdDsa, header[WellKnownJwkMemberNames.Alg].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[WellKnownJoseHeaderNames.Typ].ToString());
+        Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, header[WellKnownJwkMemberNames.Kid].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Application.Vc, header[WellKnownJoseHeaderNames.Cty].ToString());
     }
 
 
@@ -246,7 +244,7 @@ internal sealed class JwsCredentialSecuringTests
         Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcLdJwt, header[JwkProperties.Typ].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcLdJwt, header[WellKnownJoseHeaderNames.Typ].ToString());
     }
 
 
@@ -274,7 +272,7 @@ internal sealed class JwsCredentialSecuringTests
         Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual(WellKnownMediaTypes.Application.Vp, header[JwkProperties.Cty].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Application.Vp, header[WellKnownJoseHeaderNames.Cty].ToString());
     }
 
 

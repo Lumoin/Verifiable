@@ -24,26 +24,6 @@ namespace Verifiable.Core.Model.Dcql;
 public record ClaimsQuery
 {
     /// <summary>
-    /// The JSON property name for <see cref="Id"/>.
-    /// </summary>
-    public const string IdPropertyName = "id";
-
-    /// <summary>
-    /// The JSON property name for <see cref="Path"/>.
-    /// </summary>
-    public const string PathPropertyName = "path";
-
-    /// <summary>
-    /// The JSON property name for <see cref="Values"/>.
-    /// </summary>
-    public const string ValuesPropertyName = "values";
-
-    /// <summary>
-    /// The JSON property name for <see cref="IntentToRetain"/>.
-    /// </summary>
-    public const string IntentToRetainPropertyName = "intent_to_retain";
-
-    /// <summary>
     /// Optional identifier for referencing in claim sets. Defaults to the path string.
     /// </summary>
     public string? Id { get; init; }

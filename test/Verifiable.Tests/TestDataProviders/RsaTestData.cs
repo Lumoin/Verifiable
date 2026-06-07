@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.DataProviders

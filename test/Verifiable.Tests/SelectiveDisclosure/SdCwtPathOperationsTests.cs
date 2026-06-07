@@ -1,10 +1,10 @@
-﻿using System.Formats.Cbor;
+using System.Diagnostics.CodeAnalysis;
+using System.Formats.Cbor;
 using System.Text;
 using Verifiable.Cbor;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.JCose.Sd;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
@@ -20,6 +20,13 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// use JsonElement values which are appropriate for JSON serialization.
 /// </para>
 /// </remarks>
+[SuppressMessage(
+    "Reliability", "CA2000",
+    Justification =
+        "Tests construct Salt instances via TestSalts.FromBytes and pass them to " +
+        "SdDisclosure factory methods which take ownership; disclosures are explicitly " +
+        "disposed via using declarations or try/finally blocks. The analyzer cannot " +
+        "see ownership transfer through factory methods.")]
 [TestClass]
 internal sealed class SdCwtPathOperationsTests
 {
@@ -43,7 +50,7 @@ internal sealed class SdCwtPathOperationsTests
     public void ExtractPathsFindsDisclosuresInRootSdArray()
     {
         //A minimal SD-CWT structure.
-        SdDisclosure nameDisclosure = CreateCborDisclosure("salt1", "name", "John Doe");
+        using SdDisclosure nameDisclosure = CreateCborDisclosure("salt1", "name", "John Doe");
 
         byte[] disclosureCbor = SdCwtSerializer.SerializeDisclosure(nameDisclosure);
         byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(disclosureCbor, HashAlgorithm);
@@ -51,12 +58,12 @@ internal sealed class SdCwtPathOperationsTests
 
         byte[] payload = CreateCwtPayloadWithDigests([digestBase64]);
         SdCwtMessage message = CreateMinimalSdCwt(payload, [nameDisclosure]);
-        
+
         IReadOnlyDictionary<SdDisclosure, CredentialPath> paths = SdCwtPathExtraction.ExtractPaths(
             message,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared);
-        
+
         Assert.HasCount(1, paths);
         Assert.IsTrue(paths.ContainsKey(nameDisclosure));
         Assert.AreEqual(CredentialPath.Root.Append("name"), paths[nameDisclosure]);
@@ -65,34 +72,34 @@ internal sealed class SdCwtPathOperationsTests
 
     [TestMethod]
     public void ExtractAllPathsIncludesVisiblePaths()
-    {        
+    {
         byte[] payload = CreateSimpleCwtPayload();
         SdCwtMessage message = CreateMinimalSdCwt(payload, []);
-        
+
         IReadOnlySet<CredentialPath> paths = SdCwtPathExtraction.ExtractAllPaths(message, SensitiveMemoryPool<byte>.Shared);
-        
+
         Assert.Contains(CredentialPath.Root, paths);
     }
 
 
     [TestMethod]
     public void ExtractMandatoryPathsReturnsVisibleClaims()
-    {        
+    {
         byte[] payload = CreateSimpleCwtPayload();
         SdCwtMessage message = CreateMinimalSdCwt(payload, []);
-        
+
         IReadOnlySet<CredentialPath> mandatory = SdCwtPathExtraction.ExtractMandatoryPaths(
             message,
             SensitiveMemoryPool<byte>.Shared);
-        
+
         Assert.Contains(CredentialPath.Root, mandatory);
     }
 
 
     [TestMethod]
     public void CreateLatticeReturnsConfiguredLattice()
-    {        
-        SdDisclosure disclosure = CreateCborDisclosure("salt", "selective", "value");
+    {
+        using SdDisclosure disclosure = CreateCborDisclosure("salt", "selective", "value");
 
         byte[] disclosureCbor = SdCwtSerializer.SerializeDisclosure(disclosure);
         byte[] digest = SdCwtSerializer.ComputeDisclosureDigest(disclosureCbor, HashAlgorithm);
@@ -100,7 +107,7 @@ internal sealed class SdCwtPathOperationsTests
 
         byte[] payload = CreateCwtPayloadWithDigests([digestBase64]);
         SdCwtMessage message = CreateMinimalSdCwt(payload, [disclosure]);
-        
+
         PathLattice lattice = SdCwtPathExtraction.CreateLattice(
             message,
             TestSetup.Base64UrlEncoder,
@@ -112,7 +119,7 @@ internal sealed class SdCwtPathOperationsTests
 
     [TestMethod]
     public void ExtractPathsWithEmptyDisclosuresReturnsEmpty()
-    {        
+    {
         byte[] payload = CreateSimpleCwtPayload();
         SdCwtMessage message = CreateMinimalSdCwt(payload, []);
 
@@ -121,16 +128,16 @@ internal sealed class SdCwtPathOperationsTests
             message,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared);
-        
+
         Assert.HasCount(0, paths);
     }
 
 
     [TestMethod]
     public void ExtractPathsWithMultipleDisclosuresReturnsAll()
-    {        
-        SdDisclosure disclosure1 = CreateCborDisclosure("salt1", "given_name", "Alice");
-        SdDisclosure disclosure2 = CreateCborDisclosure("salt2", "family_name", "Smith");
+    {
+        using SdDisclosure disclosure1 = CreateCborDisclosure("salt1", "given_name", "Alice");
+        using SdDisclosure disclosure2 = CreateCborDisclosure("salt2", "family_name", "Smith");
 
         byte[] cbor1 = SdCwtSerializer.SerializeDisclosure(disclosure1);
         byte[] cbor2 = SdCwtSerializer.SerializeDisclosure(disclosure2);
@@ -139,12 +146,12 @@ internal sealed class SdCwtPathOperationsTests
 
         byte[] payload = CreateCwtPayloadWithMultipleDigests([digest1, digest2]);
         SdCwtMessage message = CreateMinimalSdCwt(payload, [disclosure1, disclosure2]);
-        
+
         IReadOnlyDictionary<SdDisclosure, CredentialPath> paths = SdCwtPathExtraction.ExtractPaths(
             message,
             TestSetup.Base64UrlEncoder,
             SensitiveMemoryPool<byte>.Shared);
-        
+
         Assert.HasCount(2, paths);
         Assert.AreEqual(CredentialPath.Root.Append("given_name"), paths[disclosure1]);
         Assert.AreEqual(CredentialPath.Root.Append("family_name"), paths[disclosure2]);
@@ -161,7 +168,7 @@ internal sealed class SdCwtPathOperationsTests
     private static SdDisclosure CreateCborDisclosure(string salt, string claimName, object claimValue)
     {
         return SdDisclosure.CreateProperty(
-            Encoding.UTF8.GetBytes(salt),
+            TestSalts.FromBytes(Encoding.UTF8.GetBytes(salt)),
             claimName,
             claimValue);
     }
@@ -188,7 +195,7 @@ internal sealed class SdCwtPathOperationsTests
     {
         var writer = new CborWriter(CborConformanceMode.Canonical);
         writer.WriteStartMap(1);
-        writer.WriteInt32(WellKnownCwtClaims.Iss);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString(TestIssuer);
         writer.WriteEndMap();
         return writer.Encode();
@@ -201,7 +208,7 @@ internal sealed class SdCwtPathOperationsTests
         writer.WriteStartMap(3);
 
         //iss claim.
-        writer.WriteInt32(WellKnownCwtClaims.Iss);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString(TestIssuer);
 
         //_sd array.
@@ -228,7 +235,7 @@ internal sealed class SdCwtPathOperationsTests
         writer.WriteStartMap(2);
 
         //iss claim.
-        writer.WriteInt32(WellKnownCwtClaims.Iss);
+        writer.WriteInt32(WellKnownCwtClaimNames.Iss);
         writer.WriteTextString(TestIssuer);
 
         //_sd array.

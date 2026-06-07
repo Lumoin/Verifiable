@@ -23,7 +23,7 @@ internal static class JsonSerializerOptionsExtensions
     };
 
 
-    public static JsonSerializerOptions ApplyVerifiableDefaults(this JsonSerializerOptions options)
+    public static JsonSerializerOptions ApplyVerifiableDefaults(this JsonSerializerOptions options, bool requireDcqlMeta = true)
     {
         options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         options.PropertyNamingPolicy = new DefaultNamingNamingPolicy(Array.AsReadOnly([JsonNamingPolicy.CamelCase]));
@@ -46,14 +46,23 @@ internal static class JsonSerializerOptionsExtensions
         //Verifiable Credential converters.
         options.Converters.Add(new IssuerConverter());
         options.Converters.Add(new CredentialSubjectConverter());
+        options.Converters.Add(new VerifiableCredentialConverter());
+        options.Converters.Add(new VerifiablePresentationConverter());
+        options.Converters.Add(new EnvelopedVerifiablePresentationConverter());
 
-        //DCQL converters.
+        //DCQL converters. CredentialQueryConverter enforces the OID4VP §6.1 'meta'
+        //requirement by default; converter-fidelity tests pass requireDcqlMeta:false.
         options.Converters.Add(new DcqlQueryConverter());
-        options.Converters.Add(new CredentialQueryConverter());
+        options.Converters.Add(new CredentialQueryConverter(requireDcqlMeta));
         options.Converters.Add(new CredentialQueryMetaConverter());
         options.Converters.Add(new ClaimsQueryConverter());
         options.Converters.Add(new TrustedAuthoritiesQueryConverter());
         options.Converters.Add(new CredentialSetQueryConverter());
+
+        //OID4VP client_metadata (Verifier metadata) converters — snake_case wire names
+        //and correct shape (bare vp_formats_supported map, jwks as a JSON object).
+        options.Converters.Add(new VpFormatsSupportedConverter());
+        options.Converters.Add(new VerifierClientMetadataConverter());
 
         //Status list converters.
         options.Converters.Add(new StatusListJsonConverter(SensitiveMemoryPool<byte>.Shared));

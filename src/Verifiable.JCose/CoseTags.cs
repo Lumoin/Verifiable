@@ -1,4 +1,4 @@
-﻿namespace Verifiable.JCose;
+namespace Verifiable.JCose;
 
 /// <summary>
 /// CBOR tags for COSE structures as defined in

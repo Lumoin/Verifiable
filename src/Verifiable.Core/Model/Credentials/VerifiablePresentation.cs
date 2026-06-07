@@ -1,4 +1,3 @@
-﻿using System.Collections.Generic;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.DataIntegrity;
 
@@ -22,6 +21,13 @@ namespace Verifiable.Core.Model.Credentials
     /// <para>
     /// Certain types of presentations might contain data synthesized from, but not containing,
     /// the original Verifiable Credentials (for example, zero-knowledge proofs).
+    /// </para>
+    /// <para>
+    /// This type is the UNSECURED presentation — the input to a securing mechanism.
+    /// An embedded Data Integrity proof produces a
+    /// <see cref="DataIntegrity.DataIntegritySecuredPresentation"/> (this type plus a
+    /// <c>proof</c> member); an enveloping mechanism (JOSE, COSE) carries this object as
+    /// a payload referenced from an <see cref="EnvelopedVerifiablePresentation"/>.
     /// </para>
     /// <para>
     /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#presentations">
@@ -103,20 +109,22 @@ namespace Verifiable.Core.Model.Credentials
         public List<VerifiableCredential>? VerifiableCredential { get; set; }
 
         /// <summary>
-        /// One or more cryptographic proofs authenticating the presentation.
+        /// Enveloping-secured credentials presented alongside (or instead of) the
+        /// JSON-LD credentials in <see cref="VerifiableCredential"/>.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The presentation proof typically uses the <c>authentication</c> verification
-        /// relationship from the holder's controlled identifier document. It should include
-        /// any challenge issued by the verifier to prevent replay attacks.
+        /// An enveloping-secured credential (JOSE, COSE, SD-JWT, SD-CWT) is carried as an
+        /// <see cref="Credentials.EnvelopedVerifiableCredential"/> whose <c>id</c> is a
+        /// <c>data:</c> URL. On the wire both this list and <see cref="VerifiableCredential"/>
+        /// are emitted into the single <c>verifiableCredential</c> array; the serializer
+        /// discriminates each element on read by its <c>type</c> and <c>data:</c> <c>id</c>.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#securing-mechanisms">
-        /// VC Data Model 2.0 §4.12 Securing Mechanisms</see>.
+        /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#presentations">VC-DM 2.0 §3.3 Presentations</see>.
         /// </para>
         /// </remarks>
-        public List<DataIntegrityProof>? Proof { get; set; }
+        public List<EnvelopedVerifiableCredential>? EnvelopedVerifiableCredential { get; set; }
 
         /// <summary>
         /// Terms of use that apply to this presentation.

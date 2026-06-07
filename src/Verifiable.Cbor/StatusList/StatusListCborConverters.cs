@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Formats.Cbor;
 using Verifiable.Core.StatusList;

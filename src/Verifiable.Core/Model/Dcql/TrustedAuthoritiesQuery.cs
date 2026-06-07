@@ -16,17 +16,9 @@ namespace Verifiable.Core.Model.Dcql;
 public record TrustedAuthoritiesQuery
 {
     /// <summary>
-    /// The JSON property name for <see cref="Type"/>.
-    /// </summary>
-    public const string TypePropertyName = "type";
-
-    /// <summary>
-    /// The JSON property name for <see cref="Values"/>.
-    /// </summary>
-    public const string ValuesPropertyName = "values";
-
-    /// <summary>
-    /// The type of authority identifier (e.g., "aki" for Authority Key Identifier).
+    /// The authority identification scheme — one of the registered values on
+    /// <see cref="DcqlTrustedAuthorityTypes"/> (<c>aki</c>, <c>etsi_tl</c>,
+    /// <c>openid_federation</c>) per OID4VP 1.0 §6.1.1.
     /// </summary>
     public required string Type { get; init; }
 

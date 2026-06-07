@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Core.Model.Common
+namespace Verifiable.Core.Model.Common
 {
     /// <summary>
     /// Represents the target representation format for DID document production according to DID Core specification.

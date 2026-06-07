@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Core;
 
 namespace Verifiable.Core.Resolvers;
 
@@ -9,6 +10,13 @@ namespace Verifiable.Core.Resolvers;
 /// </summary>
 /// <param name="did">The DID string to resolve.</param>
 /// <param name="options">The resolution options.</param>
+/// <param name="context">
+/// The per-operation <see cref="ExchangeContext"/>. A method resolver that dereferences
+/// a URL over the network (rather than returning a <see cref="DidResolutionKind.DocumentUrl"/>
+/// for the caller to fetch) routes it through the guarded outbound fetch, which reads the
+/// SSRF <c>OutboundFetchPolicy</c> off this context — so the policy reaches the resolver as
+/// an explicit per-call argument rather than a captured closure.
+/// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>The resolution result.</returns>
 /// <remarks>
@@ -25,6 +33,7 @@ namespace Verifiable.Core.Resolvers;
 public delegate ValueTask<DidResolutionResult> DidMethodResolverDelegate(
     string did,
     DidResolutionOptions options,
+    ExchangeContext context,
     CancellationToken cancellationToken);
 
 /// <summary>
@@ -35,6 +44,11 @@ public delegate ValueTask<DidResolutionResult> DidMethodResolverDelegate(
 /// <param name="path">The path component of the DID URL, or <see langword="null"/>.</param>
 /// <param name="query">The query component of the DID URL, or <see langword="null"/>.</param>
 /// <param name="options">The dereferencing options.</param>
+/// <param name="context">
+/// The per-operation <see cref="ExchangeContext"/> carrying the SSRF
+/// <c>OutboundFetchPolicy</c> for any network dereference. See
+/// <see cref="DidMethodResolverDelegate"/>.
+/// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>The dereferencing result.</returns>
 public delegate ValueTask<DidDereferencingResult> DidMethodDereferencerDelegate(
@@ -42,6 +56,7 @@ public delegate ValueTask<DidDereferencingResult> DidMethodDereferencerDelegate(
     string? path,
     string? query,
     DidDereferencingOptions options,
+    ExchangeContext context,
     CancellationToken cancellationToken);
 
 /// <summary>

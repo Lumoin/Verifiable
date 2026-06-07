@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Core.Model.Dcql;
+namespace Verifiable.Core.Model.Dcql;
 
 /// <summary>
 /// Well-known credential format identifiers defined in the OpenID for Verifiable

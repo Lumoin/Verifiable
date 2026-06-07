@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;

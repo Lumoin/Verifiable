@@ -67,8 +67,8 @@ internal class HwTpmCapabilityTests
 
 
     [TestMethod]
-    public void DumpTpmFixedProperties()
-    {        
+    public async Task DumpTpmFixedProperties()
+    {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
 
@@ -78,13 +78,13 @@ internal class HwTpmCapabilityTests
         TestContext.WriteLine("");
 
         //PT_FIXED starts at 0x100.
-        DumpTpmProperties(Tpm, pool, registry, 0x100);
+        await DumpTpmProperties(Tpm, pool, registry, 0x100).ConfigureAwait(false);
     }
 
 
     [TestMethod]
-    public void DumpTpmVariableProperties()
-    {        
+    public async Task DumpTpmVariableProperties()
+    {
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
 
@@ -94,12 +94,12 @@ internal class HwTpmCapabilityTests
         TestContext.WriteLine("");
 
         //PT_VAR starts at 0x200.
-        DumpTpmProperties(Tpm, pool, registry, 0x200);
+        await DumpTpmProperties(Tpm, pool, registry, 0x200).ConfigureAwait(false);
     }
 
 
     [TestMethod]
-    public void DumpSupportedAlgorithms()
+    public async Task DumpSupportedAlgorithms()
     {        
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -110,8 +110,8 @@ internal class HwTpmCapabilityTests
         TestContext.WriteLine("");
 
         var input = GetCapabilityInput.ForAlgorithms();
-        TpmResult<GetCapabilityResponse> result = TpmCommandExecutor.Execute<GetCapabilityResponse>(
-            Tpm, input, [], pool, registry);
+        TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+            Tpm, input, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(result, "GetCapability(ALGS)");
 
@@ -130,7 +130,7 @@ internal class HwTpmCapabilityTests
 
 
     [TestMethod]
-    public void DumpSupportedEccCurves()
+    public async Task DumpSupportedEccCurves()
     {
         using TpmDevice device = TpmDevice.Open();
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
@@ -143,8 +143,8 @@ internal class HwTpmCapabilityTests
 
         var input = GetCapabilityInput.ForEccCurves();
 
-        TpmResult<GetCapabilityResponse> result = TpmCommandExecutor.Execute<GetCapabilityResponse>(
-            device, input, [], pool, registry);
+        TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+            device, input, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(result, "GetCapability(ECC_CURVES)");
 
@@ -161,7 +161,7 @@ internal class HwTpmCapabilityTests
 
 
     [TestMethod]
-    public void DumpPcrBanks()
+    public async Task DumpPcrBanks()
     {        
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -172,8 +172,8 @@ internal class HwTpmCapabilityTests
         TestContext.WriteLine("");
 
         var input = GetCapabilityInput.ForPcrs();
-        TpmResult<GetCapabilityResponse> result = TpmCommandExecutor.Execute<GetCapabilityResponse>(
-            Tpm, input, [], pool, registry);
+        TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+            Tpm, input, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(result, "GetCapability(PCRS)");
 
@@ -189,7 +189,7 @@ internal class HwTpmCapabilityTests
     }
 
     [TestMethod]
-    public void DumpPcrValues()
+    public async Task DumpPcrValues()
     {
         using TpmDevice device = TpmDevice.Open();
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
@@ -213,7 +213,7 @@ internal class HwTpmCapabilityTests
         TestContext.WriteLine("");
 
         //Read all 24 PCRs with pagination.
-        var allResults = ReadAllPcrs(device, pool, registry, TpmAlgIdConstants.TPM_ALG_SHA256, 24);
+        var allResults = await ReadAllPcrs(device, pool, registry, TpmAlgIdConstants.TPM_ALG_SHA256, 24).ConfigureAwait(false);
 
         if(allResults.Count > 0)
         {
@@ -233,7 +233,7 @@ internal class HwTpmCapabilityTests
 
 
     [TestMethod]
-    public void DumpAllPcrBanksAndValues()
+    public async Task DumpAllPcrBanksAndValues()
     {        
         MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
         var registry = new TpmResponseRegistry();
@@ -246,8 +246,8 @@ internal class HwTpmCapabilityTests
 
         //First, get the PCR allocation to see which banks exist.
         var capInput = GetCapabilityInput.ForPcrs();
-        TpmResult<GetCapabilityResponse> capResult = TpmCommandExecutor.Execute<GetCapabilityResponse>(
-            Tpm, capInput, [], pool, registry);
+        TpmResult<GetCapabilityResponse> capResult = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+            Tpm, capInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(capResult, "GetCapability(PCRS)");
 
@@ -263,7 +263,7 @@ internal class HwTpmCapabilityTests
         {
             TestContext.WriteLine($"--- {selection.HashAlgorithm} Bank ---");
 
-            var allResults = ReadAllPcrs(Tpm, pool, registry, (TpmAlgIdConstants)selection.HashAlgorithm, 24);
+            var allResults = await ReadAllPcrs(Tpm, pool, registry, (TpmAlgIdConstants)selection.HashAlgorithm, 24).ConfigureAwait(false);
 
             if(allResults.Count > 0)
             {
@@ -298,7 +298,7 @@ internal class HwTpmCapabilityTests
     /// <param name="hashAlgorithm">The hash algorithm for the PCR bank.</param>
     /// <param name="pcrCount">The number of PCRs to read (starting from 0).</param>
     /// <returns>A list of tuples containing PCR index, digest bytes, and update counter.</returns>
-    private List<(int PcrIndex, byte[] Digest, uint UpdateCounter)> ReadAllPcrs(
+    private async Task<List<(int PcrIndex, byte[] Digest, uint UpdateCounter)>> ReadAllPcrs(
         TpmDevice device,
         MemoryPool<byte> pool,
         TpmResponseRegistry registry,
@@ -327,8 +327,8 @@ internal class HwTpmCapabilityTests
 
             using var input = PcrReadInput.ForPcrs(hashAlgorithm, pcrArray, pool);
 
-            TpmResult<PcrReadResponse> result = TpmCommandExecutor.Execute<PcrReadResponse>(
-                device, input, [], pool, registry);
+            TpmResult<PcrReadResponse> result = await TpmCommandExecutor.ExecuteAsync<PcrReadResponse>(
+                device, input, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             if(!result.IsSuccess)
             {
@@ -374,7 +374,7 @@ internal class HwTpmCapabilityTests
         return results;
     }
 
-    private void DumpTpmProperties(TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint startProperty)
+    private async Task DumpTpmProperties(TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint startProperty)
     {
         uint property = startProperty;
         bool moreData = true;
@@ -383,8 +383,8 @@ internal class HwTpmCapabilityTests
         {
             var input = GetCapabilityInput.ForTpmProperties(property);
 
-            TpmResult<GetCapabilityResponse> result = TpmCommandExecutor.Execute<GetCapabilityResponse>(
-                device, input, [], pool, registry);
+            TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+                device, input, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             AssertUtilities.AssertSuccess(result, $"GetCapability(TPM_PROPERTIES, 0x{property:X})");
 

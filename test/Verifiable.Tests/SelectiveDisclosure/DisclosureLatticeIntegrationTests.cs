@@ -1,6 +1,7 @@
-﻿using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.JCose;
 
-using SelectiveDisclosureCore = Verifiable.Core.SelectiveDisclosure.SelectiveDisclosure;
+using SelectiveDisclosureCore = Verifiable.Core.Model.SelectiveDisclosure.SelectiveDisclosure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -49,13 +50,13 @@ internal sealed class DisclosureLatticeIntegrationTests
         //Simulate SD-JWT scenario with claim names.
         var allClaims = new HashSet<string>
     {
-        "iss", "sub", "iat", "exp",
+        WellKnownJwtClaimNames.Iss, WellKnownJwtClaimNames.Sub, WellKnownJwtClaimNames.Iat, WellKnownJwtClaimNames.Exp,
         "given_name", "family_name", "email", "phone_number",
         "address", "birthdate"
     };
 
         //iss, sub, iat, exp are typically mandatory.
-        var mandatoryClaims = new HashSet<string> { "iss", "sub", "iat", "exp" };
+        var mandatoryClaims = new HashSet<string> { WellKnownJwtClaimNames.Iss, WellKnownJwtClaimNames.Sub, WellKnownJwtClaimNames.Iat, WellKnownJwtClaimNames.Exp };
 
         var lattice = new SetDisclosureLattice<string>(allClaims, mandatoryClaims);
 
@@ -71,7 +72,7 @@ internal sealed class DisclosureLatticeIntegrationTests
             userExclusions);
 
         Assert.IsTrue(result.SatisfiesRequirements, "All requested claims are available and not excluded.");
-        Assert.Contains("iss", result.SelectedClaims, "Mandatory claim iss must be included.");
+        Assert.Contains(WellKnownJwtClaimNames.Iss, result.SelectedClaims, "Mandatory claim iss must be included.");
         Assert.Contains("given_name", result.SelectedClaims, "Requested claim given_name must be included.");
         Assert.DoesNotContain("phone_number", result.SelectedClaims, "Excluded claim phone_number must not be included.");
     }
@@ -105,13 +106,13 @@ internal sealed class DisclosureLatticeIntegrationTests
     [TestMethod]
     public void UserCannotExcludeMandatoryClaims()
     {
-        var allClaims = new HashSet<string> { "iss", "sub", "name", "email" };
-        var mandatoryClaims = new HashSet<string> { "iss", "sub" };
+        var allClaims = new HashSet<string> { WellKnownJwtClaimNames.Iss, WellKnownJwtClaimNames.Sub, "name", "email" };
+        var mandatoryClaims = new HashSet<string> { WellKnownJwtClaimNames.Iss, WellKnownJwtClaimNames.Sub };
 
         var lattice = new SetDisclosureLattice<string>(allClaims, mandatoryClaims);
 
         //User tries to exclude mandatory claim.
-        var userExclusions = new HashSet<string> { "iss", "email" };
+        var userExclusions = new HashSet<string> { WellKnownJwtClaimNames.Iss, "email" };
 
         var result = SelectiveDisclosureCore.ComputeOptimalDisclosure(
             lattice,
@@ -119,8 +120,8 @@ internal sealed class DisclosureLatticeIntegrationTests
             userExclusions: userExclusions);
 
         Assert.IsTrue(result.SatisfiesRequirements, "No verifier requirements means satisfied.");
-        Assert.Contains("iss", result.SelectedClaims, "Mandatory claim iss cannot be excluded.");
-        Assert.Contains("sub", result.SelectedClaims, "Mandatory claim sub must be included.");
+        Assert.Contains(WellKnownJwtClaimNames.Iss, result.SelectedClaims, "Mandatory claim iss cannot be excluded.");
+        Assert.Contains(WellKnownJwtClaimNames.Sub, result.SelectedClaims, "Mandatory claim sub must be included.");
         Assert.DoesNotContain("email", result.SelectedClaims, "Non-mandatory email can be excluded.");
     }
 }

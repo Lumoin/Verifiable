@@ -1,4 +1,6 @@
-﻿using System.Text.Json;
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
 
 namespace Verifiable.Json;
 
@@ -28,6 +30,12 @@ internal static class JsonElementConversion
     /// <c>Service.AdditionalData</c>. Null values are stored as null references within the
     /// collections, which <see cref="object"/> permits.
     /// </para>
+    /// <para>
+    /// Objects and arrays are materialized <strong>iteratively</strong> with an explicit
+    /// work <see cref="Stack{T}"/> rather than by recursion, so the conversion uses bounded
+    /// call-stack space regardless of how deeply the input nests — defending against a
+    /// stack-overflow on adversarial input independently of the parser's depth limit.
+    /// </para>
     /// </remarks>
     internal static object? Convert(JsonElement element)
     {
@@ -38,8 +46,7 @@ internal static class JsonElementConversion
             JsonValueKind.False => false,
             JsonValueKind.Null => null,
             JsonValueKind.Number => NarrowNumber(element),
-            JsonValueKind.Object => ConvertObject(element),
-            JsonValueKind.Array => ConvertArray(element),
+            JsonValueKind.Object or JsonValueKind.Array => ConvertContainer(element),
             _ => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}.")
         };
     }
@@ -68,26 +75,120 @@ internal static class JsonElementConversion
     }
 
 
-    private static Dictionary<string, object> ConvertObject(JsonElement element)
+    //Materializes an object/array (and everything nested within) using an explicit
+    //stack. Each frame owns a container being filled and an enumerator over its
+    //source element's children; a child object/array creates its container, links it
+    //into the parent, and is pushed as a new frame, while scalars are added in place.
+    private static object ConvertContainer(JsonElement root)
     {
-        var dict = new Dictionary<string, object>();
-        foreach(JsonProperty prop in element.EnumerateObject())
+        object rootContainer = NewContainer(root.ValueKind);
+
+        var stack = new Stack<Frame>();
+        stack.Push(new Frame(root, rootContainer));
+
+        while(stack.Count > 0)
         {
-            dict[prop.Name] = Convert(prop.Value)!;
+            Frame frame = stack.Peek();
+            if(!frame.TryGetNext(out string? name, out JsonElement value))
+            {
+                stack.Pop();
+                continue;
+            }
+
+            if(value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+            {
+                object childContainer = NewContainer(value.ValueKind);
+                frame.Add(name, childContainer);
+                stack.Push(new Frame(value, childContainer));
+            }
+            else
+            {
+                frame.Add(name, ConvertScalar(value));
+            }
         }
 
-        return dict;
+        return rootContainer;
     }
 
 
-    private static List<object> ConvertArray(JsonElement element)
+    private static object NewContainer(JsonValueKind kind) =>
+        kind == JsonValueKind.Object ? new Dictionary<string, object>() : new List<object>();
+
+
+    private static object? ConvertScalar(JsonElement element) => element.ValueKind switch
     {
-        var list = new List<object>();
-        foreach(JsonElement item in element.EnumerateArray())
+        JsonValueKind.String => element.GetString(),
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.Null => null,
+        JsonValueKind.Number => NarrowNumber(element),
+        _ => throw new NotSupportedException($"Unsupported JSON value kind: {element.ValueKind}.")
+    };
+
+
+    //A mutable work item: the container being filled plus the (struct) enumerator over
+    //its source children. Held as a class so the enumerator mutates in place across
+    //Stack.Peek() calls — a struct frame would be copied and lose enumerator progress.
+    private sealed class Frame
+    {
+        private readonly object container;
+        private readonly bool isObject;
+        private JsonElement.ObjectEnumerator objectEnumerator;
+        private JsonElement.ArrayEnumerator arrayEnumerator;
+
+        public Frame(JsonElement element, object container)
         {
-            list.Add(Convert(item)!);
+            this.container = container;
+            isObject = element.ValueKind == JsonValueKind.Object;
+            if(isObject)
+            {
+                objectEnumerator = element.EnumerateObject();
+            }
+            else
+            {
+                arrayEnumerator = element.EnumerateArray();
+            }
         }
 
-        return list;
+
+        public bool TryGetNext(out string? name, out JsonElement value)
+        {
+            if(isObject)
+            {
+                if(objectEnumerator.MoveNext())
+                {
+                    JsonProperty property = objectEnumerator.Current;
+                    name = property.Name;
+                    value = property.Value;
+
+                    return true;
+                }
+            }
+            else if(arrayEnumerator.MoveNext())
+            {
+                name = null;
+                value = arrayEnumerator.Current;
+
+                return true;
+            }
+
+            name = null;
+            value = default;
+
+            return false;
+        }
+
+
+        public void Add(string? name, object? value)
+        {
+            if(isObject)
+            {
+                ((Dictionary<string, object>)container)[name!] = value!;
+            }
+            else
+            {
+                ((List<object>)container).Add(value!);
+            }
+        }
     }
 }

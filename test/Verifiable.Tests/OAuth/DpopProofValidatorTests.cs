@@ -1,0 +1,419 @@
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.BouncyCastle;
+using Verifiable.Cryptography;
+using Verifiable.JCose;
+using Verifiable.Microsoft;
+using Verifiable.OAuth.Dpop;
+using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.TestInfrastructure;
+
+namespace Verifiable.Tests.OAuth;
+
+[TestClass]
+internal sealed class DpopProofValidatorTests
+{
+    public TestContext TestContext { get; set; } = null!;
+
+    private static readonly DateTimeOffset NowInstant = new(2026, 5, 13, 12, 0, 0, TimeSpan.Zero);
+    private static readonly TimeSpan IatSkew = TimeSpan.FromSeconds(30);
+    private const string DefaultMethod = "POST";
+    private const string DefaultUrl = "https://as.example.com/token";
+
+    private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
+
+
+    [TestMethod]
+    public async Task ValidateAsyncSucceedsOnFreshProof()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"Validation must succeed; got {result.FailureReason}.");
+        Assert.IsNotNull(result.Claims);
+        Assert.IsNotNull(result.JwkThumbprint);
+        Assert.AreEqual(
+            DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.Es256,
+                TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared),
+            result.JwkThumbprint);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsMalformedProof()
+    {
+        DpopProofValidationResult result = await ValidateAsync("not-a-jws").ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.Malformed, result.FailureReason);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsWrongTyp()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        //Build with a non-DPoP typ in the header by hand-spliced header dict.
+        string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
+            header => new Dictionary<string, object>(header)
+            {
+                [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
+            }).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.InvalidTyp, result.FailureReason);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsUnacceptableAlg()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        //Force header to advertise a non-ECDSA alg. The signature was made with
+        //ES256 but the header lies — validator should reject on alg shape before
+        //attempting signature verification.
+        string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
+            header => new Dictionary<string, object>(header)
+            {
+                [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Hs256
+            }).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.InvalidAlg, result.FailureReason);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsMissingJwkInHeader()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
+            header =>
+            {
+                Dictionary<string, object> tampered = new(header);
+                tampered.Remove(WellKnownJoseHeaderNames.Jwk);
+                return tampered;
+            }).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.IsTrue(
+            result.FailureReason is DpopProofValidationFailureReason.InvalidJwk
+                or DpopProofValidationFailureReason.Malformed,
+            $"Expected InvalidJwk or Malformed; got {result.FailureReason}.");
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsJwkContainingPrivateKey()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        //RFC 9449 §4.2: the jwk header MUST be a public key. Splice an EC private
+        //scalar ('d') into the jwk; the validator rejects it before signature checks.
+        string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
+            header =>
+            {
+                Dictionary<string, object> tampered = new(header);
+                var jwk = new Dictionary<string, object>(
+                    (IReadOnlyDictionary<string, object>)tampered[WellKnownJoseHeaderNames.Jwk],
+                    StringComparer.Ordinal)
+                {
+                    [WellKnownJwkMemberNames.D] = "cHJpdmF0ZS1zY2FsYXI"
+                };
+                tampered[WellKnownJoseHeaderNames.Jwk] = jwk;
+
+                return tampered;
+            }).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.JwkContainsPrivateKey, result.FailureReason);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsBadSignature()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false);
+
+        //Tamper one byte of the signature by flipping a middle character of the
+        //base64url signature segment. The middle of a base64url string carries
+        //full 6-bit groups, so any base64url character substitutes to another
+        //base64url character without breaking decode validity -- the resulting
+        //bytes verify false, which is what this test asserts. The previous
+        //last-character substitution was non-deterministic: only A/Q/g/w are
+        //valid as the trailing single-byte position, so randomly-generated
+        //signatures ending in 'A' had no valid neighbour and threw
+        //FormatException at decode time.
+        int signatureStart = proof.LastIndexOf('.') + 1;
+        int tamperIndex = signatureStart + (proof.Length - signatureStart) / 2;
+        char tampered = proof[tamperIndex] == 'A' ? 'B' : 'A';
+        string tamperedProof = string.Concat(
+            proof.AsSpan(0, tamperIndex), tampered.ToString(), proof.AsSpan(tamperIndex + 1));
+
+        DpopProofValidationResult result = await ValidateAsync(tamperedProof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.SignatureFailed, result.FailureReason);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsWrongHtm()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofAsync(key, BuildClaims() with { Htm = "GET" }).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.HtmMismatch, result.FailureReason);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsWrongHtu()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofAsync(key, BuildClaims() with { Htu = "https://attacker.example.com/token" }).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.HtuMismatch, result.FailureReason);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsOldIat()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        DpopProofClaims claims = BuildClaims() with { Iat = NowInstant - TimeSpan.FromMinutes(5) };
+        string proof = await BuildProofAsync(key, claims).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.IatOutOfWindow, result.FailureReason);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsFutureIat()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        DpopProofClaims claims = BuildClaims() with { Iat = NowInstant + TimeSpan.FromMinutes(5) };
+        string proof = await BuildProofAsync(key, claims).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.IatOutOfWindow, result.FailureReason);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsMissingNonceWhenRequired()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(
+            proof, expectedNonce: "expected-nonce", nonceRequired: true).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.NonceMissing, result.FailureReason);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsMismatchedNonce()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofAsync(key, BuildClaims() with { Nonce = "wrong-nonce" }).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(
+            proof, expectedNonce: "expected-nonce", nonceRequired: true).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.NonceMismatch, result.FailureReason);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncRejectsMismatchedAth()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofAsync(key, BuildClaims() with { Ath = "wrong-ath" }).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(
+            proof, accessToken: "presented-token").ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.AthMismatch, result.FailureReason);
+    }
+
+
+    //RFC 9449 §4.2 non-ECDSA algorithms — proof built with RS256 / PS256 /
+    //EdDSA must pass validation when paired with the matching verification
+    //delegate. End-to-end shape: real key material, real construction with
+    //the correct signing function, real validation with the correct
+    //verification function.
+
+    [TestMethod]
+    public async Task ValidateAsyncSucceedsOnFreshProofWithRs256()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Rs256);
+
+        string proof = await DpopProofConstruction.BuildAsync(
+            BuildClaims(),
+            key,
+            TestSetup.Base64UrlEncoder,
+            DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctions.SignRsaSha256Pkcs1Async,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(
+            proof, verifier: MicrosoftCryptographicFunctions.VerifyRsaSha256Pkcs1Async).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"RS256 proof validation must succeed; got {result.FailureReason}.");
+        Assert.AreEqual(
+            DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.Rs256,
+                TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared),
+            result.JwkThumbprint);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncSucceedsOnFreshProofWithPs256()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Ps256);
+
+        string proof = await DpopProofConstruction.BuildAsync(
+            BuildClaims(),
+            key,
+            TestSetup.Base64UrlEncoder,
+            DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctions.SignRsaSha256PssAsync,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(
+            proof, verifier: MicrosoftCryptographicFunctions.VerifyRsaSha256PssAsync).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"PS256 proof validation must succeed; got {result.FailureReason}.");
+        Assert.AreEqual(
+            DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.Ps256,
+                TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared),
+            result.JwkThumbprint);
+    }
+
+
+    [TestMethod]
+    public async Task ValidateAsyncSucceedsOnFreshProofWithEdDsa()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.EdDsa);
+
+        string proof = await DpopProofConstruction.BuildAsync(
+            BuildClaims(),
+            key,
+            TestSetup.Base64UrlEncoder,
+            DpopTestSupport.Serializer,
+            BouncyCastleCryptographicFunctions.SignEd25519Async,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(
+            proof, verifier: BouncyCastleCryptographicFunctions.VerifyEd25519Async).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"EdDSA proof validation must succeed; got {result.FailureReason}.");
+        Assert.AreEqual(
+            DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.EdDsa,
+                TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared),
+            result.JwkThumbprint);
+    }
+
+
+    private static DpopProofClaims BuildClaims() => new()
+    {
+        Htm = DefaultMethod,
+        Htu = DefaultUrl,
+        Iat = NowInstant,
+        Jti = Guid.NewGuid().ToString("N")
+    };
+
+
+    private async Task<string> BuildProofAsync(DpopKey key, DpopProofClaims claims) =>
+        await DpopProofConstruction.BuildAsync(
+            claims,
+            key,
+            TestSetup.Base64UrlEncoder,
+            DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctions.SignP256Async,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+
+    private async Task<string> BuildProofWithCustomHeaderAsync(
+        DpopKey key,
+        DpopProofClaims claims,
+        Func<IReadOnlyDictionary<string, object>, IReadOnlyDictionary<string, object>> headerTransform)
+    {
+        DpopJwsPartSerializer customSerializer = DpopTestSupport.Serializer with
+        {
+            SerializeHeader = header =>
+                headerTransform(DpopTestSupport.SerializeHeader(header))
+        };
+
+        return await DpopProofConstruction.BuildAsync(
+            claims,
+            key,
+            TestSetup.Base64UrlEncoder,
+            customSerializer,
+            MicrosoftCryptographicFunctions.SignP256Async,
+            SensitiveMemoryPool<byte>.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    private async Task<DpopProofValidationResult> ValidateAsync(
+        string proof,
+        string? expectedNonce = null,
+        bool nonceRequired = false,
+        string? accessToken = null,
+        VerificationDelegate? verifier = null)
+    {
+        DpopProofValidationRequest request = new()
+        {
+            Proof = proof,
+            HttpMethod = DefaultMethod,
+            HttpUrl = DefaultUrl,
+            ExpectedNonce = expectedNonce,
+            NonceRequired = nonceRequired,
+            AccessToken = accessToken
+        };
+
+        return await DpopProofValidator.ValidateAsync(
+            request,
+            verifier ?? MicrosoftCryptographicFunctions.VerifyP256Async,
+            DpopTestSupport.Parser,
+            TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder,
+            TimeProvider,
+            SensitiveMemoryPool<byte>.Shared,
+            IatSkew,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+}

@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
@@ -45,6 +45,9 @@ namespace Verifiable.Tests.TestDataProviders
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> X25519Source = new(() =>
             BouncyCastleKeyMaterialCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared));
 
+        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P256ExchangeSource = new(() =>
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared));
+
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlDsa44Source = new(() =>
             BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(SensitiveMemoryPool<byte>.Shared));
 
@@ -62,6 +65,18 @@ namespace Verifiable.Tests.TestDataProviders
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlKem1024Source = new(() =>
             BouncyCastleKeyMaterialCreator.CreateMlKem1024Keys(SensitiveMemoryPool<byte>.Shared));
+
+        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP256r1Source = new(() =>
+            BouncyCastleKeyMaterialCreator.CreateBrainpoolP256r1Keys(SensitiveMemoryPool<byte>.Shared));
+
+        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP320r1Source = new(() =>
+            BouncyCastleKeyMaterialCreator.CreateBrainpoolP320r1Keys(SensitiveMemoryPool<byte>.Shared));
+
+        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP384r1Source = new(() =>
+            BouncyCastleKeyMaterialCreator.CreateBrainpoolP384r1Keys(SensitiveMemoryPool<byte>.Shared));
+
+        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP512r1Source = new(() =>
+            BouncyCastleKeyMaterialCreator.CreateBrainpoolP512r1Keys(SensitiveMemoryPool<byte>.Shared));
 
 
         /// <summary>
@@ -113,6 +128,20 @@ namespace Verifiable.Tests.TestDataProviders
             => CopyKeyMaterial(X25519Source.Value);
 
         /// <summary>
+        /// Returns a disposable copy of P-256 exchange key material (BouncyCastle backend).
+        /// The public key is tagged with <see cref="CryptoTags.P256ExchangePublicKey"/> and
+        /// the private key with <see cref="CryptoTags.P256ExchangePrivateKey"/>.
+        /// </summary>
+        /// <remarks>
+        /// The cached copy is suitable when any P-256 exchange key will do. When the public
+        /// and private keys must form a matched ephemeral pair — as in OID4VP flows where
+        /// the public key is embedded in the JAR and the private key decrypts the response —
+        /// use <see cref="CreateFreshP256ExchangeKeyMaterial"/> instead.
+        /// </remarks>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256ExchangeKeyMaterial()
+            => CopyKeyMaterial(P256ExchangeSource.Value);
+
+        /// <summary>
         /// Returns a disposable copy of ML-DSA-44 key material (BouncyCastle backend, NIST security level 2).
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa44KeyMaterial()
@@ -148,6 +177,30 @@ namespace Verifiable.Tests.TestDataProviders
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem1024KeyMaterial()
             => CopyKeyMaterial(MlKem1024Source.Value);
 
+        /// <summary>
+        /// Returns a disposable copy of Brainpool P-256r1 key material (BouncyCastle backend, RFC 5639 / RFC 9784 <c>ESB256</c>).
+        /// </summary>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP256r1KeyMaterial()
+            => CopyKeyMaterial(BrainpoolP256r1Source.Value);
+
+        /// <summary>
+        /// Returns a disposable copy of Brainpool P-320r1 key material (BouncyCastle backend, RFC 5639 / RFC 9784 <c>ESB320</c>).
+        /// </summary>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP320r1KeyMaterial()
+            => CopyKeyMaterial(BrainpoolP320r1Source.Value);
+
+        /// <summary>
+        /// Returns a disposable copy of Brainpool P-384r1 key material (BouncyCastle backend, RFC 5639 / RFC 9784 <c>ESB384</c>).
+        /// </summary>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP384r1KeyMaterial()
+            => CopyKeyMaterial(BrainpoolP384r1Source.Value);
+
+        /// <summary>
+        /// Returns a disposable copy of Brainpool P-512r1 key material (BouncyCastle backend, RFC 5639 / RFC 9784 <c>ESB512</c>).
+        /// </summary>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP512r1KeyMaterial()
+            => CopyKeyMaterial(BrainpoolP512r1Source.Value);
+
 
         /// <summary>
         /// Generates a brand-new P-256 key pair. Use when tests require distinct keys
@@ -155,6 +208,15 @@ namespace Verifiable.Tests.TestDataProviders
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshP256KeyMaterial()
             => MicrosoftKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+
+        /// <summary>
+        /// Generates a brand-new P-256 exchange key pair (BouncyCastle backend).
+        /// Use in OID4VP flows and any scenario where the public and private keys must
+        /// form a matched ephemeral pair — for example when the public key is embedded
+        /// in a JAR and the private key later decrypts the <c>direct_post.jwt</c> response.
+        /// </summary>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshP256ExchangeKeyMaterial()
+            => BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared);
 
         /// <summary>
         /// Generates a brand-new P-384 key pair. Use when tests require distinct keys.
@@ -227,6 +289,30 @@ namespace Verifiable.Tests.TestDataProviders
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshMlKem1024KeyMaterial()
             => BouncyCastleKeyMaterialCreator.CreateMlKem1024Keys(SensitiveMemoryPool<byte>.Shared);
+
+        /// <summary>
+        /// Generates a brand-new Brainpool P-256r1 key pair. Use when tests require distinct keys.
+        /// </summary>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshBrainpoolP256r1KeyMaterial()
+            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP256r1Keys(SensitiveMemoryPool<byte>.Shared);
+
+        /// <summary>
+        /// Generates a brand-new Brainpool P-320r1 key pair. Use when tests require distinct keys.
+        /// </summary>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshBrainpoolP320r1KeyMaterial()
+            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP320r1Keys(SensitiveMemoryPool<byte>.Shared);
+
+        /// <summary>
+        /// Generates a brand-new Brainpool P-384r1 key pair. Use when tests require distinct keys.
+        /// </summary>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshBrainpoolP384r1KeyMaterial()
+            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP384r1Keys(SensitiveMemoryPool<byte>.Shared);
+
+        /// <summary>
+        /// Generates a brand-new Brainpool P-512r1 key pair. Use when tests require distinct keys.
+        /// </summary>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshBrainpoolP512r1KeyMaterial()
+            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP512r1Keys(SensitiveMemoryPool<byte>.Shared);
 
 
         /// <summary>

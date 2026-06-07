@@ -75,7 +75,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
@@ -115,7 +115,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
@@ -156,7 +156,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
 
         //Verify the JSON wire format contains the expected mixed-type array.
@@ -211,7 +211,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
@@ -260,7 +260,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
@@ -309,7 +309,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
 
         //Verify wire format is a flat array of arrays.
@@ -374,7 +374,7 @@ internal sealed class DcqlQuerySerializationTests
             ]
         };
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         string json = JsonSerializerExtensions.Serialize(original, options);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
@@ -395,6 +395,110 @@ internal sealed class DcqlQuerySerializationTests
         Assert.IsTrue(claimsArray[1].TryGetProperty("intent_to_retain", out _));
         Assert.IsFalse(claimsArray[2].TryGetProperty("intent_to_retain", out _));
     }
+
+
+    //OID4VP §6.1 multiple (default false) and §6.3 require_cryptographic_
+    //holder_binding (default true) are nullable on the wire: omitted means
+    //the spec default applies, which lives at the processing layer rather
+    //than the type. Round-trip behaviour: explicit values preserve, absent
+    //values come back null (not coerced to the spec default).
+
+    [TestMethod]
+    public void MultipleAndRequireCryptographicHolderBindingRoundtrip()
+    {
+        DcqlQuery original = new()
+        {
+            Credentials =
+            [
+                //Both flags explicitly set.
+                new CredentialQuery
+                {
+                    Id = "explicit",
+                    Format = "mso_mdoc",
+                    Multiple = true,
+                    RequireCryptographicHolderBinding = false
+                },
+                //Both flags omitted.
+                new CredentialQuery
+                {
+                    Id = "default",
+                    Format = "mso_mdoc"
+                },
+                //Inverted explicit values.
+                new CredentialQuery
+                {
+                    Id = "explicit_inverted",
+                    Format = "mso_mdoc",
+                    Multiple = false,
+                    RequireCryptographicHolderBinding = true
+                }
+            ]
+        };
+
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        string json = JsonSerializerExtensions.Serialize(original, options);
+        DcqlQuery deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
+
+        Assert.IsNotNull(deserialized.Credentials);
+        Assert.HasCount(3, deserialized.Credentials);
+
+        //Explicit values preserved verbatim.
+        Assert.IsTrue(deserialized.Credentials[0].Multiple!.Value);
+        Assert.IsFalse(deserialized.Credentials[0].RequireCryptographicHolderBinding!.Value);
+
+        //Omitted flags round-trip to null (NOT to the spec default).
+        Assert.IsNull(deserialized.Credentials[1].Multiple);
+        Assert.IsNull(deserialized.Credentials[1].RequireCryptographicHolderBinding);
+
+        //Explicit-false / explicit-true preserved.
+        Assert.IsFalse(deserialized.Credentials[2].Multiple!.Value);
+        Assert.IsTrue(deserialized.Credentials[2].RequireCryptographicHolderBinding!.Value);
+
+        //Wire format: fields appear only when explicitly set.
+        using JsonDocument doc = JsonDocument.Parse(json);
+        JsonElement credentials = doc.RootElement.GetProperty("credentials");
+
+        Assert.IsTrue(credentials[0].TryGetProperty("multiple", out _));
+        Assert.IsTrue(credentials[0].TryGetProperty("require_cryptographic_holder_binding", out _));
+
+        Assert.IsFalse(credentials[1].TryGetProperty("multiple", out _));
+        Assert.IsFalse(credentials[1].TryGetProperty("require_cryptographic_holder_binding", out _));
+
+        Assert.IsTrue(credentials[2].TryGetProperty("multiple", out _));
+        Assert.IsTrue(credentials[2].TryGetProperty("require_cryptographic_holder_binding", out _));
+    }
+
+
+    //Deserialisation of an inbound DCQL query that came in over the wire
+    //without either field present must NOT coerce to the spec default —
+    //the default lives at the processing layer, not at the deserialisation
+    //layer. This is the wire-faithfulness invariant.
+
+    [TestMethod]
+    public void DeserialisingWireWithoutFlagsRoundTripsToNullNotToSpecDefault()
+    {
+        const string WireJson = """
+            {
+              "credentials": [
+                {
+                  "id": "pid",
+                  "format": "mso_mdoc"
+                }
+              ]
+            }
+            """;
+
+        JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
+        DcqlQuery deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(WireJson, options)!;
+
+        CredentialQuery query = deserialized.Credentials![0];
+        Assert.IsNull(query.Multiple,
+            "Spec default for 'multiple' (false per §6.1) must NOT be baked into deserialisation.");
+        Assert.IsNull(query.RequireCryptographicHolderBinding,
+            "Spec default for 'require_cryptographic_holder_binding' (true per §6.3) must NOT be " +
+            "baked into deserialisation.");
+    }
+
 
     [TestMethod]
     public void EffectiveIdUsesPathWhenIdIsNull()
@@ -464,7 +568,7 @@ internal sealed class DcqlQuerySerializationTests
             }
             """;
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         Assert.Throws<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
@@ -482,7 +586,7 @@ internal sealed class DcqlQuerySerializationTests
             }
             """;
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         Assert.Throws<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
@@ -506,7 +610,7 @@ internal sealed class DcqlQuerySerializationTests
             }
             """;
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         Assert.Throws<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
@@ -568,7 +672,7 @@ internal sealed class DcqlQuerySerializationTests
             }
             """;
 
-        var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
+        var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         var deserialized = JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options)!;
 
         Assert.IsNotNull(deserialized.Credentials);

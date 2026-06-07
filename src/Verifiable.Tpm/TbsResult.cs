@@ -1,4 +1,4 @@
-﻿namespace Verifiable.Tpm;
+namespace Verifiable.Tpm;
 
 /// <summary>
 /// Windows TPM Base Services (TBS) result codes.

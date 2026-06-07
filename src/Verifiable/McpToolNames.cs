@@ -1,4 +1,4 @@
-﻿namespace Verifiable;
+namespace Verifiable;
 
 /// <summary>
 /// Constants for MCP tool names exposed by the Verifiable MCP server.

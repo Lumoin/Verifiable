@@ -43,13 +43,13 @@ public static class KeyExtensions
     /// This extension is used internally by <see cref="PrivateKey.SignAsync"/> and can also be used
     /// directly when you need to combine different signing functions with the same key material.
     /// </remarks>
-    /// <seealso cref="PrivateKey.SignAsync"/>
     public static ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningFunction<byte, byte, ValueTask<Signature>> signingFunction, MemoryPool<byte> signaturePool)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingFunction);
         ArgumentNullException.ThrowIfNull(signaturePool);
-        return privateKey.SignWithKeyBytesAsync((privateKeyBytes, dataToSign, signaturePool) => signingFunction(privateKeyBytes, dataToSign, signaturePool), dataToSign, signaturePool);
+
+        return privateKey.WithKeyBytesAsync((privateKeyBytes, dataToSign, signaturePool) => signingFunction(privateKeyBytes, dataToSign, signaturePool), dataToSign, signaturePool);
     }
 
 
@@ -65,13 +65,17 @@ public static class KeyExtensions
     /// <param name="signaturePool">The memory pool for allocating the signature buffer.</param>
     /// <param name="context">Optional context parameters for the signing operation.</param>
     /// <returns>The signature of the data.</returns>
-    public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningDelegate signingDelegate, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
+    public static ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningDelegate signingDelegate, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
-        return await privateKey.SignWithKeyBytesAsync(async (privateKeyBytes, dataToSign, signaturePool) => await signingDelegate(privateKeyBytes, dataToSign, signaturePool, context).ConfigureAwait(false), dataToSign, signaturePool)
-            .ConfigureAwait(false);
+
+        return privateKey.WithKeyBytesAsync(
+            (privateKeyBytes, dataToSign, signaturePool) =>
+                signingDelegate(privateKeyBytes, dataToSign, signaturePool, context),
+            dataToSign,
+            signaturePool);
     }
 
 
@@ -85,7 +89,7 @@ public static class KeyExtensions
         var algorithm = privateKey.Tag.Get<CryptoAlgorithm>();
         var purpose = privateKey.Tag.Get<Purpose>();
         var signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose);
-        
+
         return await privateKey.SignAsync(dataToSign, signingDelegate, signaturePool).ConfigureAwait(false);
     }
 
@@ -109,6 +113,7 @@ public static class KeyExtensions
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(signature);
         ArgumentNullException.ThrowIfNull(verificationFunction);
+
         return publicKey.WithKeyBytesAsync((publicKeyBytes, dataToVerify, signature) => verificationFunction(publicKeyBytes, dataToVerify, signature), dataToVerify, signature);
     }
 
@@ -130,6 +135,125 @@ public static class KeyExtensions
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(signature);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
+
         return publicKey.WithKeyBytesAsync((publicKeyBytes, dataToVerify, sig) => verificationDelegate(dataToVerify, sig.AsReadOnlyMemory(), publicKeyBytes, context), dataToVerify, signature);
     }
+
+
+    /// <summary>
+    /// Computes an HMAC over <paramref name="message"/> using the symmetric key and
+    /// the supplied <see cref="ComputeHmacDelegate"/>.
+    /// </summary>
+    /// <param name="key">The symmetric key memory containing the HMAC key bytes.</param>
+    /// <param name="message">The bytes to authenticate.</param>
+    /// <param name="outputByteLength">The expected HMAC output length in bytes.</param>
+    /// <param name="hmacDelegate">The HMAC compute delegate, typically from a cryptographic backend.</param>
+    /// <param name="pool">The memory pool to allocate the output from.</param>
+    /// <param name="context">Optional context parameters.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The computed <see cref="HmacValue"/>.</returns>
+    public static async ValueTask<HmacValue> ComputeHmacAsync(
+        this SymmetricKeyMemory key,
+        System.Buffers.ReadOnlySequence<byte> message,
+        int outputByteLength,
+        ComputeHmacDelegate hmacDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(hmacDelegate);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        (HmacValue result, CryptoEvent? _) = await key.WithKeyBytesAsync(
+            (keyBytes, args) => args.HmacDelegate(
+                args.Message, keyBytes, args.OutputByteLength, key.Tag, args.Pool, args.Context, args.CancellationToken),
+            (Message: message, OutputByteLength: outputByteLength, HmacDelegate: hmacDelegate,
+                Pool: pool, Context: context, CancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return result;
+    }
+
+
+    /// <summary>Convenience overload for one-shot callers.</summary>
+    public static ValueTask<HmacValue> ComputeHmacAsync(
+        this SymmetricKeyMemory key,
+        ReadOnlyMemory<byte> message,
+        int outputByteLength,
+        ComputeHmacDelegate hmacDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default) =>
+        key.ComputeHmacAsync(new System.Buffers.ReadOnlySequence<byte>(message), outputByteLength, hmacDelegate, pool, context, cancellationToken);
+
+
+    /// <summary>
+    /// Verifies an HMAC <paramref name="expectedMac"/> against an HMAC of
+    /// <paramref name="message"/> using the symmetric key and the supplied
+    /// <see cref="VerifyHmacDelegate"/>.
+    /// </summary>
+    public static ValueTask<bool> VerifyHmacAsync(
+        this SymmetricKeyMemory key,
+        System.Buffers.ReadOnlySequence<byte> message,
+        HmacValue expectedMac,
+        VerifyHmacDelegate verifyDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(expectedMac);
+        return key.VerifyHmacAsync(message, expectedMac.AsReadOnlyMemory(), verifyDelegate, pool, context, cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Verifies <paramref name="expectedMacBytes"/> against an HMAC of
+    /// <paramref name="message"/> using the symmetric key and the supplied
+    /// <see cref="VerifyHmacDelegate"/>.
+    /// </summary>
+    public static async ValueTask<bool> VerifyHmacAsync(
+        this SymmetricKeyMemory key,
+        System.Buffers.ReadOnlySequence<byte> message,
+        ReadOnlyMemory<byte> expectedMacBytes,
+        VerifyHmacDelegate verifyDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(verifyDelegate);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        (bool isValid, CryptoEvent? _) = await key.WithKeyBytesAsync(
+            (keyBytes, args) => args.VerifyDelegate(
+                args.Message, keyBytes, args.ExpectedMacBytes, key.Tag, args.Pool, args.Context, args.CancellationToken),
+            (Message: message, ExpectedMacBytes: expectedMacBytes, VerifyDelegate: verifyDelegate,
+                Pool: pool, Context: context, CancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return isValid;
+    }
+
+
+    /// <summary>Convenience overload: ReadOnlyMemory message + HmacValue expected.</summary>
+    public static ValueTask<bool> VerifyHmacAsync(
+        this SymmetricKeyMemory key,
+        ReadOnlyMemory<byte> message,
+        HmacValue expectedMac,
+        VerifyHmacDelegate verifyDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default) =>
+        key.VerifyHmacAsync(new System.Buffers.ReadOnlySequence<byte>(message), expectedMac, verifyDelegate, pool, context, cancellationToken);
+
+
+    /// <summary>Convenience overload: ReadOnlyMemory message + raw expected bytes.</summary>
+    public static ValueTask<bool> VerifyHmacAsync(
+        this SymmetricKeyMemory key,
+        ReadOnlyMemory<byte> message,
+        ReadOnlyMemory<byte> expectedMacBytes,
+        VerifyHmacDelegate verifyDelegate,
+        System.Buffers.MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default) =>
+        key.VerifyHmacAsync(new System.Buffers.ReadOnlySequence<byte>(message), expectedMacBytes, verifyDelegate, pool, context, cancellationToken);
 }

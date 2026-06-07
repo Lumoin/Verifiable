@@ -1,13 +1,14 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using VDS.RDF.JsonLd;
+using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Json;
+using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -122,11 +123,15 @@ internal sealed class CredentialIssuanceFlowTests
     /// <summary>
     /// JCS canonicalization delegate. Ignores context resolver since JCS does not use JSON-LD.
     /// </summary>
-    private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, cancellationToken) =>
+    private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
     {
         var canonical = Jcs.Canonicalize(json);
         return ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = canonical });
     };
+
+    //Canonicalization/signing here is in-memory; a default context yields the
+    //secure-default SSRF policy and satisfies the policy-carrying parameter.
+    private static readonly ExchangeContext EmptyContext = new();
 
     /// <summary>
     /// Proof value encoder delegate using multibase Base58Btc encoding.
@@ -160,36 +165,6 @@ internal sealed class CredentialIssuanceFlowTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    /// <summary>
-    /// Creates a dotNetRdf document loader that delegates to our context resolver.
-    /// </summary>
-    private static Func<Uri, JsonLdLoaderOptions?, RemoteDocument> CreateDotNetRdfContextLoader(
-        ContextResolverDelegate? contextResolver)
-    {
-        return (uri, options) =>
-        {
-            string? contextJson = null;
-
-            if(contextResolver != null)
-            {
-                //Synchronously wait since dotNetRdf's loader is synchronous.
-                contextJson = contextResolver(uri, CancellationToken.None).AsTask().GetAwaiter().GetResult();
-            }
-
-            if(contextJson == null)
-            {
-                throw new JsonLdProcessorException(
-                    JsonLdErrorCode.LoadingDocumentFailed,
-                    $"Unknown context URI: {uri}");
-            }
-
-            return new RemoteDocument
-            {
-                DocumentUrl = uri,
-                Document = contextJson
-            };
-        };
-    }
 
 
     /// <summary>
@@ -217,12 +192,12 @@ internal sealed class CredentialIssuanceFlowTests
         var credentialJson = JsonSerializerExtensions.Serialize(credential, JsonOptions);
 
         //Canonicalize without examples context. The alumniOf claim should be dropped.
-        var canonicalFormWithoutContext = await RdfcCanonicalizer(credentialJson, ContextResolver, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var canonicalFormWithoutContext = await RdfcCanonicalizer(credentialJson, ContextResolver, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         var alumniOfInCanonicalWithoutContext = canonicalFormWithoutContext.CanonicalForm.Contains(ClaimValueUniversityName, StringComparison.Ordinal);
 
         //Add examples context and canonicalize again. The alumniOf claim should now be included.
         var credentialWithContext = AddContextToCredential(credentialJson, CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl);
-        var canonicalFormWithContext = await RdfcCanonicalizer(credentialWithContext, ContextResolver, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var canonicalFormWithContext = await RdfcCanonicalizer(credentialWithContext, ContextResolver, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         var alumniOfInCanonicalWithContext = canonicalFormWithContext.CanonicalForm.Contains(ClaimValueUniversityName, StringComparison.Ordinal);
 
         Assert.IsFalse(alumniOfInCanonicalWithoutContext, "Claim should NOT be in canonical form without examples context.");
@@ -292,7 +267,9 @@ internal sealed class CredentialIssuanceFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var verificationResult = await signedCredential.VerifyAsync(
@@ -301,13 +278,14 @@ internal sealed class CredentialIssuanceFlowTests
             ContextResolver,
             ProofValueDecoder,
             SerializeCredential,
-            DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(CredentialVerificationResult.Success(), verificationResult);
+        Assert.IsTrue(verificationResult.IsValid);
         Assert.AreEqual(holderDid, signedCredential.CredentialSubject![0].Id);
         Assert.AreEqual(IssuerDidWeb, signedCredential.Issuer!.Id);
     }
@@ -372,7 +350,9 @@ internal sealed class CredentialIssuanceFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var verificationResult = await signedCredential.VerifyAsync(
@@ -381,13 +361,14 @@ internal sealed class CredentialIssuanceFlowTests
             contextResolver: null,
             ProofValueDecoder,
             SerializeCredential,
-            DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(CredentialVerificationResult.Success(), verificationResult);
+        Assert.IsTrue(verificationResult.IsValid);
         Assert.AreEqual(holderDid, signedCredential.CredentialSubject![0].Id);
         Assert.AreEqual(IssuerDidWeb, signedCredential.Issuer!.Id);
     }
@@ -445,13 +426,15 @@ internal sealed class CredentialIssuanceFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Tamper by modifying the JSON string directly.
         var signedCredentialJson = JsonSerializerExtensions.Serialize(signedCredential, JsonOptions);
         var tamperedJson = signedCredentialJson.Replace(ClaimValueUniversityName, ClaimValueFakeUniversity, StringComparison.Ordinal);
-        var tamperedCredential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(tamperedJson, JsonOptions)!;
+        var tamperedCredential = JsonSerializerExtensions.Deserialize<DataIntegritySecuredCredential>(tamperedJson, JsonOptions)!;
 
         var verificationResult = await tamperedCredential.VerifyAsync(
             issuerDidDocument,
@@ -459,13 +442,14 @@ internal sealed class CredentialIssuanceFlowTests
             ContextResolver,
             ProofValueDecoder,
             SerializeCredential,
-            DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), verificationResult);
+        Assert.AreEqual(VerificationFailureReason.SignatureInvalid, verificationResult.FailureReason);
     }
 
 
@@ -517,13 +501,15 @@ internal sealed class CredentialIssuanceFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Tamper by modifying the JSON string directly.
         var signedCredentialJson = JsonSerializerExtensions.Serialize(signedCredential, JsonOptions);
         var tamperedJson = signedCredentialJson.Replace(ClaimValueUniversityName, ClaimValueFakeUniversity, StringComparison.Ordinal);
-        var tamperedCredential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(tamperedJson, JsonOptions)!;
+        var tamperedCredential = JsonSerializerExtensions.Deserialize<DataIntegritySecuredCredential>(tamperedJson, JsonOptions)!;
 
         var verificationResult = await tamperedCredential.VerifyAsync(
             issuerDidDocument,
@@ -531,13 +517,14 @@ internal sealed class CredentialIssuanceFlowTests
             contextResolver: null,
             ProofValueDecoder,
             SerializeCredential,
-            DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
+            MicrosoftEntropyFunctions.ComputeDigestAsync,
             SensitiveMemoryPool<byte>.Shared,
+            EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), verificationResult);
+        Assert.AreEqual(VerificationFailureReason.SignatureInvalid, verificationResult.FailureReason);
     }
 
 

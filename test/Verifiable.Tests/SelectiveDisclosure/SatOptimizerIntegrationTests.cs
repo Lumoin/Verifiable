@@ -1,4 +1,4 @@
-﻿using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;

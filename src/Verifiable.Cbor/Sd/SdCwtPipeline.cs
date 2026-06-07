@@ -1,13 +1,12 @@
-﻿using System.Buffers;
+using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Formats.Cbor;
 using System.Threading;
 using System.Threading.Tasks;
-using Verifiable.Core.SelectiveDisclosure;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.JCose.Sd;
 
 namespace Verifiable.Cbor.Sd;
 
@@ -25,13 +24,14 @@ internal static class SdCwtPipeline
     internal static (ReadOnlyMemory<byte> RedactedPayload, IReadOnlyList<SdDisclosure> Disclosures) Redact(
         ReadOnlyMemory<byte> payload,
         IReadOnlySet<CredentialPath> disclosablePaths,
-        SaltFactoryDelegate saltFactory,
-        string hashAlgorithm)
+        GenerateDisclosureSaltDelegate generateSalt,
+        string hashAlgorithm,
+        DecoyDigestOptions decoyOptions)
     {
         byte[] payloadArray = payload.ToArray();
 
         var (cwtPayload, disclosures) = SdCwtClaimRedaction.Redact(
-            payloadArray, disclosablePaths, saltFactory, hashAlgorithm);
+            payloadArray, disclosablePaths, generateSalt, hashAlgorithm, decoyOptions);
 
         byte[] redactedBytes = SerializeCwtPayload(cwtPayload);
         return (redactedBytes, disclosures);
@@ -39,9 +39,13 @@ internal static class SdCwtPipeline
 
 
     /// <summary>
-    /// Signs a redacted CBOR payload as a COSE_Sign1 message.
+    /// Signs a redacted CBOR payload as a COSE_Sign1 message using an explicit
+    /// <see cref="SigningDelegate"/>. Registry resolution is the caller's concern
+    /// (<see cref="SdCwtIssuance"/> resolves the function from the key's tag and
+    /// forwards here); this keeps the pipeline a pure parameter-taking body.
     /// </summary>
     internal static async ValueTask<ReadOnlyMemory<byte>> Sign(
+        SigningDelegate signingDelegate,
         ReadOnlyMemory<byte> redactedPayload,
         string hashAlgorithm,
         string mediaType,
@@ -62,11 +66,6 @@ internal static class SdCwtPipeline
 
         //Build Sig_structure per RFC 9052 Section 4.4.
         byte[] sigStructure = BuildSigStructure(protectedHeaderBytes, redactedPayload.Span);
-
-        //Sign via the crypto registry.
-        CryptoAlgorithm cryptoAlgorithm = privateKey.Tag.Get<CryptoAlgorithm>();
-        Purpose purpose = privateKey.Tag.Get<Purpose>();
-        SigningDelegate signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(cryptoAlgorithm, purpose);
 
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),

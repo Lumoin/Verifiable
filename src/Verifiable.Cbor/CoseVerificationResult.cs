@@ -1,4 +1,6 @@
-﻿namespace Verifiable.JCose;
+using System;
+
+namespace Verifiable.JCose;
 
 /// <summary>
 /// Result of verifying a COSE_Sign1 structure.

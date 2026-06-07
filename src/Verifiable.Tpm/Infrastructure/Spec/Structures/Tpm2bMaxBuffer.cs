@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers.Binary;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Structures;

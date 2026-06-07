@@ -1,17 +1,24 @@
-﻿using System;
 using Verifiable.Core.Resolvers;
 
 namespace Verifiable.OAuth;
 
 /// <summary>
-/// Catalog of well-known URI paths used in OAuth, OpenID, and related identity specifications.
+/// Catalog of well-known URI paths used in OAuth, OpenID, and related
+/// identity specifications. Each static member is a single
+/// <see cref="WellKnownPath"/> instance describing one IANA-registered rule.
 /// </summary>
 /// <remarks>
+/// <para>
+/// <strong>Type vs. catalog:</strong> <see cref="WellKnownPath"/> (singular)
+/// is the entry type. This class (plural) is the static catalog of
+/// library-provided instances. The naming pair is deliberate; see
+/// <see cref="WellKnownPath"/> for the per-entry shape.
+/// </para>
 /// <para>
 /// Each entry provides a pure function that computes the metadata document URL
 /// from a base identifier. Consumers fetch the document using their own HTTP infrastructure
 /// and extract endpoint URIs using the metadata key constants such as
-/// <see cref="AuthorizationServerMetadataKeys"/>.
+/// <see cref="AuthorizationServerMetadataParameterNames"/>.
 /// </para>
 /// <para>
 /// This catalog corresponds to a subset of the IANA Well-Known URIs registry,
@@ -78,6 +85,38 @@ public static class WellKnownPaths
         "authzen-configuration",
         "Authorization API 1.0",
         identifier => ComputeWellKnownSuffix(identifier, "authzen-configuration"));
+
+    /// <summary>
+    /// OpenID Shared Signals Framework 1.0 Transmitter Configuration Metadata.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Computes <c>{baseUri}/.well-known/ssf-configuration</c> (SSF 1.0 §7.2.1;
+    /// supports the path-insertion variant for multi-tenant issuers). A
+    /// Transmitter serving the legacy RISC path additionally exposes the same
+    /// document at <c>/.well-known/risc-configuration</c> (§7.2.2).
+    /// </para>
+    /// </remarks>
+    public static WellKnownPath SsfConfiguration { get; } = new(
+        "ssf-configuration",
+        "Shared Signals Framework 1.0",
+        identifier => ComputeWellKnownSuffix(identifier, "ssf-configuration"));
+
+    /// <summary>
+    /// OAuth 2.0 Protected Resource Metadata (RFC 9728).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Computes the metadata URL per RFC 9728 §3: the well-known suffix is
+    /// inserted between the host component and the path and/or query
+    /// components of the resource identifier, with any terminating slash
+    /// removed first — <c>{host}/.well-known/oauth-protected-resource{path}</c>.
+    /// </para>
+    /// </remarks>
+    public static WellKnownPath OAuthProtectedResource { get; } = new(
+        "oauth-protected-resource",
+        "RFC 9728",
+        identifier => ComputeWellKnownWithPathInsertion(identifier, "oauth-protected-resource"));
 
     /// <summary>
     /// DID Web resolution (did:web method specification).
