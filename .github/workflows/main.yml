@@ -101,20 +101,20 @@ jobs:
     steps:
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm' }}
-      uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
+      uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
       with:
         disable-sudo: true
         egress-policy: block
         allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
     - name: Checkout code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       with:
         fetch-depth: 0
         fetch-tags: true
 
     - name: Set up .NET SDK
-      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+      uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
@@ -353,19 +353,19 @@ jobs:
       if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm' }}
       # Note: disable-sudo is intentionally omitted here because apt-get is
       # needed below to install native AOT prerequisites (clang, zlib1g-dev).
-      uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
+      uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
       with:
         egress-policy: block
         allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
     - name: Checkout code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       with:
         fetch-depth: 0
         fetch-tags: true
 
     - name: Set up .NET SDK
-      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+      uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
@@ -434,6 +434,34 @@ jobs:
         done
       shell: bash
 
+    # Runtime conformance: prove the native AOT binary just produced actually runs
+    # on this platform. The managed build's IsAotCompatible analysis catches trim/AOT
+    # issues statically, but only executing the compiled, trimmed binary proves the
+    # System.CommandLine parse -> action -> output pipeline survives AOT on each RID.
+    # The host RID is derived from runner.os/runner.arch and only that native binary
+    # is run (on macOS the matrix packs both osx RIDs; only the native one executes).
+    # A real command must exit 0 and emit the expected output.
+    - name: Verify native AOT binary runs (${{ matrix.os }})
+      shell: bash
+      timeout-minutes: 5
+      run: |
+        case "${RUNNER_OS}-${RUNNER_ARCH}" in
+          Linux-X64)     rid=linux-x64 ;;
+          Linux-ARM64)   rid=linux-arm64 ;;
+          macOS-ARM64)   rid=osx-arm64 ;;
+          macOS-X64)     rid=osx-x64 ;;
+          Windows-X64)   rid=win-x64 ;;
+          Windows-ARM64) rid=win-arm64 ;;
+          *) echo "Unsupported host ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+        esac
+        bin="src/Verifiable/bin/${BUILD_CONFIGURATION}/net10.0/${rid}/publish/Verifiable"
+        if [ -f "${bin}.exe" ]; then bin="${bin}.exe"; fi
+        echo "Running native AOT binary: ${bin}"
+        out="$("${bin}" did create 42 conformance-check)"
+        echo "${out}"
+        echo "${out}" | grep -q 'Created DID document with ID: 42'
+        echo "${out}" | grep -q 'Parameter: conformance-check'
+
     - name: Upload AOT RID packages (${{ matrix.os }})
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
@@ -466,20 +494,20 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
+      uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
       with:
         disable-sudo: true
         egress-policy: block
         allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
     - name: Checkout code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       with:
         fetch-depth: 0
         fetch-tags: true
 
     - name: Set up .NET SDK
-      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+      uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
@@ -615,7 +643,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
         with:
           disable-sudo: true
           egress-policy: block
@@ -666,7 +694,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
         with:
           disable-sudo: true
           egress-policy: block
@@ -711,7 +739,7 @@ jobs:
       # short-lived API key.
       - name: NuGet trusted publishing login (OIDC)
         id: nuget_login
-        uses: NuGet/login@d22cc5f58ff5b88bf9bd452535b4335137e24544
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841
         with:
           # nuget.org profile name (not email). Store as a secret to avoid
           # hardcoding an account name in the workflow file.
