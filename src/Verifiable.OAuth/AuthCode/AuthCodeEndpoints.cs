@@ -11,6 +11,7 @@ using Verifiable.OAuth.AuthCode.Server;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Jar;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oidc;
@@ -153,7 +154,14 @@ public static class AuthCodeEndpoints
             candidates.Add(BuildRevocation());
         }
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection))
+        //RFC 7662 introspection materializes only when the capability is allowed
+        //AND both the introspection seam and the client-authentication seam are
+        //wired: an endpoint that cannot authenticate the caller would leak token
+        //state, and one with no store to read could only answer active:false —
+        //both fail-closed, like revocation above.
+        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection)
+            && context.Server?.Integration.IntrospectTokenAsync is not null
+            && context.Server?.Integration.ValidateClientCredentialsAsync is not null)
         {
             candidates.Add(BuildIntrospection());
         }
@@ -2420,8 +2428,13 @@ public static class AuthCodeEndpoints
             Name = WellKnownEndpointNames.AuthCodeIntrospect,
             HttpMethod = WellKnownHttpMethods.Post,
             Capability = WellKnownCapabilityIdentifiers.OAuthTokenIntrospection,
-            StartsNewFlow = false,
-            Kind = FlowKind.AuthCodeServer,
+            //RFC 7662 introspection is stateless — a single request that reads a
+            //token's status and returns, with no multi-step flow and no correlation
+            //key to resolve. It uses the same stateless shape as revocation
+            //(StartsNewFlow + FlowKind.Stateless), not the stateful AuthCodeServer
+            //path that would demand a flow handle the request never carries.
+            StartsNewFlow = true,
+            Kind = FlowKind.Stateless,
             DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.IntrospectionEndpoint,
 
             //Acceptance test: POST to /introspect with a token body parameter
@@ -2445,13 +2458,167 @@ public static class AuthCodeEndpoints
                 return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
             },
 
-            BuildInputAsync = static (fields, context, currentState, ct) =>
-                ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>(
-                    (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, "Introspection not yet implemented."))),
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                AuthorizationServer server = context.Server!;
+
+                ClientRecord? registration = context.Registration;
+                if(registration is null)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Unknown client."));
+                }
+
+                //RFC 7662 §2.3: a caller authenticating with client credentials that
+                //fail authentication gets HTTP 401. The candidate gate guarantees the
+                //seam is wired.
+                bool clientAuthenticated = await server.Integration.ValidateClientCredentialsAsync!(
+                    context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                if(!clientAuthenticated)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Client authentication failed."));
+                }
+
+                //RFC 7662 §2.1: token is REQUIRED. The matcher already guaranteed its
+                //presence; the guard keeps the contract explicit and local.
+                if(!fields.TryGetValue(OAuthRequestParameterNames.Token, out string? token)
+                    || string.IsNullOrEmpty(token))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Missing token parameter."));
+                }
+
+                fields.TryGetValue(OAuthRequestParameterNames.TokenTypeHint, out string? tokenTypeHint);
+
+                //RFC 7662 §2.2: the application reads its own token store and returns the
+                //token's metadata, or an inactive result for an unknown / expired / revoked
+                //token (or one this caller may not see). An unrecognized token_type_hint is
+                //a hint, not an error. A well-formed, authorized query for an inactive token
+                //is NOT an error (RFC 7662 §2.3) — it answers 200 with {"active":false}.
+                TokenIntrospectionResult result = await server.Integration.IntrospectTokenAsync!(
+                    token, tokenTypeHint, registration, context, ct).ConfigureAwait(false);
+
+                //RFC 7662 §2.2: a JSON object in application/json. The library owns the wire
+                //shape and the rule that an inactive token discloses nothing further. The
+                //response is left cacheable per RFC 7662 §4 (cache up to the token's exp).
+                string responseJson = SerializeIntrospectionResponse(result);
+
+                return (null, ServerHttpResponse.Ok(responseJson, WellKnownMediaTypes.Application.Json));
+            },
             BuildResponse = static (state, _, _) =>
                 ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
         };
+
+
+    /// <summary>
+    /// Serialises a <see cref="TokenIntrospectionResult"/> to its RFC 7662 §2.2
+    /// <c>application/json</c> response body. <c>active</c> is always present; every other
+    /// member is written only when the token is active and the value is supplied. An
+    /// inactive token yields exactly <c>{"active":false}</c> — RFC 7662 §2.2 directs the
+    /// server not to disclose any further information about it, including why it is inactive.
+    /// </summary>
+    private static string SerializeIntrospectionResponse(TokenIntrospectionResult result)
+    {
+        StringBuilder sb = JsonAppender.Rent();
+        try
+        {
+            sb.Append('{');
+            bool first = true;
+            JsonAppender.AppendBoolField(sb, "active", result.IsActive, ref first);
+
+            if(result.IsActive)
+            {
+                if(result.Scope is not null)
+                {
+                    JsonAppender.AppendStringField(sb, "scope", result.Scope, ref first);
+                }
+
+                if(result.ClientId is not null)
+                {
+                    JsonAppender.AppendStringField(sb, "client_id", result.ClientId, ref first);
+                }
+
+                if(result.Username is not null)
+                {
+                    JsonAppender.AppendStringField(sb, "username", result.Username, ref first);
+                }
+
+                if(result.TokenType is not null)
+                {
+                    JsonAppender.AppendStringField(sb, "token_type", result.TokenType, ref first);
+                }
+
+                if(result.ExpiresAt is { } expiresAt)
+                {
+                    JsonAppender.AppendInt64Field(sb, "exp", expiresAt.ToUnixTimeSeconds(), ref first);
+                }
+
+                if(result.IssuedAt is { } issuedAt)
+                {
+                    JsonAppender.AppendInt64Field(sb, "iat", issuedAt.ToUnixTimeSeconds(), ref first);
+                }
+
+                if(result.NotBefore is { } notBefore)
+                {
+                    JsonAppender.AppendInt64Field(sb, "nbf", notBefore.ToUnixTimeSeconds(), ref first);
+                }
+
+                if(result.Subject is not null)
+                {
+                    JsonAppender.AppendStringField(sb, "sub", result.Subject, ref first);
+                }
+
+                //RFC 7662 §2.2 aud: "string identifier or list of string identifiers" — a
+                //single audience is written as a JSON string, multiple as an array, both
+                //valid per RFC 7519.
+                if(result.Audience is { Count: > 0 } audience)
+                {
+                    if(audience.Count == 1)
+                    {
+                        JsonAppender.AppendStringField(sb, "aud", audience[0], ref first);
+                    }
+                    else
+                    {
+                        JsonAppender.AppendStringArrayField(sb, "aud", audience, ref first);
+                    }
+                }
+
+                if(result.Issuer is not null)
+                {
+                    JsonAppender.AppendStringField(sb, "iss", result.Issuer, ref first);
+                }
+
+                if(result.JwtId is not null)
+                {
+                    JsonAppender.AppendStringField(sb, "jti", result.JwtId, ref first);
+                }
+
+                //RFC 7662 §2.2: service-specific extension members as further top-level
+                //members, each serialised by its runtime type. active is always present, so
+                //a leading comma is always required here.
+                if(result.AdditionalClaims is not null)
+                {
+                    foreach(KeyValuePair<string, object> claim in result.AdditionalClaims)
+                    {
+                        sb.Append(',');
+                        sb.Append('"');
+                        JsonAppender.AppendEscapedString(sb, claim.Key);
+                        sb.Append("\":");
+                        JsonAppender.AppendValue(sb, claim.Value);
+                    }
+                }
+            }
+
+            sb.Append('}');
+
+            return sb.ToString();
+        }
+        finally
+        {
+            JsonAppender.Return(sb);
+        }
+    }
 
 
     /// <summary>

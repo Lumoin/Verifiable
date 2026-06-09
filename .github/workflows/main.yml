@@ -59,7 +59,9 @@ env:
     api.clearlydefined.io:443
     aka.ms:443
     api.github.com:443
+    *.actions.githubusercontent.com:443
     api.nuget.org:443
+    www.nuget.org:443
     builds.dotnet.microsoft.com:443
     ci.dot.net:443
     pkgs.dev.azure.com:443
@@ -232,7 +234,7 @@ jobs:
     # This step is run always (e.g. also for non-PRs) so the results can be inspected on the command line too.
     - name: ReportGenerator
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      run: dotnet reportgenerator -filefilters:'-**/obj/**;-**/*.g.cs' -assemblyfilters:'+Verifiable*' -reports:'${{ github.workspace }}/reports/coverage.cobertura.xml' -targetdir:'${{ github.workspace }}/reports/coverage/' -reporttypes:'HtmlInline;Cobertura;MarkdownSummary'
+      run: dotnet reportgenerator -filefilters:'-**/obj/**;-**/*.g.cs' -assemblyfilters:'+Verifiable*' -reports:'${{ github.workspace }}/reports/coverage.cobertura.xml' -targetdir:'${{ github.workspace }}/reports/coverage/' -reporttypes:'HtmlInline;Cobertura'
 
     - name: Create test summary
       if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
@@ -240,13 +242,31 @@ jobs:
       with:
         trx_files: '${{ github.workspace }}/reports/**/*.trx'
 
-    - name: Publish coverage summary
-      if: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
-      uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0
+    # The full file-by-file coverage report is uploaded as an artifact rather than posted to
+    # the PR — the per-file table was too long to be useful inline. Only the headline line/
+    # branch numbers go to the run's job summary.
+    - name: Upload coverage report
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        header: Report
-        path: '${{ github.workspace }}/reports/coverage/Summary.md'
-        recreate: true
+        name: coverage-report
+        path: '${{ github.workspace }}/reports/coverage/'
+
+    - name: Coverage headline to job summary
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      shell: bash
+      run: |
+        xml='${{ github.workspace }}/reports/coverage.cobertura.xml'
+        lineRate=$(grep -m1 '<coverage ' "$xml" | grep -oE 'line-rate="[0-9.]+"' | grep -oE '[0-9.]+')
+        branchRate=$(grep -m1 '<coverage ' "$xml" | grep -oE 'branch-rate="[0-9.]+"' | grep -oE '[0-9.]+')
+        linePct=$(awk -v v="$lineRate" 'BEGIN { printf "%.1f", v * 100 }')
+        branchPct=$(awk -v v="$branchRate" 'BEGIN { printf "%.1f", v * 100 }')
+        {
+          echo "### Coverage"
+          echo ""
+          echo "- Line: ${linePct}%"
+          echo "- Branch: ${branchPct}%"
+        } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Update MCP server manifest version
       if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' }}
@@ -278,7 +298,7 @@ jobs:
         done
 
     - name: Generate artifact attestation
-      if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
+      if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' && github.event.repository.private == false }}
       uses: lumoin/trusted-devsecops/.github/actions/sign-artifact@bd2b7f91e73d758f3126562d6a569fc0f31814ee
       with:
         subject-path: './nupkgs/*.nupkg'
@@ -621,7 +641,7 @@ jobs:
         done
 
     - name: Generate artifact attestation for CLI packages
-      if: ${{ github.actor != 'dependabot[bot]' }}
+      if: ${{ github.actor != 'dependabot[bot]' && github.event.repository.private == false }}
       uses: lumoin/trusted-devsecops/.github/actions/sign-artifact@bd2b7f91e73d758f3126562d6a569fc0f31814ee
       with:
         subject-path: './nupkgs/*.nupkg'
@@ -692,6 +712,10 @@ jobs:
     needs: [ build, pack-cli-pointer ]
     if: ${{ github.event_name == 'release' && github.repository_owner == 'lumoin' }}
     runs-on: ubuntu-latest
+    # Bind publishing to the "Release" deployment environment so the OIDC token carries the
+    # environment claim nuget.org trusted publishing requires, and deployments are recorded
+    # against it.
+    environment: Release
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411

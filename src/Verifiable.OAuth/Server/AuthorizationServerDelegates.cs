@@ -754,6 +754,51 @@ public delegate ValueTask RevokeTokenDelegate(
 
 
 /// <summary>
+/// Introspects a token at the token introspection endpoint
+/// (<see href="https://www.rfc-editor.org/rfc/rfc7662">RFC 7662</see>) on behalf
+/// of an authenticated protected resource, returning the token's metadata.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Invoked after the endpoint has authenticated the caller via
+/// <see cref="ValidateClientCredentialsDelegate"/>. The application looks the
+/// presented token up in its own store and returns a
+/// <see cref="Introspection.TokenIntrospectionResult"/> describing it. The same store the
+/// per-call decision seams (<see cref="EvaluateAccessDelegate"/>,
+/// <see cref="LoadClientRegistrationDelegate"/>) read to reject a revoked token is what
+/// decides liveness here, so an introspection answer and an enforcement decision converge
+/// on one piece of state.
+/// </para>
+/// <para>
+/// Per <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.2">RFC 7662 §2.2</see>
+/// a token that is unknown, expired, revoked, or that this caller may not see is NOT an
+/// error: the application returns <see cref="Introspection.TokenIntrospectionResult.Inactive"/>
+/// (the library answers HTTP 200 with <c>{"active":false}</c> and discloses nothing
+/// further). The application MUST scope its answer to what
+/// <paramref name="registration"/> is entitled to learn — RFC 7662 §2.2 lets the server
+/// limit, or withhold, a token's details per requesting resource.
+/// </para>
+/// <para>
+/// <paramref name="tokenTypeHint"/> carries the RFC 7662 §2.1 <c>token_type_hint</c> when
+/// present — an optimization the application MAY use to locate the token faster; an
+/// unrecognized hint MUST NOT cause a failure.
+/// </para>
+/// </remarks>
+/// <param name="token">The token to introspect, exactly as presented on the wire.</param>
+/// <param name="tokenTypeHint">The <c>token_type_hint</c> form value, or <see langword="null"/> when omitted.</param>
+/// <param name="registration">The authenticated protected resource making the request.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The token's metadata, or an inactive result when it is unknown or not disclosable.</returns>
+public delegate ValueTask<Introspection.TokenIntrospectionResult> IntrospectTokenDelegate(
+    string token,
+    string? tokenTypeHint,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
 /// Parses a Global Token Revocation request body
 /// (<see href="https://datatracker.ietf.org/doc/draft-parecki-oauth-global-token-revocation/">draft-parecki-oauth-global-token-revocation §3</see>)
 /// into the neutral <see cref="Logout.GlobalTokenRevocationRequest"/> — a single

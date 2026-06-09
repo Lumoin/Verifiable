@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Core.StatusList;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
@@ -111,4 +112,13 @@ public sealed record VpTokenParsed
     /// or no reuse occurred.
     /// </summary>
     public bool SaltReused { get; init; }
+
+    /// <summary>
+    /// The IETF Token Status List reference (<c>status.status_list = {idx, uri}</c>) extracted from
+    /// the credential's issuer payload, or <see langword="null"/> when the credential carries no
+    /// status claim. A verifier — RP server, peer wallet, or agent — passes this to
+    /// <see cref="StatusList.CredentialStatusGate"/> to check revocation; surfacing it here keeps
+    /// the fetch and trust of the status list the caller's concern, not the parser's.
+    /// </summary>
+    public StatusListReference? CredentialStatus { get; init; }
 }
