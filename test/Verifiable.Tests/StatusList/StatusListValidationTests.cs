@@ -55,7 +55,7 @@ internal sealed class StatusListValidationTests
     public void GetStatusReturnsCorrectValue()
     {
         var timeProvider = new FakeTimeProvider(BaseTime);
-        using var list = StatusListType.Create(MediumListCapacity, StatusListBitSize.TwoBits, Pool);
+        using var list = StatusListType.Create(MediumListCapacity, StatusListBitSize.TwoBits, Pool, BitOrder.LeastSignificantFirst);
         list[SuspendedCredentialIndex] = StatusTypes.Suspended;
 
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list);
@@ -70,7 +70,7 @@ internal sealed class StatusListValidationTests
     public void GetStatusThrowsForSubjectMismatch()
     {
         var timeProvider = new FakeTimeProvider(BaseTime);
-        using var list = StatusListType.Create(MediumListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(MediumListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list);
         var reference = new StatusListReference(0, MismatchedSubject);
 
@@ -82,7 +82,7 @@ internal sealed class StatusListValidationTests
     public void GetStatusThrowsWhenTokenHasExpired()
     {
         var timeProvider = new FakeTimeProvider(BaseTime);
-        using var list = StatusListType.Create(MediumListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(MediumListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list)
         {
             ExpirationTime = BaseTime.AddHours(1)
@@ -100,7 +100,7 @@ internal sealed class StatusListValidationTests
     public void GetStatusSucceedsBeforeExpiration()
     {
         var timeProvider = new FakeTimeProvider(BaseTime);
-        using var list = StatusListType.Create(MediumListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(MediumListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list)
         {
             ExpirationTime = BaseTime.AddHours(1)
@@ -119,7 +119,7 @@ internal sealed class StatusListValidationTests
     public void GetStatusThrowsForIndexOutOfBounds()
     {
         var timeProvider = new FakeTimeProvider(BaseTime);
-        using var list = StatusListType.Create(10, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(10, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list);
         var reference = new StatusListReference(10, ExampleTokenSubject);
 
@@ -141,7 +141,7 @@ internal sealed class StatusListValidationTests
     public void ShouldRefreshReturnsFalseWhenNoTtl()
     {
         var timeProvider = new FakeTimeProvider(BaseTime);
-        using var list = StatusListType.Create(10, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(10, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list);
 
         var resolvedAt = timeProvider.GetUtcNow();
@@ -156,7 +156,7 @@ internal sealed class StatusListValidationTests
     public void ShouldRefreshReturnsTrueWhenTtlExceeded()
     {
         var timeProvider = new FakeTimeProvider(BaseTime);
-        using var list = StatusListType.Create(10, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(10, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list)
         {
             TimeToLive = 60
@@ -176,7 +176,7 @@ internal sealed class StatusListValidationTests
     public void ShouldRefreshReturnsFalseWhenWithinTtl()
     {
         var timeProvider = new FakeTimeProvider(BaseTime);
-        using var list = StatusListType.Create(10, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(10, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list)
         {
             TimeToLive = 3600

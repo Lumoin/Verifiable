@@ -39,7 +39,7 @@ internal sealed class StatusListTokenTests
     [TestMethod]
     public void ConstructorSetsRequiredProperties()
     {
-        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list);
 
@@ -54,7 +54,7 @@ internal sealed class StatusListTokenTests
     [TestMethod]
     public void OptionalPropertiesCanBeSet()
     {
-        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         var expiration = BaseTime.AddHours(1);
 
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list)
@@ -71,7 +71,7 @@ internal sealed class StatusListTokenTests
     [TestMethod]
     public void ConstructorThrowsForNullSubject()
     {
-        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         Assert.ThrowsExactly<ArgumentNullException>(() =>
             new StatusListToken(null!, BaseTime, list));
@@ -81,7 +81,7 @@ internal sealed class StatusListTokenTests
     [TestMethod]
     public void ConstructorThrowsForWhitespaceSubject()
     {
-        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         Assert.ThrowsExactly<ArgumentException>(() =>
             new StatusListToken("   ", BaseTime, list));

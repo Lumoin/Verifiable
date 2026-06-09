@@ -141,7 +141,14 @@ public static class AuthCodeEndpoints
             candidates.Add(BuildRefreshToken());
         }
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenRevocation))
+        //Token revocation (RFC 7009). Activates only when the capability is
+        //allowed AND both the revocation seam and the client-authentication seam
+        //are wired: a revocation endpoint that cannot authenticate the client or
+        //cannot revoke would be a silent no-op that misleads clients into
+        //believing their tokens were killed (fail-closed, like client_credentials).
+        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenRevocation)
+            && context.Server?.Integration.RevokeTokenAsync is not null
+            && context.Server?.Integration.ValidateClientCredentialsAsync is not null)
         {
             candidates.Add(BuildRevocation());
         }
@@ -267,6 +274,20 @@ public static class AuthCodeEndpoints
                 fields.TryGetValue(WellKnownJwtClaimNames.Nonce, out string? nonce);
                 nonce ??= string.Empty;
 
+                //RFC 9470 §4 step-up: the authentication-requirement parameters
+                //(acr_values, max_age) are carried forward to the authorization
+                //endpoint where they are evaluated against the established
+                //authentication. max_age is a non-negative integer (OIDC Core
+                //§3.1.2.1); a malformed value is a request error.
+                fields.TryGetValue(OAuthRequestParameterNames.AcrValues, out string? acrValues);
+                fields.TryGetValue(OAuthRequestParameterNames.State, out string? requestState);
+                (int? maxAge, bool isMaxAgeWellFormed) = ReadRequestedMaxAge(fields);
+                if(!isMaxAgeWellFormed)
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "max_age must be a non-negative integer."));
+                }
+
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
                 string flowId = context.FlowId!;
@@ -292,7 +313,10 @@ public static class AuthCodeEndpoints
                     ExpectedIssuer: clientId,
                     ReceivedAt: now,
                     ExpiresAt: expiresAt,
-                    ExpiresIn: expiresIn), (ServerHttpResponse?)null);
+                    ExpiresIn: expiresIn,
+                    AcrValues: acrValues,
+                    MaxAge: maxAge,
+                    State: requestState), (ServerHttpResponse?)null);
             },
             BuildResponse = static (state, _, _) =>
             {
@@ -388,9 +412,36 @@ public static class AuthCodeEndpoints
                         OAuthErrors.ServerError, "Subject not authenticated."));
                 }
 
-                DateTimeOffset authTime = context.AuthTime ?? server.TimeProvider.GetUtcNow();
+                ParRequestReceivedState parState = (ParRequestReceivedState)currentState;
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
+                DateTimeOffset authTime = context.AuthTime ?? now;
+
+                //RFC 9101 §6.3 (applied to PAR via RFC 9126 §4): when the authorization request
+                //is passed by reference (request_uri), the authorization server MUST only use the
+                //pushed parameters, even if the same parameter is duplicated in the query. Honoring
+                //a front-channel scope would defeat PAR's integrity guarantee (RFC 9126 §1), so the
+                //pushed scope is authoritative and a query-string scope is ignored.
+                string grantedScope = parState.Scope;
+
+                //Extraneous front-channel parameters are ignored, but their presence on a
+                //request_uri-referenced request may indicate a non-conformant client or a tampering
+                //attempt — surface it on the request's trace (observational; does not change behavior).
+                if(HasExtraneousReferencedRequestParameters(fields))
+                {
+                    System.Diagnostics.Activity.Current?.AddEvent(
+                        new System.Diagnostics.ActivityEvent(
+                            Diagnostics.OAuthEventNames.ExtraneousAuthorizeParameters));
+                }
+
+                ServerHttpResponse? requirementFailure = await EvaluateAuthenticationRequirementsAsync(
+                    server, context, parState.AcrValues, parState.MaxAge, grantedScope,
+                    subjectId, now, parState.RedirectUri, parState.State, ct).ConfigureAwait(false);
+                if(requirementFailure is not null)
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)requirementFailure);
+                }
+
                 string rawCode = await server.Integration.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthAuthorizationCode, context, ct)
                     .ConfigureAwait(false);
@@ -402,16 +453,14 @@ public static class AuthCodeEndpoints
                     server.Codecs.Encoder!,
                     SensitiveMemoryPool<byte>.Shared);
 
-                ParRequestReceivedState parState = (ParRequestReceivedState)currentState;
-
-                fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scope);
-
                 OAuthFlowInput input = new ServerAuthorizeCompleted(
                     CodeHash: codeHash,
                     SubjectId: subjectId,
                     AuthTime: authTime,
-                    Scope: scope ?? parState.Scope,
-                    CompletedAt: now);
+                    Scope: grantedScope,
+                    CompletedAt: now,
+                    SessionId: context.SessionId,
+                    Acr: context.Acr);
 
                 return ((OAuthFlowInput?)input, (ServerHttpResponse?)null);
             },
@@ -528,7 +577,30 @@ public static class AuthCodeEndpoints
                 fields.TryGetValue(WellKnownJwtClaimNames.Nonce, out string? nonce);
                 nonce ??= string.Empty;
 
+                //RFC 9470 §4 step-up — the authentication-requirement parameters arrive
+                //directly on the authorization request (RFC 9470 Figures 4 and 5). max_age
+                //is a non-negative integer (OIDC Core §3.1.2.1); a malformed value is a
+                //request error.
+                fields.TryGetValue(OAuthRequestParameterNames.AcrValues, out string? acrValues);
+                fields.TryGetValue(OAuthRequestParameterNames.State, out string? requestState);
+                (int? maxAge, bool isMaxAgeWellFormed) = ReadRequestedMaxAge(fields);
+                if(!isMaxAgeWellFormed)
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "max_age must be a non-negative integer."));
+                }
+
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
+                DateTimeOffset authTime = context.AuthTime ?? now;
+
+                ServerHttpResponse? requirementFailure = await EvaluateAuthenticationRequirementsAsync(
+                    server, context, acrValues, maxAge, scope, subjectId, now, redirectUri, requestState, ct)
+                    .ConfigureAwait(false);
+                if(requirementFailure is not null)
+                {
+                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)requirementFailure);
+                }
+
                 string flowId = context.FlowId!;
 
                 //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for
@@ -556,10 +628,13 @@ public static class AuthCodeEndpoints
                     ClientId: clientId,
                     Nonce: nonce,
                     SubjectId: subjectId,
-                    AuthTime: now,
+                    AuthTime: authTime,
                     ExpectedIssuer: clientId,
                     CompletedAt: now,
-                    ExpiresAt: expiresAt), (ServerHttpResponse?)null);
+                    ExpiresAt: expiresAt,
+                    SessionId: context.SessionId,
+                    Acr: context.Acr,
+                    State: requestState), (ServerHttpResponse?)null);
             },
 
             BuildResponse = static (state, _, context) =>
@@ -715,7 +790,10 @@ public static class AuthCodeEndpoints
                     ExpectedIssuer: ro.ClientId,
                     ReceivedAt: now,
                     ExpiresAt: expiresAt,
-                    ExpiresIn: expiresIn), null);
+                    ExpiresIn: expiresIn,
+                    AcrValues: ro.AcrValues,
+                    MaxAge: ro.MaxAge,
+                    State: ro.State), null);
             },
 
             BuildResponse = static (state, _, _) =>
@@ -828,6 +906,16 @@ public static class AuthCodeEndpoints
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
+                DateTimeOffset authTime = context.AuthTime ?? now;
+
+                ServerHttpResponse? requirementFailure = await EvaluateAuthenticationRequirementsAsync(
+                    server, context, ro.AcrValues, ro.MaxAge, ro.Scope, subjectId, now,
+                    ro.RedirectUri, ro.State, ct).ConfigureAwait(false);
+                if(requirementFailure is not null)
+                {
+                    return ((OAuthFlowInput?)null, requirementFailure);
+                }
+
                 string flowId = context.FlowId!;
 
                 //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for
@@ -855,10 +943,13 @@ public static class AuthCodeEndpoints
                     ClientId: ro.ClientId,
                     Nonce: ro.Nonce,
                     SubjectId: subjectId,
-                    AuthTime: now,
+                    AuthTime: authTime,
                     ExpectedIssuer: ro.ClientId,
                     CompletedAt: now,
-                    ExpiresAt: expiresAt), null);
+                    ExpiresAt: expiresAt,
+                    SessionId: context.SessionId,
+                    Acr: context.Acr,
+                    State: ro.State), null);
             },
 
             BuildResponse = static (state, _, context) =>
@@ -1388,6 +1479,8 @@ public static class AuthCodeEndpoints
                     IssuedAt = now,
                     Nonce = string.IsNullOrEmpty(codeState.Nonce) ? null : codeState.Nonce,
                     AuthTime = codeState.AuthTime,
+                    SessionId = codeState.SessionId,
+                    Acr = codeState.Acr,
                     Confirmation = confirmation
                 };
 
@@ -1530,7 +1623,9 @@ public static class AuthCodeEndpoints
                         IssuedAt = now,
                         SubjectId = codeState.SubjectId,
                         Scope = codeState.Scope,
-                        Confirmation = confirmation
+                        Confirmation = confirmation,
+                        AuthTime = codeState.AuthTime,
+                        Acr = codeState.Acr
                     };
                     await server.Integration.SaveFlowStateAsync(
                         registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, ct)
@@ -2000,6 +2095,8 @@ public static class AuthCodeEndpoints
                     Scope = storedRefresh.Scope,
                     ClientId = storedRefresh.ClientId,
                     IssuedAt = now,
+                    AuthTime = storedRefresh.AuthTime,
+                    Acr = storedRefresh.Acr,
                     Confirmation = confirmation
                 };
 
@@ -2123,7 +2220,9 @@ public static class AuthCodeEndpoints
                         IssuedAt = now,
                         SubjectId = storedRefresh.SubjectId,
                         Scope = storedRefresh.Scope,
-                        Confirmation = confirmation
+                        Confirmation = confirmation,
+                        AuthTime = storedRefresh.AuthTime,
+                        Acr = storedRefresh.Acr
                     };
                     await server.Integration.SaveFlowStateAsync(
                         registration.TenantId, newRefreshFlowId, newRefreshState, stepCount: 0, context, ct)
@@ -2234,8 +2333,14 @@ public static class AuthCodeEndpoints
             Name = WellKnownEndpointNames.AuthCodeRevoke,
             HttpMethod = WellKnownHttpMethods.Post,
             Capability = WellKnownCapabilityIdentifiers.OAuthTokenRevocation,
-            StartsNewFlow = false,
-            Kind = FlowKind.AuthCodeServer,
+            //RFC 7009 revocation is stateless — a single request that revokes a
+            //token and returns, with no multi-step flow and no correlation key to
+            //resolve. It uses the same stateless shape as the client_credentials
+            //grant (StartsNewFlow + FlowKind.Stateless), not the stateful
+            //AuthCodeServer path that would demand a flow handle the request never
+            //carries.
+            StartsNewFlow = true,
+            Kind = FlowKind.Stateless,
             DiscoveryMetadataKey = AuthorizationServerMetadataParameterNames.RevocationEndpoint,
 
             //Acceptance test: POST to /revoke with a token body parameter per
@@ -2259,10 +2364,51 @@ public static class AuthCodeEndpoints
                 return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
             },
 
-            BuildInputAsync = static (fields, context, currentState, ct) =>
-                ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>(
-                    (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, "Revocation not yet implemented."))),
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                AuthorizationServer server = context.Server!;
+
+                ClientRecord? registration = context.Registration;
+                if(registration is null)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Unknown client."));
+                }
+
+                //RFC 7009 §2.1: the client MUST authenticate using the same method
+                //it uses at the token endpoint. The seam owns the method and the
+                //credential comparison; the candidate gate guarantees it is wired.
+                bool clientAuthenticated = await server.Integration.ValidateClientCredentialsAsync!(
+                    context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                if(!clientAuthenticated)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Client authentication failed."));
+                }
+
+                //RFC 7009 §2.1: token is REQUIRED. The matcher already guaranteed
+                //its presence; the guard keeps the contract explicit and local.
+                if(!fields.TryGetValue(OAuthRequestParameterNames.Token, out string? token)
+                    || string.IsNullOrEmpty(token))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "Missing token parameter."));
+                }
+
+                fields.TryGetValue(OAuthRequestParameterNames.TokenTypeHint, out string? tokenTypeHint);
+
+                //RFC 7009 §2.1: revoke on behalf of the authenticated client; the
+                //application scopes the revocation to that client's tokens and
+                //cascades refresh -> access. An unrecognized token_type_hint is a
+                //hint, not an error.
+                await server.Integration.RevokeTokenAsync!(
+                    token, tokenTypeHint, registration, context, ct).ConfigureAwait(false);
+
+                //RFC 7009 §2.2: HTTP 200 with an empty body whether the token was
+                //live, already revoked, or unknown — the response never reveals
+                //which, so a probing client learns nothing about token validity.
+                return (null, ServerHttpResponse.Ok());
+            },
             BuildResponse = static (state, _, _) =>
                 ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
         };
@@ -2323,9 +2469,59 @@ public static class AuthCodeEndpoints
     /// permissive deployment opts out via <c>policy.EmitIssOnRedirect</c>.
     /// </remarks>
     private static ServerHttpResponse BuildAuthorizeRedirect(
-        ServerCodeIssuedState code, ExchangeContext context)
+        ServerCodeIssuedState code, ExchangeContext context) =>
+        BuildAuthorizeRedirectWithParameters(
+            code.RedirectUri,
+            $"code={Uri.EscapeDataString(code.CodeHash)}",
+            code.State,
+            context);
+
+
+    /// <summary>
+    /// Builds an OAuth 2.0 Authorization Error Response as a redirect per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>:
+    /// a 302 to the client's already-validated <paramref name="redirectUri"/> carrying the
+    /// <c>error</c> and <c>error_description</c> query parameters, plus the request's
+    /// <paramref name="state"/> when one was sent. Used for authentication-requirement failures
+    /// (<c>unmet_authentication_requirements</c>, RFC 9470 §5) discovered after the redirect URI
+    /// has been validated, so the error is delivered to the client via the redirect rather than
+    /// rendered to the user agent.
+    /// </summary>
+    private static ServerHttpResponse BuildAuthorizeErrorRedirect(
+        Uri redirectUri, string error, string errorDescription, string? state, ExchangeContext context) =>
+        BuildAuthorizeRedirectWithParameters(
+            redirectUri,
+            $"error={Uri.EscapeDataString(error)}&error_description={Uri.EscapeDataString(errorDescription)}",
+            state,
+            context);
+
+
+    /// <summary>
+    /// Builds a 302 redirect to a validated authorization <paramref name="redirectUri"/>,
+    /// appending the already-encoded <paramref name="parameters"/> query fragment, the request's
+    /// <paramref name="state"/> when present, and the RFC 9207 <c>iss</c> parameter when
+    /// <c>policy.EmitIssOnRedirect</c> is set. A <c>redirect_uri</c> MAY carry its own query
+    /// component (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1.2">RFC 6749 §3.1.2</see> /
+    /// RFC 3986), which MUST be retained, so the first appended parameter uses <c>&amp;</c>
+    /// when a query is already present and <c>?</c> otherwise. The <c>state</c> is echoed
+    /// verbatim on both the success and error responses per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see> so
+    /// the client can bind the redirect to its pending request. The issuer URL source order
+    /// mirrors <c>DefaultIssuerResolver</c>: <see cref="ClientRecord.IssuerUri"/> first, then
+    /// the per-request <see cref="ExchangeContextServerExtensions.Issuer"/>; the parameter is
+    /// omitted when neither is populated.
+    /// </summary>
+    private static ServerHttpResponse BuildAuthorizeRedirectWithParameters(
+        Uri redirectUri, string parameters, string? state, ExchangeContext context)
     {
-        string location = $"{code.RedirectUri}?code={Uri.EscapeDataString(code.CodeHash)}";
+        string baseUri = redirectUri.ToString();
+        char separator = baseUri.Contains('?', StringComparison.Ordinal) ? '&' : '?';
+        string location = $"{baseUri}{separator}{parameters}";
+
+        if(!string.IsNullOrEmpty(state))
+        {
+            location += $"&state={Uri.EscapeDataString(state)}";
+        }
 
         if(context.EmitIssOnRedirect)
         {
@@ -2337,6 +2533,153 @@ public static class AuthCodeEndpoints
         }
 
         return ServerHttpResponse.Redirect(location);
+    }
+
+
+    /// <summary>
+    /// Maps an application <see cref="AuthorizationDenialReason"/> to its OAuth 2.0
+    /// Authorization Error Response code. A denial with no reason set is treated as
+    /// <see cref="AuthorizationDenialReason.AccessDenied"/>.
+    /// </summary>
+    private static string MapDenialReasonToError(AuthorizationDenialReason? reason) => reason switch
+    {
+        AuthorizationDenialReason.UnmetAuthenticationRequirements => OAuthErrors.UnmetAuthenticationRequirements,
+        AuthorizationDenialReason.AccessDenied => OAuthErrors.AccessDenied,
+        _ => OAuthErrors.AccessDenied
+    };
+
+
+    /// <summary>
+    /// Supplies a reason-specific <c>error_description</c> for an application denial that
+    /// carried none.
+    /// </summary>
+    private static string DefaultDenialDescription(AuthorizationDenialReason? reason) => reason switch
+    {
+        AuthorizationDenialReason.UnmetAuthenticationRequirements =>
+            "The established authentication does not satisfy the request's authentication requirements.",
+        _ => "The authorization request was denied."
+    };
+
+
+    /// <summary>
+    /// Evaluates a request's RFC 9470 §5 step-up authentication requirements at the
+    /// authorization endpoint, shared across every code-issuing authorize path (PAR-backed,
+    /// direct, and JAR). Enforces the temporal <c>max_age</c> recency requirement itself
+    /// (OIDC Core §3.1.2.1, using the deployment's <c>ClockSkewTolerance</c>), then invokes
+    /// the application's <see cref="EvaluateAuthorizationRequestDelegate"/> for the semantic
+    /// decision (<c>acr</c> satisfaction, consent, policy). Returns the OAuth Authorization
+    /// Error Response redirect to use when a requirement is unmet, or <see langword="null"/>
+    /// when the request may proceed to code issuance.
+    /// </summary>
+    /// <summary>
+    /// Reads the optional <c>max_age</c> request parameter (OIDC Core §3.1.2.1) — the maximum
+    /// authentication age in whole seconds, a non-negative integer. Returns the parsed value
+    /// (or <see langword="null"/> when the parameter is absent) and whether it was well-formed;
+    /// a present-but-malformed value reports <c>IsWellFormed = false</c> so the caller rejects
+    /// the request with <c>invalid_request</c>. Shared by the query-parameter authorize paths
+    /// (PAR and direct); the JAR path reads the same parameter from the signed request object.
+    /// </summary>
+    /// <summary>
+    /// Returns whether a <c>request_uri</c>-referenced authorize request carries any front-channel
+    /// parameter beyond <c>request_uri</c> and <c>client_id</c>. Per RFC 9126 §4 / RFC 9101 §6.3
+    /// such a request carries only those two; anything else is ignored (the pushed request is
+    /// authoritative) and is a signal worth surfacing for observability.
+    /// </summary>
+    private static bool HasExtraneousReferencedRequestParameters(RequestFields fields)
+    {
+        foreach(string key in fields.Keys)
+        {
+            if(!string.Equals(key, OAuthRequestParameterNames.RequestUri, StringComparison.Ordinal)
+                && !string.Equals(key, OAuthRequestParameterNames.ClientId, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    private static (int? MaxAge, bool IsWellFormed) ReadRequestedMaxAge(RequestFields fields)
+    {
+        if(!fields.TryGetValue(OAuthRequestParameterNames.MaxAge, out string? raw)
+            || string.IsNullOrEmpty(raw))
+        {
+            return (null, true);
+        }
+
+        if(!int.TryParse(raw, out int parsed) || parsed < 0)
+        {
+            return (null, false);
+        }
+
+        return (parsed, true);
+    }
+
+
+    private static async ValueTask<ServerHttpResponse?> EvaluateAuthenticationRequirementsAsync(
+        AuthorizationServer server,
+        ExchangeContext context,
+        string? requestedAcrValues,
+        int? requestedMaxAge,
+        string requestedScope,
+        string subjectId,
+        DateTimeOffset now,
+        Uri redirectUri,
+        string? requestState,
+        CancellationToken cancellationToken)
+    {
+        if(requestedMaxAge is int maxAge)
+        {
+            //RFC 9470 §5 / OIDC Core §3.1.2.1 — max_age bounds the elapsed seconds since the
+            //End-User's last active authentication. The comparison is in WHOLE SECONDS, the
+            //unit max_age and the auth_time claim are both defined in, and carries NO clock-skew
+            //padding: auth_time and now are both produced within this authorization server (one
+            //clock), so there is no two-party divergence to absorb — unlike the JAR / access-token
+            //iat/exp checks, which compare a remote issuer's timestamps. Padding here would
+            //silently widen max_age=0 ("prompt=login", requiring a fresh authentication) into a
+            //tolerance-wide window through which a stale session would pass. The requirement is
+            //necessary (RFC 9470 §5): an absent auth_time cannot be confirmed recent and so fails
+            //closed rather than being assumed fresh.
+            if(context.AuthTime is not { } establishedAuthTime
+                || now.ToUnixTimeSeconds() - establishedAuthTime.ToUnixTimeSeconds() > maxAge)
+            {
+                return BuildAuthorizeErrorRedirect(
+                    redirectUri,
+                    OAuthErrors.UnmetAuthenticationRequirements,
+                    "The established authentication does not satisfy the requested max_age.",
+                    requestState,
+                    context);
+            }
+        }
+
+        if(server.Integration.EvaluateAuthorizationRequestAsync is { } evaluateRequest
+            && context.Registration is { } registration)
+        {
+            AuthorizationRequestDecision decision = await evaluateRequest(
+                new AuthorizationRequestEvaluation
+                {
+                    RequestedAcrValues = requestedAcrValues,
+                    RequestedMaxAge = requestedMaxAge,
+                    RequestedScope = requestedScope,
+                    Subject = subjectId,
+                    EstablishedAcr = context.Acr,
+                    EstablishedAuthTime = context.AuthTime
+                },
+                registration, context, cancellationToken).ConfigureAwait(false);
+
+            if(!decision.IsPermitted)
+            {
+                return BuildAuthorizeErrorRedirect(
+                    redirectUri,
+                    MapDenialReasonToError(decision.DenialReason),
+                    decision.DenialDescription ?? DefaultDenialDescription(decision.DenialReason),
+                    requestState,
+                    context);
+            }
+        }
+
+        return null;
     }
 
 

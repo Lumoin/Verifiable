@@ -89,7 +89,10 @@ public static class AuthCodeServerFlowTransitions
                                 Scope = par.Scope,
                                 ClientId = par.ClientId,
                                 Nonce = par.Nonce,
-                                ExpiresIn = par.ExpiresIn
+                                ExpiresIn = par.ExpiresIn,
+                                AcrValues = par.AcrValues,
+                                MaxAge = par.MaxAge,
+                                State = par.State
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ParRequestReceived"),
@@ -112,8 +115,11 @@ public static class AuthCodeServerFlowTransitions
                                 Scope = direct.Scope,
                                 SubjectId = direct.SubjectId,
                                 AuthTime = direct.AuthTime,
+                                SessionId = direct.SessionId,
+                                Acr = direct.Acr,
                                 ClientId = direct.ClientId,
-                                Nonce = direct.Nonce
+                                Nonce = direct.Nonce,
+                                State = direct.State
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerCodeIssued"),
@@ -134,8 +140,11 @@ public static class AuthCodeServerFlowTransitions
                                 Scope = auth.Scope,
                                 SubjectId = auth.SubjectId,
                                 AuthTime = auth.AuthTime,
+                                SessionId = auth.SessionId,
+                                Acr = auth.Acr,
                                 ClientId = received.ClientId,
-                                Nonce = received.Nonce
+                                Nonce = received.Nonce,
+                                State = received.State
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerCodeIssued"),

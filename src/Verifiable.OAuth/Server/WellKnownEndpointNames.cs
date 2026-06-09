@@ -37,6 +37,11 @@ public static class WellKnownEndpointNames
     public static readonly string AuthCodeRevoke = "AuthCode.Revoke";
     public static readonly string AuthCodeIntrospect = "AuthCode.Introspect";
 
+    //Global Token Revocation (draft-parecki-oauth-global-token-revocation): an
+    //authenticated JSON command that revokes all of a subject's tokens by
+    //RFC 9493 Subject Identifier.
+    public static readonly string GlobalTokenRevocation = "GlobalTokenRevocation";
+
     //OID4VP family
     public static readonly string Oid4VpPar = "Oid4Vp.Par";
     public static readonly string Oid4VpJarRequest = "Oid4Vp.JarRequest";
@@ -59,6 +64,8 @@ public static class WellKnownEndpointNames
 
     //OIDC family
     public static readonly string UserInfo = "Oidc.UserInfo";
+    //OIDC RP-Initiated Logout 1.0 end-session endpoint.
+    public static readonly string EndSession = "Oidc.EndSession";
 
     //AuthZEN family
     public static readonly string AuthZenAccessEvaluation = "AuthZen.AccessEvaluation";

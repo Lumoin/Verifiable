@@ -251,6 +251,9 @@ public static class OAuthResponseParsers
         string? scope = TryGetStringField(body, "scope", out ReadOnlySpan<char> sc)
             ? sc.ToString() : null;
 
+        string? idToken = TryGetStringField(body, "id_token", out ReadOnlySpan<char> idt)
+            ? idt.ToString() : null;
+
         return Result.Success<TokenResponse, OAuthParseError>(
             new TokenResponse
             {
@@ -258,7 +261,8 @@ public static class OAuthResponseParsers
                 TokenType = tokenTypeSpan.ToString(),
                 ExpiresIn = expiresIn,
                 RefreshToken = refreshToken,
-                Scope = scope
+                Scope = scope,
+                IdToken = idToken
             });
     }
 

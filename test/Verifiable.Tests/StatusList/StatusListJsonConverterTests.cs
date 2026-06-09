@@ -76,7 +76,7 @@ internal sealed class StatusListJsonConverterTests
     public void OneBitRoundTripsViaJson()
     {
         var options = CreateOptions();
-        using var original = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, SensitiveMemoryPool<byte>.Shared);
+        using var original = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, SensitiveMemoryPool<byte>.Shared, BitOrder.LeastSignificantFirst);
         original[0] = StatusTypes.Invalid;
         original[3] = StatusTypes.Invalid;
         original[7] = StatusTypes.Invalid;
@@ -108,7 +108,7 @@ internal sealed class StatusListJsonConverterTests
     public void StatusListWithAggregationUriRoundTrips()
     {
         var options = CreateOptions();
-        using var list = StatusListType.Create(8, StatusListBitSize.OneBit, SensitiveMemoryPool<byte>.Shared);
+        using var list = StatusListType.Create(8, StatusListBitSize.OneBit, SensitiveMemoryPool<byte>.Shared, BitOrder.LeastSignificantFirst);
         list.AggregationUri = ExampleAggregationUri;
 
         string json = JsonSerializerExtensions.Serialize(list, options);

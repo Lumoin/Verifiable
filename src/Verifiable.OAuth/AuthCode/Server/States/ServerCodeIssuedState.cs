@@ -74,4 +74,28 @@ public sealed record ServerCodeIssuedState: OAuthFlowState
     /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OIDC Core §3.1.2.1</see>.
     /// </summary>
     public required string Nonce { get; init; }
+
+    /// <summary>
+    /// The End-User's authentication session identifier (<c>sid</c>) established at
+    /// authorize time, carried forward so the token endpoint can emit it as the ID
+    /// Token's <c>sid</c> claim. <see langword="null"/> when no session-scoped
+    /// identifier was stamped.
+    /// </summary>
+    public string? SessionId { get; init; }
+
+    /// <summary>
+    /// The Authentication Context Class Reference (<c>acr</c>) established at authorize
+    /// time, carried forward so the token endpoint can emit it as the access token's
+    /// <c>acr</c> claim per RFC 9068 §2.2.1 / RFC 9470 §5. <see langword="null"/> when no
+    /// authentication-context reference was stamped.
+    /// </summary>
+    public string? Acr { get; init; }
+
+    /// <summary>
+    /// The opaque <c>state</c> value from the authorization request, carried forward so the
+    /// success redirect echoes it back to the client per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>.
+    /// <see langword="null"/> when the request carried no <c>state</c>.
+    /// </summary>
+    public string? State { get; init; }
 }

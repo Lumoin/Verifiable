@@ -84,7 +84,8 @@ public sealed class StatusListCborConverter: CborConverter<Core.StatusList.Statu
         }
 
         StatusListBitSize bitSize = (StatusListBitSize)bits.Value;
-        var statusList = Core.StatusList.StatusList.FromCompressed(lst, bitSize, pool);
+        var statusList = Core.StatusList.StatusList.FromCompressed(
+            lst, bitSize, pool, Core.StatusList.BitOrder.LeastSignificantFirst);
 
         if(aggregationUri is not null)
         {

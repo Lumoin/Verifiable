@@ -88,4 +88,29 @@ public sealed record ParRequestReceivedState: OAuthFlowState
     /// </para>
     /// </remarks>
     public required int ExpiresIn { get; init; }
+
+    /// <summary>
+    /// The <c>acr_values</c> from the PAR request (space-separated, preference-ordered),
+    /// or <see langword="null"/> when none was requested. Carried forward so the authorization
+    /// endpoint can evaluate whether the established authentication satisfies the requested
+    /// Authentication Context Class Reference per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9470#section-5">RFC 9470 §5</see>.
+    /// </summary>
+    public string? AcrValues { get; init; }
+
+    /// <summary>
+    /// The <c>max_age</c> from the PAR request (maximum authentication age in seconds), or
+    /// <see langword="null"/> when none was requested. Carried forward so the authorization
+    /// endpoint can enforce authentication recency per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OIDC Core §3.1.2.1</see>.
+    /// </summary>
+    public int? MaxAge { get; init; }
+
+    /// <summary>
+    /// The opaque <c>state</c> value from the pushed authorization request, carried forward so
+    /// the authorization endpoint echoes it on both the success and error redirects per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>.
+    /// <see langword="null"/> when the request carried no <c>state</c>.
+    /// </summary>
+    public string? State { get; init; }
 }

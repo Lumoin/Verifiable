@@ -35,6 +35,7 @@ public static class WellKnownClaimIds
     //OIDC authentication context (codes 1020–1029).
     public static readonly ClaimId OidcAuthTime = ClaimId.Create(1020, "OidcAuthTime");
     public static readonly ClaimId OidcAuthClass = ClaimId.Create(1021, "OidcAuthClass");
+    public static readonly ClaimId OidcSessionId = ClaimId.Create(1022, "OidcSessionId");
 
     //RFC 7800 confirmation method (codes 1030–1039).
     public static readonly ClaimId CnfBinding = ClaimId.Create(1030, "CnfBinding");

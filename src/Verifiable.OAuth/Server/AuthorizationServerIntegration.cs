@@ -483,6 +483,68 @@ public sealed class AuthorizationServerIntegration
     public ValidateClientCredentialsDelegate? ValidateClientCredentialsAsync { get; set; }
 
     /// <summary>
+    /// Revokes a token at the RFC 7009 revocation endpoint on behalf of an
+    /// authenticated client. The endpoint activates only when the
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthTokenRevocation"/> capability
+    /// is allowed and BOTH this seam and <see cref="ValidateClientCredentialsAsync"/>
+    /// are wired — a revocation endpoint that cannot authenticate the client or
+    /// cannot revoke would be a silent no-op that misleads clients into believing a
+    /// token was killed. The application owns the token store and the
+    /// refresh-to-access cascade.
+    /// </summary>
+    public RevokeTokenDelegate? RevokeTokenAsync { get; set; }
+
+    /// <summary>
+    /// Parses a Global Token Revocation request body
+    /// (draft-parecki-oauth-global-token-revocation §3) into the neutral
+    /// <see cref="Logout.GlobalTokenRevocationRequest"/>. Required when
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation"/> is
+    /// advertised — the default JSON implementation lives in
+    /// <c>Verifiable.OAuth.Json</c> and is wired by the application.
+    /// </summary>
+    public ParseGlobalTokenRevocationRequestDelegate? ParseGlobalTokenRevocationRequestAsync { get; set; }
+
+    /// <summary>
+    /// Revokes all of a subject's tokens for a Global Token Revocation command
+    /// (draft-parecki-oauth-global-token-revocation §3). The endpoint activates
+    /// only when the <see cref="WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation"/>
+    /// capability is allowed and the parse seam, this seam, and
+    /// <see cref="ValidateClientCredentialsAsync"/> are all wired (fail-closed —
+    /// an unauthenticated or no-op global revocation would be dangerous). The
+    /// application owns the fan-out (revoke the subject's grants, optionally emit a
+    /// CAEP <c>session-revoked</c> signal); the library owns the wire.
+    /// </summary>
+    public RevokeSubjectTokensDelegate? RevokeSubjectTokensAsync { get; set; }
+
+    /// <summary>
+    /// Terminates the End-User's authentication session for an RP-Initiated Logout
+    /// (OIDC RP-Initiated Logout 1.0). The <c>end_session_endpoint</c> activates only
+    /// when the <see cref="WellKnownCapabilityIdentifiers.OidcRpInitiatedLogout"/>
+    /// capability is allowed and this seam plus the verification-key resolver are wired
+    /// (the endpoint must verify the <c>id_token_hint</c>). The application owns the
+    /// session store and the cascade.
+    /// </summary>
+    public TerminateSessionDelegate? TerminateSessionAsync { get; set; }
+
+    /// <summary>
+    /// Terminates a session identified only by a <c>logout_hint</c> — the sessionless
+    /// RP-Initiated Logout path (OIDC RP-Initiated Logout 1.0 §3), taken when the request
+    /// carries a <c>logout_hint</c> but no <c>id_token_hint</c>. Optional: when unset the
+    /// <c>end_session_endpoint</c> still requires an <c>id_token_hint</c>; wiring it enables
+    /// the sessionless branch. The application resolves the opaque hint to a session.
+    /// </summary>
+    public TerminateSessionByHintDelegate? TerminateSessionByHintAsync { get; set; }
+
+    /// <summary>
+    /// Fans a terminated session out to registered RPs as an OIDC Back-Channel Logout
+    /// (OIDC Back-Channel Logout 1.0). Optional: when unset the OP performs no back-channel
+    /// fan-out and does not advertise <c>backchannel_logout_supported</c>; wiring it activates
+    /// the fan-out the end-session endpoint runs after <see cref="TerminateSessionAsync"/>. The
+    /// application owns the session→RP list, builds each Logout Token, and delivers it.
+    /// </summary>
+    public DeliverBackChannelLogoutDelegate? DeliverBackChannelLogoutAsync { get; set; }
+
+    /// <summary>
     /// Classifies a raw token string into a typed
     /// <see cref="Verifiable.JCose.JoseTokenShape"/> by structural inspection.
     /// Optional.
@@ -613,6 +675,21 @@ public sealed class AuthorizationServerIntegration
     /// endpoint is registered.
     /// </summary>
     public ResolveOidcClaimsDelegate? ResolveOidcClaimsAsync { get; set; }
+
+
+    /// <summary>
+    /// Application seam making the authorization decision at the authorization endpoint
+    /// after authentication and the library's own checks. The application may permit or
+    /// deny on any requested/established fact — an unsatisfied <c>acr</c> (RFC 9470 §5
+    /// step-up), resource-owner consent, or deployment policy — and the library maps a
+    /// denial to its OAuth error. See <see cref="EvaluateAuthorizationRequestDelegate"/>
+    /// for the contract. Unset means the authorization server applies no additional
+    /// decision at this point (the achieved <c>acr</c> is still conveyed in the issued
+    /// tokens, and the resource server's step-up challenge remains the backstop). The
+    /// temporal <c>max_age</c> recency requirement is enforced by the library directly (it
+    /// needs no deployment semantics) and does not go through this seam.
+    /// </summary>
+    public EvaluateAuthorizationRequestDelegate? EvaluateAuthorizationRequestAsync { get; set; }
 
 
     /// <summary>

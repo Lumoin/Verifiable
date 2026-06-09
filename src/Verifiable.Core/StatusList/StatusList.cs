@@ -21,7 +21,7 @@ namespace Verifiable.Core.StatusList;
 /// </para>
 /// <list type="bullet">
 ///   <item><description>Indices start at 0 and increase sequentially.</description></item>
-///   <item><description>Bits are packed from least significant bit (0) to most significant bit (7) within each byte.</description></item>
+///   <item><description>Within each byte, entries are packed in the order given by <see cref="BitOrder"/>: least-significant-bit-first for the IETF Token Status List, most-significant-bit-first for the W3C Bitstring Status List.</description></item>
 ///   <item><description>The byte array is compressed using DEFLATE with the ZLIB data format.</description></item>
 ///   <item><description>Implementations should use the highest available compression level.</description></item>
 /// </list>
@@ -58,6 +58,13 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     public int Capacity { get; }
 
     /// <summary>
+    /// Gets the order in which entries are packed within each byte:
+    /// <see cref="BitOrder.LeastSignificantFirst"/> for the IETF Token Status List,
+    /// <see cref="BitOrder.MostSignificantFirst"/> for the W3C Bitstring Status List.
+    /// </summary>
+    public BitOrder BitOrder { get; }
+
+    /// <summary>
     /// Gets or sets an optional URI to the Status List Aggregation endpoint.
     /// </summary>
     /// <remarks>
@@ -84,12 +91,13 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         set => Set(index, value);
     }
 
-    private StatusList(IMemoryOwner<byte> memoryOwner, StatusListBitSize bitSize, int capacity, int byteCount)
+    private StatusList(IMemoryOwner<byte> memoryOwner, StatusListBitSize bitSize, int capacity, int byteCount, BitOrder bitOrder)
     {
         this.memoryOwner = memoryOwner;
         this.byteCount = byteCount;
         BitSize = bitSize;
         Capacity = capacity;
+        BitOrder = bitOrder;
     }
 
     /// <summary>
@@ -102,13 +110,18 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     /// The memory pool to allocate from. Should return exact-size buffers.
     /// Use <see cref="SensitiveMemoryPool"/> for proper disposal and zeroing.
     /// </param>
+    /// <param name="bitOrder">
+    /// The order entries are packed within each byte:
+    /// <see cref="BitOrder.LeastSignificantFirst"/> for the IETF Token Status List,
+    /// <see cref="BitOrder.MostSignificantFirst"/> for the W3C Bitstring Status List.
+    /// </param>
     /// <returns>A new <see cref="StatusList"/> instance.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="capacity"/> is not positive or
     /// <paramref name="bitSize"/> is not a valid value.
     /// </exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pool"/> is <see langword="null"/>.</exception>
-    public static StatusList Create(int capacity, StatusListBitSize bitSize, MemoryPool<byte> pool)
+    public static StatusList Create(int capacity, StatusListBitSize bitSize, MemoryPool<byte> pool, BitOrder bitOrder)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity);
         ValidateBitSize(bitSize);
@@ -121,7 +134,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         //Zero out for clean initial state.
         owner.Memory.Span[..byteCount].Clear();
 
-        return new StatusList(owner, bitSize, capacity, byteCount);
+        return new StatusList(owner, bitSize, capacity, byteCount, bitOrder);
     }
 
     /// <summary>
@@ -133,11 +146,16 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     /// The memory pool to allocate the decompressed data into.
     /// Use <see cref="SensitiveMemoryPool"/> for proper disposal and zeroing.
     /// </param>
+    /// <param name="bitOrder">
+    /// The order entries are packed within each byte:
+    /// <see cref="BitOrder.LeastSignificantFirst"/> for the IETF Token Status List,
+    /// <see cref="BitOrder.MostSignificantFirst"/> for the W3C Bitstring Status List.
+    /// </param>
     /// <returns>A new <see cref="StatusList"/> instance with the decompressed data.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="compressedData"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="compressedData"/> is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="bitSize"/> is not a valid value.</exception>
-    public static StatusList FromCompressed(ReadOnlySpan<byte> compressedData, StatusListBitSize bitSize, MemoryPool<byte> pool)
+    public static StatusList FromCompressed(ReadOnlySpan<byte> compressedData, StatusListBitSize bitSize, MemoryPool<byte> pool, BitOrder bitOrder)
     {
         if(compressedData.IsEmpty)
         {
@@ -154,7 +172,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         IMemoryOwner<byte> owner = pool.Rent(decompressed.Length);
         decompressed.CopyTo(owner.Memory.Span);
 
-        return new StatusList(owner, bitSize, capacity, decompressed.Length);
+        return new StatusList(owner, bitSize, capacity, decompressed.Length, bitOrder);
     }
 
     /// <summary>
@@ -166,11 +184,16 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     /// The memory pool to copy the data into.
     /// Use <see cref="SensitiveMemoryPool"/> for proper disposal and zeroing.
     /// </param>
+    /// <param name="bitOrder">
+    /// The order entries are packed within each byte:
+    /// <see cref="BitOrder.LeastSignificantFirst"/> for the IETF Token Status List,
+    /// <see cref="BitOrder.MostSignificantFirst"/> for the W3C Bitstring Status List.
+    /// </param>
     /// <returns>A new <see cref="StatusList"/> instance.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="rawData"/> is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="bitSize"/> is not a valid value.</exception>
-    public static StatusList FromRaw(ReadOnlySpan<byte> rawData, StatusListBitSize bitSize, MemoryPool<byte> pool)
+    public static StatusList FromRaw(ReadOnlySpan<byte> rawData, StatusListBitSize bitSize, MemoryPool<byte> pool, BitOrder bitOrder)
     {
         if(rawData.IsEmpty)
         {
@@ -186,7 +209,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         IMemoryOwner<byte> owner = pool.Rent(rawData.Length);
         rawData.CopyTo(owner.Memory.Span);
 
-        return new StatusList(owner, bitSize, capacity, rawData.Length);
+        return new StatusList(owner, bitSize, capacity, rawData.Length, bitOrder);
     }
 
     /// <summary>
@@ -206,7 +229,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         int bits = (int)BitSize;
         int entriesPerByte = 8 / bits;
         int byteIndex = index / entriesPerByte;
-        int bitOffset = (index % entriesPerByte) * bits;
+        int bitOffset = ComputeBitOffset(index, bits, entriesPerByte);
         byte mask = (byte)((1 << bits) - 1);
 
         return (byte)((data[byteIndex] >> bitOffset) & mask);
@@ -241,7 +264,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         Span<byte> data = memoryOwner!.Memory.Span;
         int entriesPerByte = 8 / bits;
         int byteIndex = index / entriesPerByte;
-        int bitOffset = (index % entriesPerByte) * bits;
+        int bitOffset = ComputeBitOffset(index, bits, entriesPerByte);
 
         data[byteIndex] = (byte)((data[byteIndex] & ~(maxValue << bitOffset)) | (value << bitOffset));
     }
@@ -307,7 +330,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
             return true;
         }
 
-        if(BitSize != other.BitSize || Capacity != other.Capacity)
+        if(BitSize != other.BitSize || Capacity != other.Capacity || BitOrder != other.BitOrder)
         {
             return false;
         }
@@ -338,6 +361,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         var hash = new HashCode();
         hash.Add(BitSize);
         hash.Add(Capacity);
+        hash.Add(BitOrder);
         hash.Add(AggregationUri);
         hash.AddBytes(memoryOwner!.Memory.Span[..byteCount]);
 
@@ -374,6 +398,19 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         zlib.CopyTo(output);
 
         return output.ToArray();
+    }
+
+
+    /// <summary>
+    /// Computes the bit offset of an entry within its byte, honoring <see cref="BitOrder"/>.
+    /// </summary>
+    private int ComputeBitOffset(int index, int bits, int entriesPerByte)
+    {
+        int withinByte = index % entriesPerByte;
+
+        return BitOrder == BitOrder.MostSignificantFirst
+            ? (entriesPerByte - 1 - withinByte) * bits
+            : withinByte * bits;
     }
 
 

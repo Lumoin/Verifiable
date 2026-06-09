@@ -1,0 +1,129 @@
+using System.Diagnostics;
+
+namespace Verifiable.OAuth.Server;
+
+/// <summary>
+/// The reason an application denied an authorization request at the
+/// <see cref="EvaluateAuthorizationRequestDelegate"/> seam. The library maps each
+/// reason to the corresponding OAuth 2.0 Authorization Error Response code.
+/// </summary>
+public enum AuthorizationDenialReason
+{
+    /// <summary>
+    /// The established authentication does not meet the request's authentication
+    /// requirements — the requested Authentication Context Class Reference
+    /// (<c>acr_values</c>) was not satisfied. Mapped to
+    /// <see cref="OAuthErrors.UnmetAuthenticationRequirements"/> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9470#section-5">RFC 9470 §5</see> /
+    /// <see href="https://openid.net/specs/openid-connect-unmet-authentication-requirements-1_0.html">OIDCUAR</see>.
+    /// </summary>
+    UnmetAuthenticationRequirements,
+
+    /// <summary>
+    /// The resource owner or deployment policy denied the request — for example the
+    /// End-User declined consent. Mapped to <see cref="OAuthErrors.AccessDenied"/> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>.
+    /// </summary>
+    AccessDenied
+}
+
+
+/// <summary>
+/// The immutable snapshot of authorization-request facts handed to an application's
+/// <see cref="EvaluateAuthorizationRequestDelegate"/>: what the client requested and what
+/// authentication the application established. The library supplies the requested values
+/// (which the application cannot otherwise see in the Pushed Authorization Request flow,
+/// since they are held server-side) alongside the established authentication facts so the
+/// application can reach an authorization decision without re-deriving them.
+/// </summary>
+[DebuggerDisplay("AuthorizationRequestEvaluation Subject={Subject} RequestedAcr={RequestedAcrValues}")]
+public sealed record AuthorizationRequestEvaluation
+{
+    /// <summary>
+    /// The requested <c>acr_values</c> (space-separated, preference-ordered), or
+    /// <see langword="null"/> when the request asked for no specific authentication
+    /// context class reference.
+    /// </summary>
+    public string? RequestedAcrValues { get; init; }
+
+    /// <summary>
+    /// The requested <c>max_age</c> in seconds, or <see langword="null"/> when absent.
+    /// Informational at this seam — the library enforces the temporal <c>max_age</c>
+    /// recency requirement itself before invoking the evaluator.
+    /// </summary>
+    public int? RequestedMaxAge { get; init; }
+
+    /// <summary>The scope requested by the client (as carried in the authorization request).</summary>
+    public required string RequestedScope { get; init; }
+
+    /// <summary>The authenticated subject identifier.</summary>
+    public required string Subject { get; init; }
+
+    /// <summary>
+    /// The Authentication Context Class Reference the application established for this
+    /// authentication (the value it placed on the request context via <c>SetAcr</c>), or
+    /// <see langword="null"/> when none was established.
+    /// </summary>
+    public string? EstablishedAcr { get; init; }
+
+    /// <summary>
+    /// The instant the End-User authenticated, or <see langword="null"/> when the
+    /// application stamped no authentication time.
+    /// </summary>
+    public DateTimeOffset? EstablishedAuthTime { get; init; }
+}
+
+
+/// <summary>
+/// An application's verdict on an authorization request, returned from the
+/// <see cref="EvaluateAuthorizationRequestDelegate"/> seam. A denial carries the
+/// <see cref="DenialReason"/> the library maps to an OAuth 2.0 Authorization Error
+/// Response code, plus an optional human-readable <see cref="DenialDescription"/>.
+/// </summary>
+[DebuggerDisplay("AuthorizationRequestDecision IsPermitted={IsPermitted} DenialReason={DenialReason}")]
+public sealed record AuthorizationRequestDecision
+{
+    /// <summary>
+    /// Whether the request is permitted to proceed to code issuance.
+    /// <see langword="false"/> fails the authorization request with the error mapped
+    /// from <see cref="DenialReason"/>.
+    /// </summary>
+    public required bool IsPermitted { get; init; }
+
+    /// <summary>
+    /// The reason a non-permitted request was denied. Ignored when
+    /// <see cref="IsPermitted"/> is <see langword="true"/>; a denial with no reason set
+    /// is treated as <see cref="AuthorizationDenialReason.AccessDenied"/>.
+    /// </summary>
+    public AuthorizationDenialReason? DenialReason { get; init; }
+
+    /// <summary>
+    /// An optional human-readable description carried into the error response's
+    /// <c>error_description</c>. <see langword="null"/> falls back to a reason-specific
+    /// default.
+    /// </summary>
+    public string? DenialDescription { get; init; }
+
+
+    /// <summary>A bare permit verdict.</summary>
+    public static AuthorizationRequestDecision Permit { get; } = new() { IsPermitted = true };
+
+
+    /// <summary>
+    /// A deny verdict with the given <paramref name="reason"/> and optional
+    /// <paramref name="description"/>.
+    /// </summary>
+    /// <param name="reason">The reason the request was denied.</param>
+    /// <param name="description">An optional human-readable description.</param>
+    /// <returns>A non-permitted <see cref="AuthorizationRequestDecision"/>.</returns>
+    public static AuthorizationRequestDecision Deny(
+        AuthorizationDenialReason reason, string? description = null)
+    {
+        return new AuthorizationRequestDecision
+        {
+            IsPermitted = false,
+            DenialReason = reason,
+            DenialDescription = description
+        };
+    }
+}

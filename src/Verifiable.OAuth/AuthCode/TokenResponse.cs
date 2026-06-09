@@ -37,5 +37,12 @@ public sealed record TokenResponse
     /// The granted scopes, if different from those requested. <see langword="null"/>
     /// when the granted scopes equal the requested scopes.
     /// </summary>
-    public string? Scope { get; init; }    
+    public string? Scope { get; init; }
+
+    /// <summary>
+    /// The ID Token, if issued. Present in an OpenID Connect token response per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#TokenResponse">OpenID Connect Core 1.0 §3.1.3.3</see>;
+    /// <see langword="null"/> for plain OAuth 2.0 responses that carry no ID Token.
+    /// </summary>
+    public string? IdToken { get; init; }
 }

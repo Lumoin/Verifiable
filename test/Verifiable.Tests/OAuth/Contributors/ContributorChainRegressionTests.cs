@@ -100,8 +100,8 @@ internal sealed class ContributorChainRegressionTests
     {
         List<ClaimDelegate<ClaimContributionTarget>> rules = ContributionProfiles.StandardRules();
 
-        Assert.HasCount(7, rules,
-            "StandardRules registers seven contributor rules: sub, profile, email, address, phone, cnf, acr+amr+auth_time.");
+        Assert.HasCount(8, rules,
+            "StandardRules registers eight contributor rules: sub, profile, email, address, phone, cnf, acr+amr+auth_time, sid.");
 
         ClaimId[] expectedFirstIds =
         [
@@ -111,7 +111,8 @@ internal sealed class ContributorChainRegressionTests
             WellKnownClaimIds.OidcAddress,
             WellKnownClaimIds.OidcPhone,
             WellKnownClaimIds.CnfBinding,
-            WellKnownClaimIds.OidcAuthClass
+            WellKnownClaimIds.OidcAuthClass,
+            WellKnownClaimIds.OidcSessionId
         ];
 
         for(int i = 0; i < rules.Count; i++)

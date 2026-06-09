@@ -123,6 +123,20 @@ public sealed class AuthCodeRequestObject: IEquatable<AuthCodeRequestObject>
     /// </summary>
     public string? Jti { get; init; }
 
+    /// <summary>
+    /// The requested <c>acr_values</c> (space-separated, preference-ordered), or
+    /// <see langword="null"/> when absent. OPTIONAL per OIDC Core §3.1.2.1; carried through
+    /// for RFC 9470 §5 step-up evaluation at the authorization endpoint.
+    /// </summary>
+    public string? AcrValues { get; init; }
+
+    /// <summary>
+    /// The requested <c>max_age</c> (maximum authentication age in seconds), or
+    /// <see langword="null"/> when absent. OPTIONAL per OIDC Core §3.1.2.1; carried through
+    /// for authentication-recency enforcement at the authorization endpoint.
+    /// </summary>
+    public int? MaxAge { get; init; }
+
 
     /// <inheritdoc/>
     public bool Equals(AuthCodeRequestObject? other)
@@ -150,7 +164,9 @@ public sealed class AuthCodeRequestObject: IEquatable<AuthCodeRequestObject>
             && Exp == other.Exp
             && string.Equals(Iss, other.Iss, StringComparison.Ordinal)
             && string.Equals(Aud, other.Aud, StringComparison.Ordinal)
-            && string.Equals(Jti, other.Jti, StringComparison.Ordinal);
+            && string.Equals(Jti, other.Jti, StringComparison.Ordinal)
+            && string.Equals(AcrValues, other.AcrValues, StringComparison.Ordinal)
+            && MaxAge == other.MaxAge;
     }
 
 

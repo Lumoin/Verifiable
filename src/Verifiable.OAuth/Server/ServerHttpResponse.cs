@@ -78,6 +78,20 @@ public sealed record ServerHttpResponse
         };
 
 
+    /// <summary>
+    /// Returns a 200 OK response with an empty body — for example the RFC 7009
+    /// §2.2 revocation response, which conveys all information in the status
+    /// code and is read by the client for the code alone.
+    /// </summary>
+    public static ServerHttpResponse Ok() =>
+        new()
+        {
+            StatusCode = (int)HttpStatusCode.OK,
+            Body = string.Empty,
+            ContentType = string.Empty
+        };
+
+
     /// <summary>Returns a 201 Created response with a JSON body.</summary>
     public static ServerHttpResponse Created(string body, string contentType) =>
         new()
@@ -160,6 +174,21 @@ public sealed record ServerHttpResponse
         new()
         {
             StatusCode = (int)HttpStatusCode.Conflict,
+            Body = BuildErrorBody(error, description),
+            ContentType = WellKnownMediaTypes.Application.Json
+        };
+
+
+    /// <summary>
+    /// Returns a 422 Unprocessable Content with an OAuth error JSON body — a
+    /// well-formed request the server understood but cannot act on, for example a
+    /// Global Token Revocation command (draft-parecki-oauth-global-token-revocation)
+    /// for a subject the server cannot process.
+    /// </summary>
+    public static ServerHttpResponse UnprocessableEntity(string error, string description) =>
+        new()
+        {
+            StatusCode = (int)HttpStatusCode.UnprocessableEntity,
             Body = BuildErrorBody(error, description),
             ContentType = WellKnownMediaTypes.Application.Json
         };

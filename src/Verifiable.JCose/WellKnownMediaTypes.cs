@@ -550,6 +550,21 @@ namespace Verifiable.JCose
             public static readonly string SecEventJwt = "secevent+jwt";
 
             /// <summary>
+            /// OIDC Back-Channel Logout token (<c>logout+jwt</c>). The explicit <c>typ</c>
+            /// header value a Logout Token is RECOMMENDED to carry per
+            /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#LogoutToken">OIDC Back-Channel Logout 1.0 §2.4</see>,
+            /// declaring the JWS as a Logout Token rather than an ID Token or a generic SET.
+            /// </summary>
+            public static readonly string LogoutJwt = "logout+jwt";
+
+            /// <summary>
+            /// Whether <paramref name="typ"/> is <see cref="LogoutJwt"/>.
+            /// </summary>
+            /// <param name="typ">The JWT typ header value.</param>
+            /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="LogoutJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsLogoutJwt(string typ) => Equals(typ, LogoutJwt);
+
+            /// <summary>
             /// If <paramref name="typ"/> is <see cref="SdJwt"/> or not.
             /// </summary>
             /// <param name="typ">The JWT typ header value.</param>

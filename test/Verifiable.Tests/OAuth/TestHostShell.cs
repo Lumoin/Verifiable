@@ -1977,6 +1977,55 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
+    /// Dispatches a request carrying a JSON body to the named endpoint — the
+    /// body-bearing form of
+    /// <see cref="DispatchAtEndpointAsync(string, string, string, RequestFields, ExchangeContext, CancellationToken)"/>
+    /// for endpoints that read <c>IncomingRequest.Body</c> (AuthZEN, SSF, Global
+    /// Token Revocation). A <see langword="null"/> <paramref name="jsonBody"/>
+    /// dispatches with no body.
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchAtEndpointAsync(
+        string segment,
+        string endpointName,
+        string httpMethod,
+        RequestFields fields,
+        string? jsonBody,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(endpointName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(httpMethod);
+        ArgumentNullException.ThrowIfNull(fields);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string path = ComposeEndpointPath(endpointName, segment);
+
+        RequestBody body = jsonBody is null
+            ? RequestBody.None
+            : new RequestBody
+            {
+                Bytes = Encoding.UTF8.GetBytes(jsonBody),
+                ContentType = WellKnownMediaTypes.Application.Json
+            };
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: httpMethod,
+            Fields: fields,
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty)
+        {
+            Body = body
+        };
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// Deregisters a client by endpoint segment and emits a
     /// <see cref="ClientDeregistered"/> event.
     /// </summary>
@@ -2168,6 +2217,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             AllowedCapabilities = capabilities,
             AllowedRedirectUris = ImmutableHashSet.Create(
                 new Uri("https://client.example.com/callback")),
+            AllowedPostLogoutRedirectUris = ImmutableHashSet.Create(
+                new Uri("https://client.example.com/post-logout")),
             AllowedScopes = ImmutableHashSet.Create(
                 WellKnownScopes.OpenId,
                 WellKnownScopes.Profile,
@@ -2205,6 +2256,57 @@ internal sealed class TestHostShell: IAsyncDisposable
             decryptionPrivateKey: exchangeKeyPair.PrivateKey,
             encryptionKeyId: encryptionKeyId,
             signingKeyId: signingKeyId);
+    }
+
+
+    /// <summary>
+    /// Registers an OIDC Back-Channel Logout relying party: a DPoP/auth-code client
+    /// (RP-Initiated + Back-Channel Logout capable, <see cref="PolicyProfile.Rfc6749WithPkce"/>)
+    /// whose <see cref="ClientRecord.BackchannelLogoutUri"/> is set to
+    /// <paramref name="backchannelLogoutUri"/> — the receiver endpoint the OP POSTs this
+    /// RP's <c>logout_token</c> to during federated logout
+    /// (<see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCRegistration">OIDC Back-Channel Logout 1.0 §2.2</see>).
+    /// </summary>
+    /// <remarks>
+    /// Builds the baseline registration via <see cref="RegisterDpopClient"/>, then
+    /// re-stores it with <see cref="ClientRecord.BackchannelLogoutUri"/> populated — the
+    /// same register-then-upgrade pattern <see cref="RegisterFederationCapableClient"/>
+    /// uses, because the routing dictionaries are host-internal.
+    /// </remarks>
+    /// <param name="clientId">The OAuth client identifier.</param>
+    /// <param name="baseUri">The base URI for the client's endpoints.</param>
+    /// <param name="backchannelLogoutUri">The RP's back-channel logout receiver URI.</param>
+    /// <param name="capabilities">The capabilities this RP is allowed to use.</param>
+    /// <returns>The RP's key material, with <see cref="VerifierKeyMaterial.Registration"/> pointing at the upgraded record.</returns>
+    public VerifierKeyMaterial RegisterBackChannelLogoutClient(
+        string clientId,
+        Uri baseUri,
+        Uri backchannelLogoutUri,
+        ImmutableHashSet<CapabilityIdentifier> capabilities)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
+        ArgumentNullException.ThrowIfNull(baseUri);
+        ArgumentNullException.ThrowIfNull(backchannelLogoutUri);
+        ArgumentNullException.ThrowIfNull(capabilities);
+
+        VerifierKeyMaterial material = RegisterDpopClient(
+            clientId, baseUri, PolicyProfile.Rfc6749WithPkce, capabilities);
+
+        ClientRecord updated = material.Registration with
+        {
+            BackchannelLogoutUri = backchannelLogoutUri
+        };
+
+        string segment = updated.TenantId.Value;
+        Registrations[segment] = updated;
+        Registrations[clientId] = updated;
+        Server.RegisterClient(
+            updated,
+            new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
+            new ExchangeContext());
+        material.Registration = updated;
+
+        return material;
     }
 
 
@@ -2810,6 +2912,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         if(endpointName == WellKnownEndpointNames.ClientCredentialsToken) { return "token"; }
         if(endpointName == WellKnownEndpointNames.AuthCodeRevoke) { return "revoke"; }
         if(endpointName == WellKnownEndpointNames.AuthCodeIntrospect) { return "introspect"; }
+        if(endpointName == WellKnownEndpointNames.GlobalTokenRevocation) { return "global_token_revocation"; }
+        if(endpointName == WellKnownEndpointNames.EndSession) { return "end_session"; }
         if(endpointName == WellKnownEndpointNames.Oid4VpPar) { return "par"; }
         if(endpointName == WellKnownEndpointNames.Oid4VpJarRequest) { return "jar"; }
         if(endpointName == WellKnownEndpointNames.Oid4VpDirectPost) { return "cb"; }

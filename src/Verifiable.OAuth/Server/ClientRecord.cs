@@ -92,6 +92,31 @@ public sealed record ClientRecord
     public required ImmutableHashSet<Uri> AllowedRedirectUris { get; init; }
 
     /// <summary>
+    /// The <c>post_logout_redirect_uri</c> values this client may use at the
+    /// end-session endpoint, per
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html">OIDC RP-Initiated Logout</see>.
+    /// Exact-match validated like <see cref="AllowedRedirectUris"/>. Optional — an
+    /// empty set means the client registered none, so a logout request that supplies a
+    /// <c>post_logout_redirect_uri</c> is rejected (no redirect).
+    /// </summary>
+    public ImmutableHashSet<Uri> AllowedPostLogoutRedirectUris { get; init; } =
+        ImmutableHashSet<Uri>.Empty;
+
+    /// <summary>
+    /// The URI the OP POSTs this client's <c>logout_token</c> to during OIDC Back-Channel
+    /// Logout (server-side mirror of <see cref="Client.ClientRegistration.BackchannelLogoutUri"/>),
+    /// per <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCRegistration">OIDC Back-Channel Logout 1.0 §2.2</see>.
+    /// <see langword="null"/> when the client did not register for back-channel logout.
+    /// </summary>
+    public Uri? BackchannelLogoutUri { get; init; }
+
+    /// <summary>
+    /// Whether this client's Logout Tokens must carry a <c>sid</c> claim
+    /// (<see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCRegistration">OIDC Back-Channel Logout 1.0 §2.2</see>).
+    /// </summary>
+    public bool BackchannelLogoutSessionRequired { get; init; }
+
+    /// <summary>
     /// The scopes this client may request.
     /// </summary>
     public required ImmutableHashSet<string> AllowedScopes { get; init; }

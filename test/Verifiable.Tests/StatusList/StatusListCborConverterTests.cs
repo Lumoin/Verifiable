@@ -92,7 +92,7 @@ internal sealed class StatusListCborConverterTests
     [TestMethod]
     public void OneBitCborRoundTrips()
     {
-        using var original = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var original = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         original[0] = StatusTypes.Invalid;
         original[3] = StatusTypes.Invalid;
         original[7] = StatusTypes.Invalid;
@@ -150,7 +150,7 @@ internal sealed class StatusListCborConverterTests
     [TestMethod]
     public void StatusListTokenRoundTrips()
     {
-        using var list = StatusListType.Create(MediumListCapacity, StatusListBitSize.TwoBits, Pool);
+        using var list = StatusListType.Create(MediumListCapacity, StatusListBitSize.TwoBits, Pool, BitOrder.LeastSignificantFirst);
         list[0] = StatusTypes.Invalid;
         list[SuspendedCredentialIndex] = StatusTypes.Suspended;
 
@@ -184,7 +184,7 @@ internal sealed class StatusListCborConverterTests
     [TestMethod]
     public void StatusListTokenWithoutOptionalClaimsRoundTrips()
     {
-        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         var original = new StatusListToken(ExampleTokenSubject, BaseTime, list);
 

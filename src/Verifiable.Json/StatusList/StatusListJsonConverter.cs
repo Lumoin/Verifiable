@@ -94,7 +94,8 @@ public sealed class StatusListJsonConverter: JsonConverter<Core.StatusList.Statu
         StatusListBitSize bitSize = (StatusListBitSize)bits.Value;
         byte[] compressedData = Base64UrlDecode(lst);
 
-        var statusList = Core.StatusList.StatusList.FromCompressed(compressedData, bitSize, pool);
+        var statusList = Core.StatusList.StatusList.FromCompressed(
+            compressedData, bitSize, pool, Core.StatusList.BitOrder.LeastSignificantFirst);
 
         if(aggregationUri is not null)
         {

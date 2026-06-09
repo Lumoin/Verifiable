@@ -52,7 +52,10 @@ public sealed record ServerParValidated(
     string ExpectedIssuer,
     DateTimeOffset ReceivedAt,
     DateTimeOffset ExpiresAt,
-    int ExpiresIn): AuthCodeServerFlowInput;
+    int ExpiresIn,
+    string? AcrValues = null,
+    int? MaxAge = null,
+    string? State = null): AuthCodeServerFlowInput;
 
 
 /// <summary>
@@ -69,13 +72,25 @@ public sealed record ServerParValidated(
 /// <param name="AuthTime">The UTC instant at which the subject authenticated.</param>
 /// <param name="Scope">The scope granted at the authorization endpoint.</param>
 /// <param name="CompletedAt">The UTC instant the authorization completed.</param>
+/// <param name="SessionId">
+/// The End-User's authentication session identifier (<c>sid</c>), carried into the
+/// ID Token's <c>sid</c> claim. <see langword="null"/> when the deployment stamps no
+/// session-scoped identifier.
+/// </param>
+/// <param name="Acr">
+/// The Authentication Context Class Reference (<c>acr</c>) established for the
+/// authentication, carried into the access token's <c>acr</c> claim per RFC 9068 §2.2.1
+/// / RFC 9470 §5. <see langword="null"/> when no authentication-context reference was stamped.
+/// </param>
 [DebuggerDisplay("ServerAuthorizeCompleted SubjectId={SubjectId}")]
 public sealed record ServerAuthorizeCompleted(
     string CodeHash,
     string SubjectId,
     DateTimeOffset AuthTime,
     string Scope,
-    DateTimeOffset CompletedAt): AuthCodeServerFlowInput;
+    DateTimeOffset CompletedAt,
+    string? SessionId = null,
+    string? Acr = null): AuthCodeServerFlowInput;
 
 
 /// <summary>
@@ -173,6 +188,16 @@ public sealed record ServerFail(
 /// <param name="ExpectedIssuer">The server's issuer identifier.</param>
 /// <param name="CompletedAt">The UTC instant the authorization completed.</param>
 /// <param name="ExpiresAt">The UTC instant the authorization session expires.</param>
+/// <param name="SessionId">
+/// The End-User's authentication session identifier (<c>sid</c>), carried into the
+/// ID Token's <c>sid</c> claim. <see langword="null"/> when the deployment stamps no
+/// session-scoped identifier.
+/// </param>
+/// <param name="Acr">
+/// The Authentication Context Class Reference (<c>acr</c>) established for the
+/// authentication, carried into the access token's <c>acr</c> claim per RFC 9068 §2.2.1
+/// / RFC 9470 §5. <see langword="null"/> when no authentication-context reference was stamped.
+/// </param>
 [DebuggerDisplay("ServerDirectAuthorizeCompleted FlowId={FlowId} ClientId={ClientId}")]
 public sealed record ServerDirectAuthorizeCompleted(
     string FlowId,
@@ -186,4 +211,7 @@ public sealed record ServerDirectAuthorizeCompleted(
     DateTimeOffset AuthTime,
     string ExpectedIssuer,
     DateTimeOffset CompletedAt,
-    DateTimeOffset ExpiresAt): AuthCodeServerFlowInput;
+    DateTimeOffset ExpiresAt,
+    string? SessionId = null,
+    string? Acr = null,
+    string? State = null): AuthCodeServerFlowInput;

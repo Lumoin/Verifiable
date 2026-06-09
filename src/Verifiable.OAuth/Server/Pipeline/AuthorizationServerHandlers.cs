@@ -60,6 +60,22 @@ internal static class AuthorizationServerHandlers
     public const string AuthTimeKey = "server.authTime";
 
     /// <summary>
+    /// Context bag key for the End-User's authentication session identifier (<c>sid</c>),
+    /// stamped by the application's authentication middleware at authorize time alongside
+    /// <see cref="AuthTimeKey"/>. Value type: <see cref="string"/>.
+    /// </summary>
+    public const string SessionIdKey = "server.sessionId";
+
+    /// <summary>
+    /// Context bag key for the Authentication Context Class Reference (<c>acr</c>)
+    /// established for the End-User's authentication, stamped by the application's
+    /// authentication middleware at authorize time alongside <see cref="AuthTimeKey"/>.
+    /// Carried into the access token's <c>acr</c> claim per RFC 9068 §2.2.1 / RFC 9470 §5.
+    /// Value type: <see cref="string"/>.
+    /// </summary>
+    public const string AcrKey = "server.acr";
+
+    /// <summary>
     /// Context bag key for the <see cref="ClientRecord"/> resolved at the start
     /// of each request. Set by the dispatcher so <c>BuildInputAsync</c> delegates can
     /// read per-registration values without capturing from outside static lambdas.
