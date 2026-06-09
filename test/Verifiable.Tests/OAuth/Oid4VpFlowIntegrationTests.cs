@@ -5,6 +5,7 @@ using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
+using Verifiable.Core.StatusList;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -31,6 +32,8 @@ using Verifiable.Tests.TestDataProviders;
 using System.Collections.Immutable;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
+
+using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -1342,7 +1345,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
 
     private async ValueTask<(string SerializedSdJwt, PrivateKeyMemory HolderPrivateKey, PublicKeyMemory IssuerPublicKey)>
-        IssuePidCredentialWithClaimsAsync(string givenName, string familyName, CancellationToken cancellationToken)
+        IssuePidCredentialWithClaimsAsync(string givenName, string familyName, CancellationToken cancellationToken, StatusListReference? status = null)
     {
         var issuerKeys = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory issuerPrivateKey = issuerKeys.PrivateKey;
@@ -1356,16 +1359,31 @@ internal sealed class Oid4VpFlowIntegrationTests
             holderPublicKey.AsReadOnlySpan(),
             TestSetup.Base64UrlEncoder);
 
+        var claims = new List<KeyValuePair<string, object>>
+        {
+            new(EudiPid.SdJwt.GivenName, givenName),
+            new(EudiPid.SdJwt.FamilyName, familyName)
+        };
+
+        if(status is not null)
+        {
+            //IETF Token Status List section 6: a non-disclosable status claim in the issuer payload.
+            claims.Add(new("status", new Dictionary<string, object>
+            {
+                ["status_list"] = new Dictionary<string, object>
+                {
+                    ["idx"] = status.Value.Index,
+                    ["uri"] = status.Value.Uri
+                }
+            }));
+        }
+
         JwtPayload payload = JwtPayload.ForSdJwtVcIssuance(
             issuer: IssuerId,
             verifiableCredentialType: EudiPid.SdJwtVct,
             issuedAt: TimeProvider.GetUtcNow(),
             holderConfirmation: holderJwk,
-            claims:
-            [
-                new(EudiPid.SdJwt.GivenName, givenName),
-                new(EudiPid.SdJwt.FamilyName, familyName)
-            ]);
+            claims: claims);
 
         var disclosablePaths = new HashSet<CredentialPath>
         {
@@ -1386,6 +1404,73 @@ internal sealed class Oid4VpFlowIntegrationTests
         string serializedSdJwt = SdJwtSerializer.SerializeToken(issuedToken, TestSetup.Base64UrlEncoder);
 
         return (serializedSdJwt, holderKeys.PrivateKey, issuerKeys.PublicKey);
+    }
+
+
+    //A genuinely issued SD-JWT VC that carries an IETF Token Status List reference is verified
+    //through the production path: the verifier surfaces the status_list reference, and the
+    //verifier-agnostic revocation gate reads it valid, then revoked once the credential's bit is
+    //flipped. This is the credential-verification flow any verifier runs — RP server, peer wallet,
+    //or agent — independent of the JAR/JWE presentation transport the other flow tests exercise.
+    [TestMethod]
+    public async Task SdJwtVcStatusReferenceSurfacesAndDrivesRevocationGate()
+    {
+        const string statusListUri = "https://issuer.example/statuslists/1";
+        const int credentialIndex = 42;
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await IssuePidCredentialWithClaimsAsync(
+                "Alice", "Smith", TestContext.CancellationToken,
+                status: new StatusListReference(credentialIndex, statusListUri)).ConfigureAwait(false);
+
+        using(holderPrivateKey)
+        using(issuerPublicKey)
+        {
+            PublicKeyMemory? IssuerLookup(string iss) =>
+                string.Equals(iss, IssuerId, StringComparison.Ordinal) ? issuerPublicKey : null;
+
+            VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
+                serializedSdJwt,
+                "pid",
+                static s => SdJwtSerializer.ParseToken(
+                    s, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag),
+                static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
+                IssuerLookup,
+                MicrosoftEntropyFunctions.ComputeDigestAsync,
+                TestSetup.Base64UrlDecoder,
+                TestSetup.Base64UrlEncoder,
+                Pool,
+                saltReuseSeam: null,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsTrue(parsed.CredentialSignatureValid, "The issued credential must verify.");
+            Assert.IsNotNull(parsed.CredentialStatus, "The verifier must surface the credential's status_list reference.");
+            Assert.AreEqual(credentialIndex, parsed.CredentialStatus.Value.Index);
+            Assert.AreEqual(statusListUri, parsed.CredentialStatus.Value.Uri);
+
+            //The resolver stands in for whatever fetched and verified the status list (an HTTP fetch,
+            //or an Orleans status-list grain); here the verified token is built directly.
+            using StatusListType statusList = StatusListType.Create(
+                64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+
+            CredentialStatusOutcome beforeRevocation = await CredentialStatusGate.CheckAsync(
+                parsed.CredentialStatus.Value,
+                (uri, ct) => ValueTask.FromResult(new StatusListToken(statusListUri, now, statusList)),
+                now,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(beforeRevocation.IsValid, "An unset status bit must read as valid.");
+
+            statusList[credentialIndex] = StatusTypes.Invalid;
+
+            CredentialStatusOutcome afterRevocation = await CredentialStatusGate.CheckAsync(
+                parsed.CredentialStatus.Value,
+                (uri, ct) => ValueTask.FromResult(new StatusListToken(statusListUri, now, statusList)),
+                now,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsFalse(afterRevocation.IsValid, "After flipping the credential's bit the status must read as revoked.");
+            Assert.AreEqual(StatusTypes.Invalid, afterRevocation.Status);
+        }
     }
 
 

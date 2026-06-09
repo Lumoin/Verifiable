@@ -5,6 +5,7 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Core.StatusList;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
@@ -113,6 +114,7 @@ public static class SdJwtVpTokenVerification
         string? iss;
         string? sdAlg;
         Dictionary<string, object>? jwkDict;
+        string? statusObject;
 
         {
             string[] issuerParts = token.IssuerSigned.Split('.');
@@ -123,7 +125,14 @@ public static class SdJwtVpTokenVerification
             sdAlg = JwkJsonReader.ExtractStringValue(issuerPayload, "_sd_alg"u8);
             jwkDict = JwkJsonReader.ExtractNestedObjectProperties(
                 issuerPayload, "cnf"u8, "jwk"u8);
+
+            //IETF Token Status List section 6: the Referenced Token MAY carry a status claim with a
+            //status_list reference. Slice the status object span here; parsing happens off-span below.
+            statusObject = JwkJsonReader.ExtractObjectAsString(issuerPayload, "status"u8);
         }
+
+        //The credential's status reference (idx/uri), surfaced for the verifier's revocation gate.
+        StatusListReference? credentialStatus = ParseStatusListReference(statusObject);
 
         //Resolve the issuer's public key from the trust framework.
         PublicKeyMemory? issuerPublicKey = iss is not null ? resolveIssuerKey(iss) : null;
@@ -275,6 +284,7 @@ public static class SdJwtVpTokenVerification
             KbJwtSignatureValid = kbJwtSignatureValid,
             CredentialSignatureValid = credentialSignatureValid,
             CredentialIssuer = iss,
+            CredentialStatus = credentialStatus,
             SdHashValid = sdHashValid,
             SessionTranscriptValid = true,
             KbJwtTransactionDataHashes = kbTransactionDataHashes,
@@ -290,5 +300,36 @@ public static class SdJwtVpTokenVerification
             MinimumDisclosureSaltLengthBytes = minimumSaltLength,
             SaltReused = saltReused
         };
+    }
+
+
+    //Parses the IETF Token Status List reference (status.status_list = {idx, uri}) from the
+    //already-sliced status object JSON. Span-based throughout to keep this class serialization-free;
+    //the two small re-encodes only run when a status claim is actually present.
+    internal static StatusListReference? ParseStatusListReference(string? statusObjectJson)
+    {
+        if(statusObjectJson is null)
+        {
+            return null;
+        }
+
+        string? statusListObject = JwkJsonReader.ExtractObjectAsString(
+            Encoding.UTF8.GetBytes(statusObjectJson), "status_list"u8);
+        if(statusListObject is null)
+        {
+            return null;
+        }
+
+        ReadOnlySpan<byte> statusListBytes = Encoding.UTF8.GetBytes(statusListObject);
+        string? uri = JwkJsonReader.ExtractStringValue(statusListBytes, "uri"u8);
+        if(uri is null
+            || !JwkJsonReader.TryExtractLongValue(statusListBytes, "idx"u8, out long index)
+            || index < 0
+            || index > int.MaxValue)
+        {
+            return null;
+        }
+
+        return new StatusListReference((int)index, uri);
     }
 }

@@ -495,6 +495,19 @@ public sealed class AuthorizationServerIntegration
     public RevokeTokenDelegate? RevokeTokenAsync { get; set; }
 
     /// <summary>
+    /// Introspects a token at the RFC 7662 introspection endpoint on behalf of an
+    /// authenticated protected resource. The endpoint activates only when the
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthTokenIntrospection"/> capability
+    /// is allowed and BOTH this seam and <see cref="ValidateClientCredentialsAsync"/>
+    /// are wired — an introspection endpoint that cannot authenticate the caller would
+    /// leak token state to anyone, and one that cannot read the token store could only
+    /// answer <c>active:false</c>, misleading a resource into rejecting live tokens. The
+    /// application owns the token store; the library owns the wire shape and the
+    /// inactive-discloses-nothing rule.
+    /// </summary>
+    public IntrospectTokenDelegate? IntrospectTokenAsync { get; set; }
+
+    /// <summary>
     /// Parses a Global Token Revocation request body
     /// (draft-parecki-oauth-global-token-revocation §3) into the neutral
     /// <see cref="Logout.GlobalTokenRevocationRequest"/>. Required when
