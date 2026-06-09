@@ -40,12 +40,12 @@ public static class ContributionProfiles
     /// application can extend it without affecting future calls.
     /// </summary>
     /// <remarks>
-    /// Seven rules: the OIDC Core §2 / §5.3 <c>sub</c> claim (via
+    /// Eight rules: the OIDC Core §2 / §5.3 <c>sub</c> claim (via
     /// <see cref="AuthorizationServerIntegration.ResolveSubjectIdentifierAsync"/>),
     /// profile / email / address / phone (OIDC Core §5.4), the
     /// RFC 7800 / RFC 9449 §6.1 <c>cnf</c> confirmation claim, and the
     /// OIDC Core §2 authentication-context family (<c>acr</c>, <c>amr</c>,
-    /// <c>auth_time</c>). Rules return
+    /// <c>auth_time</c>), and the <c>sid</c> session identifier. Rules return
     /// <see cref="ClaimOutcome.NotApplicable"/> for targets they don't
     /// apply to and for scope-gated claims when the granted scope omits
     /// their family. The subject-identifier rule runs first so the
@@ -74,7 +74,10 @@ public static class ContributionProfiles
             [WellKnownClaimIds.CnfBinding]),
         new ClaimDelegate<ClaimContributionTarget>(
             AcrAmrClaimContributor.GenerateAuthClassClaims,
-            [WellKnownClaimIds.OidcAuthClass, WellKnownClaimIds.OidcAuthTime])
+            [WellKnownClaimIds.OidcAuthClass, WellKnownClaimIds.OidcAuthTime]),
+        new ClaimDelegate<ClaimContributionTarget>(
+            SidClaimContributor.GenerateSidClaim,
+            [WellKnownClaimIds.OidcSessionId])
     ];
 
 

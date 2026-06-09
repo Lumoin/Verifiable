@@ -4,7 +4,9 @@ using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Metadata;
 using Verifiable.OAuth.Server.Routing;
 
 namespace Verifiable.Tests.OAuth;
@@ -59,6 +61,56 @@ internal sealed class DiscoveryEndpointTests
         Assert.AreNotEqual(
             material.Registration.IssuerUri!.GetLeftPart(UriPartial.Authority), issuer,
             "The path-bearing issuer must NOT be reduced to its authority component.");
+    }
+
+
+    /// <summary>
+    /// RFC 8414 §3.3 / OIDC Discovery §4.3 issuer-match, consumer side. The reference AS
+    /// emits a compliant segment-bearing issuer; a conformant client MUST verify it equals the
+    /// per-tenant base the well-known URL was derived from, code point by code point. This is
+    /// the strict oracle that reproduces the onboarding-inspector class of rejection in-house:
+    /// an issuer whose tenant segment was placed in the endpoint paths but omitted from the
+    /// <c>issuer</c> — or a portless placeholder — is rejected, so the metadata MUST NOT be used.
+    /// </summary>
+    [TestMethod]
+    public async Task DiscoveryIssuerMatchEnforcesSection33ConsumerSide()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        Uri servedIssuer = new(body.RootElement.GetProperty("issuer").GetString()!);
+
+        //The per-tenant base the client derived the well-known URL from (segment-bearing).
+        Uri expectedIssuer = material.Registration.IssuerUri!;
+
+        //Compliant: the served issuer carries the tenant segment and equals the base.
+        AuthorizationServerMetadata compliant = new() { Issuer = servedIssuer };
+        Assert.IsTrue(
+            AuthorizationServerMetadataValidation.IsIssuerMatch(compliant, expectedIssuer),
+            "A segment-bearing issuer equal to the discovery base satisfies §3.3.");
+
+        //Reproduces the onboarding-inspector rejection: tenant segment present in the endpoint
+        //paths but dropped from the issuer (here the authority-only form), checked against the
+        //segmented base — MUST be rejected.
+        AuthorizationServerMetadata segmentDropped = new()
+        {
+            Issuer = new Uri(expectedIssuer.GetLeftPart(UriPartial.Authority))
+        };
+        Assert.IsFalse(
+            AuthorizationServerMetadataValidation.IsIssuerMatch(segmentDropped, expectedIssuer),
+            "An issuer that drops the tenant segment present in the discovery base violates §3.3.");
+
+        //Reproduces the portless/segmentless placeholder seed (a hardcoded https://localhost):
+        //a different authority never equals the per-tenant base.
+        AuthorizationServerMetadata placeholder = new() { Issuer = new Uri("https://localhost") };
+        Assert.IsFalse(
+            AuthorizationServerMetadataValidation.IsIssuerMatch(placeholder, expectedIssuer),
+            "A portless/segmentless placeholder issuer does not equal the per-tenant base.");
     }
 
 
@@ -478,6 +530,44 @@ internal sealed class DiscoveryEndpointTests
         Assert.IsTrue(body.RootElement.TryGetProperty(
             OpenIdProviderMetadataParameterNames.UserinfoEndpoint, out _),
             "userinfo_endpoint must be present once UserInfo capability is allowed.");
+    }
+
+
+    /// <summary>
+    /// RFC 9470 §7 / RFC 8414 §2 — the AS advertises <c>acr_values_supported</c> so clients
+    /// and resource servers know which <c>acr</c> values they may demand at step-up. The
+    /// supported assurance levels are deployment authentication knowledge the transport-agnostic
+    /// library does not hold, so a deployment surfaces them through the existing
+    /// <see cref="AuthorizationServerIntegration.ContributeDiscoveryFieldsAsync"/> seam under the
+    /// library-named key; the document round-trips the contributed array verbatim.
+    /// </summary>
+    [TestMethod]
+    public async Task DiscoveryEmitsAppContributedAcrValuesSupported()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        host.Server.Integration.ContributeDiscoveryFieldsAsync = static (_, _, _) =>
+            ValueTask.FromResult(new DiscoveryDocumentContribution(
+                [new DiscoveryStringArrayField(
+                    AuthorizationServerMetadataParameterNames.AcrValuesSupported,
+                    ["urn:mace:incommon:iap:silver", "loa-substantial"])]));
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        Assert.IsTrue(body.RootElement.TryGetProperty(
+            AuthorizationServerMetadataParameterNames.AcrValuesSupported, out JsonElement acrValues),
+            $"acr_values_supported must appear when the deployment contributes it. Body: {response.Body}");
+        Assert.AreEqual(JsonValueKind.Array, acrValues.ValueKind);
+
+        List<string> values = EnumerateStrings(acrValues);
+        Assert.Contains("urn:mace:incommon:iap:silver", values);
+        Assert.Contains("loa-substantial", values);
     }
 
 

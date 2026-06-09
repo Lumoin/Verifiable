@@ -68,6 +68,23 @@ public static class AuthCodeRequestObjectExtensions
             string? aud = JwtClaimReaders.OptionalClaim(claims, WellKnownJwtClaimNames.Aud);
             string? jti = JwtClaimReaders.OptionalClaim(claims, WellKnownJwtClaimNames.Jti);
 
+            //RFC 9470 §4 step-up parameters carried in the request object. acr_values is a
+            //string; max_age is a non-negative integer (OIDC Core §3.1.2.1) — a present but
+            //malformed value is surfaced as invalid_request_object like any other JAR defect.
+            string? acrValues = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.AcrValues);
+            int? maxAge = null;
+            if(claims.TryGetValue(OAuthRequestParameterNames.MaxAge, out object? maxAgeClaim))
+            {
+                if(!JwtClaimReaders.TryToInt64(maxAgeClaim, out long maxAgeValue)
+                    || maxAgeValue < 0 || maxAgeValue > int.MaxValue)
+                {
+                    throw new FormatException(
+                        $"JAR '{OAuthRequestParameterNames.MaxAge}' claim must be a non-negative integer.");
+                }
+
+                maxAge = (int)maxAgeValue;
+            }
+
             return new AuthCodeRequestObject
             {
                 ClientId = clientId,
@@ -83,7 +100,9 @@ public static class AuthCodeRequestObjectExtensions
                 Exp = verified.Exp,
                 Iss = iss,
                 Aud = aud,
-                Jti = jti
+                Jti = jti,
+                AcrValues = acrValues,
+                MaxAge = maxAge
             };
         }
     }

@@ -113,6 +113,18 @@ public sealed record IssuanceContext
     public DateTimeOffset? AuthTime { get; init; }
 
     /// <summary>
+    /// The Authentication Context Class Reference (<c>acr</c>) established for the
+    /// End-User's authentication at authorize time and carried through the flow
+    /// state. Emitted into the access token's <c>acr</c> claim per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2.1">RFC 9068 §2.2.1</see>
+    /// and <see href="https://www.rfc-editor.org/rfc/rfc9470#section-5">RFC 9470 §5</see>
+    /// (step-up authentication) so the Resource Server can read the authentication
+    /// strength actually achieved. <see langword="null"/> when the deployment stamps
+    /// no <c>acr</c> (no step-up / authentication-context tracking for this request).
+    /// </summary>
+    public string? Acr { get; init; }
+
+    /// <summary>
     /// The RFC 7800 confirmation method established at the token endpoint —
     /// for example the DPoP <c>jkt</c> thumbprint when the request carried a
     /// validated DPoP proof. Token producers consume the populated members to
@@ -121,4 +133,13 @@ public sealed record IssuanceContext
     /// sender-constrained and no <c>cnf</c> claim is emitted.
     /// </summary>
     public ConfirmationMethod? Confirmation { get; init; }
+
+    /// <summary>
+    /// The End-User's authentication session identifier (<c>sid</c>) established at
+    /// authorize time and carried through the flow state. Emitted as the ID Token's
+    /// <c>sid</c> claim when present per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html">OIDC Core</see>;
+    /// <see langword="null"/> for tokens not bound to a session-scoped identifier.
+    /// </summary>
+    public string? SessionId { get; init; }
 }

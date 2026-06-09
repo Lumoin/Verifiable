@@ -128,6 +128,63 @@ public static class ExchangeContextServerExtensions
 
 
         /// <summary>
+        /// Gets the End-User's authentication session identifier (<c>sid</c>) placed
+        /// by the application's authentication middleware. Carried from the authorize
+        /// endpoint through the flow state into the ID Token's <c>sid</c> claim, so it
+        /// identifies the specific login session (not merely the subject) — the value
+        /// OIDC Back-Channel / Front-Channel Logout reference per session.
+        /// </summary>
+        /// <returns>
+        /// The session identifier, or <see langword="null"/> when the application did
+        /// not stamp one (no session-scoped logout for this deployment).
+        /// </returns>
+        public string? SessionId =>
+            context.TryGetValue(AuthorizationServerHandlers.SessionIdKey, out object? v)
+                && v is string s && !string.IsNullOrWhiteSpace(s) ? s : null;
+
+        /// <summary>
+        /// Sets the authentication session identifier (<c>sid</c>). Called by the
+        /// application's authentication middleware before dispatching to the authorize
+        /// endpoint, alongside <see cref="SetAuthTime"/> and <see cref="SetSubjectId"/>.
+        /// </summary>
+        /// <param name="sessionId">The session identifier.</param>
+        public void SetSessionId(string sessionId)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+            context[AuthorizationServerHandlers.SessionIdKey] = sessionId;
+        }
+
+
+        /// <summary>
+        /// Gets the Authentication Context Class Reference (<c>acr</c>) placed by the
+        /// application's authentication middleware. Carried from the authorize endpoint
+        /// through the flow state into the access token's <c>acr</c> claim per
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2.1">RFC 9068 §2.2.1</see>
+        /// and <see href="https://www.rfc-editor.org/rfc/rfc9470#section-5">RFC 9470 §5</see>,
+        /// so the Resource Server can read the authentication strength actually achieved.
+        /// </summary>
+        /// <returns>
+        /// The established <c>acr</c> value, or <see langword="null"/> when the
+        /// application stamped none (no step-up / authentication-context tracking).
+        /// </returns>
+        public string? Acr =>
+            context.TryGetValue(AuthorizationServerHandlers.AcrKey, out object? v)
+                && v is string s && !string.IsNullOrWhiteSpace(s) ? s : null;
+
+        /// <summary>
+        /// Sets the Authentication Context Class Reference (<c>acr</c>). Called by the
+        /// application's authentication middleware before dispatching to the authorize
+        /// endpoint, alongside <see cref="SetAuthTime"/> and <see cref="SetSessionId"/>.
+        /// </summary>
+        /// <param name="acr">The established authentication context class reference.</param>
+        public void SetAcr(string acr)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(acr);
+            context[AuthorizationServerHandlers.AcrKey] = acr;
+        }
+
+
+        /// <summary>
         /// Gets the <see cref="ClientRecord"/> resolved by the dispatcher at the
         /// start of each request. Available to all <see cref="BuildInputDelegate"/>
         /// implementations without capturing the registration from outside.

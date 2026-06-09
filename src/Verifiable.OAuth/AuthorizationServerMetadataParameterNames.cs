@@ -71,6 +71,57 @@ public static class AuthorizationServerMetadataParameterNames
     public static readonly string IntrospectionEndpoint = "introspection_endpoint";
 
     /// <summary>
+    /// URL of the authorization server's Global Token Revocation endpoint
+    /// (draft-parecki-oauth-global-token-revocation).
+    /// </summary>
+    public static readonly string GlobalTokenRevocationEndpoint = "global_token_revocation_endpoint";
+
+    /// <summary>
+    /// URL of the OP's RP-Initiated Logout end-session endpoint
+    /// (<see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html">OIDC RP-Initiated Logout 1.0</see>).
+    /// </summary>
+    public static readonly string EndSessionEndpoint = "end_session_endpoint";
+
+    /// <summary>
+    /// Languages and scripts supported for the user interface, as a JSON array of
+    /// BCP47 language tags (<see href="https://openid.net/specs/openid-connect-discovery-1_0.html">OIDC Discovery 1.0 §3</see>).
+    /// The library renders no user interface, so this is application-contributed (the
+    /// deployment's UI languages) via <see cref="Server.AuthorizationServerIntegration.ContributeDiscoveryFieldsAsync"/>;
+    /// it advertises the languages an OP would honour for the RP-Initiated Logout
+    /// <c>ui_locales</c> request parameter.
+    /// </summary>
+    public static readonly string UiLocalesSupported = "ui_locales_supported";
+
+    /// <summary>
+    /// Authentication Context Class References the authorization server supports, as a
+    /// JSON array (<see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see>;
+    /// <see href="https://openid.net/specs/openid-connect-discovery-1_0.html">OIDC Discovery 1.0 §3</see>).
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9470#section-7">RFC 9470 §7</see> (step-up
+    /// authentication) has the AS advertise this so resource servers and clients know which
+    /// <c>acr</c> values they may demand. The supported assurance levels are a property of how
+    /// a deployment authenticates End-Users — knowledge the transport-agnostic library does not
+    /// hold — so this is application-contributed (the deployment's authentication levels) via
+    /// <see cref="Server.AuthorizationServerIntegration.ContributeDiscoveryFieldsAsync"/>,
+    /// mirroring <see cref="UiLocalesSupported"/>.
+    /// </summary>
+    public static readonly string AcrValuesSupported = "acr_values_supported";
+
+    /// <summary>
+    /// Whether the OP supports OIDC Back-Channel Logout, advertised as
+    /// <c>backchannel_logout_supported</c> per
+    /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCSupport">OIDC Back-Channel Logout 1.0 §4</see>.
+    /// </summary>
+    public static readonly string BackchannelLogoutSupported = "backchannel_logout_supported";
+
+    /// <summary>
+    /// Whether the OP includes a <c>sid</c> claim in its Logout Tokens (enabling
+    /// per-session back-channel logout), advertised as
+    /// <c>backchannel_logout_session_supported</c> per
+    /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCSupport">OIDC Back-Channel Logout 1.0 §4</see>.
+    /// </summary>
+    public static readonly string BackchannelLogoutSessionSupported = "backchannel_logout_session_supported";
+
+    /// <summary>
     /// URL of the authorization server's pushed authorization request endpoint (RFC 9126).
     /// </summary>
     public static readonly string PushedAuthorizationRequestEndpoint = "pushed_authorization_request_endpoint";

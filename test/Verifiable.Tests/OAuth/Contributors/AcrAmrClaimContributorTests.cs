@@ -146,4 +146,95 @@ internal sealed class AcrAmrClaimContributorTests
         Assert.IsTrue(claims.All(c => c.Outcome == ClaimOutcome.NotApplicable),
             "AcrAmr applies only to IdTokenTarget — UserInfo responses don't carry authentication-context claims.");
     }
+
+
+    /// <summary>
+    /// RFC 9068 §2.2.1 / RFC 9470 §5 — the access token carries <c>acr</c> and
+    /// <c>auth_time</c> from the threaded <see cref="IssuanceContext"/> so the
+    /// Resource Server can read the authentication strength actually achieved.
+    /// </summary>
+    [TestMethod]
+    public async Task EmitsAcrAndAuthTimeForAccessTokenTarget()
+    {
+        AccessTokenTarget target = ContributorTestFixtures.BuildAccessTokenTarget(
+            "openid",
+            authTime: ContributorTestFixtures.FixedAuthTime,
+            acr: "loa-substantial");
+
+        List<Claim> claims = await AcrAmrClaimContributor.GenerateAuthClassClaims(
+            target, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Dictionary<string, object> emitted = ContributorTestFixtures.ExtractEmitted(claims);
+        Assert.AreEqual("loa-substantial", emitted[WellKnownJwtClaimNames.Acr]);
+        Assert.AreEqual(
+            ContributorTestFixtures.FixedAuthTime.ToUnixTimeSeconds(),
+            emitted[WellKnownJwtClaimNames.AuthTime]);
+    }
+
+
+    /// <summary>
+    /// Access tokens carry no <see cref="OidcClaims"/>, so the contributor never
+    /// emits <c>amr</c> on an <see cref="AccessTokenTarget"/> — RFC 9470 §5 names
+    /// only <c>acr</c> and <c>auth_time</c> for the Resource Server.
+    /// </summary>
+    [TestMethod]
+    public async Task NeverEmitsAmrForAccessTokenTarget()
+    {
+        AccessTokenTarget target = ContributorTestFixtures.BuildAccessTokenTarget(
+            "openid",
+            authTime: ContributorTestFixtures.FixedAuthTime,
+            acr: "loa-substantial");
+
+        List<Claim> claims = await AcrAmrClaimContributor.GenerateAuthClassClaims(
+            target, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Dictionary<string, object> emitted = ContributorTestFixtures.ExtractEmitted(claims);
+        Assert.IsFalse(emitted.ContainsKey(WellKnownJwtClaimNames.Amr),
+            "An access token carries no amr — it has no resolved OidcClaims.AuthContext to source one from.");
+    }
+
+
+    /// <summary>
+    /// A deployment that does no step-up / authentication-context tracking stamps no
+    /// <c>acr</c>; the auth-code flow still carries an <c>auth_time</c>, so the access
+    /// token emits <c>auth_time</c> only and reports <c>acr</c> as
+    /// <see cref="ClaimOutcome.NotApplicable"/>.
+    /// </summary>
+    [TestMethod]
+    public async Task EmitsAuthTimeOnlyWhenAccessTokenHasNoAcr()
+    {
+        AccessTokenTarget target = ContributorTestFixtures.BuildAccessTokenTarget(
+            "openid",
+            authTime: ContributorTestFixtures.FixedAuthTime,
+            acr: null);
+
+        List<Claim> claims = await AcrAmrClaimContributor.GenerateAuthClassClaims(
+            target, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Dictionary<string, object> emitted = ContributorTestFixtures.ExtractEmitted(claims);
+        Assert.IsTrue(emitted.ContainsKey(WellKnownJwtClaimNames.AuthTime));
+        Assert.IsFalse(emitted.ContainsKey(WellKnownJwtClaimNames.Acr),
+            "No stamped acr — the acr claim must be NotApplicable, not emitted.");
+    }
+
+
+    /// <summary>
+    /// An access token with neither a stamped <c>acr</c> nor an <c>auth_time</c>
+    /// (e.g. a grant shape with no End-User authentication) emits no
+    /// authentication-context claims.
+    /// </summary>
+    [TestMethod]
+    public async Task ReturnsNotApplicableForAccessTokenTargetWhenNoAuthContext()
+    {
+        AccessTokenTarget target = ContributorTestFixtures.BuildAccessTokenTarget(
+            "openid",
+            authTime: null,
+            acr: null);
+
+        List<Claim> claims = await AcrAmrClaimContributor.GenerateAuthClassClaims(
+            target, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(claims.All(c => c.Outcome == ClaimOutcome.NotApplicable),
+            "With no acr and no auth_time, every authentication-context claim must be NotApplicable.");
+    }
 }

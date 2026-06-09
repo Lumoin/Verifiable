@@ -6,6 +6,7 @@ using Verifiable.Core.SecurityEvents;
 using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Logout;
 using Verifiable.OAuth.Ssf;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Oid4Vp;
@@ -33,8 +34,7 @@ namespace Verifiable.Tests.OAuth;
 /// <para>
 /// Capabilities declared in <see cref="WellKnownCapabilityIdentifiers"/> but
 /// not yet end-to-end flow-complete are intentionally excluded:
-/// <c>OAuthClientCredentials</c>, <c>OAuthTokenExchange</c>,
-/// <c>OAuthTokenRevocation</c>, <c>OAuthTokenIntrospection</c>,
+/// <c>OAuthTokenExchange</c>, <c>OAuthTokenIntrospection</c>,
 /// <c>OAuthDeviceAuthorization</c>, <c>OidcSessionManagement</c>,
 /// <c>VcVerifiableCredentialIssuance</c>, and <c>AuthZenAuthorizationApi</c>.
 /// Adding a flow for any of them is the trigger to add it here too.
@@ -86,6 +86,10 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
             WellKnownCapabilityIdentifiers.SsfTransmitter,
             WellKnownCapabilityIdentifiers.OAuthClientCredentials,
+            WellKnownCapabilityIdentifiers.OAuthTokenRevocation,
+            WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation,
+            WellKnownCapabilityIdentifiers.OidcRpInitiatedLogout,
+            WellKnownCapabilityIdentifiers.OidcBackChannelLogout,
             WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata);
 
     /// <summary>The token-AS capabilities plus the OID4VP-verifier and Federation roles, all co-registered.</summary>
@@ -110,6 +114,29 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
 
+        //RevokeTokenAsync + ValidateClientCredentialsAsync together gate the RFC 7009
+        //revocation endpoint — both must be wired for revocation_endpoint to be advertised.
+        host.Server.Integration.RevokeTokenAsync = static (_, _, _, _, _) =>
+            ValueTask.CompletedTask;
+
+        //Global Token Revocation: capability + the default JSON parse seam + the
+        //revoke-subject seam + client auth gate the endpoint — wiring them advertises
+        //global_token_revocation_endpoint.
+        host.Server.Integration.UseDefaultGlobalTokenRevocationJsonParsing();
+        host.Server.Integration.RevokeSubjectTokensAsync = static (_, _, _, _) =>
+            ValueTask.FromResult(GlobalTokenRevocationOutcome.Initiated);
+
+        //RP-Initiated Logout: capability + TerminateSessionAsync + the (host-wired)
+        //verification-key resolver gate the end_session endpoint — wiring the seam
+        //advertises end_session_endpoint.
+        host.Server.Integration.TerminateSessionAsync = static (_, _, _, _, _) =>
+            ValueTask.CompletedTask;
+
+        //Back-Channel Logout: capability + the deliver (fan-out) seam advertise
+        //backchannel_logout_supported / backchannel_logout_session_supported.
+        host.Server.Integration.DeliverBackChannelLogoutAsync = static (_, _, _, _, _) =>
+            ValueTask.CompletedTask;
+
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.MetadataDiscovery,
@@ -128,6 +155,11 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         [
             "issuer",
             "token_endpoint",
+            "revocation_endpoint",
+            "global_token_revocation_endpoint",
+            "end_session_endpoint",
+            "backchannel_logout_supported",
+            "backchannel_logout_session_supported",
             "authorization_endpoint",
             "pushed_authorization_request_endpoint",
             "jwks_uri",
@@ -165,6 +197,11 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         {
             "issuer",
             "token_endpoint",
+            "revocation_endpoint",
+            "global_token_revocation_endpoint",
+            "end_session_endpoint",
+            "backchannel_logout_supported",
+            "backchannel_logout_session_supported",
             "authorization_endpoint",
             "pushed_authorization_request_endpoint",
             "jwks_uri",

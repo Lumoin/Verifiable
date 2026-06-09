@@ -709,6 +709,192 @@ public delegate ValueTask<bool> ValidateClientCredentialsDelegate(
 
 
 /// <summary>
+/// Revokes a token at the token revocation endpoint
+/// (<see href="https://www.rfc-editor.org/rfc/rfc7009">RFC 7009</see>) on behalf
+/// of an authenticated client.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Invoked after the endpoint has authenticated the client via
+/// <see cref="ValidateClientCredentialsDelegate"/>. The application revokes the
+/// presented token in its own token store and SHOULD cascade per
+/// <see href="https://www.rfc-editor.org/rfc/rfc7009#section-2.1">RFC 7009 §2.1</see>
+/// — revoking a refresh token also invalidates the access tokens derived from it.
+/// That same store is what the per-call decision seams
+/// (<see cref="EvaluateAccessDelegate"/>, <see cref="LoadClientRegistrationDelegate"/>)
+/// read to reject a revoked token on its next use, so a signal-driven or
+/// admin-driven revocation and an RFC 7009 client-driven one converge on one
+/// piece of state.
+/// </para>
+/// <para>
+/// The operation is idempotent and returns no value: per
+/// <see href="https://www.rfc-editor.org/rfc/rfc7009#section-2.2">RFC 7009 §2.2</see>
+/// the endpoint answers HTTP 200 whether the token was live, already revoked, or
+/// unknown — the response never reveals which. The implementation MUST scope the
+/// revocation to tokens issued to <paramref name="registration"/> and treat a
+/// token belonging to another client as unknown (a silent no-op).
+/// </para>
+/// <para>
+/// <paramref name="tokenTypeHint"/> carries the RFC 7009 §2.1
+/// <c>token_type_hint</c> when present — an optimization the application MAY use
+/// to locate the token faster; an unrecognized hint MUST NOT cause a failure.
+/// </para>
+/// </remarks>
+/// <param name="token">The token to revoke, exactly as presented on the wire.</param>
+/// <param name="tokenTypeHint">The <c>token_type_hint</c> form value, or <see langword="null"/> when omitted.</param>
+/// <param name="registration">The authenticated client whose token is being revoked.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask RevokeTokenDelegate(
+    string token,
+    string? tokenTypeHint,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Parses a Global Token Revocation request body
+/// (<see href="https://datatracker.ietf.org/doc/draft-parecki-oauth-global-token-revocation/">draft-parecki-oauth-global-token-revocation §3</see>)
+/// into the neutral <see cref="Logout.GlobalTokenRevocationRequest"/> — a single
+/// <c>sub_id</c> RFC 9493 Subject Identifier.
+/// </summary>
+/// <remarks>
+/// Required when <see cref="WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation"/>
+/// is advertised. The default JSON implementation lives in
+/// <c>Verifiable.OAuth.Json</c> and is wired by the application — the
+/// <c>Verifiable.OAuth</c> serialization firewall keeps <c>System.Text.Json</c>
+/// out of the library. Return <see langword="null"/> when the body does not parse
+/// as a valid request (no <c>sub_id</c>, or an unreadable Subject Identifier); the
+/// endpoint then responds HTTP 400.
+/// </remarks>
+/// <param name="requestBody">The raw JSON request body (UTF-8 decoded from the POST body).</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask<Logout.GlobalTokenRevocationRequest?> ParseGlobalTokenRevocationRequestDelegate(
+    string requestBody,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Revokes all of a subject's tokens for a Global Token Revocation command
+/// (<see href="https://datatracker.ietf.org/doc/draft-parecki-oauth-global-token-revocation/">draft-parecki-oauth-global-token-revocation §3</see>)
+/// on behalf of an authenticated client.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Invoked after the endpoint authenticates the client and parses the
+/// <c>sub_id</c>. The application MUST revoke all of the subject's refresh
+/// tokens, invalidate its access tokens where feasible, and require
+/// re-authentication before issuing new ones. This is the global-logout fan-out
+/// drop-out: the application performs the revocation against the same token store
+/// the per-call decision seams (<see cref="EvaluateAccessDelegate"/>,
+/// <see cref="LoadClientRegistrationDelegate"/>) read, and — when it runs a Shared
+/// Signals Transmitter — MAY emit a CAEP <c>session-revoked</c> event on
+/// completion. The library owns the wire and the status-code mapping; the
+/// application owns the revocation and any signal emission. There is deliberately
+/// no library "orchestrator" object — the orchestration is this delegate.
+/// </para>
+/// <para>
+/// The returned <see cref="Logout.GlobalTokenRevocationOutcome"/> selects the
+/// response: <c>Initiated</c> → 204, <c>SubjectNotFound</c> → 404,
+/// <c>Forbidden</c> → 403, <c>Unprocessable</c> → 422.
+/// </para>
+/// </remarks>
+/// <param name="subId">The RFC 9493 Subject Identifier whose tokens are to be revoked.</param>
+/// <param name="registration">The authenticated client issuing the command.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask<Logout.GlobalTokenRevocationOutcome> RevokeSubjectTokensDelegate(
+    Verifiable.Core.SecurityEvents.SubjectIdentifier subId,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Terminates the End-User's authentication session for an RP-Initiated Logout
+/// (<see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html">OIDC RP-Initiated Logout 1.0</see>).
+/// Invoked by the end-session endpoint after it has verified the <c>id_token_hint</c>
+/// and validated the <c>post_logout_redirect_uri</c>.
+/// </summary>
+/// <remarks>
+/// The application ends the session identified by <paramref name="sessionId"/> (the ID
+/// Token's <c>sid</c>) for <paramref name="subject"/> in its session store and SHOULD
+/// revoke that session's tokens — the same store the per-call decision seams read.
+/// Idempotent. Back-Channel Logout (a later slice) composes the registered-RP fan-out
+/// after this. <paramref name="sessionId"/> is <see langword="null"/> when the
+/// <c>id_token_hint</c> carried no <c>sid</c> (terminate by subject).
+/// </remarks>
+/// <param name="subject">The subject whose session is being terminated (the hint's <c>sub</c>).</param>
+/// <param name="sessionId">The session identifier (<c>sid</c>) from the id_token_hint, or <see langword="null"/>.</param>
+/// <param name="registration">The client (tenant) the logout request belongs to.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask TerminateSessionDelegate(
+    string subject,
+    string? sessionId,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Terminates a session identified only by an opaque <c>logout_hint</c> — the
+/// sessionless RP-Initiated Logout path
+/// (<see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html">OIDC RP-Initiated Logout 1.0 §3</see>),
+/// taken when the request carries a <c>logout_hint</c> but no <c>id_token_hint</c>.
+/// </summary>
+/// <remarks>
+/// Per §3 the value and meaning of <c>logout_hint</c> are at the OP's discretion (it may
+/// be an email, phone number, username, or an RP-session identifier), so the library does
+/// not interpret it: it drops out to the application, which resolves the hint to a session
+/// (or sessions) and ends it. Wiring this delegate is what enables the sessionless branch
+/// of the end-session endpoint; when it is unset the endpoint still requires an
+/// <c>id_token_hint</c>. Idempotent.
+/// </remarks>
+/// <param name="logoutHint">The opaque <c>logout_hint</c> value, verbatim from the request.</param>
+/// <param name="registration">The client (tenant) the logout request belongs to.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask TerminateSessionByHintDelegate(
+    string logoutHint,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Fans a terminated session out to every registered RP as an OIDC Back-Channel Logout
+/// (<see href="https://openid.net/specs/openid-connect-backchannel-1_0.html">OIDC Back-Channel Logout 1.0</see>),
+/// invoked by the end-session endpoint <em>after</em> <see cref="TerminateSessionDelegate"/>
+/// has ended the local session.
+/// </summary>
+/// <remarks>
+/// There is deliberately no library "orchestrator": this seam IS the fan-out. The
+/// application enumerates the sessions/RPs the logout touches (its own session→RP store —
+/// the library does not hold that list), builds a Logout Token per RP with
+/// <see cref="Logout.BackChannelLogout.BuildLogoutTokenAsync"/> (audience = that RP's
+/// identifier, the supplied <paramref name="subject"/>/<paramref name="sessionId"/>), and
+/// POSTs each to the RP's <c>backchannel_logout_uri</c>. Wiring this seam is what advertises
+/// <c>backchannel_logout_supported</c>. Best-effort and idempotent; a delivery failure to one
+/// RP MUST NOT abort the others.
+/// </remarks>
+/// <param name="subject">The subject whose session was terminated (the verified hint's <c>sub</c>).</param>
+/// <param name="sessionId">The terminated session id (<c>sid</c>), or <see langword="null"/> when the hint carried none.</param>
+/// <param name="registration">The client (tenant) the logout request belongs to.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask DeliverBackChannelLogoutDelegate(
+    string subject,
+    string? sessionId,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
 /// Signs the assembled OpenID AuthZEN Authorization API 1.0 PDP metadata as a
 /// <c>signed_metadata</c> JWT (§9.1). The library hands over the fully
 /// assembled metadata claim set as a <see cref="Verifiable.JCose.JwtPayload"/>
@@ -811,6 +997,44 @@ public delegate ValueTask<string?> SignProtectedResourceMetadataDelegate(
 /// <param name="cancellationToken">Cancellation token.</param>
 public delegate ValueTask<AuthZen.AccessEvaluationDecision> EvaluateAccessDelegate(
     AuthZen.AccessEvaluationRequest request,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Makes the application's authorization decision for an authorization-endpoint request,
+/// after the End-User has been authenticated and the library's own checks (PKCE, redirect
+/// URI, scope, and the temporal <c>max_age</c> recency requirement) have passed. The
+/// application receives the requested and established facts in
+/// <paramref name="evaluation"/> — plus the full per-request <paramref name="context"/> —
+/// and may permit or deny on <em>any</em> of them: the requested
+/// <see cref="AuthorizationRequestEvaluation.RequestedAcrValues"/> against the
+/// <see cref="AuthorizationRequestEvaluation.EstablishedAcr"/> (an assurance-level
+/// comparison only the deployment can make), resource-owner consent, or deployment policy.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Returns a decision, not an error — mirroring <see cref="EvaluateAccessDelegate"/>. A
+/// denial carries an <see cref="AuthorizationDenialReason"/> the library maps to the OAuth
+/// 2.0 Authorization Error Response code (<c>unmet_authentication_requirements</c> for an
+/// unsatisfied <c>acr</c> per
+/// <see href="https://www.rfc-editor.org/rfc/rfc9470#section-5">RFC 9470 §5</see>,
+/// <c>access_denied</c> for a consent/policy refusal per
+/// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>),
+/// delivered to the client as a redirect. When this delegate is not wired the authorization
+/// server applies no additional decision at this point — the achieved <c>acr</c> is still
+/// conveyed in the issued tokens and the resource server's step-up challenge remains the
+/// backstop.
+/// </para>
+/// </remarks>
+/// <param name="evaluation">The requested and established authorization-request facts.</param>
+/// <param name="registration">The client registration the request belongs to.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The application's permit-or-deny verdict.</returns>
+public delegate ValueTask<AuthorizationRequestDecision> EvaluateAuthorizationRequestDelegate(
+    AuthorizationRequestEvaluation evaluation,
     ClientRecord registration,
     ExchangeContext context,
     CancellationToken cancellationToken);

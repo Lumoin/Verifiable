@@ -53,7 +53,7 @@ internal sealed class StatusListTests
     [TestMethod]
     public void CreateOneBitListSetsAndGetsCorrectly()
     {
-        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         list[0] = StatusTypes.Invalid;
         list[1] = StatusTypes.Valid;
         list[7] = StatusTypes.Invalid;
@@ -67,7 +67,7 @@ internal sealed class StatusListTests
     [TestMethod]
     public void CreateTwoBitListSetsAndGetsCorrectly()
     {
-        using var list = StatusListType.Create(12, StatusListBitSize.TwoBits, Pool);
+        using var list = StatusListType.Create(12, StatusListBitSize.TwoBits, Pool, BitOrder.LeastSignificantFirst);
         list[0] = StatusTypes.Invalid;
         list[1] = StatusTypes.Suspended;
         list[2] = StatusTypes.Valid;
@@ -83,7 +83,7 @@ internal sealed class StatusListTests
     [TestMethod]
     public void CreateFourBitListSetsAndGetsCorrectly()
     {
-        using var list = StatusListType.Create(8, StatusListBitSize.FourBits, Pool);
+        using var list = StatusListType.Create(8, StatusListBitSize.FourBits, Pool, BitOrder.LeastSignificantFirst);
         list[0] = 0x0A;
         list[1] = 0x05;
 
@@ -95,7 +95,7 @@ internal sealed class StatusListTests
     [TestMethod]
     public void CreateEightBitListSetsAndGetsCorrectly()
     {
-        using var list = StatusListType.Create(4, StatusListBitSize.EightBits, Pool);
+        using var list = StatusListType.Create(4, StatusListBitSize.EightBits, Pool, BitOrder.LeastSignificantFirst);
         list[0] = 0xFF;
         list[1] = (byte)SuspendedCredentialIndex;
 
@@ -108,7 +108,7 @@ internal sealed class StatusListTests
     public void OneBitSpecVectorRawBytesMatchSpec()
     {
         //Section 4.1: status values [1,0,0,1,1,1,0,1, 1,1,0,0,0,1,0,1] = bytes [0xB9, 0xA3].
-        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         list[0] = 1; list[3] = 1; list[4] = 1; list[5] = 1; list[7] = 1;
         list[8] = 1; list[9] = 1; list[13] = 1; list[15] = 1;
 
@@ -122,7 +122,7 @@ internal sealed class StatusListTests
     public void TwoBitSpecVectorRawBytesMatchSpec()
     {
         //Section 4.1: byte array [0xC9, 0x44, 0xF9].
-        using var list = StatusListType.Create(12, StatusListBitSize.TwoBits, Pool);
+        using var list = StatusListType.Create(12, StatusListBitSize.TwoBits, Pool, BitOrder.LeastSignificantFirst);
         list[0] = StatusTypes.Invalid; list[1] = StatusTypes.Suspended;
         list[2] = StatusTypes.Valid; list[3] = StatusTypes.ApplicationSpecific03;
         list[4] = StatusTypes.Valid; list[5] = StatusTypes.Invalid;
@@ -140,13 +140,13 @@ internal sealed class StatusListTests
     [TestMethod]
     public void CompressDecompressRoundTripsOneBit()
     {
-        using var original = StatusListType.Create(MediumListCapacity, StatusListBitSize.OneBit, Pool);
+        using var original = StatusListType.Create(MediumListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         original[0] = StatusTypes.Invalid;
         original[SuspendedCredentialIndex] = StatusTypes.Invalid;
         original[99] = StatusTypes.Invalid;
 
         byte[] compressed = original.Compress();
-        using var restored = StatusListType.FromCompressed(compressed, StatusListBitSize.OneBit, Pool);
+        using var restored = StatusListType.FromCompressed(compressed, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         Assert.AreEqual(original[0], restored[0]);
         Assert.AreEqual(original[SuspendedCredentialIndex], restored[SuspendedCredentialIndex]);
@@ -160,7 +160,7 @@ internal sealed class StatusListTests
     {
         //Section 4.1: compressed form from the spec.
         byte[] specCompressed = Convert.FromHexString(OneBitCompressedHex);
-        using var list = StatusListType.FromCompressed(specCompressed, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.FromCompressed(specCompressed, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         Assert.AreEqual((byte)1, list[0]);
         Assert.AreEqual((byte)0, list[1]);
@@ -178,7 +178,7 @@ internal sealed class StatusListTests
     {
         //Section 4.1: compressed form from the spec.
         byte[] specCompressed = Convert.FromHexString(TwoBitCompressedHex);
-        using var list = StatusListType.FromCompressed(specCompressed, StatusListBitSize.TwoBits, Pool);
+        using var list = StatusListType.FromCompressed(specCompressed, StatusListBitSize.TwoBits, Pool, BitOrder.LeastSignificantFirst);
 
         Assert.AreEqual(StatusTypes.Invalid, list[0]);
         Assert.AreEqual(StatusTypes.Suspended, list[1]);
@@ -191,7 +191,7 @@ internal sealed class StatusListTests
     public void FromRawCreatesListFromUncompressedBytes()
     {
         byte[] raw = [0xB9, 0xA3];
-        using var list = StatusListType.FromRaw(raw, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.FromRaw(raw, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         Assert.AreEqual((byte)1, list[0]);
         Assert.AreEqual((byte)0, list[1]);
@@ -202,10 +202,10 @@ internal sealed class StatusListTests
     [TestMethod]
     public void CapacityReflectsBitSize()
     {
-        using var oneBit = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
-        using var twoBit = StatusListType.Create(SmallListCapacity, StatusListBitSize.TwoBits, Pool);
-        using var fourBit = StatusListType.Create(SmallListCapacity, StatusListBitSize.FourBits, Pool);
-        using var eightBit = StatusListType.Create(SmallListCapacity, StatusListBitSize.EightBits, Pool);
+        using var oneBit = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+        using var twoBit = StatusListType.Create(SmallListCapacity, StatusListBitSize.TwoBits, Pool, BitOrder.LeastSignificantFirst);
+        using var fourBit = StatusListType.Create(SmallListCapacity, StatusListBitSize.FourBits, Pool, BitOrder.LeastSignificantFirst);
+        using var eightBit = StatusListType.Create(SmallListCapacity, StatusListBitSize.EightBits, Pool, BitOrder.LeastSignificantFirst);
 
         Assert.AreEqual(SmallListCapacity, oneBit.Capacity);
         Assert.AreEqual(SmallListCapacity, twoBit.Capacity);
@@ -217,7 +217,7 @@ internal sealed class StatusListTests
     [TestMethod]
     public void IndexerGetThrowsForNegativeIndex()
     {
-        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = list[-1]);
     }
@@ -226,7 +226,7 @@ internal sealed class StatusListTests
     [TestMethod]
     public void IndexerGetThrowsForOutOfBoundsIndex()
     {
-        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = list[SmallListCapacity]);
     }
@@ -235,7 +235,7 @@ internal sealed class StatusListTests
     [TestMethod]
     public void IndexerSetThrowsForValueExceedingBitSize()
     {
-        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => list[0] = 2);
     }
@@ -244,8 +244,8 @@ internal sealed class StatusListTests
     [TestMethod]
     public void EqualityForIdenticalLists()
     {
-        using var a = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
-        using var b = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var a = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+        using var b = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         a[0] = StatusTypes.Invalid;
         b[0] = StatusTypes.Invalid;
 
@@ -257,8 +257,8 @@ internal sealed class StatusListTests
     [TestMethod]
     public void InequalityForDifferentData()
     {
-        using var a = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
-        using var b = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var a = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+        using var b = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         a[0] = StatusTypes.Invalid;
         b[0] = StatusTypes.Valid;
 
@@ -270,8 +270,8 @@ internal sealed class StatusListTests
     [TestMethod]
     public void InequalityForDifferentBitSize()
     {
-        using var a = StatusListType.Create(8, StatusListBitSize.OneBit, Pool);
-        using var b = StatusListType.Create(8, StatusListBitSize.TwoBits, Pool);
+        using var a = StatusListType.Create(8, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+        using var b = StatusListType.Create(8, StatusListBitSize.TwoBits, Pool, BitOrder.LeastSignificantFirst);
 
         Assert.AreNotEqual(a, b);
     }
@@ -280,7 +280,7 @@ internal sealed class StatusListTests
     [TestMethod]
     public void DisposeReleasesMemory()
     {
-        var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         list.Dispose();
 
         Assert.ThrowsExactly<ObjectDisposedException>(() => _ = list[0]);
@@ -290,7 +290,7 @@ internal sealed class StatusListTests
     [TestMethod]
     public void DoubleDisposeDoesNotThrow()
     {
-        var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         list.Dispose();
         list.Dispose();
     }
@@ -299,7 +299,7 @@ internal sealed class StatusListTests
     [TestMethod]
     public void AsSpanReturnsRawData()
     {
-        using var list = StatusListType.FromRaw([0xB9, 0xA3], StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.FromRaw([0xB9, 0xA3], StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
         ReadOnlySpan<byte> span = list.AsSpan();
 
@@ -312,7 +312,7 @@ internal sealed class StatusListTests
     [TestMethod]
     public void AggregationUriCanBeSet()
     {
-        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         list.AggregationUri = ExampleAggregationUri;
 
         Assert.AreEqual(ExampleAggregationUri, list.AggregationUri);
@@ -322,8 +322,8 @@ internal sealed class StatusListTests
     [TestMethod]
     public void GetHashCodeConsistentForEqualLists()
     {
-        using var a = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
-        using var b = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool);
+        using var a = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+        using var b = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         a[5] = StatusTypes.Invalid;
         b[5] = StatusTypes.Invalid;
 

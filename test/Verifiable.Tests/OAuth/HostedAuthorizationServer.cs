@@ -557,7 +557,9 @@ internal sealed class HostedAuthorizationServer
                     Verifiable.OAuth.Federation.FederationEndpoints.Builder,
                     Verifiable.OAuth.AuthZen.AuthZenEndpoints.Builder,
                     Verifiable.OAuth.Ssf.SsfTransmitterEndpoints.Builder,
-                    Verifiable.OAuth.ProtectedResource.ProtectedResourceMetadataEndpoints.Builder
+                    Verifiable.OAuth.ProtectedResource.ProtectedResourceMetadataEndpoints.Builder,
+                    Verifiable.OAuth.Logout.GlobalTokenRevocationEndpoints.Builder,
+                    Verifiable.OAuth.Logout.EndSessionEndpoints.Builder
                 ]),
                 TokenProducers = new TokenProducerSet(
                 [

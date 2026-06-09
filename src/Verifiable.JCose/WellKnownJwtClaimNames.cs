@@ -95,6 +95,15 @@ public static class WellKnownJwtClaimNames
     public static readonly string AuthTime = "auth_time";
 
     /// <summary>
+    /// The <c>sid</c> (Session ID) claim — identifies the End-User's authentication
+    /// session at the OP. Emitted in the ID Token and referenced by OIDC Back-Channel
+    /// and Front-Channel Logout, per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html">OIDC Core</see>
+    /// and <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html">Back-Channel Logout 1.0</see>.
+    /// </summary>
+    public static readonly string Sid = "sid";
+
+    /// <summary>
     /// The <c>acr</c> (Authentication Context Class Reference) claim per
     /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OIDC Core §2</see>.
     /// Value is an application-defined assurance level (e.g. an eIDAS LoA or NIST 800-63 IAL/AAL).

@@ -432,6 +432,142 @@ internal sealed class JarAuthorizeByValueTests
 
 
     [TestMethod]
+    public async Task StaleAuthenticationBeyondDirectMaxAgeFailsWithUnmetRequirement()
+    {
+        //RFC 9470 §5 / OIDC Core §3.1.2.1 — a direct (non-JAR) authorize request that
+        //carries max_age must fail with unmet_authentication_requirements when the
+        //established authentication is older than max_age (beyond the default 60 s skew).
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterClient(
+            ClientId, ClientBaseUri, DirectOnlyCapabilities, PolicyProfile.Rfc6749WithPkce);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        RequestFields fields = new()
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.MaxAge] = "300"
+        };
+
+        ExchangeContext context = new();
+        context.SetSubjectId(TestSubject);
+        context.SetAuthTime(now - TimeSpan.FromSeconds(600));
+
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.AuthCodeAuthorize, "GET",
+            fields, context, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains(
+            $"error={OAuthErrors.UnmetAuthenticationRequirements}", response.Location!,
+            StringComparison.Ordinal,
+            $"A stale authentication on the direct authorize path must fail. Location: {response.Location}");
+        Assert.DoesNotContain("code=", response.Location!, StringComparison.Ordinal);
+    }
+
+
+    [TestMethod]
+    public async Task StaleAuthenticationBeyondJarMaxAgeFailsWithUnmetRequirement()
+    {
+        //RFC 9470 §5 — the max_age requirement carried inside a JAR-by-value request object
+        //is enforced just like the query-parameter form: a stale authentication fails with
+        //unmet_authentication_requirements. Proves the JAR projection carries max_age and the
+        //shared enforcement runs on the signed-request path (closing the step-up bypass gap).
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterClient(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        claims[OAuthRequestParameterNames.MaxAge] = 300L;
+        string compactJar = await BuildSignedJarAsync(
+            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        RequestFields fields = new()
+        {
+            [OAuthRequestParameterNames.Request] = compactJar,
+            [OAuthRequestParameterNames.ClientId] = ClientId
+        };
+        ExchangeContext context = new();
+        context.SetSubjectId(TestSubject);
+        context.SetAuthTime(now - TimeSpan.FromSeconds(600));
+
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.AuthCodeAuthorize, "GET",
+            fields, context, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains(
+            $"error={OAuthErrors.UnmetAuthenticationRequirements}", response.Location!,
+            StringComparison.Ordinal,
+            $"A stale authentication against a JAR max_age must fail. Location: {response.Location}");
+        Assert.DoesNotContain("code=", response.Location!, StringComparison.Ordinal);
+    }
+
+
+    [TestMethod]
+    public async Task DirectAuthorizeSuccessRedirectEchoesState()
+    {
+        //RFC 6749 §4.1.2 — the direct (query-parameter) authorize path captures state from the
+        //request and echoes it on the success redirect alongside the code.
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterClient(
+            ClientId, ClientBaseUri, DirectOnlyCapabilities, PolicyProfile.Rfc6749WithPkce);
+
+        RequestFields fields = new()
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
+            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.State] = "direct-state-xyz"
+        };
+
+        ExchangeContext context = new();
+        context.SetSubjectId(TestSubject);
+        ServerHttpResponse response = await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.AuthCodeAuthorize, "GET",
+            fields, context, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        Assert.Contains("code=", response.Location!, StringComparison.Ordinal);
+        Assert.Contains("state=direct-state-xyz", response.Location!, StringComparison.Ordinal,
+            $"The direct authorize success redirect must echo state. Location: {response.Location}");
+    }
+
+
+    [TestMethod]
+    public async Task JarByValueSuccessRedirectEchoesStateFromRequestObject()
+    {
+        //RFC 6749 §4.1.2 — the state carried inside the signed request object (a required JAR
+        //claim) is echoed on the success redirect, proving the projection carries it through.
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterClient(
+            ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string compactJar = await BuildSignedJarAsync(
+            material, now, BuildBaseClaims(material, now), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        ServerHttpResponse response = await DispatchAuthorizeAsync(
+            host, material, compactJar, ClientId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(302, response.StatusCode, response.Body);
+        //BuildBaseClaims sets state = "state-jar-direct-01"; it must round-trip onto the redirect.
+        Assert.Contains("state=state-jar-direct-01", response.Location!, StringComparison.Ordinal,
+            $"The JAR-by-value success redirect must echo the request object's state. Location: {response.Location}");
+    }
+
+
+    [TestMethod]
     public async Task RejectsDirectAuthorizeWhenProfileRequiresPushedAuthorizationRequests()
     {
         //FAPI 2.0 §5.2.2 — under a PAR-mandating profile (the default Haip10/Fapi20),

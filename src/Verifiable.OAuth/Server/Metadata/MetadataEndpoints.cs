@@ -445,6 +445,25 @@ public static class MetadataEndpoints
                         WellKnownDpopValues.SupportedSigningAlgorithms);
                 }
 
+                //OIDC Back-Channel Logout 1.0 §4: advertise back-channel logout only when the
+                //capability is allowed AND the fan-out seam is wired (fail-closed). The OP is
+                //the sender — there is no OP endpoint to chain — so the boolean flags are
+                //emitted here rather than via a candidate's DiscoveryMetadataKey. The OP
+                //includes a sid in its Logout Tokens (the per-session sid), so session-based
+                //back-channel logout is supported too.
+                if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
+                    && server.Integration.DeliverBackChannelLogoutAsync is not null)
+                {
+                    AppendBooleanField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.BackchannelLogoutSupported,
+                        true);
+                    AppendBooleanField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.BackchannelLogoutSessionSupported,
+                        true);
+                }
+
                 //token_endpoint_auth_methods_supported (RFC 8414 §2 OPTIONAL).
                 //The library's token endpoint accepts PKCE-only public clients
                 //per OAuth 2.1 — auth method "none". Deployments that add

@@ -29,6 +29,15 @@ public static class OAuthEventNames
     public static readonly string ValidationFailed = "oauth.validation.failed";
 
     /// <summary>
+    /// A <c>request_uri</c>-referenced authorization request (PAR per RFC 9126, or JAR by
+    /// reference per RFC 9101) carried front-channel parameters beyond <c>request_uri</c> and
+    /// <c>client_id</c>. Per RFC 9101 §6.3 the authorization server uses only the pushed
+    /// parameters and ignores these extras; their presence may indicate a non-conformant client
+    /// or a front-channel tampering attempt, so it is surfaced for deployments to alert on.
+    /// </summary>
+    public static readonly string ExtraneousAuthorizeParameters = "oauth.authorize.extraneous_parameters_ignored";
+
+    /// <summary>
     /// The PDA transitioned to a new state.
     /// </summary>
     public static readonly string StateTransition = "oauth.flow.state_transition";

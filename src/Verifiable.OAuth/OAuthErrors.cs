@@ -28,6 +28,14 @@ public static class OAuthErrors
     /// <summary>The requested scope is invalid, unknown, or malformed.</summary>
     public static readonly string InvalidScope = "invalid_scope";
 
+    /// <summary>
+    /// The resource owner or authorization server denied the request — for example the
+    /// End-User declined consent, or deployment policy refused it. Returned from the
+    /// authorization endpoint as an OAuth 2.0 Authorization Error Response (RFC 6749
+    /// §4.1.2.1 redirect).
+    /// </summary>
+    public static readonly string AccessDenied = "access_denied";
+
     /// <summary>The authorization server is temporarily unable to handle the request.</summary>
     public static readonly string TemporarilyUnavailable = "temporarily_unavailable";
 
@@ -69,6 +77,15 @@ public static class OAuthErrors
     public static readonly string InsufficientScope = "insufficient_scope";
 
     /// <summary>
+    /// RFC 9470 §3: the authentication event associated with the presented access
+    /// token does not meet the protected resource's authentication requirements —
+    /// the subject must step up (a stronger <c>acr</c> and/or a fresher
+    /// authentication per <c>max_age</c>). Emitted with HTTP 401 in a
+    /// <c>WWW-Authenticate</c> step-up challenge.
+    /// </summary>
+    public static readonly string InsufficientUserAuthentication = "insufficient_user_authentication";
+
+    /// <summary>
     /// RFC 9449 §8: the server requires the client to retry with a fresh
     /// DPoP nonce. Emitted with HTTP 401 (token endpoint, resource server)
     /// or HTTP 400 (other endpoints) and a <c>DPoP-Nonce</c> response header
@@ -81,4 +98,16 @@ public static class OAuthErrors
     /// required claims, replay defense, or thumbprint-binding mismatch.
     /// </summary>
     public static readonly string InvalidDpopProof = "invalid_dpop_proof";
+
+    /// <summary>
+    /// The authorization server is unable to meet the Relying Party's authentication
+    /// requirements for the End-User — a requested Authentication Context Class Reference
+    /// (<c>acr_values</c>) could not be satisfied, or the established authentication is
+    /// older than the requested <c>max_age</c>. Returned from the authorization endpoint
+    /// as an OAuth 2.0 Authorization Error Response (RFC 6749 §4.1.2.1 redirect) per the
+    /// <see href="https://openid.net/specs/openid-connect-unmet-authentication-requirements-1_0.html">OpenID Connect Core Error Code <c>unmet_authentication_requirements</c></see>
+    /// extension, invoked for step-up authentication by
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9470#section-5">RFC 9470 §5</see>.
+    /// </summary>
+    public static readonly string UnmetAuthenticationRequirements = "unmet_authentication_requirements";
 }

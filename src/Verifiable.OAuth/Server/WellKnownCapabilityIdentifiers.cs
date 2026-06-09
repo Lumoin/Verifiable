@@ -89,6 +89,32 @@ public static class WellKnownCapabilityIdentifiers
         CapabilityIdentifier.Create("urn:verifiable:capability:oauth:introspection");
 
     /// <summary>
+    /// Global Token Revocation per
+    /// <see href="https://datatracker.ietf.org/doc/draft-parecki-oauth-global-token-revocation/">draft-parecki-oauth-global-token-revocation</see>
+    /// — an authenticated command that revokes all of a subject's tokens by
+    /// RFC 9493 Subject Identifier, regardless of the authentication protocol or
+    /// whether the user is present.
+    /// </summary>
+    public static CapabilityIdentifier OAuthGlobalTokenRevocation { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oauth:global_token_revocation");
+
+    /// <summary>
+    /// OpenID Connect RP-Initiated Logout 1.0 — the <c>end_session_endpoint</c> an RP
+    /// redirects the User Agent to in order to terminate the End-User's session, per
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html">OIDC RP-Initiated Logout 1.0</see>.
+    /// </summary>
+    public static CapabilityIdentifier OidcRpInitiatedLogout { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oidc:rp_initiated_logout");
+
+    /// <summary>
+    /// OpenID Connect Back-Channel Logout 1.0 — the OP delivers a signed <c>logout_token</c>
+    /// to each registered RP's <c>backchannel_logout_uri</c> when a session ends, per
+    /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html">OIDC Back-Channel Logout 1.0</see>.
+    /// </summary>
+    public static CapabilityIdentifier OidcBackChannelLogout { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oidc:back_channel_logout");
+
+    /// <summary>
     /// Device Authorization Grant per
     /// <see href="https://www.rfc-editor.org/rfc/rfc8628">RFC 8628</see>.
     /// </summary>

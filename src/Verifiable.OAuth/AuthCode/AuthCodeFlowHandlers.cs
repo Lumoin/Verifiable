@@ -449,21 +449,40 @@ public static class AuthCodeFlowHandlers
             ExpiresIn = tokenResponse.ExpiresIn,
             RefreshToken = tokenResponse.RefreshToken,
             Scope = tokenResponse.Scope,
+            IdToken = tokenResponse.IdToken,
             ReceivedAt = now
         };
 
         await infrastructure.SaveStateAsync(tokenReceived, context, cancellationToken).ConfigureAwait(false);
 
+        var body = new Dictionary<string, object>
+        {
+            [OAuthRequestParameterNames.AccessToken] = tokenResponse.AccessToken,
+            [OAuthRequestParameterNames.TokenType] = tokenResponse.TokenType,
+            [OAuthRequestParameterNames.ExpiresIn] = tokenResponse.ExpiresIn ?? 0,
+            [OAuthRequestParameterNames.Scope] = tokenResponse.Scope ?? string.Empty
+        };
+
+        //A refresh token MAY be issued on the auth-code exchange (RFC 6749 §5.1, e.g.
+        //when offline access is granted). It is parsed and persisted, so surface it to
+        //the caller too — mirroring the refresh response below.
+        if(tokenResponse.RefreshToken is not null)
+        {
+            body[OAuthRequestParameterNames.RefreshToken] = tokenResponse.RefreshToken;
+        }
+
+        //An OpenID Connect token response carries an ID Token alongside the access
+        //token (OpenID Connect Core 1.0 §3.1.3.3). Surface it so an OIDC relying party
+        //can read it — e.g. to later pass it as id_token_hint to the end_session endpoint.
+        if(tokenResponse.IdToken is not null)
+        {
+            body[OAuthRequestParameterNames.IdToken] = tokenResponse.IdToken;
+        }
+
         return new AuthCodeFlowEndpointResult
         {
             Outcome = AuthCodeFlowEndpointOutcome.Ok,
-            Body = new Dictionary<string, object>
-            {
-                [OAuthRequestParameterNames.AccessToken] = tokenResponse.AccessToken,
-                [OAuthRequestParameterNames.TokenType] = tokenResponse.TokenType,
-                [OAuthRequestParameterNames.ExpiresIn] = tokenResponse.ExpiresIn ?? 0,
-                [OAuthRequestParameterNames.Scope] = tokenResponse.Scope ?? string.Empty
-            }
+            Body = body
         };
     }
 
@@ -595,17 +614,26 @@ public static class AuthCodeFlowHandlers
         }
 
         TokenResponse tokenResponse = refreshResult.Value;
+        var body = new Dictionary<string, object>
+        {
+            [OAuthRequestParameterNames.AccessToken] = tokenResponse.AccessToken,
+            [OAuthRequestParameterNames.TokenType] = tokenResponse.TokenType,
+            [OAuthRequestParameterNames.ExpiresIn] = tokenResponse.ExpiresIn ?? 0,
+            [OAuthRequestParameterNames.RefreshToken] = tokenResponse.RefreshToken ?? string.Empty,
+            [OAuthRequestParameterNames.Scope] = tokenResponse.Scope ?? string.Empty
+        };
+
+        //A refresh response MAY carry a new ID Token (OpenID Connect Core 1.0 §12.1);
+        //surface it when present.
+        if(tokenResponse.IdToken is not null)
+        {
+            body[OAuthRequestParameterNames.IdToken] = tokenResponse.IdToken;
+        }
+
         return new AuthCodeFlowEndpointResult
         {
             Outcome = AuthCodeFlowEndpointOutcome.Ok,
-            Body = new Dictionary<string, object>
-            {
-                [OAuthRequestParameterNames.AccessToken] = tokenResponse.AccessToken,
-                [OAuthRequestParameterNames.TokenType] = tokenResponse.TokenType,
-                [OAuthRequestParameterNames.ExpiresIn] = tokenResponse.ExpiresIn ?? 0,
-                [OAuthRequestParameterNames.RefreshToken] = tokenResponse.RefreshToken ?? string.Empty,
-                [OAuthRequestParameterNames.Scope] = tokenResponse.Scope ?? string.Empty
-            }
+            Body = body
         };
     }
 

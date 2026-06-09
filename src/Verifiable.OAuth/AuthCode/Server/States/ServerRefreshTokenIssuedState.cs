@@ -60,4 +60,24 @@ public sealed record ServerRefreshTokenIssuedState: OAuthFlowState
     /// <see cref="ConfirmationMethod.JwkThumbprint"/> per RFC 9449 §5.
     /// </summary>
     public ConfirmationMethod? Confirmation { get; init; }
+
+    /// <summary>
+    /// The instant the End-User authenticated at the original authorization, carried
+    /// forward across refresh rotations so the refreshed access token's <c>auth_time</c>
+    /// claim stays fixed. Per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2.1">RFC 9068 §2.2.1</see>,
+    /// the authentication-context claims remain the same across all access tokens that
+    /// derive from a given authorization response, including those obtained by refreshing.
+    /// <see langword="null"/> when no End-User authentication backs the token (e.g. a
+    /// grant shape with no interactive login).
+    /// </summary>
+    public DateTimeOffset? AuthTime { get; init; }
+
+    /// <summary>
+    /// The Authentication Context Class Reference (<c>acr</c>) established at the original
+    /// authorization, carried forward across refresh rotations so the refreshed access
+    /// token's <c>acr</c> claim stays fixed per RFC 9068 §2.2.1. <see langword="null"/>
+    /// when no authentication-context reference was established.
+    /// </summary>
+    public string? Acr { get; init; }
 }

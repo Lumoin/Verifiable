@@ -57,7 +57,6 @@
     <ProjectReference Include="..\..\src\Verifiable.Cbor\Verifiable.Cbor.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Core\Verifiable.Core.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable.Geometry\Verifiable.Geometry.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.JCose\Verifiable.JCose.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Json\Verifiable.Json.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />

@@ -65,6 +65,25 @@ public static class OAuthRequestParameterNames
     public static readonly string Scope = "scope";
 
     /// <summary>
+    /// The <c>acr_values</c> parameter. A space-separated, preference-ordered list of
+    /// requested Authentication Context Class Reference values per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OIDC Core §3.1.2.1</see>;
+    /// used by <see href="https://www.rfc-editor.org/rfc/rfc9470#section-4">RFC 9470 §4</see>
+    /// step-up authentication to convey the authentication strength the resource server demands.
+    /// </summary>
+    public static readonly string AcrValues = "acr_values";
+
+    /// <summary>
+    /// The <c>max_age</c> parameter. The maximum allowable elapsed time in seconds since the
+    /// End-User's last active authentication per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OIDC Core §3.1.2.1</see>;
+    /// a non-negative integer. When present, the issued ID Token MUST carry an <c>auth_time</c>
+    /// claim, and <c>max_age=0</c> requires a fresh authentication (equivalent to <c>prompt=login</c>).
+    /// Used by <see href="https://www.rfc-editor.org/rfc/rfc9470#section-4">RFC 9470 §4</see> step-up.
+    /// </summary>
+    public static readonly string MaxAge = "max_age";
+
+    /// <summary>
     /// The <c>state</c> parameter.
     /// An opaque value used to maintain state between the request and callback.
     /// Provides CSRF protection per
@@ -73,6 +92,32 @@ public static class OAuthRequestParameterNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.7">RFC 9700 §4.7</see>.
     /// </summary>
     public static readonly string State = "state";
+
+    /// <summary>
+    /// The <c>id_token_hint</c> parameter — a previously-issued ID Token passed to the
+    /// end-session endpoint as a hint about the End-User's session, per
+    /// <see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout">OIDC RP-Initiated Logout §2</see>.
+    /// </summary>
+    public static readonly string IdTokenHint = "id_token_hint";
+
+    /// <summary>
+    /// The <c>post_logout_redirect_uri</c> parameter — where the OP redirects the
+    /// User Agent after logout; validated against the client's registered values
+    /// (RP-Initiated Logout §2).
+    /// </summary>
+    public static readonly string PostLogoutRedirectUri = "post_logout_redirect_uri";
+
+    /// <summary>
+    /// The <c>logout_hint</c> parameter — a hint to the OP about the End-User to log
+    /// out (RP-Initiated Logout §2).
+    /// </summary>
+    public static readonly string LogoutHint = "logout_hint";
+
+    /// <summary>
+    /// The <c>ui_locales</c> parameter — the End-User's preferred languages for any
+    /// logout-confirmation UI (RP-Initiated Logout §2).
+    /// </summary>
+    public static readonly string UiLocales = "ui_locales";
 
     /// <summary>
     /// The <c>response_mode</c> parameter.
@@ -139,6 +184,14 @@ public static class OAuthRequestParameterNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
     public static readonly string RefreshToken = "refresh_token";
+
+    /// <summary>
+    /// The <c>id_token</c> parameter.
+    /// The ID Token issued alongside the access token in an OpenID Connect token
+    /// response per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#TokenResponse">OpenID Connect Core 1.0 §3.1.3.3</see>.
+    /// </summary>
+    public static readonly string IdToken = "id_token";
 
     //Revocation parameters — RFC 7009.
 

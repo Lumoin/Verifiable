@@ -32,6 +32,13 @@ public sealed record TokenReceivedState: OAuthFlowState
     /// <summary>The scopes granted, if different from those requested.</summary>
     public string? Scope { get; init; }
 
+    /// <summary>
+    /// The ID Token, if the token endpoint returned one (OpenID Connect token
+    /// response per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#TokenResponse">OpenID Connect Core 1.0 §3.1.3.3</see>).
+    /// </summary>
+    public string? IdToken { get; init; }
+
     /// <summary>The UTC instant at which the token response was received.</summary>
     public required DateTimeOffset ReceivedAt { get; init; }
 }

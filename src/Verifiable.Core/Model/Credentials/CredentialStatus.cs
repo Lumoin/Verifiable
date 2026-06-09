@@ -24,8 +24,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// Common status mechanisms include:
 /// </para>
 /// <list type="bullet">
-/// <item><description><c>BitstringStatusListEntry</c>: Efficient bitstring-based status lists.</description></item>
-/// <item><description><c>RevocationList2020Status</c>: Legacy revocation list format.</description></item>
+/// <item><description><c>BitstringStatusListEntry</c>: W3C Bitstring Status List entry.</description></item>
 /// </list>
 /// <para>
 /// See <see href="https://www.w3.org/TR/vc-data-model-2.0/#status">VC Data Model 2.0 §4.10 Status</see>.

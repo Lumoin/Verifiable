@@ -58,7 +58,7 @@
   <ItemGroup Condition="$(MSBuildProjectName) == 'Verifiable.OAuth'">
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.OAuth.txt" Visible="false" />
   </ItemGroup>
-  
+
   <!-- Settings for all tests projects specifically. -->
   <PropertyGroup>
     <EnableMSTestRunner>true</EnableMSTestRunner>

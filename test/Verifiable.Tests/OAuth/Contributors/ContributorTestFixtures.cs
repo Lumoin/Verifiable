@@ -47,7 +47,8 @@ internal static class ContributorTestFixtures
     public static IssuanceContext BuildIssuance(
         string scope,
         ConfirmationMethod? confirmation = null,
-        DateTimeOffset? authTime = null)
+        DateTimeOffset? authTime = null,
+        string? acr = null)
     {
         return new IssuanceContext
         {
@@ -60,6 +61,7 @@ internal static class ContributorTestFixtures
             IssuedAt = FixedIssuedAt,
             Nonce = null,
             AuthTime = authTime,
+            Acr = acr,
             Confirmation = confirmation
         };
     }
@@ -95,8 +97,10 @@ internal static class ContributorTestFixtures
 
     public static AccessTokenTarget BuildAccessTokenTarget(
         string scope,
-        ConfirmationMethod? confirmation = null) =>
-        new(BuildIssuance(scope, confirmation));
+        ConfirmationMethod? confirmation = null,
+        DateTimeOffset? authTime = null,
+        string? acr = null) =>
+        new(BuildIssuance(scope, confirmation, authTime, acr));
 
 
     public static IntrospectionTarget BuildIntrospectionTarget(string scope) =>
