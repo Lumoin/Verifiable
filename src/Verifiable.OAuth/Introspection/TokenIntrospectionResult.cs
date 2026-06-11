@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
+using Verifiable.OAuth;
+
 namespace Verifiable.OAuth.Introspection;
 
 /// <summary>
@@ -106,6 +108,21 @@ public sealed record TokenIntrospectionResult
     /// when not surfaced.
     /// </summary>
     public string? JwtId { get; init; }
+
+    /// <summary>
+    /// RFC 9396 §9.2 <c>authorization_details</c>: the granted Rich Authorization Requests
+    /// details associated with the token, or <see langword="null"/> when the token carries none
+    /// (or the deployment does not surface them to this caller). Written as the top-level
+    /// <c>authorization_details</c> member of the introspection response. RFC 9396 §9.2: "If the
+    /// AS includes authorization detail information for the token in its response, the information
+    /// MUST be conveyed with authorization_details as a top-level member of the introspection
+    /// response JSON object." The library emits exactly what the application supplies — the
+    /// application owns the §9.2 "potentially filtered and extended for the RS making the
+    /// introspection request" decision, the same way it narrows <see cref="Scope"/> per calling
+    /// resource. Each entry carries the §2 structure (the §2 REQUIRED <c>type</c> and any common
+    /// or type-specific members).
+    /// </summary>
+    public IReadOnlyList<AuthorizationDetail>? AuthorizationDetails { get; init; }
 
     /// <summary>
     /// Service-specific extension members written as additional top-level members of the

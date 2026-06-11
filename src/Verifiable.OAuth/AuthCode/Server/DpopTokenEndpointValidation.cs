@@ -147,41 +147,28 @@ internal static class DpopTokenEndpointValidation
                 .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
         }
 
-        //JTI replay check — storage-backed, runs only after structural and
-        //cryptographic checks pass.
-        string jtiCorrelationKey = $"{issuerUri.OriginalString}:{proofResult.Claims.Jti}";
-        if(server.Integration.ResolveCorrelationKeyAsync is not null)
+        //JTI replay check — the same shared (issuer, jti) correlation store the JAR path
+        //uses, governed by JtiReplayPolicy: Required fails closed when no store is wired, and
+        //the read and first-use record happen as one unit (RFC 9449 §11.1). Runs only after
+        //structural and cryptographic checks pass.
+        JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
+            server, context, registration.TenantId,
+            issuerUri.OriginalString, proofResult.Claims.Jti,
+            now + WellKnownDpopValues.DefaultReplayWindow,
+            cancellationToken).ConfigureAwait(false);
+
+        if(jtiOutcome == JtiReplayOutcome.Replayed)
         {
-            string? existingJtiFlowId = await server.Integration.ResolveCorrelationKeyAsync(
-                registration.TenantId, FlowKind.JtiReplay, jtiCorrelationKey, context, cancellationToken)
-                .ConfigureAwait(false);
-            if(existingJtiFlowId is not null)
-            {
-                return DpopValidationOutcome.Failure(ServerHttpResponse.BadRequest(
-                    OAuthErrors.InvalidDpopProof,
-                    "DPoP proof jti has been seen previously."));
-            }
+            return DpopValidationOutcome.Failure(ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidDpopProof,
+                "DPoP proof jti has been seen previously."));
         }
 
-        if(server.Integration.SaveFlowStateAsync is not null)
+        if(jtiOutcome == JtiReplayOutcome.StoreUnavailable)
         {
-            string syntheticFlowId = await server.Integration.GenerateIdentifierAsync!(
-                WellKnownIdentifierPurposes.OAuthCorrelationId, context, cancellationToken)
-                .ConfigureAwait(false);
-            JtiSeenState jtiState = new()
-            {
-                FlowId = syntheticFlowId,
-                ExpectedIssuer = issuerUri.OriginalString,
-                EnteredAt = now,
-                ExpiresAt = now + WellKnownDpopValues.DefaultReplayWindow,
-                Kind = FlowKind.JtiReplay,
-                Issuer = issuerUri.OriginalString,
-                Jti = proofResult.Claims.Jti,
-                SeenAt = now
-            };
-            await server.Integration.SaveFlowStateAsync(
-                registration.TenantId, jtiCorrelationKey, jtiState, stepCount: 0, context, cancellationToken)
-                .ConfigureAwait(false);
+            return DpopValidationOutcome.Failure(ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError,
+                "DPoP proof jti replay defense is required by policy but no jti store is configured."));
         }
 
         ConfirmationMethod? confirmation = proofResult.JwkThumbprint is not null

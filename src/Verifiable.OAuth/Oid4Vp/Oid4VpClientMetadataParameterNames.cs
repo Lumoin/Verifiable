@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
 
@@ -26,20 +27,35 @@ namespace Verifiable.OAuth.Oid4Vp;
 [DebuggerDisplay("Oid4VpClientMetadataParameterNames")]
 public static class Oid4VpClientMetadataParameterNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="ClientId"/>.</summary>
+    public static ReadOnlySpan<byte> ClientIdUtf8 => "client_id"u8;
+
     /// <summary>The <c>client_id</c> member echoing the Verifier's client identifier.</summary>
-    public static readonly string ClientId = "client_id";
+    public static readonly string ClientId = Utf8Constants.ToInternedString(ClientIdUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Jwks"/>.</summary>
+    public static ReadOnlySpan<byte> JwksUtf8 => "jwks"u8;
 
     /// <summary>The <c>jwks</c> member carrying the Verifier's response-encryption keys (§8.3).</summary>
-    public static readonly string Jwks = "jwks";
+    public static readonly string Jwks = Utf8Constants.ToInternedString(JwksUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="VpFormatsSupported"/>.</summary>
+    public static ReadOnlySpan<byte> VpFormatsSupportedUtf8 => "vp_formats_supported"u8;
 
     /// <summary>The <c>vp_formats_supported</c> member — the credential-format support map (§11.1).</summary>
-    public static readonly string VpFormatsSupported = "vp_formats_supported";
+    public static readonly string VpFormatsSupported = Utf8Constants.ToInternedString(VpFormatsSupportedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="EncryptedResponseEncValuesSupported"/>.</summary>
+    public static ReadOnlySpan<byte> EncryptedResponseEncValuesSupportedUtf8 => "encrypted_response_enc_values_supported"u8;
 
     /// <summary>The <c>encrypted_response_enc_values_supported</c> member — JWE <c>enc</c> algorithms.</summary>
-    public static readonly string EncryptedResponseEncValuesSupported = "encrypted_response_enc_values_supported";
+    public static readonly string EncryptedResponseEncValuesSupported = Utf8Constants.ToInternedString(EncryptedResponseEncValuesSupportedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="EncryptedResponseAlgValuesSupported"/>.</summary>
+    public static ReadOnlySpan<byte> EncryptedResponseAlgValuesSupportedUtf8 => "encrypted_response_alg_values_supported"u8;
 
     /// <summary>The <c>encrypted_response_alg_values_supported</c> member — JWE <c>alg</c> algorithms.</summary>
-    public static readonly string EncryptedResponseAlgValuesSupported = "encrypted_response_alg_values_supported";
+    public static readonly string EncryptedResponseAlgValuesSupported = Utf8Constants.ToInternedString(EncryptedResponseAlgValuesSupportedUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly <c>client_id</c>.</summary>

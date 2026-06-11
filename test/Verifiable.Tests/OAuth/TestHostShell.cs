@@ -33,6 +33,7 @@ using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Audit;
 using Verifiable.OAuth.Server.Keys;
 using Verifiable.OAuth.Server.States;
+using Verifiable.OAuth.Siop.Server;
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Validation;
 using Verifiable.Tests.TestDataProviders;
@@ -172,6 +173,16 @@ internal sealed class TestHostShell: IAsyncDisposable
     private Dictionary<string, PublicKeyMemory> IssuerTrustStore { get; } = [];
 
     /// <summary>
+    /// SIOPv2 §11.1 DID trust map for Self-Issued ID Tokens of the Decentralized Identifier
+    /// Subject Syntax Type, keyed by the DID Document verification-method id (the JOSE header
+    /// <c>kid</c>) and falling back to the bare DID. The SIOP validator's
+    /// <see cref="Verifiable.OAuth.Siop.ResolveDidVerificationKeyDelegate"/> reads from this map,
+    /// the DID-subject parallel of <see cref="IssuerTrustStore"/>.
+    /// </summary>
+    private Dictionary<string, PublicKeyMemory> SiopDidTrustStore { get; } =
+        new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Per-subject OIDC claim store. The fixture's
     /// <see cref="AuthorizationServerIntegration.ResolveOidcClaimsAsync"/>
     /// lambda reads from this dictionary so tests can seed claim sets and
@@ -192,6 +203,78 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(issuerPublicKey);
 
         IssuerTrustStore[issuerId] = issuerPublicKey;
+    }
+
+
+    /// <summary>
+    /// Registers a SIOPv2 Self-Issued OP's DID verification key for the Decentralized Identifier
+    /// Subject Syntax Type. The key is indexed under both the verification-method id
+    /// (<paramref name="keyId"/>, the JOSE header <c>kid</c>) and the bare <paramref name="did"/>,
+    /// so the resolver matches whether or not the token carries a <c>kid</c>.
+    /// </summary>
+    /// <param name="did">The Self-Issued OP's DID — the <c>iss</c>/<c>sub</c> claim value.</param>
+    /// <param name="keyId">The DID Document verification-method id (the header <c>kid</c>).</param>
+    /// <param name="verificationKey">The DID's public verification key.</param>
+    public void RegisterSiopDidTrust(string did, string keyId, PublicKeyMemory verificationKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(did);
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyId);
+        ArgumentNullException.ThrowIfNull(verificationKey);
+
+        SiopDidTrustStore[keyId] = verificationKey;
+        SiopDidTrustStore[did] = verificationKey;
+    }
+
+
+    /// <summary>
+    /// The SIOPv2 §11.1 DID resolution seam shared into every host this shell builds. It selects
+    /// the verification key by the JOSE header <c>kid</c> when present (the verification-method id),
+    /// falling back to the bare DID, and hands back a fresh owned copy because the validator
+    /// disposes the resolved key after signature verification.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The resolved key's ownership transfers to the SIOP validator, which disposes it under a using statement after signature verification; disposing here would close the buffer before the caller reads it. This mirrors PinnedVerifierKeyResolver.")]
+    private ValueTask<PublicKeyMemory?> ResolveSiopDidKey(
+        string did, string? keyId, CancellationToken cancellationToken)
+    {
+        PublicKeyMemory? trusted = keyId is not null && SiopDidTrustStore.TryGetValue(keyId, out PublicKeyMemory? byKid)
+            ? byKid
+            : SiopDidTrustStore.GetValueOrDefault(did);
+        if(trusted is null)
+        {
+            return ValueTask.FromResult<PublicKeyMemory?>(null);
+        }
+
+        //Hand back a fresh owned copy so the validator can dispose the resolved key after use
+        //without disturbing the shell's retained trust-store entry.
+        ReadOnlySpan<byte> keyBytes = trusted.AsReadOnlySpan();
+        IMemoryOwner<byte> owner = MemoryPool.Rent(keyBytes.Length);
+        keyBytes.CopyTo(owner.Memory.Span);
+
+        return ValueTask.FromResult<PublicKeyMemory?>(new PublicKeyMemory(owner, trusted.Tag));
+    }
+
+
+    /// <summary>
+    /// Registers a fresh P-256 exchange keypair as a Relying Party encryption key on the named host:
+    /// the private half lands in the host's decryption-key store under a new key id (so the SIOP
+    /// executor's <c>DecryptionKeyResolver</c> resolves it), and the public half is returned to the
+    /// caller — a SIOP test wallet encrypts the Self-Issued ID Token JWE to it. The caller owns and
+    /// disposes the returned public key.
+    /// </summary>
+    public (KeyId EncryptionKeyId, PublicKeyMemory EncryptionPublicKey) RegisterRpEncryptionKey(
+        string hostName = "default")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+
+        HostedAuthorizationServer host = Host(hostName);
+
+        KeyId encryptionKeyId = new($"urn:uuid:{Guid.NewGuid()}");
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> exchangeKeyPair =
+            TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
+
+        host.DecryptionKeys[encryptionKeyId] = exchangeKeyPair.PrivateKey;
+
+        return (encryptionKeyId, exchangeKeyPair.PublicKey);
     }
 
 
@@ -281,7 +364,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             vpValidator: VpValidatorShared,
             mdocSeams: MdocSeamsShared,
             sdCwtSeams: SdCwtSeamsShared,
-            saltReuseSeam: SaltReuseSeamShared);
+            saltReuseSeam: SaltReuseSeamShared,
+            resolveDidVerificationKey: ResolveSiopDidKey);
         HostsByName["default"] = Default;
     }
 
@@ -347,7 +431,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             resolveIssuerKey: ResolveIssuerKeyShared,
             vpValidator: VpValidatorShared,
             mdocSeams: MdocSeamsShared,
-            sdCwtSeams: SdCwtSeamsShared);
+            sdCwtSeams: SdCwtSeamsShared,
+            resolveDidVerificationKey: ResolveSiopDidKey);
         HostsByName[name] = host;
 
         return host;
@@ -1757,6 +1842,194 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
+    /// SIOPv2 request preparation — creates a new Relying-Party flow. Sets the transaction
+    /// inputs (nonce, client_id, accepted algorithms) on the context bag and dispatches the
+    /// preparation endpoint, mirroring <see cref="HandleParAsync"/>. Returns the per-flow request
+    /// handle the Wallet echoes as <c>state</c> on its Self-Issued ID Token response. The internal
+    /// flow identifier never leaves this method.
+    /// </summary>
+    public async Task<string> HandleSiopRequestPreparationAsync(
+        VerifierKeyMaterial keyMaterial,
+        string nonce,
+        string clientId,
+        IReadOnlyList<string> allowedAlgorithms,
+        CancellationToken cancellationToken)
+    {
+        (string requestHandle, _) = await HandleSiopRequestPreparationAsync(
+            keyMaterial, nonce, clientId, allowedAlgorithms,
+            useStaticDiscoveryAudience: false, cancellationToken).ConfigureAwait(false);
+
+        return requestHandle;
+    }
+
+
+    /// <summary>
+    /// SIOPv2 request preparation that also exposes the by-reference <c>request_uri</c> the
+    /// preparation endpoint composed, and lets the caller toggle the §9.1 static-discovery
+    /// <c>aud</c>. Returns both the per-flow request handle (echoed as <c>state</c>) and the
+    /// <c>request_uri</c> the Wallet GETs to fetch the signed §9 Request Object.
+    /// </summary>
+    public Task<(string RequestHandle, Uri RequestUri)> HandleSiopRequestPreparationAsync(
+        VerifierKeyMaterial keyMaterial,
+        string nonce,
+        string clientId,
+        IReadOnlyList<string> allowedAlgorithms,
+        bool useStaticDiscoveryAudience,
+        CancellationToken cancellationToken) =>
+        HandleSiopRequestPreparationAsync(
+            keyMaterial, nonce, clientId, allowedAlgorithms, useStaticDiscoveryAudience,
+            encryptionKeyId: null, allowedEncAlgorithms: null, cancellationToken);
+
+
+    /// <summary>
+    /// SIOPv2 request preparation that also advertises the Relying Party's encryption key id and
+    /// accepted content-encryption algorithms, so the Wallet may return the Self-Issued ID Token as a
+    /// compact JWE encrypted to the RP's public encryption key. The encrypted-response analogue of the
+    /// bare-JWS preparation above.
+    /// </summary>
+    public Task<(string RequestHandle, Uri RequestUri)> HandleSiopRequestPreparationAsync(
+        VerifierKeyMaterial keyMaterial,
+        string nonce,
+        string clientId,
+        IReadOnlyList<string> allowedAlgorithms,
+        bool useStaticDiscoveryAudience,
+        string? encryptionKeyId,
+        IReadOnlyList<string>? allowedEncAlgorithms,
+        CancellationToken cancellationToken) =>
+        HandleSiopRequestPreparationAsync(
+            keyMaterial, nonce, clientId, allowedAlgorithms, useStaticDiscoveryAudience,
+            encryptionKeyId, allowedEncAlgorithms, requestObjectAdditionalHeaderClaims: null,
+            cancellationToken);
+
+
+    /// <summary>
+    /// SIOPv2 request preparation that also sets the additional §9 Request Object JOSE header claims —
+    /// the client-id-prefix material (<c>x5c</c>, <c>trust_chain</c>, <c>jwt</c>, <c>kid</c>) the
+    /// wallet resolves the RP signing key from through the shared client-id trust fabric. The SIOP
+    /// parallel of how the OID4VP PAR helper threads <c>jarAdditionalHeaderClaims</c>.
+    /// </summary>
+    public async Task<(string RequestHandle, Uri RequestUri)> HandleSiopRequestPreparationAsync(
+        VerifierKeyMaterial keyMaterial,
+        string nonce,
+        string clientId,
+        IReadOnlyList<string> allowedAlgorithms,
+        bool useStaticDiscoveryAudience,
+        string? encryptionKeyId,
+        IReadOnlyList<string>? allowedEncAlgorithms,
+        JwtHeader? requestObjectAdditionalHeaderClaims,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(keyMaterial);
+        ArgumentException.ThrowIfNullOrWhiteSpace(nonce);
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
+        ArgumentNullException.ThrowIfNull(allowedAlgorithms);
+
+        ExchangeContext context = new();
+        context.SetTenantId(keyMaterial.Registration.TenantId);
+        context.SetSiopNonce(nonce);
+        context.SetSiopClientId(clientId);
+        context.SetSiopAllowedAlgorithms(allowedAlgorithms);
+        context.SetSiopUseStaticDiscoveryAudience(useStaticDiscoveryAudience);
+
+        if(encryptionKeyId is not null)
+        {
+            context.SetSiopEncryptionKeyId(encryptionKeyId);
+        }
+
+        if(allowedEncAlgorithms is not null)
+        {
+            context.SetSiopAllowedEncAlgorithms(allowedEncAlgorithms);
+        }
+
+        if(requestObjectAdditionalHeaderClaims is not null)
+        {
+            context.SetSiopRequestObjectAdditionalHeaderClaims(requestObjectAdditionalHeaderClaims);
+        }
+
+        //The preparation endpoint is invoked internally by the RP app — not from a wire HTTP
+        //request. The matcher reads context (the siop.nonce slot) and ignores path and fields.
+        //IncomingRequest is constructed for protocol-uniformity; its Path is the canonical
+        ///siop_request template substituted with the segment.
+        string segment = keyMaterial.Registration.TenantId.Value;
+        string preparationPath = TestHostShell.ComposeEndpointPath(
+            WellKnownEndpointNames.SiopRequestObject, segment);
+
+        IncomingRequest request = new(
+            Path: preparationPath,
+            Method: "POST",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty);
+
+        ServerHttpResponse response = await Server.DispatchAsync(
+            request, context, cancellationToken).ConfigureAwait(false);
+
+        if(!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"SIOP request preparation failed with status {response.StatusCode}: {response.Body}");
+        }
+
+        //The library placed the per-flow request handle and the composed request_uri on context
+        //before dispatch returned.
+        string requestHandle = context.SiopRequestHandle
+            ?? throw new InvalidOperationException("SiopRequestHandle not set after preparation.");
+        Uri requestUri = context.SiopGeneratedRequestUri
+            ?? throw new InvalidOperationException("SiopGeneratedRequestUri not set after preparation.");
+
+        return (requestHandle, requestUri);
+    }
+
+
+    /// <summary>
+    /// SIOPv2 §9 Request Object fetch — the by-reference GET against the <c>request_uri</c>. The
+    /// <paramref name="externalToken"/> is the per-flow request handle from
+    /// <see cref="HandleSiopRequestPreparationAsync(VerifierKeyMaterial, string, string, IReadOnlyList{string}, bool, CancellationToken)"/>.
+    /// Returns the signed compact §9 Request Object the RP served. Mirrors
+    /// <see cref="HandleJarRequestAsync"/>.
+    /// </summary>
+    public async Task<string> HandleSiopRequestObjectAsync(
+        VerifierKeyMaterial keyMaterial,
+        string externalToken,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(keyMaterial);
+        ArgumentException.ThrowIfNullOrWhiteSpace(externalToken);
+
+        ExchangeContext context = new();
+        context.SetTenantId(keyMaterial.Registration.TenantId);
+        context.SetCorrelationKey(externalToken);
+
+        //The request-object endpoint matches on context.CorrelationKey — the RP app's URL routing
+        //layer extracted the {handle} segment from the request_uri and placed it on context before
+        //dispatching, the same skin behaviour as the OID4VP JAR-fetch endpoint.
+        string segment = keyMaterial.Registration.TenantId.Value;
+        string requestObjectPath = TestHostShell.ComposeEndpointPath(
+            WellKnownEndpointNames.SiopRequestObjectByReference, segment) + "/" + externalToken;
+
+        IncomingRequest request = new(
+            Path: requestObjectPath,
+            Method: "GET",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty);
+
+        ServerHttpResponse response = await Server.DispatchAsync(
+            request, context, cancellationToken).ConfigureAwait(false);
+
+        if(response.StatusCode != 200)
+        {
+            throw new InvalidOperationException(
+                $"SIOP §9 Request Object request failed with status {response.StatusCode}: {response.Body}");
+        }
+
+        return context.SiopRequestObject
+            ?? throw new InvalidOperationException(
+                "SiopRequestObject not set in context after request-object dispatch.");
+    }
+
+
+    /// <summary>
     /// OID4VP JAR request — fetches the signed JAR for a continuing flow.
     /// The <paramref name="externalToken"/> is the opaque token from
     /// <see cref="HandleParAsync"/>, not the internal flow identifier.
@@ -1938,11 +2211,31 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// the single test-side source of URL shape; changes to URL shape happen
     /// there, not in every test.
     /// </remarks>
+    public ValueTask<ServerHttpResponse> DispatchAtEndpointAsync(
+        string segment,
+        string endpointName,
+        string httpMethod,
+        RequestFields fields,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+        => DispatchAtEndpointAsync(
+            segment, endpointName, httpMethod, fields, RequestHeaders.Empty, context, cancellationToken);
+
+
+    /// <summary>
+    /// Header-carrying form of
+    /// <see cref="DispatchAtEndpointAsync(string, string, string, RequestFields, ExchangeContext, CancellationToken)"/>
+    /// for tests that exercise header-driven policy — for example a
+    /// <c>ResolveCapabilitiesAsync</c> that attenuates capabilities by the caller's
+    /// <c>X-Forwarded-For</c>. The no-headers form delegates here with
+    /// <see cref="RequestHeaders.Empty"/>.
+    /// </summary>
     public async ValueTask<ServerHttpResponse> DispatchAtEndpointAsync(
         string segment,
         string endpointName,
         string httpMethod,
         RequestFields fields,
+        RequestHeaders headers,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
@@ -1950,6 +2243,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(endpointName);
         ArgumentException.ThrowIfNullOrWhiteSpace(httpMethod);
         ArgumentNullException.ThrowIfNull(fields);
+        ArgumentNullException.ThrowIfNull(headers);
         ArgumentNullException.ThrowIfNull(context);
 
         //The fixture's URL-shape choice lives in ComposeEndpointPath /
@@ -1967,7 +2261,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             Path: path,
             Method: httpMethod,
             Fields: fields,
-            Headers: RequestHeaders.Empty,
+            Headers: headers,
             RouteValues: RouteValues.Empty);
 
         context.SetTenantId(segment);
@@ -2014,6 +2308,55 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: httpMethod,
             Fields: fields,
             Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty)
+        {
+            Body = body
+        };
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Header- and body-carrying form of <see cref="DispatchAtEndpointAsync(string, string, string, RequestFields, string, ExchangeContext, CancellationToken)"/>
+    /// — for protected endpoints that read both an <c>Authorization</c> bearer header and a
+    /// JSON <c>IncomingRequest.Body</c> (the OID4VCI 1.0 §8 Credential Endpoint). A
+    /// <see langword="null"/> <paramref name="jsonBody"/> dispatches with no body.
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchAtEndpointAsync(
+        string segment,
+        string endpointName,
+        string httpMethod,
+        RequestFields fields,
+        RequestHeaders headers,
+        string? jsonBody,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(endpointName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(httpMethod);
+        ArgumentNullException.ThrowIfNull(fields);
+        ArgumentNullException.ThrowIfNull(headers);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string path = ComposeEndpointPath(endpointName, segment);
+
+        RequestBody body = jsonBody is null
+            ? RequestBody.None
+            : new RequestBody
+            {
+                Bytes = Encoding.UTF8.GetBytes(jsonBody),
+                ContentType = WellKnownMediaTypes.Application.Json
+            };
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: httpMethod,
+            Fields: fields,
+            Headers: headers,
             RouteValues: RouteValues.Empty)
         {
             Body = body
@@ -2181,10 +2524,28 @@ internal sealed class TestHostShell: IAsyncDisposable
         string clientId,
         Uri baseUri,
         PolicyProfile? profile = null,
+        ImmutableHashSet<CapabilityIdentifier>? capabilities = null) =>
+        RegisterDpopClientOnHost("default", clientId, baseUri, profile, capabilities);
+
+
+    /// <summary>
+    /// Registers a DPoP/token-issuing client on the named host. Multi-host
+    /// topologies (e.g. a Credential Issuer beside the default Verifier) call
+    /// this overload to put the registration and its key material on the right
+    /// host's per-host dictionaries.
+    /// </summary>
+    public VerifierKeyMaterial RegisterDpopClientOnHost(
+        string hostName,
+        string clientId,
+        Uri baseUri,
+        PolicyProfile? profile = null,
         ImmutableHashSet<CapabilityIdentifier>? capabilities = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         ArgumentNullException.ThrowIfNull(baseUri);
+
+        HostedAuthorizationServer host = Host(hostName);
 
         capabilities ??= ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
@@ -2200,13 +2561,13 @@ internal sealed class TestHostShell: IAsyncDisposable
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeyPair =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
-        SigningKeys[signingKeyId] = signingKeyPair.PrivateKey;
-        VerificationKeys[signingKeyId] = signingKeyPair.PublicKey;
+        host.SigningKeys[signingKeyId] = signingKeyPair.PrivateKey;
+        host.VerificationKeys[signingKeyId] = signingKeyPair.PublicKey;
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> exchangeKeyPair =
             TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         KeyId encryptionKeyId = new($"urn:uuid:{Guid.NewGuid()}");
-        DecryptionKeys[encryptionKeyId] = exchangeKeyPair.PrivateKey;
+        host.DecryptionKeys[encryptionKeyId] = exchangeKeyPair.PrivateKey;
         exchangeKeyPair.PublicKey.Dispose();
 
         ClientRecord registration = new()
@@ -2241,10 +2602,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Profile = profile ?? PolicyProfile.Haip10
         };
 
-        Registrations[segment] = registration;
-        Registrations[clientId] = registration;
+        host.Registrations[segment] = registration;
+        host.Registrations[clientId] = registration;
 
-        Server.RegisterClient(
+        host.Server.RegisterClient(
             registration,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
             new ExchangeContext());
@@ -2256,6 +2617,90 @@ internal sealed class TestHostShell: IAsyncDisposable
             decryptionPrivateKey: exchangeKeyPair.PrivateKey,
             encryptionKeyId: encryptionKeyId,
             signingKeyId: signingKeyId);
+    }
+
+
+    /// <summary>
+    /// Re-registers <paramref name="material"/>'s client with an explicit
+    /// <see cref="WellKnownTokenTypes.AccessToken"/> lifetime on
+    /// <see cref="ClientRecord.TokenLifetimes"/>. Credential-issuing flows that mint a plain
+    /// bearer Access Token use this to stay within the OID4VCI 1.0 §13.10 long-lived threshold:
+    /// "Long-lived Access Tokens giving access to Credentials MUST not be issued unless
+    /// sender-constrained." Updates the per-host registration table and re-emits the registration
+    /// event so the routing table re-syncs against the lifetime-bearing record.
+    /// </summary>
+    public void SetAccessTokenLifetime(VerifierKeyMaterial material, TimeSpan lifetime, string hostName = "default")
+    {
+        ArgumentNullException.ThrowIfNull(material);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+
+        HostedAuthorizationServer host = Host(hostName);
+
+        //Read the live record from the per-host table — other helpers (e.g. UpdateSigningKeys)
+        //may have re-registered the client without updating material.Registration, so the dict is
+        //the source of truth for the current key/scope/lifetime set.
+        string segment = material.Registration.TenantId.Value;
+        if(!host.Registrations.TryGetValue(segment, out ClientRecord? previous))
+        {
+            throw new InvalidOperationException(
+                $"No registration found for segment '{segment}'.");
+        }
+
+        ImmutableDictionary<string, TimeSpan> lifetimes = previous.TokenLifetimes
+            .ToImmutableDictionary(StringComparer.Ordinal)
+            .SetItem(WellKnownTokenTypes.AccessToken, lifetime);
+
+        ClientRecord updated = previous with
+        {
+            TokenLifetimes = lifetimes
+        };
+
+        host.Registrations[segment] = updated;
+        host.Registrations[updated.ClientId] = updated;
+
+        host.Server.UpdateClient(previous, updated, new ExchangeContext());
+
+        material.Registration = updated;
+    }
+
+
+    /// <summary>
+    /// Re-registers <paramref name="material"/>'s client with the RFC 9396 §10
+    /// <c>authorization_details_types</c> allowlist set to
+    /// <paramref name="allowedTypes"/> on <see cref="ClientRecord.AllowedAuthorizationDetailsTypes"/>.
+    /// Drives the per-client gate that refuses an authorization details object whose <c>type</c>
+    /// is outside the registered set. Uses the same register-then-upgrade pattern as
+    /// <see cref="SetAccessTokenLifetime"/>, because the routing dictionaries are host-internal.
+    /// </summary>
+    public void SetAllowedAuthorizationDetailsTypes(
+        VerifierKeyMaterial material,
+        ImmutableHashSet<string> allowedTypes,
+        string hostName = "default")
+    {
+        ArgumentNullException.ThrowIfNull(material);
+        ArgumentNullException.ThrowIfNull(allowedTypes);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+
+        HostedAuthorizationServer host = Host(hostName);
+
+        string segment = material.Registration.TenantId.Value;
+        if(!host.Registrations.TryGetValue(segment, out ClientRecord? previous))
+        {
+            throw new InvalidOperationException(
+                $"No registration found for segment '{segment}'.");
+        }
+
+        ClientRecord updated = previous with
+        {
+            AllowedAuthorizationDetailsTypes = allowedTypes
+        };
+
+        host.Registrations[segment] = updated;
+        host.Registrations[updated.ClientId] = updated;
+
+        host.Server.UpdateClient(previous, updated, new ExchangeContext());
+
+        material.Registration = updated;
     }
 
 
@@ -2872,6 +3317,13 @@ internal sealed class TestHostShell: IAsyncDisposable
             return $"/.well-known/oauth-protected-resource/{segment}";
         }
 
+        //OID4VCI §12.2.2: the Credential Issuer Metadata path is likewise formed by INSERTING
+        // /.well-known/openid-credential-issuer between the host and the issuer's path component.
+        if(endpointName == WellKnownEndpointNames.Oid4VciCredentialIssuerMetadata)
+        {
+            return $"/.well-known/openid-credential-issuer/{segment}";
+        }
+
         string suffix = EndpointPathSuffix(endpointName)
             ?? throw new ArgumentException(
                 $"No fixture path mapping registered for endpoint role '{endpointName}'.",
@@ -2946,6 +3398,15 @@ internal sealed class TestHostShell: IAsyncDisposable
         if(endpointName == WellKnownEndpointNames.SsfSubjectAdd) { return "ssf/subjects/add"; }
         if(endpointName == WellKnownEndpointNames.SsfSubjectRemove) { return "ssf/subjects/remove"; }
         if(endpointName == WellKnownEndpointNames.SsfVerification) { return "ssf/verify"; }
+        if(endpointName == WellKnownEndpointNames.Oid4VciNonce) { return "nonce"; }
+        if(endpointName == WellKnownEndpointNames.Oid4VciPreAuthorizedToken) { return "token"; }
+        if(endpointName == WellKnownEndpointNames.Oid4VciCredential) { return "credential"; }
+        if(endpointName == WellKnownEndpointNames.Oid4VciDeferredCredential) { return "deferred_credential"; }
+        if(endpointName == WellKnownEndpointNames.Oid4VciNotification) { return "notification"; }
+        if(endpointName == WellKnownEndpointNames.Oid4VciCredentialOffer) { return "credential_offer"; }
+        if(endpointName == WellKnownEndpointNames.SiopRequestObject) { return "siop_request"; }
+        if(endpointName == WellKnownEndpointNames.SiopRequestObjectByReference) { return "siop_request_object"; }
+        if(endpointName == WellKnownEndpointNames.SiopResponse) { return "siop_response"; }
 
         return null;
     }

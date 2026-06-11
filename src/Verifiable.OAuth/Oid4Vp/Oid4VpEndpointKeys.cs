@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
 
@@ -30,6 +31,9 @@ namespace Verifiable.OAuth.Oid4Vp;
 [DebuggerDisplay("Oid4VpEndpointKeys")]
 public static class Oid4VpEndpointKeys
 {
+    /// <summary>The UTF-8 source literal of <see cref="RequestUri"/>.</summary>
+    public static ReadOnlySpan<byte> RequestUriUtf8 => "oid4vp.endpoint.requestUri"u8;
+
     /// <summary>
     /// The per-flow JAR-fetch endpoint URL embedded as the <c>request_uri</c>
     /// value in the PAR response per
@@ -57,5 +61,5 @@ public static class Oid4VpEndpointKeys
     /// or direct-post requests arrive.
     /// </para>
     /// </remarks>
-    public static readonly string RequestUri = "oid4vp.endpoint.requestUri";
+    public static readonly string RequestUri = Utf8Constants.ToInternedString(RequestUriUtf8);
 }

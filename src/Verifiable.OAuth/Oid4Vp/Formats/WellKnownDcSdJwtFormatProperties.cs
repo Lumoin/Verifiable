@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp.Formats;
 
@@ -10,13 +11,19 @@ namespace Verifiable.OAuth.Oid4Vp.Formats;
 [DebuggerDisplay("WellKnownDcSdJwtFormatProperties")]
 public static class WellKnownDcSdJwtFormatProperties
 {
+    /// <summary>The UTF-8 source literal of <see cref="SdJwtAlgValues"/>.</summary>
+    public static ReadOnlySpan<byte> SdJwtAlgValuesUtf8 => "sd-jwt_alg_values"u8;
+
     /// <summary>
     /// The <c>sd-jwt_alg_values</c> property. A JSON array of JWS algorithm
     /// identifiers supported for the SD-JWT component. The presented SD-JWT's
     /// <c>alg</c> JOSE header MUST match one of these values when present.
     /// Per OID4VP 1.0 Appendix B.3.
     /// </summary>
-    public static readonly string SdJwtAlgValues = "sd-jwt_alg_values";
+    public static readonly string SdJwtAlgValues = Utf8Constants.ToInternedString(SdJwtAlgValuesUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="KbJwtAlgValues"/>.</summary>
+    public static ReadOnlySpan<byte> KbJwtAlgValuesUtf8 => "kb-jwt_alg_values"u8;
 
     /// <summary>
     /// The <c>kb-jwt_alg_values</c> property. A JSON array of JWS algorithm
@@ -24,7 +31,7 @@ public static class WellKnownDcSdJwtFormatProperties
     /// KB-JWT's <c>alg</c> JOSE header MUST match one of these values when present.
     /// Per OID4VP 1.0 Appendix B.3.
     /// </summary>
-    public static readonly string KbJwtAlgValues = "kb-jwt_alg_values";
+    public static readonly string KbJwtAlgValues = Utf8Constants.ToInternedString(KbJwtAlgValuesUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

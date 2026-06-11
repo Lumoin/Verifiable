@@ -102,6 +102,20 @@ public sealed record ServerHttpResponse
         };
 
 
+    /// <summary>
+    /// Returns a 202 Accepted response with a JSON body — for example the OID4VCI 1.0 §9.2
+    /// Deferred Credential Response that echoes the <c>transaction_id</c> with the polling
+    /// <c>interval</c>.
+    /// </summary>
+    public static ServerHttpResponse Accepted(string body, string contentType) =>
+        new()
+        {
+            StatusCode = (int)HttpStatusCode.Accepted,
+            Body = body,
+            ContentType = contentType
+        };
+
+
     /// <summary>Returns a 204 No Content response with an empty body.</summary>
     public static ServerHttpResponse NoContent() =>
         new()
@@ -231,6 +245,11 @@ public sealed record ServerHttpResponse
         };
 
 
+    //RFC 6749 §4.1.2.1 / §5.2, restated by OID4VCI 1.0 §8.3.1.2: "The values for the
+    //error_description parameter MUST NOT include characters outside the set
+    //%x20-21 / %x23-5B / %x5D-7E." The set excludes the JSON-significant " and \ (and every
+    //control character), so sanitizing to it both enforces the charset MUST and keeps the
+    //interpolated body well-formed JSON without a separate escaping pass.
     private static string BuildErrorBody(string error, string description) =>
-        $"{{\"error\":\"{error}\",\"error_description\":\"{description}\"}}";
+        $"{{\"error\":\"{error}\",\"error_description\":\"{ErrorDescriptionCharset.Sanitize(description)}\"}}";
 }

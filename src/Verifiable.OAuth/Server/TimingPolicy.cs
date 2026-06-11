@@ -134,6 +134,24 @@ public sealed record TimingPolicy
     public TimeSpan MaximumFlowLifetime { get; init; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
+    /// The OID4VCI 1.0 §13.10 threshold above which an Access Token giving access to
+    /// Credentials is "long lived" and therefore MUST NOT be issued as a plain bearer token —
+    /// it must be sender-constrained (DPoP / <c>cnf.jkt</c>). Default 5 minutes.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-13.10">OID4VCI 1.0 §13.10</see>:
+    /// "Long-lived Access Tokens giving access to Credentials MUST not be issued unless
+    /// sender-constrained. Access Tokens with lifetimes longer than 5 minutes are, in general,
+    /// considered long lived." The library enforces this fail-closed at the OID4VCI token
+    /// endpoints: when the access token the request would mint outlives this threshold and is
+    /// not sender-constrained, the request is refused rather than a long-lived bearer Credential
+    /// token issued. A deployment that wants a different "long lived" boundary shortens or
+    /// lengthens this value; the spec's number is the default.
+    /// </remarks>
+    public TimeSpan CredentialAccessTokenSenderConstraintThreshold { get; init; } = TimeSpan.FromMinutes(5);
+
+
+    /// <summary>
     /// The clock-skew tolerance applied when validating <c>nbf</c>, <c>iat</c>,
     /// and <c>exp</c> claims on inbound JWTs. Default 60 seconds.
     /// </summary>

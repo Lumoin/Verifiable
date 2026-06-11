@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Dpop;
 
@@ -153,7 +154,8 @@ public static class DpopProofValidator
         }
 
         DateTimeOffset now = timeProvider.GetUtcNow();
-        if(claims.Iat < now - iatSkew || claims.Iat > now + iatSkew)
+        if(!JwtTemporalChecks.IsNotStale(claims.Iat, now, iatSkew)
+            || !JwtTemporalChecks.IsNotInFuture(claims.Iat, now, iatSkew))
         {
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.IatOutOfWindow);
         }

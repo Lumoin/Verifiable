@@ -1,3 +1,6 @@
+using Verifiable.Cryptography.Text;
+
+
 namespace Verifiable.OAuth;
 
 /// <summary>
@@ -10,23 +13,44 @@ namespace Verifiable.OAuth;
 /// </remarks>
 public static class OAuthErrors
 {
+    /// <summary>The UTF-8 source literal of <see cref="InvalidRequest"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidRequestUtf8 => "invalid_request"u8;
+
     /// <summary>The request is missing a required parameter or is otherwise malformed.</summary>
-    public static readonly string InvalidRequest = "invalid_request";
+    public static readonly string InvalidRequest = Utf8Constants.ToInternedString(InvalidRequestUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidClient"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidClientUtf8 => "invalid_client"u8;
 
     /// <summary>Client authentication failed.</summary>
-    public static readonly string InvalidClient = "invalid_client";
+    public static readonly string InvalidClient = Utf8Constants.ToInternedString(InvalidClientUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidGrant"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidGrantUtf8 => "invalid_grant"u8;
 
     /// <summary>The provided authorization grant or refresh token is invalid or expired.</summary>
-    public static readonly string InvalidGrant = "invalid_grant";
+    public static readonly string InvalidGrant = Utf8Constants.ToInternedString(InvalidGrantUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="UnauthorizedClient"/>.</summary>
+    public static ReadOnlySpan<byte> UnauthorizedClientUtf8 => "unauthorized_client"u8;
 
     /// <summary>The client is not authorized to request an authorization code.</summary>
-    public static readonly string UnauthorizedClient = "unauthorized_client";
+    public static readonly string UnauthorizedClient = Utf8Constants.ToInternedString(UnauthorizedClientUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ServerError"/>.</summary>
+    public static ReadOnlySpan<byte> ServerErrorUtf8 => "server_error"u8;
 
     /// <summary>The authorization server encountered an unexpected condition.</summary>
-    public static readonly string ServerError = "server_error";
+    public static readonly string ServerError = Utf8Constants.ToInternedString(ServerErrorUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidScope"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidScopeUtf8 => "invalid_scope"u8;
 
     /// <summary>The requested scope is invalid, unknown, or malformed.</summary>
-    public static readonly string InvalidScope = "invalid_scope";
+    public static readonly string InvalidScope = Utf8Constants.ToInternedString(InvalidScopeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="AccessDenied"/>.</summary>
+    public static ReadOnlySpan<byte> AccessDeniedUtf8 => "access_denied"u8;
 
     /// <summary>
     /// The resource owner or authorization server denied the request — for example the
@@ -34,10 +58,16 @@ public static class OAuthErrors
     /// authorization endpoint as an OAuth 2.0 Authorization Error Response (RFC 6749
     /// §4.1.2.1 redirect).
     /// </summary>
-    public static readonly string AccessDenied = "access_denied";
+    public static readonly string AccessDenied = Utf8Constants.ToInternedString(AccessDeniedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="TemporarilyUnavailable"/>.</summary>
+    public static ReadOnlySpan<byte> TemporarilyUnavailableUtf8 => "temporarily_unavailable"u8;
 
     /// <summary>The authorization server is temporarily unable to handle the request.</summary>
-    public static readonly string TemporarilyUnavailable = "temporarily_unavailable";
+    public static readonly string TemporarilyUnavailable = Utf8Constants.ToInternedString(TemporarilyUnavailableUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidRequestObject"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidRequestObjectUtf8 => "invalid_request_object"u8;
 
     /// <summary>
     /// The <c>request</c> parameter contains a JWT that fails validation per
@@ -45,14 +75,20 @@ public static class OAuthErrors
     /// signature verification failed, <c>typ</c> is wrong, a required claim is missing,
     /// or a timing claim is outside the acceptable window.
     /// </summary>
-    public static readonly string InvalidRequestObject = "invalid_request_object";
+    public static readonly string InvalidRequestObject = Utf8Constants.ToInternedString(InvalidRequestObjectUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidRequestUri"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidRequestUriUtf8 => "invalid_request_uri"u8;
 
     /// <summary>
     /// The <c>request_uri</c> parameter could not be dereferenced or the dereferenced
     /// value is not a valid Request Object per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 §5</see>.
     /// </summary>
-    public static readonly string InvalidRequestUri = "invalid_request_uri";
+    public static readonly string InvalidRequestUri = Utf8Constants.ToInternedString(InvalidRequestUriUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidClientMetadata"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidClientMetadataUtf8 => "invalid_client_metadata"u8;
 
     /// <summary>
     /// The request body submitted to the dynamic client registration endpoint
@@ -60,21 +96,30 @@ public static class OAuthErrors
     /// requested fields conflicts with policy per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.2">RFC 7591 §3.2.2</see>.
     /// </summary>
-    public static readonly string InvalidClientMetadata = "invalid_client_metadata";
+    public static readonly string InvalidClientMetadata = Utf8Constants.ToInternedString(InvalidClientMetadataUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidToken"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidTokenUtf8 => "invalid_token"u8;
 
     /// <summary>
     /// The bearer token presented at an RFC 7592 management endpoint is
     /// missing, malformed, or does not match the persisted registration access
     /// token.
     /// </summary>
-    public static readonly string InvalidToken = "invalid_token";
+    public static readonly string InvalidToken = Utf8Constants.ToInternedString(InvalidTokenUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InsufficientScope"/>.</summary>
+    public static ReadOnlySpan<byte> InsufficientScopeUtf8 => "insufficient_scope"u8;
 
     /// <summary>
     /// RFC 6750 §3.1: the request requires higher privileges than provided by
     /// the access token. Emitted by the OIDC Core §5.3 UserInfo endpoint when
     /// the validated access token does not carry the <c>openid</c> scope.
     /// </summary>
-    public static readonly string InsufficientScope = "insufficient_scope";
+    public static readonly string InsufficientScope = Utf8Constants.ToInternedString(InsufficientScopeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InsufficientUserAuthentication"/>.</summary>
+    public static ReadOnlySpan<byte> InsufficientUserAuthenticationUtf8 => "insufficient_user_authentication"u8;
 
     /// <summary>
     /// RFC 9470 §3: the authentication event associated with the presented access
@@ -83,7 +128,10 @@ public static class OAuthErrors
     /// authentication per <c>max_age</c>). Emitted with HTTP 401 in a
     /// <c>WWW-Authenticate</c> step-up challenge.
     /// </summary>
-    public static readonly string InsufficientUserAuthentication = "insufficient_user_authentication";
+    public static readonly string InsufficientUserAuthentication = Utf8Constants.ToInternedString(InsufficientUserAuthenticationUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="UseDpopNonce"/>.</summary>
+    public static ReadOnlySpan<byte> UseDpopNonceUtf8 => "use_dpop_nonce"u8;
 
     /// <summary>
     /// RFC 9449 §8: the server requires the client to retry with a fresh
@@ -91,13 +139,19 @@ public static class OAuthErrors
     /// or HTTP 400 (other endpoints) and a <c>DPoP-Nonce</c> response header
     /// carrying the new nonce value.
     /// </summary>
-    public static readonly string UseDpopNonce = "use_dpop_nonce";
+    public static readonly string UseDpopNonce = Utf8Constants.ToInternedString(UseDpopNonceUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidDpopProof"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidDpopProofUtf8 => "invalid_dpop_proof"u8;
 
     /// <summary>
     /// RFC 9449 §8: the presented DPoP proof failed validation — signature,
     /// required claims, replay defense, or thumbprint-binding mismatch.
     /// </summary>
-    public static readonly string InvalidDpopProof = "invalid_dpop_proof";
+    public static readonly string InvalidDpopProof = Utf8Constants.ToInternedString(InvalidDpopProofUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="UnmetAuthenticationRequirements"/>.</summary>
+    public static ReadOnlySpan<byte> UnmetAuthenticationRequirementsUtf8 => "unmet_authentication_requirements"u8;
 
     /// <summary>
     /// The authorization server is unable to meet the Relying Party's authentication
@@ -109,5 +163,16 @@ public static class OAuthErrors
     /// extension, invoked for step-up authentication by
     /// <see href="https://www.rfc-editor.org/rfc/rfc9470#section-5">RFC 9470 §5</see>.
     /// </summary>
-    public static readonly string UnmetAuthenticationRequirements = "unmet_authentication_requirements";
+    public static readonly string UnmetAuthenticationRequirements = Utf8Constants.ToInternedString(UnmetAuthenticationRequirementsUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidAuthorizationDetails"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidAuthorizationDetailsUtf8 => "invalid_authorization_details"u8;
+
+    /// <summary>
+    /// RFC 9396 §5: the <c>authorization_details</c> parameter is missing a required field,
+    /// carries an unsupported authorization details type, or requests authorization the server
+    /// cannot grant. Usable wherever <c>invalid_scope</c> is — the authorization endpoint
+    /// (redirect) and the token endpoint (400 JSON body).
+    /// </summary>
+    public static readonly string InvalidAuthorizationDetails = Utf8Constants.ToInternedString(InvalidAuthorizationDetailsUtf8);
 }

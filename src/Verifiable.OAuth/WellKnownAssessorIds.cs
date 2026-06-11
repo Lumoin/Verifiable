@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth;
 
@@ -16,9 +17,12 @@ namespace Verifiable.OAuth;
 [DebuggerDisplay("WellKnownAssessorIds")]
 public static class WellKnownAssessorIds
 {
+    /// <summary>The UTF-8 source literal of <see cref="ClaimContributors"/>.</summary>
+    public static ReadOnlySpan<byte> ClaimContributorsUtf8 => "oauth.claim-contributors"u8;
+
     /// <summary>
     /// Issuer identifier for the composed claim-contribution issuer on
     /// <see cref="Server.ServerConfiguration.ClaimIssuer"/>.
     /// </summary>
-    public static readonly string ClaimContributors = "oauth.claim-contributors";
+    public static readonly string ClaimContributors = Utf8Constants.ToInternedString(ClaimContributorsUtf8);
 }

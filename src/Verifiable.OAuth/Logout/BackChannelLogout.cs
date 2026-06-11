@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Text;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Logout;
@@ -36,12 +37,15 @@ namespace Verifiable.OAuth.Logout;
 [DebuggerDisplay("BackChannelLogout")]
 public static class BackChannelLogout
 {
+    /// <summary>The UTF-8 source literal of <see cref="BackChannelLogoutEventType"/>.</summary>
+    public static ReadOnlySpan<byte> BackChannelLogoutEventTypeUtf8 => "http://schemas.openid.net/event/backchannel-logout"u8;
+
     /// <summary>
     /// The back-channel logout event-type identifier — the member name a Logout Token's
     /// <c>events</c> claim MUST carry, mapping to an empty JSON object
     /// (<see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#LogoutToken">OIDC Back-Channel Logout 1.0 §2.4</see>).
     /// </summary>
-    public static readonly string BackChannelLogoutEventType = "http://schemas.openid.net/event/backchannel-logout";
+    public static readonly string BackChannelLogoutEventType = Utf8Constants.ToInternedString(BackChannelLogoutEventTypeUtf8);
 
     /// <summary>Reused empty payload for tolerant reads of an absent or malformed claim.</summary>
     private static readonly IReadOnlyDictionary<string, object> EmptyPayload =

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth;
 
@@ -29,13 +30,19 @@ namespace Verifiable.OAuth;
 [DebuggerDisplay("WellKnownAuthenticationSchemes")]
 public static class WellKnownAuthenticationSchemes
 {
+    /// <summary>The UTF-8 source literal of <see cref="Bearer"/>.</summary>
+    public static ReadOnlySpan<byte> BearerUtf8 => "Bearer"u8;
+
     /// <summary>
     /// The OAuth 2.0 Bearer authentication scheme per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 §2.1</see>.
     /// Used in <c>Authorization: Bearer &lt;access-token&gt;</c> and as the
     /// <c>token_type</c> value in token endpoint responses.
     /// </summary>
-    public static readonly string Bearer = "Bearer";
+    public static readonly string Bearer = Utf8Constants.ToInternedString(BearerUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="DPoP"/>.</summary>
+    public static ReadOnlySpan<byte> DPoPUtf8 => "DPoP"u8;
 
     /// <summary>
     /// The DPoP authentication scheme per
@@ -43,7 +50,7 @@ public static class WellKnownAuthenticationSchemes
     /// Used in <c>Authorization: DPoP &lt;access-token&gt;</c> when the
     /// access token is bound to a DPoP proof.
     /// </summary>
-    public static readonly string DPoP = "DPoP";
+    public static readonly string DPoP = Utf8Constants.ToInternedString(DPoPUtf8);
 
 
     /// <summary>

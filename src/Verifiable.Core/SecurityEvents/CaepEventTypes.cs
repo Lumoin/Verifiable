@@ -1,3 +1,6 @@
+using System;
+using Verifiable.Cryptography.Text;
+
 namespace Verifiable.Core.SecurityEvents;
 
 /// <summary>
@@ -12,31 +15,57 @@ namespace Verifiable.Core.SecurityEvents;
 /// </remarks>
 public static class CaepEventTypes
 {
+    //The family prefix the StartsWith membership predicate matches on; every member's
+    //full URI literal below carries it verbatim (a test pins the coherence).
     private const string Prefix = "https://schemas.openid.net/secevent/caep/event-type/";
 
+    /// <summary>The UTF-8 source literal of <see cref="SessionRevoked"/>.</summary>
+    public static ReadOnlySpan<byte> SessionRevokedUtf8 => "https://schemas.openid.net/secevent/caep/event-type/session-revoked"u8;
+
     /// <summary>Session Revoked (<c>session-revoked</c>) — CAEP §3.1.</summary>
-    public static readonly string SessionRevoked = Prefix + "session-revoked";
+    public static readonly string SessionRevoked = Utf8Constants.ToInternedString(SessionRevokedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="TokenClaimsChange"/>.</summary>
+    public static ReadOnlySpan<byte> TokenClaimsChangeUtf8 => "https://schemas.openid.net/secevent/caep/event-type/token-claims-change"u8;
 
     /// <summary>Token Claims Change (<c>token-claims-change</c>) — CAEP §3.2.</summary>
-    public static readonly string TokenClaimsChange = Prefix + "token-claims-change";
+    public static readonly string TokenClaimsChange = Utf8Constants.ToInternedString(TokenClaimsChangeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="CredentialChange"/>.</summary>
+    public static ReadOnlySpan<byte> CredentialChangeUtf8 => "https://schemas.openid.net/secevent/caep/event-type/credential-change"u8;
 
     /// <summary>Credential Change (<c>credential-change</c>) — CAEP §3.3.</summary>
-    public static readonly string CredentialChange = Prefix + "credential-change";
+    public static readonly string CredentialChange = Utf8Constants.ToInternedString(CredentialChangeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="AssuranceLevelChange"/>.</summary>
+    public static ReadOnlySpan<byte> AssuranceLevelChangeUtf8 => "https://schemas.openid.net/secevent/caep/event-type/assurance-level-change"u8;
 
     /// <summary>Assurance Level Change (<c>assurance-level-change</c>) — CAEP §3.4.</summary>
-    public static readonly string AssuranceLevelChange = Prefix + "assurance-level-change";
+    public static readonly string AssuranceLevelChange = Utf8Constants.ToInternedString(AssuranceLevelChangeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="DeviceComplianceChange"/>.</summary>
+    public static ReadOnlySpan<byte> DeviceComplianceChangeUtf8 => "https://schemas.openid.net/secevent/caep/event-type/device-compliance-change"u8;
 
     /// <summary>Device Compliance Change (<c>device-compliance-change</c>) — CAEP §3.5.</summary>
-    public static readonly string DeviceComplianceChange = Prefix + "device-compliance-change";
+    public static readonly string DeviceComplianceChange = Utf8Constants.ToInternedString(DeviceComplianceChangeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SessionEstablished"/>.</summary>
+    public static ReadOnlySpan<byte> SessionEstablishedUtf8 => "https://schemas.openid.net/secevent/caep/event-type/session-established"u8;
 
     /// <summary>Session Established (<c>session-established</c>) — CAEP §3.6.</summary>
-    public static readonly string SessionEstablished = Prefix + "session-established";
+    public static readonly string SessionEstablished = Utf8Constants.ToInternedString(SessionEstablishedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SessionPresented"/>.</summary>
+    public static ReadOnlySpan<byte> SessionPresentedUtf8 => "https://schemas.openid.net/secevent/caep/event-type/session-presented"u8;
 
     /// <summary>Session Presented (<c>session-presented</c>) — CAEP §3.7.</summary>
-    public static readonly string SessionPresented = Prefix + "session-presented";
+    public static readonly string SessionPresented = Utf8Constants.ToInternedString(SessionPresentedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RiskLevelChange"/>.</summary>
+    public static ReadOnlySpan<byte> RiskLevelChangeUtf8 => "https://schemas.openid.net/secevent/caep/event-type/risk-level-change"u8;
 
     /// <summary>Risk Level Change (<c>risk-level-change</c>) — CAEP §3.8.</summary>
-    public static readonly string RiskLevelChange = Prefix + "risk-level-change";
+    public static readonly string RiskLevelChange = Utf8Constants.ToInternedString(RiskLevelChangeUtf8);
 
 
     /// <summary>Whether <paramref name="eventType"/> is <see cref="SessionRevoked"/>.</summary>

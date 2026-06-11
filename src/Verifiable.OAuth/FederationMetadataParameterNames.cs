@@ -1,3 +1,6 @@
+using Verifiable.Cryptography.Text;
+
+
 namespace Verifiable.OAuth;
 
 /// <summary>
@@ -13,38 +16,59 @@ namespace Verifiable.OAuth;
 /// </remarks>
 public static class FederationMetadataParameterNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="FetchEndpoint"/>.</summary>
+    public static ReadOnlySpan<byte> FetchEndpointUtf8 => "federation_fetch_endpoint"u8;
+
     /// <summary>
     /// URL of the federation fetch endpoint for retrieving subordinate statements.
     /// </summary>
-    public static readonly string FetchEndpoint = "federation_fetch_endpoint";
+    public static readonly string FetchEndpoint = Utf8Constants.ToInternedString(FetchEndpointUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ListEndpoint"/>.</summary>
+    public static ReadOnlySpan<byte> ListEndpointUtf8 => "federation_list_endpoint"u8;
 
     /// <summary>
     /// URL of the federation list endpoint for listing subordinate entities.
     /// </summary>
-    public static readonly string ListEndpoint = "federation_list_endpoint";
+    public static readonly string ListEndpoint = Utf8Constants.ToInternedString(ListEndpointUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ResolveEndpoint"/>.</summary>
+    public static ReadOnlySpan<byte> ResolveEndpointUtf8 => "federation_resolve_endpoint"u8;
 
     /// <summary>
     /// URL of the federation resolve endpoint.
     /// </summary>
-    public static readonly string ResolveEndpoint = "federation_resolve_endpoint";
+    public static readonly string ResolveEndpoint = Utf8Constants.ToInternedString(ResolveEndpointUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="TrustMarkStatusEndpoint"/>.</summary>
+    public static ReadOnlySpan<byte> TrustMarkStatusEndpointUtf8 => "federation_trust_mark_status_endpoint"u8;
 
     /// <summary>
     /// URL of the federation trust mark status endpoint.
     /// </summary>
-    public static readonly string TrustMarkStatusEndpoint = "federation_trust_mark_status_endpoint";
+    public static readonly string TrustMarkStatusEndpoint = Utf8Constants.ToInternedString(TrustMarkStatusEndpointUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="TrustMarkListingEndpoint"/>.</summary>
+    public static ReadOnlySpan<byte> TrustMarkListingEndpointUtf8 => "federation_trust_mark_listing_endpoint"u8;
 
     /// <summary>
     /// URL of the federation trust mark listing endpoint.
     /// </summary>
-    public static readonly string TrustMarkListingEndpoint = "federation_trust_mark_listing_endpoint";
+    public static readonly string TrustMarkListingEndpoint = Utf8Constants.ToInternedString(TrustMarkListingEndpointUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="TrustMarkEndpoint"/>.</summary>
+    public static ReadOnlySpan<byte> TrustMarkEndpointUtf8 => "federation_trust_mark_endpoint"u8;
 
     /// <summary>
     /// URL of the federation trust mark endpoint.
     /// </summary>
-    public static readonly string TrustMarkEndpoint = "federation_trust_mark_endpoint";
+    public static readonly string TrustMarkEndpoint = Utf8Constants.ToInternedString(TrustMarkEndpointUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="HistoricalKeysEndpoint"/>.</summary>
+    public static ReadOnlySpan<byte> HistoricalKeysEndpointUtf8 => "federation_historical_keys_endpoint"u8;
 
     /// <summary>
     /// URL of the federation historical keys endpoint.
     /// </summary>
-    public static readonly string HistoricalKeysEndpoint = "federation_historical_keys_endpoint";
+    public static readonly string HistoricalKeysEndpoint = Utf8Constants.ToInternedString(HistoricalKeysEndpointUtf8);
 }

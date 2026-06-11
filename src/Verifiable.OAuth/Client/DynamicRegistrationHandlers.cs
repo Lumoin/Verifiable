@@ -251,6 +251,14 @@ public static class DynamicRegistrationHandlers
             {
                 JsonAppender.AppendStringField(sb, "scope", metadata.Scope, ref first);
             }
+            if(metadata.AuthorizationDetailsTypes is not null)
+            {
+                //RFC 9396 §10/§14.5: the client declares the authorization details types it will
+                //use so the AS can entitle it to exactly those types.
+                JsonAppender.AppendStringArrayField(
+                    sb, AuthorizationDetailsParameterNames.AuthorizationDetailsTypes,
+                    metadata.AuthorizationDetailsTypes, ref first);
+            }
             if(metadata.JwksUri is not null)
             {
                 JsonAppender.AppendUriField(sb, "jwks_uri", metadata.JwksUri, ref first);

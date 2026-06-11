@@ -191,6 +191,18 @@ internal static class Rfc9068AccessTokenProducer
             audience: audiences,
             clientId: context.ClientId);
 
+        //RFC 9396 §9.1: "If the access token is a JWT [RFC7519], the AS is RECOMMENDED to add the
+        //authorization details object ... as a top-level claim." The granted authorization details
+        //resolved at the token endpoint — the same value the token response echoes, carrying the
+        //OID4VCI 1.0 §6.2 credential_identifiers the Resource Server needs — are embedded verbatim;
+        //the openid_credential profile's granted objects carry no per-audience locations, so there
+        //is nothing to filter out for the resolved audience.
+        IReadOnlyList<object>? grantedDetails = context.Context.GrantedAuthorizationDetailsClaim;
+        if(grantedDetails is not null)
+        {
+            payload[OAuthRequestParameterNames.AuthorizationDetails] = grantedDetails;
+        }
+
         return new TokenProducerOutput(header, payload);
     }
 }

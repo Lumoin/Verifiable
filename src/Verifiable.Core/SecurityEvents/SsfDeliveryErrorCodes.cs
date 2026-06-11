@@ -1,3 +1,6 @@
+using System;
+using Verifiable.Cryptography.Text;
+
 namespace Verifiable.Core.SecurityEvents;
 
 /// <summary>
@@ -10,26 +13,47 @@ namespace Verifiable.Core.SecurityEvents;
 /// </summary>
 public static class SsfDeliveryErrorCodes
 {
+    /// <summary>The UTF-8 source literal of <see cref="InvalidRequest"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidRequestUtf8 => "invalid_request"u8;
+
     /// <summary><c>invalid_request</c> — the request body / SET cannot be parsed or is otherwise invalid.</summary>
-    public static readonly string InvalidRequest = "invalid_request";
+    public static readonly string InvalidRequest = Utf8Constants.ToInternedString(InvalidRequestUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidKey"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidKeyUtf8 => "invalid_key"u8;
 
     /// <summary><c>invalid_key</c> — a key used to sign or encrypt the SET is invalid or revoked.</summary>
-    public static readonly string InvalidKey = "invalid_key";
+    public static readonly string InvalidKey = Utf8Constants.ToInternedString(InvalidKeyUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidIssuer"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidIssuerUtf8 => "invalid_issuer"u8;
 
     /// <summary><c>invalid_issuer</c> — the SET Issuer is invalid for the Receiver.</summary>
-    public static readonly string InvalidIssuer = "invalid_issuer";
+    public static readonly string InvalidIssuer = Utf8Constants.ToInternedString(InvalidIssuerUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidAudience"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidAudienceUtf8 => "invalid_audience"u8;
 
     /// <summary><c>invalid_audience</c> — the SET Audience does not correspond to the Receiver.</summary>
-    public static readonly string InvalidAudience = "invalid_audience";
+    public static readonly string InvalidAudience = Utf8Constants.ToInternedString(InvalidAudienceUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="AuthenticationFailed"/>.</summary>
+    public static ReadOnlySpan<byte> AuthenticationFailedUtf8 => "authentication_failed"u8;
 
     /// <summary><c>authentication_failed</c> — the Recipient could not authenticate the SET.</summary>
-    public static readonly string AuthenticationFailed = "authentication_failed";
+    public static readonly string AuthenticationFailed = Utf8Constants.ToInternedString(AuthenticationFailedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="AccessDenied"/>.</summary>
+    public static ReadOnlySpan<byte> AccessDeniedUtf8 => "access_denied"u8;
 
     /// <summary><c>access_denied</c> — delivery is not authorized.</summary>
-    public static readonly string AccessDenied = "access_denied";
+    public static readonly string AccessDenied = Utf8Constants.ToInternedString(AccessDeniedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidState"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidStateUtf8 => "invalid_state"u8;
 
     /// <summary><c>invalid_state</c> — a Verification Event's <c>state</c> did not match (SSF §8.1.4.1).</summary>
-    public static readonly string InvalidState = "invalid_state";
+    public static readonly string InvalidState = Utf8Constants.ToInternedString(InvalidStateUtf8);
 
 
     /// <summary>Whether <paramref name="code"/> is <see cref="InvalidRequest"/>.</summary>
@@ -78,9 +102,15 @@ public sealed record SsfSetError
 /// <summary>The member NAMES of a SET error object (<c>err</c>, <c>description</c>).</summary>
 public static class SsfSetErrorParameterNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="Err"/>.</summary>
+    public static ReadOnlySpan<byte> ErrUtf8 => "err"u8;
+
     /// <summary><c>err</c> — the error code.</summary>
-    public static readonly string Err = "err";
+    public static readonly string Err = Utf8Constants.ToInternedString(ErrUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Description"/>.</summary>
+    public static ReadOnlySpan<byte> DescriptionUtf8 => "description"u8;
 
     /// <summary><c>description</c> — the optional error description.</summary>
-    public static readonly string Description = "description";
+    public static readonly string Description = Utf8Constants.ToInternedString(DescriptionUtf8);
 }

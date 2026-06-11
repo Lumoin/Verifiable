@@ -73,9 +73,10 @@ public readonly struct RegistrationAccessToken: IEquatable<RegistrationAccessTok
 
 
     /// <inheritdoc/>
+    /// <remarks>Fixed-time — the value is a bearer credential.</remarks>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(RegistrationAccessToken other) =>
-        string.Equals(Value, other.Value, StringComparison.Ordinal);
+        FixedTimeComparison.AreEqual(Value, other.Value);
 
 
     /// <inheritdoc/>

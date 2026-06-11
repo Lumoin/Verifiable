@@ -1,3 +1,6 @@
+using Verifiable.Cryptography.Text;
+
+
 namespace Verifiable.JCose;
 
 /// <summary>
@@ -17,26 +20,38 @@ namespace Verifiable.JCose;
 /// </remarks>
 public static class SecurityEventTokenClaimNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="Events"/>.</summary>
+    public static ReadOnlySpan<byte> EventsUtf8 => "events"u8;
+
     /// <summary>
     /// The <c>events</c> claim — a JSON object whose members are event-type URIs
     /// mapped to event payload objects. REQUIRED in every SET.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc8417#section-2.2">RFC 8417 §2.2</see>.
     /// </summary>
-    public static readonly string Events = "events";
+    public static readonly string Events = Utf8Constants.ToInternedString(EventsUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Toe"/>.</summary>
+    public static ReadOnlySpan<byte> ToeUtf8 => "toe"u8;
 
     /// <summary>
     /// The <c>toe</c> (Time of Event) claim — the time at which the event
     /// occurred, as a JSON number of seconds from the Unix epoch. OPTIONAL.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc8417#section-2.2">RFC 8417 §2.2</see>.
     /// </summary>
-    public static readonly string Toe = "toe";
+    public static readonly string Toe = Utf8Constants.ToInternedString(ToeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Txn"/>.</summary>
+    public static ReadOnlySpan<byte> TxnUtf8 => "txn"u8;
 
     /// <summary>
     /// The <c>txn</c> (Transaction Identifier) claim — an opaque value the issuer
     /// uses to correlate the SET with a transaction or process. OPTIONAL.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc8417#section-2.2">RFC 8417 §2.2</see>.
     /// </summary>
-    public static readonly string Txn = "txn";
+    public static readonly string Txn = Utf8Constants.ToInternedString(TxnUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubId"/>.</summary>
+    public static ReadOnlySpan<byte> SubIdUtf8 => "sub_id"u8;
 
     /// <summary>
     /// The <c>sub_id</c> (Subject Identifier) claim — a Subject Identifier object
@@ -44,7 +59,7 @@ public static class SecurityEventTokenClaimNames
     /// about, in place of the bare string <c>sub</c> claim. OPTIONAL.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 §3</see>.
     /// </summary>
-    public static readonly string SubId = "sub_id";
+    public static readonly string SubId = Utf8Constants.ToInternedString(SubIdUtf8);
 
 
     /// <summary>Whether <paramref name="claim"/> is <see cref="Events"/>.</summary>

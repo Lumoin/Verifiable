@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using System.Text;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Cryptography
 {
@@ -8,6 +10,9 @@ namespace Verifiable.Cryptography
     /// </summary>
     public static class RsaUtilities
     {
+        /// <summary>The UTF-8 source literal of <see cref="DefaultExponent"/>.</summary>
+        public static ReadOnlySpan<byte> DefaultExponentUtf8 => "AQAB"u8;
+
         /// <summary>
         /// The exponent used by did:key RSA keys and is a common default value in RSA cryotography.
         /// </summary>
@@ -17,7 +22,7 @@ namespace Verifiable.Cryptography
         /// ReadOnlySpan<byte> RsaExponent65537 = new byte[] { 0x01, 0x00, 0x01 };
         /// This translates to "AQAB" in Base64.
         /// </remarks>
-        public static readonly string DefaultExponent = "AQAB";
+        public static readonly string DefaultExponent = Utf8Constants.ToInternedString(DefaultExponentUtf8);
 
         /// <summary>
         /// The 2048 byte RSA ASN.1 DER encoded prefix as defined at <see href="https://w3c-ccg.github.io/did-method-key/#x2048-bit-modulus-public-exponent-65537"/>.

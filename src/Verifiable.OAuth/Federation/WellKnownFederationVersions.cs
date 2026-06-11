@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -18,8 +19,11 @@ namespace Verifiable.OAuth.Federation;
 [DebuggerDisplay("WellKnownFederationVersions")]
 public static class WellKnownFederationVersions
 {
+    /// <summary>The UTF-8 source literal of <see cref="AssessorVersion"/>.</summary>
+    public static ReadOnlySpan<byte> AssessorVersionUtf8 => "1.0.0"u8;
+
     /// <summary>
     /// Version applied to every Federation-library assessor's output.
     /// </summary>
-    public static readonly string AssessorVersion = "1.0.0";
+    public static readonly string AssessorVersion = Utf8Constants.ToInternedString(AssessorVersionUtf8);
 }

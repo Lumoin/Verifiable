@@ -122,6 +122,34 @@ public sealed record ClientRecord
     public required ImmutableHashSet<string> AllowedScopes { get; init; }
 
     /// <summary>
+    /// The RFC 9396 authorization details <c>type</c> values this client may use, the
+    /// per-client mirror of the client registration metadata parameter
+    /// <c>authorization_details_types</c> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-10">RFC 9396 §10</see>:
+    /// "Clients MAY indicate the authorization details types they will use when requesting
+    /// authorization with the client registration metadata parameter
+    /// <c>authorization_details_types</c>, which is a JSON array."
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see langword="null"/> means the client registered no <c>authorization_details_types</c>
+    /// restriction. Because §10 makes the parameter advisory ("MAY indicate"), an unrestricted
+    /// client may use any authorization details <c>type</c> the AS supports — the absence of the
+    /// metadata is not a prohibition, so authorization details requests are processed against the
+    /// server's registered types alone.
+    /// </para>
+    /// <para>
+    /// A non-<see langword="null"/> set is an allowlist: a request carrying an authorization
+    /// details object whose <c>type</c> is outside this set is refused with
+    /// <see cref="OAuthErrors.InvalidAuthorizationDetails"/> at every request path that processes
+    /// <c>authorization_details</c> (pushed/authorize receipt and the token request), the same
+    /// per-client gate <see cref="AllowedScopes"/> and <see cref="AllowedRedirectUris"/> apply.
+    /// An empty set registers that the client may use no authorization details types at all.
+    /// </para>
+    /// </remarks>
+    public ImmutableHashSet<string>? AllowedAuthorizationDetailsTypes { get; init; }
+
+    /// <summary>
     /// Per-token-type lifetimes keyed by token type name.
     /// Keys are typically <c>"access_token"</c>, <c>"refresh_token"</c>, <c>"id_token"</c>.
     /// </summary>

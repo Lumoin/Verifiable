@@ -508,6 +508,152 @@ public sealed class AuthorizationServerIntegration
     public IntrospectTokenDelegate? IntrospectTokenAsync { get; set; }
 
     /// <summary>
+    /// Mints a fresh OID4VCI 1.0 §7 <c>c_nonce</c>. The Nonce Endpoint activates only when the
+    /// <see cref="WellKnownCapabilityIdentifiers.Oid4VciNonceEndpoint"/> capability is allowed
+    /// and this seam is wired — an advertised Nonce Endpoint that cannot mint a challenge would
+    /// break every key-bound Credential Request. The application owns the nonce store so it can
+    /// validate the nonce later at the Credential Endpoint.
+    /// </summary>
+    public IssueCredentialNonceDelegate? IssueCredentialNonceAsync { get; set; }
+
+    /// <summary>
+    /// Validates an OID4VCI 1.0 §6 Pre-Authorized Code grant. The grant activates only when
+    /// the <see cref="WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant"/> capability
+    /// is allowed and this seam is wired — an advertised grant with no code-validation seam would
+    /// mint access tokens for any code string (fail-closed). The application owns the
+    /// pre-authorized code store, so it resolves the subject and distinguishes the §6.3 error
+    /// cases the library cannot.
+    /// </summary>
+    public ValidatePreAuthorizedCodeDelegate? ValidatePreAuthorizedCodeAsync { get; set; }
+
+    /// <summary>
+    /// Parses an OID4VCI 1.0 §8.2 Credential Request body into the neutral
+    /// <see cref="Oid4Vci.CredentialRequest"/>. Required when
+    /// <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint"/> is advertised —
+    /// the default JSON implementation lives in <c>Verifiable.OAuth.Json</c> and is wired by
+    /// the application.
+    /// </summary>
+    public ParseCredentialRequestDelegate? ParseCredentialRequestAsync { get; set; }
+
+    /// <summary>
+    /// Parses an RFC 9396 <c>authorization_details</c> request parameter into the neutral
+    /// <see cref="AuthorizationDetail"/> list. Required when the server processes
+    /// <c>authorization_details</c> (RFC 9396 §2; OID4VCI 1.0 §5.1.1 / §6.1.1) — a request
+    /// carrying the parameter while this seam is unwired is refused with
+    /// <c>invalid_authorization_details</c> (the server does not support the parameter). The
+    /// default JSON implementation lives in <c>Verifiable.OAuth.Json</c> and is wired by the
+    /// application.
+    /// </summary>
+    public ParseAuthorizationDetailListDelegate? ParseAuthorizationDetailsAsync { get; set; }
+
+    /// <summary>
+    /// The RFC 9396 authorization details <c>type</c> → handler registry the AS dispatches
+    /// every parsed authorization details object through (§5/§7 multi-type dispatch). Created
+    /// pre-populated with the built-in <c>openid_credential</c> handler
+    /// (<see cref="Oid4Vci.OpenIdCredentialAuthorizationDetailHandler"/>); a deployment registers
+    /// further handlers to support additional types. Its
+    /// <see cref="AuthorizationDetailTypeRegistry.RegisteredTypes"/> is what the AS metadata
+    /// advertises as <c>authorization_details_types_supported</c> (§10).
+    /// </summary>
+    public AuthorizationDetailTypeRegistry AuthorizationDetailTypes { get; } =
+        CreateDefaultAuthorizationDetailTypeRegistry();
+
+    /// <summary>
+    /// Decides an <c>openid_credential</c> authorization details request at the token endpoint
+    /// and mints the OID4VCI 1.0 §6.2 <c>credential_identifiers</c> per granted configuration.
+    /// Required when the server processes <c>authorization_details</c>; a token request whose
+    /// grant carries authorization details while this seam is unwired is refused with
+    /// <c>invalid_authorization_details</c> (fail-closed — the library cannot mint Credential
+    /// Dataset identifiers). The application owns the configuration catalog and dataset store.
+    /// </summary>
+    public ResolveCredentialAuthorizationDelegate? ResolveCredentialAuthorizationAsync { get; set; }
+
+    /// <summary>
+    /// Issues an OID4VCI 1.0 §8 Credential. The Credential Endpoint activates only when the
+    /// <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint"/> capability is
+    /// allowed and BOTH this seam and <see cref="ParseCredentialRequestAsync"/> are wired — an
+    /// advertised Credential Endpoint that cannot parse the request or cannot mint would be a
+    /// fail-open authorization boundary. The application owns proof verification (its
+    /// <c>c_nonce</c> store), the supported Credential Configurations, and the signing key; the
+    /// library owns bearer-token validation and the wire shape.
+    /// </summary>
+    public IssueCredentialDelegate? IssueCredentialAsync { get; set; }
+
+    /// <summary>
+    /// Resolves what a §8 Credential Request's <c>jwt</c> key proof(s) must satisfy (the expected
+    /// <c>c_nonce</c>, the acceptable proof-signing algorithms, the <c>iat</c> window). Wiring this
+    /// seam OPTS IN to library-side Appendix F.4 proof validation at the Credential Endpoint: the
+    /// library validates each proof with <see cref="Oid4Vci.CredentialProofValidator"/> BEFORE
+    /// <see cref="IssueCredentialAsync"/> is consulted, mapping a failure to the §8.3.1.2
+    /// <c>invalid_proof</c> / <c>invalid_nonce</c> error. When this seam is unwired the endpoint
+    /// validates no proofs and hands the whole §F.4 check to <see cref="IssueCredentialAsync"/> (the
+    /// established default), so every Credential Endpoint deployment that does not set it is
+    /// unchanged. The application owns the <c>c_nonce</c> store and its single-use retirement
+    /// either way.
+    /// </summary>
+    public ResolveCredentialProofExpectationDelegate? ResolveCredentialProofExpectationAsync { get; set; }
+
+    /// <summary>
+    /// Encrypts an OID4VCI 1.0 §10 (Deferred) Credential Response to the Wallet-supplied key.
+    /// Optional — when unwired, a request carrying <c>credential_response_encryption</c> is
+    /// refused with <c>invalid_encryption_parameters</c> (fail-closed: §8.3 forbids answering
+    /// such a request in clear).
+    /// </summary>
+    public EncryptCredentialResponseDelegate? EncryptCredentialResponseAsync { get; set; }
+
+    /// <summary>
+    /// Decrypts an OID4VCI 1.0 §10 encrypted Credential Request with the Issuer's key from
+    /// <c>credential_request_encryption.jwks</c>. Optional — when unwired, a compact-JWE
+    /// request body is refused with <c>invalid_credential_request</c>.
+    /// </summary>
+    public DecryptCredentialRequestDelegate? DecryptCredentialRequestAsync { get; set; }
+
+    /// <summary>
+    /// Resolves an OID4VCI 1.0 §9 Deferred Credential Request from the application's
+    /// deferred-transaction store. The Deferred Credential Endpoint activates only when the
+    /// <see cref="WellKnownCapabilityIdentifiers.Oid4VciDeferredCredentialEndpoint"/> capability
+    /// is allowed and this seam is wired — fail-closed: an advertised endpoint without the
+    /// store could only refuse every <c>transaction_id</c>.
+    /// </summary>
+    public ResolveDeferredCredentialDelegate? ResolveDeferredCredentialAsync { get; set; }
+
+    /// <summary>
+    /// Processes an OID4VCI 1.0 §11.1 Notification Request. The Notification Endpoint activates
+    /// only when the <see cref="WellKnownCapabilityIdentifiers.Oid4VciNotificationEndpoint"/>
+    /// capability is allowed and this seam is wired — fail-closed: an advertised endpoint
+    /// without the <c>notification_id</c> store could only reject every notification.
+    /// </summary>
+    public ProcessCredentialNotificationDelegate? ProcessCredentialNotificationAsync { get; set; }
+
+    /// <summary>
+    /// Resolves an OID4VCI 1.0 §4.1.3 by-reference Credential Offer from the application's offer
+    /// store. The Credential Offer Endpoint activates only when the
+    /// <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialOfferEndpoint"/> capability is
+    /// allowed and this seam is wired — fail-closed: only the application's offer store, keyed by
+    /// the id the <c>credential_offer_uri</c> carries, can produce the offer the Wallet fetches.
+    /// </summary>
+    public ResolveCredentialOfferDelegate? ResolveCredentialOfferAsync { get; set; }
+
+    /// <summary>
+    /// Contributes the application-owned values of the OID4VCI 1.0 §12.2 Credential Issuer
+    /// Metadata document (<c>credential_configurations_supported</c> and the optional
+    /// <c>authorization_servers</c> / <c>display</c> / <c>batch_credential_issuance</c>). The
+    /// Credential Issuer Metadata endpoint activates only when the
+    /// <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialIssuerMetadata"/> capability is
+    /// allowed and this seam is wired — the document's REQUIRED
+    /// <c>credential_configurations_supported</c> is application data the library cannot derive.
+    /// </summary>
+    public ContributeCredentialIssuerMetadataDelegate? ContributeCredentialIssuerMetadataAsync { get; set; }
+
+    /// <summary>
+    /// Signs the assembled OID4VCI 1.0 §12.2.3 Credential Issuer Metadata as a
+    /// <c>signed_metadata</c> JWT. Optional — when set, the returned JWT is embedded in the
+    /// document. The application owns the signing key, the algorithm, and the §12.2.3
+    /// structural claims (<c>typ</c>, <c>sub</c>, <c>iat</c>).
+    /// </summary>
+    public SignCredentialIssuerMetadataDelegate? SignCredentialIssuerMetadataAsync { get; set; }
+
+    /// <summary>
     /// Parses a Global Token Revocation request body
     /// (draft-parecki-oauth-global-token-revocation §3) into the neutral
     /// <see cref="Logout.GlobalTokenRevocationRequest"/>. Required when
@@ -741,5 +887,19 @@ public sealed class AuthorizationServerIntegration
         }
 
         IsValidated = true;
+    }
+
+
+    /// <summary>
+    /// Creates the authorization details <c>type</c> registry every integration starts with,
+    /// carrying the built-in <c>openid_credential</c> handler so the OID4VCI 1.0 §5.1.1 profile
+    /// works without further wiring.
+    /// </summary>
+    private static AuthorizationDetailTypeRegistry CreateDefaultAuthorizationDetailTypeRegistry()
+    {
+        AuthorizationDetailTypeRegistry registry = new();
+        registry.Register(Oid4Vci.OpenIdCredentialAuthorizationDetailHandler.Handler);
+
+        return registry;
     }
 }

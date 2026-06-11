@@ -1,3 +1,6 @@
+using Verifiable.Cryptography.Text;
+
+
 namespace Verifiable.OAuth.Oid4Vp;
 
 /// <summary>
@@ -5,8 +8,11 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </summary>
 public static class DirectPostParameters
 {
+    /// <summary>The UTF-8 source literal of <see cref="Response"/>.</summary>
+    public static ReadOnlySpan<byte> ResponseUtf8 => "response"u8;
+
     /// <summary>
     /// The <c>response</c> parameter carrying the JWE-encrypted authorization response JWT.
     /// </summary>
-    public static readonly string Response = "response";
+    public static readonly string Response = Utf8Constants.ToInternedString(ResponseUtf8);
 }

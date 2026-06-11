@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Core.SecurityEvents;
 
@@ -61,21 +63,39 @@ public sealed record SsfPollResponse
 /// <summary>The member NAMES of poll request/response bodies (RFC 8936).</summary>
 public static class SsfPollParameterNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="MaxEvents"/>.</summary>
+    public static ReadOnlySpan<byte> MaxEventsUtf8 => "maxEvents"u8;
+
     /// <summary><c>maxEvents</c> — max SETs to return (request).</summary>
-    public static readonly string MaxEvents = "maxEvents";
+    public static readonly string MaxEvents = Utf8Constants.ToInternedString(MaxEventsUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ReturnImmediately"/>.</summary>
+    public static ReadOnlySpan<byte> ReturnImmediatelyUtf8 => "returnImmediately"u8;
 
     /// <summary><c>returnImmediately</c> — short-poll flag (request).</summary>
-    public static readonly string ReturnImmediately = "returnImmediately";
+    public static readonly string ReturnImmediately = Utf8Constants.ToInternedString(ReturnImmediatelyUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Ack"/>.</summary>
+    public static ReadOnlySpan<byte> AckUtf8 => "ack"u8;
 
     /// <summary><c>ack</c> — array of acknowledged jti values (request).</summary>
-    public static readonly string Ack = "ack";
+    public static readonly string Ack = Utf8Constants.ToInternedString(AckUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SetErrs"/>.</summary>
+    public static ReadOnlySpan<byte> SetErrsUtf8 => "setErrs"u8;
 
     /// <summary><c>setErrs</c> — map of jti → error for invalid SETs (request).</summary>
-    public static readonly string SetErrs = "setErrs";
+    public static readonly string SetErrs = Utf8Constants.ToInternedString(SetErrsUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Sets"/>.</summary>
+    public static ReadOnlySpan<byte> SetsUtf8 => "sets"u8;
 
     /// <summary><c>sets</c> — map of jti → compact SET string (response).</summary>
-    public static readonly string Sets = "sets";
+    public static readonly string Sets = Utf8Constants.ToInternedString(SetsUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="MoreAvailable"/>.</summary>
+    public static ReadOnlySpan<byte> MoreAvailableUtf8 => "moreAvailable"u8;
 
     /// <summary><c>moreAvailable</c> — whether more SETs remain (response).</summary>
-    public static readonly string MoreAvailable = "moreAvailable";
+    public static readonly string MoreAvailable = Utf8Constants.ToInternedString(MoreAvailableUtf8);
 }

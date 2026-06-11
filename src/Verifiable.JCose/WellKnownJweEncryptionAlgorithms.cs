@@ -1,3 +1,6 @@
+using Verifiable.Cryptography.Text;
+
+
 namespace Verifiable.JCose
 {
     /// <summary>    
@@ -9,46 +12,67 @@ namespace Verifiable.JCose
     public static class WellKnownJweEncryptionAlgorithms
     {
         // <summary>
+        /// <summary>The UTF-8 source literal of <see cref="A128CbcHs256"/>.</summary>
+        public static ReadOnlySpan<byte> A128CbcHs256Utf8 => "A128CBC-HS256"u8;
+
         /// AES/CBC/HMAC/SHA authenticated encryption.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.2">AES_128_CBC_HMAC_SHA_256</see>.</remarks>
-        public static readonly string A128CbcHs256 = "A128CBC-HS256";
+        public static readonly string A128CbcHs256 = Utf8Constants.ToInternedString(A128CbcHs256Utf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="A192CbcHs384"/>.</summary>
+        public static ReadOnlySpan<byte> A192CbcHs384Utf8 => "A192CBC-HS384"u8;
 
         /// <summary>
         /// AES_192_CBC_HMAC_SHA_384 authenticated encryption.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.2">AES_192_CBC_HMAC_SHA_384</see>.</remarks>
-        public static readonly string A192CbcHs384 = "A192CBC-HS384";
+        public static readonly string A192CbcHs384 = Utf8Constants.ToInternedString(A192CbcHs384Utf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="A256CbcHs512"/>.</summary>
+        public static ReadOnlySpan<byte> A256CbcHs512Utf8 => "A256CBC-HS512"u8;
 
         /// <summary>
         /// AES_256_CBC_HMAC_SHA_512 authenticated encryption.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.2">AES_256_CBC_HMAC_SHA_512</see>.</remarks>
-        public static readonly string A256CbcHs512 = "A256CBC-HS512";
+        public static readonly string A256CbcHs512 = Utf8Constants.ToInternedString(A256CbcHs512Utf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="A128Gcm"/>.</summary>
+        public static ReadOnlySpan<byte> A128GcmUtf8 => "A128GCM"u8;
 
         /// <summary>
         /// AES/GCM authenticated encryption.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.3">AES_GCM</see>.</remarks>
-        public static readonly string A128Gcm = "A128GCM";
+        public static readonly string A128Gcm = Utf8Constants.ToInternedString(A128GcmUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="A192Gcm"/>.</summary>
+        public static ReadOnlySpan<byte> A192GcmUtf8 => "A192GCM"u8;
 
         /// <summary>
         /// AES_192/GCM authenticated encryption.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.3">AES_192_GCM</see>.</remarks>
-        public static readonly string A192Gcm = "A192GCM";
+        public static readonly string A192Gcm = Utf8Constants.ToInternedString(A192GcmUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="A256Gcm"/>.</summary>
+        public static ReadOnlySpan<byte> A256GcmUtf8 => "A256GCM"u8;
 
         /// <summary>
         /// AES_256/GCM authenticated encryption.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.3">AES_256_GCM</see>.</remarks>
-        public static readonly string A256Gcm = "A256GCM";
+        public static readonly string A256Gcm = Utf8Constants.ToInternedString(A256GcmUtf8);
                
+        /// <summary>The UTF-8 source literal of <see cref="XC20P"/>.</summary>
+        public static ReadOnlySpan<byte> XC20PUtf8 => "XC20P"u8;
+
         /// <summary>
         /// Extended nonce ChaCha20-Poly1305
         /// </summary>
         /// <remarks>See more at <see href="https://tools.ietf.org/html/draft-amringer-jose-chacha-02">ChaCha20-Poly1305</see>.</remarks>
-        public static readonly string XC20P = "XC20P";
+        public static readonly string XC20P = Utf8Constants.ToInternedString(XC20PUtf8);
 
 
         /// <summary>

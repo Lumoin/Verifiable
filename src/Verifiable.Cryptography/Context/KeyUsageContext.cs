@@ -176,6 +176,38 @@ public readonly struct KeyUsageContext: IEquatable<KeyUsageContext>
     public static KeyUsageContext FederationEntitySignature { get; } = new(10);
 
 
+    /// <summary>
+    /// Signing of JWT-secured authorization responses (JARM) issued by the
+    /// authorization endpoint per
+    /// <see href="https://openid.net/specs/oauth-v2-jarm-final.html#section-2.2">JARM §2.2</see>,
+    /// required by FAPI 2.0 Message Signing §5.4.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="IdTokenIssuance"/> and
+    /// <see cref="AccessTokenIssuance"/> because the response JWT secures the
+    /// front-channel authorization response itself — its audience is the OAuth
+    /// client and its lifetime is minutes (JARM §2.1 recommends at most ten) —
+    /// and clients negotiate its algorithm separately via the
+    /// <c>authorization_signed_response_alg</c> registration parameter.
+    /// </remarks>
+    public static KeyUsageContext AuthorizationResponseSigning { get; } = new(11);
+
+
+    /// <summary>
+    /// Signing of JWT token introspection responses per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9701#section-5">RFC 9701 §5</see>,
+    /// required by FAPI 2.0 Message Signing §5.5.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="AccessTokenIssuance"/> because the response JWT
+    /// attests the introspection result to a resource server — it is explicitly
+    /// not an access token (RFC 9701 §8.1 cross-JWT confusion) — and resource
+    /// servers negotiate its algorithm separately via the
+    /// <c>introspection_signed_response_alg</c> registration parameter.
+    /// </remarks>
+    public static KeyUsageContext IntrospectionResponseSigning { get; } = new(12);
+
+
     private static readonly List<KeyUsageContext> contexts =
     [
         None,
@@ -188,7 +220,9 @@ public readonly struct KeyUsageContext: IEquatable<KeyUsageContext>
         WalletAttestation,
         DpopProof,
         IdTokenIssuance,
-        FederationEntitySignature
+        FederationEntitySignature,
+        AuthorizationResponseSigning,
+        IntrospectionResponseSigning
     ];
 
 
@@ -307,6 +341,9 @@ public static class KeyUsageContextNames
         var c when c == KeyUsageContext.WalletAttestation.Code => nameof(KeyUsageContext.WalletAttestation),
         var c when c == KeyUsageContext.DpopProof.Code => nameof(KeyUsageContext.DpopProof),
         var c when c == KeyUsageContext.IdTokenIssuance.Code => nameof(KeyUsageContext.IdTokenIssuance),
+        var c when c == KeyUsageContext.FederationEntitySignature.Code => nameof(KeyUsageContext.FederationEntitySignature),
+        var c when c == KeyUsageContext.AuthorizationResponseSigning.Code => nameof(KeyUsageContext.AuthorizationResponseSigning),
+        var c when c == KeyUsageContext.IntrospectionResponseSigning.Code => nameof(KeyUsageContext.IntrospectionResponseSigning),
         _ => $"Custom ({code})"
     };
 }

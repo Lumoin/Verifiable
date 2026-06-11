@@ -2,6 +2,7 @@ using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 
 namespace Verifiable.OAuth.Pkce;
 
@@ -97,8 +98,10 @@ public sealed class PkceChallenge: IDisposable, IEquatable<PkceChallenge>
             return true;
         }
 
+        //Fixed-time, uniform with PkceVerifier — the credential family compares
+        //without a match-length timing channel.
         return EncodedLength == other.EncodedLength
-            && Bytes.Span.SequenceEqual(other.Bytes.Span);
+            && CryptographicOperations.FixedTimeEquals(Bytes.Span, other.Bytes.Span);
     }
 
 

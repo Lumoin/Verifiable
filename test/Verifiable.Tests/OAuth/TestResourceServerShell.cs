@@ -27,7 +27,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     public Uri? HttpBaseAddress { get; private set; }
 
     /// <summary>
-    /// Per-request JTI tracker. Maps jti → expiry instant. Tests inspect
+    /// Per-request DPoP proof JTI tracker. Maps jti → expiry instant. Tests inspect
     /// this directly to verify replay-defense behaviour.
     /// </summary>
     public ConcurrentDictionary<string, DateTimeOffset> SeenDpopJtis { get; } =

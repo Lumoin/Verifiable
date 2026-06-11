@@ -1,4 +1,6 @@
+using System;
 using System.Diagnostics;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Core.Model.Dcql;
 
@@ -22,19 +24,28 @@ namespace Verifiable.Core.Model.Dcql;
 [DebuggerDisplay("DcqlTrustedAuthorityTypes")]
 public static class DcqlTrustedAuthorityTypes
 {
+    /// <summary>The UTF-8 source literal of <see cref="Aki"/>.</summary>
+    public static ReadOnlySpan<byte> AkiUtf8 => "aki"u8;
+
     /// <summary>
     /// <c>aki</c> — the authority is identified by the <c>KeyIdentifier</c> of the
     /// <c>AuthorityKeyIdentifier</c> X.509 extension (base64url-encoded DER value) per
     /// OID4VP 1.0 §6.1.1.1. Used with X.509-anchored credential formats (e.g. mdoc).
     /// </summary>
-    public static readonly string Aki = "aki";
+    public static readonly string Aki = Utf8Constants.ToInternedString(AkiUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="EtsiTrustedList"/>.</summary>
+    public static ReadOnlySpan<byte> EtsiTrustedListUtf8 => "etsi_tl"u8;
 
     /// <summary>
     /// <c>etsi_tl</c> — the authority is identified by the location of an ETSI Trusted
     /// List (ETSI TS 119 612) per OID4VP 1.0 §6.1.1.2; the list, or one it cascades to,
     /// must contain the credential's issuing authority.
     /// </summary>
-    public static readonly string EtsiTrustedList = "etsi_tl";
+    public static readonly string EtsiTrustedList = Utf8Constants.ToInternedString(EtsiTrustedListUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="OpenIdFederation"/>.</summary>
+    public static ReadOnlySpan<byte> OpenIdFederationUtf8 => "openid_federation"u8;
 
     /// <summary>
     /// <c>openid_federation</c> — the authority is identified by an OpenID Federation
@@ -42,7 +53,7 @@ public static class DcqlTrustedAuthorityTypes
     /// path including that identifier must be constructible from a matching credential.
     /// This is the value carried for SD-JWT VC issuers identified by their <c>iss</c>.
     /// </summary>
-    public static readonly string OpenIdFederation = "openid_federation";
+    public static readonly string OpenIdFederation = Utf8Constants.ToInternedString(OpenIdFederationUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly <c>aki</c>.</summary>

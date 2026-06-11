@@ -611,6 +611,13 @@ namespace Verifiable.JCose
                         throw new ArgumentException($"RSA JWK must contain a valid '{WellKnownJwkMemberNames.E}' field.", nameof(jwk));
                     }
                 }
+                else if(WellKnownKeyTypeValues.IsAkp(keyType))
+                {
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.Pub, out object? akpPub) || akpPub is not string)
+                    {
+                        throw new ArgumentException($"AKP JWK must contain a valid '{WellKnownJwkMemberNames.Pub}' field.", nameof(jwk));
+                    }
+                }
                 else
                 {
                     throw new ArgumentException($"Unsupported key type: '{keyType}'.");
@@ -626,6 +633,7 @@ namespace Verifiable.JCose
                 if(WellKnownKeyTypeValues.IsEc(keyType)) { return DecodeEcKey(jwk, decoder); }
                 if(WellKnownKeyTypeValues.IsOkp(keyType)) { return DecodeOkpKey(jwk, decoder); }
                 if(WellKnownKeyTypeValues.IsRsa(keyType)) { return DecodeRsaKey(jwk, decoder); }
+                if(WellKnownKeyTypeValues.IsAkp(keyType)) { return DecodeAkpKey(jwk, decoder); }
 
                 throw new ArgumentException($"Unsupported key type: '{keyType}'.");
             }
@@ -653,6 +661,14 @@ namespace Verifiable.JCose
             static byte[] DecodeRsaKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
             {
                 using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.N], SensitiveMemoryPool<byte>.Shared);
+
+                return decoded.Memory.Span.ToArray();
+            }
+
+
+            static byte[] DecodeAkpKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
+            {
+                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.Pub], SensitiveMemoryPool<byte>.Shared);
 
                 return decoded.Memory.Span.ToArray();
             }
@@ -714,6 +730,15 @@ namespace Verifiable.JCose
                         512 => (CryptoAlgorithm.Rsa4096, Purpose.Verification),
                         _ => throw new ArgumentException($"Unsupported RSA key size: '{keyMaterialLength}' bytes.")
                     };
+                }
+
+                if(WellKnownKeyTypeValues.IsAkp(keyType))
+                {
+                    //An Algorithm Key Pair carries its algorithm in the REQUIRED alg member —
+                    //there is no curve dimension to dispatch on.
+                    if(WellKnownJwaValues.IsMlDsa44(algorithm)) { return (CryptoAlgorithm.MlDsa44, Purpose.Verification); }
+                    if(WellKnownJwaValues.IsMlDsa65(algorithm)) { return (CryptoAlgorithm.MlDsa65, Purpose.Verification); }
+                    if(WellKnownJwaValues.IsMlDsa87(algorithm)) { return (CryptoAlgorithm.MlDsa87, Purpose.Verification); }
                 }
 
                 throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.");

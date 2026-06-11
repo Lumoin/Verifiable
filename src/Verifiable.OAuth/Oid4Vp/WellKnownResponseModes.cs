@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
 
@@ -17,12 +18,18 @@ public static class WellKnownResponseModes
 {
     //Response mode values — OID4VP 1.0 §8.
 
+    /// <summary>The UTF-8 source literal of <see cref="DirectPost"/>.</summary>
+    public static ReadOnlySpan<byte> DirectPostUtf8 => "direct_post"u8;
+
     /// <summary>
     /// The <c>direct_post</c> response mode. The Wallet POSTs the Authorization
     /// Response parameters form-encoded directly to the <c>response_uri</c> endpoint.
     /// Per OID4VP 1.0 §8.2.
     /// </summary>
-    public static readonly string DirectPost = "direct_post";
+    public static readonly string DirectPost = Utf8Constants.ToInternedString(DirectPostUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="DirectPostJwt"/>.</summary>
+    public static ReadOnlySpan<byte> DirectPostJwtUtf8 => "direct_post.jwt"u8;
 
     /// <summary>
     /// The <c>direct_post.jwt</c> response mode. The Wallet POSTs a single
@@ -30,26 +37,38 @@ public static class WellKnownResponseModes
     /// the <c>response_uri</c> endpoint. Required by HAIP 1.0 for the
     /// cross-device encrypted response flow. Per OID4VP 1.0 §8.3.1.
     /// </summary>
-    public static readonly string DirectPostJwt = "direct_post.jwt";
+    public static readonly string DirectPostJwt = Utf8Constants.ToInternedString(DirectPostJwtUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="DcApi"/>.</summary>
+    public static ReadOnlySpan<byte> DcApiUtf8 => "dc_api"u8;
 
     /// <summary>
     /// The <c>dc_api</c> response mode. Used with the W3C Digital Credentials API.
     /// Per OID4VP 1.0 Appendix A.
     /// </summary>
-    public static readonly string DcApi = "dc_api";
+    public static readonly string DcApi = Utf8Constants.ToInternedString(DcApiUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="DcApiJwt"/>.</summary>
+    public static ReadOnlySpan<byte> DcApiJwtUtf8 => "dc_api.jwt"u8;
 
     /// <summary>
     /// The <c>dc_api.jwt</c> response mode. Encrypted variant of <see cref="DcApi"/>.
     /// Per OID4VP 1.0 Appendix A.
     /// </summary>
-    public static readonly string DcApiJwt = "dc_api.jwt";
+    public static readonly string DcApiJwt = Utf8Constants.ToInternedString(DcApiJwtUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Fragment"/>.</summary>
+    public static ReadOnlySpan<byte> FragmentUtf8 => "fragment"u8;
 
     /// <summary>
     /// The <c>fragment</c> response mode. The default when no response mode is
     /// specified and the <c>redirect_uri</c> is used. NOT RECOMMENDED by EWC RFC002
     /// for cross-device flows. Per OAuth 2.0 Multiple Response Types.
     /// </summary>
-    public static readonly string Fragment = "fragment";
+    public static readonly string Fragment = Utf8Constants.ToInternedString(FragmentUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Query"/>.</summary>
+    public static ReadOnlySpan<byte> QueryUtf8 => "query"u8;
 
     /// <summary>
     /// The <c>query</c> response mode per
@@ -60,7 +79,7 @@ public static class WellKnownResponseModes
     /// <see cref="DirectPostJwt"/> instead because cross-device has no
     /// redirect URI to navigate the user-agent to.
     /// </summary>
-    public static readonly string Query = "query";
+    public static readonly string Query = Utf8Constants.ToInternedString(QueryUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

@@ -113,4 +113,41 @@ public sealed record ParRequestReceivedState: OAuthFlowState
     /// <see langword="null"/> when the request carried no <c>state</c>.
     /// </summary>
     public string? State { get; init; }
+
+    /// <summary>
+    /// The RFC 9396 <c>authorization_details</c> value from the pushed authorization request,
+    /// verbatim and shape-validated at PAR receipt, or <see langword="null"/> when the request
+    /// carried none. The pushed value is authoritative (RFC 9101 §6.3 via RFC 9126 §4 — a
+    /// front-channel duplicate is ignored) and is carried to the token endpoint, where the
+    /// granted <c>credential_identifiers</c> are resolved per OID4VCI 1.0 §6.2.
+    /// </summary>
+    public string? AuthorizationDetails { get; init; }
+
+    /// <summary>
+    /// The <c>response_mode</c> the pushed authorization request asked for — authoritative
+    /// over any front-channel duplicate per RFC 9101 §6.3 via RFC 9126 §4 — carried forward
+    /// so the authorize response site knows whether to wrap the response in a JARM JWT
+    /// (<see cref="Jarm.JarmResponseModes"/>). <see langword="null"/> when the request
+    /// carried no <c>response_mode</c>.
+    /// </summary>
+    public string? ResponseMode { get; init; }
+
+    /// <summary>
+    /// The OID4VCI 1.0 §5.1.3 <c>issuer_state</c> the pushed authorization request carried,
+    /// verbatim, or <see langword="null"/> when none was present. Carried to the authorization
+    /// endpoint, where it is surfaced as UNTRUSTED input to the application's
+    /// authorization-decision seam — §5.1.3 requires the issuer to treat it as possibly
+    /// attacker-injected, so the library validates nothing about it and only the application can
+    /// correlate it to the Credential Offer it created. The pushed value is authoritative over any
+    /// front-channel duplicate (RFC 9101 §6.3 via RFC 9126 §4).
+    /// </summary>
+    public string? IssuerState { get; init; }
+
+    /// <summary>
+    /// The RFC 8707 <c>resource</c> indicator(s) the pushed authorization request carried
+    /// (space-delimited when multiple), or <see langword="null"/> when none was present. Carried
+    /// to the authorization endpoint and surfaced to the authorization-decision seam; OID4VCI 1.0
+    /// §5.1.2 RECOMMENDS its use to let the Authorization Server differentiate Credential Issuers.
+    /// </summary>
+    public string? Resource { get; init; }
 }

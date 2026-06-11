@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Core.SecurityEvents;
 
@@ -8,8 +9,11 @@ namespace Verifiable.Core.SecurityEvents;
 /// </summary>
 public static class CaepTokenClaimsChangeClaimNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="Claims"/>.</summary>
+    public static ReadOnlySpan<byte> ClaimsUtf8 => "claims"u8;
+
     /// <summary><c>claims</c> — REQUIRED; one or more claims with their new value(s).</summary>
-    public static readonly string Claims = "claims";
+    public static readonly string Claims = Utf8Constants.ToInternedString(ClaimsUtf8);
 }
 
 

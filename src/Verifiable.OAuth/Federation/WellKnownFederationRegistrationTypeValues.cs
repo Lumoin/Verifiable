@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -18,18 +19,24 @@ namespace Verifiable.OAuth.Federation;
 [DebuggerDisplay("WellKnownFederationRegistrationTypeValues")]
 public static class WellKnownFederationRegistrationTypeValues
 {
+    /// <summary>The UTF-8 source literal of <see cref="Automatic"/>.</summary>
+    public static ReadOnlySpan<byte> AutomaticUtf8 => "automatic"u8;
+
     /// <summary>
     /// <c>automatic</c> — Federation §12.1 automatic registration from an
     /// inline trust chain. Implemented by
     /// <see cref="FederationAutomaticRegistration"/>.
     /// </summary>
-    public static readonly string Automatic = "automatic";
+    public static readonly string Automatic = Utf8Constants.ToInternedString(AutomaticUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Explicit"/>.</summary>
+    public static ReadOnlySpan<byte> ExplicitUtf8 => "explicit"u8;
 
     /// <summary>
     /// <c>explicit</c> — Federation §12.2 explicit registration at the
     /// <c>federation_registration_endpoint</c>.
     /// </summary>
-    public static readonly string Explicit = "explicit";
+    public static readonly string Explicit = Utf8Constants.ToInternedString(ExplicitUtf8);
 
     /// <summary>Whether <paramref name="value"/> is <see cref="Automatic"/>.</summary>
     public static bool IsAutomatic(string value) => string.Equals(value, Automatic, StringComparison.Ordinal);

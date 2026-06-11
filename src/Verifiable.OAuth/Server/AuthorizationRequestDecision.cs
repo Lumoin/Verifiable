@@ -56,6 +56,39 @@ public sealed record AuthorizationRequestEvaluation
     /// <summary>The scope requested by the client (as carried in the authorization request).</summary>
     public required string RequestedScope { get; init; }
 
+    /// <summary>
+    /// The RFC 9396 <c>authorization_details</c> requested by the client, verbatim as carried
+    /// in the authorization request (for PAR flows, the pushed value — a front-channel
+    /// duplicate is never consulted), or <see langword="null"/> when none was requested. The
+    /// value has passed the library's shape validation (supported type,
+    /// <c>credential_configuration_id</c> present); the application parses it with its own JSON
+    /// stack when its consent decision depends on the requested details. The granted
+    /// <c>credential_identifiers</c> are resolved later, at the token endpoint, through
+    /// <see cref="ResolveCredentialAuthorizationDelegate"/>.
+    /// </summary>
+    public string? RequestedAuthorizationDetails { get; init; }
+
+    /// <summary>
+    /// The OID4VCI 1.0 §5.1.3 <c>issuer_state</c> the Wallet echoed from a Credential Offer, or
+    /// <see langword="null"/> when the request carried none. The library treats this strictly as
+    /// UNTRUSTED input and validates nothing about it: §5.1.3 requires the Credential Issuer to
+    /// take into account that <c>issuer_state</c> is not guaranteed to originate from this
+    /// Credential Issuer — it could have been injected by an attacker. The application correlates
+    /// it to the Credential Offer it created (the only party that can), and refuses the request at
+    /// this seam when it cannot.
+    /// </summary>
+    public string? RequestedIssuerState { get; init; }
+
+    /// <summary>
+    /// The RFC 8707 <c>resource</c> indicator(s) the request carried, or <see langword="null"/>
+    /// when none was present. OID4VCI 1.0 §5.1.2 RECOMMENDS the Wallet send the Credential
+    /// Issuer's identifier here when the issuer metadata carries <c>authorization_servers</c>, so
+    /// the Authorization Server can differentiate Credential Issuers. The library reads and
+    /// surfaces the value(s) verbatim; whether and how to honor them — to scope or audience-bind
+    /// the issued access token — is the application's decision.
+    /// </summary>
+    public IReadOnlyList<string>? RequestedResource { get; init; }
+
     /// <summary>The authenticated subject identifier.</summary>
     public required string Subject { get; init; }
 

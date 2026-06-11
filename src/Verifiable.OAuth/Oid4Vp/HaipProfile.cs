@@ -520,7 +520,7 @@ public static class HaipProfile
             encoder,
             pool,
             agreementPartyUInfo,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -542,6 +542,16 @@ public static class HaipProfile
     /// Caller is responsible for selecting per the Verifier's
     /// <c>encrypted_response_enc_values_supported</c> set.
     /// </param>
+    /// <param name="keyManagementAlgorithm">
+    /// The JWE <c>alg</c> (key management algorithm) for the protected header. Defaults to
+    /// <see cref="WellKnownJweAlgorithms.EcdhEs"/> (the OID4VP <c>direct_post.jwt</c> default).
+    /// OID4VCI 1.0 §10 requires this to equal the <c>alg</c> member of the recipient JWK, so the
+    /// OID4VCI response-encryption seam passes the JWK-supplied value here rather than hardcoding it.
+    /// </param>
+    /// <param name="keyId">
+    /// Optional <c>kid</c> (Key ID) copied into the JWE protected header. OID4VCI 1.0 §10 makes
+    /// this a MUST when the recipient JWK carries a <c>kid</c>. <see langword="null"/> omits it.
+    /// </param>
     public static async ValueTask<string> EncryptResponseAsync(
         PublicKeyMemory encryptionPublicKey,
         string selectedEnc,
@@ -554,6 +564,8 @@ public static class HaipProfile
         EncodeDelegate encoder,
         MemoryPool<byte> pool,
         string? agreementPartyUInfo = null,
+        string? keyManagementAlgorithm = null,
+        string? keyId = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(encryptionPublicKey);
@@ -567,10 +579,11 @@ public static class HaipProfile
         ArgumentNullException.ThrowIfNull(pool);
 
         UnencryptedJwe unencrypted = UnencryptedJwe.ForEcdhEs(
-            WellKnownJweAlgorithms.EcdhEs,
+            keyManagementAlgorithm ?? WellKnownJweAlgorithms.EcdhEs,
             selectedEnc,
             vpTokenPayloadBytes,
-            agreementPartyUInfo);
+            agreementPartyUInfo,
+            keyId);
 
         using JweMessage encrypted = await unencrypted.EncryptAsync(
             encryptionPublicKey,

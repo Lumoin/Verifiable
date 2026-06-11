@@ -1,3 +1,4 @@
+using Verifiable.Cryptography.Text;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Dpop;
@@ -30,12 +31,15 @@ namespace Verifiable.OAuth.Dpop;
 /// </remarks>
 public static class WellKnownDpopValues
 {
+    /// <summary>The UTF-8 source literal of <see cref="ProofTypeHeader"/>.</summary>
+    public static ReadOnlySpan<byte> ProofTypeHeaderUtf8 => "dpop+jwt"u8;
+
     /// <summary>
     /// The required VALUE of the <c>typ</c> JWS header parameter on DPoP
     /// proofs, per RFC 9449 §4.2. Distinguishes a DPoP proof JWS from
     /// other JWS shapes during structural parse.
     /// </summary>
-    public static readonly string ProofTypeHeader = "dpop+jwt";
+    public static readonly string ProofTypeHeader = Utf8Constants.ToInternedString(ProofTypeHeaderUtf8);
 
     /// <summary>
     /// The asymmetric JWS signature algorithms a DPoP proof may use, per RFC 9449 §4.2 —

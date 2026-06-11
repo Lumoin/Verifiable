@@ -80,4 +80,15 @@ public sealed record ServerRefreshTokenIssuedState: OAuthFlowState
     /// when no authentication-context reference was established.
     /// </summary>
     public string? Acr { get; init; }
+
+    /// <summary>
+    /// The RFC 9396 <c>authorization_details</c> granted to the access token this refresh token
+    /// was minted alongside, verbatim, or <see langword="null"/> when the grant carried none. The
+    /// refresh exchange resolves the granted <c>credential_identifiers</c> against it — optionally
+    /// narrowed by a refresh-request subset per RFC 9396 §6.1 — re-emits the §7 token-response
+    /// echo and the §9.1 access-token claim, and carries the value across rotation so a second
+    /// refresh still carries the details. Mirrors <c>ServerCodeIssuedState.AuthorizationDetails</c>
+    /// so the granted details survive the authorization-code-to-refresh handover.
+    /// </summary>
+    public string? AuthorizationDetails { get; init; }
 }

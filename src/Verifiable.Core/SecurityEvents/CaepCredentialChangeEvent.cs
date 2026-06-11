@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Core.SecurityEvents;
 
@@ -8,23 +9,41 @@ namespace Verifiable.Core.SecurityEvents;
 /// </summary>
 public static class CaepCredentialChangeClaimNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="CredentialType"/>.</summary>
+    public static ReadOnlySpan<byte> CredentialTypeUtf8 => "credential_type"u8;
+
     /// <summary><c>credential_type</c> — REQUIRED; see <see cref="CaepCredentialTypeValues"/>.</summary>
-    public static readonly string CredentialType = "credential_type";
+    public static readonly string CredentialType = Utf8Constants.ToInternedString(CredentialTypeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ChangeType"/>.</summary>
+    public static ReadOnlySpan<byte> ChangeTypeUtf8 => "change_type"u8;
 
     /// <summary><c>change_type</c> — REQUIRED; see <see cref="CaepChangeTypeValues"/>.</summary>
-    public static readonly string ChangeType = "change_type";
+    public static readonly string ChangeType = Utf8Constants.ToInternedString(ChangeTypeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="FriendlyName"/>.</summary>
+    public static ReadOnlySpan<byte> FriendlyNameUtf8 => "friendly_name"u8;
 
     /// <summary><c>friendly_name</c> — OPTIONAL; the credential's friendly name.</summary>
-    public static readonly string FriendlyName = "friendly_name";
+    public static readonly string FriendlyName = Utf8Constants.ToInternedString(FriendlyNameUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="X509Issuer"/>.</summary>
+    public static ReadOnlySpan<byte> X509IssuerUtf8 => "x509_issuer"u8;
 
     /// <summary><c>x509_issuer</c> — OPTIONAL; the X.509 certificate issuer (RFC 5280).</summary>
-    public static readonly string X509Issuer = "x509_issuer";
+    public static readonly string X509Issuer = Utf8Constants.ToInternedString(X509IssuerUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="X509Serial"/>.</summary>
+    public static ReadOnlySpan<byte> X509SerialUtf8 => "x509_serial"u8;
 
     /// <summary><c>x509_serial</c> — OPTIONAL; the X.509 certificate serial number (RFC 5280).</summary>
-    public static readonly string X509Serial = "x509_serial";
+    public static readonly string X509Serial = Utf8Constants.ToInternedString(X509SerialUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Fido2Aaguid"/>.</summary>
+    public static ReadOnlySpan<byte> Fido2AaguidUtf8 => "fido2_aaguid"u8;
 
     /// <summary><c>fido2_aaguid</c> — OPTIONAL; the FIDO2 Authenticator Attestation GUID (WebAuthn).</summary>
-    public static readonly string Fido2Aaguid = "fido2_aaguid";
+    public static readonly string Fido2Aaguid = Utf8Constants.ToInternedString(Fido2AaguidUtf8);
 }
 
 
@@ -33,17 +52,29 @@ public static class CaepCredentialChangeClaimNames
 /// </summary>
 public static class CaepChangeTypeValues
 {
+    /// <summary>The UTF-8 source literal of <see cref="Create"/>.</summary>
+    public static ReadOnlySpan<byte> CreateUtf8 => "create"u8;
+
     /// <summary><c>create</c> — the credential was created.</summary>
-    public static readonly string Create = "create";
+    public static readonly string Create = Utf8Constants.ToInternedString(CreateUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Revoke"/>.</summary>
+    public static ReadOnlySpan<byte> RevokeUtf8 => "revoke"u8;
 
     /// <summary><c>revoke</c> — the credential was revoked.</summary>
-    public static readonly string Revoke = "revoke";
+    public static readonly string Revoke = Utf8Constants.ToInternedString(RevokeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Update"/>.</summary>
+    public static ReadOnlySpan<byte> UpdateUtf8 => "update"u8;
 
     /// <summary><c>update</c> — the credential was updated.</summary>
-    public static readonly string Update = "update";
+    public static readonly string Update = Utf8Constants.ToInternedString(UpdateUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Delete"/>.</summary>
+    public static ReadOnlySpan<byte> DeleteUtf8 => "delete"u8;
 
     /// <summary><c>delete</c> — the credential was deleted.</summary>
-    public static readonly string Delete = "delete";
+    public static readonly string Delete = Utf8Constants.ToInternedString(DeleteUtf8);
 
 
     /// <summary>Whether <paramref name="value"/> is one of the four allowed values.</summary>
@@ -64,35 +95,65 @@ public static class CaepChangeTypeValues
 /// </summary>
 public static class CaepCredentialTypeValues
 {
+    /// <summary>The UTF-8 source literal of <see cref="Password"/>.</summary>
+    public static ReadOnlySpan<byte> PasswordUtf8 => "password"u8;
+
     /// <summary><c>password</c>.</summary>
-    public static readonly string Password = "password";
+    public static readonly string Password = Utf8Constants.ToInternedString(PasswordUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Pin"/>.</summary>
+    public static ReadOnlySpan<byte> PinUtf8 => "pin"u8;
 
     /// <summary><c>pin</c>.</summary>
-    public static readonly string Pin = "pin";
+    public static readonly string Pin = Utf8Constants.ToInternedString(PinUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="X509"/>.</summary>
+    public static ReadOnlySpan<byte> X509Utf8 => "x509"u8;
 
     /// <summary><c>x509</c>.</summary>
-    public static readonly string X509 = "x509";
+    public static readonly string X509 = Utf8Constants.ToInternedString(X509Utf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Fido2Platform"/>.</summary>
+    public static ReadOnlySpan<byte> Fido2PlatformUtf8 => "fido2-platform"u8;
 
     /// <summary><c>fido2-platform</c>.</summary>
-    public static readonly string Fido2Platform = "fido2-platform";
+    public static readonly string Fido2Platform = Utf8Constants.ToInternedString(Fido2PlatformUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Fido2Roaming"/>.</summary>
+    public static ReadOnlySpan<byte> Fido2RoamingUtf8 => "fido2-roaming"u8;
 
     /// <summary><c>fido2-roaming</c>.</summary>
-    public static readonly string Fido2Roaming = "fido2-roaming";
+    public static readonly string Fido2Roaming = Utf8Constants.ToInternedString(Fido2RoamingUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="FidoU2f"/>.</summary>
+    public static ReadOnlySpan<byte> FidoU2fUtf8 => "fido-u2f"u8;
 
     /// <summary><c>fido-u2f</c>.</summary>
-    public static readonly string FidoU2f = "fido-u2f";
+    public static readonly string FidoU2f = Utf8Constants.ToInternedString(FidoU2fUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="VerifiableCredential"/>.</summary>
+    public static ReadOnlySpan<byte> VerifiableCredentialUtf8 => "verifiable-credential"u8;
 
     /// <summary><c>verifiable-credential</c>.</summary>
-    public static readonly string VerifiableCredential = "verifiable-credential";
+    public static readonly string VerifiableCredential = Utf8Constants.ToInternedString(VerifiableCredentialUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="PhoneVoice"/>.</summary>
+    public static ReadOnlySpan<byte> PhoneVoiceUtf8 => "phone-voice"u8;
 
     /// <summary><c>phone-voice</c>.</summary>
-    public static readonly string PhoneVoice = "phone-voice";
+    public static readonly string PhoneVoice = Utf8Constants.ToInternedString(PhoneVoiceUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="PhoneSms"/>.</summary>
+    public static ReadOnlySpan<byte> PhoneSmsUtf8 => "phone-sms"u8;
 
     /// <summary><c>phone-sms</c>.</summary>
-    public static readonly string PhoneSms = "phone-sms";
+    public static readonly string PhoneSms = Utf8Constants.ToInternedString(PhoneSmsUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="App"/>.</summary>
+    public static ReadOnlySpan<byte> AppUtf8 => "app"u8;
 
     /// <summary><c>app</c>.</summary>
-    public static readonly string App = "app";
+    public static readonly string App = Utf8Constants.ToInternedString(AppUtf8);
 }
 
 

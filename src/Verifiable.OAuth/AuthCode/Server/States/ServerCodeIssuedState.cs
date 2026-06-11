@@ -98,4 +98,21 @@ public sealed record ServerCodeIssuedState: OAuthFlowState
     /// <see langword="null"/> when the request carried no <c>state</c>.
     /// </summary>
     public string? State { get; init; }
+
+    /// <summary>
+    /// The RFC 9396 <c>authorization_details</c> the authorization request was authorized with,
+    /// verbatim, or <see langword="null"/> when none was requested. The token endpoint resolves
+    /// the granted <c>credential_identifiers</c> against it — optionally narrowed by a
+    /// token-request subset per OID4VCI 1.0 §6.1.1 — and echoes the grant in the token
+    /// response's <c>authorization_details</c> per §6.2.
+    /// </summary>
+    public string? AuthorizationDetails { get; init; }
+
+    /// <summary>
+    /// The <c>response_mode</c> the authorization request asked for, carried forward so the
+    /// authorize response site knows whether to wrap the response in a JARM JWT
+    /// (<see cref="Jarm.JarmResponseModes"/>) and which §2.3 encoding to apply.
+    /// <see langword="null"/> when the request carried no <c>response_mode</c>.
+    /// </summary>
+    public string? ResponseMode { get; init; }
 }
