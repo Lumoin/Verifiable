@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.JCose
 {
@@ -23,6 +24,9 @@ namespace Verifiable.JCose
         [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
         public static class Application
         {
+            /// <summary>The UTF-8 source literal of <see cref="Vc"/>.</summary>
+            public static ReadOnlySpan<byte> VcUtf8 => "vc"u8;
+
             /// <summary>
             /// Verifiable Credential content type for use in JOSE <c>cty</c> and COSE content type (3) headers.
             /// </summary>
@@ -35,7 +39,10 @@ namespace Verifiable.JCose
             /// See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vcs-with-jose">VC-JOSE-COSE §3.1</see>.
             /// </para>
             /// </remarks>
-            public static readonly string Vc = "vc";
+            public static readonly string Vc = Utf8Constants.ToInternedString(VcUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="Vp"/>.</summary>
+            public static ReadOnlySpan<byte> VpUtf8 => "vp"u8;
 
             /// <summary>
             /// Verifiable Presentation content type for use in JOSE <c>cty</c> and COSE content type (3) headers.
@@ -49,7 +56,10 @@ namespace Verifiable.JCose
             /// See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vps-with-jose">VC-JOSE-COSE §3.2</see>.
             /// </para>
             /// </remarks>
-            public static readonly string Vp = "vp";
+            public static readonly string Vp = Utf8Constants.ToInternedString(VpUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="ApplicationVc"/>.</summary>
+            public static ReadOnlySpan<byte> ApplicationVcUtf8 => "application/vc"u8;
 
             /// <summary>
             /// Full media type for an unsecured Verifiable Credential (<c>application/vc</c>).
@@ -63,7 +73,10 @@ namespace Verifiable.JCose
             /// See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vcs-with-cose">VC-JOSE-COSE §4.1</see>.
             /// </para>
             /// </remarks>
-            public static readonly string ApplicationVc = "application/vc";
+            public static readonly string ApplicationVc = Utf8Constants.ToInternedString(ApplicationVcUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="ApplicationVp"/>.</summary>
+            public static ReadOnlySpan<byte> ApplicationVpUtf8 => "application/vp"u8;
 
             /// <summary>
             /// Full media type for an unsecured Verifiable Presentation (<c>application/vp</c>).
@@ -77,89 +90,134 @@ namespace Verifiable.JCose
             /// See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vps-with-cose">VC-JOSE-COSE §4.2</see>.
             /// </para>
             /// </remarks>
-            public static readonly string ApplicationVp = "application/vp";
+            public static readonly string ApplicationVp = Utf8Constants.ToInternedString(ApplicationVpUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VcLdJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VcLdJwtUtf8 => "application/vc+ld+jwt"u8;
 
             /// <summary>
             /// Verifiable Credential secured as a JWT with JSON-LD.
             /// </summary>
             /// <remarks>See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vcs-with-jose">VC-JOSE-COSE §3.1</see>.</remarks>
-            public static readonly string VcLdJwt = "application/vc+ld+jwt";
+            public static readonly string VcLdJwt = Utf8Constants.ToInternedString(VcLdJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VpLdJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VpLdJwtUtf8 => "application/vp+ld+jwt"u8;
 
             /// <summary>
             /// Verifiable Presentation secured as a JWT with JSON-LD.
             /// </summary>
             /// <remarks>See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vps-with-jose">VC-JOSE-COSE §3.2</see>.</remarks>
-            public static readonly string VpLdJwt = "application/vp+ld+jwt";
+            public static readonly string VpLdJwt = Utf8Constants.ToInternedString(VpLdJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VcJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VcJwtUtf8 => "application/vc+jwt"u8;
 
             /// <summary>
             /// Verifiable Credential secured as a JWT (non-JSON-LD).
             /// </summary>
             /// <remarks>See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vcs-with-jose">VC-JOSE-COSE §3.1</see>.</remarks>
-            public static readonly string VcJwt = "application/vc+jwt";
+            public static readonly string VcJwt = Utf8Constants.ToInternedString(VcJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VpJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VpJwtUtf8 => "application/vp+jwt"u8;
 
             /// <summary>
             /// Verifiable Presentation secured as a JWT (non-JSON-LD).
             /// </summary>
             /// <remarks>See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vps-with-jose">VC-JOSE-COSE §3.2</see>.</remarks>
-            public static readonly string VpJwt = "application/vp+jwt";
+            public static readonly string VpJwt = Utf8Constants.ToInternedString(VpJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VcLdCose"/>.</summary>
+            public static ReadOnlySpan<byte> VcLdCoseUtf8 => "application/vc+ld+cose"u8;
 
             /// <summary>
             /// Verifiable Credential secured using COSE with JSON-LD.
             /// </summary>
             /// <remarks>See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vcs-with-cose">VC-JOSE-COSE §4.1</see>.</remarks>
-            public static readonly string VcLdCose = "application/vc+ld+cose";
+            public static readonly string VcLdCose = Utf8Constants.ToInternedString(VcLdCoseUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VpLdCose"/>.</summary>
+            public static ReadOnlySpan<byte> VpLdCoseUtf8 => "application/vp+ld+cose"u8;
 
             /// <summary>
             /// Verifiable Presentation secured using COSE with JSON-LD.
             /// </summary>
             /// <remarks>See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vps-with-cose">VC-JOSE-COSE §4.2</see>.</remarks>
-            public static readonly string VpLdCose = "application/vp+ld+cose";
+            public static readonly string VpLdCose = Utf8Constants.ToInternedString(VpLdCoseUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VcCose"/>.</summary>
+            public static ReadOnlySpan<byte> VcCoseUtf8 => "application/vc+cose"u8;
 
             /// <summary>
             /// Verifiable Credential secured using COSE (non-JSON-LD).
             /// </summary>
             /// <remarks>See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vcs-with-cose">VC-JOSE-COSE §4.1</see>.</remarks>
-            public static readonly string VcCose = "application/vc+cose";
+            public static readonly string VcCose = Utf8Constants.ToInternedString(VcCoseUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VpCose"/>.</summary>
+            public static ReadOnlySpan<byte> VpCoseUtf8 => "application/vp+cose"u8;
 
             /// <summary>
             /// Verifiable Presentation secured using COSE (non-JSON-LD).
             /// </summary>
             /// <remarks>See <see href="https://www.w3.org/TR/vc-jose-cose/#securing-vps-with-cose">VC-JOSE-COSE §4.2</see>.</remarks>
-            public static readonly string VpCose = "application/vp+cose";
+            public static readonly string VpCose = Utf8Constants.ToInternedString(VpCoseUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="SdJwt"/>.</summary>
+            public static ReadOnlySpan<byte> SdJwtUtf8 => "application/sd-jwt"u8;
 
             /// <summary>
             /// Generic SD-JWT per <see href="https://datatracker.ietf.org/doc/rfc9901/">RFC 9901</see>.
             /// </summary>
             /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9901.html#section-9.3.1">RFC 9901 §9.3.1</see>.</remarks>
-            public static readonly string SdJwt = "application/sd-jwt";
+            public static readonly string SdJwt = Utf8Constants.ToInternedString(SdJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VcSdJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VcSdJwtUtf8 => "application/vc+sd-jwt"u8;
 
             /// <summary>
             /// SD-JWT Verifiable Credential.
             /// </summary>
             /// <remarks>See <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-sd-jwt-vc-08.html#section-4.2.1.1">SD-JWT VC §4.2.1.1</see>.</remarks>
-            public static readonly string VcSdJwt = "application/vc+sd-jwt";
+            public static readonly string VcSdJwt = Utf8Constants.ToInternedString(VcSdJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="KbJwt"/>.</summary>
+            public static ReadOnlySpan<byte> KbJwtUtf8 => "application/kb+jwt"u8;
 
             /// <summary>
             /// SD-JWT Key Binding JWT.
             /// </summary>
             /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9901.html#section-5.3">RFC 9901 §5.3</see>.</remarks>
-            public static readonly string KbJwt = "application/kb+jwt";
+            public static readonly string KbJwt = Utf8Constants.ToInternedString(KbJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="SdCwt"/>.</summary>
+            public static ReadOnlySpan<byte> SdCwtUtf8 => "application/sd-cwt"u8;
 
             /// <summary>
             /// Generic SD-CWT per <see href="https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html">draft-ietf-spice-sd-cwt</see>.
             /// </summary>
-            public static readonly string SdCwt = "application/sd-cwt";
+            public static readonly string SdCwt = Utf8Constants.ToInternedString(SdCwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VcSdCwt"/>.</summary>
+            public static ReadOnlySpan<byte> VcSdCwtUtf8 => "application/vc+sd-cwt"u8;
 
             /// <summary>
             /// SD-CWT Verifiable Credential secured using COSE.
             /// </summary>
-            public static readonly string VcSdCwt = "application/vc+sd-cwt";
+            public static readonly string VcSdCwt = Utf8Constants.ToInternedString(VcSdCwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="OauthAuthzReqJwt"/>.</summary>
+            public static ReadOnlySpan<byte> OauthAuthzReqJwtUtf8 => "application/oauth-authz-req+jwt"u8;
 
             /// <summary>
             /// OAuth 2.0 JWT Authorization Request (<c>application/oauth-authz-req+jwt</c>).
             /// See <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 §4</see>.
             /// </summary>
-            public static readonly string OauthAuthzReqJwt = "application/oauth-authz-req+jwt";
+            public static readonly string OauthAuthzReqJwt = Utf8Constants.ToInternedString(OauthAuthzReqJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="EntityStatementJwt"/>.</summary>
+            public static ReadOnlySpan<byte> EntityStatementJwtUtf8 => "application/entity-statement+jwt"u8;
 
             /// <summary>
             /// OpenID Federation 1.0 Entity Statement
@@ -169,7 +227,10 @@ namespace Verifiable.JCose
             /// returned from the <c>federation_fetch_endpoint</c>.
             /// See <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1">OpenID Federation 1.0 §3.1</see>.
             /// </summary>
-            public static readonly string EntityStatementJwt = "application/entity-statement+jwt";
+            public static readonly string EntityStatementJwt = Utf8Constants.ToInternedString(EntityStatementJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="ResolveResponseJwt"/>.</summary>
+            public static ReadOnlySpan<byte> ResolveResponseJwtUtf8 => "application/resolve-response+jwt"u8;
 
             /// <summary>
             /// OpenID Federation 1.0 Resolve Response
@@ -179,7 +240,10 @@ namespace Verifiable.JCose
             /// subject's resolved metadata, trust chain, and trust marks.
             /// See <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3">OpenID Federation 1.0 §8.3</see>.
             /// </summary>
-            public static readonly string ResolveResponseJwt = "application/resolve-response+jwt";
+            public static readonly string ResolveResponseJwt = Utf8Constants.ToInternedString(ResolveResponseJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="ExplicitRegistrationResponseJwt"/>.</summary>
+            public static ReadOnlySpan<byte> ExplicitRegistrationResponseJwtUtf8 => "application/explicit-registration-response+jwt"u8;
 
             /// <summary>
             /// OpenID Federation 1.0 Explicit Registration Response
@@ -189,7 +253,10 @@ namespace Verifiable.JCose
             /// Party that registered explicitly.
             /// See <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2">OpenID Federation 1.0 §12.2</see> / §15.8.
             /// </summary>
-            public static readonly string ExplicitRegistrationResponseJwt = "application/explicit-registration-response+jwt";
+            public static readonly string ExplicitRegistrationResponseJwt = Utf8Constants.ToInternedString(ExplicitRegistrationResponseJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="HistoricalKeysJwt"/>.</summary>
+            public static ReadOnlySpan<byte> HistoricalKeysJwtUtf8 => "application/jwk-set+jwt"u8;
 
             /// <summary>
             /// OpenID Federation 1.0 Historical Keys
@@ -200,19 +267,50 @@ namespace Verifiable.JCose
             /// Keys.
             /// See <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.7.2">OpenID Federation 1.0 §8.7.2</see>.
             /// </summary>
-            public static readonly string HistoricalKeysJwt = "application/jwk-set+jwt";
+            public static readonly string HistoricalKeysJwt = Utf8Constants.ToInternedString(HistoricalKeysJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="AtJwt"/>.</summary>
+            public static ReadOnlySpan<byte> AtJwtUtf8 => "application/at+jwt"u8;
 
             /// <summary>
             /// OAuth 2.0 JWT Access Token (<c>application/at+jwt</c>).
             /// See <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.1">RFC 9068 §2.1</see>.
             /// </summary>
-            public static readonly string AtJwt = "application/at+jwt";
+            public static readonly string AtJwt = Utf8Constants.ToInternedString(AtJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="TokenIntrospectionJwt"/>.</summary>
+            public static ReadOnlySpan<byte> TokenIntrospectionJwtUtf8 => "application/token-introspection+jwt"u8;
+
+            /// <summary>
+            /// JWT token introspection response (<c>application/token-introspection+jwt</c>).
+            /// The <c>Accept</c> value a resource server requests a signed introspection
+            /// response with, and the <c>Content-Type</c> of that response.
+            /// See <see href="https://www.rfc-editor.org/rfc/rfc9701#section-5">RFC 9701 §5</see>.
+            /// </summary>
+            public static readonly string TokenIntrospectionJwt = Utf8Constants.ToInternedString(TokenIntrospectionJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="Jwt"/>.</summary>
+            public static ReadOnlySpan<byte> JwtUtf8 => "application/jwt"u8;
+
+            /// <summary>
+            /// A generic JWT (<c>application/jwt</c>) per
+            /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-10.3">RFC 7519 §10.3</see>.
+            /// OID4VCI 1.0 §10 uses it as the media type of encrypted Credential Requests
+            /// and Responses.
+            /// </summary>
+            public static readonly string Jwt = Utf8Constants.ToInternedString(JwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="DpopJwt"/>.</summary>
+            public static ReadOnlySpan<byte> DpopJwtUtf8 => "application/dpop+jwt"u8;
 
             /// <summary>
             /// DPoP proof JWT (<c>application/dpop+jwt</c>).
             /// See <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 §4.3</see>.
             /// </summary>
-            public static readonly string DpopJwt = "application/dpop+jwt";
+            public static readonly string DpopJwt = Utf8Constants.ToInternedString(DpopJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VerifierAttestationJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VerifierAttestationJwtUtf8 => "application/verifier-attestation+jwt"u8;
 
             /// <summary>
             /// Verifier Attestation JWT (<c>application/verifier-attestation+jwt</c>).
@@ -228,7 +326,10 @@ namespace Verifiable.JCose
             /// matching the convention <see cref="OauthAuthzReqJwt"/> /
             /// <see cref="AtJwt"/> / <see cref="DpopJwt"/> follow.
             /// </remarks>
-            public static readonly string VerifierAttestationJwt = "application/verifier-attestation+jwt";
+            public static readonly string VerifierAttestationJwt = Utf8Constants.ToInternedString(VerifierAttestationJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="SecEventJwt"/>.</summary>
+            public static ReadOnlySpan<byte> SecEventJwtUtf8 => "application/secevent+jwt"u8;
 
             /// <summary>
             /// Security Event Token (<c>application/secevent+jwt</c>). The HTTP
@@ -238,19 +339,25 @@ namespace Verifiable.JCose
             /// (<see href="https://www.rfc-editor.org/rfc/rfc8936">RFC 8936</see>).
             /// See <see href="https://www.rfc-editor.org/rfc/rfc8417#section-2.3">RFC 8417 §2.3</see>.
             /// </summary>
-            public static readonly string SecEventJwt = "application/secevent+jwt";
+            public static readonly string SecEventJwt = Utf8Constants.ToInternedString(SecEventJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="Json"/>.</summary>
+            public static ReadOnlySpan<byte> JsonUtf8 => "application/json"u8;
 
             /// <summary>
             /// The JSON content-type, <c>application/json</c>, per
             /// <see href="https://www.rfc-editor.org/rfc/rfc8259">RFC 8259</see>.
             /// </summary>
-            public static readonly string Json = "application/json";
+            public static readonly string Json = Utf8Constants.ToInternedString(JsonUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="FormUrlEncoded"/>.</summary>
+            public static ReadOnlySpan<byte> FormUrlEncodedUtf8 => "application/x-www-form-urlencoded"u8;
 
             /// <summary>
             /// The form-urlencoded content-type, <c>application/x-www-form-urlencoded</c>,
             /// per <see href="https://url.spec.whatwg.org/#application/x-www-form-urlencoded">URL Standard</see>.
             /// </summary>
-            public static readonly string FormUrlEncoded = "application/x-www-form-urlencoded";
+            public static readonly string FormUrlEncoded = Utf8Constants.ToInternedString(FormUrlEncodedUtf8);
 
 
             /// <summary>
@@ -469,69 +576,116 @@ namespace Verifiable.JCose
         [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
         public static class Jwt
         {
+            /// <summary>The UTF-8 source literal of <see cref="VcLdJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VcLdJwtUtf8 => "vc+ld+jwt"u8;
+
             /// <summary>
             /// Verifiable Credential as JWT with JSON-LD.
             /// </summary>
-            public static readonly string VcLdJwt = "vc+ld+jwt";
+            public static readonly string VcLdJwt = Utf8Constants.ToInternedString(VcLdJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VpLdJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VpLdJwtUtf8 => "vp+ld+jwt"u8;
 
             /// <summary>
             /// Verifiable Presentation as JWT with JSON-LD.
             /// </summary>
-            public static readonly string VpLdJwt = "vp+ld+jwt";
+            public static readonly string VpLdJwt = Utf8Constants.ToInternedString(VpLdJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VcJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VcJwtUtf8 => "vc+jwt"u8;
 
             /// <summary>
             /// Verifiable Credential as JWT (non-JSON-LD).
             /// </summary>
-            public static readonly string VcJwt = "vc+jwt";
+            public static readonly string VcJwt = Utf8Constants.ToInternedString(VcJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VpJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VpJwtUtf8 => "vp+jwt"u8;
 
             /// <summary>
             /// Verifiable Presentation as JWT (non-JSON-LD).
             /// </summary>
-            public static readonly string VpJwt = "vp+jwt";
+            public static readonly string VpJwt = Utf8Constants.ToInternedString(VpJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="SdJwt"/>.</summary>
+            public static ReadOnlySpan<byte> SdJwtUtf8 => "sd-jwt"u8;
 
             /// <summary>
             /// Generic SD-JWT (short form for <c>typ</c> header) per
             /// <see href="https://datatracker.ietf.org/doc/rfc9901/">RFC 9901</see>.
             /// </summary>
             /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9901.html#section-9.3.1">RFC 9901 §9.3.1</see>.</remarks>
-            public static readonly string SdJwt = "sd-jwt";
+            public static readonly string SdJwt = Utf8Constants.ToInternedString(SdJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VcSdJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VcSdJwtUtf8 => "vc+sd-jwt"u8;
 
             /// <summary>
             /// SD-JWT Verifiable Credential (short form for <c>typ</c> header).
             /// </summary>
             /// <remarks>See <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-sd-jwt-vc-08.html#section-4.2.1.1">SD-JWT VC §4.2.1.1</see>.</remarks>
-            public static readonly string VcSdJwt = "vc+sd-jwt";
+            public static readonly string VcSdJwt = Utf8Constants.ToInternedString(VcSdJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="KbJwt"/>.</summary>
+            public static ReadOnlySpan<byte> KbJwtUtf8 => "kb+jwt"u8;
 
             /// <summary>
             /// Key Binding JWT (short form for <c>typ</c> header).
             /// </summary>
             /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9901.html#section-5.3">RFC 9901 §5.3</see>.</remarks>
-            public static readonly string KbJwt = "kb+jwt";
+            public static readonly string KbJwt = Utf8Constants.ToInternedString(KbJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="DcSdJwt"/>.</summary>
+            public static ReadOnlySpan<byte> DcSdJwtUtf8 => "dc+sd-jwt"u8;
 
             /// <summary>
             /// SD-JWT Verifiable Credential per HAIP 1.0 and RFC 9901 (<c>dc+sd-jwt</c>).
             /// See <see href="https://www.rfc-editor.org/rfc/rfc9901#section-3.2.2.1.1">RFC 9901 §3.2.2.1.1</see>.
             /// </summary>
-            public static readonly string DcSdJwt = "dc+sd-jwt";
+            public static readonly string DcSdJwt = Utf8Constants.ToInternedString(DcSdJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="OauthAuthzReqJwt"/>.</summary>
+            public static ReadOnlySpan<byte> OauthAuthzReqJwtUtf8 => "oauth-authz-req+jwt"u8;
 
             /// <summary>
             /// JWT Authorization Request for JAR (<c>oauth-authz-req+jwt</c>).
             /// See <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 §4</see>.
             /// </summary>
-            public static readonly string OauthAuthzReqJwt = "oauth-authz-req+jwt";
+            public static readonly string OauthAuthzReqJwt = Utf8Constants.ToInternedString(OauthAuthzReqJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="AtJwt"/>.</summary>
+            public static ReadOnlySpan<byte> AtJwtUtf8 => "at+jwt"u8;
 
             /// <summary>
             /// OAuth 2.0 JWT Access Token (<c>at+jwt</c>). Used as the <c>typ</c> header
             /// value for JWT access tokens per
             /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.1">RFC 9068 §2.1</see>.
             /// </summary>
-            public static readonly string AtJwt = "at+jwt";
+            public static readonly string AtJwt = Utf8Constants.ToInternedString(AtJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="TokenIntrospectionJwt"/>.</summary>
+            public static ReadOnlySpan<byte> TokenIntrospectionJwtUtf8 => "token-introspection+jwt"u8;
+
+            /// <summary>
+            /// JWT token introspection response (<c>token-introspection+jwt</c>). Used as
+            /// the <c>typ</c> header value of a signed introspection response so the JWT
+            /// cannot be confused with an access token (RFC 9701 §8.1).
+            /// See <see href="https://www.rfc-editor.org/rfc/rfc9701#section-5">RFC 9701 §5</see>.
+            /// </summary>
+            public static readonly string TokenIntrospectionJwt = Utf8Constants.ToInternedString(TokenIntrospectionJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="DpopJwt"/>.</summary>
+            public static ReadOnlySpan<byte> DpopJwtUtf8 => "dpop+jwt"u8;
 
             /// <summary>
             /// DPoP proof JWT (<c>dpop+jwt</c>).
             /// See <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 §4.3</see>.
             /// </summary>
-            public static readonly string DpopJwt = "dpop+jwt";
+            public static readonly string DpopJwt = Utf8Constants.ToInternedString(DpopJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="VerifierAttestationJwt"/>.</summary>
+            public static ReadOnlySpan<byte> VerifierAttestationJwtUtf8 => "verifier-attestation+jwt"u8;
 
             /// <summary>
             /// Verifier Attestation JWT (<c>verifier-attestation+jwt</c>).
@@ -539,7 +693,10 @@ namespace Verifiable.JCose
             /// <c>verifier_attestation:</c> Client Identifier Prefix is used.
             /// See <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-12">OID4VP 1.0 §12</see>.
             /// </summary>
-            public static readonly string VerifierAttestationJwt = "verifier-attestation+jwt";
+            public static readonly string VerifierAttestationJwt = Utf8Constants.ToInternedString(VerifierAttestationJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="SecEventJwt"/>.</summary>
+            public static ReadOnlySpan<byte> SecEventJwtUtf8 => "secevent+jwt"u8;
 
             /// <summary>
             /// Security Event Token (<c>secevent+jwt</c>). The explicit <c>typ</c>
@@ -547,7 +704,10 @@ namespace Verifiable.JCose
             /// <see href="https://www.rfc-editor.org/rfc/rfc8417#section-2.3">RFC 8417 §2.3</see>
             /// and OpenID SSF 1.0 §4.1.1 (explicit typing).
             /// </summary>
-            public static readonly string SecEventJwt = "secevent+jwt";
+            public static readonly string SecEventJwt = Utf8Constants.ToInternedString(SecEventJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="LogoutJwt"/>.</summary>
+            public static ReadOnlySpan<byte> LogoutJwtUtf8 => "logout+jwt"u8;
 
             /// <summary>
             /// OIDC Back-Channel Logout token (<c>logout+jwt</c>). The explicit <c>typ</c>
@@ -555,7 +715,7 @@ namespace Verifiable.JCose
             /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#LogoutToken">OIDC Back-Channel Logout 1.0 §2.4</see>,
             /// declaring the JWS as a Logout Token rather than an ID Token or a generic SET.
             /// </summary>
-            public static readonly string LogoutJwt = "logout+jwt";
+            public static readonly string LogoutJwt = Utf8Constants.ToInternedString(LogoutJwtUtf8);
 
             /// <summary>
             /// Whether <paramref name="typ"/> is <see cref="LogoutJwt"/>.

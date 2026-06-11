@@ -1,3 +1,6 @@
+using System;
+using Verifiable.Cryptography.Text;
+
 namespace Verifiable.Core.SecurityEvents;
 
 /// <summary>
@@ -7,19 +10,27 @@ namespace Verifiable.Core.SecurityEvents;
 /// </summary>
 public static class SsfEventTypes
 {
+    //The family prefix the StartsWith membership predicate matches on; every member's
+    //full URI literal below carries it verbatim (a test pins the coherence).
     private const string Prefix = "https://schemas.openid.net/secevent/ssf/event-type/";
+
+    /// <summary>The UTF-8 source literal of <see cref="Verification"/>.</summary>
+    public static ReadOnlySpan<byte> VerificationUtf8 => "https://schemas.openid.net/secevent/ssf/event-type/verification"u8;
 
     /// <summary>
     /// Verification (<c>verification</c>) — emitted in response to a verification
     /// request and echoing the supplied <c>state</c>. SSF 1.0 §8.1.4.1.
     /// </summary>
-    public static readonly string Verification = Prefix + "verification";
+    public static readonly string Verification = Utf8Constants.ToInternedString(VerificationUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="StreamUpdated"/>.</summary>
+    public static ReadOnlySpan<byte> StreamUpdatedUtf8 => "https://schemas.openid.net/secevent/ssf/event-type/stream-updated"u8;
 
     /// <summary>
     /// Stream Updated (<c>stream-updated</c>) — emitted when the Transmitter changes a
     /// stream's status (carrying <c>status</c> and an optional <c>reason</c>). SSF 1.0 §8.1.5.
     /// </summary>
-    public static readonly string StreamUpdated = Prefix + "stream-updated";
+    public static readonly string StreamUpdated = Utf8Constants.ToInternedString(StreamUpdatedUtf8);
 
 
     /// <summary>Whether <paramref name="eventType"/> is <see cref="Verification"/>.</summary>

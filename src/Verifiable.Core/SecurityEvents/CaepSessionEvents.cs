@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Core.SecurityEvents;
 
@@ -10,17 +11,29 @@ namespace Verifiable.Core.SecurityEvents;
 /// </summary>
 public static class CaepSessionClaimNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="FpUa"/>.</summary>
+    public static ReadOnlySpan<byte> FpUaUtf8 => "fp_ua"u8;
+
     /// <summary><c>fp_ua</c> — OPTIONAL; user-agent fingerprint computed by the Transmitter (qualities, not identity).</summary>
-    public static readonly string FpUa = "fp_ua";
+    public static readonly string FpUa = Utf8Constants.ToInternedString(FpUaUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Acr"/>.</summary>
+    public static ReadOnlySpan<byte> AcrUtf8 => "acr"u8;
 
     /// <summary><c>acr</c> — OPTIONAL; authentication context class reference, interpreted as in an OIDC ID Token.</summary>
-    public static readonly string Acr = "acr";
+    public static readonly string Acr = Utf8Constants.ToInternedString(AcrUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Amr"/>.</summary>
+    public static ReadOnlySpan<byte> AmrUtf8 => "amr"u8;
 
     /// <summary><c>amr</c> — OPTIONAL; authentication methods reference array, interpreted as in an OIDC ID Token.</summary>
-    public static readonly string Amr = "amr";
+    public static readonly string Amr = Utf8Constants.ToInternedString(AmrUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ExtId"/>.</summary>
+    public static ReadOnlySpan<byte> ExtIdUtf8 => "ext_id"u8;
 
     /// <summary><c>ext_id</c> — OPTIONAL; external session identifier correlating to a broader session.</summary>
-    public static readonly string ExtId = "ext_id";
+    public static readonly string ExtId = Utf8Constants.ToInternedString(ExtIdUtf8);
 }
 
 

@@ -294,6 +294,22 @@ public static class PolicyExchangeContextExtensions
 
 
         /// <summary>
+        /// Gets whether the deployment accepts an OID4VCI 1.0 §6 Pre-Authorized Code Token
+        /// Request without a <c>client_id</c>. Defaults to <see langword="false"/> — the §12.3
+        /// default for <c>pre-authorized_grant_anonymous_access_supported</c>.
+        /// </summary>
+        public bool PreAuthorizedGrantAnonymousAccessSupported =>
+            context.TryGetValue(PolicyContextKeys.PreAuthorizedGrantAnonymousAccessSupported, out object? v)
+                && v is bool b && b;
+
+        /// <summary>Sets whether the §6 Pre-Authorized Code grant accepts anonymous (no <c>client_id</c>) Token Requests.</summary>
+        public void SetPreAuthorizedGrantAnonymousAccessSupported(bool value)
+        {
+            context[PolicyContextKeys.PreAuthorizedGrantAnonymousAccessSupported] = value;
+        }
+
+
+        /// <summary>
         /// Gets the wire shape of the issuer URL. Defaults to
         /// <see cref="IssuerShape.FullUrl"/> (multi-tenant FAPI 2.0).
         /// </summary>

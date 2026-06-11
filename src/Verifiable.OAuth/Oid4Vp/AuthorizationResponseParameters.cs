@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
 
@@ -9,6 +10,9 @@ namespace Verifiable.OAuth.Oid4Vp;
 [DebuggerDisplay("AuthorizationResponseParameters")]
 public static class AuthorizationResponseParameters
 {
+    /// <summary>The UTF-8 source literal of <see cref="VpToken"/>.</summary>
+    public static ReadOnlySpan<byte> VpTokenUtf8 => "vp_token"u8;
+
     /// <summary>
     /// The <c>vp_token</c> response parameter.
     /// When DCQL is used, the value is a JSON-encoded object whose keys are the
@@ -16,28 +20,37 @@ public static class AuthorizationResponseParameters
     /// values are the matching Verifiable Presentations.
     /// Per OID4VP 1.0 §8.1.
     /// </summary>
-    public static readonly string VpToken = "vp_token";
+    public static readonly string VpToken = Utf8Constants.ToInternedString(VpTokenUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="State"/>.</summary>
+    public static ReadOnlySpan<byte> StateUtf8 => "state"u8;
 
     /// <summary>
     /// The <c>state</c> response parameter.
     /// Returned unchanged from the Authorization Request for CSRF protection
     /// per RFC 6749 §4.1.2 and RFC 9700 §4.7. OPTIONAL.
     /// </summary>
-    public static readonly string State = "state";
+    public static readonly string State = Utf8Constants.ToInternedString(StateUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Response"/>.</summary>
+    public static ReadOnlySpan<byte> ResponseUtf8 => "response"u8;
 
     /// <summary>
     /// The <c>response</c> parameter used in <c>direct_post.jwt</c> mode.
     /// Contains the compact JWE serialization of the encrypted Authorization
     /// Response per OID4VP 1.0 §8.3.1.
     /// </summary>
-    public static readonly string Response = "response";
+    public static readonly string Response = Utf8Constants.ToInternedString(ResponseUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RedirectUri"/>.</summary>
+    public static ReadOnlySpan<byte> RedirectUriUtf8 => "redirect_uri"u8;
 
     /// <summary>
     /// The <c>redirect_uri</c> parameter in the Verifier's response to the Wallet
     /// after a successful Authorization Response POST per OID4VP 1.0 §8.2.
     /// OPTIONAL. When present the Wallet redirects the user to this URI.
     /// </summary>
-    public static readonly string RedirectUri = "redirect_uri";
+    public static readonly string RedirectUri = Utf8Constants.ToInternedString(RedirectUriUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

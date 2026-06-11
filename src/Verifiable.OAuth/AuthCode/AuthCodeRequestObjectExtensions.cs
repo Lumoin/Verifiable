@@ -34,13 +34,19 @@ public static class AuthCodeRequestObjectExtensions
         /// Projects this verified JAR's claims into a typed
         /// <see cref="AuthCodeRequestObject"/>.
         /// </summary>
+        /// <param name="rawAuthorizationDetails">
+        /// The verbatim RFC 9396 <c>authorization_details</c> array text the caller re-sliced
+        /// from the verified payload, or <see langword="null"/> when absent. Passed in rather
+        /// than read from the parsed claims because the carried value must be the exact signed
+        /// text, not a reserialisation.
+        /// </param>
         /// <returns>The typed projection.</returns>
         /// <exception cref="FormatException">
         /// Thrown when an RFC 9101 §4 required claim is missing or has the
         /// wrong runtime type, or when <c>redirect_uri</c> is not an absolute
         /// <see cref="Uri"/>.
         /// </exception>
-        public AuthCodeRequestObject ProjectAuthCode()
+        public AuthCodeRequestObject ProjectAuthCode(string? rawAuthorizationDetails = null)
         {
             ArgumentNullException.ThrowIfNull(verified);
 
@@ -72,6 +78,13 @@ public static class AuthCodeRequestObjectExtensions
             //string; max_age is a non-negative integer (OIDC Core §3.1.2.1) — a present but
             //malformed value is surfaced as invalid_request_object like any other JAR defect.
             string? acrValues = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.AcrValues);
+            string? responseMode = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.ResponseMode);
+
+            //OID4VCI 1.0 §5.1.3 issuer_state and RFC 8707 resource: read verbatim. issuer_state is
+            //surfaced to the decision seam as UNTRUSTED — §5.1.3 forbids the issuer from assuming it
+            //originated here — so the projection neither validates nor interprets it.
+            string? issuerState = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.IssuerState);
+            string? resource = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.Resource);
             int? maxAge = null;
             if(claims.TryGetValue(OAuthRequestParameterNames.MaxAge, out object? maxAgeClaim))
             {
@@ -102,7 +115,11 @@ public static class AuthCodeRequestObjectExtensions
                 Aud = aud,
                 Jti = jti,
                 AcrValues = acrValues,
-                MaxAge = maxAge
+                MaxAge = maxAge,
+                AuthorizationDetails = rawAuthorizationDetails,
+                ResponseMode = responseMode,
+                IssuerState = issuerState,
+                Resource = resource
             };
         }
     }

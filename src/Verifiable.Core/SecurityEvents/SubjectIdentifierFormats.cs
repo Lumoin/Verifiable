@@ -1,3 +1,6 @@
+using System;
+using Verifiable.Cryptography.Text;
+
 namespace Verifiable.Core.SecurityEvents;
 
 /// <summary>
@@ -16,19 +19,28 @@ namespace Verifiable.Core.SecurityEvents;
 /// </remarks>
 public static class SubjectIdentifierFormats
 {
+    /// <summary>The UTF-8 source literal of <see cref="Account"/>.</summary>
+    public static ReadOnlySpan<byte> AccountUtf8 => "account"u8;
+
     /// <summary>
     /// The Account Identifier Format (<c>account</c>) — identifies a subject by an
     /// <c>acct</c> URI in the <see cref="SubjectIdentifierMemberNames.Uri"/> member.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.1">RFC 9493 §3.2.1</see>.
     /// </summary>
-    public static readonly string Account = "account";
+    public static readonly string Account = Utf8Constants.ToInternedString(AccountUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Email"/>.</summary>
+    public static ReadOnlySpan<byte> EmailUtf8 => "email"u8;
 
     /// <summary>
     /// The Email Identifier Format (<c>email</c>) — identifies a subject by an email
     /// address in the <see cref="SubjectIdentifierMemberNames.Email"/> member.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.2">RFC 9493 §3.2.2</see>.
     /// </summary>
-    public static readonly string Email = "email";
+    public static readonly string Email = Utf8Constants.ToInternedString(EmailUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="IssuerSubject"/>.</summary>
+    public static ReadOnlySpan<byte> IssuerSubjectUtf8 => "iss_sub"u8;
 
     /// <summary>
     /// The Issuer and Subject Identifier Format (<c>iss_sub</c>) — identifies a subject
@@ -36,35 +48,50 @@ public static class SubjectIdentifierFormats
     /// <see cref="SubjectIdentifierMemberNames.Sub"/> pair.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.3">RFC 9493 §3.2.3</see>.
     /// </summary>
-    public static readonly string IssuerSubject = "iss_sub";
+    public static readonly string IssuerSubject = Utf8Constants.ToInternedString(IssuerSubjectUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Opaque"/>.</summary>
+    public static ReadOnlySpan<byte> OpaqueUtf8 => "opaque"u8;
 
     /// <summary>
     /// The Opaque Identifier Format (<c>opaque</c>) — identifies a subject by an opaque
     /// string in the <see cref="SubjectIdentifierMemberNames.Id"/> member.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.4">RFC 9493 §3.2.4</see>.
     /// </summary>
-    public static readonly string Opaque = "opaque";
+    public static readonly string Opaque = Utf8Constants.ToInternedString(OpaqueUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="PhoneNumber"/>.</summary>
+    public static ReadOnlySpan<byte> PhoneNumberUtf8 => "phone_number"u8;
 
     /// <summary>
     /// The Phone Number Identifier Format (<c>phone_number</c>) — identifies a subject by a
     /// telephone number in the <see cref="SubjectIdentifierMemberNames.PhoneNumber"/> member.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.5">RFC 9493 §3.2.5</see>.
     /// </summary>
-    public static readonly string PhoneNumber = "phone_number";
+    public static readonly string PhoneNumber = Utf8Constants.ToInternedString(PhoneNumberUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="DecentralizedIdentifier"/>.</summary>
+    public static ReadOnlySpan<byte> DecentralizedIdentifierUtf8 => "did"u8;
 
     /// <summary>
     /// The Decentralized Identifier (DID) Format (<c>did</c>) — identifies a subject by a
     /// DID URL in the <see cref="SubjectIdentifierMemberNames.Url"/> member.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.6">RFC 9493 §3.2.6</see>.
     /// </summary>
-    public static readonly string DecentralizedIdentifier = "did";
+    public static readonly string DecentralizedIdentifier = Utf8Constants.ToInternedString(DecentralizedIdentifierUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Uri"/>.</summary>
+    public static ReadOnlySpan<byte> UriUtf8 => "uri"u8;
 
     /// <summary>
     /// The URI Identifier Format (<c>uri</c>) — identifies a subject by a URI in the
     /// <see cref="SubjectIdentifierMemberNames.Uri"/> member.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.7">RFC 9493 §3.2.7</see>.
     /// </summary>
-    public static readonly string Uri = "uri";
+    public static readonly string Uri = Utf8Constants.ToInternedString(UriUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Aliases"/>.</summary>
+    public static ReadOnlySpan<byte> AliasesUtf8 => "aliases"u8;
 
     /// <summary>
     /// The Aliases Identifier Format (<c>aliases</c>) — identifies a subject by an array of
@@ -72,21 +99,30 @@ public static class SubjectIdentifierFormats
     /// member.
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.8">RFC 9493 §3.2.8</see>.
     /// </summary>
-    public static readonly string Aliases = "aliases";
+    public static readonly string Aliases = Utf8Constants.ToInternedString(AliasesUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="JwtId"/>.</summary>
+    public static ReadOnlySpan<byte> JwtIdUtf8 => "jwt_id"u8;
 
     /// <summary>
     /// The JWT ID Identifier Format (<c>jwt_id</c>) — identifies a JWT by its
     /// <see cref="SubjectIdentifierMemberNames.Iss"/> and
     /// <see cref="SubjectIdentifierMemberNames.Jti"/> members. Added by OpenID SSF 1.0 §3.5.1.
     /// </summary>
-    public static readonly string JwtId = "jwt_id";
+    public static readonly string JwtId = Utf8Constants.ToInternedString(JwtIdUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SamlAssertionId"/>.</summary>
+    public static ReadOnlySpan<byte> SamlAssertionIdUtf8 => "saml_assertion_id"u8;
 
     /// <summary>
     /// The SAML Assertion ID Identifier Format (<c>saml_assertion_id</c>) — identifies a
     /// SAML 2.0 assertion by its <see cref="SubjectIdentifierMemberNames.Issuer"/> and
     /// <see cref="SubjectIdentifierMemberNames.AssertionId"/> members. Added by OpenID SSF 1.0 §3.5.2.
     /// </summary>
-    public static readonly string SamlAssertionId = "saml_assertion_id";
+    public static readonly string SamlAssertionId = Utf8Constants.ToInternedString(SamlAssertionIdUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="IpAddresses"/>.</summary>
+    public static ReadOnlySpan<byte> IpAddressesUtf8 => "ip-addresses"u8;
 
     /// <summary>
     /// The IP Addresses Identifier Format (<c>ip-addresses</c>) — identifies a subject by an
@@ -94,7 +130,10 @@ public static class SubjectIdentifierFormats
     /// member. Added by OpenID SSF 1.0 §3.5.3. Note the format name and its member are both
     /// hyphenated (<c>ip-addresses</c>), unlike the underscore-separated RFC 9493 formats.
     /// </summary>
-    public static readonly string IpAddresses = "ip-addresses";
+    public static readonly string IpAddresses = Utf8Constants.ToInternedString(IpAddressesUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Complex"/>.</summary>
+    public static ReadOnlySpan<byte> ComplexUtf8 => "complex"u8;
 
     /// <summary>
     /// The Complex Subject Format (<c>complex</c>) — groups one or more named Simple
@@ -103,7 +142,7 @@ public static class SubjectIdentifierFormats
     /// OpenID Shared Signals Framework 1.0 §3.3; member names are in
     /// <see cref="ComplexSubjectMemberNames"/>.
     /// </summary>
-    public static readonly string Complex = "complex";
+    public static readonly string Complex = Utf8Constants.ToInternedString(ComplexUtf8);
 
 
     /// <summary>Whether <paramref name="format"/> is <see cref="Account"/>.</summary>

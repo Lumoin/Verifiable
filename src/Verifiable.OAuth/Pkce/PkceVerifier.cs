@@ -2,6 +2,7 @@ using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 
 namespace Verifiable.OAuth.Pkce;
 
@@ -100,8 +101,9 @@ public sealed class PkceVerifier: IDisposable, IEquatable<PkceVerifier>
             return true;
         }
 
+        //Fixed-time — the verifier is the PKCE secret.
         return EncodedLength == other.EncodedLength
-            && Bytes.Span.SequenceEqual(other.Bytes.Span);
+            && CryptographicOperations.FixedTimeEquals(Bytes.Span, other.Bytes.Span);
     }
 
 

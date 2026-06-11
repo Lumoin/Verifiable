@@ -32,6 +32,8 @@ using Verifiable.OAuth.Server.Metadata;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Server.Registration;
 using Verifiable.OAuth.Server.States;
+using Verifiable.OAuth.Siop.Server;
+using Verifiable.OAuth.Siop.Server.States;
 using Verifiable.OAuth.Validation;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -129,6 +131,12 @@ internal sealed class HostedAuthorizationServer
     /// truth.
     /// </param>
     /// <param name="vpValidator">VP token validator (HAIP 1.0 SD-JWT rules by default).</param>
+    /// <param name="resolveDidVerificationKey">
+    /// SIOPv2 §11.1 DID resolution seam for Self-Issued ID Tokens of the Decentralized
+    /// Identifier Subject Syntax Type. Shared from the shell so the DID trust map is a single
+    /// source of truth, mirroring <paramref name="resolveIssuerKey"/>. When
+    /// <see langword="null"/> the SIOP validator fails closed on a DID subject.
+    /// </param>
     public static HostedAuthorizationServer Build(
         string name,
         TimeProvider timeProvider,
@@ -138,7 +146,8 @@ internal sealed class HostedAuthorizationServer
         MdocVpVerificationSeams? mdocSeams = null,
         SdCwtVpVerificationSeams? sdCwtSeams = null,
         CommitmentReuseDetectionSeam? saltReuseSeam = null,
-        TimingPolicy? timings = null)
+        TimingPolicy? timings = null,
+        Verifiable.OAuth.Siop.ResolveDidVerificationKeyDelegate? resolveDidVerificationKey = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -212,6 +221,32 @@ internal sealed class HostedAuthorizationServer
                         if(!string.IsNullOrWhiteSpace(vpPar.ParHandle))
                         {
                             host.RequestUriTokenIndex[vpPar.ParHandle] = flowId;
+                        }
+
+                        break;
+                    }
+                    case SiopRequestPreparedState siopPrepared:
+                    {
+                        //The SIOP preparation endpoint stamps the per-flow request handle
+                        //directly on the state. Index it so the response endpoint's state echo
+                        //resolves back to the flowId through ResolveCorrelationKeyAsync — the
+                        //same RequestUriTokenIndex path the OID4VP handle uses.
+                        if(!string.IsNullOrWhiteSpace(siopPrepared.RequestHandle))
+                        {
+                            host.RequestUriTokenIndex[siopPrepared.RequestHandle] = flowId;
+                        }
+
+                        break;
+                    }
+                    case SiopRequestObjectServedState siopServed:
+                    {
+                        //The by-reference §9 path advances past SiopRequestPreparedState to the
+                        //served state. Keep the per-flow handle indexed so both the request_uri GET
+                        //(CorrelationKey) and the subsequent id_token POST (state echo) resolve back
+                        //to the flowId — the parallel of VerifierJarServedState carrying ParHandle.
+                        if(!string.IsNullOrWhiteSpace(siopServed.RequestHandle))
+                        {
+                            host.RequestUriTokenIndex[siopServed.RequestHandle] = flowId;
                         }
 
                         break;
@@ -327,11 +362,34 @@ internal sealed class HostedAuthorizationServer
                         new Uri($"{authority}/connect/{segment}/request/{handle}"));
                 }
 
+                //Per-flow SIOPv2 §9 request_uri — the same per-flow shape as the OID4VP request_uri,
+                //incorporating the SIOP request handle the preparation endpoint placed on the
+                //context. This fixture uses /connect/{segment}/siop_request_object/{handle}.
+                if(string.Equals(endpointKey, SiopVerifierEndpointKeys.RequestUri, StringComparison.Ordinal))
+                {
+                    string? handle = ctx.SiopRequestHandle;
+                    if(string.IsNullOrWhiteSpace(handle))
+                    {
+                        return ValueTask.FromResult<Uri?>(null);
+                    }
+
+                    return ValueTask.FromResult<Uri?>(
+                        new Uri($"{authority}/connect/{segment}/siop_request_object/{handle}"));
+                }
+
                 //RFC 9728 §3: the protected-resource metadata path is formed by
                 //INSERTION between host and the identifier's path, not by the
                 //fixture's /connect/{segment}/<suffix> scheme — delegate to
                 //ComposeEndpointPath, which owns that special case.
                 if(string.Equals(endpointKey, WellKnownEndpointNames.ProtectedResourceMetadata, StringComparison.Ordinal))
+                {
+                    return ValueTask.FromResult<Uri?>(
+                        new Uri($"{authority}{TestHostShell.ComposeEndpointPath(endpointKey, segment)}"));
+                }
+
+                //OID4VCI §12.2.2 Credential Issuer Metadata — same INSERTION shape as the
+                //RFC 9728 protected-resource metadata above; ComposeEndpointPath owns the case.
+                if(string.Equals(endpointKey, WellKnownEndpointNames.Oid4VciCredentialIssuerMetadata, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<Uri?>(
                         new Uri($"{authority}{TestHostShell.ComposeEndpointPath(endpointKey, segment)}"));
@@ -419,12 +477,29 @@ internal sealed class HostedAuthorizationServer
                     authMethod = parsed;
                 }
 
+                //RFC 9396 §10/§14.5 authorization_details_types — an absent member leaves this
+                //null (the client registered no restriction); a present array becomes the allowlist.
+                List<string>? authorizationDetailsTypes = null;
+                if(root.TryGetProperty(
+                    AuthorizationDetailsParameterNames.AuthorizationDetailsTypes, out JsonElement adt))
+                {
+                    authorizationDetailsTypes = [];
+                    foreach(JsonElement el in adt.EnumerateArray())
+                    {
+                        if(el.GetString() is string typeValue)
+                        {
+                            authorizationDetailsTypes.Add(typeValue);
+                        }
+                    }
+                }
+
                 return ValueTask.FromResult(new ClientMetadata
                 {
                     RedirectUris = redirectUris,
                     ClientName = clientName,
                     Scope = scope,
-                    TokenEndpointAuthMethod = authMethod
+                    TokenEndpointAuthMethod = authMethod,
+                    AuthorizationDetailsTypes = authorizationDetailsTypes
                 });
             },
 
@@ -532,6 +607,118 @@ internal sealed class HostedAuthorizationServer
                 JsonSerializer.Serialize(metadata, TestSetup.DefaultSerializationOptions)
         };
 
+        //The shared action executor holds the handlers of every stateful flow this host runs.
+        //The HAIP executor seeds it with the OID4VP verifier handlers (SignJar, DecryptResponse);
+        //SiopVerifierExecutor.Register then contributes the SIOPv2 ValidateSelfIssuedIdToken handler
+        //onto the SAME instance, so a single registry serves both flows.
+        OAuthActionExecutor executor = HaipOid4VpVerifierExecutor.Create(
+            headerSerializer: header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)header,
+                TestSetup.DefaultSerializationOptions),
+            payloadSerializer: payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)payload,
+                TestSetup.DefaultSerializationOptions),
+            dcqlQuerySerializer: q =>
+                JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
+            clientMetadataSerializer: m =>
+                JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
+            decoder: TestSetup.Base64UrlDecoder,
+            encoder: TestSetup.Base64UrlEncoder,
+            resolveIssuerKey: resolveIssuerKey,
+            parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
+                s, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag),
+            computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
+                t, TestSetup.Base64UrlEncoder),
+            computeDigest: MicrosoftEntropyFunctions.ComputeDigestAsync,
+            vpValidators: BuildVpValidators(vpValidator, mdocSeams, sdCwtSeams, timeProvider),
+            keyAgreementDecryptDelegate:
+                BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
+            keyDerivationDelegate: ConcatKdf.DefaultKeyDerivationDelegate,
+            aeadDecryptDelegate: BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
+            pool: SensitiveMemoryPool<byte>.Shared,
+            keyAgreementEncryptDelegate:
+                BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
+            aeadEncryptDelegate: BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
+            tagToEpkCrvConverter: CryptoFormatConversions.DefaultTagToEpkCrvConverter,
+            mdocSeams: mdocSeams,
+            sdCwtSeams: sdCwtSeams,
+            saltReuseSeam: saltReuseSeam,
+            //Wire the Core disclosure engine behind the verifier's assessment seam:
+            //run DcqlDisclosure over the disclosed claims and read graph.Satisfied
+            //(DCQL satisfaction) and disclosed-minus-selected (over-disclosure).
+            assessDisclosure: static async (assessContext, cancellationToken) =>
+            {
+                DcqlDisclosureResult<IReadOnlyDictionary<CredentialPath, object?>> result =
+                    await DcqlDisclosure.ComputeStrategyAsync(
+                        assessContext.CredentialQuery,
+                        assessContext.DisclosedClaims,
+                        //Supply the verified issuer so DcqlEvaluator can enforce a
+                        //trusted_authorities constraint fail-closed; without it the
+                        //evaluator skips the check (it has no authority to compare).
+                        DisclosedClaimsDcqlAdapter.CreateMetadataExtractor(
+                            assessContext.CredentialQuery.Format!, issuer: assessContext.Issuer),
+                        DisclosedClaimsDcqlAdapter.ClaimExtractor,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                //Satisfaction is result.Satisfied — the DCQL match verdict (format / type /
+                //trusted_authorities / claim values) ANDed with lattice disclosure adequacy.
+                //Over-disclosure is any disclosed path the engine did not select as appropriate.
+                DisclosureStrategyGraph<IReadOnlyDictionary<CredentialPath, object?>> graph = result.Graph;
+                bool satisfied = result.Satisfied;
+                bool overDisclosed;
+                if(graph.Decisions.Count > 0)
+                {
+                    IReadOnlySet<CredentialPath> selected = graph.Decisions[0].SelectedPaths;
+                    overDisclosed = false;
+                    foreach(CredentialPath disclosedPath in assessContext.DisclosedClaims.Keys)
+                    {
+                        if(!selected.Contains(disclosedPath))
+                        {
+                            overDisclosed = true;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    //No decision -> the query's required claims were not met.
+                    overDisclosed = assessContext.DisclosedClaims.Count > 0;
+                }
+
+                return new Oid4VpDisclosureAssessment
+                {
+                    Satisfied = satisfied,
+                    OverDisclosed = overDisclosed
+                };
+            });
+
+        //SIOPv2 RP flow's §11.1 ValidateSelfIssuedIdToken handler AND the §12 combined-response
+        //ValidateCombinedSiopResponse handler, contributed onto the shared executor alongside the
+        //OID4VP handlers above. The §12 handler reuses the SAME vp_token-verification seams the
+        //OID4VP executor was wired with — the shared issuer-key lookup, the SD-JWT parser, the
+        //hash-input function, and the digest function — so combined responses validate their
+        //vp_token through the identical SdJwtVpTokenVerification pipeline.
+        SiopVerifierExecutor.Register(
+            executor,
+            TestSetup.Base64UrlDecoder,
+            TestSetup.Base64UrlEncoder,
+            headerSerializer: header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)header,
+                TestSetup.DefaultSerializationOptions),
+            payloadSerializer: payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)payload,
+                TestSetup.DefaultSerializationOptions),
+            pool: SensitiveMemoryPool<byte>.Shared,
+            timeProvider: timeProvider,
+            resolveDidVerificationKey: resolveDidVerificationKey,
+            resolveIssuerKey: resolveIssuerKey,
+            parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
+                s, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag),
+            computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
+                t, TestSetup.Base64UrlEncoder),
+            computeDigest: MicrosoftEntropyFunctions.ComputeDigestAsync,
+            saltReuseSeam: saltReuseSeam);
+
         host.Server = new AuthorizationServer
         {
             Integration = integration,
@@ -559,7 +746,9 @@ internal sealed class HostedAuthorizationServer
                     Verifiable.OAuth.Ssf.SsfTransmitterEndpoints.Builder,
                     Verifiable.OAuth.ProtectedResource.ProtectedResourceMetadataEndpoints.Builder,
                     Verifiable.OAuth.Logout.GlobalTokenRevocationEndpoints.Builder,
-                    Verifiable.OAuth.Logout.EndSessionEndpoints.Builder
+                    Verifiable.OAuth.Logout.EndSessionEndpoints.Builder,
+                    Verifiable.OAuth.Oid4Vci.Oid4VciEndpoints.Builder,
+                    SiopVerifierEndpoints.Builder
                 ]),
                 TokenProducers = new TokenProducerSet(
                 [
@@ -569,90 +758,12 @@ internal sealed class HostedAuthorizationServer
                 ClaimIssuer = ContributionProfiles.StandardClaimIssuer(timeProvider)
             },
 
-            //The HAIP executor handles OID4VP flows (SignJar, DecryptResponse).
+            //The shared executor (built above) holds the OID4VP verifier handlers
+            //(SignJar, DecryptResponse) AND the SIOPv2 ValidateSelfIssuedIdToken handler.
             //Auth Code flows do not produce actions and ignore the executor.
             //Key resolvers are read from the server's groups at call time, not
             //captured here.
-            ActionExecutor = HaipOid4VpVerifierExecutor.Create(
-                headerSerializer: header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                    (Dictionary<string, object>)header,
-                    TestSetup.DefaultSerializationOptions),
-                payloadSerializer: payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                    (Dictionary<string, object>)payload,
-                    TestSetup.DefaultSerializationOptions),
-                dcqlQuerySerializer: q =>
-                    JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
-                clientMetadataSerializer: m =>
-                    JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
-                decoder: TestSetup.Base64UrlDecoder,
-                encoder: TestSetup.Base64UrlEncoder,
-                resolveIssuerKey: resolveIssuerKey,
-                parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                    s, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag),
-                computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
-                    t, TestSetup.Base64UrlEncoder),
-                computeDigest: MicrosoftEntropyFunctions.ComputeDigestAsync,
-                vpValidators: BuildVpValidators(vpValidator, mdocSeams, sdCwtSeams, timeProvider),
-                keyAgreementDecryptDelegate:
-                    BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
-                keyDerivationDelegate: ConcatKdf.DefaultKeyDerivationDelegate,
-                aeadDecryptDelegate: BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
-                pool: SensitiveMemoryPool<byte>.Shared,
-                keyAgreementEncryptDelegate:
-                    BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
-                aeadEncryptDelegate: BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
-                tagToEpkCrvConverter: CryptoFormatConversions.DefaultTagToEpkCrvConverter,
-                mdocSeams: mdocSeams,
-                sdCwtSeams: sdCwtSeams,
-                saltReuseSeam: saltReuseSeam,
-                //Wire the Core disclosure engine behind the verifier's assessment seam:
-                //run DcqlDisclosure over the disclosed claims and read graph.Satisfied
-                //(DCQL satisfaction) and disclosed-minus-selected (over-disclosure).
-                assessDisclosure: static async (assessContext, cancellationToken) =>
-                {
-                    DcqlDisclosureResult<IReadOnlyDictionary<CredentialPath, object?>> result =
-                        await DcqlDisclosure.ComputeStrategyAsync(
-                            assessContext.CredentialQuery,
-                            assessContext.DisclosedClaims,
-                            //Supply the verified issuer so DcqlEvaluator can enforce a
-                            //trusted_authorities constraint fail-closed; without it the
-                            //evaluator skips the check (it has no authority to compare).
-                            DisclosedClaimsDcqlAdapter.CreateMetadataExtractor(
-                                assessContext.CredentialQuery.Format!, issuer: assessContext.Issuer),
-                            DisclosedClaimsDcqlAdapter.ClaimExtractor,
-                            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-                    //Satisfaction is result.Satisfied — the DCQL match verdict (format / type /
-                    //trusted_authorities / claim values) ANDed with lattice disclosure adequacy.
-                    //Over-disclosure is any disclosed path the engine did not select as appropriate.
-                    DisclosureStrategyGraph<IReadOnlyDictionary<CredentialPath, object?>> graph = result.Graph;
-                    bool satisfied = result.Satisfied;
-                    bool overDisclosed;
-                    if(graph.Decisions.Count > 0)
-                    {
-                        IReadOnlySet<CredentialPath> selected = graph.Decisions[0].SelectedPaths;
-                        overDisclosed = false;
-                        foreach(CredentialPath disclosedPath in assessContext.DisclosedClaims.Keys)
-                        {
-                            if(!selected.Contains(disclosedPath))
-                            {
-                                overDisclosed = true;
-                                break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        //No decision -> the query's required claims were not met.
-                        overDisclosed = assessContext.DisclosedClaims.Count > 0;
-                    }
-
-                    return new Oid4VpDisclosureAssessment
-                    {
-                        Satisfied = satisfied,
-                        OverDisclosed = overDisclosed
-                    };
-                })
+            ActionExecutor = executor
         };
 
         host.Server.Validate();

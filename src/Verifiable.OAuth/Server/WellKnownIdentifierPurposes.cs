@@ -144,4 +144,16 @@ public static class WellKnownIdentifierPurposes
     /// </summary>
     public static IdentifierPurpose Oid4VpWalletNonce { get; } =
         IdentifierPurpose.Create("urn:verifiable:identifier-purpose:oid4vp:wallet_nonce");
+
+
+    //SIOPv2-side wire identifiers.
+
+    /// <summary>
+    /// SIOPv2 Relying-Party request handle — the opaque per-flow token the RP returns from its
+    /// request-preparation endpoint, carried in the <c>request_uri</c> and echoed by the Wallet as
+    /// the <c>state</c> on the Self-Issued ID Token response. The internal flow identifier never
+    /// leaves the server process; this handle is what crosses the wire.
+    /// </summary>
+    public static IdentifierPurpose SiopRequestHandle { get; } =
+        IdentifierPurpose.Create("urn:verifiable:identifier-purpose:siop:request_handle");
 }

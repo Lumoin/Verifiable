@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Core.SecurityEvents;
 
@@ -9,17 +10,29 @@ namespace Verifiable.Core.SecurityEvents;
 /// </summary>
 public static class CaepEventClaimNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="EventTimestamp"/>.</summary>
+    public static ReadOnlySpan<byte> EventTimestampUtf8 => "event_timestamp"u8;
+
     /// <summary><c>event_timestamp</c> — when the described change occurred, as Unix seconds.</summary>
-    public static readonly string EventTimestamp = "event_timestamp";
+    public static readonly string EventTimestamp = Utf8Constants.ToInternedString(EventTimestampUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InitiatingEntity"/>.</summary>
+    public static ReadOnlySpan<byte> InitiatingEntityUtf8 => "initiating_entity"u8;
 
     /// <summary><c>initiating_entity</c> — who invoked the event; see <see cref="CaepInitiatingEntityValues"/>.</summary>
-    public static readonly string InitiatingEntity = "initiating_entity";
+    public static readonly string InitiatingEntity = Utf8Constants.ToInternedString(InitiatingEntityUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ReasonAdmin"/>.</summary>
+    public static ReadOnlySpan<byte> ReasonAdminUtf8 => "reason_admin"u8;
 
     /// <summary><c>reason_admin</c> — a BCP47-keyed localizable administrative message object.</summary>
-    public static readonly string ReasonAdmin = "reason_admin";
+    public static readonly string ReasonAdmin = Utf8Constants.ToInternedString(ReasonAdminUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ReasonUser"/>.</summary>
+    public static ReadOnlySpan<byte> ReasonUserUtf8 => "reason_user"u8;
 
     /// <summary><c>reason_user</c> — a BCP47-keyed localizable end-user message object.</summary>
-    public static readonly string ReasonUser = "reason_user";
+    public static readonly string ReasonUser = Utf8Constants.ToInternedString(ReasonUserUtf8);
 }
 
 
@@ -28,17 +41,29 @@ public static class CaepEventClaimNames
 /// </summary>
 public static class CaepInitiatingEntityValues
 {
+    /// <summary>The UTF-8 source literal of <see cref="Admin"/>.</summary>
+    public static ReadOnlySpan<byte> AdminUtf8 => "admin"u8;
+
     /// <summary><c>admin</c> — an administrative action triggered the event.</summary>
-    public static readonly string Admin = "admin";
+    public static readonly string Admin = Utf8Constants.ToInternedString(AdminUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="User"/>.</summary>
+    public static ReadOnlySpan<byte> UserUtf8 => "user"u8;
 
     /// <summary><c>user</c> — an end-user action triggered the event.</summary>
-    public static readonly string User = "user";
+    public static readonly string User = Utf8Constants.ToInternedString(UserUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Policy"/>.</summary>
+    public static ReadOnlySpan<byte> PolicyUtf8 => "policy"u8;
 
     /// <summary><c>policy</c> — a policy evaluation triggered the event.</summary>
-    public static readonly string Policy = "policy";
+    public static readonly string Policy = Utf8Constants.ToInternedString(PolicyUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="System"/>.</summary>
+    public static ReadOnlySpan<byte> SystemUtf8 => "system"u8;
 
     /// <summary><c>system</c> — a system or platform assertion triggered the event.</summary>
-    public static readonly string System = "system";
+    public static readonly string System = Utf8Constants.ToInternedString(SystemUtf8);
 
 
     /// <summary>Whether <paramref name="value"/> is one of the four allowed values.</summary>

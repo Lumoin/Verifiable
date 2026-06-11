@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using Verifiable.Cryptography.Text;
 using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth;
@@ -169,28 +170,43 @@ public readonly struct HttpResponseData: IEquatable<HttpResponseData>
 /// </summary>
 public static class HttpResponseDataKeys
 {
+    /// <summary>The UTF-8 source literal of <see cref="StatusCode"/>.</summary>
+    public static ReadOnlySpan<byte> StatusCodeUtf8 => "transport.status_code"u8;
+
     /// <summary>The HTTP status code as a string. Example: <c>"200"</c>.</summary>
-    public static readonly string StatusCode = "transport.status_code";
+    public static readonly string StatusCode = Utf8Constants.ToInternedString(StatusCodeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="TraceParent"/>.</summary>
+    public static ReadOnlySpan<byte> TraceParentUtf8 => "transport.traceparent"u8;
 
     /// <summary>
     /// W3C TraceContext <c>traceparent</c> header value from the response.
     /// </summary>
-    public static readonly string TraceParent = "transport.traceparent";
+    public static readonly string TraceParent = Utf8Constants.ToInternedString(TraceParentUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="TraceState"/>.</summary>
+    public static ReadOnlySpan<byte> TraceStateUtf8 => "transport.tracestate"u8;
 
     /// <summary>
     /// W3C TraceContext <c>tracestate</c> header value from the response.
     /// </summary>
-    public static readonly string TraceState = "transport.tracestate";
+    public static readonly string TraceState = Utf8Constants.ToInternedString(TraceStateUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ContentType"/>.</summary>
+    public static ReadOnlySpan<byte> ContentTypeUtf8 => "transport.content_type"u8;
 
     /// <summary>
     /// Response <c>Content-Type</c> header. Used to detect RFC 9457
     /// <c>application/problem+json</c> responses.
     /// </summary>
-    public static readonly string ContentType = "transport.content_type";
+    public static readonly string ContentType = Utf8Constants.ToInternedString(ContentTypeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RequestId"/>.</summary>
+    public static ReadOnlySpan<byte> RequestIdUtf8 => "transport.request_id"u8;
 
     /// <summary>
     /// Server-supplied request identifier from a vendor-specific header
     /// such as <c>X-Request-ID</c>.
     /// </summary>
-    public static readonly string RequestId = "transport.request_id";
+    public static readonly string RequestId = Utf8Constants.ToInternedString(RequestIdUtf8);
 }

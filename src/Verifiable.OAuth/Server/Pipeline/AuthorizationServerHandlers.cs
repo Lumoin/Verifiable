@@ -130,6 +130,32 @@ internal static class AuthorizationServerHandlers
     public const string IssuedTokensKey = "server.issuedTokens";
 
     /// <summary>
+    /// Context-bag key for the granted RFC 9396 <c>authorization_details</c> response value
+    /// (the serialised JSON array carrying the OID4VCI 1.0 §6.2 <c>credential_identifiers</c>)
+    /// assembled by the token endpoint's <c>BuildInputAsync</c> for consumption by
+    /// <c>BuildResponse</c>. Transient, like the issued token strings — never persisted.
+    /// </summary>
+    public const string GrantedAuthorizationDetailsKey = "server.grantedAuthorizationDetails";
+
+    /// <summary>
+    /// Context-bag key for the granted RFC 9396 <c>authorization_details</c> in structured form
+    /// — a list of authorization details objects, each a string-keyed map — assembled by the token
+    /// endpoint's <c>BuildInputAsync</c> alongside <see cref="GrantedAuthorizationDetailsKey"/>.
+    /// The RFC 9068 access-token producer reads it to embed the RFC 9396 §9.1
+    /// <c>authorization_details</c> top-level claim. Transient, like the issued token strings —
+    /// never persisted.
+    /// </summary>
+    public const string GrantedAuthorizationDetailsClaimKey = "server.grantedAuthorizationDetailsClaim";
+
+    /// <summary>
+    /// Context-bag key for the signed JARM JWT Response Document assembled by the
+    /// authorize endpoint's <c>BuildInputAsync</c> for consumption by <c>BuildResponse</c>,
+    /// which encodes it per the carried <c>response_mode</c> (JARM §2.3). Transient, like
+    /// the issued token strings — never persisted.
+    /// </summary>
+    public const string JarmResponseJwtKey = "server.jarmResponseJwt";
+
+    /// <summary>
     /// Context-bag key for the <see cref="MatchPayload"/> produced by the
     /// matched endpoint's <see cref="MatchRequestDelegate"/> during dispatch.
     /// </summary>

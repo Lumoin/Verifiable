@@ -82,6 +82,19 @@ public sealed record ClientMetadata
     public string? Scope { get; init; }
 
     /// <summary>
+    /// The RFC 9396 authorization details <c>type</c> values the client will use, the client
+    /// registration metadata parameter <c>authorization_details_types</c> registered by
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-14.5">RFC 9396 §14.5</see> in the
+    /// IANA OAuth Dynamic Client Registration Metadata registry
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9396#section-10">RFC 9396 §10</see>:
+    /// "Clients MAY indicate the authorization details types they will use ..."). The AS stores
+    /// this on <see cref="Server.ClientRecord.AllowedAuthorizationDetailsTypes"/> and refuses any
+    /// authorization details object whose <c>type</c> is outside it. <see langword="null"/> when
+    /// the client registered no such restriction.
+    /// </summary>
+    public IReadOnlyList<string>? AuthorizationDetailsTypes { get; init; }
+
+    /// <summary>
     /// URL of the client's JWKS document. RFC 7591 §2 <c>jwks_uri</c>.
     /// </summary>
     public Uri? JwksUri { get; init; }

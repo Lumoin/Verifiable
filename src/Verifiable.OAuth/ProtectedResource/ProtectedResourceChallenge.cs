@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.ProtectedResource;
 
@@ -28,8 +29,11 @@ namespace Verifiable.OAuth.ProtectedResource;
 /// </remarks>
 public static class ProtectedResourceChallenge
 {
+    /// <summary>The UTF-8 source literal of <see cref="ResourceMetadataParameter"/>.</summary>
+    public static ReadOnlySpan<byte> ResourceMetadataParameterUtf8 => "resource_metadata"u8;
+
     /// <summary>The <c>resource_metadata</c> challenge parameter name (RFC 9728 §5.1).</summary>
-    public static readonly string ResourceMetadataParameter = "resource_metadata";
+    public static readonly string ResourceMetadataParameter = Utf8Constants.ToInternedString(ResourceMetadataParameterUtf8);
 
 
     /// <summary>

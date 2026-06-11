@@ -1,3 +1,6 @@
+using Verifiable.Cryptography.Text;
+
+
 namespace Verifiable.JCose;
 
 /// <summary>
@@ -17,29 +20,44 @@ namespace Verifiable.JCose;
 /// </remarks>
 public static class WellKnownJoseHeaderNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="Typ"/>.</summary>
+    public static ReadOnlySpan<byte> TypUtf8 => "typ"u8;
+
     /// <summary>
     /// The <c>typ</c> (Type) header parameter per RFC 7515 §4.1.9. Declares the
     /// media type of the complete JWT/JWS/JWE.
     /// </summary>
-    public static readonly string Typ = "typ";
+    public static readonly string Typ = Utf8Constants.ToInternedString(TypUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Cty"/>.</summary>
+    public static ReadOnlySpan<byte> CtyUtf8 => "cty"u8;
 
     /// <summary>
     /// The <c>cty</c> (Content Type) header parameter per RFC 7515 §4.1.10 and
     /// RFC 7519 §5.2. Used when the payload itself is a JWT (nested JWT case).
     /// </summary>
-    public static readonly string Cty = "cty";
+    public static readonly string Cty = Utf8Constants.ToInternedString(CtyUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Enc"/>.</summary>
+    public static ReadOnlySpan<byte> EncUtf8 => "enc"u8;
 
     /// <summary>
     /// The <c>enc</c> (Encryption Algorithm) header parameter per RFC 7516 §4.1.2.
     /// Identifies the content encryption algorithm used to produce the ciphertext.
     /// </summary>
-    public static readonly string Enc = "enc";
+    public static readonly string Enc = Utf8Constants.ToInternedString(EncUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Epk"/>.</summary>
+    public static ReadOnlySpan<byte> EpkUtf8 => "epk"u8;
 
     /// <summary>
     /// The <c>epk</c> (Ephemeral Public Key) header parameter per RFC 7518 §4.6.1.1.
     /// Carries the sender's ephemeral public key in ECDH key-agreement algorithms.
     /// </summary>
-    public static readonly string Epk = "epk";
+    public static readonly string Epk = Utf8Constants.ToInternedString(EpkUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Apu"/>.</summary>
+    public static ReadOnlySpan<byte> ApuUtf8 => "apu"u8;
 
     /// <summary>
     /// The <c>apu</c> (Agreement PartyUInfo) header parameter per RFC 7518 §4.6.1.2.
@@ -47,21 +65,27 @@ public static class WellKnownJoseHeaderNames
     /// (base64url) here per ISO/IEC 18013-7 §B.4.4 so the Verifier can reconstruct the
     /// SessionTranscript.
     /// </summary>
-    public static readonly string Apu = "apu";
+    public static readonly string Apu = Utf8Constants.ToInternedString(ApuUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Jwk"/>.</summary>
+    public static ReadOnlySpan<byte> JwkUtf8 => "jwk"u8;
 
     /// <summary>
     /// The <c>jwk</c> (JSON Web Key) header parameter per RFC 7515 §4.1.3.
     /// Carries the public key used to verify the JWS. MUST NOT contain private
     /// key components.
     /// </summary>
-    public static readonly string Jwk = "jwk";
+    public static readonly string Jwk = Utf8Constants.ToInternedString(JwkUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Jwt"/>.</summary>
+    public static ReadOnlySpan<byte> JwtUtf8 => "jwt"u8;
 
     /// <summary>
     /// The <c>jwt</c> JOSE header parameter used to carry a Verifier Attestation
     /// JWT in a signed Authorization Request Object per
     /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-12">OID4VP 1.0 §12</see>.
     /// </summary>
-    public static readonly string Jwt = "jwt";
+    public static readonly string Jwt = Utf8Constants.ToInternedString(JwtUtf8);
 
 
     /// <summary>Whether <paramref name="name"/> is <see cref="Typ"/>.</summary>

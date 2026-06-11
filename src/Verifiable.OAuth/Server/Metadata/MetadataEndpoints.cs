@@ -315,6 +315,8 @@ public static class MetadataEndpoints
                 bool refreshTokenOnChain = false;
                 bool tokenEndpointOnChain = false;
                 bool clientCredentialsOnChain = false;
+                bool preAuthorizedCodeOnChain = false;
+                bool introspectionOnChain = false;
                 foreach(ServerEndpoint chainEndpoint in chain)
                 {
                     if(chainEndpoint.Capability == WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)
@@ -335,6 +337,16 @@ public static class MetadataEndpoints
                         WellKnownEndpointNames.ClientCredentialsToken, StringComparison.Ordinal))
                     {
                         clientCredentialsOnChain = true;
+                    }
+                    if(string.Equals(chainEndpoint.Name,
+                        WellKnownEndpointNames.Oid4VciPreAuthorizedToken, StringComparison.Ordinal))
+                    {
+                        preAuthorizedCodeOnChain = true;
+                    }
+                    if(string.Equals(chainEndpoint.Name,
+                        WellKnownEndpointNames.AuthCodeIntrospect, StringComparison.Ordinal))
+                    {
+                        introspectionOnChain = true;
                     }
 
                     if(chainEndpoint.DiscoveryMetadataKey is null) { continue; }
@@ -372,7 +384,8 @@ public static class MetadataEndpoints
                 //resolved through the verification-key resolver and its tag
                 //mapped to a JWA identifier; the deduped set forms the
                 //advertised list.
-                IReadOnlyList<string> idTokenAlgs = await ResolveIdTokenSigningAlgValuesAsync(
+                IReadOnlyList<string> idTokenAlgs = await ResolveSigningAlgValuesAsync(
+                    Verifiable.Cryptography.Context.KeyUsageContext.IdTokenIssuance,
                     server, registration, context, ct).ConfigureAwait(false);
                 if(idTokenAlgs.Count > 0)
                 {
@@ -388,9 +401,9 @@ public static class MetadataEndpoints
                 //Defaults from RFC 6749 / OIDC Core (authorization_code +
                 //implicit) intentionally not used — implicit is out of scope
                 //per OAuth 2.1 / FAPI 2.0.
-                if(authorizationCodeOnChain || clientCredentialsOnChain)
+                if(authorizationCodeOnChain || clientCredentialsOnChain || preAuthorizedCodeOnChain)
                 {
-                    List<string> grantTypes = new(3);
+                    List<string> grantTypes = new(4);
                     if(authorizationCodeOnChain)
                     {
                         grantTypes.Add(OAuthRequestParameterValues.GrantTypeAuthorizationCode);
@@ -405,10 +418,95 @@ public static class MetadataEndpoints
                         grantTypes.Add(OAuthRequestParameterValues.GrantTypeClientCredentials);
                     }
 
+                    if(preAuthorizedCodeOnChain)
+                    {
+                        grantTypes.Add(OAuthRequestParameterValues.GrantTypePreAuthorizedCode);
+                    }
+
                     AppendStringArrayField(
                         sb,
                         AuthorizationServerMetadataParameterNames.GrantTypesSupported,
                         grantTypes);
+                }
+
+                //pre-authorized_grant_anonymous_access_supported (OID4VCI 1.0 §12.3 OPTIONAL):
+                //"A boolean indicating whether the Credential Issuer accepts a Token Request with
+                //a Pre-Authorized Code but without a client_id. The default is false." Advertised
+                //only when the §6 Pre-Authorized Code token endpoint is on the chain AND the
+                //deployment opted in via policy — the advertisement matches what the
+                //ValidatePreAuthorizedCodeAsync seam will accept (it denies an anonymous request
+                //with ClientAuthenticationRequired when the deployment requires authentication).
+                //Omitted (rather than emitted false) when not opted in, since false is the §12.3
+                //default the Wallet assumes for an absent parameter.
+                if(preAuthorizedCodeOnChain && context.PreAuthorizedGrantAnonymousAccessSupported)
+                {
+                    AppendBooleanField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.PreAuthorizedGrantAnonymousAccessSupported,
+                        true);
+                }
+
+                //authorization_details_types_supported (RFC 9396 §10). Advertised when a
+                //token grant that can process authorization_details is on the chain AND the
+                //decision seam that mints the OID4VCI §6.2 credential_identifiers is wired —
+                //an advertisement without the seam would invite requests the server refuses
+                //with invalid_authorization_details.
+                if((authorizationCodeOnChain || preAuthorizedCodeOnChain)
+                    && server.Integration.ResolveCredentialAuthorizationAsync is not null)
+                {
+                    AppendStringArrayField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.AuthorizationDetailsTypesSupported,
+                        server.Integration.AuthorizationDetailTypes.RegisteredTypes);
+                }
+
+                //JARM §4: advertise the JWT-secured response modes and signing algorithms
+                //when the authorize endpoint is on the chain AND this registration carries
+                //an authorization-response signing key — an advertisement without the key
+                //would invite response_mode requests the server refuses with invalid_request.
+                if(authorizationCodeOnChain)
+                {
+                    IReadOnlyList<string> jarmAlgs = await ResolveSigningAlgValuesAsync(
+                        Verifiable.Cryptography.Context.KeyUsageContext.AuthorizationResponseSigning,
+                        server, registration, context, ct).ConfigureAwait(false);
+                    if(jarmAlgs.Count > 0)
+                    {
+                        AppendStringArrayField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.ResponseModesSupported,
+                            [
+                                "query",
+                                "fragment",
+                                "form_post",
+                                Jarm.JarmResponseModes.QueryJwt,
+                                Jarm.JarmResponseModes.FragmentJwt,
+                                Jarm.JarmResponseModes.FormPostJwt,
+                                Jarm.JarmResponseModes.Jwt
+                            ]);
+                        AppendStringArrayField(
+                            sb,
+                            Jarm.JarmServerMetadataParameterNames.AuthorizationSigningAlgValuesSupported,
+                            jarmAlgs);
+                    }
+                }
+
+                //RFC 9701 §7: advertise the introspection-response signing algorithms when
+                //the introspection endpoint is on the chain AND this registration carries
+                //an introspection-response signing key — an advertisement without the key
+                //would invite Accept: application/token-introspection+jwt requests the
+                //server refuses with invalid_request.
+                if(introspectionOnChain)
+                {
+                    IReadOnlyList<string> introspectionAlgs = await ResolveSigningAlgValuesAsync(
+                        Verifiable.Cryptography.Context.KeyUsageContext.IntrospectionResponseSigning,
+                        server, registration, context, ct).ConfigureAwait(false);
+                    if(introspectionAlgs.Count > 0)
+                    {
+                        AppendStringArrayField(
+                            sb,
+                            Introspection.IntrospectionServerMetadataParameterNames.IntrospectionSigningAlgValuesSupported,
+                            introspectionAlgs);
+                    }
                 }
 
                 //code_challenge_methods_supported (RFC 7636 §6.2.1). The
@@ -680,15 +778,14 @@ public static class MetadataEndpoints
     /// such a registration anyway). The discovery emitter omits the field
     /// entirely in that case rather than emitting an empty array.
     /// </remarks>
-    private static async ValueTask<IReadOnlyList<string>> ResolveIdTokenSigningAlgValuesAsync(
+    private static async ValueTask<IReadOnlyList<string>> ResolveSigningAlgValuesAsync(
+        Verifiable.Cryptography.Context.KeyUsageContext usage,
         AuthorizationServer server,
         ClientRecord registration,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        if(!registration.SigningKeys.TryGetValue(
-                Verifiable.Cryptography.Context.KeyUsageContext.IdTokenIssuance,
-                out SigningKeySet? signingKeySet))
+        if(!registration.SigningKeys.TryGetValue(usage, out SigningKeySet? signingKeySet))
         {
             return [];
         }

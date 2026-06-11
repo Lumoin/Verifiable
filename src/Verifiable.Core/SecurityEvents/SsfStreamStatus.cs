@@ -1,3 +1,6 @@
+using System;
+using Verifiable.Cryptography.Text;
+
 namespace Verifiable.Core.SecurityEvents;
 
 /// <summary>
@@ -25,14 +28,23 @@ public sealed record SsfStreamStatus
 /// </summary>
 public static class SsfStreamStatusValues
 {
+    /// <summary>The UTF-8 source literal of <see cref="Enabled"/>.</summary>
+    public static ReadOnlySpan<byte> EnabledUtf8 => "enabled"u8;
+
     /// <summary><c>enabled</c> — the Transmitter MUST transmit events over the stream.</summary>
-    public static readonly string Enabled = "enabled";
+    public static readonly string Enabled = Utf8Constants.ToInternedString(EnabledUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Paused"/>.</summary>
+    public static ReadOnlySpan<byte> PausedUtf8 => "paused"u8;
 
     /// <summary><c>paused</c> — the Transmitter MUST NOT transmit, SHOULD hold events for resumption.</summary>
-    public static readonly string Paused = "paused";
+    public static readonly string Paused = Utf8Constants.ToInternedString(PausedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Disabled"/>.</summary>
+    public static ReadOnlySpan<byte> DisabledUtf8 => "disabled"u8;
 
     /// <summary><c>disabled</c> — the Transmitter MUST NOT transmit and holds nothing.</summary>
-    public static readonly string Disabled = "disabled";
+    public static readonly string Disabled = Utf8Constants.ToInternedString(DisabledUtf8);
 
 
     /// <summary>Whether <paramref name="status"/> is <see cref="Enabled"/>.</summary>
@@ -59,12 +71,21 @@ public static class SsfStreamStatusValues
 /// </summary>
 public static class SsfStreamStatusParameterNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="StreamId"/>.</summary>
+    public static ReadOnlySpan<byte> StreamIdUtf8 => "stream_id"u8;
+
     /// <summary><c>stream_id</c> — REQUIRED stream identifier.</summary>
-    public static readonly string StreamId = "stream_id";
+    public static readonly string StreamId = Utf8Constants.ToInternedString(StreamIdUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Status"/>.</summary>
+    public static ReadOnlySpan<byte> StatusUtf8 => "status"u8;
 
     /// <summary><c>status</c> — REQUIRED status value.</summary>
-    public static readonly string Status = "status";
+    public static readonly string Status = Utf8Constants.ToInternedString(StatusUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Reason"/>.</summary>
+    public static ReadOnlySpan<byte> ReasonUtf8 => "reason"u8;
 
     /// <summary><c>reason</c> — OPTIONAL reason string.</summary>
-    public static readonly string Reason = "reason";
+    public static readonly string Reason = Utf8Constants.ToInternedString(ReasonUtf8);
 }

@@ -344,6 +344,87 @@ public static class ExchangeContextServerExtensions
 
 
         /// <summary>
+        /// Gets the granted RFC 9396 <c>authorization_details</c> response value — the
+        /// serialised JSON array carrying the OID4VCI 1.0 §6.2 <c>credential_identifiers</c> —
+        /// assembled by the token endpoint during <c>BuildInputAsync</c> for consumption by
+        /// <c>BuildResponse</c>.
+        /// </summary>
+        /// <returns>
+        /// The serialised array, or <see langword="null"/> when the token request's grant
+        /// carried no authorization details.
+        /// </returns>
+        public string? GrantedAuthorizationDetails =>
+            context.TryGetValue(AuthorizationServerHandlers.GrantedAuthorizationDetailsKey, out object? v)
+                && v is string json ? json : null;
+
+        /// <summary>
+        /// Sets the granted RFC 9396 <c>authorization_details</c> response value assembled
+        /// during token endpoint processing. Transient — consumed by <c>BuildResponse</c> when
+        /// composing the HTTP response body, never persisted.
+        /// </summary>
+        /// <param name="grantedAuthorizationDetailsJson">The serialised authorization_details array.</param>
+        public void SetGrantedAuthorizationDetails(string grantedAuthorizationDetailsJson)
+        {
+            ArgumentNullException.ThrowIfNull(grantedAuthorizationDetailsJson);
+            context[AuthorizationServerHandlers.GrantedAuthorizationDetailsKey] = grantedAuthorizationDetailsJson;
+        }
+
+
+        /// <summary>
+        /// Gets the granted RFC 9396 <c>authorization_details</c> in structured form — a list of
+        /// authorization details objects (each a string-keyed map) carrying the same granted,
+        /// OID4VCI 1.0 §6.2-enriched details as <see cref="GrantedAuthorizationDetails"/>. The
+        /// RFC 9068 access-token producer reads it to populate the RFC 9396 §9.1
+        /// <c>authorization_details</c> top-level claim of a JWT access token.
+        /// </summary>
+        /// <returns>
+        /// The structured details, or <see langword="null"/> when the token request's grant
+        /// carried no authorization details.
+        /// </returns>
+        public IReadOnlyList<object>? GrantedAuthorizationDetailsClaim =>
+            context.TryGetValue(AuthorizationServerHandlers.GrantedAuthorizationDetailsClaimKey, out object? v)
+                && v is IReadOnlyList<object> details ? details : null;
+
+        /// <summary>
+        /// Sets the granted RFC 9396 <c>authorization_details</c> in structured form, assembled
+        /// during token endpoint processing alongside <see cref="SetGrantedAuthorizationDetails"/>.
+        /// Transient — consumed by the access-token producer, never persisted.
+        /// </summary>
+        /// <param name="grantedAuthorizationDetails">The structured authorization details objects.</param>
+        public void SetGrantedAuthorizationDetailsClaim(IReadOnlyList<object> grantedAuthorizationDetails)
+        {
+            ArgumentNullException.ThrowIfNull(grantedAuthorizationDetails);
+            context[AuthorizationServerHandlers.GrantedAuthorizationDetailsClaimKey] = grantedAuthorizationDetails;
+        }
+
+
+        /// <summary>
+        /// Gets the signed JARM JWT Response Document assembled by the authorize endpoint
+        /// during <c>BuildInputAsync</c> for consumption by <c>BuildResponse</c>, which
+        /// encodes it per the carried <c>response_mode</c> (JARM §2.3).
+        /// </summary>
+        /// <returns>
+        /// The compact response JWT, or <see langword="null"/> when the authorization
+        /// request did not ask for a JWT-secured authorization response.
+        /// </returns>
+        public string? JarmResponseJwt =>
+            context.TryGetValue(AuthorizationServerHandlers.JarmResponseJwtKey, out object? v)
+                && v is string jwt ? jwt : null;
+
+        /// <summary>
+        /// Sets the signed JARM JWT Response Document assembled during authorize endpoint
+        /// processing. Transient — consumed by <c>BuildResponse</c> when composing the
+        /// redirect or form-post response, never persisted.
+        /// </summary>
+        /// <param name="responseJwt">The compact response JWT.</param>
+        public void SetJarmResponseJwt(string responseJwt)
+        {
+            ArgumentNullException.ThrowIfNull(responseJwt);
+            context[AuthorizationServerHandlers.JarmResponseJwtKey] = responseJwt;
+        }
+
+
+        /// <summary>
         /// Gets the typed <see cref="MatchPayload"/> the dispatcher placed on
         /// the context after <see cref="EndpointChain.MatchAsync"/> selected
         /// the matched endpoint.

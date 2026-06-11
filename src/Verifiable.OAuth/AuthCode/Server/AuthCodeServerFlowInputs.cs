@@ -40,6 +40,14 @@ public abstract record AuthCodeServerFlowInput: OAuthFlowInput;
 /// Carried explicitly so the wire value is what was promised at PAR time
 /// rather than a recomputation at response-build time.
 /// </param>
+/// <param name="IssuerState">
+/// The OID4VCI 1.0 §5.1.3 <c>issuer_state</c> the Wallet echoed, carried verbatim and UNTRUSTED
+/// to the authorization-decision seam. <see langword="null"/> when the request carried none.
+/// </param>
+/// <param name="Resource">
+/// The RFC 8707 <c>resource</c> indicator(s) the request carried (space-delimited when multiple),
+/// surfaced to the authorization-decision seam. <see langword="null"/> when absent.
+/// </param>
 [DebuggerDisplay("ServerParValidated FlowId={FlowId} RequestUri={RequestUri}")]
 public sealed record ServerParValidated(
     string FlowId,
@@ -55,7 +63,11 @@ public sealed record ServerParValidated(
     int ExpiresIn,
     string? AcrValues = null,
     int? MaxAge = null,
-    string? State = null): AuthCodeServerFlowInput;
+    string? State = null,
+    string? AuthorizationDetails = null,
+    string? ResponseMode = null,
+    string? IssuerState = null,
+    string? Resource = null): AuthCodeServerFlowInput;
 
 
 /// <summary>
@@ -198,6 +210,14 @@ public sealed record ServerFail(
 /// authentication, carried into the access token's <c>acr</c> claim per RFC 9068 §2.2.1
 /// / RFC 9470 §5. <see langword="null"/> when no authentication-context reference was stamped.
 /// </param>
+/// <param name="IssuerState">
+/// The OID4VCI 1.0 §5.1.3 <c>issuer_state</c> the Wallet echoed, carried verbatim and UNTRUSTED
+/// to the authorization-decision seam. <see langword="null"/> when the request carried none.
+/// </param>
+/// <param name="Resource">
+/// The RFC 8707 <c>resource</c> indicator(s) the request carried (space-delimited when multiple),
+/// surfaced to the authorization-decision seam. <see langword="null"/> when absent.
+/// </param>
 [DebuggerDisplay("ServerDirectAuthorizeCompleted FlowId={FlowId} ClientId={ClientId}")]
 public sealed record ServerDirectAuthorizeCompleted(
     string FlowId,
@@ -214,4 +234,8 @@ public sealed record ServerDirectAuthorizeCompleted(
     DateTimeOffset ExpiresAt,
     string? SessionId = null,
     string? Acr = null,
-    string? State = null): AuthCodeServerFlowInput;
+    string? State = null,
+    string? AuthorizationDetails = null,
+    string? ResponseMode = null,
+    string? IssuerState = null,
+    string? Resource = null): AuthCodeServerFlowInput;

@@ -1,3 +1,6 @@
+using Verifiable.Cryptography.Text;
+
+
 namespace Verifiable.JCose
 {
     /// <summary>
@@ -8,29 +11,44 @@ namespace Verifiable.JCose
     /// <remarks>As per definition parameters are case-sensitive.</remarks>
     public static class WellKnownKeyTypeValues
     {
+        /// <summary>The UTF-8 source literal of <see cref="Ec"/>.</summary>
+        public static ReadOnlySpan<byte> EcUtf8 => "EC"u8;
+
         /// <summary>
         /// Elliptic Curve key type.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.2.1">RFC 7518 - Section 6.2.1</see>.</remarks>
-        public static readonly string Ec = "EC";
+        public static readonly string Ec = Utf8Constants.ToInternedString(EcUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="Oct"/>.</summary>
+        public static ReadOnlySpan<byte> OctUtf8 => "oct"u8;
 
         /// <summary>
         /// Symmetric key type.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.4">RFC 7518 - Section 6.4</see>.</remarks>
-        public static readonly string Oct = "oct";
+        public static readonly string Oct = Utf8Constants.ToInternedString(OctUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="Okp"/>.</summary>
+        public static ReadOnlySpan<byte> OkpUtf8 => "OKP"u8;
 
         /// <summary>
         /// Octet Key Pair key type.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc8037">RFC 8037</see>.</remarks>
-        public static readonly string Okp = "OKP";
+        public static readonly string Okp = Utf8Constants.ToInternedString(OkpUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="Rsa"/>.</summary>
+        public static ReadOnlySpan<byte> RsaUtf8 => "RSA"u8;
 
         /// <summary>
         /// RSA key type.
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.3.1">RFC 7518 §6.3.1</see>.</remarks>
-        public static readonly string Rsa = "RSA";
+        public static readonly string Rsa = Utf8Constants.ToInternedString(RsaUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="Akp"/>.</summary>
+        public static ReadOnlySpan<byte> AkpUtf8 => "AKP"u8;
 
         /// <summary>
         /// Algorithm Key Pair (AKP) key type for post-quantum algorithms.
@@ -40,7 +58,7 @@ namespace Verifiable.JCose
         /// Used for ML-DSA and other algorithms where the key structure is algorithm-specific.
         /// The <c>pub</c> and <c>priv</c> parameters carry the raw public and private key bytes.
         /// </remarks>
-        public static readonly string Akp = "AKP";
+        public static readonly string Akp = Utf8Constants.ToInternedString(AkpUtf8);
 
 
         /// <summary>

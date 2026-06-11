@@ -391,6 +391,43 @@ internal sealed class SsfStreamManagementEndpointTests
     }
 
 
+    /// <summary>
+    /// Pins the documented default: the SSF stream-management endpoints delegate
+    /// authentication to the application's <c>AuthorizeSsfRequestAsync</c> seam, and when that
+    /// seam is left UNWIRED the management requests are served without authentication. This is
+    /// the same app-owns-authorization model every other endpoint uses (the library never
+    /// invents a token validator); SSF §7.1.1 keeps the well-known discovery document public
+    /// regardless. A deployment that requires authentication wires the seam (covered by
+    /// <see cref="ScopeEnforcementOverHttpWire"/>); this test exists so
+    /// the permissive default cannot change silently — it is an asserted contract, not an
+    /// accident of wiring.
+    /// </summary>
+    [TestMethod]
+    public async Task UnwiredAuthorizationSeamLeavesSsfManagementOpen()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        Dictionary<string, SsfStreamConfiguration> store = RegisterTransmitter(app, out VerifierKeyMaterial material);
+        using VerifierKeyMaterial _ = material;
+
+        //Deliberately NOT wiring app.Server.Integration.AuthorizeSsfRequestAsync.
+        Assert.IsNull(app.Server.Integration.AuthorizeSsfRequestAsync,
+            "This test pins the behaviour when the authorization seam is unwired.");
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        HttpClient http = host.SharedHttpClient!;
+        Uri streamUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/ssf/stream");
+
+        //No token, no authorization seam → the create is served (201), not rejected.
+        using HttpResponseMessage created = await SendAsync(
+            http, HttpMethod.Post, streamUrl, body: string.Empty, token: null).ConfigureAwait(false);
+        string createdBody = await created.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, (int)created.StatusCode, createdBody);
+        Assert.HasCount(1, store);
+    }
+
+
     private async Task<HttpResponseMessage> SendAsync(
         HttpClient http, HttpMethod method, Uri url, string? body, string? token)
     {

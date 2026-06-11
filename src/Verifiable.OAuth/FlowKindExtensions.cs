@@ -78,6 +78,14 @@ public static class FlowKindExtensions
 
 
         /// <summary>
+        /// The SIOPv2 server-side Relying Party flow. Models the RP's request-preparation and
+        /// Self-Issued ID Token response endpoints.
+        /// </summary>
+        public static Siop.Server.SiopVerifierServerFlowKind SiopVerifierServer =>
+            Siop.Server.SiopVerifierServerFlowKind.Instance;
+
+
+        /// <summary>
         /// Marker for stateless endpoints — JWKS, discovery, and similar
         /// metadata endpoints that compute responses without any flow state.
         /// </summary>

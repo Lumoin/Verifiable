@@ -799,6 +799,377 @@ public delegate ValueTask<Introspection.TokenIntrospectionResult> IntrospectToke
 
 
 /// <summary>
+/// Issues a fresh OID4VCI 1.0 §7 <c>c_nonce</c> — an unpredictable, server-chosen challenge
+/// the Wallet incorporates into the proof of possession in a subsequent Credential Request.
+/// </summary>
+/// <remarks>
+/// Invoked by the unprotected Nonce Endpoint. The application mints the nonce and owns its
+/// store, so it can later verify — at the Credential Endpoint — that a presented proof carries
+/// a nonce this server issued and has not yet retired. The library owns only the wire shape
+/// (<c>{"c_nonce": ...}</c> with <c>Cache-Control: no-store</c>); per OID4VCI 1.0 §7.2 the
+/// nonce's format and lifetime are at the issuer's discretion, so the library prescribes neither.
+/// </remarks>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>A fresh, unpredictable <c>c_nonce</c> string.</returns>
+public delegate ValueTask<string> IssueCredentialNonceDelegate(
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Validates an OID4VCI 1.0 §6 Pre-Authorized Code grant and decides whether to authorize
+/// access-token issuance.
+/// </summary>
+/// <remarks>
+/// Invoked by the Pre-Authorized Code grant at the token endpoint. The application owns the
+/// pre-authorized code store — populated when the Credential Offer was minted — so it is the
+/// only party that can tell a wrong code from a wrong Transaction Code, decide whether a
+/// Transaction Code was expected, and resolve the subject the issued Credential is about. The
+/// library owns only the wire shape: it reads <c>pre-authorized_code</c> and <c>tx_code</c>
+/// off the request, maps the returned <see cref="Oid4Vci.PreAuthorizedCodeDecision"/> to the
+/// §6.2 token response or a §6.3 error, and mints the access token through the configured
+/// token producers. Client authentication is OPTIONAL for this grant (§6.1); the seam decides
+/// whether an anonymous request (no <paramref name="clientId"/>) is acceptable.
+/// </remarks>
+/// <param name="preAuthorizedCode">The <c>pre-authorized_code</c> the Wallet presented.</param>
+/// <param name="transactionCode">
+/// The <c>tx_code</c> the Wallet presented, or <see langword="null"/> when absent.
+/// </param>
+/// <param name="clientId">
+/// The <c>client_id</c> the Wallet presented, or <see langword="null"/> when the request is
+/// anonymous (permitted in this grant unless the deployment requires client authentication).
+/// </param>
+/// <param name="registration">The <see cref="ClientRecord"/> resolved for the request's tenant.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The application's grant-or-deny verdict.</returns>
+public delegate ValueTask<Oid4Vci.PreAuthorizedCodeDecision> ValidatePreAuthorizedCodeDelegate(
+    string preAuthorizedCode,
+    string? transactionCode,
+    string? clientId,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Parses an OID4VCI 1.0 §8.2 Credential Request JSON body into the neutral
+/// <see cref="Oid4Vci.CredentialRequest"/> information model.
+/// </summary>
+/// <remarks>
+/// Required when <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint"/> is
+/// advertised. The default JSON implementation lives in <c>Verifiable.OAuth.Json</c> and is
+/// wired by the application — the <c>Verifiable.OAuth</c> serialization firewall keeps
+/// <c>System.Text.Json</c> out of the library, so the request body's
+/// <c>credential_configuration_id</c> / <c>credential_identifier</c> / <c>proofs</c> are
+/// deserialised by the application's JSON stack. Return <see langword="null"/> when the body
+/// does not parse as a valid Credential Request; the endpoint then responds
+/// <c>400 invalid_credential_request</c>.
+/// </remarks>
+/// <param name="requestBody">The raw JSON request body (UTF-8 decoded from the POST body).</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask<Oid4Vci.CredentialRequest?> ParseCredentialRequestDelegate(
+    string requestBody,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Issues one or more OID4VCI 1.0 §8 Credentials of the same Credential Configuration on a
+/// valid Credential Request, or refuses it with a §8.3.1.2 error.
+/// </summary>
+/// <remarks>
+/// Invoked by the Credential Endpoint after the library has validated the bearer access token
+/// (§8.3.1.1) and enforced the §8.2 request shape. The application owns the <c>c_nonce</c>
+/// store, the set of supported Credential Configurations, and the issuer signing key, so it is
+/// the only party that can verify the holder proofs in <paramref name="request"/>, mint each
+/// Credential bound to its proven holder key, and tell the §8.3.1.2 error cases apart. The
+/// library owns only the wire shape: it maps the returned
+/// <see cref="Oid4Vci.CredentialIssuanceDecision"/> to the §8.3 Credential Response or a
+/// §8.3.1.2 Credential Error Response. The <paramref name="accessToken"/> is the validated
+/// access-token payload — the application reads its <c>sub</c> (the End-User the Credential is
+/// about, bound by the grant) and any granted scope or <c>authorization_details</c>.
+/// </remarks>
+/// <param name="request">The parsed Credential Request.</param>
+/// <param name="accessToken">The validated access-token claims presented at the endpoint.</param>
+/// <param name="registration">The <see cref="ClientRecord"/> resolved for the request's tenant.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The application's issue-or-refuse verdict.</returns>
+public delegate ValueTask<Oid4Vci.CredentialIssuanceDecision> IssueCredentialDelegate(
+    Oid4Vci.CredentialRequest request,
+    JwtPayload accessToken,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Resolves what an OID4VCI 1.0 §8 Credential Request's <c>jwt</c> key proof(s) must satisfy — the
+/// expected <c>c_nonce</c>, the acceptable proof-signing algorithms, and the <c>iat</c> window —
+/// so the library can run the Appendix F.4 proof-validation checks BEFORE the
+/// <see cref="IssueCredentialDelegate"/> seam mints.
+/// </summary>
+/// <remarks>
+/// Wiring this seam OPTS IN to library-side §F.4 proof validation at the Credential Endpoint; when
+/// it is unwired the endpoint validates no proofs and hands the whole check to
+/// <see cref="IssueCredentialDelegate"/>, the established default. The application owns the
+/// <c>c_nonce</c> store and its single-use retirement, so only it can answer which nonce a given
+/// request's proof must echo (it reads the value off its store keyed by the validated
+/// <paramref name="accessToken"/> / request) — the library compares but never stores. Returning
+/// <see langword="null"/> from a wired seam means "no expectation for this request": the endpoint
+/// skips library-side validation for it and defers to <see cref="IssueCredentialDelegate"/>.
+/// </remarks>
+/// <param name="request">The parsed Credential Request whose proofs are about to be validated.</param>
+/// <param name="accessToken">The validated access-token claims presented at the endpoint.</param>
+/// <param name="registration">The <see cref="ClientRecord"/> resolved for the request's tenant.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The proof expectation to enforce, or <see langword="null"/> to defer to the issuance seam.</returns>
+public delegate ValueTask<Oid4Vci.CredentialProofExpectation?> ResolveCredentialProofExpectationDelegate(
+    Oid4Vci.CredentialRequest request,
+    JwtPayload accessToken,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Encrypts an OID4VCI 1.0 §10 (Deferred) Credential Response: the application composes the
+/// JWE — using its provider's key agreement, key derivation, and AEAD delegates — to the
+/// Wallet-supplied key in <paramref name="encryption"/>.
+/// </summary>
+/// <remarks>
+/// The library owns the wire decision (§8.3/§9.2: a request carrying
+/// <c>credential_response_encryption</c> MUST receive an encrypted response, media type
+/// <c>application/jwt</c>, with the §8.3.1.2 <c>invalid_encryption_parameters</c> refusal when
+/// that cannot happen); the application owns the §10 composition — the JWE <c>alg</c> from the
+/// JWK's <c>alg</c> member, the <c>kid</c> copied when present, the <c>enc</c> from
+/// <see cref="Oid4Vci.CredentialResponseEncryption.Enc"/>. Return <see langword="null"/> when
+/// the parameters are unsupported (unknown <c>enc</c>, unusable key type); the endpoint then
+/// refuses with <c>invalid_encryption_parameters</c>.
+/// </remarks>
+/// <param name="responseJson">The plaintext response body to encrypt — the §8.3/§9.2 JSON.</param>
+/// <param name="encryption">The shape-validated §8.2 encryption parameters from the request.</param>
+/// <param name="registration">The <see cref="ClientRecord"/> resolved for the request's tenant.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The compact JWE, or <see langword="null"/> when the parameters are unsupported.</returns>
+public delegate ValueTask<string?> EncryptCredentialResponseDelegate(
+    string responseJson,
+    Oid4Vci.CredentialResponseEncryption encryption,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Decrypts an OID4VCI 1.0 §10 encrypted Credential Request: the application resolves its
+/// decryption key (advertised in the issuer metadata's <c>credential_request_encryption.jwks</c>)
+/// and returns the plaintext request JSON.
+/// </summary>
+/// <remarks>
+/// The library owns the wire decision (a compact-JWE body on the Credential or Deferred
+/// Credential Endpoint routes here; absent this seam, an encrypted request is refused); the
+/// application owns the JWE decryption with its provider delegates. Return
+/// <see langword="null"/> when decryption fails — the endpoint then refuses with
+/// <c>invalid_credential_request</c>.
+/// </remarks>
+/// <param name="encryptedRequestJwt">The compact JWE request body, exactly as received.</param>
+/// <param name="registration">The <see cref="ClientRecord"/> resolved for the request's tenant.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The decrypted request JSON, or <see langword="null"/> when decryption fails.</returns>
+public delegate ValueTask<string?> DecryptCredentialRequestDelegate(
+    string encryptedRequestJwt,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Resolves an OID4VCI 1.0 §9 Deferred Credential Request: the application looks up its
+/// deferred-transaction store by <paramref name="transactionId"/> and reports the Credentials
+/// as issued, still pending, or the request as refused.
+/// </summary>
+/// <remarks>
+/// The library validates the bearer token and the §9.1 request shape, and maps the returned
+/// decision to the §9.2 200/202 responses or a §9.3 error. The application owns the
+/// transaction store — only it can tell an unknown or already-consumed <c>transaction_id</c>
+/// from an issuance still in flight — and §9.1 makes invalidating the <c>transaction_id</c>
+/// after delivery its responsibility.
+/// </remarks>
+/// <param name="transactionId">The §9.1 <c>transaction_id</c> presented by the Wallet.</param>
+/// <param name="accessToken">The validated access-token claims presented at the endpoint.</param>
+/// <param name="registration">The <see cref="ClientRecord"/> resolved for the request's tenant.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The application's issued / pending / refused verdict.</returns>
+public delegate ValueTask<Oid4Vci.DeferredCredentialDecision> ResolveDeferredCredentialDelegate(
+    string transactionId,
+    JwtPayload accessToken,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Processes an OID4VCI 1.0 §11.1 Notification Request — the Wallet's report on what became of
+/// the Credentials identified by the notification's <c>notification_id</c>.
+/// </summary>
+/// <remarks>
+/// The library validates the bearer token and the §11.1 request shape (including the
+/// case-sensitive <c>event</c> values), and maps the returned decision to the §11.2 success or
+/// the §11.3 <c>invalid_notification_id</c> error. §11 makes the notification idempotent —
+/// implementations return acceptance for repeated identical calls.
+/// </remarks>
+/// <param name="notification">The parsed and shape-validated notification.</param>
+/// <param name="accessToken">The validated access-token claims presented at the endpoint.</param>
+/// <param name="registration">The <see cref="ClientRecord"/> resolved for the request's tenant.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The application's accept / reject verdict.</returns>
+public delegate ValueTask<Oid4Vci.CredentialNotificationDecision> ProcessCredentialNotificationDelegate(
+    Oid4Vci.CredentialNotification notification,
+    JwtPayload accessToken,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Resolves an OID4VCI 1.0 §4.1.3 by-reference Credential Offer from the application's offer
+/// store by the <paramref name="offerId"/> the <c>credential_offer_uri</c> carries.
+/// </summary>
+/// <remarks>
+/// Invoked by the unprotected Credential Offer Endpoint. The application composed the offer
+/// out-of-band when it provisioned the Pre-Authorized Code (or set up the Authorization Code
+/// Flow context) and owns the store keyed by the offer id embedded in the
+/// <c>credential_offer_uri</c>, so only it can tell an unknown or expired id from a live one.
+/// The library owns only the wire shape — the §4.1.1 JSON object served as
+/// <c>application/json</c> (§4.1.3: the offer is never signed). Return <see langword="null"/>
+/// when no live offer matches the id; the endpoint then responds HTTP 404.
+/// </remarks>
+/// <param name="offerId">The offer identifier read from the request, embedded in the <c>credential_offer_uri</c>.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The stored Credential Offer, or <see langword="null"/> when no live offer matches.</returns>
+public delegate ValueTask<Oid4Vci.CredentialOffer?> ResolveCredentialOfferDelegate(
+    string offerId,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Parses an RFC 9396 <c>authorization_details</c> request parameter — a JSON array of
+/// authorization details objects — into the neutral <see cref="AuthorizationDetail"/> list, the
+/// generic information model that carries the §2 <c>type</c>, the §2.2 common fields, and every
+/// type-specific member preserved verbatim.
+/// </summary>
+/// <remarks>
+/// Required when the server processes <c>authorization_details</c> (RFC 9396 §2; OID4VCI 1.0
+/// §5.1.1 / §6.1.1). The default JSON implementation lives in <c>Verifiable.OAuth.Json</c> and is
+/// wired by the application — the <c>Verifiable.OAuth</c> serialization firewall keeps
+/// <c>System.Text.Json</c> out of the library. Return <see langword="null"/> when the value is
+/// not a well-formed JSON array of objects each carrying a string <c>type</c>; the endpoint then
+/// responds <c>invalid_authorization_details</c>. The per-type shape checks (supported type,
+/// required fields) are the library's, applied after the parse by the
+/// <see cref="AuthorizationDetailTypeRegistry"/>.
+/// </remarks>
+/// <param name="authorizationDetailsJson">The <c>authorization_details</c> value, verbatim from the request.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask<IReadOnlyList<AuthorizationDetail>?> ParseAuthorizationDetailListDelegate(
+    string authorizationDetailsJson,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Decides an <c>openid_credential</c> authorization details request at the token endpoint and
+/// mints the OID4VCI 1.0 §6.2 <c>credential_identifiers</c> for each granted configuration.
+/// </summary>
+/// <remarks>
+/// Invoked by both token grants — Authorization Code (details authorized at the authorization
+/// endpoint, optionally narrowed in the token request per §6.1.1) and Pre-Authorized Code
+/// (details presented directly in the token request). The application owns the supported
+/// Credential Configurations and the Credential Dataset store, so it alone can refuse an
+/// unknown configuration and enumerate the dataset identifiers the access token will cover for
+/// <paramref name="subject"/>. The library owns the wire: it parses and shape-validates the
+/// parameter, enforces the §6.1.1 subset rule, and maps the returned
+/// <see cref="Oid4Vci.CredentialAuthorizationDecision"/> to the §6.2 response
+/// <c>authorization_details</c> or an RFC 9396 §5 <c>invalid_authorization_details</c> error.
+/// </remarks>
+/// <param name="requestedDetails">The shape-validated <c>openid_credential</c> authorization details.</param>
+/// <param name="subject">The subject the access token is issued to.</param>
+/// <param name="registration">The <see cref="ClientRecord"/> resolved for the request's tenant.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The application's grant-or-deny verdict.</returns>
+public delegate ValueTask<Oid4Vci.CredentialAuthorizationDecision> ResolveCredentialAuthorizationDelegate(
+    IReadOnlyList<Oid4Vci.CredentialAuthorizationDetail> requestedDetails,
+    string subject,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Contributes the application-owned values of the OID4VCI 1.0 §12.2 Credential Issuer Metadata
+/// document — the <c>credential_configurations_supported</c> catalog and the optional
+/// <c>authorization_servers</c> / <c>display</c> / <c>batch_credential_issuance</c> — that the
+/// library cannot derive from the endpoint chain.
+/// </summary>
+/// <remarks>
+/// Required when <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialIssuerMetadata"/> is
+/// advertised: only the application knows which Credentials it issues. The library derives
+/// <c>credential_issuer</c>, <c>credential_endpoint</c>, and <c>nonce_endpoint</c> itself and
+/// merges this contribution over them. Return
+/// <see cref="Oid4Vci.CredentialIssuerMetadataContribution.Empty"/> to emit only the derivable
+/// fields (with an empty <c>credential_configurations_supported</c> object).
+/// </remarks>
+/// <param name="registration">The <see cref="ClientRecord"/> the metadata document describes.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask<Oid4Vci.CredentialIssuerMetadataContribution> ContributeCredentialIssuerMetadataDelegate(
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Signs the assembled OID4VCI 1.0 §12.2.3 Credential Issuer Metadata as a <c>signed_metadata</c>
+/// JWT. The library hands over the fully assembled metadata claim set as a
+/// <see cref="JwtPayload"/> — the same values the plain document carries — and the application
+/// signs it with its own key and algorithm and returns the compact JWS.
+/// </summary>
+/// <remarks>
+/// Optional: when unset, the document carries only its plain-JSON fields; when set, the returned
+/// JWT is embedded verbatim as the <c>signed_metadata</c> field, and returning
+/// <see langword="null"/> omits the field. Per §12.2.3 the application's signer owns the signing
+/// key and its <c>kid</c> selection — knowledge the transport-agnostic library does not hold — so
+/// the JWS itself is composed here. The library supplies
+/// <see cref="Oid4Vci.SignedCredentialIssuerMetadata.CreateAsync"/> as a conformant helper a seam
+/// implementation SHOULD call: it sets the §12.2.3 structural claims the helper guarantees — the
+/// <c>typ</c> (<c>openidvci-issuer-metadata+jwt</c>), the REQUIRED <c>sub</c> (equal to the
+/// <c>credential_issuer</c> the claim set carries), and <c>iat</c> — copies every metadata
+/// parameter as a top-level claim, and rejects a <c>none</c> or symmetric <c>alg</c>. A
+/// <c>signed_metadata</c> claim never appears inside the JWT itself.
+/// </remarks>
+/// <param name="metadata">The assembled metadata claim set to sign, as a JOSE payload.</param>
+/// <param name="registration">The <see cref="ClientRecord"/> the metadata document describes.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask<string?> SignCredentialIssuerMetadataDelegate(
+    JwtPayload metadata,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
 /// Parses a Global Token Revocation request body
 /// (<see href="https://datatracker.ietf.org/doc/draft-parecki-oauth-global-token-revocation/">draft-parecki-oauth-global-token-revocation §3</see>)
 /// into the neutral <see cref="Logout.GlobalTokenRevocationRequest"/> — a single

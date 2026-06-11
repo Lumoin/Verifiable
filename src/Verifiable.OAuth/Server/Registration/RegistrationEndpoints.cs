@@ -183,10 +183,21 @@ public static class RegistrationEndpoints
             AllowedCapabilities = capabilities,
             AllowedRedirectUris = redirectUris,
             AllowedScopes = scopes,
+            AllowedAuthorizationDetailsTypes = ToAllowedAuthorizationDetailsTypes(metadata),
             TokenLifetimes = FrozenDictionary<string, TimeSpan>.Empty,
             SigningKeys = FrozenDictionary<Verifiable.Cryptography.Context.KeyUsageContext, SigningKeySet>.Empty
         };
     }
+
+
+    //RFC 9396 §10/§14.5: the client registration metadata authorization_details_types becomes the
+    //per-client AllowedAuthorizationDetailsTypes allowlist. An omitted parameter (null) registers
+    //no restriction, mirroring the §10 "MAY indicate" semantics — the client may then use any
+    //authorization details type the AS supports.
+    private static ImmutableHashSet<string>? ToAllowedAuthorizationDetailsTypes(ClientMetadata metadata) =>
+        metadata.AuthorizationDetailsTypes is null
+            ? null
+            : [.. metadata.AuthorizationDetailsTypes];
 
 
     private static string BuildRegistrationResponseJson(
@@ -240,6 +251,14 @@ public static class RegistrationEndpoints
         if(metadata.Scope is not null)
         {
             JsonAppender.AppendStringField(sb, "scope", metadata.Scope, ref first);
+        }
+        if(metadata.AuthorizationDetailsTypes is not null)
+        {
+            //RFC 9396 §10/§14.5: echo the registered authorization_details_types so the client
+            //sees the allowlist the AS will enforce on its authorization details requests.
+            JsonAppender.AppendStringArrayField(sb,
+                AuthorizationDetailsParameterNames.AuthorizationDetailsTypes,
+                metadata.AuthorizationDetailsTypes, ref first);
         }
         if(metadata.TokenEndpointAuthMethod is not null)
         {
@@ -420,7 +439,10 @@ public static class RegistrationEndpoints
         return previous with
         {
             AllowedRedirectUris = redirectUris,
-            AllowedScopes = scopes
+            AllowedScopes = scopes,
+            AllowedAuthorizationDetailsTypes = newMetadata.AuthorizationDetailsTypes is null
+                ? previous.AllowedAuthorizationDetailsTypes
+                : ToAllowedAuthorizationDetailsTypes(newMetadata)
         };
     }
 
@@ -508,6 +530,16 @@ public static class RegistrationEndpoints
                 string scope = string.Join(' ',
                     registration.AllowedScopes.OrderBy(s => s, StringComparer.Ordinal));
                 JsonAppender.AppendStringField(sb, "scope", scope, ref first);
+            }
+            if(registration.AllowedAuthorizationDetailsTypes is not null)
+            {
+                //RFC 9396 §10/§14.5: echo the registered authorization_details_types allowlist.
+                //Sort ordinally so the body is byte-for-byte deterministic, matching the scope
+                //field's treatment (the internal store is an unordered ImmutableHashSet).
+                JsonAppender.AppendStringArrayField(sb,
+                    AuthorizationDetailsParameterNames.AuthorizationDetailsTypes,
+                    registration.AllowedAuthorizationDetailsTypes.OrderBy(t => t, StringComparer.Ordinal),
+                    ref first);
             }
 
             sb.Append('}');

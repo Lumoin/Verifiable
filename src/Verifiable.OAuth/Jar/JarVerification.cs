@@ -1,6 +1,7 @@
 using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Jar;
 
@@ -123,6 +124,19 @@ public static class JarVerification
             }
 
             // Step 4 — parse the payload now that the signature is verified.
+            // A duplicate top-level key is rejected first: the span scanner that
+            // re-slices native-JSON claims (e.g. RFC 9396 authorization_details) reads the
+            // FIRST occurrence while a deserializer keeps the LAST, so a signed payload with
+            // a repeated key is a validate-one / act-on-another smuggling vector. There is no
+            // legitimate reason for a signed Request Object to carry a duplicate top-level
+            // claim, so it is refused rather than silently resolved.
+            if(JwkJsonReader.HasDuplicateTopLevelKeys(unverified.Payload.Span))
+            {
+                return new JarRejected(
+                    OAuthErrors.InvalidRequestObject,
+                    "JAR payload carries a duplicate top-level claim name.");
+            }
+
             IReadOnlyDictionary<string, object> claims;
             try
             {
@@ -158,14 +172,14 @@ public static class JarVerification
             // exp at or before iat is a non-positive lifetime; exp at or before nbf
             // is a validity window that never opens. Both are structurally invalid
             // regardless of skew, so they are checked before the clock comparisons.
-            if(exp <= iat)
+            if(!JwtTemporalChecks.IsPositiveInterval(iat, exp))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
                     $"JAR exp {exp:O} is at or before iat {iat:O} (non-positive lifetime).");
             }
 
-            if(exp <= nbf)
+            if(!JwtTemporalChecks.IsPositiveInterval(nbf, exp))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
@@ -177,37 +191,59 @@ public static class JarVerification
             // exp in the past beyond skew rejects. iat is checked for
             // not-in-future to defend against a clock-skewed client signing
             // far ahead.
-            if(nbf > now + clockSkew)
+            if(!JwtTemporalChecks.IsNotInFuture(nbf, now, clockSkew))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
                     $"JAR is not yet valid (nbf {nbf:O} is after now {now:O} plus clock skew).");
             }
 
-            if(exp + clockSkew <= now)
+            if(!JwtTemporalChecks.IsBeforeExpiry(now, exp, clockSkew))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
                     $"JAR has expired (exp {exp:O} is before now {now:O} minus clock skew).");
             }
 
-            if(iat > now + clockSkew)
+            if(!JwtTemporalChecks.IsNotInFuture(iat, now, clockSkew))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
                     $"JAR iat {iat:O} is in the future beyond clock skew.");
             }
 
-            // Step 7 — validate the lifetime ceiling. exp - iat must not
-            // exceed maximumLifetime. FAPI 2.0 §5.2.2 Clause 13 constrains
-            // the window; the library aligns with the most demanding profile
-            // it supports.
+            // Step 6b — nbf age ceiling. FAPI 2.0 Message Signing §5.3.1
+            // requires nbf to be no longer than a bounded interval in the
+            // past (60 minutes there; this library applies the supplied
+            // maximumLifetime, which the strict default sets tighter). A
+            // stale-but-unexpired window would otherwise let a long-lived
+            // request object linger.
+            if(!JwtTemporalChecks.IsNotStale(nbf, now, clockSkew + maximumLifetime))
+            {
+                return new JarRejected(
+                    OAuthErrors.InvalidRequestObject,
+                    $"JAR nbf {nbf:O} is more than the maximum lifetime ({maximumLifetime}) in the past.");
+            }
+
+            // Step 7 — validate the lifetime ceilings. exp - iat must not
+            // exceed maximumLifetime (FAPI 2.0 §5.2.2 Clause 13), and
+            // exp - nbf must not either (FAPI 2.0 Message Signing §5.3.1
+            // phrases the window from nbf). Both run so neither anchor claim
+            // can stretch the validity window past the ceiling.
             TimeSpan declaredLifetime = exp - iat;
-            if(declaredLifetime > maximumLifetime)
+            if(!JwtTemporalChecks.IsWithinLifetimeCeiling(iat, exp, maximumLifetime))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
                     $"JAR lifetime ({declaredLifetime}) exceeds maximum ({maximumLifetime}).");
+            }
+
+            TimeSpan windowFromNbf = exp - nbf;
+            if(!JwtTemporalChecks.IsWithinLifetimeCeiling(nbf, exp, maximumLifetime))
+            {
+                return new JarRejected(
+                    OAuthErrors.InvalidRequestObject,
+                    $"JAR exp is {windowFromNbf} after nbf, exceeding the maximum lifetime ({maximumLifetime}).");
             }
 
             return new JarVerified(

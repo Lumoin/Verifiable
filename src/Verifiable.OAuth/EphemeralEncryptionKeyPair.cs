@@ -2,6 +2,7 @@ using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -204,8 +205,11 @@ public sealed class EphemeralEncryptionKeyPair: IDisposable, IEquatable<Ephemera
             return true;
         }
 
+        //Fixed-time on the private half — equality over key material must not
+        //expose a match-length timing channel.
         return PublicKeyJwk == other.PublicKeyJwk
-            && PrivateKeyBytes.Span.SequenceEqual(other.PrivateKeyBytes.Span);
+            && CryptographicOperations.FixedTimeEquals(
+                PrivateKeyBytes.Span, other.PrivateKeyBytes.Span);
     }
 
 

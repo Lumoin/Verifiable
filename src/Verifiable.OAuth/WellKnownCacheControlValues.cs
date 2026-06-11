@@ -1,3 +1,6 @@
+using Verifiable.Cryptography.Text;
+
+
 namespace Verifiable.OAuth;
 
 /// <summary>
@@ -13,6 +16,9 @@ namespace Verifiable.OAuth;
 /// </remarks>
 public static class WellKnownCacheControlValues
 {
+    /// <summary>The UTF-8 source literal of <see cref="NoStore"/>.</summary>
+    public static ReadOnlySpan<byte> NoStoreUtf8 => "no-store"u8;
+
     /// <summary>
     /// The <c>no-store</c> directive per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7234#section-5.2.2.3">RFC 7234 §5.2.2.3</see>.
@@ -20,5 +26,5 @@ public static class WellKnownCacheControlValues
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1#section-3.2.3">OAuth 2.1 §3.2.3</see>
     /// on responses carrying tokens, credentials, or other sensitive information.
     /// </summary>
-    public static readonly string NoStore = "no-store";
+    public static readonly string NoStore = Utf8Constants.ToInternedString(NoStoreUtf8);
 }

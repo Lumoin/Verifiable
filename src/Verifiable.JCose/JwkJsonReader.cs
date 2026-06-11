@@ -293,6 +293,32 @@ public static class JwkJsonReader
 
 
     /// <summary>
+    /// Extracts all string-valued properties from an object-valued property at the
+    /// top level of <paramref name="json"/>. For example, extracts all JWK fields
+    /// from <c>{"sub_jwk":{"kty":"EC","crv":"P-256","x":"...","y":"..."}}</c>.
+    /// </summary>
+    /// <param name="json">UTF-8 JSON bytes to search.</param>
+    /// <param name="key">The object property key (e.g., <c>"sub_jwk"</c>).</param>
+    /// <returns>
+    /// A dictionary of string-valued properties from the object, or
+    /// <see langword="null"/> if the key is absent or its value is not an object.
+    /// Non-string values (arrays, objects, numbers, booleans) are skipped.
+    /// </returns>
+    public static Dictionary<string, object>? ExtractObjectProperties(
+        ReadOnlySpan<byte> json,
+        ReadOnlySpan<byte> key)
+    {
+        ReadOnlySpan<byte> objectSpan = FindObjectContent(json, key);
+        if(objectSpan.IsEmpty)
+        {
+            return null;
+        }
+
+        return ExtractAllStringProperties(objectSpan);
+    }
+
+
+    /// <summary>
     /// Extracts all string-valued properties from an object nested two levels deep.
     /// For example, extracts all JWK fields from <c>{"cnf":{"jwk":{"kty":"OKP","crv":"Ed25519","x":"..."}}}</c>.
     /// </summary>
@@ -372,8 +398,19 @@ public static class JwkJsonReader
             return false;
         }
 
+        //The digit run MUST be the whole number: the next byte, if any, must close the
+        //value (a JSON structural byte or whitespace). Otherwise the token is a non-integer
+        //JSON number — exponent (1e10), decimal (1.5), or garbage (12abc) — and reading only
+        //the leading digits would silently misparse it. A misread NumericDate (exp/iat/nbf)
+        //would corrupt temporal checks, so such values are rejected rather than truncated.
+        if(end < json.Length && !IsNumberTerminator(json[end]))
+        {
+            return false;
+        }
+
         ReadOnlySpan<byte> digits = json[start..end];
         string text = Encoding.UTF8.GetString(digits);
+
         return long.TryParse(text, System.Globalization.NumberStyles.Integer,
             System.Globalization.CultureInfo.InvariantCulture, out value);
     }
@@ -448,6 +485,79 @@ public static class JwkJsonReader
         }
 
         return Encoding.UTF8.GetString(json[braceStart..pos]);
+    }
+
+
+    /// <summary>
+    /// Extracts an array-valued JSON property and returns it as a string, including
+    /// the outer brackets. The returned string is a self-contained JSON array:
+    /// <c>[...]</c>.
+    /// </summary>
+    /// <param name="json">UTF-8 JSON bytes to search.</param>
+    /// <param name="key">The property key as a UTF-8 literal.</param>
+    /// <returns>
+    /// The full JSON text of the array value (brackets included), or
+    /// <see langword="null"/> if the key is absent or the value is not an array.
+    /// Used to slice a native-JSON array out of a JWT payload verbatim — e.g. the
+    /// RFC 9396 <c>authorization_details</c> of a signed Request Object — for
+    /// downstream processing that operates on the exact signed text.
+    /// </returns>
+    public static string? ExtractArrayAsString(
+        ReadOnlySpan<byte> json,
+        ReadOnlySpan<byte> key)
+    {
+        int keyStart = IndexOfKey(json, key);
+        if(keyStart < 0)
+        {
+            return null;
+        }
+
+        int afterKey = keyStart + key.Length + 1;
+        afterKey = SkipWhitespaceAndColon(json, afterKey);
+        if(afterKey < 0 || afterKey >= json.Length || json[afterKey] != (byte)'[')
+        {
+            return null;
+        }
+
+        int bracketStart = afterKey;
+        int depth = 1;
+        int pos = bracketStart + 1;
+
+        while(pos < json.Length && depth > 0)
+        {
+            if(json[pos] == (byte)'[')
+            {
+                depth++;
+            }
+            else if(json[pos] == (byte)']')
+            {
+                depth--;
+            }
+            else if(json[pos] == (byte)'"')
+            {
+                //Skip string content so brackets inside strings don't
+                //bias the depth counter.
+                pos++;
+                while(pos < json.Length && json[pos] != (byte)'"')
+                {
+                    if(json[pos] == (byte)'\\')
+                    {
+                        pos++;
+                    }
+
+                    pos++;
+                }
+            }
+
+            pos++;
+        }
+
+        if(depth != 0)
+        {
+            return null;
+        }
+
+        return Encoding.UTF8.GetString(json[bracketStart..pos]);
     }
 
 
@@ -762,6 +872,78 @@ public static class JwkJsonReader
 
 
     /// <summary>
+    /// Reports whether <paramref name="json"/> carries the same top-level key more than once.
+    /// JSON permits duplicate object keys, and readers disagree on which occurrence wins —
+    /// this span scanner returns the FIRST (<see cref="IndexOfKey"/>) while a typical
+    /// deserializer keeps the LAST. On a SIGNED payload that reader disagreement is a
+    /// validate-one / act-on-another smuggling vector (e.g. a duplicated RFC 9396
+    /// <c>authorization_details</c>), so a verified payload should be rejected outright when
+    /// a top-level key repeats. Only depth-0 keys are considered; a key reused inside a
+    /// nested object is legitimate and not flagged.
+    /// </summary>
+    /// <param name="json">UTF-8 JSON bytes to scan (an object, optionally with its braces).</param>
+    /// <returns><see langword="true"/> when any top-level key appears twice.</returns>
+    public static bool HasDuplicateTopLevelKeys(ReadOnlySpan<byte> json)
+    {
+        int pos = 0;
+        while(pos < json.Length && IsJsonWhitespace(json[pos]))
+        {
+            pos++;
+        }
+
+        if(pos < json.Length && json[pos] == (byte)'{')
+        {
+            pos++;
+        }
+
+        int depth = 0;
+        HashSet<string> seenKeys = new(StringComparer.Ordinal);
+
+        while(pos < json.Length)
+        {
+            byte b = json[pos];
+
+            if(b == (byte)'"')
+            {
+                int nameStart = pos + 1;
+                int afterString = SkipString(json, pos);
+                if(depth == 0 && afterString >= 1 && IsKeyPosition(json, afterString))
+                {
+                    //afterString is one past the closing quote; the name spans
+                    //[nameStart, afterString - 1).
+                    string keyName = Encoding.UTF8.GetString(json[nameStart..(afterString - 1)]);
+                    if(!seenKeys.Add(keyName))
+                    {
+                        return true;
+                    }
+                }
+
+                pos = afterString;
+                continue;
+            }
+
+            if(b == (byte)'{' || b == (byte)'[')
+            {
+                depth++;
+            }
+            else if(b == (byte)'}' || b == (byte)']')
+            {
+                depth--;
+            }
+
+            pos++;
+        }
+
+        return false;
+    }
+
+
+    /// <summary>Whether <paramref name="b"/> closes a JSON number — a structural byte or whitespace.</summary>
+    private static bool IsNumberTerminator(byte b) =>
+        b == (byte)',' || b == (byte)'}' || b == (byte)']' || IsJsonWhitespace(b);
+
+
+    /// <summary>
     /// Returns the index immediately after the closing quote of the string whose
     /// opening quote is at <paramref name="openQuotePos"/>, honoring backslash
     /// escapes; or <paramref name="json"/>.Length for an unterminated string.
@@ -871,6 +1053,114 @@ public static class JwkJsonReader
             return null;
         }
 
-        return Encoding.UTF8.GetString(json[start..end]);
+        ReadOnlySpan<byte> raw = json[start..end];
+
+        //Fast path: a value carrying no backslash carries no JSON escape, so the raw
+        //bytes ARE the logical string. base64url key material (x/y/d/n/e) and every
+        //unescaped header value take this path unchanged. Only when an escape is present
+        //is the value decoded, which is what a conformant JSON reader returns: a JOSE
+        //'typ' such as openid4vci-proof+jwt serialized by System.Text.Json's default
+        //encoder arrives as "openid4vci-proof+jwt", and the string equality the
+        //callers perform is against the decoded '+' form.
+        if(raw.IndexOf((byte)'\\') < 0)
+        {
+            return Encoding.UTF8.GetString(raw);
+        }
+
+        return DecodeJsonStringEscapes(Encoding.UTF8.GetString(raw));
     }
+
+
+    //Decodes the JSON string escape sequences of RFC 8259 §7 in an already-UTF-8-decoded
+    //value: the two-character escapes and \uXXXX (each emitted as one UTF-16 code unit, so
+    //a surrogate pair's two \u escapes compose the astral code point naturally). A
+    //malformed or unknown escape is preserved verbatim rather than dropped.
+    private static string DecodeJsonStringEscapes(string value)
+    {
+        StringBuilder builder = new(value.Length);
+        int index = 0;
+        while(index < value.Length)
+        {
+            char current = value[index];
+            if(current != '\\' || index + 1 >= value.Length)
+            {
+                builder.Append(current);
+                index++;
+
+                continue;
+            }
+
+            char escape = value[index + 1];
+            char? simple = escape switch
+            {
+                '"' => '"',
+                '\\' => '\\',
+                '/' => '/',
+                'b' => '\b',
+                'f' => '\f',
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                _ => null
+            };
+
+            if(simple is char decoded)
+            {
+                builder.Append(decoded);
+                index += 2;
+
+                continue;
+            }
+
+            if(escape == 'u' && TryDecodeHex4(value, index + 2, out char unicode))
+            {
+                builder.Append(unicode);
+                index += 6;
+
+                continue;
+            }
+
+            //Unknown or truncated escape: keep the backslash literally and continue.
+            builder.Append(current);
+            index++;
+        }
+
+        return builder.ToString();
+    }
+
+
+    private static bool TryDecodeHex4(string value, int start, out char result)
+    {
+        result = '\0';
+        if(start + 4 > value.Length)
+        {
+            return false;
+        }
+
+        int code = 0;
+        for(int offset = 0; offset < 4; offset++)
+        {
+            int nibble = HexNibble(value[start + offset]);
+            if(nibble < 0)
+            {
+                return false;
+            }
+
+            code = (code << 4) | nibble;
+        }
+
+        result = (char)code;
+
+        return true;
+    }
+
+
+    private static int HexNibble(char character) =>
+        character switch
+        {
+            >= '0' and <= '9' => character - '0',
+            >= 'a' and <= 'f' => character - 'a' + 10,
+            >= 'A' and <= 'F' => character - 'A' + 10,
+            _ => -1
+        };
 }

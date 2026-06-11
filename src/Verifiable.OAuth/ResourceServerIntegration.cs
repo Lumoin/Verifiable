@@ -62,18 +62,16 @@ public sealed class ResourceServerIntegration
     public TimeSpan AccessTokenIatSkew { get; init; } = TimeSpan.FromSeconds(60);
 
     /// <summary>
-    /// Replay tracker query for DPoP proof <c>jti</c> values. Required
-    /// when the RS accepts DPoP-bound tokens; unused on Bearer-only
-    /// deployments.
+    /// Replay tracker query for DPoP proof <c>jti</c> values presented to this
+    /// resource server per RFC 9449 §11.1. Required when the RS accepts
+    /// DPoP-bound tokens; unused on Bearer-only deployments.
     /// </summary>
     public IsDpopProofJtiSeenDelegate? IsDpopProofJtiSeenAsync { get; init; }
 
     /// <summary>
-    /// Persists a DPoP proof <c>jti</c> after a successful validation so
-    /// subsequent presentations within the freshness window can be
-    /// detected. Required alongside
-    /// <see cref="IsDpopProofJtiSeenAsync"/> when the RS accepts
-    /// DPoP-bound tokens.
+    /// Persists an accepted DPoP proof <c>jti</c> so subsequent presentations
+    /// within the freshness window can be detected. Required alongside
+    /// <see cref="IsDpopProofJtiSeenAsync"/> when the RS accepts DPoP-bound tokens.
     /// </summary>
     public PersistDpopProofJtiDelegate? PersistDpopProofJtiAsync { get; init; }
 }

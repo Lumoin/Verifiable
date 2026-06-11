@@ -89,6 +89,61 @@ public static class WellKnownCapabilityIdentifiers
         CapabilityIdentifier.Create("urn:verifiable:capability:oauth:introspection");
 
     /// <summary>
+    /// OID4VCI 1.0 §7 Nonce Endpoint — issues the <c>c_nonce</c> challenge used in the
+    /// proof of possession of key material in a Credential Request.
+    /// </summary>
+    public static CapabilityIdentifier Oid4VciNonceEndpoint { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oid4vci:nonce");
+
+    /// <summary>
+    /// OID4VCI 1.0 §6 Pre-Authorized Code grant — exchanges a
+    /// <c>pre-authorized_code</c> (and optional <c>tx_code</c>) for an access token at
+    /// the token endpoint, the grant the Credential Issuer hands the Wallet in a
+    /// Credential Offer.
+    /// </summary>
+    public static CapabilityIdentifier Oid4VciPreAuthorizedCodeGrant { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oid4vci:pre_authorized_code");
+
+    /// <summary>
+    /// OID4VCI 1.0 §8 Credential Endpoint — issues one or more Credentials of the same
+    /// Credential Configuration on presentation of a valid access token and holder
+    /// proof(s) of possession.
+    /// </summary>
+    public static CapabilityIdentifier Oid4VciCredentialEndpoint { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oid4vci:credential");
+
+    /// <summary>
+    /// OID4VCI 1.0 §12.2 Credential Issuer Metadata — serves the
+    /// <c>/.well-known/openid-credential-issuer</c> document describing the issuer's
+    /// <c>credential_endpoint</c> and <c>credential_configurations_supported</c>.
+    /// </summary>
+    public static CapabilityIdentifier Oid4VciCredentialIssuerMetadata { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oid4vci:credential_issuer_metadata");
+
+    /// <summary>
+    /// OID4VCI 1.0 §9 Deferred Credential Endpoint — delivers Credentials whose issuance the
+    /// Credential Endpoint deferred with a <c>transaction_id</c>, on presentation of a valid
+    /// access token.
+    /// </summary>
+    public static CapabilityIdentifier Oid4VciDeferredCredentialEndpoint { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oid4vci:deferred_credential");
+
+    /// <summary>
+    /// OID4VCI 1.0 §11 Notification Endpoint — receives the Wallet's issuance-outcome events
+    /// per <c>notification_id</c>, on presentation of a valid access token.
+    /// </summary>
+    public static CapabilityIdentifier Oid4VciNotificationEndpoint { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oid4vci:notification");
+
+    /// <summary>
+    /// OID4VCI 1.0 §4.1.3 Credential Offer Endpoint — serves a stored Credential Offer object
+    /// by its id, the resource the <c>credential_offer_uri</c> in a by-reference deep link
+    /// points the Wallet at. Unprotected and unsigned (§4.1.3).
+    /// </summary>
+    public static CapabilityIdentifier Oid4VciCredentialOfferEndpoint { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oid4vci:credential_offer");
+
+    /// <summary>
     /// Global Token Revocation per
     /// <see href="https://datatracker.ietf.org/doc/draft-parecki-oauth-global-token-revocation/">draft-parecki-oauth-global-token-revocation</see>
     /// — an authenticated command that revokes all of a subject's tokens by
@@ -191,6 +246,14 @@ public static class WellKnownCapabilityIdentifiers
     /// </summary>
     public static CapabilityIdentifier VcVerifiablePresentation { get; } =
         CapabilityIdentifier.Create("urn:verifiable:capability:vc:verifiable_presentation");
+
+    /// <summary>
+    /// SIOPv2 — the Self-Issued OpenID Provider v2 Relying Party flow. Enables the
+    /// request-preparation and Self-Issued ID Token response endpoints by which this
+    /// Authorization Server, acting as the RP, requests and verifies a Self-Issued ID Token.
+    /// </summary>
+    public static CapabilityIdentifier SiopSelfIssuedOp { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:siop:self_issued_op");
 
     /// <summary>
     /// OID4VCI — OpenID for Verifiable Credential Issuance.

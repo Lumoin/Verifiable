@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.ProtectedResource;
 
@@ -31,11 +32,17 @@ namespace Verifiable.OAuth.ProtectedResource;
 /// </remarks>
 public static class StepUpAuthenticationChallenge
 {
+    /// <summary>The UTF-8 source literal of <see cref="AcrValuesParameter"/>.</summary>
+    public static ReadOnlySpan<byte> AcrValuesParameterUtf8 => "acr_values"u8;
+
     /// <summary>The <c>acr_values</c> challenge parameter name (RFC 9470 §3).</summary>
-    public static readonly string AcrValuesParameter = "acr_values";
+    public static readonly string AcrValuesParameter = Utf8Constants.ToInternedString(AcrValuesParameterUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="MaxAgeParameter"/>.</summary>
+    public static ReadOnlySpan<byte> MaxAgeParameterUtf8 => "max_age"u8;
 
     /// <summary>The <c>max_age</c> challenge parameter name (RFC 9470 §3).</summary>
-    public static readonly string MaxAgeParameter = "max_age";
+    public static readonly string MaxAgeParameter = Utf8Constants.ToInternedString(MaxAgeParameterUtf8);
 
     /// <summary>The <c>error</c> challenge parameter name (RFC 6750 §3 / RFC 9470 §3).</summary>
     private const string ErrorParameter = "error";

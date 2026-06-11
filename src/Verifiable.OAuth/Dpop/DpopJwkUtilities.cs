@@ -95,6 +95,19 @@ public static class DpopJwkUtilities
                         ?? throw new InvalidOperationException("DefaultAlgorithmToJwkConverter must produce 'x' for OKP keys.")
                 },
 
+            //Algorithm Key Pair (ML-DSA et al.): unlike the RFC 7518 families, alg is a
+            //REQUIRED member of an AKP JWK and participates in its thumbprint canon —
+            //the lexicographic sort yields {alg, kty, pub}.
+            string akp when string.Equals(akp, WellKnownKeyTypeValues.Akp, StringComparison.Ordinal) =>
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [WellKnownJwkMemberNames.Kty] = kty,
+                    [WellKnownJwkMemberNames.Alg] = jwk.Alg
+                        ?? throw new InvalidOperationException("DefaultAlgorithmToJwkConverter must produce 'alg' for AKP keys."),
+                    [WellKnownJwkMemberNames.Pub] = jwk.Pub
+                        ?? throw new InvalidOperationException("DefaultAlgorithmToJwkConverter must produce 'pub' for AKP keys.")
+                },
+
             _ => throw new InvalidOperationException(
                 $"DPoP JWK serialization received an unexpected kty '{kty}' from the algorithm-to-JWK converter for alg '{alg}'.")
         };

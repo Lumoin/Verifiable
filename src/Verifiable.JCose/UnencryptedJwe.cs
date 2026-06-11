@@ -73,17 +73,36 @@ public sealed class UnencryptedJwe
     /// Verifier can reconstruct the SessionTranscript. <see langword="null"/> omits the
     /// parameter (the default for SD-JWT / SD-CWT, which need no transcript binding).
     /// </param>
+    /// <param name="keyId">
+    /// Optional <c>kid</c> (Key ID) protected-header parameter per RFC 7515 §4.1.6. When the
+    /// recipient public key carries a <c>kid</c>, the encrypter copies it here so the recipient
+    /// can identify the key used — OID4VCI 1.0 §10 makes this a MUST ("If the selected public key
+    /// contains a kid parameter, the JWE MUST include the same value in the kid JWE Header
+    /// Parameter."). <see langword="null"/> omits the parameter.
+    /// </param>
     /// <returns>An <see cref="UnencryptedJwe"/> ready for encryption.</returns>
     public static UnencryptedJwe ForEcdhEs(
         string keyManagementAlgorithm,
         string contentEncryptionAlgorithm,
         ReadOnlyMemory<byte> plaintext,
-        string? agreementPartyUInfo = null)
+        string? agreementPartyUInfo = null,
+        string? keyId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(keyManagementAlgorithm);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentEncryptionAlgorithm);
 
-        var header = new JwtHeader(capacity: agreementPartyUInfo is null ? 2 : 3)
+        int capacity = 2;
+        if(agreementPartyUInfo is not null)
+        {
+            capacity++;
+        }
+
+        if(keyId is not null)
+        {
+            capacity++;
+        }
+
+        var header = new JwtHeader(capacity)
         {
             [WellKnownJwkMemberNames.Alg] = keyManagementAlgorithm,
             [WellKnownJoseHeaderNames.Enc] = contentEncryptionAlgorithm
@@ -92,6 +111,11 @@ public sealed class UnencryptedJwe
         if(agreementPartyUInfo is not null)
         {
             header[WellKnownJoseHeaderNames.Apu] = agreementPartyUInfo;
+        }
+
+        if(keyId is not null)
+        {
+            header[WellKnownJwkMemberNames.Kid] = keyId;
         }
 
         return new UnencryptedJwe(header, plaintext);

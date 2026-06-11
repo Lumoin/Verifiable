@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp.Formats;
 
@@ -11,12 +12,15 @@ namespace Verifiable.OAuth.Oid4Vp.Formats;
 [DebuggerDisplay("WellKnownJwtVcFormatProperties")]
 public static class WellKnownJwtVcFormatProperties
 {
+    /// <summary>The UTF-8 source literal of <see cref="AlgValuesSupported"/>.</summary>
+    public static ReadOnlySpan<byte> AlgValuesSupportedUtf8 => "alg_values_supported"u8;
+
     /// <summary>
     /// The <c>alg_values_supported</c> property. A JSON array of JWS algorithm
     /// identifiers supported for signing JWT VCs and JWT VPs.
     /// Per OID4VP 1.0 Appendix B.1.
     /// </summary>
-    public static readonly string AlgValuesSupported = "alg_values_supported";
+    public static readonly string AlgValuesSupported = Utf8Constants.ToInternedString(AlgValuesSupportedUtf8);
 
 
     /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is

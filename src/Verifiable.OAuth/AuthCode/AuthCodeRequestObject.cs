@@ -137,6 +137,37 @@ public sealed class AuthCodeRequestObject: IEquatable<AuthCodeRequestObject>
     /// </summary>
     public int? MaxAge { get; init; }
 
+    /// <summary>
+    /// The RFC 9396 <c>authorization_details</c> of the Request Object as its verbatim JSON
+    /// array text, or <see langword="null"/> when absent. RFC 9396 §3 carries the value as a
+    /// native JSON array inside a JWT, so the matcher re-slices the exact signed text from the
+    /// verified payload rather than reserialising the parsed claims.
+    /// </summary>
+    public string? AuthorizationDetails { get; init; }
+
+    /// <summary>
+    /// The <c>response_mode</c> the Request Object asks for, or <see langword="null"/> when
+    /// absent. A JARM value (<see cref="Jarm.JarmResponseModes"/>) requests a JWT-secured
+    /// authorization response; the matcher gates it for servability at receipt.
+    /// </summary>
+    public string? ResponseMode { get; init; }
+
+    /// <summary>
+    /// The OID4VCI 1.0 §5.1.3 <c>issuer_state</c> claim of the Request Object, or
+    /// <see langword="null"/> when absent. Carried through verbatim and surfaced as UNTRUSTED
+    /// input to the authorization-decision seam — §5.1.3 requires the issuer to treat it as
+    /// possibly attacker-injected, so the matcher validates nothing about it.
+    /// </summary>
+    public string? IssuerState { get; init; }
+
+    /// <summary>
+    /// The RFC 8707 <c>resource</c> indicator(s) of the Request Object (space-delimited when
+    /// multiple), or <see langword="null"/> when absent. OID4VCI 1.0 §5.1.2 RECOMMENDS its use to
+    /// let the Authorization Server differentiate Credential Issuers; carried through and surfaced
+    /// to the authorization-decision seam.
+    /// </summary>
+    public string? Resource { get; init; }
+
 
     /// <inheritdoc/>
     public bool Equals(AuthCodeRequestObject? other)
@@ -166,7 +197,11 @@ public sealed class AuthCodeRequestObject: IEquatable<AuthCodeRequestObject>
             && string.Equals(Aud, other.Aud, StringComparison.Ordinal)
             && string.Equals(Jti, other.Jti, StringComparison.Ordinal)
             && string.Equals(AcrValues, other.AcrValues, StringComparison.Ordinal)
-            && MaxAge == other.MaxAge;
+            && MaxAge == other.MaxAge
+            && string.Equals(AuthorizationDetails, other.AuthorizationDetails, StringComparison.Ordinal)
+            && string.Equals(ResponseMode, other.ResponseMode, StringComparison.Ordinal)
+            && string.Equals(IssuerState, other.IssuerState, StringComparison.Ordinal)
+            && string.Equals(Resource, other.Resource, StringComparison.Ordinal);
     }
 
 

@@ -92,7 +92,11 @@ public static class AuthCodeServerFlowTransitions
                                 ExpiresIn = par.ExpiresIn,
                                 AcrValues = par.AcrValues,
                                 MaxAge = par.MaxAge,
-                                State = par.State
+                                State = par.State,
+                                AuthorizationDetails = par.AuthorizationDetails,
+                                ResponseMode = par.ResponseMode,
+                                IssuerState = par.IssuerState,
+                                Resource = par.Resource
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ParRequestReceived"),
@@ -119,7 +123,9 @@ public static class AuthCodeServerFlowTransitions
                                 Acr = direct.Acr,
                                 ClientId = direct.ClientId,
                                 Nonce = direct.Nonce,
-                                State = direct.State
+                                State = direct.State,
+                                AuthorizationDetails = direct.AuthorizationDetails,
+                                ResponseMode = direct.ResponseMode
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerCodeIssued"),
@@ -144,7 +150,12 @@ public static class AuthCodeServerFlowTransitions
                                 Acr = auth.Acr,
                                 ClientId = received.ClientId,
                                 Nonce = received.Nonce,
-                                State = received.State
+                                State = received.State,
+                                //The pushed authorization_details and response_mode are
+                                //authoritative by construction — copied from the PAR state,
+                                //never from the front channel (RFC 9101 §6.3 via RFC 9126 §4).
+                                AuthorizationDetails = received.AuthorizationDetails,
+                                ResponseMode = received.ResponseMode
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerCodeIssued"),

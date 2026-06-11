@@ -1,4 +1,5 @@
 using Verifiable.Core.Resolvers;
+using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth;
 
@@ -27,6 +28,17 @@ namespace Verifiable.OAuth;
 /// </remarks>
 public static class WellKnownPaths
 {
+    /// <summary>The UTF-8 source literal of <see cref="OpenIdCredentialIssuerSuffix"/>.</summary>
+    public static ReadOnlySpan<byte> OpenIdCredentialIssuerSuffixUtf8 => "openid-credential-issuer"u8;
+
+    /// <summary>
+    /// The OID4VCI 1.0 §12.2.2 well-known suffix inserted between the host and path components
+    /// of the Credential Issuer Identifier to form the Credential Issuer Metadata URL. IANA
+    /// registration: OID4VCI 1.0 Appendix G.5.1.
+    /// </summary>
+    public static readonly string OpenIdCredentialIssuerSuffix = Utf8Constants.ToInternedString(OpenIdCredentialIssuerSuffixUtf8);
+
+
     /// <summary>
     /// OAuth 2.0 Authorization Server Metadata (RFC 8414).
     /// </summary>
@@ -117,6 +129,31 @@ public static class WellKnownPaths
         "oauth-protected-resource",
         "RFC 9728",
         identifier => ComputeWellKnownWithPathInsertion(identifier, "oauth-protected-resource"));
+
+    /// <summary>
+    /// OpenID for Verifiable Credential Issuance 1.0 Credential Issuer Metadata (OID4VCI 1.0 §12.2.2).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// §12.2.2: "Credential Issuers publishing metadata MUST make a JSON document available at
+    /// the path formed by inserting the string <c>/.well-known/openid-credential-issuer</c> into
+    /// the Credential Issuer Identifier between the host component and the path component, if any."
+    /// This is the identical host/path-insertion rule RFC 8414 §3 and RFC 9728 §3 use, so this
+    /// entry reuses <see cref="ComputeWellKnownWithPathInsertion"/> rather than a divergent routine.
+    /// </para>
+    /// <para>
+    /// For <c>https://issuer.example.com</c>, produces
+    /// <c>https://issuer.example.com/.well-known/openid-credential-issuer</c>. For
+    /// <c>https://issuer.example.com/tenant</c>, produces
+    /// <c>https://issuer.example.com/.well-known/openid-credential-issuer/tenant</c> — exactly the
+    /// two §12.2.2 worked examples.
+    /// </para>
+    /// </remarks>
+    public static WellKnownPath OpenIdCredentialIssuer { get; } = new(
+        OpenIdCredentialIssuerSuffix,
+        "OID4VCI 1.0",
+        identifier => ComputeWellKnownWithPathInsertion(identifier, OpenIdCredentialIssuerSuffix));
+
 
     /// <summary>
     /// DID Web resolution (did:web method specification).

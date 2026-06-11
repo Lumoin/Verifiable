@@ -1,3 +1,6 @@
+using Verifiable.Cryptography.Text;
+
+
 namespace Verifiable.JCose
 {
     /// <summary>
@@ -24,12 +27,18 @@ namespace Verifiable.JCose
     {
         //Values of the "use" (Public Key Use) parameter — RFC 7517 §4.2.
 
+        /// <summary>The UTF-8 source literal of <see cref="UseSig"/>.</summary>
+        public static ReadOnlySpan<byte> UseSigUtf8 => "sig"u8;
+
         /// <summary>
         /// The <c>sig</c> value for the <see cref="WellKnownJwkMemberNames.Use"/> parameter,
         /// indicating the key is used for computing digital signatures or MACs per
         /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.2">RFC 7517 §4.2</see>.
         /// </summary>
-        public static readonly string UseSig = "sig";
+        public static readonly string UseSig = Utf8Constants.ToInternedString(UseSigUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="UseEnc"/>.</summary>
+        public static ReadOnlySpan<byte> UseEncUtf8 => "enc"u8;
 
         /// <summary>
         /// The <c>enc</c> value for the <see cref="WellKnownJwkMemberNames.Use"/> parameter,
@@ -41,17 +50,20 @@ namespace Verifiable.JCose
         /// JWE header parameter NAME (also the string <c>"enc"</c>) per RFC 7516 §4.1.2.
         /// Same string, different semantic context.
         /// </remarks>
-        public static readonly string UseEnc = "enc";
+        public static readonly string UseEnc = Utf8Constants.ToInternedString(UseEncUtf8);
 
 
         //Values of the "typ" (Type) header parameter — RFC 7519 §5.1.
+
+        /// <summary>The UTF-8 source literal of <see cref="TypeJwt"/>.</summary>
+        public static ReadOnlySpan<byte> TypeJwtUtf8 => "JWT"u8;
 
         /// <summary>
         /// The <c>JWT</c> value for the <see cref="WellKnownJoseHeaderNames.Typ"/> parameter
         /// per <see href="https://www.rfc-editor.org/rfc/rfc7519#section-5.1">RFC 7519 §5.1</see>.
         /// Spelled uppercase for compatibility with legacy implementations.
         /// </summary>
-        public static readonly string TypeJwt = "JWT";
+        public static readonly string TypeJwt = Utf8Constants.ToInternedString(TypeJwtUtf8);
 
 
         /// <summary>Whether <paramref name="value"/> is <see cref="UseSig"/>.</summary>
