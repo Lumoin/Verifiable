@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Implements ISO/IEC 7816-4 APDU functionality for smart cards</Title>
+    <Description>Includes and implements functionality to build, parse and exchange ISO/IEC 7816-4 APDUs with smart cards and NFC documents</Description>
+    <PackageTags>APDU smart-card ISO7816 NFC eMRTD</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
+  </ItemGroup>
+
+</Project>

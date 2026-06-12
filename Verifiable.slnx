@@ -37,6 +37,7 @@
     <File Path="documents/ADRs/validation-and-secops.md" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Verifiable.Apdu/Verifiable.Apdu.csproj" />
     <Project Path="src/Verifiable.BouncyCastle/Verifiable.BouncyCastle.csproj" />
     <Project Path="src/Verifiable.Cbor/Verifiable.Cbor.csproj" Id="38096bd8-b6f1-4028-aa63-99b1379eefc6" />
     <Project Path="src/Verifiable.Core/Verifiable.Core.csproj" />
