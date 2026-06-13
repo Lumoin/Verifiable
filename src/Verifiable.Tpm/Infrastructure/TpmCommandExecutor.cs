@@ -191,39 +191,20 @@ public static class TpmCommandExecutor
                 using IMemoryOwner<byte> requestOwner = pool.Rent(totalRequestSize);
                 Memory<byte> requestMemory = requestOwner.Memory[..totalRequestSize];
 
-                //Build request synchronously inside this scope; the writer is a ref struct.
-                {
-                    var writer = new TpmWriter(requestMemory.Span);
-
-                    //Write header.
-                    writer.WriteUInt16(requestTag);
-                    writer.WriteUInt32((uint)totalRequestSize);
-                    writer.WriteUInt32((uint)commandCode);
-
-                    //Write handles.
-                    if(inputHandleSize > 0)
-                    {
-                        writer.WriteBytes(handlesMemory.Span);
-                    }
-
-                    //Write auth area if sessions present.
-                    if(hasSessions)
-                    {
-                        int authBodySize = authAreaSize - 4;
-                        writer.WriteUInt32((uint)authBodySize);
-
-                        for(int i = 0; i < sessions.Count; i++)
-                        {
-                            sessions[i].WriteAuthCommand(ref writer, preparedAuthHmacs[i]);
-                        }
-                    }
-
-                    //Write parameters.
-                    if(parametersSize > 0)
-                    {
-                        writer.WriteBytes(parametersMemory.Span);
-                    }
-                }
+                //Build request synchronously; the writer is a ref struct contained inside the helper.
+                WriteRequest(
+                    requestMemory.Span,
+                    requestTag,
+                    totalRequestSize,
+                    commandCode,
+                    inputHandleSize,
+                    handlesMemory,
+                    hasSessions,
+                    authAreaSize,
+                    sessions,
+                    preparedAuthHmacs,
+                    parametersSize,
+                    parametersMemory);
 
                 //Submit to TPM.
                 TpmResult<TpmResponse> transportResult = await device.SubmitAsync(
@@ -248,81 +229,23 @@ public static class TpmCommandExecutor
                     return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
                 }
 
-                //Parse response synchronously inside this scope; the reader is a ref struct.
-                ushort responseTag;
-                uint responseSize;
-                uint responseCode;
-                uint[] outHandles;
-                int parametersStart;
-                int parametersLength;
-                int authStart;
-                int authLength;
-                bool responseHasSessions;
-
+                //Parse the response envelope synchronously; the reader is a ref struct contained inside the helper.
+                TpmResult<TpmResponseLayout> layoutResult = ParseResponseLayout(response.AsReadOnlySpan(), responseLength, codec.OutHandleCount);
+                if(!layoutResult.IsSuccess)
                 {
-                    ReadOnlySpan<byte> actualResponse = response.AsReadOnlySpan();
-
-                    //Parse response header.
-                    var headerReader = new TpmReader(actualResponse);
-                    responseTag = headerReader.ReadUInt16();
-                    responseSize = headerReader.ReadUInt32();
-                    responseCode = headerReader.ReadUInt32();
-
-                    //Validate response size.
-                    if(responseSize < TpmConstants.HeaderSize || responseSize > TpmConstants.MaxResponseSize || responseSize != responseLength)
-                    {
-                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
-                    }
-
-                    //Check for TPM error.
-                    if(responseCode != (uint)TpmRcConstants.TPM_RC_SUCCESS)
-                    {
-                        return TpmResult<TResponse>.TpmError((TpmRcConstants)responseCode);
-                    }
-
-                    //Parse output handles.
-                    int handlesStartOffset = TpmConstants.HeaderSize;
-                    var reader = new TpmReader(actualResponse[handlesStartOffset..]);
-
-                    outHandles = new uint[codec.OutHandleCount];
-                    for(int i = 0; i < codec.OutHandleCount; i++)
-                    {
-                        outHandles[i] = reader.ReadUInt32();
-                    }
-
-                    //Split parameters and auth.
-                    int currentOffset = TpmConstants.HeaderSize + (codec.OutHandleCount * sizeof(uint));
-                    responseHasSessions = responseTag == (ushort)TpmStConstants.TPM_ST_SESSIONS;
-
-                    if(responseHasSessions)
-                    {
-                        uint parameterSize = reader.ReadUInt32();
-                        currentOffset += sizeof(uint);
-
-                        parametersStart = currentOffset;
-                        parametersLength = (int)parameterSize;
-
-                        authStart = parametersStart + parametersLength;
-                        authLength = (int)responseSize - authStart;
-                    }
-                    else
-                    {
-                        parametersStart = currentOffset;
-                        parametersLength = (int)responseSize - parametersStart;
-
-                        authStart = 0;
-                        authLength = 0;
-                    }
+                    return TpmResult<TResponse>.TpmError(layoutResult.ResponseCode);
                 }
+
+                TpmResponseLayout layout = layoutResult.Value;
 
                 //Parse response parameters using codec.
                 TResponse typedResponse;
-                if(codec.HasResponseParameters && parametersLength > 0)
+                if(codec.HasResponseParameters && layout.ParametersLength > 0)
                 {
-                    ReadOnlySpan<byte> parametersArea = response.AsReadOnlySpan().Slice(parametersStart, parametersLength);
+                    ReadOnlySpan<byte> parametersArea = response.AsReadOnlySpan().Slice(layout.ParametersStart, layout.ParametersLength);
                     var paramReader = new TpmReader(parametersArea);
 
-                    ITpmWireType parsed = codec.ParseResponse(ref paramReader, outHandles, pool);
+                    ITpmWireType parsed = codec.ParseResponse(ref paramReader, layout.OutHandles, pool);
 
                     if(parsed is not TResponse typed)
                     {
@@ -351,7 +274,7 @@ public static class TpmCommandExecutor
                 }
 
                 //Parse and verify sessions.
-                if(responseHasSessions && sessions.Count > 0)
+                if(layout.HasSessions && sessions.Count > 0)
                 {
                     //Compute rpHash only if we have sessions that need it.
                     IMemoryOwner<byte>? rpHashOwner = null;
@@ -369,19 +292,19 @@ public static class TpmCommandExecutor
                             //bytes survive across the async digest computation; the response
                             //buffer is borrowed from the pool already, but slicing through
                             //a Memory reference keeps the lifetime explicit.
-                            using IMemoryOwner<byte> responseParamsOwner = pool.Rent(Math.Max(parametersLength, 1));
-                            Memory<byte> responseParamsMemory = responseParamsOwner.Memory[..parametersLength];
-                            response.AsReadOnlySpan().Slice(parametersStart, parametersLength).CopyTo(responseParamsMemory.Span);
+                            using IMemoryOwner<byte> responseParamsOwner = pool.Rent(Math.Max(layout.ParametersLength, 1));
+                            Memory<byte> responseParamsMemory = responseParamsOwner.Memory[..layout.ParametersLength];
+                            response.AsReadOnlySpan().Slice(layout.ParametersStart, layout.ParametersLength).CopyTo(responseParamsMemory.Span);
 
                             await ComputeRpHashAsync(
-                                sessionHashAlg, responseCode, commandCode, responseParamsMemory, rpHashMemory, pool, cancellationToken).ConfigureAwait(false);
+                                sessionHashAlg, layout.ResponseCode, commandCode, responseParamsMemory, rpHashMemory, pool, cancellationToken).ConfigureAwait(false);
                         }
 
                         //Auth area parsing must happen on the response span; copy out to
                         //pool-backed memory before any further awaits.
-                        IMemoryOwner<byte> authOwner = pool.Rent(Math.Max(authLength, 1));
-                        Memory<byte> authMemory = authOwner.Memory[..authLength];
-                        response.AsReadOnlySpan().Slice(authStart, authLength).CopyTo(authMemory.Span);
+                        IMemoryOwner<byte> authOwner = pool.Rent(Math.Max(layout.AuthLength, 1));
+                        Memory<byte> authMemory = authOwner.Memory[..layout.AuthLength];
+                        response.AsReadOnlySpan().Slice(layout.AuthStart, layout.AuthLength).CopyTo(authMemory.Span);
 
                         try
                         {
@@ -447,6 +370,158 @@ public static class TpmCommandExecutor
         {
             cpHashOwner?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Writes the full TPM command request (header, handles, auth area, parameters) into the
+    /// supplied buffer. The <see cref="TpmWriter"/> is a ref struct, so it is born and buried
+    /// inside this synchronous method and never crosses an await boundary.
+    /// </summary>
+    /// <param name="request">The request buffer to write into.</param>
+    /// <param name="requestTag">The request tag (TPM_ST value).</param>
+    /// <param name="totalRequestSize">The total request size including the header.</param>
+    /// <param name="commandCode">The command code.</param>
+    /// <param name="inputHandleSize">The size in bytes of the input handle area.</param>
+    /// <param name="handles">The pre-serialized input handle bytes.</param>
+    /// <param name="hasSessions">Whether an authorization (session) area is present.</param>
+    /// <param name="authAreaSize">The total auth area size including the authorizationSize field.</param>
+    /// <param name="sessions">The sessions whose auth commands are written.</param>
+    /// <param name="preparedAuthHmacs">The precomputed per-session auth HMACs.</param>
+    /// <param name="parametersSize">The size in bytes of the parameter area.</param>
+    /// <param name="parameters">The pre-serialized parameter bytes.</param>
+    private static void WriteRequest(
+        Span<byte> request,
+        ushort requestTag,
+        int totalRequestSize,
+        TpmCcConstants commandCode,
+        int inputHandleSize,
+        ReadOnlyMemory<byte> handles,
+        bool hasSessions,
+        int authAreaSize,
+        IReadOnlyList<TpmSessionBase> sessions,
+        Tpm2bAuth?[] preparedAuthHmacs,
+        int parametersSize,
+        ReadOnlyMemory<byte> parameters)
+    {
+        var writer = new TpmWriter(request);
+
+        //Write header.
+        writer.WriteUInt16(requestTag);
+        writer.WriteUInt32((uint)totalRequestSize);
+        writer.WriteUInt32((uint)commandCode);
+
+        //Write handles.
+        if(inputHandleSize > 0)
+        {
+            writer.WriteBytes(handles.Span);
+        }
+
+        //Write auth area if sessions present.
+        if(hasSessions)
+        {
+            int authBodySize = authAreaSize - 4;
+            writer.WriteUInt32((uint)authBodySize);
+
+            for(int i = 0; i < sessions.Count; i++)
+            {
+                sessions[i].WriteAuthCommand(ref writer, preparedAuthHmacs[i]);
+            }
+        }
+
+        //Write parameters.
+        if(parametersSize > 0)
+        {
+            writer.WriteBytes(parameters.Span);
+        }
+    }
+
+    /// <summary>
+    /// Parses the TPM response envelope (header, output handles, parameter/auth split) into a
+    /// <see cref="TpmResponseLayout"/>. The <see cref="TpmReader"/> is a ref struct, so it is
+    /// born and buried inside this synchronous method; only offsets, lengths, and the output
+    /// handle array flow back to the caller.
+    /// </summary>
+    /// <param name="response">The full response buffer.</param>
+    /// <param name="responseLength">The actual response length in bytes.</param>
+    /// <param name="outHandleCount">The number of output handles the codec expects.</param>
+    /// <returns>
+    /// The parsed layout on success, a <see cref="TpmRcConstants.TPM_RC_SIZE"/> TPM error on a
+    /// size violation, or the TPM error carried by the response header.
+    /// </returns>
+    private static TpmResult<TpmResponseLayout> ParseResponseLayout(
+        ReadOnlySpan<byte> response,
+        int responseLength,
+        int outHandleCount)
+    {
+        //Parse response header.
+        var headerReader = new TpmReader(response);
+        ushort responseTag = headerReader.ReadUInt16();
+        uint responseSize = headerReader.ReadUInt32();
+        uint responseCode = headerReader.ReadUInt32();
+
+        //Validate response size.
+        if(responseSize < TpmConstants.HeaderSize || responseSize > TpmConstants.MaxResponseSize || responseSize != responseLength)
+        {
+            return TpmResult<TpmResponseLayout>.TpmError(TpmRcConstants.TPM_RC_SIZE);
+        }
+
+        //Check for TPM error.
+        if(responseCode != (uint)TpmRcConstants.TPM_RC_SUCCESS)
+        {
+            return TpmResult<TpmResponseLayout>.TpmError((TpmRcConstants)responseCode);
+        }
+
+        //Parse output handles.
+        int handlesStartOffset = TpmConstants.HeaderSize;
+        var reader = new TpmReader(response[handlesStartOffset..]);
+
+        uint[] outHandles = new uint[outHandleCount];
+        for(int i = 0; i < outHandleCount; i++)
+        {
+            outHandles[i] = reader.ReadUInt32();
+        }
+
+        //Split parameters and auth.
+        int currentOffset = TpmConstants.HeaderSize + (outHandleCount * sizeof(uint));
+        bool responseHasSessions = responseTag == (ushort)TpmStConstants.TPM_ST_SESSIONS;
+
+        int parametersStart;
+        int parametersLength;
+        int authStart;
+        int authLength;
+
+        if(responseHasSessions)
+        {
+            uint parameterSize = reader.ReadUInt32();
+            currentOffset += sizeof(uint);
+
+            parametersStart = currentOffset;
+            parametersLength = (int)parameterSize;
+
+            authStart = parametersStart + parametersLength;
+            authLength = (int)responseSize - authStart;
+        }
+        else
+        {
+            parametersStart = currentOffset;
+            parametersLength = (int)responseSize - parametersStart;
+
+            authStart = 0;
+            authLength = 0;
+        }
+
+        TpmResponseLayout layout = new(
+            responseTag,
+            responseSize,
+            responseCode,
+            outHandles,
+            parametersStart,
+            parametersLength,
+            authStart,
+            authLength,
+            responseHasSessions);
+
+        return TpmResult<TpmResponseLayout>.Success(layout);
     }
 
     /// <summary>
