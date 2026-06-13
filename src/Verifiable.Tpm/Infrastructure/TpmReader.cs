@@ -19,9 +19,9 @@ namespace Verifiable.Tpm.Infrastructure;
 /// </remarks>
 public ref struct TpmReader
 {
-    private readonly ReadOnlySpan<byte> _original;
-    private ReadOnlySpan<byte> _remaining;
-    private int _consumed;
+    private readonly ReadOnlySpan<byte> original;
+    private ReadOnlySpan<byte> remaining;
+    private int consumed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TpmReader"/> struct.
@@ -29,30 +29,30 @@ public ref struct TpmReader
     /// <param name="buffer">The buffer to read from.</param>
     public TpmReader(ReadOnlySpan<byte> buffer)
     {
-        _original = buffer;
-        _remaining = buffer;
-        _consumed = 0;
+        original = buffer;
+        remaining = buffer;
+        consumed = 0;
     }
 
     /// <summary>
     /// Gets the number of bytes consumed so far.
     /// </summary>
-    public int Consumed => _consumed;
+    public int Consumed => consumed;
 
     /// <summary>
     /// Gets the number of bytes remaining.
     /// </summary>
-    public int Remaining => _remaining.Length;
+    public int Remaining => remaining.Length;
 
     /// <summary>
     /// Gets a value indicating whether the buffer is empty.
     /// </summary>
-    public bool IsEmpty => _remaining.IsEmpty;
+    public bool IsEmpty => remaining.IsEmpty;
 
     /// <summary>
     /// Gets the current position in the original buffer.
     /// </summary>
-    public int Position => _consumed;
+    public int Position => consumed;
 
     /// <summary>
     /// Reads a single byte.
@@ -60,7 +60,7 @@ public ref struct TpmReader
     /// <returns>The byte value.</returns>
     public byte ReadByte()
     {
-        byte value = _remaining[0];
+        byte value = remaining[0];
         Advance(1);
         return value;
     }
@@ -71,7 +71,7 @@ public ref struct TpmReader
     /// <returns>The value.</returns>
     public ushort ReadUInt16()
     {
-        ushort value = BinaryPrimitives.ReadUInt16BigEndian(_remaining);
+        ushort value = BinaryPrimitives.ReadUInt16BigEndian(remaining);
         Advance(sizeof(ushort));
         return value;
     }
@@ -82,7 +82,7 @@ public ref struct TpmReader
     /// <returns>The value.</returns>
     public uint ReadUInt32()
     {
-        uint value = BinaryPrimitives.ReadUInt32BigEndian(_remaining);
+        uint value = BinaryPrimitives.ReadUInt32BigEndian(remaining);
         Advance(sizeof(uint));
         return value;
     }
@@ -93,7 +93,7 @@ public ref struct TpmReader
     /// <returns>The value.</returns>
     public ulong ReadUInt64()
     {
-        ulong value = BinaryPrimitives.ReadUInt64BigEndian(_remaining);
+        ulong value = BinaryPrimitives.ReadUInt64BigEndian(remaining);
         Advance(sizeof(ulong));
         return value;
     }
@@ -105,7 +105,7 @@ public ref struct TpmReader
     /// <returns>A span containing the bytes.</returns>
     public ReadOnlySpan<byte> ReadBytes(int count)
     {
-        ReadOnlySpan<byte> bytes = _remaining[..count];
+        ReadOnlySpan<byte> bytes = remaining[..count];
         Advance(count);
         return bytes;
     }
@@ -131,7 +131,7 @@ public ref struct TpmReader
     public TpmBlob ReadTpm2bBlob()
     {
         ushort length = ReadUInt16();
-        int offset = _consumed;
+        int offset = consumed;
         Advance(length);
         return new TpmBlob(offset, length);
     }
@@ -143,7 +143,7 @@ public ref struct TpmReader
     /// <returns>A blob containing offset and length into the original buffer.</returns>
     public TpmBlob ReadBlob(int count)
     {
-        int offset = _consumed;
+        int offset = consumed;
         Advance(count);
         return new TpmBlob(offset, count);
     }
@@ -153,7 +153,7 @@ public ref struct TpmReader
     /// </summary>
     /// <param name="count">The number of bytes to peek.</param>
     /// <returns>A span containing the bytes.</returns>
-    public ReadOnlySpan<byte> PeekBytes(int count) => _remaining[..count];
+    public ReadOnlySpan<byte> PeekBytes(int count) => remaining[..count];
 
     /// <summary>
     /// Skips a specified number of bytes.
@@ -163,7 +163,7 @@ public ref struct TpmReader
 
     private void Advance(int count)
     {
-        _remaining = _remaining[count..];
-        _consumed += count;
+        remaining = remaining[count..];
+        consumed += count;
     }
 }
