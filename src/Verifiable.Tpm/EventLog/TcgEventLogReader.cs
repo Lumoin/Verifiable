@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
 using Verifiable.Tpm.EventLog;
 
@@ -156,6 +157,7 @@ public static partial class TcgEventLogReader
     }
 
 
+    [UnsupportedOSPlatform("browser")]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership transferred to TcgEventLogData and then to caller.")]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Any exception is treated the same.")]
     private static TpmResult<TcgEventLogData> ReadWindowsEventLog(MemoryPool<byte> pool)
@@ -213,6 +215,7 @@ public static partial class TcgEventLogReader
     /// <summary>
     /// Reads the Linux event log from securityfs.
     /// </summary>
+    [UnsupportedOSPlatform("browser")]
     private static TpmResult<TcgEventLogData> ReadLinuxEventLog(MemoryPool<byte> pool)
     {
         return ReadLinuxFileHardened(LinuxEventLogPath, pool);
@@ -228,6 +231,7 @@ public static partial class TcgEventLogReader
     /// a symlink was encountered (blocked by <c>O_NOFOLLOW</c>), <c>ENOENT</c> means the file
     /// or a path component does not exist, and <c>EACCES</c> indicates a permissions problem.
     /// </remarks>
+    [UnsupportedOSPlatform("browser")]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Any exception during file operations is treated as I/O error.")]
     private static TpmResult<TcgEventLogData> ReadLinuxFileHardened(string path, MemoryPool<byte> pool)
     {
@@ -426,6 +430,7 @@ public static partial class TcgEventLogReader
     }
 
     //Windows TBS interop.
+    [UnsupportedOSPlatform("browser")]
     [LibraryImport("tbs.dll", EntryPoint = "Tbsi_Get_TCG_Log")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial uint Tbsi_Get_TCG_Log(
@@ -436,13 +441,16 @@ public static partial class TcgEventLogReader
 #pragma warning disable CA5392 //Use DefaultDllImportSearchPaths attribute for P/Invokes.
 
     //Linux POSIX interop for hardened event log file access.
+    [UnsupportedOSPlatform("browser")]
     [LibraryImport("libc", EntryPoint = "open", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
 
     private static partial int LinuxOpen(string pathname, int flags, int mode);
 
+    [UnsupportedOSPlatform("browser")]
     [LibraryImport("libc", EntryPoint = "fstat", SetLastError = true)]
     private static partial int LinuxFstat(int fd, IntPtr statBuf);
 
+    [UnsupportedOSPlatform("browser")]
     [LibraryImport("libc", EntryPoint = "close")]
     private static partial int LinuxClose(int fd);
 
