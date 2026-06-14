@@ -22,7 +22,7 @@ public static class WellKnownAssessorIds
 
     /// <summary>
     /// Issuer identifier for the composed claim-contribution issuer on
-    /// <see cref="Server.ServerConfiguration.ClaimIssuer"/>.
+    /// <see cref="Server.AuthorizationServerIntegration.ClaimIssuer"/>.
     /// </summary>
     public static readonly string ClaimContributors = Utf8Constants.ToInternedString(ClaimContributorsUtf8);
 }

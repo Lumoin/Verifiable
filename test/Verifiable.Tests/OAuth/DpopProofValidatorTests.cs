@@ -37,7 +37,7 @@ internal sealed class DpopProofValidatorTests
         Assert.IsNotNull(result.JwkThumbprint);
         Assert.AreEqual(
             DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.Es256,
-                TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared),
+                TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
             result.JwkThumbprint);
     }
 
@@ -280,7 +280,7 @@ internal sealed class DpopProofValidatorTests
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
             MicrosoftCryptographicFunctions.SignRsaSha256Pkcs1Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofValidationResult result = await ValidateAsync(
@@ -289,7 +289,7 @@ internal sealed class DpopProofValidatorTests
         Assert.IsTrue(result.IsSuccess, $"RS256 proof validation must succeed; got {result.FailureReason}.");
         Assert.AreEqual(
             DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.Rs256,
-                TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared),
+                TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
             result.JwkThumbprint);
     }
 
@@ -306,7 +306,7 @@ internal sealed class DpopProofValidatorTests
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
             MicrosoftCryptographicFunctions.SignRsaSha256PssAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofValidationResult result = await ValidateAsync(
@@ -315,7 +315,7 @@ internal sealed class DpopProofValidatorTests
         Assert.IsTrue(result.IsSuccess, $"PS256 proof validation must succeed; got {result.FailureReason}.");
         Assert.AreEqual(
             DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.Ps256,
-                TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared),
+                TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
             result.JwkThumbprint);
     }
 
@@ -332,7 +332,7 @@ internal sealed class DpopProofValidatorTests
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
             BouncyCastleCryptographicFunctions.SignEd25519Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofValidationResult result = await ValidateAsync(
@@ -341,7 +341,7 @@ internal sealed class DpopProofValidatorTests
         Assert.IsTrue(result.IsSuccess, $"EdDSA proof validation must succeed; got {result.FailureReason}.");
         Assert.AreEqual(
             DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.EdDsa,
-                TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared),
+                TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
             result.JwkThumbprint);
     }
 
@@ -362,7 +362,7 @@ internal sealed class DpopProofValidatorTests
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
 
@@ -383,7 +383,7 @@ internal sealed class DpopProofValidatorTests
             TestSetup.Base64UrlEncoder,
             customSerializer,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -412,7 +412,7 @@ internal sealed class DpopProofValidatorTests
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             TimeProvider,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             IatSkew,
             TestContext.CancellationToken).ConfigureAwait(false);
     }

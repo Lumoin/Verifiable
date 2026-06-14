@@ -7,7 +7,7 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Server.Registration;
 
@@ -22,11 +22,11 @@ namespace Verifiable.OAuth.Server.Registration;
 /// <para>
 /// <strong>Two entry points.</strong> RFC 7591 §3 (POST <c>/connect/register</c>)
 /// is global — there is no registration yet, so it cannot fit the per-registration
-/// <see cref="ServerConfiguration.EndpointBuilders"/> chain. The skin invokes
+/// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/> chain. The skin invokes
 /// <see cref="HandleCreateAsync"/> directly from its routing layer. RFC 7592 §2
 /// (GET / PUT / DELETE on <c>/connect/{segment}/register</c>) is per-registration
 /// and is registered via the <see cref="Builder"/> delegate that slots into
-/// <see cref="ServerConfiguration.EndpointBuilders"/>.
+/// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
 /// </para>
 /// <para>
 /// <strong>Storage model.</strong> The library does not own credential storage.
@@ -56,7 +56,7 @@ public static class RegistrationEndpoints
     /// management endpoints (GET / PUT / DELETE on the URL the application's
     /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
     /// returns for <see cref="WellKnownEndpointNames.RegistrationRegister"/>).
-    /// Pass this to <see cref="ServerConfiguration.EndpointBuilders"/>.
+    /// Pass this to <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     /// <remarks>
     /// Endpoints are emitted only when the registration's capability set
@@ -64,7 +64,7 @@ public static class RegistrationEndpoints
     /// </remarks>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
-        if(!registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration))
+        if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration))
         {
             return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>([]);
         }
@@ -111,7 +111,7 @@ public static class RegistrationEndpoints
         string requestBody,
         ImmutableHashSet<CapabilityIdentifier> capabilities,
         ExchangeContext context,
-        AuthorizationServer server,
+        EndpointServer server,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(requestBody);
@@ -119,8 +119,9 @@ public static class RegistrationEndpoints
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(server);
 
-        AuthorizationServerIntegration integration = server.Integration;
-        if(integration.ParseClientMetadataAsync is null)
+        var oauth = server.OAuth();
+
+        if(oauth.ParseClientMetadataAsync is null)
         {
             return ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
@@ -130,7 +131,7 @@ public static class RegistrationEndpoints
         ClientMetadata metadata;
         try
         {
-            metadata = await integration.ParseClientMetadataAsync(
+            metadata = await oauth.ParseClientMetadataAsync(
                 requestBody, cancellationToken).ConfigureAwait(false);
         }
         catch(Exception)
@@ -140,10 +141,10 @@ public static class RegistrationEndpoints
                 "Request body did not parse as a valid RFC 7591 client metadata document.");
         }
 
-        string clientId = await integration.GenerateIdentifierAsync!(
+        string clientId = await oauth.GenerateIdentifierAsync!(
             WellKnownIdentifierPurposes.OAuthClientId, context, cancellationToken)
             .ConfigureAwait(false);
-        string accessTokenValue = await integration.GenerateIdentifierAsync!(
+        string accessTokenValue = await oauth.GenerateIdentifierAsync!(
             WellKnownIdentifierPurposes.OAuthRegistrationAccessToken, context, cancellationToken)
             .ConfigureAwait(false);
         RegistrationAccessToken accessToken = new(accessTokenValue);
@@ -328,9 +329,10 @@ public static class RegistrationEndpoints
 
             BuildInputAsync = async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
                 ServerHttpResponse response = await handler(context, server, ct).ConfigureAwait(false);
-                return ((OAuthFlowInput?)null, (ServerHttpResponse?)response);
+                return ((FlowInput?)null, (ServerHttpResponse?)response);
             },
 
             BuildResponse = static (state, _, _) =>
@@ -342,21 +344,22 @@ public static class RegistrationEndpoints
 
     private delegate ValueTask<ServerHttpResponse> ManagementHandlerDelegate(
         ExchangeContext context,
-        AuthorizationServer server,
+        EndpointServer server,
         CancellationToken cancellationToken);
 
 
     private static async ValueTask<ServerHttpResponse> HandleReadAsync(
         ExchangeContext context,
-        AuthorizationServer server,
+        EndpointServer server,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         ServerHttpResponse? authFailure = await ValidateBearerAsync(
             context, server, cancellationToken).ConfigureAwait(false);
         if(authFailure is not null) { return authFailure; }
 
 
-        ClientRecord registration = context.Registration!;
+        ClientRecord registration = context.ClientRegistration!;
         DateTimeOffset now = server.TimeProvider.GetUtcNow();
         string body = BuildReadResponseJson(registration, now);
         //OAuth 2.1 §3.2.3 — the RFC 7592 read response echoes client
@@ -371,15 +374,15 @@ public static class RegistrationEndpoints
 
     private static async ValueTask<ServerHttpResponse> HandleUpdateAsync(
         ExchangeContext context,
-        AuthorizationServer server,
+        EndpointServer server,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         ServerHttpResponse? authFailure = await ValidateBearerAsync(
             context, server, cancellationToken).ConfigureAwait(false);
         if(authFailure is not null) { return authFailure; }
 
-        AuthorizationServerIntegration integration = server.Integration;
-        if(integration.ParseClientMetadataAsync is null)
+        if(oauth.ParseClientMetadataAsync is null)
         {
             return ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
@@ -404,7 +407,7 @@ public static class RegistrationEndpoints
         ClientMetadata newMetadata;
         try
         {
-            newMetadata = await integration.ParseClientMetadataAsync(
+            newMetadata = await oauth.ParseClientMetadataAsync(
                 bodyText, cancellationToken).ConfigureAwait(false);
         }
         catch(Exception)
@@ -414,7 +417,7 @@ public static class RegistrationEndpoints
                 "Request body did not parse as a valid RFC 7591 client metadata document.");
         }
 
-        ClientRecord previous = context.Registration!;
+        ClientRecord previous = context.ClientRegistration!;
         ClientRecord updated = BuildUpdatedRecord(previous, newMetadata);
 
         server.UpdateClient(previous, updated, context);
@@ -449,14 +452,15 @@ public static class RegistrationEndpoints
 
     private static async ValueTask<ServerHttpResponse> HandleDeleteAsync(
         ExchangeContext context,
-        AuthorizationServer server,
+        EndpointServer server,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         ServerHttpResponse? authFailure = await ValidateBearerAsync(
             context, server, cancellationToken).ConfigureAwait(false);
         if(authFailure is not null) { return authFailure; }
 
-        ClientRecord registration = context.Registration!;
+        ClientRecord registration = context.ClientRegistration!;
         server.DeregisterClient(registration, "RFC 7592 DELETE", context);
 
         return ServerHttpResponse.NoContent();
@@ -465,11 +469,11 @@ public static class RegistrationEndpoints
 
     private static async ValueTask<ServerHttpResponse?> ValidateBearerAsync(
         ExchangeContext context,
-        AuthorizationServer server,
+        EndpointServer server,
         CancellationToken cancellationToken)
     {
-        AuthorizationServerIntegration integration = server.Integration;
-        if(integration.ValidateRegistrationAccessTokenAsync is null)
+        var oauth = server.OAuth();
+        if(oauth.ValidateRegistrationAccessTokenAsync is null)
         {
             return ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
@@ -489,9 +493,9 @@ public static class RegistrationEndpoints
         }
 
         string presented = authHeader[bearerPrefix.Length..];
-        ClientRecord registration = context.Registration!;
+        ClientRecord registration = context.ClientRegistration!;
 
-        bool valid = await integration.ValidateRegistrationAccessTokenAsync(
+        bool valid = await oauth.ValidateRegistrationAccessTokenAsync(
             registration.TenantId,
             registration.ClientId,
             presented,

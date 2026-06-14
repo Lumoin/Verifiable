@@ -47,7 +47,7 @@ namespace Verifiable.Cryptography;
 /// <strong>OTel lifetime span.</strong>
 /// When a backend supplies an <see cref="Activity"/> at construction, this class
 /// tags it with <c>crypto.nonce.use_count</c> at each <see cref="UseNonce"/> call
-/// and stops it on disposal. The base class tags <c>crypto.lifetime_ms</c>.
+/// and stops it on disposal. The base class tags <c>sensitive_memory.lifetime_ms</c>.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

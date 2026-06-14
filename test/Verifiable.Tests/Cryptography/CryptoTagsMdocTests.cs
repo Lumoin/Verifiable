@@ -40,7 +40,7 @@ internal sealed class CryptoTagsMdocTests
         const int IsoMinimumLength = 16;
 
         using Salt salt = TestSalts.Generate(
-            IsoMinimumLength, CryptoTags.MdocIssuerSignedItemRandom, SensitiveMemoryPool<byte>.Shared);
+            IsoMinimumLength, CryptoTags.MdocIssuerSignedItemRandom, BaseMemoryPool.Shared);
 
         Assert.AreEqual(IsoMinimumLength, salt.Length);
         Assert.AreEqual(Purpose.Salt, salt.Tag.Get<Purpose>(),

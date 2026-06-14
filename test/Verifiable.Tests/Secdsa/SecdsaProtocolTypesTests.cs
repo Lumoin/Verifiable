@@ -100,7 +100,7 @@ internal sealed class SecdsaProtocolTypesTests
         byte[] scalar = new byte[EllipticCurveConstants.P256.PointArrayLength];
         RandomNumberGenerator.Fill(scalar);
 
-        using SensitiveMemoryPool<byte> pool = new();
+        using BaseMemoryPool pool = new();
         PinKeyScalarBytes pinKey = PinKeyScalarBytes.Create(scalar, pool);
 
         byte[] valueBefore = pinKey.Value.ToArray();
@@ -110,7 +110,7 @@ internal sealed class SecdsaProtocolTypesTests
 
         using IMemoryOwner<byte> next = pool.Rent(EllipticCurveConstants.P256.PointArrayLength);
         Assert.IsTrue(next.Memory.Span.SequenceEqual(new byte[EllipticCurveConstants.P256.PointArrayLength]),
-            "Memory returned to SensitiveMemoryPool must be zeroed.");
+            "Memory returned to BaseMemoryPool must be zeroed.");
     }
 
     [TestMethod]

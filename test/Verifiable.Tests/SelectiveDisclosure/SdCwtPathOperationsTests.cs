@@ -62,7 +62,7 @@ internal sealed class SdCwtPathOperationsTests
         IReadOnlyDictionary<SdDisclosure, CredentialPath> paths = SdCwtPathExtraction.ExtractPaths(
             message,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.HasCount(1, paths);
         Assert.IsTrue(paths.ContainsKey(nameDisclosure));
@@ -76,7 +76,7 @@ internal sealed class SdCwtPathOperationsTests
         byte[] payload = CreateSimpleCwtPayload();
         SdCwtMessage message = CreateMinimalSdCwt(payload, []);
 
-        IReadOnlySet<CredentialPath> paths = SdCwtPathExtraction.ExtractAllPaths(message, SensitiveMemoryPool<byte>.Shared);
+        IReadOnlySet<CredentialPath> paths = SdCwtPathExtraction.ExtractAllPaths(message, BaseMemoryPool.Shared);
 
         Assert.Contains(CredentialPath.Root, paths);
     }
@@ -90,7 +90,7 @@ internal sealed class SdCwtPathOperationsTests
 
         IReadOnlySet<CredentialPath> mandatory = SdCwtPathExtraction.ExtractMandatoryPaths(
             message,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.Contains(CredentialPath.Root, mandatory);
     }
@@ -111,7 +111,7 @@ internal sealed class SdCwtPathOperationsTests
         PathLattice lattice = SdCwtPathExtraction.CreateLattice(
             message,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.IsNotNull(lattice);
     }
@@ -127,7 +127,7 @@ internal sealed class SdCwtPathOperationsTests
         IReadOnlyDictionary<SdDisclosure, CredentialPath> paths = SdCwtPathExtraction.ExtractPaths(
             message,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.HasCount(0, paths);
     }
@@ -150,7 +150,7 @@ internal sealed class SdCwtPathOperationsTests
         IReadOnlyDictionary<SdDisclosure, CredentialPath> paths = SdCwtPathExtraction.ExtractPaths(
             message,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.HasCount(2, paths);
         Assert.AreEqual(CredentialPath.Root.Append("given_name"), paths[disclosure1]);

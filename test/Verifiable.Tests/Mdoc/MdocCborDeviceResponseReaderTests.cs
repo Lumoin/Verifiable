@@ -46,7 +46,7 @@ internal sealed class MdocCborDeviceResponseReaderTests
             using MdocDocument issued = await IssueAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
 
             using IMemoryOwner<byte> mdocGeneratedNonce =
-                Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, SensitiveMemoryPool<byte>.Shared);
+                Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, BaseMemoryPool.Shared);
             ReadOnlyMemory<byte> nonceMemory =
                 mdocGeneratedNonce.Memory[..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
             ReadOnlyMemory<byte> sessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
@@ -59,7 +59,7 @@ internal sealed class MdocCborDeviceResponseReaderTests
                 MdocDeviceNameSpaces.Empty,
                 sessionTranscript,
                 deviceKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             using MdocDeviceResponse deviceResponse = new(
@@ -74,10 +74,10 @@ internal sealed class MdocCborDeviceResponseReaderTests
 
             //=== Verifier side: reconstruct strictly from the wire bytes ===
             using IMemoryOwner<byte> deviceResponseBytes = Oid4VpMdocPresentation.DecodeVpTokenValue(
-                vpTokenValue, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+                vpTokenValue, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
 
             using MdocParsedDeviceResponse parsed = MdocCborDeviceResponseReader.Read(
-                deviceResponseBytes.Memory.Span, SensitiveMemoryPool<byte>.Shared);
+                deviceResponseBytes.Memory.Span, BaseMemoryPool.Shared);
 
             Assert.AreEqual(MdocWellKnownKeys.Version10, parsed.Version);
             Assert.AreEqual(MdocWellKnownKeys.StatusOk, parsed.Status);
@@ -89,7 +89,7 @@ internal sealed class MdocCborDeviceResponseReaderTests
 
             //Issuer MSO signature (M.3) against the wire-reconstructed issuerAuth.
             bool isIssuerVerified = await parsedDocument.IssuerSigned.IssuerAuth.VerifyAsync(
-                issuerKeys.PublicKey, SensitiveMemoryPool<byte>.Shared,
+                issuerKeys.PublicKey, BaseMemoryPool.Shared,
                 CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure,
                 TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(isIssuerVerified, "Issuer signature must verify against the wire-reconstructed issuerAuth.");
@@ -101,7 +101,7 @@ internal sealed class MdocCborDeviceResponseReaderTests
             //Device signature (M.3b) over the verifier-reconstructed SessionTranscript.
             using IMemoryOwner<byte> reconstructedNonceOwner =
                 Oid4VpMdocPresentation.DecodeMdocGeneratedNonceForTransmissionRoundTrip(
-                    mdocGeneratedNonceForTransmission, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+                    mdocGeneratedNonceForTransmission, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
             ReadOnlyMemory<byte> reconstructedNonce = reconstructedNonceOwner.Memory
                 [..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
             ReadOnlyMemory<byte> reconstructedTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
@@ -112,7 +112,7 @@ internal sealed class MdocCborDeviceResponseReaderTests
                 parsedDocument.DocType,
                 reconstructedTranscript,
                 deviceKeys.PublicKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 CoseSerialization.ParseCoseSign1AllowingNilPayload,
                 MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes,
                 CoseSerialization.BuildSigStructure,
@@ -159,7 +159,7 @@ internal sealed class MdocCborDeviceResponseReaderTests
         try
         {
             using MdocParsedDeviceResponse _ = MdocCborDeviceResponseReader.Read(
-                notAMap, SensitiveMemoryPool<byte>.Shared);
+                notAMap, BaseMemoryPool.Shared);
         }
         catch(Exception ex)
         {
@@ -193,7 +193,7 @@ internal sealed class MdocCborDeviceResponseReaderTests
                 DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
             },
             issuerKeys.PrivateKey,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

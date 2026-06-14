@@ -35,7 +35,7 @@ internal sealed class SchnorrZkpChallengeHashMigrationTests
         EcPoint[] publicKeys = [dPoint];
         byte[] binding = "challenge-binding-A"u8.ToArray();
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         SchnorrZkProof proof = await SchnorrZkp.GenerateAsync(
@@ -66,7 +66,7 @@ internal sealed class SchnorrZkpChallengeHashMigrationTests
         EcPoint[] publicKeys = [dGenerator0, dGenerator1];
         byte[] binding = "multi-generator-binding"u8.ToArray();
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         SchnorrZkProof proof = await SchnorrZkp.GenerateAsync(
@@ -91,7 +91,7 @@ internal sealed class SchnorrZkpChallengeHashMigrationTests
         EcPoint[] generators = [EcMath.G];
         EcPoint[] publicKeys = [dPoint];
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         SchnorrZkProof proof = await SchnorrZkp.GenerateAsync(

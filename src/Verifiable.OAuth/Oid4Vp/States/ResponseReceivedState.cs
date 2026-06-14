@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.Oid4Vp.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ResponseReceived FlowId={FlowId} ReceivedAt={ReceivedAt}")]
-public sealed record ResponseReceivedState: OAuthFlowState
+public sealed record ResponseReceivedState: FlowState
 {
     /// <summary>
     /// The raw JWE compact serialization received from the HTTP POST.

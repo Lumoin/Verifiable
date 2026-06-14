@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ServerCodeIssued FlowId={FlowId} SubjectId={SubjectId}")]
-public sealed record ServerCodeIssuedState: OAuthFlowState
+public sealed record ServerCodeIssuedState: FlowState
 {
     /// <summary>
     /// SHA-256 hash of the authorization code returned to the client.

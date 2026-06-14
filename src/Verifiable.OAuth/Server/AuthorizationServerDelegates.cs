@@ -3,7 +3,6 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 
 using Verifiable.OAuth.Server.Metadata;
-using Verifiable.OAuth.Server.Routing;
 namespace Verifiable.OAuth.Server;
 
 /// <summary>
@@ -24,96 +23,6 @@ namespace Verifiable.OAuth.Server;
 /// </remarks>
 public delegate ValueTask<ClientRecord?> LoadClientRegistrationDelegate(
     TenantId tenantId,
-    ExchangeContext context,
-    CancellationToken cancellationToken);
-
-
-/// <summary>
-/// Persists an <see cref="OAuthFlowState"/> and its step count to durable storage
-/// under the given correlation key, scoped by tenant.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Called after every successful PDA transition. Must be idempotent.
-/// </para>
-/// <para>
-/// The <paramref name="tenantId"/> scopes the storage write to the tenant the request
-/// belongs to. Storage layers key records by <c>(tenantId, correlationKey)</c> so that
-/// flow state from one tenant cannot be loaded under another. The PDA state record
-/// itself does not carry tenant — tenant isolation is enforced at this storage boundary,
-/// not at the state layer.
-/// </para>
-/// <para>
-/// The <paramref name="correlationKey"/> is the protocol handle that will arrive
-/// at the next endpoint — for example the <c>request_uri</c> opaque token for
-/// PAR-based flows, the authorization <c>code</c> for the token endpoint, the
-/// <c>device_code</c> for device authorization polling, or the <c>auth_req_id</c>
-/// for CIBA. The application stores the state under this key so that
-/// <see cref="LoadServerFlowStateDelegate"/> can retrieve it directly without
-/// any secondary index or mapping table.
-/// </para>
-/// </remarks>
-public delegate ValueTask SaveServerFlowStateDelegate(
-    TenantId tenantId,
-    string correlationKey,
-    OAuthFlowState state,
-    int stepCount,
-    ExchangeContext context,
-    CancellationToken cancellationToken);
-
-
-/// <summary>
-/// Deletes a previously-saved flow state, scoped by tenant.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Required for protocol paths that rotate or invalidate state — most
-/// notably refresh-token rotation per
-/// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.2.2">RFC 9700 §2.2.2</see>.
-/// On a successful refresh exchange the AS invalidates the presented
-/// refresh token by calling this delegate against the token's flow id;
-/// the application's lambda removes the secondary-index entry and the
-/// flow record from storage.
-/// </para>
-/// <para>
-/// Implementations are idempotent: a delete against an unknown
-/// <paramref name="correlationKey"/> is a no-op, not an error. The
-/// dispatcher relies on this for clean retry semantics.
-/// </para>
-/// </remarks>
-public delegate ValueTask DeleteServerFlowStateDelegate(
-    TenantId tenantId,
-    string correlationKey,
-    ExchangeContext context,
-    CancellationToken cancellationToken);
-
-
-/// <summary>
-/// Loads an <see cref="OAuthFlowState"/> and step count from durable storage by
-/// correlation key, scoped by tenant.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The <paramref name="tenantId"/> scopes the storage read to the tenant the request
-/// belongs to — a load attempt under one tenant must never return a record persisted
-/// under another. The library does not enforce this at the state layer; the storage
-/// implementation is responsible for keying records by <c>(tenantId, correlationKey)</c>
-/// or otherwise refusing cross-tenant reads.
-/// </para>
-/// <para>
-/// The <paramref name="correlationKey"/> is extracted from the inbound request by
-/// <see cref="AuthorizationServer"/> — it is whatever the protocol's natural handle
-/// is at this endpoint: a <c>request_uri</c> token, an authorization <c>code</c>,
-/// a <c>device_code</c>, a <c>state</c> value, or an <c>auth_req_id</c>.
-/// </para>
-/// <para>
-/// Returns <c>(null, 0)</c> when no state is found for the given <paramref name="tenantId"/>
-/// and <paramref name="correlationKey"/> pair.
-/// </para>
-/// </remarks>
-public delegate ValueTask<(OAuthFlowState? State, int StepCount)> LoadServerFlowStateDelegate(
-    TenantId tenantId,
-    string correlationKey,
     ExchangeContext context,
     CancellationToken cancellationToken);
 

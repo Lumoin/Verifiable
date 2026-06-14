@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Server;
 
@@ -36,7 +36,7 @@ public static class AuthCodeServerFlowAutomaton
     /// The time provider used to stamp the initial state. Supply a
     /// <c>FakeTimeProvider</c> in tests and <see cref="TimeProvider.System"/> in production.
     /// </param>
-    public static PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeServerStackSymbol> Create(
+    public static PushdownAutomaton<FlowState, FlowInput, AuthCodeServerStackSymbol> Create(
         string runId,
         TimeProvider timeProvider)
     {
@@ -45,7 +45,7 @@ public static class AuthCodeServerFlowAutomaton
 
         DateTimeOffset now = timeProvider.GetUtcNow();
 
-        return new PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeServerStackSymbol>(
+        return new PushdownAutomaton<FlowState, FlowInput, AuthCodeServerStackSymbol>(
             runId: runId,
             initialState: new ServerFlowFailedState
             {
@@ -72,15 +72,15 @@ public static class AuthCodeServerFlowAutomaton
     /// <param name="state">The persisted server flow state loaded from the store.</param>
     /// <param name="stepCount">The step count at the time the state was persisted.</param>
     /// <param name="timeProvider">The time provider used for expiry checks.</param>
-    public static PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeServerStackSymbol> CreateFromSnapshot(
-        OAuthFlowState state,
+    public static PushdownAutomaton<FlowState, FlowInput, AuthCodeServerStackSymbol> CreateFromSnapshot(
+        FlowState state,
         int stepCount,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        return new PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeServerStackSymbol>(
+        return new PushdownAutomaton<FlowState, FlowInput, AuthCodeServerStackSymbol>(
             runId: Guid.CreateVersion7(timeProvider.GetUtcNow()).ToString("N"),
             savedState: state,
             savedStack: [AuthCodeServerStackSymbol.Base],

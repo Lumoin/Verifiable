@@ -62,7 +62,7 @@ internal sealed class OAuthAttackMitigationTests
     [TestMethod]
     public async Task Rfc9700Section4Point4MixUpAttackCallbackWithWrongIssuerIsRejected()
     {
-        var store = new Dictionary<string, OAuthFlowState>();
+        var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
@@ -88,7 +88,7 @@ internal sealed class OAuthAttackMitigationTests
     [TestMethod]
     public async Task Rfc9700Section4Point4MixUpAttackCallbackWithMissingIssuerIsRejectedUnderHaip10()
     {
-        var store = new Dictionary<string, OAuthFlowState>();
+        var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
@@ -115,7 +115,7 @@ internal sealed class OAuthAttackMitigationTests
     public async Task Rfc9700Section4Point4MixUpAttackCallbackWithMissingIssuerSucceedsUnderRfc6749()
     {
         //Plain RFC 6749 with PKCE does not require iss. The callback is valid without it.
-        var store = new Dictionary<string, OAuthFlowState>();
+        var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Rfc6749WithPkce);
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
@@ -139,7 +139,7 @@ internal sealed class OAuthAttackMitigationTests
     [TestMethod]
     public async Task Rfc9700Section4Point4MixUpAttackCallbackWithCorrectIssuerSucceeds()
     {
-        var store = new Dictionary<string, OAuthFlowState>();
+        var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
@@ -173,7 +173,7 @@ internal sealed class OAuthAttackMitigationTests
     [TestMethod]
     public async Task Rfc9700Section4Point7CsrfCallbackWithUnknownStateIsRejected()
     {
-        var store = new Dictionary<string, OAuthFlowState>();
+        var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
@@ -195,7 +195,7 @@ internal sealed class OAuthAttackMitigationTests
     [TestMethod]
     public async Task Rfc9700Section4Point7CsrfCallbackWithMissingStateIsRejected()
     {
-        var store = new Dictionary<string, OAuthFlowState>();
+        var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
@@ -233,7 +233,7 @@ internal sealed class OAuthAttackMitigationTests
         //Verify that every PAR request body produced by the flow includes code_challenge.
         //Its absence would allow a PKCE downgrade attack per RFC 9700 §4.8.
         var capturedFields = new Dictionary<string, string>();
-        var store = new Dictionary<string, OAuthFlowState>();
+        var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             store,
             PolicyProfile.Haip10,
@@ -258,7 +258,7 @@ internal sealed class OAuthAttackMitigationTests
         //Verify that every token request produced by the flow includes code_verifier.
         var parCaptured = new Dictionary<string, string>();
         var tokenCaptured = new Dictionary<string, string>();
-        var store = new Dictionary<string, OAuthFlowState>();
+        var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             store,
             PolicyProfile.Haip10,
@@ -307,7 +307,7 @@ internal sealed class OAuthAttackMitigationTests
     public async Task Rfc9700Section4Point8PkceDowngradeCodeChallengeMethodIsAlwaysS256()
     {
         var capturedFields = new Dictionary<string, string>();
-        var store = new Dictionary<string, OAuthFlowState>();
+        var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             store,
             PolicyProfile.Haip10,
@@ -331,7 +331,7 @@ internal sealed class OAuthAttackMitigationTests
     [TestMethod]
     public async Task Rfc9700Section4Point9TokenReplayExpiredFlowStateIsRejected()
     {
-        var store = new Dictionary<string, OAuthFlowState>();
+        var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             store,
             PolicyProfile.Haip10,
@@ -363,7 +363,7 @@ internal sealed class OAuthAttackMitigationTests
 
 
     private (OAuthClientInfrastructure Infrastructure, ClientRegistration Registration) CreateInfrastructureAndRegistration(
-        Dictionary<string, OAuthFlowState> store,
+        Dictionary<string, FlowState> store,
         PolicyProfile profile,
         string? parResponse = null,
         string? tokenResponse = null,
@@ -419,8 +419,8 @@ internal sealed class OAuthAttackMitigationTests
                 ValueTask.FromResult(store.GetValueOrDefault(flowId)),
             loadStateByRequestUriAsync: (requestUri, _, _) =>
             {
-                OAuthFlowState? found = null;
-                foreach(OAuthFlowState s in store.Values)
+                FlowState? found = null;
+                foreach(FlowState s in store.Values)
                 {
                     if(s is ParCompletedState pc
                         && string.Equals(pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
@@ -467,7 +467,7 @@ internal sealed class OAuthAttackMitigationTests
             ? /*lang=json,strict*/ $"{{\"access_token\":\"{accessToken}\",\"token_type\":\"{tokenType}\",\"expires_in\":{expiresIn}}}"
             : /*lang=json,strict*/ $"{{\"access_token\":\"{accessToken}\",\"token_type\":\"{tokenType}\",\"expires_in\":{expiresIn},\"refresh_token\":\"{refreshToken}\"}}";
 
-    private static string GetSingleFlowId(Dictionary<string, OAuthFlowState> store)
+    private static string GetSingleFlowId(Dictionary<string, FlowState> store)
     {
         Assert.IsNotEmpty(store, "Store must contain at least one flow state.");
         foreach(string key in store.Keys)

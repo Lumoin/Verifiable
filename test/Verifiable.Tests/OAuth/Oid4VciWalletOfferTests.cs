@@ -27,7 +27,7 @@ internal sealed class Oid4VciWalletOfferTests
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://issuer.client.test";
     private static readonly Uri ClientBaseUri = new("https://issuer.client.test");
@@ -102,7 +102,7 @@ internal sealed class Oid4VciWalletOfferTests
         string segment = material.Registration.TenantId.Value;
 
         CredentialOffer stored = BuildPreAuthorizedOffer();
-        host.Server.Integration.ResolveCredentialOfferAsync =
+        host.Server.OAuth().ResolveCredentialOfferAsync =
             (offerId, context, ct) => ValueTask.FromResult<CredentialOffer?>(
                 string.Equals(offerId, OfferId, StringComparison.Ordinal) ? stored : null);
 

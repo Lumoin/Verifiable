@@ -10,7 +10,7 @@ namespace Verifiable.Cryptography.Secdsa;
 /// The scalar is derived from the user PIN and a hardware-bound binder key
 /// per the constructions in Annex B of the SECDSA specification at
 /// https://wellet.nl/SECDSA-EUDI-wallet-latest.pdf. It must be zeroed
-/// immediately after use. Use <see cref="SensitiveMemoryPool{T}"/> as the
+/// immediately after use. Use <see cref="BaseMemoryPool"/> as the
 /// pool to guarantee zeroing of the backing buffer on disposal.
 /// This type owns its memory and must be disposed.
 /// </remarks>
@@ -36,7 +36,7 @@ public sealed class PinKeyScalarBytes: IDisposable
     /// </summary>
     /// <param name="scalarBytes">The big-endian scalar bytes.</param>
     /// <param name="pool">
-    /// The memory pool to allocate from. Use <see cref="SensitiveMemoryPool{T}.Shared"/>
+    /// The memory pool to allocate from. Use <see cref="BaseMemoryPool.Shared"/>
     /// to ensure the backing buffer is zeroed when returned to the pool.
     /// </param>
     /// <returns>A new <see cref="PinKeyScalarBytes"/> owning the scalar buffer.</returns>
@@ -55,7 +55,7 @@ public sealed class PinKeyScalarBytes: IDisposable
     {
         if(!Disposed)
         {
-            //Zero before returning to the pool. When SensitiveMemoryPool is used
+            //Zero before returning to the pool. When BaseMemoryPool is used
             //the pool itself also zeroes on return, providing defence in depth.
             Owner.Memory.Span.Slice(0, Length).Clear();
             Owner.Dispose();

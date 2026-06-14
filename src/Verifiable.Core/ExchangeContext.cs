@@ -20,7 +20,7 @@ namespace Verifiable.Core;
 /// even HTTP (wallet&#8596;wallet P2P, BLE, NFC, QR), so the threaded context must carry no
 /// transport or protocol coupling. It is a per-operation, <em>mutable</em>, string-keyed bag —
 /// handlers accumulate values (tenant identity, resolved policy, intermediate results) as the
-/// operation progresses. This is deliberately distinct from <see cref="Cryptography.Tag"/>, the
+/// operation progresses. This is deliberately distinct from <see cref="Foundation.Tag"/>, the
 /// <em>immutable</em>, type-keyed metadata attached to a single value (a key, a signature, a
 /// verified credential): the two are complementary, and the exchange context is string-keyed
 /// because it holds many same-typed values (tenant id, subject id, flow id are all strings) that

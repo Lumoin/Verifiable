@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.Oid4Vp.States;
 
 namespace Verifiable.OAuth.Oid4Vp.Session;
@@ -35,8 +35,8 @@ namespace Verifiable.OAuth.Oid4Vp.Session;
 [DebuggerDisplay("Oid4VpStepResult Outcome={Outcome} Step={StepCount} Accepted={Accepted}")]
 public sealed record Oid4VpStepResult(
     Oid4VpStepOutcome Outcome,
-    OAuthFlowState State,
+    FlowState State,
     bool Accepted,
     int StepCount,
-    TraceEntry<OAuthFlowState, OAuthFlowInput> TraceEntry,
+    TraceEntry<FlowState, FlowInput> TraceEntry,
     Exception? FaultException = null);

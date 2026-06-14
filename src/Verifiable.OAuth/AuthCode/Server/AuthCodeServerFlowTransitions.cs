@@ -1,4 +1,4 @@
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Server;
 
@@ -10,7 +10,7 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// <remarks>
 /// <para>
 /// The delegate returned by <see cref="Create"/> is the <c>δ</c> function in
-/// <c>PushdownAutomaton&lt;OAuthFlowState, OAuthFlowInput, AuthCodeServerStackSymbol&gt;</c>.
+/// <c>PushdownAutomaton&lt;FlowState, FlowInput, AuthCodeServerStackSymbol&gt;</c>.
 /// It is a pure dispatch table — no I/O, no randomness, no time reads occur here.
 /// All effectful values arrive pre-computed inside the input records.
 /// </para>
@@ -48,12 +48,12 @@ namespace Verifiable.OAuth.AuthCode.Server;
 public static class AuthCodeServerFlowTransitions
 {
     /// <summary>Creates the transition delegate for the server-side Authorization Code flow PDA.</summary>
-    public static TransitionDelegate<OAuthFlowState, OAuthFlowInput, AuthCodeServerStackSymbol> Create() =>
+    public static TransitionDelegate<FlowState, FlowInput, AuthCodeServerStackSymbol> Create() =>
         static (state, input, stackTop, cancellationToken) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            TransitionResult<OAuthFlowState, AuthCodeServerStackSymbol>? result =
+            TransitionResult<FlowState, AuthCodeServerStackSymbol>? result =
                 (state, input) switch
                 {
                     //ServerFail is accepted from any non-terminal state.
@@ -216,12 +216,12 @@ public static class AuthCodeServerFlowTransitions
                     _ => null
                 };
 
-            return ValueTask.FromResult<TransitionResult<OAuthFlowState, AuthCodeServerStackSymbol>?>(result);
+            return ValueTask.FromResult<TransitionResult<FlowState, AuthCodeServerStackSymbol>?>(result);
         };
 
 
-    private static TransitionResult<OAuthFlowState, AuthCodeServerStackSymbol> Transition(
-        OAuthFlowState nextState,
+    private static TransitionResult<FlowState, AuthCodeServerStackSymbol> Transition(
+        FlowState nextState,
         StackAction<AuthCodeServerStackSymbol> stackAction,
         string label) =>
         new(nextState, stackAction, label);

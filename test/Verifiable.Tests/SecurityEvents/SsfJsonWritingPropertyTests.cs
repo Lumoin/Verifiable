@@ -4,6 +4,7 @@ using CsCheck;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Json;
 using Verifiable.OAuth.Ssf;
+using Verifiable.Server;
 
 namespace Verifiable.Tests.SecurityEvents;
 

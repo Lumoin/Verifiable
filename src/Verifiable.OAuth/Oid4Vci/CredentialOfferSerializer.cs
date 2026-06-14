@@ -1,5 +1,6 @@
 using System.Text;
 using Verifiable.JCose;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Oid4Vci;
 

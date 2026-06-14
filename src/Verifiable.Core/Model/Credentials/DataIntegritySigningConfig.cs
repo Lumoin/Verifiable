@@ -121,7 +121,7 @@ public sealed record DataIntegritySigningConfig
 
     /// <summary>
     /// Memory pool for signature and digest allocations. Production
-    /// deployments typically pass <c>SensitiveMemoryPool&lt;byte&gt;.Shared</c>;
+    /// deployments typically pass <c>BaseMemoryPool.Shared</c>;
     /// tests may inject a different pool for instrumentation.
     /// </summary>
     public required MemoryPool<byte> MemoryPool { get; init; }

@@ -105,7 +105,7 @@ internal sealed class RecursiveTenancyTests
         //Wire a per-request capability resolver that vetoes the JWKS
         //endpoint, but only for the customer tenant. The operator's chain
         //must keep JWKS; the customer's chain must drop it.
-        host.Server.Integration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        host.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
         {
             HashSet<CapabilityIdentifier> active = [.. registration.AllowedCapabilities];
             if(registration.TenantId.Value.StartsWith("cust-", StringComparison.Ordinal))
@@ -125,7 +125,7 @@ internal sealed class RecursiveTenancyTests
         //segment; override by re-registering after a rename is hard, so
         //instead select the predicate by something controllable: the
         //ClientId starts with "https://customer-...". Recheck the predicate.
-        host.Server.Integration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        host.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
         {
             HashSet<CapabilityIdentifier> active = [.. registration.AllowedCapabilities];
             if(registration.ClientId.StartsWith("https://customer-", StringComparison.Ordinal))

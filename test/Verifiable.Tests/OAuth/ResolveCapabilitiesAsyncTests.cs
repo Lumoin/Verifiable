@@ -4,6 +4,7 @@ using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
+using Verifiable.Server.Pipeline;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -47,7 +48,7 @@ internal sealed class ResolveCapabilitiesAsyncTests
 
         //Veto JwksEndpoint via the per-call delegate while the static
         //AllowedCapabilities set still includes it.
-        host.Server.Integration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        host.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
         {
             HashSet<CapabilityIdentifier> attenuated =
                 [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
@@ -87,7 +88,7 @@ internal sealed class ResolveCapabilitiesAsyncTests
         //whether to veto JwksEndpoint. The same registration produces
         //different chains across the two calls because the lambda observes
         //request-scoped state.
-        host.Server.Integration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        host.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
         {
             bool vetoJwks =
                 ctx.TryGetValue("test.vetoJwks", out object? v) && v is bool b && b;
@@ -139,7 +140,7 @@ internal sealed class ResolveCapabilitiesAsyncTests
         //ResolveEndpointUriAsync to throw if called for the JWKS endpoint name —
         //the throw proves the filter happens BEFORE URI resolution; if the
         //filter happened after, the throw would fire.
-        host.Server.Integration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        host.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
         {
             HashSet<CapabilityIdentifier> attenuated =
                 [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
@@ -147,8 +148,8 @@ internal sealed class ResolveCapabilitiesAsyncTests
         };
 
         ResolveEndpointUriDelegate originalResolver =
-            host.Server.Integration.ResolveEndpointUriAsync!;
-        host.Server.Integration.ResolveEndpointUriAsync =
+            host.Server.OAuth().ResolveEndpointUriAsync!;
+        host.Server.OAuth().ResolveEndpointUriAsync =
             (endpointName, registration, ctx, ct) =>
         {
             if(endpointName == WellKnownEndpointNames.MetadataJwks)

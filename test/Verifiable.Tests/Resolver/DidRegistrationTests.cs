@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.Methods;
 using Verifiable.Core.Resolvers;

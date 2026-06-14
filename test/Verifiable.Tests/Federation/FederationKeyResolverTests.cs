@@ -27,7 +27,7 @@ internal sealed class FederationKeyResolverTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         ResolveEntityKeyDelegate resolver = FederationKeyResolver.BuildInChainResolver(
-            TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
 
         //Self-signed EC: issuerStatement == statementToVerify.
         using PublicKeyMemory? resolved = await resolver(
@@ -74,7 +74,7 @@ internal sealed class FederationKeyResolverTests
         };
 
         ResolveEntityKeyDelegate resolver = FederationKeyResolver.BuildInChainResolver(
-            TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
 
         using PublicKeyMemory? resolved = await resolver(
             subjectEc.Statement, subjectEc.Header, emptyIssuer,

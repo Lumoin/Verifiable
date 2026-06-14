@@ -30,11 +30,14 @@ using Verifiable.OAuth.Server.Audit;
 using Verifiable.OAuth.Server.Keys;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.OAuth.Server.Pipeline;
+using Verifiable.Server.Pipeline;
 using Verifiable.OAuth.Server.Registration;
 using Verifiable.OAuth.Server.States;
 using Verifiable.OAuth.Siop.Server;
 using Verifiable.OAuth.Siop.Server.States;
 using Verifiable.OAuth.Validation;
+using Verifiable.Vcalm;
+using Verifiable.Vcalm.Exchange;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -71,10 +74,10 @@ internal sealed class HostedAuthorizationServer
     /// Two-phase init: the host is constructed empty so the
     /// <see cref="AuthorizationServerIntegration"/> delegates can close over
     /// <see cref="Registrations"/> / <see cref="FlowStates"/> / etc. before the
-    /// <see cref="AuthorizationServer"/> itself is built; <see cref="Build"/>
+    /// <see cref="EndpointServer"/> itself is built; <see cref="Build"/>
     /// assigns the wired server here.
     /// </remarks>
-    public AuthorizationServer Server { get; internal set; } = null!;
+    public EndpointServer Server { get; internal set; } = null!;
 
 
     //Per-host stores. Every AuthorizationServer integration delegate that
@@ -83,7 +86,7 @@ internal sealed class HostedAuthorizationServer
     //and the key material backing the cryptography resolvers.
 
     public ConcurrentDictionary<string, ClientRecord> Registrations { get; } = new();
-    public ConcurrentDictionary<string, (OAuthFlowState State, int StepCount)> FlowStates { get; } = new();
+    public ConcurrentDictionary<string, (FlowState State, int StepCount)> FlowStates { get; } = new();
     public ConcurrentDictionary<string, string> RequestUriTokenIndex { get; } = new();
     public ConcurrentDictionary<string, string> CodeIndex { get; } = new();
     public ConcurrentDictionary<string, string> JtiIndex { get; } = new();
@@ -168,7 +171,7 @@ internal sealed class HostedAuthorizationServer
                         ? claims : null),
 
             LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
-                ValueTask.FromResult(
+                ValueTask.FromResult<IRegistrationRecord?>(
                     host.Registrations.TryGetValue(tenantId, out ClientRecord? reg)
                         ? reg : null),
 
@@ -251,6 +254,44 @@ internal sealed class HostedAuthorizationServer
 
                         break;
                     }
+                    case VcalmExchangePendingState exchangePending:
+                    {
+                        //VCALM §3.6: index the exchange id -> flowId so the §3.6.5 participate POST's
+                        //{localExchangeId} resolves back to the flow id (ResolveCorrelationKeyAsync) and
+                        //the stateless §3.6.4 / §3.6.6 reads resolve it (ResolveVcalmExchangeFlowIdAsync).
+                        //The same RequestUriTokenIndex path the OID4VP / SIOP handles use.
+                        if(!string.IsNullOrWhiteSpace(exchangePending.ExchangeId))
+                        {
+                            host.RequestUriTokenIndex[exchangePending.ExchangeId] = flowId;
+                        }
+
+                        break;
+                    }
+                    case VcalmExchangeActiveState exchangeActive:
+                    {
+                        //Keep the index live across the §3.6.5 advance so a subsequent participate POST
+                        //and a §3.6.6 read still resolve to the flow id.
+                        if(!string.IsNullOrWhiteSpace(exchangeActive.ExchangeId))
+                        {
+                            host.RequestUriTokenIndex[exchangeActive.ExchangeId] = flowId;
+                        }
+
+                        break;
+                    }
+                    case VcalmExchangeCompleteState exchangeComplete:
+                    {
+                        if(!string.IsNullOrWhiteSpace(exchangeComplete.ExchangeId))
+                        {
+                            host.RequestUriTokenIndex[exchangeComplete.ExchangeId] = flowId;
+                        }
+
+                        break;
+                    }
+                    case VcalmExchangeInvalidState { ExchangeId.Length: > 0 } exchangeInvalid:
+                    {
+                        host.RequestUriTokenIndex[exchangeInvalid.ExchangeId] = flowId;
+                        break;
+                    }
                     case JtiSeenState jti:
                     {
                         //RFC 9449 §11.1 replay defense. The flowId arrives already
@@ -291,7 +332,7 @@ internal sealed class HostedAuthorizationServer
                 ValueTask.FromResult(
                     host.FlowStates.TryGetValue(flowId, out var entry)
                         ? (entry.State, entry.StepCount)
-                        : ((OAuthFlowState?)null, 0)),
+                        : ((FlowState?)null, 0)),
 
             ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
             {
@@ -338,7 +379,7 @@ internal sealed class HostedAuthorizationServer
             //routing, or any other scheme.
             ResolveEndpointUriAsync = (endpointKey, registration, ctx, ct) =>
             {
-                Uri? baseUri = registration.IssuerUri ?? ctx.Issuer;
+                Uri? baseUri = ((ClientRecord)registration).IssuerUri ?? ctx.Issuer;
                 if(baseUri is null)
                 {
                     return ValueTask.FromResult<Uri?>(null);
@@ -377,6 +418,17 @@ internal sealed class HostedAuthorizationServer
                         new Uri($"{authority}/connect/{segment}/siop_request_object/{handle}"));
                 }
 
+                //VCALM §3.6 vcapi participation URL — the per-exchange URL the §3.6.4 protocols response
+                //and the §3.6.3 create Location header carry. The exchange engine stamped the exchange
+                //id on the context before asking, so the fixture appends it to the /exchanges collection
+                //path: /connect/{segment}/vcalm/exchanges/{exchangeId}.
+                if(string.Equals(endpointKey, WellKnownVcalmEndpointNames.VcalmParticipateInExchange, StringComparison.Ordinal)
+                    && ctx.VcalmExchangeId is { } vcalmExchangeId)
+                {
+                    return ValueTask.FromResult<Uri?>(
+                        new Uri($"{authority}/connect/{segment}/vcalm/exchanges/{vcalmExchangeId}"));
+                }
+
                 //RFC 9728 §3: the protected-resource metadata path is formed by
                 //INSERTION between host and the identifier's path, not by the
                 //fixture's /connect/{segment}/<suffix> scheme — delegate to
@@ -390,6 +442,15 @@ internal sealed class HostedAuthorizationServer
                 //OID4VCI §12.2.2 Credential Issuer Metadata — same INSERTION shape as the
                 //RFC 9728 protected-resource metadata above; ComposeEndpointPath owns the case.
                 if(string.Equals(endpointKey, WellKnownEndpointNames.Oid4VciCredentialIssuerMetadata, StringComparison.Ordinal))
+                {
+                    return ValueTask.FromResult<Uri?>(
+                        new Uri($"{authority}{TestHostShell.ComposeEndpointPath(endpointKey, segment)}"));
+                }
+
+                //RFC 8414 §3 Authorization Server Metadata — the §3 default well-known
+                //location formed by the same INSERTION shape between host and the issuer's
+                //path component; ComposeEndpointPath owns the case.
+                if(string.Equals(endpointKey, WellKnownEndpointNames.MetadataOAuthAuthorizationServer, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<Uri?>(
                         new Uri($"{authority}{TestHostShell.ComposeEndpointPath(endpointKey, segment)}"));
@@ -426,14 +487,15 @@ internal sealed class HostedAuthorizationServer
                     static bytes => JsonSerializer.Deserialize<Dictionary<string, object>>(
                         bytes, TestSetup.DefaultSerializationOptions)
                         ?? throw new FormatException("Header JSON parsed to null."),
-                    SensitiveMemoryPool<byte>.Shared,
+                    BaseMemoryPool.Shared,
                     ct),
 
             //Per-request policy resolution. The default dispatches on
             //ClientRecord.Profile across the three shipped profiles;
             //an unset Profile falls back to PolicyProfile.Fapi20
             //(FAPI 2.0 / HAIP-aligned).
-            ResolvePolicyAsync = PolicyProfiles.DefaultResolvePolicyAsync,
+            ResolvePolicyAsync = (registration, ctx, ct) =>
+                PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct),
 
             //Phase 9h chunk 4/8 — per-call decision points. Wired to the
             //library defaults: full registration capability set (no
@@ -626,7 +688,7 @@ internal sealed class HostedAuthorizationServer
             encoder: TestSetup.Base64UrlEncoder,
             resolveIssuerKey: resolveIssuerKey,
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
                 t, TestSetup.Base64UrlEncoder),
             computeDigest: MicrosoftEntropyFunctions.ComputeDigestAsync,
@@ -635,7 +697,7 @@ internal sealed class HostedAuthorizationServer
                 BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
             keyDerivationDelegate: ConcatKdf.DefaultKeyDerivationDelegate,
             aeadDecryptDelegate: BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
-            pool: SensitiveMemoryPool<byte>.Shared,
+            pool: BaseMemoryPool.Shared,
             keyAgreementEncryptDelegate:
                 BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
             aeadEncryptDelegate: BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
@@ -708,31 +770,45 @@ internal sealed class HostedAuthorizationServer
             payloadSerializer: payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)payload,
                 TestSetup.DefaultSerializationOptions),
-            pool: SensitiveMemoryPool<byte>.Shared,
+            pool: BaseMemoryPool.Shared,
             timeProvider: timeProvider,
             resolveDidVerificationKey: resolveDidVerificationKey,
             resolveIssuerKey: resolveIssuerKey,
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
                 t, TestSetup.Base64UrlEncoder),
             computeDigest: MicrosoftEntropyFunctions.ComputeDigestAsync,
             saltReuseSeam: saltReuseSeam);
 
-        host.Server = new AuthorizationServer
+        //The OAuth family configuration the endpoints read — cryptography, codecs,
+        //timings, token producers, the claim issuer, and the OAuth action executor —
+        //lives on the family integration, reached through server.OAuth().
+        integration.Cryptography = cryptography;
+        integration.Codecs = codecs;
+        integration.Timings = timings ?? TimingPolicy.Default;
+        integration.TokenProducers = new TokenProducerSet(
+        [
+            TokenProducer.Rfc9068AccessToken,
+            TokenProducer.Oidc10IdToken
+        ]);
+        integration.ClaimIssuer = ContributionProfiles.StandardClaimIssuer(timeProvider);
+
+        //The shared executor (built above) holds the OID4VP verifier handlers
+        //(SignJar, DecryptResponse) AND the SIOPv2 ValidateSelfIssuedIdToken handler.
+        //Auth Code flows do not produce actions and ignore the executor.
+        integration.ActionExecutor = executor;
+
+        host.Server = new EndpointServer
         {
             Integration = integration,
-            Cryptography = cryptography,
-            Codecs = codecs,
             TimeProvider = timeProvider,
-            Timings = timings ?? TimingPolicy.Default,
 
-            //The fold pipeline is configured up-front via ServerConfiguration.
-            //TestHostShell wires the three library-shipped endpoint builders and
-            //leaves token producers and claim contributors empty; tests that need
-            //custom producers or contributors apply a new ServerConfiguration via
-            //Server.ApplyConfiguration before dispatching.
-            Configuration = new ServerConfiguration
+            //The fold pipeline is configured up-front via the neutral ServerConfiguration
+            //(endpoint builders only). TestHostShell wires the library-shipped endpoint
+            //builders; tests that need a different builder set apply a new configuration
+            //via Server.ApplyConfiguration before dispatching.
+            Configuration = new Verifiable.Server.ServerConfiguration
             {
                 EndpointBuilders = new EndpointBuilderSet(
                 [
@@ -748,23 +824,32 @@ internal sealed class HostedAuthorizationServer
                     Verifiable.OAuth.Logout.GlobalTokenRevocationEndpoints.Builder,
                     Verifiable.OAuth.Logout.EndSessionEndpoints.Builder,
                     Verifiable.OAuth.Oid4Vci.Oid4VciEndpoints.Builder,
-                    SiopVerifierEndpoints.Builder
-                ]),
-                TokenProducers = new TokenProducerSet(
-                [
-                    TokenProducer.Rfc9068AccessToken,
-                    TokenProducer.Oidc10IdToken
-                ]),
-                ClaimIssuer = ContributionProfiles.StandardClaimIssuer(timeProvider)
+                    SiopVerifierEndpoints.Builder,
+                    Verifiable.Vcalm.VcalmVerifierEndpoints.Builder,
+                    Verifiable.Vcalm.VcalmIssuerEndpoints.Builder,
+                    Verifiable.Vcalm.VcalmStatusEndpoints.Builder,
+                    Verifiable.Vcalm.VcalmHolderEndpoints.Builder,
+                    Verifiable.Vcalm.Exchange.VcalmExchangeEndpoints.Builder,
+                    Verifiable.Vcalm.VcalmWorkflowEndpoints.Builder,
+                    Verifiable.Vcalm.VcalmInteractionEndpoints.Builder
+                ])
             },
 
-            //The shared executor (built above) holds the OID4VP verifier handlers
-            //(SignJar, DecryptResponse) AND the SIOPv2 ValidateSelfIssuedIdToken handler.
-            //Auth Code flows do not produce actions and ignore the executor.
-            //Key resolvers are read from the server's groups at call time, not
-            //captured here.
-            ActionExecutor = executor
+            //The neutral host drives the PDA's effectful loop through this delegate.
+            //It bridges the host-generic PdaAction to the OAuth executor, which owns
+            //the OID4VP / SIOP action handlers. Auth Code flows produce no actions.
+            ActionExecutor = (action, ctx, ct) =>
+                executor.ExecuteAsync((OAuthAction)action, ctx, ct)
         };
+
+        //Register the OAuth family integration so endpoints reach it via server.OAuth().
+        host.Server.AddIntegration(integration);
+
+        //Register the W3C VCALM family integration so the VCALM issuer / verifier endpoints reach
+        //their seams via server.Vcalm(). Tests configure the VCALM seams (parsers, Data Integrity
+        //verification / issuance, challenge and credential stores, request-size cap) on this
+        //instance through app.Server.Vcalm() after construction.
+        host.Server.AddIntegration(new Verifiable.Vcalm.VcalmIntegration());
 
         host.Server.Validate();
 

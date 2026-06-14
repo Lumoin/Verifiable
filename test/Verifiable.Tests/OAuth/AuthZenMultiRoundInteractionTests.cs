@@ -60,9 +60,9 @@ internal sealed class AuthZenMultiRoundInteractionTests
             new Uri(ClientId),
             ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
 
-        app.Server.Integration.UseDefaultAuthZenJsonParsing();
+        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
         var policy = new StepUpPolicy(requiredAcr: MfaAcr);
-        app.Server.Integration.EvaluateAccessAsync = policy.EvaluateAsync;
+        app.Server.OAuth().EvaluateAccessAsync = policy.EvaluateAsync;
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Uri url = EvaluationUrl(app, pdp);
@@ -101,9 +101,9 @@ internal sealed class AuthZenMultiRoundInteractionTests
             new Uri(ClientId),
             ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
 
-        app.Server.Integration.UseDefaultAuthZenJsonParsing();
+        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
         var policy = new EntitlementPolicy(TimeProvider, requestUrl: "https://iga.example.com/requests/new");
-        app.Server.Integration.EvaluateAccessAsync = policy.EvaluateAsync;
+        app.Server.OAuth().EvaluateAccessAsync = policy.EvaluateAsync;
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Uri url = EvaluationUrl(app, pdp);

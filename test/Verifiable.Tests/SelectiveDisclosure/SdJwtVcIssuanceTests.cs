@@ -21,7 +21,7 @@ internal sealed class SdJwtVcIssuanceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static HashSet<CredentialPath> DisclosablePaths { get; } =
     [
@@ -99,7 +99,7 @@ internal sealed class SdJwtVcIssuanceTests
 
 
     /// <summary>
-    /// Serializes a VC to JSON, encodes into a <see cref="SensitiveMemoryPool{T}"/> rental,
+    /// Serializes a VC to JSON, encodes into a <see cref="BaseMemoryPool"/> rental,
     /// and issues via <see cref="SdJwtIssuance.IssueAsync"/> with <c>vc+sd-jwt</c> media type.
     /// </summary>
     private async ValueTask<SdToken<string>> SignCredentialAsync(PrivateKeyMemory privateKey)

@@ -10,6 +10,7 @@ using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Validation;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.AuthCode;
 
@@ -49,7 +50,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// In-memory state store for development and testing:
 /// </para>
 /// <code>
-/// var store = new Dictionary&lt;string, OAuthFlowState&gt;();
+/// var store = new Dictionary&lt;string, FlowState&gt;();
 /// OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
 ///     ...
 ///     saveStateAsync: (state, _) => { store[state.FlowId] = state; return ValueTask.CompletedTask; },
@@ -281,7 +282,7 @@ public static class AuthCodeFlowHandlers
             };
         }
 
-        OAuthFlowState? loaded = await infrastructure.LoadStateAsync(
+        FlowState? loaded = await infrastructure.LoadStateAsync(
             state, context, cancellationToken).ConfigureAwait(false);
 
         if(loaded is not ParCompletedState parCompleted)
@@ -394,7 +395,7 @@ public static class AuthCodeFlowHandlers
             };
         }
 
-        OAuthFlowState? loaded = await infrastructure.LoadStateAsync(
+        FlowState? loaded = await infrastructure.LoadStateAsync(
             flowId, context, cancellationToken).ConfigureAwait(false);
 
         if(loaded is not AuthorizationCodeReceivedState codeState)
@@ -895,7 +896,7 @@ public static class AuthCodeFlowHandlers
 
     private static PkceParameters GeneratePkceParameters(EncodeDelegate base64UrlEncoder)
     {
-        return PkceGeneration.Generate(base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+        return PkceGeneration.Generate(base64UrlEncoder, BaseMemoryPool.Shared);
     }
 
     private static OutgoingFormFields EncodeParRequestBody(ParRequestBody body)

@@ -20,7 +20,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// </list>
 /// <para>
 /// The implementation must be idempotent: saving the same state twice must not
-/// produce duplicate records. The <see cref="OAuthFlowState.FlowId"/> is the
+/// produce duplicate records. The <see cref="FlowState.FlowId"/> is the
 /// primary key; <see cref="States.ParCompletedState.Par"/>'s <c>RequestUri</c> is
 /// the secondary lookup key used when the callback arrives.
 /// </para>
@@ -33,7 +33,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 public delegate ValueTask SaveFlowStateDelegate(
-    OAuthFlowState state,
+    FlowState state,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
@@ -46,11 +46,11 @@ public delegate ValueTask SaveFlowStateDelegate(
 /// persisted. Returns <see langword="null"/> when no state is found for the given
 /// identifier, which the caller should treat as an invalid or expired request.
 /// </remarks>
-/// <param name="flowId">The flow identifier to load, matching <see cref="OAuthFlowState.FlowId"/>.</param>
+/// <param name="flowId">The flow identifier to load, matching <see cref="FlowState.FlowId"/>.</param>
 /// <param name="context">The threaded per-operation <see cref="ExchangeContext"/> for tenant-scoped lookup.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>The persisted flow state, or <see langword="null"/> if not found.</returns>
-public delegate ValueTask<OAuthFlowState?> LoadFlowStateDelegate(
+public delegate ValueTask<FlowState?> LoadFlowStateDelegate(
     string flowId,
     ExchangeContext context,
     CancellationToken cancellationToken);
@@ -69,7 +69,7 @@ public delegate ValueTask<OAuthFlowState?> LoadFlowStateDelegate(
 /// <param name="context">The threaded per-operation <see cref="ExchangeContext"/> for tenant-scoped lookup.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>The persisted flow state, or <see langword="null"/> if not found.</returns>
-public delegate ValueTask<OAuthFlowState?> LoadFlowStateByRequestUriDelegate(
+public delegate ValueTask<FlowState?> LoadFlowStateByRequestUriDelegate(
     string requestUri,
     ExchangeContext context,
     CancellationToken cancellationToken);

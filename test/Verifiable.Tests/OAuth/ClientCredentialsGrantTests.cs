@@ -30,7 +30,7 @@ internal sealed class ClientCredentialsGrantTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]
@@ -162,7 +162,7 @@ internal sealed class ClientCredentialsGrantTests
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterMachineClient(app);
-        app.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        app.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -251,7 +251,7 @@ internal sealed class ClientCredentialsGrantTests
 
         //client_secret_post (RFC 6749 §2.3.1): the application owns the secret
         //store and the comparison; this test glue checks the form field.
-        app.Server.Integration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+        app.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
             ValueTask.FromResult(
                 fields.TryGetValue("client_secret", out string? secret)
                 && string.Equals(secret, ClientSecret, StringComparison.Ordinal));

@@ -43,7 +43,7 @@ public static class MicrosoftX509Functions
     /// </param>
     /// <param name="pool">
     /// Memory pool for DER byte allocations. Must be
-    /// <see cref="SensitiveMemoryPool{T}.Shared"/> to guarantee exact-size allocations.
+    /// <see cref="BaseMemoryPool.Shared"/> to guarantee exact-size allocations.
     /// </param>
     /// <returns>Certificate chain in order, leaf first. Caller must dispose all.</returns>
     public static IReadOnlyList<PkiCertificateMemory> ParseX5c(

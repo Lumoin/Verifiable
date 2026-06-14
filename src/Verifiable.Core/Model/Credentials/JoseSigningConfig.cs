@@ -68,7 +68,7 @@ public sealed record JoseSigningConfig
 
     /// <summary>
     /// Memory pool for signature allocations. Production deployments
-    /// typically pass <c>SensitiveMemoryPool&lt;byte&gt;.Shared</c>; tests may
+    /// typically pass <c>BaseMemoryPool.Shared</c>; tests may
     /// inject a different pool for instrumentation.
     /// </summary>
     public required MemoryPool<byte> MemoryPool { get; init; }

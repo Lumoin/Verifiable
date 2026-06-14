@@ -59,7 +59,7 @@ public static class JtiReplayGuard
     /// <param name="expiresAt">When the recorded entry should expire — the same window the temporal checks accept the token in.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<JtiReplayOutcome> ConsultAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ExchangeContext context,
         TenantId tenantId,
         string issuer,
@@ -72,6 +72,8 @@ public static class JtiReplayGuard
         ArgumentException.ThrowIfNullOrEmpty(issuer);
         ArgumentException.ThrowIfNullOrEmpty(jti);
 
+        var oauth = server.OAuth();
+
         JtiReplayPolicy policy = context.JtiReplayPolicy;
         if(policy == JtiReplayPolicy.Disabled)
         {
@@ -83,9 +85,9 @@ public static class JtiReplayGuard
         //defense to actually record — a read-only half-wiring would never trip, so the
         //three are treated as one indivisible capability.
         bool isStoreAvailable =
-            server.Integration.ResolveCorrelationKeyAsync is not null
-            && server.Integration.SaveFlowStateAsync is not null
-            && server.Integration.GenerateIdentifierAsync is not null;
+            oauth.ResolveCorrelationKeyAsync is not null
+            && oauth.SaveFlowStateAsync is not null
+            && oauth.GenerateIdentifierAsync is not null;
         if(!isStoreAvailable)
         {
             return policy == JtiReplayPolicy.Required
@@ -94,7 +96,7 @@ public static class JtiReplayGuard
         }
 
         string correlationKey = $"{issuer}:{jti}";
-        string? existing = await server.Integration.ResolveCorrelationKeyAsync!(
+        string? existing = await oauth.ResolveCorrelationKeyAsync!(
             tenantId, FlowKind.JtiReplay, correlationKey, context, cancellationToken).ConfigureAwait(false);
         if(existing is not null)
         {
@@ -102,7 +104,7 @@ public static class JtiReplayGuard
         }
 
         DateTimeOffset now = server.TimeProvider.GetUtcNow();
-        string flowId = await server.Integration.GenerateIdentifierAsync!(
+        string flowId = await oauth.GenerateIdentifierAsync!(
             WellKnownIdentifierPurposes.OAuthCorrelationId, context, cancellationToken).ConfigureAwait(false);
         JtiSeenState state = new()
         {
@@ -115,7 +117,7 @@ public static class JtiReplayGuard
             Jti = jti,
             SeenAt = now
         };
-        await server.Integration.SaveFlowStateAsync!(
+        await oauth.SaveFlowStateAsync!(
             tenantId, correlationKey, state, stepCount: 0, context, cancellationToken).ConfigureAwait(false);
 
         return JtiReplayOutcome.FirstUse;

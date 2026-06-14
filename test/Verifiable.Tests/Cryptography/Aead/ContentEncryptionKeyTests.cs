@@ -144,7 +144,7 @@ internal sealed class ContentEncryptionKeyTests
     {
         byte[] bytes = new byte[32];
         RandomNumberGenerator.Fill(bytes);
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(bytes.Length);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(bytes.Length);
         bytes.AsSpan().CopyTo(owner.Memory.Span);
         SymmetricKeyMemory inner = new(owner, CryptoTags.AesGcmCek);
         return new ContentEncryptionKey(inner);

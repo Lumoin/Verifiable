@@ -21,7 +21,7 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// <para>
 /// Capability identifiers flow into the
-/// <see cref="AuthorizationServer"/> capability set and propagate to
+/// <see cref="EndpointServer"/> capability set and propagate to
 /// metadata documents. Adding an entry here implies the library ships an
 /// implementation; chunks that introduce only a delegate slot (without a
 /// default) defer their capability identifier to later chunks.

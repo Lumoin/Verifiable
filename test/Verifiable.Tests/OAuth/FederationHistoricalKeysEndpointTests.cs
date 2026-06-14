@@ -40,7 +40,7 @@ internal sealed class FederationHistoricalKeysEndpointTests
     /// <summary>
     /// The memory pool the JWS decode and verify helpers rent from.
     /// </summary>
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>
@@ -63,7 +63,7 @@ internal sealed class FederationHistoricalKeysEndpointTests
         using VerifierKeyMaterial entityKeys = RegisterEntity(app, entityId, federationKeys);
 
         bool delegateInvoked = false;
-        app.Server.Integration.ResolveHistoricalKeysAsync =
+        app.Server.OAuth().ResolveHistoricalKeysAsync =
             (_, _, _) =>
             {
                 delegateInvoked = true;
@@ -184,7 +184,7 @@ internal sealed class FederationHistoricalKeysEndpointTests
 
         using VerifierKeyMaterial entityKeys = RegisterEntity(app, entityId, federationKeys);
 
-        app.Server.Integration.ResolveHistoricalKeysAsync =
+        app.Server.OAuth().ResolveHistoricalKeysAsync =
             (_, _, _) => ValueTask.FromResult<HistoricalKeysContribution?>(null);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);

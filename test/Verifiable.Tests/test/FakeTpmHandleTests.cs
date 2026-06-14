@@ -45,7 +45,7 @@ internal class FakeTpmHandleTests
 
         //Encode handle as bytes for storage.
         string tpmHandle = "Tpm-key-handle-123";
-        var handleBytes = SensitiveMemoryPool<byte>.Shared.Rent(Encoding.UTF8.GetByteCount(tpmHandle));
+        var handleBytes = BaseMemoryPool.Shared.Rent(Encoding.UTF8.GetByteCount(tpmHandle));
         Encoding.UTF8.GetBytes(tpmHandle, handleBytes.Memory.Span);
         using var handleMemory = new PublicKeyMemory(handleBytes, tpmTag);
 
@@ -54,7 +54,7 @@ internal class FakeTpmHandleTests
 
         //Test data and fake signature.
         var testData = Encoding.UTF8.GetBytes("Hello TPM!");
-        using var fakeSignature = new Signature(SensitiveMemoryPool<byte>.Shared.Rent(64), Tag.Empty);
+        using var fakeSignature = new Signature(BaseMemoryPool.Shared.Rent(64), Tag.Empty);
         //Verify using TPM key - should work transparently.
         bool isVerified = await tpmPublicKey.VerifyAsync(testData, fakeSignature).ConfigureAwait(false);
         bool verifiedWithExtension = await handleMemory.VerifyAsync(testData, fakeSignature, tpmVerificationDelegate)

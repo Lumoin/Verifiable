@@ -40,7 +40,7 @@ namespace Verifiable.OAuth;
 /// <para>
 /// When <see cref="AuthorizationServerCryptography.SelectSigningKey"/> is
 /// <see langword="null"/>, the library uses the first entry in
-/// <c>registration.SigningKeys[usage].Current</c>. This covers the common
+/// <c>((ClientRecord)registration).SigningKeys[usage].Current</c>. This covers the common
 /// single-key-per-usage case without requiring applications to write a delegate.
 /// </para>
 /// <para>

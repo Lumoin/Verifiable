@@ -9,6 +9,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -67,7 +68,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
@@ -116,7 +117,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(CredentialIssuerMetadataContribution.Empty);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
@@ -143,12 +144,12 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
 
         const string signedJwt = "eyJ0eXAiOiJvcGVuaWR2Y2ktaXNzdWVyLW1ldGFkYXRhK2p3dCJ9.eyJzdWIiOiJpc3MifQ.sig";
         JwtPayload? seenClaims = null;
-        host.Server.Integration.SignCredentialIssuerMetadataAsync =
+        host.Server.OAuth().SignCredentialIssuerMetadataAsync =
             (metadata, registration, context, ct) =>
             {
                 seenClaims = metadata;
@@ -192,7 +193,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
 
         //The reference path: the app seam composes the signed_metadata JWS THROUGH the library
@@ -204,7 +205,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         using PrivateKeyMemory issuerPrivate = keys.PrivateKey;
         string expectedIssuer = $"https://issuer.test/{segment}";
 
-        host.Server.Integration.SignCredentialIssuerMetadataAsync =
+        host.Server.OAuth().SignCredentialIssuerMetadataAsync =
             async (metadata, registration, context, ct) =>
                 await SignedCredentialIssuerMetadata.CreateAsync(
                     metadata,
@@ -215,7 +216,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
                     AppendHeaderSerializer,
                     AppendPayloadSerializer,
                     TestSetup.Base64UrlEncoder,
-                    SensitiveMemoryPool<byte>.Shared,
+                    BaseMemoryPool.Shared,
                     ct).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
@@ -228,7 +229,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
 
         //JOSE header: typ = openidvci-issuer-metadata+jwt and a non-none, non-symmetric alg.
         Dictionary<string, object>? header = SecurityEventTestJson.DeserializePart(
-            SecurityEventTestJson.DecodeSegment(segments[0], SensitiveMemoryPool<byte>.Shared));
+            SecurityEventTestJson.DecodeSegment(segments[0], BaseMemoryPool.Shared));
         Assert.IsNotNull(header);
         Assert.AreEqual("openidvci-issuer-metadata+jwt", header!["typ"] as string,
             "§12.2.3 typ MUST be openidvci-issuer-metadata+jwt.");
@@ -239,7 +240,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
 
         //JWS payload: sub = issuer id, an iat, and the metadata params as top-level claims.
         Dictionary<string, object>? payload = SecurityEventTestJson.DeserializePart(
-            SecurityEventTestJson.DecodeSegment(segments[1], SensitiveMemoryPool<byte>.Shared));
+            SecurityEventTestJson.DecodeSegment(segments[1], BaseMemoryPool.Shared));
         Assert.IsNotNull(payload);
         Assert.AreEqual(expectedIssuer, payload!["sub"] as string,
             "§12.2.3 sub MUST match the Credential Issuer Identifier.");
@@ -314,7 +315,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
             ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.Oid4VciCredentialIssuerMetadata));
         string segment = material.Registration.TenantId.Value;
 
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
@@ -337,7 +338,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(new CredentialIssuerMetadataContribution
             {
                 CredentialConfigurationsSupported = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -370,7 +371,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(new CredentialIssuerMetadataContribution
             {
                 CredentialConfigurationsSupported = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -407,7 +408,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
             {
                 BatchCredentialIssuance = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -438,7 +439,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
             {
                 CredentialResponseEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -504,7 +505,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
 
         const string Kid = "issuer-signing-key-1";
@@ -513,12 +514,12 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         using PrivateKeyMemory issuerPrivate = keys.PrivateKey;
         string expectedIssuer = $"https://issuer.test/{segment}";
 
-        host.Server.Integration.SignCredentialIssuerMetadataAsync =
+        host.Server.OAuth().SignCredentialIssuerMetadataAsync =
             async (metadata, registration, context, ct) =>
                 await SignedCredentialIssuerMetadata.CreateAsync(
                     metadata, expectedIssuer, issuerPrivate, Kid, TimeProvider.GetUtcNow(),
                     AppendHeaderSerializer, AppendPayloadSerializer, TestSetup.Base64UrlEncoder,
-                    SensitiveMemoryPool<byte>.Shared, ct).ConfigureAwait(false);
+                    BaseMemoryPool.Shared, ct).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(
             host, segment, SingleHeader(WellKnownHttpHeaderNames.Accept, WellKnownMediaTypes.Application.Jwt))
@@ -532,13 +533,13 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         Assert.HasCount(3, segments, "An application/jwt metadata response is a compact JWS (§12.2.2).");
 
         Dictionary<string, object>? header = SecurityEventTestJson.DeserializePart(
-            SecurityEventTestJson.DecodeSegment(segments[0], SensitiveMemoryPool<byte>.Shared));
+            SecurityEventTestJson.DecodeSegment(segments[0], BaseMemoryPool.Shared));
         Assert.IsNotNull(header);
         Assert.AreEqual("openidvci-issuer-metadata+jwt", header!["typ"] as string,
             "§12.2.3 typ MUST be openidvci-issuer-metadata+jwt.");
 
         Dictionary<string, object>? payload = SecurityEventTestJson.DeserializePart(
-            SecurityEventTestJson.DecodeSegment(segments[1], SensitiveMemoryPool<byte>.Shared));
+            SecurityEventTestJson.DecodeSegment(segments[1], BaseMemoryPool.Shared));
         Assert.IsNotNull(payload);
         Assert.AreEqual(expectedIssuer, payload!["sub"] as string,
             "§12.2.3 sub MUST match the Credential Issuer Identifier.");
@@ -563,11 +564,11 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment));
 
         const string signedJwt = "eyJ0eXAiOiJvcGVuaWR2Y2ktaXNzdWVyLW1ldGFkYXRhK2p3dCJ9.eyJzdWIiOiJpc3MifQ.sig";
-        host.Server.Integration.SignCredentialIssuerMetadataAsync =
+        host.Server.OAuth().SignCredentialIssuerMetadataAsync =
             (metadata, registration, context, ct) => ValueTask.FromResult<string?>(signedJwt);
 
         ServerHttpResponse response = await DispatchMetadataAsync(
@@ -600,7 +601,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
             {
                 Display = new List<object>
@@ -641,7 +642,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         WireChainEndpointSeams(host);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(BuildContribution(segment) with
             {
                 Display = new List<object>
@@ -696,11 +697,11 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     /// </summary>
     private static void WireChainEndpointSeams(TestHostShell host)
     {
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
                 ValueTask.FromResult(CredentialIssuanceDecision.Issue(["credential"]));
-        host.Server.Integration.IssueCredentialNonceAsync =
+        host.Server.OAuth().IssueCredentialNonceAsync =
             (_, _) => ValueTask.FromResult("c-nonce");
     }
 

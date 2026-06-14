@@ -73,7 +73,7 @@ internal class HwTpmCreatePrimaryTests
     [TestMethod]
     public async Task CreatePrimaryEccSigningKeySucceeds()
     {        
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
@@ -122,7 +122,7 @@ internal class HwTpmCreatePrimaryTests
     [TestMethod]
     public async Task CreatePrimaryRsaSigningKeySucceeds()
     {        
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
@@ -167,7 +167,7 @@ internal class HwTpmCreatePrimaryTests
     [TestMethod]
     public async Task CreatePrimaryWithPasswordSucceeds()
     {        
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
@@ -211,7 +211,7 @@ internal class HwTpmCreatePrimaryTests
     [TestMethod]
     public async Task CreatePrimarySameTemplateProducesSameKey()
     {        
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);

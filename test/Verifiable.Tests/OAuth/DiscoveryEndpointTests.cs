@@ -7,7 +7,8 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
+using Verifiable.Server.Routing;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -548,7 +549,7 @@ internal sealed class DiscoveryEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
-        host.Server.Integration.ContributeDiscoveryFieldsAsync = static (_, _, _) =>
+        host.Server.OAuth().ContributeDiscoveryFieldsAsync = static (_, _, _) =>
             ValueTask.FromResult(new DiscoveryDocumentContribution(
                 [new DiscoveryStringArrayField(
                     AuthorizationServerMetadataParameterNames.AcrValuesSupported,
@@ -571,12 +572,112 @@ internal sealed class DiscoveryEndpointTests
     }
 
 
+    /// <summary>
+    /// RFC 8414 §3 / §3.1: the authorization server metadata is served at the §3
+    /// default well-known location <c>/.well-known/oauth-authorization-server</c>,
+    /// path-inserted before the path-bearing tenant issuer's path segment. The
+    /// response is <c>200 OK</c> and the <c>issuer</c> member equals the tenant
+    /// issuer identifier verbatim (§3.3 issuer-match by code-point equality).
+    /// </summary>
+    [TestMethod]
+    public async Task OAuthAuthorizationServerMetadataServesAtInsertedLocationWithExactIssuer()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        ServerHttpResponse response = await DispatchOAuthAuthorizationServerMetadataAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        string? issuer = body.RootElement.GetProperty("issuer").GetString();
+
+        //§3.3: the issuer returned MUST be identical to the issuer identifier the
+        //well-known URL was derived from — including the tenant path segment that
+        //RFC 8414 §3 inserted the suffix in front of.
+        string expected = material.Registration.IssuerUri!.OriginalString;
+        Assert.AreEqual(expected, issuer,
+            "RFC 8414 §3.3: the issuer at the oauth-authorization-server mount must equal the tenant issuer identifier verbatim.");
+    }
+
+
+    /// <summary>
+    /// RFC 8414 §3.1: an authorization server MAY publish the same metadata at
+    /// multiple well-known locations derived from its issuer identifier. The
+    /// document served at the §3 default <c>oauth-authorization-server</c> mount
+    /// is byte-identical to the one served at the appended OIDC
+    /// <c>openid-configuration</c> mount for the same tenant.
+    /// </summary>
+    [TestMethod]
+    public async Task OAuthAuthorizationServerMetadataIsByteIdenticalToOpenIdConfiguration()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        ServerHttpResponse oauthMetadata = await DispatchOAuthAuthorizationServerMetadataAsync(host, material)
+            .ConfigureAwait(false);
+        ServerHttpResponse openIdConfiguration = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, oauthMetadata.StatusCode, oauthMetadata.Body);
+        Assert.AreEqual(200, openIdConfiguration.StatusCode, openIdConfiguration.Body);
+
+        //§3.1: both well-known locations are mounts of the same metadata. The
+        //library backs both with one body builder, so the wire bytes are equal
+        //ordinally — there is no per-location field divergence.
+        Assert.AreEqual(openIdConfiguration.Body, oauthMetadata.Body,
+            "RFC 8414 §3.1: the document at the oauth-authorization-server location must be byte-identical to the openid-configuration location.");
+    }
+
+
+    /// <summary>
+    /// RFC 8414 §3.1 / §5: adding the §3 default <c>oauth-authorization-server</c>
+    /// mount leaves the appended OIDC <c>openid-configuration</c> location working
+    /// unchanged — <c>200 OK</c> with the exact tenant issuer (§3.3).
+    /// </summary>
+    [TestMethod]
+    public async Task OpenIdConfigurationLocationContinuesToServeAlongsideOAuthAuthorizationServer()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        string? issuer = body.RootElement.GetProperty("issuer").GetString();
+
+        string expected = material.Registration.IssuerUri!.OriginalString;
+        Assert.AreEqual(expected, issuer,
+            "The appended openid-configuration mount must keep emitting the exact tenant issuer after the oauth-authorization-server mount is added.");
+    }
+
+
     private async ValueTask<ServerHttpResponse> DispatchDiscoveryAsync(
         TestHostShell host, VerifierKeyMaterial material)
     {
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.MetadataDiscovery,
+            WellKnownHttpMethods.Get,
+            new RequestFields(),
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    private async ValueTask<ServerHttpResponse> DispatchOAuthAuthorizationServerMetadataAsync(
+        TestHostShell host, VerifierKeyMaterial material)
+    {
+        return await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.MetadataOAuthAuthorizationServer,
             WellKnownHttpMethods.Get,
             new RequestFields(),
             new ExchangeContext(),

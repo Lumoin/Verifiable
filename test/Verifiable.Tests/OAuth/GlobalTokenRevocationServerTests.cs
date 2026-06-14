@@ -57,13 +57,13 @@ internal sealed class GlobalTokenRevocationServerTests
         using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, GtrCapabilities);
 
         SubjectIdentifier? revokedSubject = null;
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
 
         //Exercise the PRODUCTION JSON parser (Verifiable.Json) end-to-end — the
         //body's sub_id is parsed by the default parser, not a test lambda.
-        host.Server.Integration.UseDefaultGlobalTokenRevocationJsonParsing();
-        host.Server.Integration.RevokeSubjectTokensAsync = (subId, _, _, _) =>
+        host.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
+        host.Server.OAuth().RevokeSubjectTokensAsync = (subId, _, _, _) =>
         {
             revokedSubject = subId;
             return ValueTask.FromResult(GlobalTokenRevocationOutcome.Initiated);
@@ -101,14 +101,14 @@ internal sealed class GlobalTokenRevocationServerTests
 
         bool parseInvoked = false;
         bool revokeInvoked = false;
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(false);
-        host.Server.Integration.ParseGlobalTokenRevocationRequestAsync = (_, _, _) =>
+        host.Server.OAuth().ParseGlobalTokenRevocationRequestAsync = (_, _, _) =>
         {
             parseInvoked = true;
             return ValueTask.FromResult<GlobalTokenRevocationRequest?>(null);
         };
-        host.Server.Integration.RevokeSubjectTokensAsync = (_, _, _, _) =>
+        host.Server.OAuth().RevokeSubjectTokensAsync = (_, _, _, _) =>
         {
             revokeInvoked = true;
             return ValueTask.FromResult(GlobalTokenRevocationOutcome.Initiated);
@@ -143,14 +143,14 @@ internal sealed class GlobalTokenRevocationServerTests
         using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, GtrCapabilities);
 
         GlobalTokenRevocationOutcome outcome = GlobalTokenRevocationOutcome.SubjectNotFound;
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.ParseGlobalTokenRevocationRequestAsync = static (_, _, _) =>
+        host.Server.OAuth().ParseGlobalTokenRevocationRequestAsync = static (_, _, _) =>
             ValueTask.FromResult<GlobalTokenRevocationRequest?>(new GlobalTokenRevocationRequest
             {
                 SubId = SubjectIdentifier.Email("user@example.test")
             });
-        host.Server.Integration.RevokeSubjectTokensAsync = (_, _, _, _) => ValueTask.FromResult(outcome);
+        host.Server.OAuth().RevokeSubjectTokensAsync = (_, _, _, _) => ValueTask.FromResult(outcome);
 
         async ValueTask<int> DispatchStatusAsync()
         {
@@ -188,11 +188,11 @@ internal sealed class GlobalTokenRevocationServerTests
         using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, GtrCapabilities);
 
         bool revokeInvoked = false;
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.ParseGlobalTokenRevocationRequestAsync = static (_, _, _) =>
+        host.Server.OAuth().ParseGlobalTokenRevocationRequestAsync = static (_, _, _) =>
             ValueTask.FromResult<GlobalTokenRevocationRequest?>(null);
-        host.Server.Integration.RevokeSubjectTokensAsync = (_, _, _, _) =>
+        host.Server.OAuth().RevokeSubjectTokensAsync = (_, _, _, _) =>
         {
             revokeInvoked = true;
             return ValueTask.FromResult(GlobalTokenRevocationOutcome.Initiated);
@@ -225,11 +225,11 @@ internal sealed class GlobalTokenRevocationServerTests
         using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, GtrCapabilities);
 
         bool revokeInvoked = false;
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
 
         //An "email" format with no email member fails IsValidForKnownFormat().
-        host.Server.Integration.ParseGlobalTokenRevocationRequestAsync = static (_, _, _) =>
+        host.Server.OAuth().ParseGlobalTokenRevocationRequestAsync = static (_, _, _) =>
             ValueTask.FromResult<GlobalTokenRevocationRequest?>(new GlobalTokenRevocationRequest
             {
                 SubId = new SubjectIdentifier
@@ -238,7 +238,7 @@ internal sealed class GlobalTokenRevocationServerTests
                     Members = new Dictionary<string, object>(StringComparer.Ordinal)
                 }
             });
-        host.Server.Integration.RevokeSubjectTokensAsync = (_, _, _, _) =>
+        host.Server.OAuth().RevokeSubjectTokensAsync = (_, _, _, _) =>
         {
             revokeInvoked = true;
             return ValueTask.FromResult(GlobalTokenRevocationOutcome.Initiated);
@@ -270,9 +270,9 @@ internal sealed class GlobalTokenRevocationServerTests
 
         //Client authentication and the parser are wired but the revoke-subject
         //seam is not — the gate requires all three, so the endpoint must not exist.
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.ParseGlobalTokenRevocationRequestAsync = static (_, _, _) =>
+        host.Server.OAuth().ParseGlobalTokenRevocationRequestAsync = static (_, _, _) =>
             ValueTask.FromResult<GlobalTokenRevocationRequest?>(null);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(

@@ -33,7 +33,7 @@ internal sealed class FederationRegistrationEndpointTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string OpEntityId = "https://op.example.com";
     private const string RpEntityId = "https://rp.example.com";
@@ -61,7 +61,7 @@ internal sealed class FederationRegistrationEndpointTests
         string rpEcJws = rpEc.CompactJws;
 
         string? observedBody = null;
-        app.Server.Integration.ResolveExplicitRegistrationAsync = (body, _, _, _) =>
+        app.Server.OAuth().ResolveExplicitRegistrationAsync = (body, _, _, _) =>
         {
             observedBody = body;
 
@@ -140,7 +140,7 @@ internal sealed class FederationRegistrationEndpointTests
 
         using VerifierKeyMaterial opKeys = RegisterOp(app, opFederationKeys);
 
-        app.Server.Integration.ResolveExplicitRegistrationAsync =
+        app.Server.OAuth().ResolveExplicitRegistrationAsync =
             (_, _, _, _) => ValueTask.FromResult<ExplicitRegistrationContribution?>(null);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);

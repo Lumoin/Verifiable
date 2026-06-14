@@ -27,7 +27,7 @@ internal sealed class BackChannelLogoutTokenTests
 
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly DateTimeOffset IssuedAt = DateTimeOffset.UnixEpoch.AddSeconds(1715305159);
 

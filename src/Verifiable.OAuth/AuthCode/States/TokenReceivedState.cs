@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.AuthCode.States;
 /// and <c>PushdownAutomaton.IsAccepted</c> returns <see langword="true"/>.
 /// </remarks>
 [DebuggerDisplay("TokenReceived FlowId={FlowId}")]
-public sealed record TokenReceivedState: OAuthFlowState
+public sealed record TokenReceivedState: FlowState
 {
     /// <summary>The opaque access token. Must be treated as a secret.</summary>
     public required string AccessToken { get; init; }

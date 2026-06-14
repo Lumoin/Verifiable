@@ -6,7 +6,7 @@ using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -55,9 +55,9 @@ internal sealed class TokenIntrospectionServerTests
         DateTimeOffset expiresAt = new(2026, 6, 1, 13, 0, 0, TimeSpan.Zero);
 
         List<(string Token, string? Hint, ClientRecord Client)> introspected = [];
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.IntrospectTokenAsync = (token, hint, registration, _, _) =>
+        host.Server.OAuth().IntrospectTokenAsync = (token, hint, registration, _, _) =>
         {
             introspected.Add((token, hint, registration));
 
@@ -140,9 +140,9 @@ internal sealed class TokenIntrospectionServerTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, IntrospectionCapabilities);
 
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(new TokenIntrospectionResult
             {
                 IsActive = true,
@@ -213,9 +213,9 @@ internal sealed class TokenIntrospectionServerTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, IntrospectionCapabilities);
 
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(new TokenIntrospectionResult
             {
                 IsActive = true,
@@ -250,9 +250,9 @@ internal sealed class TokenIntrospectionServerTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, IntrospectionCapabilities);
 
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(new TokenIntrospectionResult
             {
                 IsActive = true,
@@ -293,12 +293,12 @@ internal sealed class TokenIntrospectionServerTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, IntrospectionCapabilities);
 
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
 
         //An application that (incorrectly) attaches metadata to an inactive result must not
         //be able to leak it: the library writes only active when IsActive is false.
-        host.Server.Integration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(new TokenIntrospectionResult
             {
                 IsActive = false,
@@ -345,9 +345,9 @@ internal sealed class TokenIntrospectionServerTests
             ClientId, ClientBaseUri, IntrospectionCapabilities);
 
         bool seamInvoked = false;
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(false);
-        host.Server.Integration.IntrospectTokenAsync = (_, _, _, _, _) =>
+        host.Server.OAuth().IntrospectTokenAsync = (_, _, _, _, _) =>
         {
             seamInvoked = true;
 
@@ -382,7 +382,7 @@ internal sealed class TokenIntrospectionServerTests
 
         //Client authentication is wired but the introspection seam is not — the candidate
         //gate requires both, so the endpoint must not materialize.
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
@@ -414,21 +414,21 @@ internal sealed class TokenIntrospectionServerTests
             ClientId, ClientBaseUri, IntrospectionCapabilities);
 
         const string blockedIp = "203.0.113.7";
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(new TokenIntrospectionResult { IsActive = true, Subject = "Z5O3upPC88QrAjx00dis" });
 
         //Attenuate per request: when the caller's forwarded IP is denylisted, the active
         //capability set excludes introspection, so the candidate is dropped from the chain.
-        host.Server.Integration.ResolveCapabilitiesAsync = (registration, context, _) =>
+        host.Server.OAuth().ResolveCapabilitiesAsync = (registration, context, _) =>
         {
             bool isBlocked = context.IncomingRequest is { } request
                 && request.Headers.TryGetSingle("X-Forwarded-For", out string? ip)
                 && ip == blockedIp;
 
             IReadOnlySet<CapabilityIdentifier> active = isBlocked
-                ? registration.AllowedCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection)
+                ? ((ClientRecord)registration).AllowedCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection)
                 : registration.AllowedCapabilities;
 
             return ValueTask.FromResult(active);
@@ -465,11 +465,11 @@ internal sealed class TokenIntrospectionServerTests
         using VerifierKeyMaterial limitedResource = host.RegisterClient(
             "https://limited.resource.test", new Uri("https://limited.resource.test"), IntrospectionCapabilities);
 
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
 
         string limitedTenant = limitedResource.Registration.TenantId.Value;
-        host.Server.Integration.IntrospectTokenAsync = (token, hint, registration, context, ct) =>
+        host.Server.OAuth().IntrospectTokenAsync = (token, hint, registration, context, ct) =>
         {
             string scope = registration.TenantId.Value == limitedTenant ? "read" : "read write admin";
 

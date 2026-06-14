@@ -272,7 +272,7 @@ internal sealed class MdocDcqlAdapterTests
                 signed: new DateTimeOffset(2026, 5, 25, 0, 0, 0, TimeSpan.Zero),
                 validFrom: new DateTimeOffset(2026, 5, 25, 0, 0, 0, TimeSpan.Zero),
                 validUntil: new DateTimeOffset(2027, 5, 25, 0, 0, 0, TimeSpan.Zero)));
-        MdocIssuerAuth issuerAuth = new(mso, EncodedCoseSign1.FromBytes(new byte[] { 0x00 }, SensitiveMemoryPool<byte>.Shared));
+        MdocIssuerAuth issuerAuth = new(mso, EncodedCoseSign1.FromBytes(new byte[] { 0x00 }, BaseMemoryPool.Shared));
 
         return new MdocDocument(PidDocType, new MdocIssuerSigned(nameSpaces, issuerAuth));
     }

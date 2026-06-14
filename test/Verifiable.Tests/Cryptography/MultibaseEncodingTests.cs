@@ -30,7 +30,7 @@ namespace Verifiable.Tests.Cryptography
                 encodedKey,
                 codecHeaderLength: 0,
                 Base58.Bitcoin.Decode,
-                SensitiveMemoryPool<byte>.Shared);
+                BaseMemoryPool.Shared);
             var bytes = decodedOwner.Memory.Span;
 
             //Extract key data without codec header for re-encoding.
@@ -63,7 +63,7 @@ namespace Verifiable.Tests.Cryptography
                 encodedKey,
                 codecHeaderLength: 0,
                 Base58.Bitcoin.Decode,
-                SensitiveMemoryPool<byte>.Shared);
+                BaseMemoryPool.Shared);
             var bytes = decodedOwner1.Memory.Span;
             var keyDataOnly1 = bytes.Slice(2).ToArray();
             decodedOwner1.Dispose();
@@ -79,7 +79,7 @@ namespace Verifiable.Tests.Cryptography
                 encodedKey,
                 codecHeaderLength: 0,
                 Base58.Bitcoin.Decode,
-                SensitiveMemoryPool<byte>.Shared);
+                BaseMemoryPool.Shared);
             var bytes2 = bytes2Owner.Memory.Span;
             var keyDataOnly2 = bytes2.Slice(2).ToArray();
             bytes2Owner.Dispose();
@@ -138,7 +138,7 @@ namespace Verifiable.Tests.Cryptography
                 multibaseEncodedPublicKey,
                 codecHeaderLength: 0,
                 Base58.Bitcoin.Decode,
-                SensitiveMemoryPool<byte>.Shared);
+                BaseMemoryPool.Shared);
 
             //The decoded data includes the codec header, so we need to compare the full data.
             var decodedWithHeader = multibaseDecodedPublicKeyOwner.Memory.ToArray();
@@ -178,7 +178,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void Ed25519WithMultibaseBtc58Succeeds()
         {
-            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -206,11 +206,11 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void X25519WithMultibaseBtc58Succeeds()
         {
-            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKeyEd25519 = keys.PublicKey;
             using var privateKeyEd25519 = keys.PrivateKey;
 
-            using var x25519PublicKeyOwner = Sodium.ConvertEd25519PublicKeyToCurve25519PublicKey(publicKeyEd25519.AsReadOnlySpan(), SensitiveMemoryPool<byte>.Shared);
+            using var x25519PublicKeyOwner = Sodium.ConvertEd25519PublicKeyToCurve25519PublicKey(publicKeyEd25519.AsReadOnlySpan(), BaseMemoryPool.Shared);
             var x25519PrivateKey = Sodium.ConvertEd25519PrivateKeyToCurve25519PrivateKey(privateKeyEd25519.AsReadOnlySpan().ToArray());
 
             //Use high-level API for public key encoding.
@@ -237,7 +237,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void P256KeyCreationTest()
         {
-            var keys = PublicPrivateKeyMaterialExtensions.Create(SensitiveMemoryPool<byte>.Shared, MicrosoftKeyMaterialCreator.CreateP256Keys);
+            var keys = PublicPrivateKeyMaterialExtensions.Create(BaseMemoryPool.Shared, MicrosoftKeyMaterialCreator.CreateP256Keys);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 

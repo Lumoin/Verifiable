@@ -30,7 +30,7 @@ internal sealed class SiopVerifierExecutorTests
     private const string ClientId = "https://verifier.example.com";
     private const string Nonce = "n-presentation-01";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
     private static readonly string[] AllowedAlgorithms = [WellKnownJwaValues.Es256];
 
     private static readonly JwtHeaderSerializer HeaderSerializer =
@@ -50,7 +50,7 @@ internal sealed class SiopVerifierExecutorTests
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder,
             HeaderSerializer, PayloadSerializer, Pool, TimeProvider);
 
-        OAuthFlowInput input = await executor.ExecuteAsync(
+        FlowInput input = await executor.ExecuteAsync(
             new ValidateSelfIssuedIdToken(idToken, ClientId, Nonce, AllowedAlgorithms),
             new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -70,7 +70,7 @@ internal sealed class SiopVerifierExecutorTests
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder,
             HeaderSerializer, PayloadSerializer, Pool, TimeProvider);
 
-        OAuthFlowInput input = await executor.ExecuteAsync(
+        FlowInput input = await executor.ExecuteAsync(
             new ValidateSelfIssuedIdToken(idToken, ClientId, "a-different-nonce", AllowedAlgorithms),
             new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
 

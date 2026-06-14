@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.Core.Dcql;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Server;
 
@@ -262,9 +263,11 @@ public sealed class Oid4VpWalletClient
             //read the scheme-specific material (x5c, trust_chain, attestation
             //jwt, kid); the resolver binds that material to the wallet's
             //trusted ExpectedVerifierClientId and the per-tenant trust anchors
-            //on the context. The parsed client_id is cross-checked downstream
-            //in PresentWithParsedRequestAsync, so steering key selection via a
-            //forged header cannot bypass the mix-up defence.
+            //on the context. The parsed client_id is cross-checked against
+            //ExpectedVerifierClientId at the top of PresentWithParsedRequestAsync
+            //(EnforceExpectedClientIdContract) — the single choke point every
+            //parse path funnels through — so steering key selection via a forged
+            //header cannot bypass the mix-up defence.
             UnverifiedJwtHeader jarHeader;
             using(UnverifiedJwsMessage unverifiedJar = JwsParsing.ParseCompact(
                 jarForParsing,
@@ -401,6 +404,38 @@ public sealed class Oid4VpWalletClient
     }
 
 
+    //Binds the parsed Authorization Request to the Verifier identity the wallet
+    //pinned out-of-band (PresentJarOptions.ExpectedVerifierClientId, obtained
+    //from the QR code or deep link). Resolving the JAR signing key by the
+    //client_id scheme proves the request is signed by a key bound to the
+    //asserted identity, but NOT that the asserted identity is the one the wallet
+    //meant to answer — a forwarded or substituted request can carry a
+    //validly-signed-but-different client_id. This is the OID4VP mix-up defence:
+    //the wallet answers only the Verifier it intended to, refusing fail-closed
+    //otherwise before producing any presentation or POSTing a response. Every
+    //parse path (signed JAR, unsigned redirect_uri JAR, inline parameters)
+    //funnels through the PresentWithParsedRequestAsync caller, so this is the
+    //single choke point that closes the cross-check.
+    private static void EnforceExpectedClientIdContract(
+        AuthorizationRequestObject request,
+        string expectedVerifierClientId)
+    {
+        if(!string.Equals(request.ClientId, expectedVerifierClientId, StringComparison.Ordinal))
+        {
+            //Surface the tampering detection on the active span before failing closed.
+            Activity.Current?.AddEvent(
+                new ActivityEvent(OAuthEventNames.Oid4VpClientIdMixUpRejected));
+
+            throw new InvalidOperationException(
+                $"The Authorization Request's client_id '{request.ClientId}' does not match the " +
+                $"Verifier client_id the wallet expected ('{expectedVerifierClientId}'). The wallet " +
+                "pins the Verifier identity from the QR code or deep link " +
+                "(PresentJarOptions.ExpectedVerifierClientId) and refuses a request bound to any " +
+                "other client_id — the OID4VP mix-up defence.");
+        }
+    }
+
+
     //OID4VP 1.0 §5.9.3 redirect_uri prefix path: the Authorization Request
     //arrived as inline URL parameters (no JAR, no signature). Parse the
     //request, enforce that client_id is the redirect_uri-prefixed form of
@@ -450,6 +485,13 @@ public sealed class Oid4VpWalletClient
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
+        //Mix-up defence: bind the request to the Verifier identity the wallet
+        //pinned out-of-band before doing any presentation work. Every parse path
+        //(signed JAR, unsigned redirect_uri JAR, inline parameters) funnels
+        //through here, so this is the single choke point that enforces the
+        //binding the signing-key resolver alone cannot.
+        EnforceExpectedClientIdContract(request, presentJarOptions.ExpectedVerifierClientId);
+
         if(request.DcqlQuery is null
             || request.DcqlQuery.Credentials is null
             || request.DcqlQuery.Credentials.Count == 0)
@@ -467,7 +509,7 @@ public sealed class Oid4VpWalletClient
                 WellKnownIdentifierPurposes.Oid4VpWalletFlowId, null, cancellationToken)
                 .ConfigureAwait(false);
 
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> pda =
+        PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pda =
             WalletFlowAutomaton.Create(
                 runId: runId,
                 requestUri: presentJarOptions.RequestUri,

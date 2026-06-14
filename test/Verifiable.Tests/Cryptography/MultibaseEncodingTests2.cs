@@ -25,7 +25,7 @@ namespace Verifiable.Tests.Cryptography
                 originalEncodedKey,
                 codecHeaderLength: 0,  //Keep the codec header in the result.
                 Base58.Bitcoin.Decode,
-                SensitiveMemoryPool<byte>.Shared);
+                BaseMemoryPool.Shared);
 
             //Extract just the key data by skipping the 2-byte codec header.
             byte[] keyDataOnly = decodedWithHeader.Memory.Span.Slice(2).ToArray();
@@ -37,7 +37,7 @@ namespace Verifiable.Tests.Cryptography
                 MulticodecHeaders.Secp256k1PublicKey,
                 MultibaseAlgorithms.Base58Btc,  //Use 'z' prefix for base58btc.
                 Base58.Bitcoin.Encode,
-                SensitiveMemoryPool<byte>.Shared);
+                BaseMemoryPool.Shared);
 
             //The re-encoded result should match the original.
             Assert.AreEqual(originalEncodedKey, reencodedKey, "Round-trip encoding should produce the original key.");
@@ -54,7 +54,7 @@ namespace Verifiable.Tests.Cryptography
             const string originalEncodedKey = "zQ3shtxV1FrJfhqE1dvxYRcCknWNjHc3c5X1y3ZSoPDi2aur2";
 
             //Decode with automatic algorithm detection.
-            var (decodedKeyData, detectedAlgorithm) = MultibaseSerializer.DecodeKey(originalEncodedKey, Base58.Bitcoin.Decode, SensitiveMemoryPool<byte>.Shared);
+            var (decodedKeyData, detectedAlgorithm) = MultibaseSerializer.DecodeKey(originalEncodedKey, Base58.Bitcoin.Decode, BaseMemoryPool.Shared);
 
             //Verify the algorithm was correctly detected from the 'zQ3s' prefix.
             Assert.AreEqual(CryptoAlgorithm.Secp256k1, detectedAlgorithm, "Should detect Secp256k1 from the encoded prefix.");
@@ -86,7 +86,7 @@ namespace Verifiable.Tests.Cryptography
             Assert.DoesNotStartWith("u", jwkEncoded, "JWK encoding should not include multibase prefix.");
 
             //Decode the JWK data.
-            var decodedData = MultibaseSerializer.DecodeFromJwk(jwkEncoded, Base64Url.DecodeFromChars, SensitiveMemoryPool<byte>.Shared);
+            var decodedData = MultibaseSerializer.DecodeFromJwk(jwkEncoded, Base64Url.DecodeFromChars, BaseMemoryPool.Shared);
 
             //Verify the decoded data matches the original.
             Assert.IsTrue(decodedData.Memory.Span.SequenceEqual(originalData), "JWK round-trip should preserve data integrity.");
@@ -113,7 +113,7 @@ namespace Verifiable.Tests.Cryptography
             foreach(var (encodedKey, expectedAlgorithm) in testCases)
             {
                 //Decode and detect the algorithm.
-                var (decodedData, detectedAlgorithm) = MultibaseSerializer.DecodeKey(encodedKey, Base58.Bitcoin.Decode, SensitiveMemoryPool<byte>.Shared);
+                var (decodedData, detectedAlgorithm) = MultibaseSerializer.DecodeKey(encodedKey, Base58.Bitcoin.Decode, BaseMemoryPool.Shared);
 
                 //Clean up the memory.
                 decodedData.Dispose();
@@ -134,7 +134,7 @@ namespace Verifiable.Tests.Cryptography
             const string knownEncodedKey = "z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
 
             //Decode using the convenience overload (uses shared pool).
-            var (decodedData, detectedAlgorithm) = MultibaseSerializer.DecodeKey(knownEncodedKey, Base58.Bitcoin.Decode, SensitiveMemoryPool<byte>.Shared);
+            var (decodedData, detectedAlgorithm) = MultibaseSerializer.DecodeKey(knownEncodedKey, Base58.Bitcoin.Decode, BaseMemoryPool.Shared);
 
             //Extract the key data for re-encoding.
             byte[] keyData = decodedData.Memory.Span.ToArray();
@@ -147,7 +147,7 @@ namespace Verifiable.Tests.Cryptography
             Assert.AreEqual(knownEncodedKey, reencodedKey, "Convenience overloads should produce identical results.");
 
             //Verify round-trip by decoding again.
-            var (decodedAgain, algorithmAgain) = MultibaseSerializer.DecodeKey(reencodedKey, Base58.Bitcoin.Decode, SensitiveMemoryPool<byte>.Shared);
+            var (decodedAgain, algorithmAgain) = MultibaseSerializer.DecodeKey(reencodedKey, Base58.Bitcoin.Decode, BaseMemoryPool.Shared);
 
             //Verify the data and algorithm are preserved.
             Assert.IsTrue(keyData.AsSpan().SequenceEqual(decodedAgain.Memory.Span), "Round-trip should preserve key data.");

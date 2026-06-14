@@ -42,6 +42,10 @@ using Verifiable.Tests.TestInfrastructure;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.OAuth.Server.Registration;
+using Verifiable.Server;
+using Verifiable.Server.Pipeline;
+using Verifiable.Vcalm;
+
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
@@ -89,7 +93,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     //Property aliases — same names the integration-delegate lambdas in the
     //constructor close over. Each access goes to the Default host's state.
     private ConcurrentDictionary<string, ClientRecord> Registrations => Default.Registrations;
-    private ConcurrentDictionary<string, (OAuthFlowState State, int StepCount)> FlowStates => Default.FlowStates;
+    private ConcurrentDictionary<string, (FlowState State, int StepCount)> FlowStates => Default.FlowStates;
     private ConcurrentDictionary<string, string> RequestUriTokenIndex => Default.RequestUriTokenIndex;
     private ConcurrentDictionary<string, string> CodeIndex => Default.CodeIndex;
     private ConcurrentDictionary<string, string> JtiIndex => Default.JtiIndex;
@@ -127,7 +131,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     public static DecodeDelegate Base64UrlDecoder => TestSetup.Base64UrlDecoder;
 
     /// <summary>The memory pool used by the host for sensitive allocations.</summary>
-    public static MemoryPool<byte> MemoryPool => SensitiveMemoryPool<byte>.Shared;
+    public static MemoryPool<byte> MemoryPool => BaseMemoryPool.Shared;
 
     /// <summary>
     /// Constant tenant segment used by dynamic-registration tests. The
@@ -155,13 +159,13 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>The authorization server instance. All tests dispatch through this.</summary>
-    public AuthorizationServer Server => Default.Server;
+    public EndpointServer Server => Default.Server;
 
     /// <summary>The current registration routing table.</summary>
     public IReadOnlyDictionary<string, ClientRecord> RegistrationStore => Registrations;
 
     /// <summary>The server-side flow state store.</summary>
-    public IReadOnlyDictionary<string, (OAuthFlowState State, int StepCount)> FlowStore => FlowStates;
+    public IReadOnlyDictionary<string, (FlowState State, int StepCount)> FlowStore => FlowStates;
 
     /// <summary>The time provider injected at construction.</summary>
     public TimeProvider Time { get; }
@@ -786,7 +790,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <param name="record">The server-side registration record.</param>
     /// <param name="redirectUri">The client's redirect URI.</param>
     /// <param name="issuerUri">The expected issuer URI for callback validation.</param>
-    public (OAuthClient Client, ClientRegistration Registration, Dictionary<string, OAuthFlowState> ClientFlowStore)
+    public (OAuthClient Client, ClientRegistration Registration, Dictionary<string, FlowState> ClientFlowStore)
         CreateInProcessOAuthClientAndRegistration(
             ClientRecord record,
             string redirectUri,
@@ -800,7 +804,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         InProcessTransport transport = new(
             Server, record, record.TenantId, issuerUri);
 
-        Dictionary<string, OAuthFlowState> clientFlowStore = [];
+        Dictionary<string, FlowState> clientFlowStore = [];
 
         string segment = record.TenantId.Value;
         Uri baseUri = new("https://verifier.example.com");
@@ -830,17 +834,17 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ValueTask.FromResult(clientFlowStore.GetValueOrDefault(flowId)),
             loadStateByRequestUriAsync: (requestUri, _, ct) =>
             {
-                foreach(OAuthFlowState state in clientFlowStore.Values)
+                foreach(FlowState state in clientFlowStore.Values)
                 {
                     if(state is Verifiable.OAuth.AuthCode.States.ParCompletedState pc
                         && string.Equals(
                             pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
                     {
-                        return ValueTask.FromResult<OAuthFlowState?>(state);
+                        return ValueTask.FromResult<FlowState?>(state);
                     }
                 }
 
-                return ValueTask.FromResult<OAuthFlowState?>(null);
+                return ValueTask.FromResult<FlowState?>(null);
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
@@ -880,7 +884,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// the client's actual outbound URL. Test isolation is preserved because
     /// each <see cref="TestHostShell"/> binds its own ephemeral port.
     /// </remarks>
-    public async ValueTask<(OAuthClient Client, ClientRegistration Registration, Dictionary<string, OAuthFlowState> ClientFlowStore)>
+    public async ValueTask<(OAuthClient Client, ClientRegistration Registration, Dictionary<string, FlowState> ClientFlowStore)>
         CreateOAuthClientAndRegistrationAsync(
             ClientRecord record,
             string redirectUri,
@@ -894,7 +898,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         ClientRecord alignedRecord = AlignRegistrationIssuerToHttpBase(record);
 
-        Dictionary<string, OAuthFlowState> clientFlowStore = [];
+        Dictionary<string, FlowState> clientFlowStore = [];
 
         string segment = alignedRecord.TenantId.Value;
         Uri baseUri = HttpBaseAddress!;
@@ -925,17 +929,17 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ValueTask.FromResult(clientFlowStore.GetValueOrDefault(flowId)),
             loadStateByRequestUriAsync: (requestUri, _, ct) =>
             {
-                foreach(OAuthFlowState state in clientFlowStore.Values)
+                foreach(FlowState state in clientFlowStore.Values)
                 {
                     if(state is Verifiable.OAuth.AuthCode.States.ParCompletedState pc
                         && string.Equals(
                             pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
                     {
-                        return ValueTask.FromResult<OAuthFlowState?>(state);
+                        return ValueTask.FromResult<FlowState?>(state);
                     }
                 }
 
-                return ValueTask.FromResult<OAuthFlowState?>(null);
+                return ValueTask.FromResult<FlowState?>(null);
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
@@ -1404,7 +1408,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </remarks>
     public OAuthClient CreateOAuthClientWithoutRegistration()
     {
-        Dictionary<string, OAuthFlowState> clientFlowStore = [];
+        Dictionary<string, FlowState> clientFlowStore = [];
 
         Uri baseUri = new("https://verifier.example.com");
         Uri parEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, DynamicRegistrationTenant));
@@ -1433,17 +1437,17 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ValueTask.FromResult(clientFlowStore.GetValueOrDefault(flowId)),
             loadStateByRequestUriAsync: (requestUri, _, ct) =>
             {
-                foreach(OAuthFlowState state in clientFlowStore.Values)
+                foreach(FlowState state in clientFlowStore.Values)
                 {
                     if(state is Verifiable.OAuth.AuthCode.States.ParCompletedState pc
                         && string.Equals(
                             pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
                     {
-                        return ValueTask.FromResult<OAuthFlowState?>(state);
+                        return ValueTask.FromResult<FlowState?>(state);
                     }
                 }
 
-                return ValueTask.FromResult<OAuthFlowState?>(null);
+                return ValueTask.FromResult<FlowState?>(null);
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
@@ -1692,7 +1696,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// (request_uri tokens, codes) through the secondary indexes, so tests
     /// can look up state using whatever handle they have.
     /// </summary>
-    public (OAuthFlowState State, int StepCount) GetFlowState(string key)
+    public (FlowState State, int StepCount) GetFlowState(string key)
     {
         if(FlowStates.TryGetValue(key, out var entry))
         {
@@ -2320,6 +2324,402 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
+    /// Dispatches a request carrying a body with an explicit content type and raw bytes — the
+    /// content-type-controlling form used to exercise the §2.4 <c>application/json</c> MUST and the
+    /// §2.4 / B.4 payload-size 413 (a non-JSON content type, or a body over the cap, must be
+    /// rejected before parsing). An empty <paramref name="contentType"/> dispatches with no body.
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchWithBodyAsync(
+        string segment,
+        string endpointName,
+        string httpMethod,
+        ReadOnlyMemory<byte> bodyBytes,
+        string contentType,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(endpointName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(httpMethod);
+        ArgumentNullException.ThrowIfNull(contentType);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string path = ComposeEndpointPath(endpointName, segment);
+
+        RequestBody body = contentType.Length == 0
+            ? RequestBody.None
+            : new RequestBody
+            {
+                Bytes = bodyBytes,
+                ContentType = contentType
+            };
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: httpMethod,
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty)
+        {
+            Body = body
+        };
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Dispatches a VCALM 1.0 §3.2.2 / §3.2.3 <c>{GET|DELETE} /credentials/{id}</c> request: the
+    /// issuer's <c>/credentials</c> collection path (resolved from
+    /// <see cref="WellKnownVcalmEndpointNames.VcalmGetCredential"/>) plus the URL-escaped credential id as
+    /// the trailing path segment. The §3.2.2 / §3.2.3 matchers extract the id from this trailing
+    /// segment. The id is passed RAW (the path is escaped here) so callers test with urn / data-URL
+    /// ids verbatim.
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchVcalmCredentialByIdAsync(
+        string segment,
+        string httpMethod,
+        string credentialId,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(httpMethod);
+        ArgumentException.ThrowIfNullOrWhiteSpace(credentialId);
+        ArgumentNullException.ThrowIfNull(context);
+
+        //The collection path the §3.2.2 / §3.2.3 endpoints resolve to, plus the escaped id segment.
+        string collectionPath = ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmGetCredential, segment);
+        string path = $"{collectionPath}/{Uri.EscapeDataString(credentialId)}";
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: httpMethod,
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty);
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Dispatches a VCALM 1.0 §C.2 <c>GET /status-lists/{id}</c> request: the status service's
+    /// <c>/status-lists</c> collection path (resolved from
+    /// <see cref="WellKnownVcalmEndpointNames.VcalmGetStatusList"/>) plus the URL-escaped status-list
+    /// id as the trailing path segment. The §C.2 matcher extracts the id from this trailing segment.
+    /// The id is passed RAW (the path is escaped here) so callers test with urn / URL ids verbatim.
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchVcalmStatusListByIdAsync(
+        string segment,
+        string statusListId,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(statusListId);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string collectionPath = ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmGetStatusList, segment);
+        string path = $"{collectionPath}/{Uri.EscapeDataString(statusListId)}";
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: "GET",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty);
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Dispatches a VCALM 1.0 §3.5.4 / §3.5.5 <c>{GET|DELETE} /presentations/{id}</c> request: the
+    /// holder's <c>/presentations</c> collection path (resolved from
+    /// <see cref="WellKnownVcalmEndpointNames.VcalmGetPresentation"/>) plus the URL-escaped presentation
+    /// id as the trailing path segment. The §3.5.4 / §3.5.5 matchers extract the id from this trailing
+    /// segment. The id is passed RAW (the path is escaped here) so callers test with urn ids verbatim.
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchVcalmPresentationByIdAsync(
+        string segment,
+        string httpMethod,
+        string presentationId,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(httpMethod);
+        ArgumentException.ThrowIfNullOrWhiteSpace(presentationId);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string collectionPath = ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmGetPresentation, segment);
+        string path = $"{collectionPath}/{Uri.EscapeDataString(presentationId)}";
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: httpMethod,
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty);
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Dispatches a VCALM 1.0 §3.6.5 <c>POST /exchanges/{id}</c> participate or §3.6.6
+    /// <c>GET /exchanges/{id}</c> get-state request: the exchange engine's <c>/exchanges</c> collection
+    /// path (resolved from <see cref="WellKnownVcalmEndpointNames.VcalmParticipateInExchange"/>) plus the
+    /// URL-escaped exchange id as the trailing path segment. The §3.6.5 / §3.6.6 matchers extract the id
+    /// from this trailing segment. A <see langword="null"/> <paramref name="jsonBody"/> dispatches with
+    /// no body (the §3.6.6 GET); a non-null body is the §3.6.5 vcapi message.
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchVcalmExchangeByIdAsync(
+        string segment,
+        string httpMethod,
+        string exchangeId,
+        string? jsonBody,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(httpMethod);
+        ArgumentException.ThrowIfNullOrWhiteSpace(exchangeId);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string collectionPath = ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmParticipateInExchange, segment);
+        string path = $"{collectionPath}/{Uri.EscapeDataString(exchangeId)}";
+
+        RequestBody body = jsonBody is null
+            ? RequestBody.None
+            : new RequestBody
+            {
+                Bytes = Encoding.UTF8.GetBytes(jsonBody),
+                ContentType = WellKnownMediaTypes.Application.Json
+            };
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: httpMethod,
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty)
+        {
+            Body = body
+        };
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Dispatches a VCALM 1.0 §3.6.4 <c>GET /exchanges/{id}/protocols</c> get-exchange-protocols
+    /// request: the exchange engine's <c>/exchanges</c> collection path plus the URL-escaped exchange id
+    /// and the <c>/protocols</c> sub-resource as the trailing path. The §3.6.4 matcher extracts the id
+    /// from between the collection path and the <c>/protocols</c> segment.
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchVcalmExchangeProtocolsAsync(
+        string segment,
+        string exchangeId,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(exchangeId);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string collectionPath = ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmGetExchangeProtocols, segment);
+        string path = $"{collectionPath}/{Uri.EscapeDataString(exchangeId)}/protocols";
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: "GET",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty);
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Dispatches a VCALM 1.0 §3.6.2 <c>GET /workflows/{localWorkflowId}</c> request: the administration
+    /// surface's <c>/workflows</c> collection path (resolved from
+    /// <see cref="WellKnownVcalmEndpointNames.VcalmGetWorkflow"/>) plus the URL-escaped workflow id as the
+    /// trailing path segment. The §3.6.2 matcher extracts the id from the trailing segment.
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchVcalmWorkflowByIdAsync(
+        string segment,
+        string workflowId,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(workflowId);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string collectionPath = ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmGetWorkflow, segment);
+        string path = $"{collectionPath}/{Uri.EscapeDataString(workflowId)}";
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: "GET",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty);
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Dispatches a VCALM 1.0 §3.6.7 <c>POST /callbacks/{localCallbackId}</c> request: the administration
+    /// surface's <c>/callbacks</c> collection path (resolved from
+    /// <see cref="WellKnownVcalmEndpointNames.VcalmExchangeStepCallback"/>) plus the URL-escaped callback
+    /// id as the trailing path segment, carrying the <c>{event{data{exchangeId}}}</c> body.
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchVcalmCallbackAsync(
+        string segment,
+        string callbackId,
+        string? jsonBody,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(callbackId);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string collectionPath = ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmExchangeStepCallback, segment);
+        string path = $"{collectionPath}/{Uri.EscapeDataString(callbackId)}";
+
+        RequestBody body = jsonBody is null
+            ? RequestBody.None
+            : new RequestBody
+            {
+                Bytes = Encoding.UTF8.GetBytes(jsonBody),
+                ContentType = WellKnownMediaTypes.Application.Json
+            };
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: "POST",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty)
+        {
+            Body = body
+        };
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Dispatches a VCALM 1.0 §3.7.4 <c>GET /interactions/{localInteractionId}</c> interaction-protocols
+    /// request: the coordinator's <c>/interactions</c> collection path (resolved from
+    /// <see cref="WellKnownVcalmEndpointNames.VcalmInteractionProtocols"/>) plus the URL-escaped
+    /// interaction id as the trailing path segment, carrying the given <paramref name="acceptHeader"/>
+    /// so the §3.7.4 content negotiation can choose the <c>application/json</c> map or the
+    /// <c>text/html</c> human-directing fallback. A <see langword="null"/> <paramref name="acceptHeader"/>
+    /// dispatches with no Accept header (the §3.7.4 unrecognized-Accept text/html branch).
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchVcalmInteractionProtocolsAsync(
+        string segment,
+        string interactionId,
+        string? acceptHeader,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(interactionId);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string collectionPath = ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmInteractionProtocols, segment);
+        string path = $"{collectionPath}/{Uri.EscapeDataString(interactionId)}";
+
+        RequestHeaders headers = acceptHeader is null
+            ? RequestHeaders.Empty
+            : new RequestHeaders(new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Accept"] = [acceptHeader]
+            });
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: "GET",
+            Fields: new RequestFields(),
+            Headers: headers,
+            RouteValues: RouteValues.Empty);
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Dispatches a VCALM 1.0 §3.7.5 <c>POST /{localInviteId}/invite-request/response</c> inviteRequest:
+    /// the coordinator's invite base path (resolved from
+    /// <see cref="WellKnownVcalmEndpointNames.VcalmInviteRequest"/>) plus the URL-escaped invite id and
+    /// the fixed <c>invite-request/response</c> sub-resource as the trailing path, carrying the
+    /// <c>{url, purpose, referenceId?}</c> body.
+    /// </summary>
+    public async ValueTask<ServerHttpResponse> DispatchVcalmInviteRequestAsync(
+        string segment,
+        string inviteId,
+        string? jsonBody,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(inviteId);
+        ArgumentNullException.ThrowIfNull(context);
+
+        string basePath = ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmInviteRequest, segment);
+        string path = $"{basePath}/{Uri.EscapeDataString(inviteId)}/invite-request/response";
+
+        RequestBody body = jsonBody is null
+            ? RequestBody.None
+            : new RequestBody
+            {
+                Bytes = Encoding.UTF8.GetBytes(jsonBody),
+                ContentType = WellKnownMediaTypes.Application.Json
+            };
+
+        IncomingRequest request = new(
+            Path: path,
+            Method: "POST",
+            Fields: new RequestFields(),
+            Headers: RequestHeaders.Empty,
+            RouteValues: RouteValues.Empty)
+        {
+            Body = body
+        };
+
+        context.SetTenantId(segment);
+        return await Server.DispatchAsync(request, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// Header- and body-carrying form of <see cref="DispatchAtEndpointAsync(string, string, string, RequestFields, string, ExchangeContext, CancellationToken)"/>
     /// — for protected endpoints that read both an <c>Authorization</c> bearer header and a
     /// JSON <c>IncomingRequest.Body</c> (the OID4VCI 1.0 §8 Credential Endpoint). A
@@ -2420,7 +2820,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         string jwksJson = EphemeralEncryptionKeyPair.CreatePublicKeyJwks(
             newExchangeKeys.PublicKey,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         newExchangeKeys.PublicKey.Dispose();
 
@@ -2776,11 +3176,11 @@ internal sealed class TestHostShell: IAsyncDisposable
         DpopHmacKeySet = new InProcessKeySet();
         DpopHmacKeySet.AddCurrent(initialKidValue, hmacMaterial);
 
-        Server.Integration.ResolveServerHmacKeyAsync = (kid, tenantId, ctx, ct) =>
+        Server.OAuth().ResolveServerHmacKeyAsync = (kid, tenantId, ctx, ct) =>
             ValueTask.FromResult(DpopHmacKeySet!.ResolveMaterial(kid));
-        Server.Integration.GetHmacKeySetAsync = (tenantId, ctx, ct) =>
+        Server.OAuth().GetHmacKeySetAsync = (tenantId, ctx, ct) =>
             ValueTask.FromResult(DpopHmacKeySet!.Snapshot());
-        Server.Integration.ValidateDpopProofAsync = (request, ct) =>
+        Server.OAuth().ValidateDpopProofAsync = (request, ct) =>
             DpopProofValidator.ValidateAsync(
                 request,
                 MicrosoftCryptographicFunctions.VerifyP256Async,
@@ -2791,27 +3191,27 @@ internal sealed class TestHostShell: IAsyncDisposable
                 MemoryPool,
                 iatSkew: WellKnownDpopValues.DefaultIatSkew,
                 cancellationToken: ct);
-        Server.Integration.IssueDpopNonceAsync = (audience, tenantId, ctx, ct) =>
+        Server.OAuth().IssueDpopNonceAsync = (audience, tenantId, ctx, ct) =>
             DefaultDpopNonceIssuance.IssueAsync(
                 audience,
                 tenantId,
                 ctx,
-                Server.Integration.GetHmacKeySetAsync!,
-                Server.Integration.SelectHmacKeyAsync,
-                Server.Integration.ResolveServerHmacKeyAsync!,
+                Server.OAuth().GetHmacKeySetAsync!,
+                Server.OAuth().SelectHmacKeyAsync,
+                Server.OAuth().ResolveServerHmacKeyAsync!,
                 Time,
                 Base64UrlEncoder,
                 System.Security.Cryptography.RandomNumberGenerator.Fill,
                 MemoryPool,
                 ct);
-        Server.Integration.ValidateDpopNonceAsync = (presented, audience, tenantId, ctx, ct) =>
+        Server.OAuth().ValidateDpopNonceAsync = (presented, audience, tenantId, ctx, ct) =>
             DefaultDpopNonceValidation.ValidateAsync(
                 presented,
                 audience,
                 tenantId,
                 ctx,
-                Server.Integration.GetHmacKeySetAsync!,
-                Server.Integration.ResolveServerHmacKeyAsync!,
+                Server.OAuth().GetHmacKeySetAsync!,
+                Server.OAuth().ResolveServerHmacKeyAsync!,
                 Time,
                 WellKnownDpopValues.DefaultNonceValidityWindow,
                 Base64UrlDecoder,
@@ -2899,7 +3299,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKeyMemory ownership transfers to SymmetricKey; SymmetricKey itself is tracked in DpopOwnedDisposables and disposed when the host is disposed.")]
     private SymmetricKey CreateFreshHmacKey(string id)
     {
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(32);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
         SymmetricKeyMemory material;
         try
         {
@@ -2944,7 +3344,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         InMemoryDpopNonceCache nonceCache = new();
 
         InProcessTransport transport = new(Server, record, record.TenantId, issuerUri);
-        Dictionary<string, OAuthFlowState> clientFlowStore = [];
+        Dictionary<string, FlowState> clientFlowStore = [];
 
         string segment = record.TenantId.Value;
         Uri issuerUriValue = new(issuerUri);
@@ -2977,17 +3377,17 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ValueTask.FromResult(clientFlowStore.GetValueOrDefault(flowId)),
             loadStateByRequestUriAsync: (requestUri, _, ct) =>
             {
-                foreach(OAuthFlowState state in clientFlowStore.Values)
+                foreach(FlowState state in clientFlowStore.Values)
                 {
                     if(state is Verifiable.OAuth.AuthCode.States.ParCompletedState pc
                         && string.Equals(
                             pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
                     {
-                        return ValueTask.FromResult<OAuthFlowState?>(state);
+                        return ValueTask.FromResult<FlowState?>(state);
                     }
                 }
 
-                return ValueTask.FromResult<OAuthFlowState?>(null);
+                return ValueTask.FromResult<FlowState?>(null);
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
@@ -3057,7 +3457,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         DpopKey dpopKey = new(dpopKeys, WellKnownJwaValues.Es256);
         InMemoryDpopNonceCache nonceCache = new();
 
-        Dictionary<string, OAuthFlowState> clientFlowStore = [];
+        Dictionary<string, FlowState> clientFlowStore = [];
 
         string segment = alignedRecord.TenantId.Value;
         Uri baseUri = HttpBaseAddress!;
@@ -3088,17 +3488,17 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ValueTask.FromResult(clientFlowStore.GetValueOrDefault(flowId)),
             loadStateByRequestUriAsync: (requestUri, _, ct) =>
             {
-                foreach(OAuthFlowState state in clientFlowStore.Values)
+                foreach(FlowState state in clientFlowStore.Values)
                 {
                     if(state is Verifiable.OAuth.AuthCode.States.ParCompletedState pc
                         && string.Equals(
                             pc.Par.RequestUri.ToString(), requestUri, StringComparison.Ordinal))
                     {
-                        return ValueTask.FromResult<OAuthFlowState?>(state);
+                        return ValueTask.FromResult<FlowState?>(state);
                     }
                 }
 
-                return ValueTask.FromResult<OAuthFlowState?>(null);
+                return ValueTask.FromResult<FlowState?>(null);
             },
             parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
@@ -3234,6 +3634,60 @@ internal sealed class TestHostShell: IAsyncDisposable
     }
 
 
+    /// <summary>
+    /// Starts an in-process Kestrel listener for the W3C VCALM 1.0 conformance bridge (chunk V-6a):
+    /// the same ephemeral-port loopback bootstrap as <see cref="StartHttpHostAsync(string, CancellationToken)"/>,
+    /// but mounting <see cref="Verifiable.Tests.Vcalm.VcalmConformanceHttpApplication"/> so the VCALM
+    /// issuer / verifier interfaces are served at the STABLE, suite-expected flat paths
+    /// (<c>/credentials/issue</c>, <c>/credentials/verify</c>, <c>/presentations/verify</c>) over real
+    /// HTTP behind an OAuth2 client-credentials bearer gate, with the AS token endpoint reachable at
+    /// <c>/token</c>. The external <c>vc-api-issuer-test-suite</c> / <c>vc-api-verifier-test-suite</c>
+    /// JS suites POST to those flat paths; this is the in-repo bridge the suites would later be pointed
+    /// at (V-6b). Idempotent per host. The supplied <paramref name="registration"/> is the conformance
+    /// tenant whose VCALM endpoints the skin fronts.
+    /// </summary>
+    public async Task StartVcalmConformanceHostAsync(
+        string hostName, ClientRecord registration, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+        ArgumentNullException.ThrowIfNull(registration);
+
+        HostedAuthorizationServer host = Host(hostName);
+        if(host.KestrelServer is not null)
+        {
+            return;
+        }
+
+        global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions kestrelOptions = new();
+        kestrelOptions.Listen(System.Net.IPAddress.Loopback, port: 0);
+
+        global::Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportOptions socketOptions = new();
+        global::Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportFactory socketFactory = new(
+            global::Microsoft.Extensions.Options.Options.Create(socketOptions),
+            global::Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+
+        global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServer kestrel = new(
+            global::Microsoft.Extensions.Options.Options.Create(kestrelOptions),
+            socketFactory,
+            global::Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+
+        Verifiable.Tests.Vcalm.VcalmConformanceHttpApplication app = new(host.Server, registration);
+        await kestrel.StartAsync(app, cancellationToken).ConfigureAwait(false);
+
+        global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature? addresses =
+            kestrel.Features.Get<global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
+        if(addresses is null || addresses.Addresses.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Kestrel for VCALM conformance host '{hostName}' started but no server addresses were exposed.");
+        }
+
+        host.KestrelServer = kestrel;
+        host.HttpBaseAddress = new Uri(addresses.Addresses.First());
+        host.SharedHttpClient = new System.Net.Http.HttpClient { BaseAddress = host.HttpBaseAddress };
+    }
+
+
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
@@ -3324,6 +3778,16 @@ internal sealed class TestHostShell: IAsyncDisposable
             return $"/.well-known/openid-credential-issuer/{segment}";
         }
 
+        //RFC 8414 §3: the authorization server metadata path is formed by INSERTING
+        // /.well-known/oauth-authorization-server between the host and the issuer's
+        //path component — for the fixture's https://issuer.test/{segment} identity
+        //that is /.well-known/oauth-authorization-server/{segment}. This is the §3
+        //default location, served alongside the appended openid-configuration mount.
+        if(endpointName == WellKnownEndpointNames.MetadataOAuthAuthorizationServer)
+        {
+            return $"/.well-known/oauth-authorization-server/{segment}";
+        }
+
         string suffix = EndpointPathSuffix(endpointName)
             ?? throw new ArgumentException(
                 $"No fixture path mapping registered for endpoint role '{endpointName}'.",
@@ -3407,6 +3871,48 @@ internal sealed class TestHostShell: IAsyncDisposable
         if(endpointName == WellKnownEndpointNames.SiopRequestObject) { return "siop_request"; }
         if(endpointName == WellKnownEndpointNames.SiopRequestObjectByReference) { return "siop_request_object"; }
         if(endpointName == WellKnownEndpointNames.SiopResponse) { return "siop_response"; }
+        //VCALM 1.0 §3.3 verifier paths (the instance pathing per §2.3 is deployment-chosen; the
+        //host skin scopes them under the tenant segment like the other service endpoints).
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmCredentialsVerify) { return "vcalm/credentials/verify"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmPresentationsVerify) { return "vcalm/presentations/verify"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmCreateChallenge) { return "vcalm/challenges"; }
+        //VCALM 1.0 §3.2 issuer paths. The §3.2.2 / §3.2.3 endpoints resolve to the /credentials
+        //collection path; the matcher accepts collection/{id} and extracts the trailing id segment.
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmCredentialsIssue) { return "vcalm/credentials/issue"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmGetCredential) { return "vcalm/credentials"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmDeleteCredential) { return "vcalm/credentials"; }
+        //VCALM 1.0 Appendix C status paths. The §C.2 endpoint resolves to the /status-lists
+        //collection path; the matcher accepts collection/{id} and extracts the trailing id segment.
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmCredentialsStatus) { return "vcalm/credentials/status"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmCreateStatusList) { return "vcalm/status-lists"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmGetStatusList) { return "vcalm/status-lists"; }
+        //VCALM 1.0 §3.5 holder presentation paths. The §3.5.2 POST and §3.5.3 GET share the
+        ///presentations collection path (the matchers split by method); the §3.5.4 / §3.5.5 endpoints
+        //resolve to the same collection path and the matcher extracts the trailing id segment.
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmCredentialsDerive) { return "vcalm/credentials/derive"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmCreatePresentation) { return "vcalm/presentations"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmGetPresentations) { return "vcalm/presentations"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmGetPresentation) { return "vcalm/presentations"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmDeletePresentation) { return "vcalm/presentations"; }
+        //VCALM 1.0 §3.6 workflows-and-exchanges paths. The §3.6.3 create POSTs to the /exchanges
+        //collection path; the §3.6.4 / §3.6.5 / §3.6.6 endpoints resolve to the same collection path
+        //and the matchers extract the trailing {localExchangeId} (+ "/protocols" for §3.6.4) segment.
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmCreateExchange) { return "vcalm/exchanges"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmGetExchangeProtocols) { return "vcalm/exchanges"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmParticipateInExchange) { return "vcalm/exchanges"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmGetExchangeState) { return "vcalm/exchanges"; }
+
+        //VCALM 1.0 §3.6.1 / §3.6.2 administration + §3.6.7 callbacks
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmCreateWorkflow) { return "vcalm/workflows"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmGetWorkflow) { return "vcalm/workflows"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmExchangeStepCallback) { return "vcalm/callbacks"; }
+
+        //VCALM 1.0 §3.7 initiating-interactions (coordinator-hosted). The §3.7.4 endpoint resolves to
+        //the /interactions collection path and the matcher extracts the trailing {localInteractionId};
+        //the §3.7.5 inviteRequest endpoint resolves to its base path and the matcher reads the
+        //{localInviteId}/invite-request/response tail.
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmInteractionProtocols) { return "vcalm/interactions"; }
+        if(endpointName == WellKnownVcalmEndpointNames.VcalmInviteRequest) { return "vcalm/invites"; }
 
         return null;
     }
@@ -3420,7 +3926,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         string jwksJson = EphemeralEncryptionKeyPair.CreatePublicKeyJwks(
             exchangePublicKey,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         return HaipProfile.CreateVerifierClientMetadata(clientId, jwksJson);
     }
@@ -3459,13 +3965,13 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>
     /// In-process transport that routes the client's HTTP-shaped requests to the
-    /// server's <see cref="AuthorizationServer.DispatchAsync"/>. Models the role
+    /// server's <see cref="EndpointServer.DispatchAsync"/>. Models the role
     /// of an HTTP layer plus structural router collapsed into one in-memory
     /// class. No closures — all dependencies are constructor parameters.
     /// </summary>
     [DebuggerDisplay("InProcessTransport Segment={segment}")]
     private sealed class InProcessTransport(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         string segment,
         string issuerUri)
@@ -3564,7 +4070,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </summary>
     [DebuggerDisplay("LookupTransport")]
     private sealed class LookupTransport(
-        AuthorizationServer server,
+        EndpointServer server,
         ConcurrentDictionary<string, ClientRecord> registrations,
         string issuerUri)
     {

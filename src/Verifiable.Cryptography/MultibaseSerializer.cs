@@ -195,7 +195,7 @@ public static class MultibaseSerializer
         char multibasePrefix,
         EncodeDelegate encoder)
     {
-        return Encode(data, codecHeader, multibasePrefix, encoder, SensitiveMemoryPool<byte>.Shared);
+        return Encode(data, codecHeader, multibasePrefix, encoder, BaseMemoryPool.Shared);
     }
 
 
@@ -335,7 +335,7 @@ public static class MultibaseSerializer
         int codecHeaderLength,
         DecodeDelegate decoder)
     {
-        return Decode(encoded, codecHeaderLength, decoder, SensitiveMemoryPool<byte>.Shared);
+        return Decode(encoded, codecHeaderLength, decoder, BaseMemoryPool.Shared);
     }
 
 

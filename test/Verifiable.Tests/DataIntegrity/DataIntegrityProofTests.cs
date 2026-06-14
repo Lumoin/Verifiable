@@ -36,9 +36,9 @@ internal sealed class DataIntegrityProofTests
 
     private static readonly DateTime ProofCreated = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> P256IssuerKeys { get; } = BouncyCastleKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> P256IssuerKeys { get; } = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
 
-    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> P256EphemeralKeys { get; } = BouncyCastleKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> P256EphemeralKeys { get; } = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
 
 
     /// <summary>
@@ -65,7 +65,7 @@ internal sealed class DataIntegrityProofTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -86,7 +86,7 @@ internal sealed class DataIntegrityProofTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -118,7 +118,7 @@ internal sealed class DataIntegrityProofTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -139,7 +139,7 @@ internal sealed class DataIntegrityProofTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -192,7 +192,7 @@ internal sealed class DataIntegrityProofTests
             SerializeProofOptions,
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -214,7 +214,7 @@ internal sealed class DataIntegrityProofTests
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -246,7 +246,7 @@ internal sealed class DataIntegrityProofTests
             EcdsaSd2023CborSerializer.SerializeDerivedProof,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -267,7 +267,7 @@ internal sealed class DataIntegrityProofTests
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -469,7 +469,7 @@ internal sealed class DataIntegrityProofTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext);
 
 
@@ -483,7 +483,7 @@ internal sealed class DataIntegrityProofTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext);
 
 

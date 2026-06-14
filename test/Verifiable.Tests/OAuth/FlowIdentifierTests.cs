@@ -49,8 +49,8 @@ internal sealed class FlowIdentifierTests
         await using TestHostShell host = new(TimeProvider);
 
         List<string> flowIds = [];
-        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
-        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
+        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
         {
             if(stage is StateTransitionStage transition)
             {

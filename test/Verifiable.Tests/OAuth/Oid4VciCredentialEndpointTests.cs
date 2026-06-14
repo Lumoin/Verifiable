@@ -71,11 +71,11 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         CredentialRequest? seenRequest = null;
         string? seenSubject = null;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seenRequest = request;
@@ -128,10 +128,10 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         bool seamCalled = false;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seamCalled = true;
@@ -164,8 +164,8 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
                 ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
 
@@ -198,10 +198,10 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         CredentialRequest? seenRequest = null;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seenRequest = request;
@@ -246,7 +246,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         string bearer = "Bearer " + accessToken;
 
@@ -287,10 +287,10 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         bool seamCalled = false;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seamCalled = true;
@@ -318,8 +318,8 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
                 ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
 
@@ -344,10 +344,10 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         bool seamCalled = false;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seamCalled = true;
@@ -380,10 +380,10 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         bool seamCalled = false;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seamCalled = true;
@@ -415,7 +415,7 @@ internal sealed class Oid4VciCredentialEndpointTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
         //Parse seam wired, issuance seam deliberately not.
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
 
@@ -439,7 +439,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         CredentialIssuanceDecision decision,
         string expectedError)
     {
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) => ValueTask.FromResult(decision);
 
         ServerHttpResponse response = await DispatchCredentialAsync(
@@ -464,7 +464,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
 

@@ -54,8 +54,8 @@ public static class SubjectIdentifierContributor
             return [new Claim(WellKnownClaimIds.SubjectIdentifier, ClaimOutcome.NotApplicable)];
         }
 
-        AuthorizationServer? server = ctx.ExchangeContext.Server;
-        ResolveSubjectIdentifierDelegate? resolve = server?.Integration.ResolveSubjectIdentifierAsync;
+        EndpointServer? server = ctx.ExchangeContext.Server;
+        ResolveSubjectIdentifierDelegate? resolve = server?.OAuth().ResolveSubjectIdentifierAsync;
         if(resolve is null)
         {
             return [new Claim(WellKnownClaimIds.SubjectIdentifier, ClaimOutcome.NotApplicable)];

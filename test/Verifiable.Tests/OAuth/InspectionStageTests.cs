@@ -55,8 +55,8 @@ internal sealed class InspectionStageTests
         await using TestHostShell host = new(TimeProvider);
 
         List<StateTransitionStage> recorded = [];
-        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
-        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
+        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
         {
             if(stage is StateTransitionStage transition)
             {
@@ -99,8 +99,8 @@ internal sealed class InspectionStageTests
         await using TestHostShell host = new(TimeProvider);
 
         List<InspectionStage> recorded = [];
-        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
-        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
+        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
         {
             recorded.Add(stage);
             return previousInspect(stage, ctx, ct);
@@ -145,8 +145,8 @@ internal sealed class InspectionStageTests
         await using TestHostShell host = new(TimeProvider);
 
         MatchedStage? recordedMatched = null;
-        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
-        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
+        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
         {
             if(stage is MatchedStage matched) { recordedMatched = matched; }
             return previousInspect(stage, ctx, ct);
@@ -188,8 +188,8 @@ internal sealed class InspectionStageTests
         await using TestHostShell host = new(TimeProvider);
 
         List<InspectionStage> recorded = [];
-        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
-        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
+        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
         {
             recorded.Add(stage);
             return previousInspect(stage, ctx, ct);
@@ -230,8 +230,8 @@ internal sealed class InspectionStageTests
         await using TestHostShell host = new(TimeProvider);
 
         List<StateTransitionStage> recorded = [];
-        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
-        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
+        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
         {
             if(stage is StateTransitionStage transition)
             {

@@ -24,8 +24,8 @@ namespace Verifiable.Core
     /// Individual metric names are used by monitoring dashboards, alert rules, and
     /// analysis tools to query specific metrics.
     ///
-    /// For cryptography-related metrics (such as SensitiveMemoryPool), see
-    /// <see cref="Verifiable.Cryptography.CryptographyMetrics"/>.
+    /// For cryptography-related metrics (such as BaseMemoryPool), see
+    /// <see cref="Lumoin.Base.BaseMemoryPoolMetrics"/>.
     /// </remarks>
     public static class VerifiableMetrics
     {

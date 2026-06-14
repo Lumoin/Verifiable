@@ -27,4 +27,4 @@ public sealed record ParSucceeded(
     TransactionNonce Nonce,
     PreparedDcqlQuery Query,
     KeyId DecryptionKeyId,
-    DateTimeOffset ReceivedAt): OAuthFlowInput;
+    DateTimeOffset ReceivedAt): FlowInput;

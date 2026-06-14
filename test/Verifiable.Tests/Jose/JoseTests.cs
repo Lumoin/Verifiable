@@ -42,7 +42,7 @@ internal sealed class JoseTests
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -55,7 +55,7 @@ internal sealed class JoseTests
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP256Async,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -83,7 +83,7 @@ internal sealed class JoseTests
             payload,
             EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             resolverState,
             ResolvePrivateKeyMaterial,
             0,
@@ -100,7 +100,7 @@ internal sealed class JoseTests
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             resolverState,
             ResolvePublicKeyMaterial,
             0,
@@ -128,7 +128,7 @@ internal sealed class JoseTests
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP384Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -137,7 +137,7 @@ internal sealed class JoseTests
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP384Async,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -163,7 +163,7 @@ internal sealed class JoseTests
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP521Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -172,7 +172,7 @@ internal sealed class JoseTests
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP521Async,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -204,7 +204,7 @@ internal sealed class JoseTests
             TestSetup.Base64UrlEncoder,
             signingPrivateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -213,7 +213,7 @@ internal sealed class JoseTests
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             wrongPublicKey,
             MicrosoftCryptographicFunctions.VerifyP256Async,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -243,7 +243,7 @@ internal sealed class JoseTests
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -252,7 +252,7 @@ internal sealed class JoseTests
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             resolverState,
             ResolvePublicKeyMaterial,
             0,
@@ -280,7 +280,7 @@ internal sealed class JoseTests
                 payload,
                 EncodeJwtPart,
                 TestSetup.Base64UrlEncoder,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 0,
                 (context, pool, state, ct) => ValueTask.FromResult<PrivateKeyMemory?>(null),
                 0,

@@ -28,4 +28,4 @@ public sealed record Initiate(
     string FlowId,
     string ExpectedIssuer,
     DateTimeOffset InitiatedAt,
-    DateTimeOffset InitialExpiresAt): OAuthFlowInput;
+    DateTimeOffset InitialExpiresAt): FlowInput;

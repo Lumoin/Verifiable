@@ -3,10 +3,10 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Routing;
 using Verifiable.OAuth.Siop.Server.States;
+using Verifiable.Server;
 
-using static Verifiable.OAuth.Server.EndpointInput;
+using static Verifiable.Server.EndpointInput;
 
 namespace Verifiable.OAuth.Siop.Server;
 
@@ -33,7 +33,7 @@ namespace Verifiable.OAuth.Siop.Server;
 /// effect-channeling the OID4VP verifier flow uses.
 /// </para>
 /// <para>
-/// Register at startup via <see cref="ServerConfiguration.EndpointBuilders"/>:
+/// Register at startup via <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>:
 /// </para>
 /// <code>
 /// server.EndpointBuilders.AddRange([
@@ -46,11 +46,11 @@ public static class SiopVerifierEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="ServerConfiguration.EndpointBuilders"/>.
+    /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
-        if(!registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.SiopSelfIssuedOp))
+        if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.SiopSelfIssuedOp))
         {
             return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>([]);
         }
@@ -103,9 +103,10 @@ public static class SiopVerifierEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return Respond(ServerHttpResponse.ServerError(
@@ -141,7 +142,7 @@ public static class SiopVerifierEndpoints
                 //Generate the external opaque request handle. A distinct random value from flowId
                 //per the architecture rule "flowId never leaves the server process." The handle is
                 //carried in the request_uri and echoed by the Wallet as the state on its response.
-                string requestHandle = await server.Integration.GenerateIdentifierAsync!(
+                string requestHandle = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.SiopRequestHandle, context, ct)
                     .ConfigureAwait(false);
 
@@ -155,7 +156,7 @@ public static class SiopVerifierEndpoints
                 //(request_uri) flow. Absent a resolver the flow still works same-device (by-value)
                 //and the handle alone is returned.
                 KeyId? signingKeyId = null;
-                if(server.Cryptography.SigningKeyResolver is not null)
+                if(oauth.Cryptography.SigningKeyResolver is not null)
                 {
                     signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
                         server,
@@ -168,9 +169,9 @@ public static class SiopVerifierEndpoints
                 //Ask the application to compose the absolute request_uri for the by-reference flow.
                 //The library does not compose URLs. Best-effort: when ResolveEndpointUriAsync is not
                 //configured (or returns null) the same-device by-value path is still available.
-                if(server.Integration.ResolveEndpointUriAsync is not null)
+                if(oauth.ResolveEndpointUriAsync is not null)
                 {
-                    Uri? requestUri = await server.Integration.ResolveEndpointUriAsync(
+                    Uri? requestUri = await oauth.ResolveEndpointUriAsync(
                         SiopVerifierEndpointKeys.RequestUri,
                         registration,
                         context,
@@ -183,7 +184,7 @@ public static class SiopVerifierEndpoints
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
-                DateTimeOffset expiresAt = now + server.Timings.Oid4VpRequestUriLifetime;
+                DateTimeOffset expiresAt = now + oauth.Timings.Oid4VpRequestUriLifetime;
 
                 //When the RP advertises an encryption key (and its accepted enc set), the Wallet MAY
                 //return the Self-Issued ID Token as a compact JWE encrypted to that key's public half.
@@ -301,7 +302,8 @@ public static class SiopVerifierEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 if(currentState is not SiopRequestPreparedState prepared)
                 {
@@ -310,7 +312,7 @@ public static class SiopVerifierEndpoints
                         "Flow not in expected state for SIOP §9 Request Object request."));
                 }
 
-                if(server.ActionExecutor is null)
+                if(oauth.ActionExecutor is null)
                 {
                     return Respond(ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError, "Action executor not configured."));
@@ -324,7 +326,7 @@ public static class SiopVerifierEndpoints
                         + "by-reference request_uri path requires a configured SigningKeyResolver."));
                 }
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return Respond(ServerHttpResponse.ServerError(
@@ -351,7 +353,7 @@ public static class SiopVerifierEndpoints
                 //GET path mirrors how the OID4VP JAR-fetch endpoint runs SignJarAction inline); the
                 //handler signs, parks the compact JWS on the context, and emits the served input
                 //that steps the PDA into SiopRequestObjectServedState.
-                OAuthFlowInput signed = await server.ActionExecutor.ExecuteAsync(
+                FlowInput signed = await oauth.ActionExecutor.ExecuteAsync(
                     new SignSiopRequestObject(
                         RequestHandle: prepared.RequestHandle,
                         ClientId: prepared.ClientId,
@@ -454,7 +456,8 @@ public static class SiopVerifierEndpoints
 
             BuildInputAsync = static (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 //SiopRequestPreparedState is the same-device (by-value) path; SiopRequestObjectServedState
                 //is the by-reference path where the RP served a signed §9 Request Object at request_uri.

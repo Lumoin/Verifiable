@@ -62,7 +62,7 @@ internal sealed class HwTpmSecdsaSignTests
     [TestMethod]
     public async Task TpmSignsDigestAndPureNetVerifies()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
@@ -118,7 +118,7 @@ internal sealed class HwTpmSecdsaSignTests
     [TestMethod]
     public async Task TpmReadPublicNameIsPresent()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);

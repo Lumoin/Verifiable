@@ -15,7 +15,7 @@ namespace Verifiable.Cryptography;
 /// once and immediately parse or forward the bytes.
 /// </para>
 /// <para>
-/// Allocated from <see cref="SensitiveMemoryPool{T}"/> and cleared on disposal.
+/// Allocated from <see cref="BaseMemoryPool"/> and cleared on disposal.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

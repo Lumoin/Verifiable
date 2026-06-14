@@ -27,7 +27,7 @@ internal sealed class DpopClientFixture: IDisposable
         InMemoryDpopNonceCache nonceCache,
         PublicKeyMemory dpopPublicKey,
         PrivateKeyMemory dpopPrivateKey,
-        Dictionary<string, OAuthFlowState> clientFlowStore)
+        Dictionary<string, FlowState> clientFlowStore)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(registration);
@@ -70,7 +70,7 @@ internal sealed class DpopClientFixture: IDisposable
     /// flow identifier (which the client treats as <c>state</c>) without
     /// reaching into the infrastructure delegate closures.
     /// </summary>
-    public Dictionary<string, OAuthFlowState> ClientFlowStore { get; }
+    public Dictionary<string, FlowState> ClientFlowStore { get; }
 
 
     /// <inheritdoc/>

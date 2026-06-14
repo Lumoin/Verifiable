@@ -9,7 +9,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// and expiry — and the End-User's self-issued subject is established.
 /// </summary>
 [DebuggerDisplay("SelfIssuedAuthenticationVerifiedState Subject={Subject} SyntaxType={SubjectSyntaxType}")]
-public sealed record SelfIssuedAuthenticationVerifiedState: OAuthFlowState
+public sealed record SelfIssuedAuthenticationVerifiedState: FlowState
 {
     /// <summary>The verified <c>sub</c> — a JWK Thumbprint URI or a DID, per the Subject Syntax Type.</summary>
     public required string Subject { get; init; }

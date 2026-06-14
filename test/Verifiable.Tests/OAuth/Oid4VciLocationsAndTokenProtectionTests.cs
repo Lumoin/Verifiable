@@ -13,6 +13,7 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -46,7 +47,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     private const string SubjectId = "urn:uuid:end-user-42";
     private const string DegreeConfigurationId = "UniversityDegree_dc_sd_jwt";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities =
         ImmutableHashSet.Create(
@@ -70,7 +71,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         ConfigureAuthorizationServersMetadata(host);
 
         ServerHttpResponse parResponse = await DispatchParAsync(
@@ -92,7 +93,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         ConfigureAuthorizationServersMetadata(host);
 
         ServerHttpResponse parResponse = await DispatchParAsync(
@@ -118,12 +119,12 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
         ConfigureAuthorizationServersMetadata(host);
 
         bool seamCalled = false;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 seamCalled = true;
@@ -155,12 +156,12 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         //§13.10: keep the plain-bearer credential token within the long-lived threshold.
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
         ConfigureAuthorizationServersMetadata(host);
 
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
                 ValueTask.FromResult(GrantAllRequested(details));
 
@@ -190,11 +191,11 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
         //No authorization_servers metadata is contributed: the AS is the issuer.
 
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
                 ValueTask.FromResult(GrantAllRequested(details));
 
@@ -222,12 +223,12 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         //Longer than the §13.10 five-minute threshold and NOT sender-constrained.
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(10));
 
         bool seamCalled = false;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 seamCalled = true;
@@ -257,11 +258,11 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         //Exactly the §13.10 threshold — not "longer than 5 minutes", so it is not long lived.
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
                 ValueTask.FromResult(GrantAllRequested(details));
 
@@ -292,8 +293,8 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         //hour, which is long lived per §13.10. The token issues because it is sender-constrained.
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
         host.EnableDpop();
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
                 ValueTask.FromResult(GrantAllRequested(details));
 
@@ -379,7 +380,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     /// </summary>
     private static void ConfigureAuthorizationServersMetadata(TestHostShell host)
     {
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync =
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync =
             (registration, context, ct) => ValueTask.FromResult(
                 new CredentialIssuerMetadataContribution
                 {

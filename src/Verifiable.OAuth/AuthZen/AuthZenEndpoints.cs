@@ -4,7 +4,7 @@ using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.AuthZen;
 
@@ -21,7 +21,7 @@ namespace Verifiable.OAuth.AuthZen;
 /// <remarks>
 /// <para>
 /// Register at startup via
-/// <see cref="ServerConfiguration.EndpointBuilders"/>. Emitted for
+/// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>. Emitted for
 /// registrations carrying
 /// <see cref="WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi"/>.
 /// </para>
@@ -39,13 +39,13 @@ public static class AuthZenEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="ServerConfiguration.EndpointBuilders"/>.
+    /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi))
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi))
         {
             candidates.Add(BuildAccessEvaluation());
             candidates.Add(BuildAccessEvaluations());
@@ -54,16 +54,16 @@ public static class AuthZenEndpoints
             //advertised in the §9.1 metadata document) only when its seam is
             //wired. context.Server is guaranteed set before builders run
             //(EndpointChain.BuildForRequestAsync throws otherwise).
-            AuthorizationServer? server = context.Server;
-            if(server?.Integration.SearchSubjectsAsync is not null)
+            EndpointServer? server = context.Server;
+            if(server?.OAuth().SearchSubjectsAsync is not null)
             {
                 candidates.Add(BuildSubjectSearch());
             }
-            if(server?.Integration.SearchResourcesAsync is not null)
+            if(server?.OAuth().SearchResourcesAsync is not null)
             {
                 candidates.Add(BuildResourceSearch());
             }
-            if(server?.Integration.SearchActionsAsync is not null)
+            if(server?.OAuth().SearchActionsAsync is not null)
             {
                 candidates.Add(BuildActionSearch());
             }
@@ -108,9 +108,10 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -118,8 +119,8 @@ public static class AuthZenEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(server.Integration.ParseAccessEvaluationRequestAsync is null
-                    || server.Integration.EvaluateAccessAsync is null)
+                if(oauth.ParseAccessEvaluationRequestAsync is null
+                    || oauth.EvaluateAccessAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -138,7 +139,7 @@ public static class AuthZenEndpoints
 
                 string requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
 
-                AccessEvaluationRequest? request = await server.Integration.ParseAccessEvaluationRequestAsync(
+                AccessEvaluationRequest? request = await oauth.ParseAccessEvaluationRequestAsync(
                     requestBody, context, ct).ConfigureAwait(false);
                 if(request is null)
                 {
@@ -147,7 +148,7 @@ public static class AuthZenEndpoints
                         "Request body did not parse as a valid Access Evaluation request."));
                 }
 
-                AccessEvaluationDecision decision = await server.Integration.EvaluateAccessAsync(
+                AccessEvaluationDecision decision = await oauth.EvaluateAccessAsync(
                     request, registration, context, ct).ConfigureAwait(false);
 
                 return (null, ServerHttpResponse.Ok(
@@ -208,9 +209,10 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -218,8 +220,8 @@ public static class AuthZenEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(server.Integration.ParseAccessEvaluationsRequestAsync is null
-                    || server.Integration.EvaluateAccessAsync is null)
+                if(oauth.ParseAccessEvaluationsRequestAsync is null
+                    || oauth.EvaluateAccessAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -238,7 +240,7 @@ public static class AuthZenEndpoints
 
                 string requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
 
-                AccessEvaluationsRequest? batch = await server.Integration.ParseAccessEvaluationsRequestAsync(
+                AccessEvaluationsRequest? batch = await oauth.ParseAccessEvaluationsRequestAsync(
                     requestBody, context, ct).ConfigureAwait(false);
                 if(batch is null)
                 {
@@ -263,7 +265,7 @@ public static class AuthZenEndpoints
                 List<AccessEvaluationDecision> decisions = new(items.Count);
                 foreach(AccessEvaluationRequest item in items)
                 {
-                    AccessEvaluationDecision decision = await server.Integration.EvaluateAccessAsync(
+                    AccessEvaluationDecision decision = await oauth.EvaluateAccessAsync(
                         item, registration, context, ct).ConfigureAwait(false);
                     decisions.Add(decision);
 
@@ -397,16 +399,17 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError, "Client registration not found in context."));
                 }
 
-                if(server.Integration.SearchSubjectsAsync is null)
+                if(oauth.SearchSubjectsAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -426,7 +429,7 @@ public static class AuthZenEndpoints
                         "Subject Search requires a subject carrying the type to enumerate."));
                 }
 
-                SubjectSearchResult result = await server.Integration.SearchSubjectsAsync(
+                SubjectSearchResult result = await oauth.SearchSubjectsAsync(
                     request, registration, context, ct).ConfigureAwait(false);
 
                 return (null, ServerHttpResponse.Ok(
@@ -458,16 +461,17 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError, "Client registration not found in context."));
                 }
 
-                if(server.Integration.SearchResourcesAsync is null)
+                if(oauth.SearchResourcesAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -487,7 +491,7 @@ public static class AuthZenEndpoints
                         "Resource Search requires a resource carrying the type to enumerate."));
                 }
 
-                ResourceSearchResult result = await server.Integration.SearchResourcesAsync(
+                ResourceSearchResult result = await oauth.SearchResourcesAsync(
                     request, registration, context, ct).ConfigureAwait(false);
 
                 return (null, ServerHttpResponse.Ok(
@@ -520,16 +524,17 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError, "Client registration not found in context."));
                 }
 
-                if(server.Integration.SearchActionsAsync is null)
+                if(oauth.SearchActionsAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -544,7 +549,7 @@ public static class AuthZenEndpoints
                 //§7 Action Search carries no action — the response IS the set of
                 //permitted actions, so there is no per-endpoint required entity
                 //beyond a parseable body.
-                ActionSearchResult result = await server.Integration.SearchActionsAsync(
+                ActionSearchResult result = await oauth.SearchActionsAsync(
                     request!, registration, context, ct).ConfigureAwait(false);
 
                 return (null, ServerHttpResponse.Ok(
@@ -586,9 +591,10 @@ public static class AuthZenEndpoints
     /// parser is unconfigured, 400 for a missing or unparseable body).
     /// </summary>
     private static async ValueTask<(AccessSearchRequest? Request, ServerHttpResponse? Error)> ReadSearchRequestAsync(
-        AuthorizationServer server, ExchangeContext context, CancellationToken cancellationToken)
+        EndpointServer server, ExchangeContext context, CancellationToken cancellationToken)
     {
-        if(server.Integration.ParseAccessSearchRequestAsync is null)
+        var oauth = server.OAuth();
+        if(oauth.ParseAccessSearchRequestAsync is null)
         {
             return (null, ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
@@ -605,7 +611,7 @@ public static class AuthZenEndpoints
 
         string requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
 
-        AccessSearchRequest? request = await server.Integration.ParseAccessSearchRequestAsync(
+        AccessSearchRequest? request = await oauth.ParseAccessSearchRequestAsync(
             requestBody, context, cancellationToken).ConfigureAwait(false);
         if(request is null)
         {
@@ -815,9 +821,10 @@ public static class AuthZenEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -843,9 +850,9 @@ public static class AuthZenEndpoints
                 Uri policyDecisionPoint;
                 try
                 {
-                    policyDecisionPoint = server.Integration.ResolveIssuerAsync is not null
-                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false)
+                    policyDecisionPoint = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
                         : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
                             .ConfigureAwait(false);
                 }
@@ -859,9 +866,9 @@ public static class AuthZenEndpoints
                 //§9.1 capabilities — application-supplied IANA URNs the library
                 //cannot derive from the chain.
                 AuthZenMetadataContribution contribution =
-                    server.Integration.ContributeAuthZenMetadataAsync is null
+                    oauth.ContributeAuthZenMetadataAsync is null
                         ? AuthZenMetadataContribution.Empty
-                        : await server.Integration.ContributeAuthZenMetadataAsync(
+                        : await oauth.ContributeAuthZenMetadataAsync(
                             registration, context, ct).ConfigureAwait(false);
 
                 IReadOnlyList<string>? capabilities =
@@ -872,10 +879,10 @@ public static class AuthZenEndpoints
                 //key and algorithm). The same chain-resolved values go into both
                 //the plain document and the signed JWT, so they cannot diverge.
                 string? signedMetadata = null;
-                if(server.Integration.SignAuthZenMetadataAsync is not null)
+                if(oauth.SignAuthZenMetadataAsync is not null)
                 {
                     JwtPayload claims = BuildMetadataClaims(policyDecisionPoint, chain, capabilities);
-                    signedMetadata = await server.Integration.SignAuthZenMetadataAsync(
+                    signedMetadata = await oauth.SignAuthZenMetadataAsync(
                         claims, registration, context, ct).ConfigureAwait(false);
                 }
 

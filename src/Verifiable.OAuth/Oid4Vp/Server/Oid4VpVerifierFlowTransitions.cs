@@ -1,5 +1,5 @@
 using System.Linq;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Server;
@@ -60,12 +60,12 @@ public static class Oid4VpVerifierFlowTransitions
     /// <summary>
     /// Creates the transition delegate for the server-side OID4VP Verifier flow PDA.
     /// </summary>
-    public static TransitionDelegate<OAuthFlowState, OAuthFlowInput, Oid4VpVerifierStackSymbol> Create() =>
+    public static TransitionDelegate<FlowState, FlowInput, Oid4VpVerifierStackSymbol> Create() =>
         static (state, input, stackTop, cancellationToken) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            TransitionResult<OAuthFlowState, Oid4VpVerifierStackSymbol>? result =
+            TransitionResult<FlowState, Oid4VpVerifierStackSymbol>? result =
                 (state, input) switch
                 {
                     //Any non-terminal state + Fail -> VerifierFlowFailed.
@@ -302,12 +302,12 @@ public static class Oid4VpVerifierFlowTransitions
                     _ => null
                 };
 
-            return ValueTask.FromResult<TransitionResult<OAuthFlowState, Oid4VpVerifierStackSymbol>?>(result);
+            return ValueTask.FromResult<TransitionResult<FlowState, Oid4VpVerifierStackSymbol>?>(result);
         };
 
 
-    private static TransitionResult<OAuthFlowState, Oid4VpVerifierStackSymbol> Transition(
-        OAuthFlowState nextState,
+    private static TransitionResult<FlowState, Oid4VpVerifierStackSymbol> Transition(
+        FlowState nextState,
         StackAction<Oid4VpVerifierStackSymbol> stackAction,
         string label) =>
         new(nextState, stackAction, label);
@@ -321,7 +321,7 @@ public static class Oid4VpVerifierFlowTransitions
     /// <c>authorization_encrypted_response_enc</c> hint so downstream states
     /// carry typed fields rather than the raw JSON blob.
     /// </summary>
-    private static TransitionResult<OAuthFlowState, Oid4VpVerifierStackSymbol> BuildWalletPostReceivedTransition(
+    private static TransitionResult<FlowState, Oid4VpVerifierStackSymbol> BuildWalletPostReceivedTransition(
         VerifierParReceivedState received,
         ServerWalletPostReceived posted)
     {

@@ -20,7 +20,7 @@ namespace Verifiable.OAuth.Oid4Vp.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ParCompleted FlowId={FlowId} RequestUri={Par.RequestUri}")]
-public sealed record ParCompletedState: OAuthFlowState
+public sealed record ParCompletedState: FlowState
 {
     /// <summary>
     /// The PKCE parameters. The verifier is persisted here because it is needed at the

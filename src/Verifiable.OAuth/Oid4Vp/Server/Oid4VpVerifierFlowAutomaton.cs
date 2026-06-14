@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Server;
@@ -24,7 +24,7 @@ public static class Oid4VpVerifierFlowAutomaton
     /// </summary>
     /// <param name="runId">A unique identifier for this PDA instance, used for tracing.</param>
     /// <param name="timeProvider">The time provider used to stamp the initial state.</param>
-    public static PushdownAutomaton<OAuthFlowState, OAuthFlowInput, Oid4VpVerifierStackSymbol> Create(
+    public static PushdownAutomaton<FlowState, FlowInput, Oid4VpVerifierStackSymbol> Create(
         string runId,
         TimeProvider timeProvider)
     {
@@ -33,7 +33,7 @@ public static class Oid4VpVerifierFlowAutomaton
 
         DateTimeOffset now = timeProvider.GetUtcNow();
 
-        return new PushdownAutomaton<OAuthFlowState, OAuthFlowInput, Oid4VpVerifierStackSymbol>(
+        return new PushdownAutomaton<FlowState, FlowInput, Oid4VpVerifierStackSymbol>(
             runId: runId,
             initialState: new VerifierFlowFailedState
             {
@@ -58,15 +58,15 @@ public static class Oid4VpVerifierFlowAutomaton
     /// <param name="state">The persisted flow state loaded from the store.</param>
     /// <param name="stepCount">The step count at the time the state was persisted.</param>
     /// <param name="timeProvider">The time provider used for expiry checks.</param>
-    public static PushdownAutomaton<OAuthFlowState, OAuthFlowInput, Oid4VpVerifierStackSymbol> CreateFromSnapshot(
-        OAuthFlowState state,
+    public static PushdownAutomaton<FlowState, FlowInput, Oid4VpVerifierStackSymbol> CreateFromSnapshot(
+        FlowState state,
         int stepCount,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        return new PushdownAutomaton<OAuthFlowState, OAuthFlowInput, Oid4VpVerifierStackSymbol>(
+        return new PushdownAutomaton<FlowState, FlowInput, Oid4VpVerifierStackSymbol>(
             runId: Guid.CreateVersion7(timeProvider.GetUtcNow()).ToString("N"),
             savedState: state,
             savedStack: [Oid4VpVerifierStackSymbol.Base],

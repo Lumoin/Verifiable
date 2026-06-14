@@ -29,7 +29,7 @@ internal sealed class BitstringStatusListCredentialJwsTests
     private const int UnsetIndex = 5;
     private static readonly DateTimeOffset Now = new(2024, 4, 6, 0, 0, 0, TimeSpan.Zero);
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     public TestContext TestContext { get; set; } = null!;
 

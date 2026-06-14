@@ -1,4 +1,4 @@
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Oid4Vp.States;
 
@@ -32,7 +32,7 @@ namespace Verifiable.OAuth.Oid4Vp.Session;
 /// </para>
 /// <code>
 /// //Load the snapshot from durable storage.
-/// (OAuthFlowState current, int stepCount) = await _store.LoadAsync(flowId, ct);
+/// (FlowState current, int stepCount) = await _store.LoadAsync(flowId, ct);
 ///
 /// Oid4VpStepResult result = await Oid4VpFlowSession.StepAsync(
 ///     current, stepCount,
@@ -77,9 +77,9 @@ public static class Oid4VpFlowSession
     /// step count, and the trace entry emitted by the automaton.
     /// </returns>
     public static async ValueTask<Oid4VpStepResult> StepAsync(
-        OAuthFlowState currentState,
+        FlowState currentState,
         int stepCount,
-        OAuthFlowInput input,
+        FlowInput input,
         ResolveDecryptionKeyDelegate? resolveDecryptionKey,
         TimeProvider timeProvider,
         CancellationToken cancellationToken = default)
@@ -89,9 +89,9 @@ public static class Oid4VpFlowSession
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentOutOfRangeException.ThrowIfNegative(stepCount);
 
-        TraceEntry<OAuthFlowState, OAuthFlowInput>? capturedEntry = null;
+        TraceEntry<FlowState, FlowInput>? capturedEntry = null;
 
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, Oid4VpStackSymbol> pda =
+        PushdownAutomaton<FlowState, FlowInput, Oid4VpStackSymbol> pda =
             new(
                 runId: Guid.CreateVersion7(timeProvider.GetUtcNow()).ToString("N"),
                 savedState: currentState,
@@ -106,7 +106,7 @@ public static class Oid4VpFlowSession
 
         await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
 
-        TraceEntry<OAuthFlowState, OAuthFlowInput> traceEntry = capturedEntry!;
+        TraceEntry<FlowState, FlowInput> traceEntry = capturedEntry!;
 
         if(pda.IsFaulted)
         {
@@ -139,10 +139,10 @@ public static class Oid4VpFlowSession
 
 
     private sealed class SingleEntryObserver(
-        Action<TraceEntry<OAuthFlowState, OAuthFlowInput>> capture)
-        : IObserver<TraceEntry<OAuthFlowState, OAuthFlowInput>>
+        Action<TraceEntry<FlowState, FlowInput>> capture)
+        : IObserver<TraceEntry<FlowState, FlowInput>>
     {
-        public void OnNext(TraceEntry<OAuthFlowState, OAuthFlowInput> value) => capture(value);
+        public void OnNext(TraceEntry<FlowState, FlowInput> value) => capture(value);
         public void OnError(Exception error) { }
         public void OnCompleted() { }
     }

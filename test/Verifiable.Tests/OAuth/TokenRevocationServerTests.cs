@@ -47,9 +47,9 @@ internal sealed class TokenRevocationServerTests
             ClientId, ClientBaseUri, RevocationCapabilities);
 
         List<(string Token, string? Hint, ClientRecord Client)> revoked = [];
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.RevokeTokenAsync = (token, hint, registration, _, _) =>
+        host.Server.OAuth().RevokeTokenAsync = (token, hint, registration, _, _) =>
         {
             revoked.Add((token, hint, registration));
             return ValueTask.CompletedTask;
@@ -92,9 +92,9 @@ internal sealed class TokenRevocationServerTests
             ClientId, ClientBaseUri, RevocationCapabilities);
 
         bool seamInvoked = false;
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(false);
-        host.Server.Integration.RevokeTokenAsync = (_, _, _, _, _) =>
+        host.Server.OAuth().RevokeTokenAsync = (_, _, _, _, _) =>
         {
             seamInvoked = true;
             return ValueTask.CompletedTask;
@@ -127,9 +127,9 @@ internal sealed class TokenRevocationServerTests
             ClientId, ClientBaseUri, RevocationCapabilities);
 
         int seamCalls = 0;
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.RevokeTokenAsync = (_, _, _, _, _) =>
+        host.Server.OAuth().RevokeTokenAsync = (_, _, _, _, _) =>
         {
             seamCalls++;
             return ValueTask.CompletedTask;
@@ -164,7 +164,7 @@ internal sealed class TokenRevocationServerTests
 
         //Client authentication is wired but the revocation seam is not — the
         //candidate gate requires both, so the endpoint must not materialize.
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(

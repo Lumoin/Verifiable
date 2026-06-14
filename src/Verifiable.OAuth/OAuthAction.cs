@@ -1,4 +1,4 @@
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 
 namespace Verifiable.OAuth;
 

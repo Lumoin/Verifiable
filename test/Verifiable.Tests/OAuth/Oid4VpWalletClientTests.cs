@@ -51,7 +51,7 @@ internal sealed class Oid4VpWalletClientTests
 
     private const string IssuerId = SdJwtVpFixture.IssuerId;
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities =
         ImmutableHashSet.Create(
@@ -94,6 +94,57 @@ internal sealed class Oid4VpWalletClientTests
         Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
             "Verifier PDA must reach PresentationVerified after the wallet POSTs the encrypted response.");
+    }
+
+
+    [TestMethod]
+    public async Task RejectsJarWhoseClientIdDoesNotMatchExpectedVerifier()
+    {
+        //Mix-up defence: the wallet pinned one Verifier identity out-of-band
+        //(ExpectedVerifierClientId) but the JAR — though validly signed and
+        //resolved by the pinned key — carries a DIFFERENT client_id. Resolving
+        //the signing key proves the request is signed by a key bound to the
+        //asserted identity, NOT that the asserted identity is the one the wallet
+        //meant to answer. The wallet MUST refuse fail-closed before producing any
+        //presentation or POSTing a response, so the Verifier never verifies.
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey = holderPrivateKey;
+        using PublicKeyMemory issuerKey = issuerPublicKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey);
+
+        (Uri requestUri, string parHandle, string compactJar) = await IssueJarAsync(
+            app, verifierKeys).ConfigureAwait(false);
+
+        Oid4VpWalletClient walletClient = BuildWalletClient(
+            app, verifierKeys, serializedSdJwt, holderKey);
+
+        //The JAR's client_id is VerifierClientId; the wallet pinned someone else.
+        const string PinnedButWrongVerifier = "https://attacker.example.com";
+
+        InvalidOperationException ex = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            async () => await walletClient.PresentJarAsync(
+                new PresentJarOptions
+                {
+                    CompactJar = compactJar,
+                    RequestUri = requestUri,
+                    ExpectedVerifierClientId = PinnedButWrongVerifier,
+                    FlowId = $"wallet-mixup-{Guid.NewGuid():N}"
+                },
+                TestContext.CancellationToken).ConfigureAwait(false))
+            .ConfigureAwait(false);
+
+        Assert.Contains("does not match", ex.Message, StringComparison.Ordinal);
+        Assert.Contains(PinnedButWrongVerifier, ex.Message, StringComparison.Ordinal);
+        Assert.Contains(VerifierClientId, ex.Message, StringComparison.Ordinal);
+
+        Assert.IsNotInstanceOfType<PresentationVerifiedState>(
+            app.GetFlowState(parHandle).State,
+            "The wallet must refuse the mismatched client_id before POSTing, so the Verifier never verifies.");
     }
 
 

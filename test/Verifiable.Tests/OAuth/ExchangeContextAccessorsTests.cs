@@ -4,6 +4,7 @@ using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
+using Verifiable.Server.Pipeline;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -44,9 +45,9 @@ internal sealed class ExchangeContextAccessorsTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        AuthorizationServer? observedAtIncomingRequest = null;
-        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
-        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        EndpointServer? observedAtIncomingRequest = null;
+        InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
+        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
         {
             if(stage is IncomingRequestStage)
             {
@@ -79,8 +80,8 @@ internal sealed class ExchangeContextAccessorsTests
         await using TestHostShell host = new(TimeProvider);
 
         EndpointChain? observedAtMatched = null;
-        InspectDelegate previousInspect = host.Server.Integration.InspectAsync!;
-        host.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        InspectDelegate previousInspect = host.Server.OAuth().InspectAsync!;
+        host.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
         {
             if(stage is MatchedStage)
             {

@@ -53,7 +53,7 @@ public static class PolicyProfiles
         //reads directly), falling back to the RFC 7519 §4.1.4 leeway default
         //when no server is on the context (out-of-dispatch / unit-test use).
         context.SetClockSkewTolerance(
-            context.Server?.Timings.ClockSkewTolerance ?? TimeSpan.FromSeconds(60));
+            context.Server?.OAuth().Timings.ClockSkewTolerance ?? TimeSpan.FromSeconds(60));
         context.SetEmitIssOnRedirect(true);
         context.SetScopeRequiredOnRequest(true);
         context.SetDiscoveryIssuerShape(IssuerShape.FullUrl);
@@ -145,7 +145,7 @@ public static class PolicyProfiles
         //Single source of truth: derive both presentation timing axes from the
         //deployment's TimingPolicy, falling back to the 60s defaults when no
         //server is on the context (out-of-dispatch / unit-test use).
-        TimingPolicy? timings = context.Server?.Timings;
+        TimingPolicy? timings = context.Server?.OAuth().Timings;
         context.SetClockSkewTolerance(timings?.ClockSkewTolerance ?? TimeSpan.FromSeconds(60));
         context.SetKbJwtMaxAgeWindow(timings?.KbJwtIatMaxAge ?? TimeSpan.FromSeconds(60));
 

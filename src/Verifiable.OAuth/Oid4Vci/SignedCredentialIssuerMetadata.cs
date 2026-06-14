@@ -66,7 +66,7 @@ public static class SignedCredentialIssuerMetadata
     /// <c>credential_issuer</c> the claim set carries.
     /// </param>
     /// <param name="signingKey">
-    /// The issuer's signing key. Its <see cref="Verifiable.Cryptography.SensitiveMemory.Tag"/>
+    /// The issuer's signing key. Its <see cref="Verifiable.Foundation.SensitiveMemory.Tag"/>
     /// selects the JWS <c>alg</c> and signing function; a key whose algorithm resolves to
     /// <c>none</c> or a symmetric MAC is rejected before any signing happens.
     /// </param>

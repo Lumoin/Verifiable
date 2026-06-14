@@ -40,7 +40,7 @@ internal sealed class MdocCoseKeyExtensionsTests
         {
             MdocCoseKey coseKey = CoseKeyFromP256Public(keys.PublicKey);
 
-            using PublicKeyMemory extracted = coseKey.ToPublicKeyMemory(SensitiveMemoryPool<byte>.Shared);
+            using PublicKeyMemory extracted = coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared);
 
             Assert.IsTrue(extracted.AsReadOnlySpan().SequenceEqual(keys.PublicKey.AsReadOnlySpan()),
                 "Extracted key bytes must equal the original compressed SEC1 point.");
@@ -69,7 +69,7 @@ internal sealed class MdocCoseKeyExtensionsTests
             using MdocDocument issued = await IssueAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
 
             using IMemoryOwner<byte> mdocGeneratedNonce =
-                Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, SensitiveMemoryPool<byte>.Shared);
+                Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, BaseMemoryPool.Shared);
             ReadOnlyMemory<byte> nonceMemory =
                 mdocGeneratedNonce.Memory[..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
             ReadOnlyMemory<byte> sessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
@@ -80,7 +80,7 @@ internal sealed class MdocCoseKeyExtensionsTests
                 issuerSigned: MdocIssuerSignedView.FromOwned(issued.IssuerSigned));
             using MdocPresentationDocument presented = await intermediate.DeviceSignAsync(
                 MdocDeviceNameSpaces.Empty, sessionTranscript, deviceKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+                BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
             using MdocDeviceResponse deviceResponse = new(
                 version: MdocWellKnownKeys.Version10, documents: [presented], status: MdocWellKnownKeys.StatusOk);
@@ -88,14 +88,14 @@ internal sealed class MdocCoseKeyExtensionsTests
 
             //=== Verifier side: device key comes from the wire MSO, not the backchannel ===
             using IMemoryOwner<byte> deviceResponseBytes = Oid4VpMdocPresentation.DecodeVpTokenValue(
-                vpTokenValue, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+                vpTokenValue, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
             using MdocParsedDeviceResponse parsed = MdocCborDeviceResponseReader.Read(
-                deviceResponseBytes.Memory.Span, SensitiveMemoryPool<byte>.Shared);
+                deviceResponseBytes.Memory.Span, BaseMemoryPool.Shared);
 
             MdocParsedDocument parsedDocument = parsed.Documents[0];
             using PublicKeyMemory deviceKeyFromMso =
                 parsedDocument.IssuerSigned.IssuerAuth.Mso.DeviceKeyInfo.DeviceKey.ToPublicKeyMemory(
-                    SensitiveMemoryPool<byte>.Shared);
+                    BaseMemoryPool.Shared);
 
             //Sanity: the MSO-derived key equals the wallet's device public key.
             Assert.IsTrue(deviceKeyFromMso.AsReadOnlySpan().SequenceEqual(deviceKeys.PublicKey.AsReadOnlySpan()),
@@ -106,7 +106,7 @@ internal sealed class MdocCoseKeyExtensionsTests
 
             bool isDeviceVerified = await parsedDocument.DeviceSigned!.VerifyAsync(
                 parsedDocument.DocType, reconstructedTranscript, deviceKeyFromMso,
-                SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload,
+                BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload,
                 MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -143,7 +143,7 @@ internal sealed class MdocCoseKeyExtensionsTests
                 DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
             },
             issuerKeys.PrivateKey,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

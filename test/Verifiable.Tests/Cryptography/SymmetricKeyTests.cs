@@ -19,7 +19,7 @@ internal sealed class SymmetricKeyTests
         RandomNumberGenerator.Fill(keyBytes);
         byte[] message = "bound-key-roundtrip"u8.ToArray();
 
-        IMemoryOwner<byte> keyOwner = SensitiveMemoryPool<byte>.Shared.Rent(keyBytes.Length);
+        IMemoryOwner<byte> keyOwner = BaseMemoryPool.Shared.Rent(keyBytes.Length);
         keyBytes.AsSpan().CopyTo(keyOwner.Memory.Span);
         SymmetricKeyMemory material = new(keyOwner, CryptoTags.HmacSha256Key);
 
@@ -32,11 +32,11 @@ internal sealed class SymmetricKeyTests
         Assert.AreEqual("test-key-id", key.Id);
 
         using HmacValue mac = await key.ComputeHmacAsync(
-            message, 32, SensitiveMemoryPool<byte>.Shared, null,
+            message, 32, BaseMemoryPool.Shared, null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await key.VerifyHmacAsync(
-            message, mac, SensitiveMemoryPool<byte>.Shared, null,
+            message, mac, BaseMemoryPool.Shared, null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid);
@@ -46,7 +46,7 @@ internal sealed class SymmetricKeyTests
     [TestMethod]
     public void ConstructorRejectsNullComputeDelegate()
     {
-        IMemoryOwner<byte> keyOwner = SensitiveMemoryPool<byte>.Shared.Rent(32);
+        IMemoryOwner<byte> keyOwner = BaseMemoryPool.Shared.Rent(32);
         keyOwner.Memory.Span.Clear();
         using SymmetricKeyMemory material = new(keyOwner, CryptoTags.HmacSha256Key);
 
@@ -58,7 +58,7 @@ internal sealed class SymmetricKeyTests
     [TestMethod]
     public void ConstructorRejectsNullVerifyDelegate()
     {
-        IMemoryOwner<byte> keyOwner = SensitiveMemoryPool<byte>.Shared.Rent(32);
+        IMemoryOwner<byte> keyOwner = BaseMemoryPool.Shared.Rent(32);
         keyOwner.Memory.Span.Clear();
         using SymmetricKeyMemory material = new(keyOwner, CryptoTags.HmacSha256Key);
 

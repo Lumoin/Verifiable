@@ -34,7 +34,7 @@ internal sealed class TpmSecdsaCommandStructureTests
     [TestMethod]
     public void SignInputCreatesWithCorrectProperties()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] digest = new byte[EllipticCurveConstants.P256.PointArrayLength];
         RandomNumberGenerator.Fill(digest);
 
@@ -55,7 +55,7 @@ internal sealed class TpmSecdsaCommandStructureTests
     [TestMethod]
     public void SignInputDisposeIsIdempotent()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] digest = new byte[EllipticCurveConstants.P256.PointArrayLength];
 
         SignInput input = SignInput.ForEcdsa(TestSigningKeyHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
@@ -66,7 +66,7 @@ internal sealed class TpmSecdsaCommandStructureTests
     [TestMethod]
     public void EcdhZGenInputCreatesFromCoordinates()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] x = new byte[EllipticCurveConstants.P256.PointArrayLength];
         byte[] y = new byte[EllipticCurveConstants.P256.PointArrayLength];
         RandomNumberGenerator.Fill(x);
@@ -84,7 +84,7 @@ internal sealed class TpmSecdsaCommandStructureTests
     [TestMethod]
     public void EcdhZGenInputCreatesFromUncompressedPoint()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] point = new byte[EllipticCurveConstants.P256.UncompressedPointByteCount];
         point[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
         RandomNumberGenerator.Fill(point.AsSpan(1));
@@ -100,7 +100,7 @@ internal sealed class TpmSecdsaCommandStructureTests
     [TestMethod]
     public void EcdhZGenInputDisposeIsIdempotent()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] point = new byte[EllipticCurveConstants.P256.UncompressedPointByteCount];
         point[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
 
@@ -120,7 +120,7 @@ internal sealed class TpmSecdsaCommandStructureTests
     [TestMethod]
     public void EcdhZGenResponseParsesAndProducesUncompressedPoint()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] xCoordinate = new byte[EllipticCurveConstants.P256.PointArrayLength];
         byte[] yCoordinate = new byte[EllipticCurveConstants.P256.PointArrayLength];
         RandomNumberGenerator.Fill(xCoordinate);
@@ -147,7 +147,7 @@ internal sealed class TpmSecdsaCommandStructureTests
     [TestMethod]
     public void EcdhZGenResponseDisposeIsIdempotent()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] wireBytes = BuildFakeEcdhZGenResponseBytes(
             new byte[EllipticCurveConstants.P256.PointArrayLength],
             new byte[EllipticCurveConstants.P256.PointArrayLength]);

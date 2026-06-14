@@ -34,19 +34,20 @@ internal static class SigningKeySelection
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The <see cref="KeyId"/> to sign with.</returns>
     public static ValueTask<KeyId> ResolveSigningKeyIdAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         KeyUsageContext usage,
         IReadOnlyDictionary<string, object> context,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
 
-        if(server.Cryptography.SelectSigningKey is not null)
+        if(oauth.Cryptography.SelectSigningKey is not null)
         {
-            return server.Cryptography.SelectSigningKey(registration, usage, context, cancellationToken);
+            return oauth.Cryptography.SelectSigningKey(registration, usage, context, cancellationToken);
         }
 
         return ValueTask.FromResult(registration.GetDefaultSigningKeyId(usage));

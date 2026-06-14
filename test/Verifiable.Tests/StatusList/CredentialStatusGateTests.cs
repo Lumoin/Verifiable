@@ -22,7 +22,7 @@ internal sealed class CredentialStatusGateTests
     private const int CredentialIndex = 42;
     private static readonly DateTimeOffset Now = new(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     public TestContext TestContext { get; set; } = null!;
 

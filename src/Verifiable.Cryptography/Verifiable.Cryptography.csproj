@@ -10,4 +10,9 @@
     <PackageTags>Cryptography Salt Hashing Base64Url MemoryPool Security</PackageTags>
   </PropertyGroup>
  
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
+    <PackageReference Include="Lumoin.Base" />
+  </ItemGroup>
+
 </Project>

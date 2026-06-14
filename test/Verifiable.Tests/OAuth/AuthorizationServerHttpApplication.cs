@@ -15,7 +15,7 @@ namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Bridges minimal Kestrel hosting to
-/// <see cref="AuthorizationServer.DispatchAsync"/>. Maps inbound HTTP
+/// <see cref="EndpointServer.DispatchAsync"/>. Maps inbound HTTP
 /// requests to the library's <see cref="IncomingRequest"/> and
 /// <see cref="ExchangeContext"/>, and maps the outbound
 /// <see cref="ServerHttpResponse"/> back to HTTP response bytes.
@@ -56,10 +56,10 @@ namespace Verifiable.Tests.OAuth;
 [DebuggerDisplay("AuthorizationServerHttpApplication")]
 internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpContext>
 {
-    private readonly AuthorizationServer server;
+    private readonly EndpointServer server;
 
 
-    public AuthorizationServerHttpApplication(AuthorizationServer server)
+    public AuthorizationServerHttpApplication(EndpointServer server)
     {
         ArgumentNullException.ThrowIfNull(server);
         this.server = server;
@@ -132,6 +132,18 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
             int insertedEnd = path.IndexOf('/', insertedStart);
 
             return insertedEnd < 0 ? path[insertedStart..] : path[insertedStart..insertedEnd];
+        }
+
+        //RFC 8414 §3 inserts the authorization-server-metadata well-known suffix
+        //between the host and the issuer identifier's path, so the tenant rides
+        //AFTER the suffix: /.well-known/oauth-authorization-server/{segment}.
+        const string oauthMetadataPrefix = "/.well-known/oauth-authorization-server/";
+        if(path.StartsWith(oauthMetadataPrefix, StringComparison.Ordinal))
+        {
+            int oauthMetadataStart = oauthMetadataPrefix.Length;
+            int oauthMetadataEnd = path.IndexOf('/', oauthMetadataStart);
+
+            return oauthMetadataEnd < 0 ? path[oauthMetadataStart..] : path[oauthMetadataStart..oauthMetadataEnd];
         }
 
         const string prefix = "/connect/";

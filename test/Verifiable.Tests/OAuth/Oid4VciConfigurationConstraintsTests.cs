@@ -9,7 +9,7 @@ using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -35,7 +35,7 @@ internal sealed class Oid4VciConfigurationConstraintsTests
     private const string ConfigurationScope = "UniversityDegree";
     private const string IssuedCredential = "eyJhbGciOiJFUzI1NiJ9.body.sig";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> IssuanceCapabilities =
         ImmutableHashSet.Create(
@@ -137,8 +137,8 @@ internal sealed class Oid4VciConfigurationConstraintsTests
     {
         VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
 
         return material;
@@ -151,7 +151,7 @@ internal sealed class Oid4VciConfigurationConstraintsTests
     /// </summary>
     private static void WireCatalog(TestHostShell host, string configurationScope, int? batchSize)
     {
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync = (_, _, _) =>
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = (_, _, _) =>
         {
             CredentialIssuerMetadataContribution contribution = new()
             {
@@ -215,7 +215,7 @@ internal sealed class Oid4VciConfigurationConstraintsTests
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, grantedScope));
 

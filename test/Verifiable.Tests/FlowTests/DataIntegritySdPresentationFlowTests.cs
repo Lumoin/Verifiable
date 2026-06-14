@@ -37,10 +37,10 @@ internal sealed class DataIntegritySdPresentationFlowTests
     private const string IssuerVerificationMethodId = "did:example:issuer#key-1";
 
     private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> P256IssuerKeys { get; } =
-        BouncyCastleKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+        BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
 
     private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> P256EphemeralKeys { get; } =
-        BouncyCastleKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+        BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
 
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
     private static ContextResolverDelegate ContextResolver { get; } = CanonicalizationTestUtilities.CreateTestContextResolver();
@@ -93,7 +93,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
             SerializeProofOptions,
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -109,7 +109,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -150,7 +150,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
             EcdsaSd2023CborSerializer.SerializeDerivedProof,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -169,7 +169,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 

@@ -26,7 +26,7 @@ internal static class MdocTestFixtures
     /// provider via <see cref="TestSalts.Generate(int, Tag, MemoryPool{byte})"/>. Bakes the named length
     /// constant and tag so call sites carry no magic <c>16</c> and no repeated tag.
     /// </summary>
-    /// <param name="pool">The memory pool to allocate from. Defaults to <see cref="SensitiveMemoryPool{T}.Shared"/>.</param>
+    /// <param name="pool">The memory pool to allocate from. Defaults to <see cref="BaseMemoryPool.Shared"/>.</param>
     /// <returns>A fresh mdoc item-random <see cref="Salt"/>; the caller owns and disposes it (or transfers ownership).</returns>
     public static Salt ItemRandomSalt(MemoryPool<byte>? pool = null) =>
         TestSalts.Generate(

@@ -30,7 +30,7 @@ namespace Verifiable.Tests.OAuth;
 /// </summary>
 internal static class Oid4VpSchemeFixtures
 {
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly JwtHeaderSerializer JwtHeaderSerializer =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(

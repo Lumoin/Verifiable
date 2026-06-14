@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.Oid4Vp.States;
 /// Transitions to <see cref="ResponseReceivedState"/> when the authorization response is posted.
 /// </remarks>
 [DebuggerDisplay("JarServed FlowId={FlowId} FetchedAt={FetchedAt}")]
-public sealed record JarServedState: OAuthFlowState
+public sealed record JarServedState: FlowState
 {
     /// <summary>The UTC instant at which the JAR was first fetched.</summary>
     public required DateTimeOffset FetchedAt { get; init; }

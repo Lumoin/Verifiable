@@ -28,7 +28,7 @@ internal sealed class KbCwtIssuanceTests
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(
         new DateTimeOffset(2026, 5, 26, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string IssuerId = "https://issuer.example.com";
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";

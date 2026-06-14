@@ -72,7 +72,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
     private const string IssuerId = "https://issuer.example.com";
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities =
         ImmutableHashSet.Create(
@@ -264,7 +264,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //in-the-wire JWE header confirms that selection happened.
         string jweHeader = result.PostedResponseArtifact[..result.PostedResponseArtifact.IndexOf('.', StringComparison.Ordinal)];
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(
-            jweHeader, SensitiveMemoryPool<byte>.Shared);
+            jweHeader, BaseMemoryPool.Shared);
         string? enc = Verifiable.JCose.JwkJsonReader.ExtractStringValue(
             headerBytes.Memory.Span, "enc"u8);
         Assert.AreEqual(
@@ -320,7 +320,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //is what the wallet client puts into wallet_metadata.jwks on the
         //§5.10 POST; the private side decrypts the JWE-wrapped JAR.
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> walletExchangeKeys =
-            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared);
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(BaseMemoryPool.Shared);
         using PublicKeyMemory walletEncPublic = walletExchangeKeys.PublicKey;
         using PrivateKeyMemory walletEncPrivate = walletExchangeKeys.PrivateKey;
 
@@ -535,7 +535,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                 TestContext.CancellationToken).ConfigureAwait(false);
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> walletExchangeKeys =
-            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared);
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(BaseMemoryPool.Shared);
         using PublicKeyMemory walletEncPublic = walletExchangeKeys.PublicKey;
         using PrivateKeyMemory walletEncPrivate = walletExchangeKeys.PrivateKey;
 
@@ -553,7 +553,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //the wallet's authorization_encrypted_response_enc choice.
         string jweHeaderB64u = compactJar[..compactJar.IndexOf('.', StringComparison.Ordinal)];
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(
-            jweHeaderB64u, SensitiveMemoryPool<byte>.Shared);
+            jweHeaderB64u, BaseMemoryPool.Shared);
         string? encHeader = JwkJsonReader.ExtractStringValue(
             headerBytes.Memory.Span, "enc"u8);
         Assert.AreEqual(WellKnownJweEncryptionAlgorithms.A256Gcm, encHeader,
@@ -596,7 +596,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                 TestContext.CancellationToken).ConfigureAwait(false);
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> walletExchangeKeys =
-            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared);
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(BaseMemoryPool.Shared);
         using PublicKeyMemory walletEncPublic = walletExchangeKeys.PublicKey;
         using PrivateKeyMemory walletEncPrivate = walletExchangeKeys.PrivateKey;
 
@@ -656,11 +656,11 @@ internal sealed class Oid4VpFlowIntegrationTests
         //public yields a shared secret only pair A's private can recover;
         //pair B derives a different secret and the AES-GCM tag fails.
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> pairA =
-            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared);
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(BaseMemoryPool.Shared);
         using PublicKeyMemory advertisedPublic = pairA.PublicKey;
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> pairB =
-            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared);
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(BaseMemoryPool.Shared);
         using PrivateKeyMemory mismatchedPrivate = pairB.PrivateKey;
         pairA.PrivateKey.Dispose();
         pairB.PublicKey.Dispose();
@@ -711,7 +711,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                 TestContext.CancellationToken).ConfigureAwait(false);
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> walletExchangeKeys =
-            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared);
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(BaseMemoryPool.Shared);
         using PublicKeyMemory walletEncPublic = walletExchangeKeys.PublicKey;
         walletExchangeKeys.PrivateKey.Dispose();
 
@@ -762,7 +762,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             walletExchangePublicKey,
             jarEncryptionEnc,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         string walletNonce = $"wn-{Guid.NewGuid():N}";
 
@@ -961,7 +961,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             "The signature segment of an alg=none JAR MUST be empty per RFC 7515 §6.1.");
 
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(
-            segments[0], SensitiveMemoryPool<byte>.Shared);
+            segments[0], BaseMemoryPool.Shared);
         string? alg = JwkJsonReader.ExtractStringValue(
             headerBytes.Memory.Span, "alg"u8);
         Assert.AreEqual(WellKnownJwaValues.None, alg,
@@ -1434,7 +1434,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                 serializedSdJwt,
                 "pid",
                 static s => SdJwtSerializer.ParseToken(
-                    s, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag),
+                    s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
                 static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
                 IssuerLookup,
                 MicrosoftEntropyFunctions.ComputeDigestAsync,
@@ -1829,7 +1829,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
             m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         bool validWithCorrectKey = await Jws.VerifyAsync(
@@ -2171,7 +2171,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             compactPresentation,
             "pid",
             static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             IssuerLookup,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
@@ -2583,7 +2583,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         Uri anchorFederationFetchUrl = new(anchorHost.HttpBaseAddress!,
             $"/connect/{anchorSegment}/federation_fetch");
 
-        anchorHost.Server.Integration.ContributeFederationMetadataAsync = (_, _, _) =>
+        anchorHost.Server.OAuth().ContributeFederationMetadataAsync = (_, _, _) =>
             ValueTask.FromResult(new FederationEntityConfigurationContribution
             {
                 Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
@@ -2601,7 +2601,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //returns 404).
         Dictionary<string, object> verifierSubjectJwks =
             BuildSingleEcKeyJwks(verifierFederationKeys.PublicKey);
-        anchorHost.Server.Integration.ResolveSubordinateStatementAsync = (subject, _, _, _) =>
+        anchorHost.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
         {
             if(!string.Equals(subject.Value, verifierEntityId.ToString(), StringComparison.Ordinal))
             {
@@ -3035,7 +3035,7 @@ internal sealed class Oid4VpFlowIntegrationTests
     {
         string[] parts = compactJwe.Split('.');
         using IMemoryOwner<byte> decoded =
-            TestSetup.Base64UrlDecoder(parts[segmentIndex], SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlDecoder(parts[segmentIndex], BaseMemoryPool.Shared);
         decoded.Memory.Span[0] ^= 0xFF;
         parts[segmentIndex] = TestSetup.Base64UrlEncoder(decoded.Memory.Span);
         return string.Join('.', parts);

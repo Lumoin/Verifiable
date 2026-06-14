@@ -1,4 +1,5 @@
 using Verifiable.OAuth;
+using Verifiable.Server;
 
 namespace Verifiable.Tests.OAuth;
 

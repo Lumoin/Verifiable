@@ -189,7 +189,7 @@ public static class SdJwtPathExtraction
         //synchronously (true for the Microsoft software backend). The data byte[]
         //wraps in ReadOnlyMemory cheaply for the bridge.
         using DigestValue digest = CryptographicKeyEvents.ComputeDigestSyncBridge(
-            data.AsMemory(), outputLength, tag, SensitiveMemoryPool<byte>.Shared);
+            data.AsMemory(), outputLength, tag, BaseMemoryPool.Shared);
         return digest.AsReadOnlySpan().ToArray();
     }
 

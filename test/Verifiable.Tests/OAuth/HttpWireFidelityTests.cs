@@ -46,7 +46,7 @@ internal sealed class HttpWireFidelityTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
-        (OAuthClient client, ClientRegistration registration, Dictionary<string, OAuthFlowState> clientFlowStore) =
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateOAuthClientAndRegistrationAsync(
                 material.Registration,
                 RedirectUri.OriginalString,

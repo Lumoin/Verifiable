@@ -181,8 +181,8 @@ public static class AcrAmrClaimContributor
             return null;
         }
 
-        AuthorizationServer? server = idt.Issuance.Context.Server;
-        ResolveOidcClaimsDelegate? resolve = server?.Integration.ResolveOidcClaimsAsync;
+        EndpointServer? server = idt.Issuance.Context.Server;
+        ResolveOidcClaimsDelegate? resolve = server?.OAuth().ResolveOidcClaimsAsync;
         if(resolve is null)
         {
             return null;

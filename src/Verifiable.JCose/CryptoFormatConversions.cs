@@ -495,7 +495,7 @@ namespace Verifiable.JCose
                     multicodecHeader,
                     MultibaseAlgorithms.Base58Btc,
                     encoder,
-                    SensitiveMemoryPool<byte>.Shared);
+                    BaseMemoryPool.Shared);
             }
 
             return (algorithm, purpose) switch
@@ -641,8 +641,8 @@ namespace Verifiable.JCose
 
             static byte[] DecodeEcKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
             {
-                using IMemoryOwner<byte> xBytes = decoder((string)jwk[WellKnownJwkMemberNames.X], SensitiveMemoryPool<byte>.Shared);
-                using IMemoryOwner<byte> yBytes = decoder((string)jwk[WellKnownJwkMemberNames.Y], SensitiveMemoryPool<byte>.Shared);
+                using IMemoryOwner<byte> xBytes = decoder((string)jwk[WellKnownJwkMemberNames.X], BaseMemoryPool.Shared);
+                using IMemoryOwner<byte> yBytes = decoder((string)jwk[WellKnownJwkMemberNames.Y], BaseMemoryPool.Shared);
 
                 //Compressed format is the canonical internal form for all EC public keys.
                 //Backend functions accept both compressed and uncompressed SEC1 encoding.
@@ -652,7 +652,7 @@ namespace Verifiable.JCose
 
             static byte[] DecodeOkpKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
             {
-                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.X], SensitiveMemoryPool<byte>.Shared);
+                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.X], BaseMemoryPool.Shared);
 
                 return decoded.Memory.Span.ToArray();
             }
@@ -660,7 +660,7 @@ namespace Verifiable.JCose
 
             static byte[] DecodeRsaKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
             {
-                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.N], SensitiveMemoryPool<byte>.Shared);
+                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.N], BaseMemoryPool.Shared);
 
                 return decoded.Memory.Span.ToArray();
             }
@@ -668,7 +668,7 @@ namespace Verifiable.JCose
 
             static byte[] DecodeAkpKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
             {
-                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.Pub], SensitiveMemoryPool<byte>.Shared);
+                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.Pub], BaseMemoryPool.Shared);
 
                 return decoded.Memory.Span.ToArray();
             }

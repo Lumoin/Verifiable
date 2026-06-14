@@ -6,18 +6,19 @@ using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Server;
+using Verifiable.Server.Diagnostics;
 using Verifiable.Tests.TestDataProviders;
 
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Verifies that <see cref="AuthorizationServer"/> emits activities (spans) and
-/// events with the correct names and tags from <see cref="OAuthActivitySource"/>.
+/// Verifies that <see cref="EndpointServer"/> emits activities (spans) and
+/// events with the correct names and tags from <see cref="ServerActivitySource"/>.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Uses <see cref="ActivityListener"/> to capture activities without any OTel SDK
-/// dependency. The listener subscribes to <see cref="OAuthActivitySource.SourceName"/>
+/// dependency. The listener subscribes to <see cref="ServerActivitySource.SourceName"/>
 /// and collects all completed activities for assertion.
 /// </para>
 /// </remarks>
@@ -62,39 +63,39 @@ internal sealed class OAuthDiagnosticsTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //ActivityListener is process-wide: sibling tests running in
-        //parallel emit activities into the same OAuthActivitySource and
+        //parallel emit activities into the same ServerActivitySource and
         //land in this bag while our listener is alive. Filter by the
         //test's own tenant id (each RegisterSigningClient produces a
         //fresh, unique TenantId) so this assertion stays isolated from
         //other tests' traffic.
         Activity[] handleActivities = captured
             .Where(a => string.Equals(
-                a.OperationName, OAuthActivityNames.Handle, StringComparison.Ordinal))
+                a.OperationName, ServerActivityNames.Handle, StringComparison.Ordinal))
             .Where(a => a.Tags.Any(t =>
-                string.Equals(t.Key, OAuthTagNames.TenantId, StringComparison.Ordinal)
+                string.Equals(t.Key, ServerTagNames.TenantId, StringComparison.Ordinal)
                 && string.Equals(t.Value, registration.TenantId.Value, StringComparison.Ordinal)))
             .ToArray();
 
         Assert.IsGreaterThan(0, handleActivities.Length,
-            $"At least one '{OAuthActivityNames.Handle}' activity tagged " +
+            $"At least one '{ServerActivityNames.Handle}' activity tagged " +
             $"with tenant '{registration.TenantId.Value}' must be emitted.");
 
         Activity activity = handleActivities[0];
 
         string? flowKind = activity.Tags
             .FirstOrDefault(t => string.Equals(
-                t.Key, OAuthTagNames.FlowKind, StringComparison.Ordinal))
+                t.Key, ServerTagNames.FlowKind, StringComparison.Ordinal))
             .Value;
 
         string? statusCode = activity.Tags
             .FirstOrDefault(t => string.Equals(
-                t.Key, OAuthTagNames.StatusCode, StringComparison.Ordinal))
+                t.Key, ServerTagNames.StatusCode, StringComparison.Ordinal))
             .Value;
 
         Assert.IsNotNull(flowKind,
-            $"Activity must carry '{OAuthTagNames.FlowKind}' tag.");
+            $"Activity must carry '{ServerTagNames.FlowKind}' tag.");
         Assert.AreEqual("200", statusCode,
-            $"Activity must carry '{OAuthTagNames.StatusCode}' tag with value '200'.");
+            $"Activity must carry '{ServerTagNames.StatusCode}' tag with value '200'.");
     }
 
 
@@ -105,6 +106,15 @@ internal sealed class OAuthDiagnosticsTests
 
         using ActivityListener listener = CreateListener(captured);
         ActivitySource.AddActivityListener(listener);
+
+        //The ActivityListener is process-wide: sibling tests running in parallel
+        //emit their own 'Handle' activities into this bag. Unlike the 200 test,
+        //this one dispatches to a nonexistent tenant with no registration to filter
+        //by, so isolate by trace instead — start a per-test root so the library's
+        //activities (if any) inherit its TraceId, and keep only those.
+        using Activity testRoot = new(nameof(HandleAsyncEmitsActivityForUnknownSegmentWith404));
+        testRoot.Start();
+        ActivityTraceId testTraceId = testRoot.TraceId;
 
         await using TestHostShell app = new(TimeProvider);
 
@@ -117,8 +127,9 @@ internal sealed class OAuthDiagnosticsTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Activity[] handleActivities = captured
+            .Where(a => a.TraceId == testTraceId)
             .Where(a => string.Equals(
-                a.OperationName, OAuthActivityNames.Handle, StringComparison.Ordinal))
+                a.OperationName, ServerActivityNames.Handle, StringComparison.Ordinal))
             .ToArray();
 
         //A 404 from DispatchAtEndpointAsync happens during registration load
@@ -131,7 +142,7 @@ internal sealed class OAuthDiagnosticsTests
         {
             string? statusCode = handleActivities[0].Tags
                 .FirstOrDefault(t => string.Equals(
-                    t.Key, OAuthTagNames.StatusCode, StringComparison.Ordinal))
+                    t.Key, ServerTagNames.StatusCode, StringComparison.Ordinal))
                 .Value;
 
             Assert.AreEqual("404", statusCode,
@@ -144,8 +155,8 @@ internal sealed class OAuthDiagnosticsTests
     public void ActivitySourceNameMatchesConstant()
     {
         Assert.AreEqual(
-            OAuthActivitySource.SourceName,
-            OAuthActivitySource.Source.Name,
+            ServerActivitySource.SourceName,
+            ServerActivitySource.Source.Name,
             "ActivitySource.Name must equal the published constant.");
     }
 
@@ -165,15 +176,7 @@ internal sealed class OAuthDiagnosticsTests
     {
         string[] names =
         [
-            OAuthActivityNames.Handle,
-            OAuthActivityNames.ResolveCorrelation,
-            OAuthActivityNames.LoadFlowState,
-            OAuthActivityNames.BuildInput,
-            OAuthActivityNames.StepPda,
-            OAuthActivityNames.SaveFlowState,
-            OAuthActivityNames.BuildJwks,
-            OAuthActivityNames.SignToken,
-            OAuthActivityNames.ClientLifecycle
+            ServerActivityNames.Handle
         ];
 
         foreach(string name in names)
@@ -191,23 +194,15 @@ internal sealed class OAuthDiagnosticsTests
     {
         string[] tags =
         [
-            OAuthTagNames.FlowKind,
-            OAuthTagNames.EndpointPath,
-            OAuthTagNames.TenantId,
-            OAuthTagNames.ClientId,
-            OAuthTagNames.HttpMethod,
-            OAuthTagNames.StatusCode,
-            OAuthTagNames.FlowState,
-            OAuthTagNames.FlowStepCount,
-            OAuthTagNames.StartsNewFlow,
-            OAuthTagNames.ClaimCode,
-            OAuthTagNames.ClaimName,
-            OAuthTagNames.ClaimOutcome,
-            OAuthTagNames.ValidationClaimCount,
-            OAuthTagNames.ValidationFailureCount,
-            OAuthTagNames.LifecycleOperation,
-            OAuthTagNames.DeregistrationReason,
-            OAuthTagNames.CorrelationResolved
+            ServerTagNames.FlowKind,
+            ServerTagNames.TenantId,
+            ServerTagNames.RegistrationId,
+            ServerTagNames.HttpMethod,
+            ServerTagNames.StatusCode,
+            ServerTagNames.FlowState,
+            ServerTagNames.FlowStepCount,
+            ServerTagNames.StartsNewFlow,
+            ServerTagNames.CorrelationResolved
         ];
 
         foreach(string tag in tags)
@@ -256,17 +251,13 @@ internal sealed class OAuthDiagnosticsTests
     {
         string[] events =
         [
-            OAuthEventNames.ValidationClaim,
-            OAuthEventNames.ValidationPassed,
-            OAuthEventNames.ValidationFailed,
-            OAuthEventNames.StateTransition,
-            OAuthEventNames.ActionExecuted,
-            OAuthEventNames.CorrelationResolved,
-            OAuthEventNames.CorrelationNotFound,
-            OAuthEventNames.FlowCreated,
-            OAuthEventNames.ClientRegistered,
-            OAuthEventNames.ClientUpdated,
-            OAuthEventNames.ClientDeregistered
+            ServerEventNames.StateTransition,
+            ServerEventNames.CorrelationResolved,
+            ServerEventNames.CorrelationNotFound,
+            ServerEventNames.FlowCreated,
+            OAuthEventNames.ExtraneousAuthorizeParameters,
+            OAuthEventNames.DuplicateGrantedCredentialConfigurationCollapsed,
+            OAuthEventNames.LongLivedBearerCredentialTokenRefused
         ];
 
         foreach(string eventName in events)
@@ -283,7 +274,7 @@ internal sealed class OAuthDiagnosticsTests
         new()
         {
             ShouldListenTo = source =>
-                string.Equals(source.Name, OAuthActivitySource.SourceName, StringComparison.Ordinal),
+                string.Equals(source.Name, ServerActivitySource.SourceName, StringComparison.Ordinal),
             Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
                 ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity => captured.Add(activity)

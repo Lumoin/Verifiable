@@ -93,7 +93,7 @@ public static class JwtSigningExtensions
     /// <see cref="SigningDelegate"/>. The registry-resolving overload above
     /// delegates here after resolving the function via
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    /// from <paramref name="privateKey"/>'s <see cref="Verifiable.Cryptography.SensitiveMemory.Tag"/>.
+    /// from <paramref name="privateKey"/>'s <see cref="Verifiable.Foundation.SensitiveMemory.Tag"/>.
     /// </summary>
     /// <param name="unsignedJwt">The unsigned JWT to sign.</param>
     /// <param name="privateKey">The private key for signing.</param>
@@ -127,7 +127,7 @@ public static class JwtSigningExtensions
 
         //Copy header span into pooled memory since spans cannot cross await boundaries.
         //Header bytes are transient and disposed after base64url encoding.
-        //The pool must return exact-size allocations (e.g. SensitiveMemoryPool).
+        //The pool must return exact-size allocations (e.g. BaseMemoryPool).
         ReadOnlySpan<byte> headerSpan = headerSerializer(unsignedJwt.Header);
         using IMemoryOwner<byte> headerOwner = memoryPool.Rent(headerSpan.Length);
         Debug.Assert(headerOwner.Memory.Length == headerSpan.Length, "Pool must return exact-size allocations.");

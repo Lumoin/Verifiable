@@ -13,7 +13,7 @@ namespace Verifiable.OAuth.Server;
 /// Policy decisions about timing live here, not in endpoint code. Every site
 /// that previously read a literal duration — for example
 /// <c>now.AddSeconds(60)</c> — reads the corresponding property on
-/// <see cref="AuthorizationServer.Timings"/> instead. The library does not
+/// <see cref="EndpointServer.Timings"/> instead. The library does not
 /// embed timing literals anywhere outside this type and its consumers.
 /// </para>
 /// <para>

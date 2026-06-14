@@ -94,8 +94,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         using VerifierKeyMaterial pdp = RegisterPdp(app);
 
         bool pdpInvoked = false;
-        app.Server.Integration.UseDefaultAuthZenJsonParsing();
-        app.Server.Integration.EvaluateAccessAsync = (request, _, _, _) =>
+        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        app.Server.OAuth().EvaluateAccessAsync = (request, _, _, _) =>
         {
             pdpInvoked = true;
             return ValueTask.FromResult(AccessEvaluationDecision.Permit);
@@ -124,8 +124,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         using VerifierKeyMaterial pdp = RegisterPdp(app);
 
         bool pdpInvoked = false;
-        app.Server.Integration.UseDefaultAuthZenJsonParsing();
-        app.Server.Integration.EvaluateAccessAsync = (request, _, _, _) =>
+        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        app.Server.OAuth().EvaluateAccessAsync = (request, _, _, _) =>
         {
             pdpInvoked = true;
             return ValueTask.FromResult(AccessEvaluationDecision.Permit);
@@ -345,8 +345,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         using VerifierKeyMaterial pdp = RegisterPdp(app);
 
         bool pdpInvoked = false;
-        app.Server.Integration.UseDefaultAuthZenJsonParsing();
-        app.Server.Integration.EvaluateAccessAsync = (request, _, _, _) =>
+        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        app.Server.OAuth().EvaluateAccessAsync = (request, _, _, _) =>
         {
             pdpInvoked = true;
             return ValueTask.FromResult(AccessEvaluationDecision.Permit);
@@ -477,8 +477,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         using VerifierKeyMaterial pdp = RegisterPdp(app);
 
         bool seamInvoked = false;
-        app.Server.Integration.UseDefaultAuthZenJsonParsing();
-        app.Server.Integration.SearchSubjectsAsync = (request, _, _, _) =>
+        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        app.Server.OAuth().SearchSubjectsAsync = (request, _, _, _) =>
         {
             seamInvoked = true;
             return ValueTask.FromResult(new SubjectSearchResult());
@@ -513,8 +513,8 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         //offset), limit is a maximum, next_token is "" at the end. The request
         //is parsed by the SHIPPED default parser, so page{token,limit} comes off
         //the wire through production code.
-        app.Server.Integration.UseDefaultAuthZenJsonParsing();
-        app.Server.Integration.SearchSubjectsAsync = (request, _, _, _) =>
+        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        app.Server.OAuth().SearchSubjectsAsync = (request, _, _, _) =>
         {
             int offset = 0;
             if(request.Page?.Token is { Length: > 0 } token && int.TryParse(token, out int parsed))
@@ -641,7 +641,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial pdp = RegisterPdp(app);
-        app.Server.Integration.ContributeAuthZenMetadataAsync = (_, _, _) =>
+        app.Server.OAuth().ContributeAuthZenMetadataAsync = (_, _, _) =>
             ValueTask.FromResult(new AuthZenMetadataContribution
             {
                 Capabilities =
@@ -675,9 +675,9 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         //library hands over and return a sentinel JWS — the library's contract
         //is "assemble the correct claims, embed the returned JWT".
         JwtPayload? signedClaims = null;
-        app.Server.Integration.ContributeAuthZenMetadataAsync = (_, _, _) =>
+        app.Server.OAuth().ContributeAuthZenMetadataAsync = (_, _, _) =>
             ValueTask.FromResult(new AuthZenMetadataContribution { Capabilities = ["urn:example:cap"] });
-        app.Server.Integration.SignAuthZenMetadataAsync = (claims, _, _, _) =>
+        app.Server.OAuth().SignAuthZenMetadataAsync = (claims, _, _, _) =>
         {
             signedClaims = claims;
             return ValueTask.FromResult<string?>("header.payload.signature");
@@ -721,7 +721,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
 
-        app.Server.Integration.ContributeDiscoveryFieldsAsync = (registration, _, _) =>
+        app.Server.OAuth().ContributeDiscoveryFieldsAsync = (registration, _, _) =>
         {
             //Derive the AuthZEN metadata URL from the issuer with the library's
             //own well-known-path helper, keeping AS and PDP identities aligned.
@@ -774,11 +774,11 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     {
         //Wire the SHIPPED default STJ parsers (Verifiable.Json) — the e2e flow
         //then exercises the real production parse path, not a test-local one.
-        app.Server.Integration.UseDefaultAuthZenJsonParsing();
+        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
 
         //The application's Policy Decision Point: alice may read; everyone else
         //is denied. A permit carries a reason in its context.
-        app.Server.Integration.EvaluateAccessAsync = (request, _, _, _) =>
+        app.Server.OAuth().EvaluateAccessAsync = (request, _, _, _) =>
         {
             bool permit = string.Equals(request.Action.Name, "can_read", StringComparison.Ordinal)
                 && string.Equals(request.Subject.Id, "alice@example.com", StringComparison.Ordinal);
@@ -799,9 +799,9 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     //return single-page results.
     private static void WireSearch(TestHostShell app)
     {
-        app.Server.Integration.UseDefaultAuthZenJsonParsing();
+        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
 
-        app.Server.Integration.SearchSubjectsAsync = (request, _, _, _) =>
+        app.Server.OAuth().SearchSubjectsAsync = (request, _, _, _) =>
             ValueTask.FromResult(new SubjectSearchResult
             {
                 Results =
@@ -812,13 +812,13 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
                 Page = new AccessSearchPage { NextToken = "next-123", Count = 2, Total = 5 },
             });
 
-        app.Server.Integration.SearchResourcesAsync = (request, _, _, _) =>
+        app.Server.OAuth().SearchResourcesAsync = (request, _, _, _) =>
             ValueTask.FromResult(new ResourceSearchResult
             {
                 Results = [new AuthZenResource { Type = "account", Id = "123" }],
             });
 
-        app.Server.Integration.SearchActionsAsync = (request, _, _, _) =>
+        app.Server.OAuth().SearchActionsAsync = (request, _, _, _) =>
             ValueTask.FromResult(new ActionSearchResult
             {
                 Results =

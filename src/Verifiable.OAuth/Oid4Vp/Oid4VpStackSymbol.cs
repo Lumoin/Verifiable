@@ -5,7 +5,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </summary>
 /// <remarks>
 /// This type is <c>TStackSymbol</c> in
-/// <c>PushdownAutomaton&lt;OAuthFlowState, OAuthFlowInput, Oid4VpStackSymbol&gt;</c>.
+/// <c>PushdownAutomaton&lt;FlowState, FlowInput, Oid4VpStackSymbol&gt;</c>.
 /// <see cref="Base"/> is the sentinel always present at the bottom of the stack.
 /// The linear authorization code flow never pushes or pops; <see cref="StepUp"/> is
 /// reserved for nested step-up authentication sub-flows.

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Diagnostics;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 
 namespace Verifiable.Tests.Automata;
 

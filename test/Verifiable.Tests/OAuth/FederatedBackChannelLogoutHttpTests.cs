@@ -57,7 +57,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>The memory pool used for all transient signing/verification buffers.</summary>
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     /// <summary>The OP issuer every RP is configured, out of band, to expect on a Logout Token's <c>iss</c>.</summary>
     private const string OpIssuer = "https://op.example/";
@@ -137,8 +137,8 @@ internal sealed class FederatedBackChannelLogoutHttpTests
         //Wire the OP seams: terminate the local session, then build and POST a Logout
         //Token (aud = that RP's client_id) to every RP in the session over real HTTP.
         using HttpClient deliveryClient = new();
-        op.Server.Integration.TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
-        op.Server.Integration.DeliverBackChannelLogoutAsync = async (subject, sessionId, _, _, ct) =>
+        op.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
+        op.Server.OAuth().DeliverBackChannelLogoutAsync = async (subject, sessionId, _, _, ct) =>
         {
             foreach(RegisteredRelyingParty relyingParty in session)
             {
@@ -398,7 +398,7 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
             ClientId,
             TestSetup.Base64UrlDecoder,
             bytes => SecurityEventTestJson.DeserializePart(bytes),
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken).ConfigureAwait(false);
 
         if(!result.IsValid)

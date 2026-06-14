@@ -157,8 +157,8 @@ public sealed record Oid4VciWalletConfiguration
     /// <summary>Time source for the holder proof's <c>iat</c> claim. Defaults to <see cref="TimeProvider.System"/>.</summary>
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 
-    /// <summary>Memory pool for transient signing buffers. Defaults to <see cref="SensitiveMemoryPool{T}.Shared"/>.</summary>
-    public MemoryPool<byte> MemoryPool { get; init; } = SensitiveMemoryPool<byte>.Shared;
+    /// <summary>Memory pool for transient signing buffers. Defaults to <see cref="BaseMemoryPool.Shared"/>.</summary>
+    public MemoryPool<byte> MemoryPool { get; init; } = BaseMemoryPool.Shared;
 
     /// <summary>
     /// Optional RFC 9449 DPoP proof producer. Required when the §6 Token Response

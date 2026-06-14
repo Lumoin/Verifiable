@@ -22,7 +22,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 [TestClass]
 internal sealed class SdJwtSerializerTests
 {
-    private static MemoryPool<byte> MemoryPool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> MemoryPool => BaseMemoryPool.Shared;
     private static EncodeDelegate Encoder => TestSetup.Base64UrlEncoder;
     private static DecodeDelegate Decoder => TestSetup.Base64UrlDecoder;
 

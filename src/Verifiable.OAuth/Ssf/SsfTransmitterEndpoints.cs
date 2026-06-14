@@ -5,7 +5,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Ssf;
 
@@ -17,7 +17,7 @@ namespace Verifiable.OAuth.Ssf;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Register at startup via <see cref="ServerConfiguration.EndpointBuilders"/>.
+/// Register at startup via <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
 /// Emitted for registrations carrying
 /// <see cref="WellKnownCapabilityIdentifiers.SsfTransmitter"/>.
 /// </para>
@@ -35,73 +35,73 @@ public static class SsfTransmitterEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="ServerConfiguration.EndpointBuilders"/>.
+    /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.SsfTransmitter))
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.SsfTransmitter))
         {
             candidates.Add(BuildSsfConfiguration());
 
             //Stream Management (§8.1.1) is active per operation only when its
             //store seam is wired — mirroring the AuthZEN optional-search
             //pattern: wired → active → advertised, fail-closed otherwise.
-            AuthorizationServer? server = context.Server;
-            if(server?.Integration.CreateSsfStreamAsync is not null
-                && server.Integration.ParseSsfStreamCreateRequestAsync is not null)
+            EndpointServer? server = context.Server;
+            if(server?.OAuth().CreateSsfStreamAsync is not null
+                && server?.OAuth().ParseSsfStreamCreateRequestAsync is not null)
             {
                 candidates.Add(BuildStreamCreate());
             }
 
-            if(server?.Integration.ReadSsfStreamsAsync is not null)
+            if(server?.OAuth().ReadSsfStreamsAsync is not null)
             {
                 candidates.Add(BuildStreamRead());
             }
 
-            if(server?.Integration.UpdateSsfStreamAsync is not null
-                && server.Integration.ParseSsfStreamUpdateRequestAsync is not null)
+            if(server?.OAuth().UpdateSsfStreamAsync is not null
+                && server?.OAuth().ParseSsfStreamUpdateRequestAsync is not null)
             {
                 candidates.Add(BuildStreamUpdate());
             }
 
-            if(server?.Integration.ReplaceSsfStreamAsync is not null
-                && server.Integration.ParseSsfStreamUpdateRequestAsync is not null)
+            if(server?.OAuth().ReplaceSsfStreamAsync is not null
+                && server?.OAuth().ParseSsfStreamUpdateRequestAsync is not null)
             {
                 candidates.Add(BuildStreamReplace());
             }
 
-            if(server?.Integration.DeleteSsfStreamAsync is not null)
+            if(server?.OAuth().DeleteSsfStreamAsync is not null)
             {
                 candidates.Add(BuildStreamDelete());
             }
 
-            if(server?.Integration.ReadSsfStreamStatusAsync is not null)
+            if(server?.OAuth().ReadSsfStreamStatusAsync is not null)
             {
                 candidates.Add(BuildStatusRead());
             }
 
-            if(server?.Integration.UpdateSsfStreamStatusAsync is not null
-                && server.Integration.ParseSsfStreamStatusAsync is not null)
+            if(server?.OAuth().UpdateSsfStreamStatusAsync is not null
+                && server?.OAuth().ParseSsfStreamStatusAsync is not null)
             {
                 candidates.Add(BuildStatusUpdate());
             }
 
-            if(server?.Integration.AddSsfSubjectAsync is not null
-                && server.Integration.ParseSsfAddSubjectRequestAsync is not null)
+            if(server?.OAuth().AddSsfSubjectAsync is not null
+                && server?.OAuth().ParseSsfAddSubjectRequestAsync is not null)
             {
                 candidates.Add(BuildSubjectAdd());
             }
 
-            if(server?.Integration.RemoveSsfSubjectAsync is not null
-                && server.Integration.ParseSsfRemoveSubjectRequestAsync is not null)
+            if(server?.OAuth().RemoveSsfSubjectAsync is not null
+                && server?.OAuth().ParseSsfRemoveSubjectRequestAsync is not null)
             {
                 candidates.Add(BuildSubjectRemove());
             }
 
-            if(server?.Integration.TriggerSsfVerificationAsync is not null
-                && server.Integration.ParseSsfVerificationRequestAsync is not null)
+            if(server?.OAuth().TriggerSsfVerificationAsync is not null
+                && server?.OAuth().ParseSsfVerificationRequestAsync is not null)
             {
                 candidates.Add(BuildVerificationTrigger());
             }
@@ -143,9 +143,10 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -170,9 +171,9 @@ public static class SsfTransmitterEndpoints
                 Uri issuer;
                 try
                 {
-                    issuer = server.Integration.ResolveIssuerAsync is not null
-                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false)
+                    issuer = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
                         : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
                             .ConfigureAwait(false);
                 }
@@ -184,9 +185,9 @@ public static class SsfTransmitterEndpoints
                 }
 
                 SsfTransmitterMetadataContribution contribution =
-                    server.Integration.ContributeSsfTransmitterMetadataAsync is null
+                    oauth.ContributeSsfTransmitterMetadataAsync is null
                         ? SsfTransmitterMetadataContribution.Empty
-                        : await server.Integration.ContributeSsfTransmitterMetadataAsync(
+                        : await oauth.ContributeSsfTransmitterMetadataAsync(
                             registration, context, ct).ConfigureAwait(false);
 
                 string metadataJson = SsfTransmitterJsonWriting.BuildTransmitterConfigurationJson(
@@ -289,8 +290,9 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
-                ClientRecord registration = context.Registration!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+                ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
 
                 ServerHttpResponse? denied = await AuthorizeAsync(
@@ -310,7 +312,7 @@ public static class SsfTransmitterEndpoints
                 else
                 {
                     string requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
-                    request = await server.Integration.ParseSsfStreamCreateRequestAsync!(
+                    request = await oauth.ParseSsfStreamCreateRequestAsync!(
                         requestBody, context, ct).ConfigureAwait(false);
                 }
 
@@ -320,7 +322,7 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The Create Stream request body cannot be parsed."));
                 }
 
-                SsfStreamWriteResult result = await server.Integration.CreateSsfStreamAsync!(
+                SsfStreamWriteResult result = await oauth.CreateSsfStreamAsync!(
                     request, registration, context, ct).ConfigureAwait(false);
 
                 return result.Outcome switch
@@ -355,8 +357,9 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
-                ClientRecord registration = context.Registration!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+                ClientRecord registration = context.ClientRegistration!;
 
                 ServerHttpResponse? denied = await AuthorizeAsync(
                     server, registration, context, WellKnownScopes.SsfRead, ct).ConfigureAwait(false);
@@ -369,7 +372,7 @@ public static class SsfTransmitterEndpoints
                 //means "list every stream this Receiver has" (possibly empty).
                 string? streamId = ReadStreamId(fields);
 
-                IReadOnlyList<SsfStreamConfiguration>? streams = await server.Integration.ReadSsfStreamsAsync!(
+                IReadOnlyList<SsfStreamConfiguration>? streams = await oauth.ReadSsfStreamsAsync!(
                     streamId, registration, context, ct).ConfigureAwait(false);
 
                 if(streams is null)
@@ -395,7 +398,7 @@ public static class SsfTransmitterEndpoints
             WellKnownEndpointNames.SsfStreamUpdate,
             WellKnownHttpMethods.Patch,
             static (server, request, registration, context, ct) =>
-                server.Integration.UpdateSsfStreamAsync!(request, registration, context, ct));
+                server.OAuth().UpdateSsfStreamAsync!(request, registration, context, ct));
 
 
     private static EndpointCandidate BuildStreamReplace() =>
@@ -403,7 +406,7 @@ public static class SsfTransmitterEndpoints
             WellKnownEndpointNames.SsfStreamReplace,
             WellKnownHttpMethods.Put,
             static (server, request, registration, context, ct) =>
-                server.Integration.ReplaceSsfStreamAsync!(request, registration, context, ct));
+                server.OAuth().ReplaceSsfStreamAsync!(request, registration, context, ct));
 
 
     //§8.1.1.3 (PATCH) and §8.1.1.4 (PUT) share the wire shape and status-code
@@ -411,7 +414,7 @@ public static class SsfTransmitterEndpoints
     private static EndpointCandidate BuildStreamWrite(
         string endpointName,
         string httpMethod,
-        Func<AuthorizationServer, SsfStreamUpdateRequest, ClientRecord, ExchangeContext, CancellationToken, ValueTask<SsfStreamWriteResult>> store) =>
+        Func<EndpointServer, SsfStreamUpdateRequest, ClientRecord, ExchangeContext, CancellationToken, ValueTask<SsfStreamWriteResult>> store) =>
         new()
         {
             Name = endpointName,
@@ -425,8 +428,9 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
-                ClientRecord registration = context.Registration!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+                ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
 
                 ServerHttpResponse? denied = await AuthorizeAsync(
@@ -443,7 +447,7 @@ public static class SsfTransmitterEndpoints
                 }
 
                 string requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
-                SsfStreamUpdateRequest? request = await server.Integration.ParseSsfStreamUpdateRequestAsync!(
+                SsfStreamUpdateRequest? request = await oauth.ParseSsfStreamUpdateRequestAsync!(
                     requestBody, context, ct).ConfigureAwait(false);
                 if(request is null)
                 {
@@ -488,8 +492,9 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
-                ClientRecord registration = context.Registration!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+                ClientRecord registration = context.ClientRegistration!;
 
                 ServerHttpResponse? denied = await AuthorizeAsync(
                     server, registration, context, WellKnownScopes.SsfManage, ct).ConfigureAwait(false);
@@ -506,7 +511,7 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The stream_id query parameter is required."));
                 }
 
-                SsfStreamWriteOutcome outcome = await server.Integration.DeleteSsfStreamAsync!(
+                SsfStreamWriteOutcome outcome = await oauth.DeleteSsfStreamAsync!(
                     streamId, registration, context, ct).ConfigureAwait(false);
 
                 return outcome switch
@@ -537,8 +542,9 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
-                ClientRecord registration = context.Registration!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+                ClientRecord registration = context.ClientRegistration!;
 
                 ServerHttpResponse? denied = await AuthorizeAsync(
                     server, registration, context, WellKnownScopes.SsfRead, ct).ConfigureAwait(false);
@@ -555,7 +561,7 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The stream_id query parameter is required."));
                 }
 
-                SsfStreamStatus? status = await server.Integration.ReadSsfStreamStatusAsync!(
+                SsfStreamStatus? status = await oauth.ReadSsfStreamStatusAsync!(
                     streamId, registration, context, ct).ConfigureAwait(false);
                 if(status is null)
                 {
@@ -586,8 +592,9 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
-                ClientRecord registration = context.Registration!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+                ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
 
                 ServerHttpResponse? denied = await AuthorizeAsync(
@@ -604,7 +611,7 @@ public static class SsfTransmitterEndpoints
                 }
 
                 string requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
-                SsfStreamStatus? requested = await server.Integration.ParseSsfStreamStatusAsync!(
+                SsfStreamStatus? requested = await oauth.ParseSsfStreamStatusAsync!(
                     requestBody, context, ct).ConfigureAwait(false);
                 if(requested is null)
                 {
@@ -612,7 +619,7 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The status update request body cannot be parsed."));
                 }
 
-                SsfStreamStatusResult result = await server.Integration.UpdateSsfStreamStatusAsync!(
+                SsfStreamStatusResult result = await oauth.UpdateSsfStreamStatusAsync!(
                     requested, registration, context, ct).ConfigureAwait(false);
 
                 return result.Outcome switch
@@ -648,8 +655,9 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
-                ClientRecord registration = context.Registration!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+                ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
 
                 ServerHttpResponse? denied = await AuthorizeAsync(
@@ -666,7 +674,7 @@ public static class SsfTransmitterEndpoints
                 }
 
                 string requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
-                SsfAddSubjectRequest? request = await server.Integration.ParseSsfAddSubjectRequestAsync!(
+                SsfAddSubjectRequest? request = await oauth.ParseSsfAddSubjectRequestAsync!(
                     requestBody, context, ct).ConfigureAwait(false);
                 if(request is null)
                 {
@@ -674,7 +682,7 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The Add Subject request body cannot be parsed."));
                 }
 
-                SsfStreamOperationOutcome outcome = await server.Integration.AddSsfSubjectAsync!(
+                SsfStreamOperationOutcome outcome = await oauth.AddSsfSubjectAsync!(
                     request, registration, context, ct).ConfigureAwait(false);
 
                 return outcome switch
@@ -709,8 +717,9 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
-                ClientRecord registration = context.Registration!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+                ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
 
                 ServerHttpResponse? denied = await AuthorizeAsync(
@@ -727,7 +736,7 @@ public static class SsfTransmitterEndpoints
                 }
 
                 string requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
-                SsfRemoveSubjectRequest? request = await server.Integration.ParseSsfRemoveSubjectRequestAsync!(
+                SsfRemoveSubjectRequest? request = await oauth.ParseSsfRemoveSubjectRequestAsync!(
                     requestBody, context, ct).ConfigureAwait(false);
                 if(request is null)
                 {
@@ -735,7 +744,7 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The Remove Subject request body cannot be parsed."));
                 }
 
-                SsfStreamOperationOutcome outcome = await server.Integration.RemoveSsfSubjectAsync!(
+                SsfStreamOperationOutcome outcome = await oauth.RemoveSsfSubjectAsync!(
                     request, registration, context, ct).ConfigureAwait(false);
 
                 return outcome switch
@@ -769,8 +778,9 @@ public static class SsfTransmitterEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
-                ClientRecord registration = context.Registration!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+                ClientRecord registration = context.ClientRegistration!;
                 IncomingRequest? req = context.IncomingRequest;
 
                 ServerHttpResponse? denied = await AuthorizeAsync(
@@ -787,7 +797,7 @@ public static class SsfTransmitterEndpoints
                 }
 
                 string requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
-                SsfVerificationRequest? request = await server.Integration.ParseSsfVerificationRequestAsync!(
+                SsfVerificationRequest? request = await oauth.ParseSsfVerificationRequestAsync!(
                     requestBody, context, ct).ConfigureAwait(false);
                 if(request is null)
                 {
@@ -795,7 +805,7 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The verification request body cannot be parsed."));
                 }
 
-                SsfStreamOperationOutcome outcome = await server.Integration.TriggerSsfVerificationAsync!(
+                SsfStreamOperationOutcome outcome = await oauth.TriggerSsfVerificationAsync!(
                     request, registration, context, ct).ConfigureAwait(false);
 
                 return outcome switch
@@ -829,13 +839,14 @@ public static class SsfTransmitterEndpoints
     //unset seam leaves the endpoints unauthenticated. The well-known discovery
     //document stays public per SSF §7.1.1.
     private static async ValueTask<ServerHttpResponse?> AuthorizeAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
         string requiredScope,
         CancellationToken cancellationToken)
     {
-        if(server.Integration.AuthorizeSsfRequestAsync is null)
+        var oauth = server.OAuth();
+        if(oauth.AuthorizeSsfRequestAsync is null)
         {
             return null;
         }
@@ -847,7 +858,7 @@ public static class SsfTransmitterEndpoints
                 server, registration, context, cancellationToken).ConfigureAwait(false);
         }
 
-        SsfRequestAuthorization outcome = await server.Integration.AuthorizeSsfRequestAsync(
+        SsfRequestAuthorization outcome = await oauth.AuthorizeSsfRequestAsync(
             req, requiredScope, registration, context, cancellationToken).ConfigureAwait(false);
 
         return outcome switch
@@ -872,15 +883,16 @@ public static class SsfTransmitterEndpoints
     /// URL that would 404 helps nobody.
     /// </summary>
     private static async ValueTask<ServerHttpResponse> UnauthorizedWithChallengeAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         ServerHttpResponse response = ServerHttpResponse.Unauthorized(
             OAuthErrors.InvalidRequest, "Authorization failed or is missing.");
 
-        if(!registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata))
+        if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata))
         {
             return response;
         }
@@ -891,9 +903,9 @@ public static class SsfTransmitterEndpoints
         Uri issuer;
         try
         {
-            issuer = server.Integration.ResolveIssuerAsync is not null
-                ? await server.Integration.ResolveIssuerAsync(registration, context, cancellationToken)
-                    .ConfigureAwait(false)
+            issuer = oauth.ResolveIssuerAsync is not null
+                ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
+                    .ConfigureAwait(false))!
                 : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
                     .ConfigureAwait(false);
         }

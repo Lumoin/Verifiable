@@ -37,9 +37,9 @@ internal sealed class CredentialSecuringMethodsTests
 
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
 
-    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> P256IssuerKeys { get; } = BouncyCastleKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> P256IssuerKeys { get; } = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
 
-    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> P256EphemeralKeys { get; } = BouncyCastleKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> P256EphemeralKeys { get; } = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
 
     private const string Ed25519PublicKeyMultibase = "z6MkrJVnaZkeFzdQyMZu1cgjg7k1pZZ6pvBQ7XJPt4swbTQ2";
     private const string Ed25519SecretKeyMultibase = "z3u2en7t5LR2WtQH5PfFqMqwVHBeXouLzo6haApm8XHqvjxq";
@@ -83,7 +83,7 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519SecretKeyMultibase,
             MulticodecHeaders.Ed25519PrivateKey.Length,
             TestSetup.Base58Decoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
         var didDocument = CreateDidDocument(Ed25519VerificationMethodId, Ed25519PublicKeyMultibase);
@@ -101,7 +101,7 @@ internal sealed class CredentialSecuringMethodsTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -122,7 +122,7 @@ internal sealed class CredentialSecuringMethodsTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -175,7 +175,7 @@ internal sealed class CredentialSecuringMethodsTests
             SerializeProofOptions,
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -197,7 +197,7 @@ internal sealed class CredentialSecuringMethodsTests
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -229,7 +229,7 @@ internal sealed class CredentialSecuringMethodsTests
             EcdsaSd2023CborSerializer.SerializeDerivedProof,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -250,7 +250,7 @@ internal sealed class CredentialSecuringMethodsTests
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -271,7 +271,7 @@ internal sealed class CredentialSecuringMethodsTests
             Ed25519SecretKeyMultibase,
             MulticodecHeaders.Ed25519PrivateKey.Length,
             TestSetup.Base58Decoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
         var didDocument = CreateDidDocument(Ed25519VerificationMethodId, Ed25519PublicKeyMultibase);
@@ -289,7 +289,7 @@ internal sealed class CredentialSecuringMethodsTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -310,7 +310,7 @@ internal sealed class CredentialSecuringMethodsTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -327,12 +327,12 @@ internal sealed class CredentialSecuringMethodsTests
         var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         var privateKeyBytes = MultibaseSerializer.Decode(
-            Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
+            Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
         JwsMessage jwsMessage = await credential.SignJwsAsync(
             privateKeyMemory, Ed25519VerificationMethodId, CredentialSerializer, HeaderSerializer,
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -341,12 +341,12 @@ internal sealed class CredentialSecuringMethodsTests
         Assert.HasCount(3, parts);
 
         var publicKeyBytes = MultibaseSerializer.Decode(
-            Ed25519PublicKeyMultibase, MulticodecHeaders.Ed25519PublicKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
+            Ed25519PublicKeyMultibase, MulticodecHeaders.Ed25519PublicKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PublicKeyMemory publicKeyMemory = new(publicKeyBytes, CryptoTags.Ed25519PublicKey);
 
         var verificationResult = await CredentialJwsExtensions.VerifyJwsAsync(
             jws, publicKeyMemory, TestSetup.Base64UrlDecoder, HeaderDeserializer, CredentialDeserializer,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid, "JWT signature verification must succeed.");
@@ -363,7 +363,7 @@ internal sealed class CredentialSecuringMethodsTests
         var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         var privateKeyBytes = MultibaseSerializer.Decode(
-            Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
+            Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
         var protectedHeader = new CborWriter(CborConformanceMode.Canonical);
@@ -387,7 +387,7 @@ internal sealed class CredentialSecuringMethodsTests
         var sigStructureBytes = sigStructure.Encode();
 
         using var signature = await privateKeyMemory.SignAsync(
-            sigStructureBytes, BouncyCastleCryptographicFunctions.SignEd25519Async, SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            sigStructureBytes, BouncyCastleCryptographicFunctions.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
 
         var coseSign1 = new CborWriter(CborConformanceMode.Canonical);
         coseSign1.WriteTag((CborTag)CoseTags.Sign1);
@@ -419,10 +419,10 @@ internal sealed class CredentialSecuringMethodsTests
         Assert.IsTrue(payloadBytes.AsSpan().SequenceEqual(readPayload), "Payload must round-trip.");
 
         var publicKeyBytes = MultibaseSerializer.Decode(
-            Ed25519PublicKeyMultibase, MulticodecHeaders.Ed25519PublicKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
+            Ed25519PublicKeyMultibase, MulticodecHeaders.Ed25519PublicKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PublicKeyMemory publicKeyMemory = new(publicKeyBytes, CryptoTags.Ed25519PublicKey);
 
-        var signatureMemory = SensitiveMemoryPool<byte>.Shared.Rent(readSignature.Length);
+        var signatureMemory = BaseMemoryPool.Shared.Rent(readSignature.Length);
         readSignature.CopyTo(signatureMemory.Memory.Span);
         using var signatureToVerify = new Signature(signatureMemory, CryptoTags.Ed25519Signature);
         bool isValid = await publicKeyMemory.VerifyAsync(sigStructureBytes, signatureToVerify, BouncyCastleCryptographicFunctions.VerifyEd25519Async).ConfigureAwait(false);
@@ -440,7 +440,7 @@ internal sealed class CredentialSecuringMethodsTests
         var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         var privateKeyBytes = MultibaseSerializer.Decode(
-            Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
+            Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
         byte[] salt1 = RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes);
@@ -482,7 +482,7 @@ internal sealed class CredentialSecuringMethodsTests
         var signingInput = $"{headerBase64Url}.{payloadBase64Url}";
 
         var signature = await privateKeyMemory.SignAsync(
-            Encoding.ASCII.GetBytes(signingInput), BouncyCastleCryptographicFunctions.SignEd25519Async, SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            Encoding.ASCII.GetBytes(signingInput), BouncyCastleCryptographicFunctions.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
 
         var issuerSignedJwt = $"{signingInput}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
         var sdJwt = $"{issuerSignedJwt}{SdConstants.JwtSeparator}{encodedDisclosure1}{SdConstants.JwtSeparator}{encodedDisclosure2}{SdConstants.JwtSeparator}";
@@ -498,11 +498,11 @@ internal sealed class CredentialSecuringMethodsTests
         Assert.HasCount(3, jwtParts);
 
         var publicKeyBytes = MultibaseSerializer.Decode(
-            Ed25519PublicKeyMultibase, MulticodecHeaders.Ed25519PublicKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
+            Ed25519PublicKeyMultibase, MulticodecHeaders.Ed25519PublicKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PublicKeyMemory publicKeyMemory = new(publicKeyBytes, CryptoTags.Ed25519PublicKey);
 
         var verificationInput = Encoding.ASCII.GetBytes($"{jwtParts[0]}.{jwtParts[1]}");
-        using var signatureBytesFromJwt = TestSetup.Base64UrlDecoder(jwtParts[2], SensitiveMemoryPool<byte>.Shared);
+        using var signatureBytesFromJwt = TestSetup.Base64UrlDecoder(jwtParts[2], BaseMemoryPool.Shared);
         using var signatureToVerify = new Signature(signatureBytesFromJwt, CryptoTags.Ed25519Signature);
         bool isValid = await publicKeyMemory.VerifyAsync(verificationInput, signatureToVerify, BouncyCastleCryptographicFunctions.VerifyEd25519Async).ConfigureAwait(false);
 
@@ -519,7 +519,7 @@ internal sealed class CredentialSecuringMethodsTests
         var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
 
         var privateKeyBytes = MultibaseSerializer.Decode(
-            Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
+            Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
         using SdDisclosure disclosure1 = SdDisclosure.CreateProperty(TestSalts.FromBytes(RandomNumberGenerator.GetBytes(SdConstants.DefaultSaltLengthBytes)), "degree",
@@ -539,7 +539,7 @@ internal sealed class CredentialSecuringMethodsTests
         var sigStructureBytes = sigStructure.Encode();
 
         using var signature = await privateKeyMemory.SignAsync(
-            sigStructureBytes, BouncyCastleCryptographicFunctions.SignEd25519Async, SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            sigStructureBytes, BouncyCastleCryptographicFunctions.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
 
         var sdCwtMessage = new SdCwtMessage(
             payload.AsMemory(), protectedHeader.AsMemory(), signature.AsReadOnlySpan().ToArray(), [disclosure1, disclosure2]);
@@ -549,16 +549,16 @@ internal sealed class CredentialSecuringMethodsTests
         Assert.IsNotNull(sdCwtBytes);
         Assert.IsGreaterThan(100, sdCwtBytes.Length, "SD-CWT should have substantial length.");
 
-        var parsedMessage = SdCwtSerializer.Parse(sdCwtBytes, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
+        var parsedMessage = SdCwtSerializer.Parse(sdCwtBytes, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
 
         Assert.IsTrue(payload.AsSpan().SequenceEqual(parsedMessage.Payload.Span), "Payload must round-trip.");
         Assert.HasCount(2, parsedMessage.Disclosures, "Disclosures must round-trip.");
 
         var publicKeyBytes = MultibaseSerializer.Decode(
-            Ed25519PublicKeyMultibase, MulticodecHeaders.Ed25519PublicKey.Length, TestSetup.Base58Decoder, SensitiveMemoryPool<byte>.Shared);
+            Ed25519PublicKeyMultibase, MulticodecHeaders.Ed25519PublicKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PublicKeyMemory publicKeyMemory = new(publicKeyBytes, CryptoTags.Ed25519PublicKey);
 
-        var signatureMemory = SensitiveMemoryPool<byte>.Shared.Rent(parsedMessage.Signature.Length);
+        var signatureMemory = BaseMemoryPool.Shared.Rent(parsedMessage.Signature.Length);
         parsedMessage.Signature.Span.CopyTo(signatureMemory.Memory.Span);
         using var signatureToVerify = new Signature(signatureMemory, CryptoTags.Ed25519Signature);
         bool isValid = await publicKeyMemory.VerifyAsync(sigStructureBytes, signatureToVerify, BouncyCastleCryptographicFunctions.VerifyEd25519Async).ConfigureAwait(false);

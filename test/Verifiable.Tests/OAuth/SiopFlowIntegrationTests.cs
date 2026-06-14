@@ -9,7 +9,7 @@ using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server.Routing;
 using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Server.States;
 using Verifiable.OAuth.Siop.Wallet;
@@ -34,7 +34,7 @@ internal sealed class SiopFlowIntegrationTests
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string RelyingPartyClientId = "https://rp.example.com";
     private const string SiopNonce = "n-siop-transaction-01";
@@ -105,7 +105,7 @@ internal sealed class SiopFlowIntegrationTests
         //=== Step 4: 200 and the terminal verified state with the expected subject + nonce. ===
         Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
 
-        (OAuthFlowState state, _) = host.GetFlowState(requestHandle);
+        (FlowState state, _) = host.GetFlowState(requestHandle);
         SelfIssuedAuthenticationVerifiedState verified =
             Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(state);
         Assert.AreEqual(expectedSubject, verified.Subject);

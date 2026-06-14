@@ -19,7 +19,7 @@ internal sealed class SdTokenDcqlAdapterTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage(

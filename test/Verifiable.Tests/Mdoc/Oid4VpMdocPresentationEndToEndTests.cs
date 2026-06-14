@@ -61,7 +61,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
             using MdocDocument issued = await IssueAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
 
             using IMemoryOwner<byte> mdocGeneratedNonce =
-                Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, SensitiveMemoryPool<byte>.Shared);
+                Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, BaseMemoryPool.Shared);
 
             //Slice as Memory (not Span) so it survives await boundaries below.
             ReadOnlyMemory<byte> nonceMemory =
@@ -80,7 +80,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
                 MdocDeviceNameSpaces.Empty,
                 sessionTranscript,
                 deviceKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             using MdocDeviceResponse deviceResponse = new(
@@ -99,11 +99,11 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
             //=== Verifier side ===
 
             using IMemoryOwner<byte> roundTrippedDeviceResponseBytes = Oid4VpMdocPresentation.DecodeVpTokenValue(
-                vpTokenValue, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+                vpTokenValue, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
 
             using IMemoryOwner<byte> reconstructedNonceOwner =
                 Oid4VpMdocPresentation.DecodeMdocGeneratedNonceForTransmissionRoundTrip(
-                    mdocGeneratedNonceForTransmission, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+                    mdocGeneratedNonceForTransmission, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
             ReadOnlyMemory<byte> reconstructedNonceMemory = reconstructedNonceOwner.Memory
                 [..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
 
@@ -116,7 +116,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
                 "Verifier-side reconstruction must be byte-identical to the wallet-side encoding.");
 
             bool isIssuerVerified = await issued.VerifyIssuerAuthAsync(
-                issuerKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                issuerKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(isIssuerVerified);
 
             MdocDigestBindingResult binding = issued.VerifyDigestBinding();
@@ -124,7 +124,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
 
             bool isDeviceVerified = await presented.VerifyDeviceSignedAsync(
                 reconstructedSessionTranscript,
-                deviceKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                deviceKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(isDeviceVerified,
                 "Device signature must verify against the OID4VP-reconstructed SessionTranscript.");
 
@@ -174,7 +174,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
     public void GenerateMdocGeneratedNonceProducesAtLeast16Bytes()
     {
         using IMemoryOwner<byte> nonce =
-            Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, SensitiveMemoryPool<byte>.Shared);
+            Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, BaseMemoryPool.Shared);
 
         Assert.IsGreaterThanOrEqualTo(
             Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength,
@@ -204,7 +204,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
 
         string vpToken = Oid4VpMdocPresentation.AssembleVpTokenValue(minimal, TestSetup.Base64UrlEncoder);
         using IMemoryOwner<byte> decoded = Oid4VpMdocPresentation.DecodeVpTokenValue(
-            vpToken, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+            vpToken, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
         ReadOnlyMemory<byte> reEncoded = MdocCborDeviceResponseWriter.EncodeDeviceResponse(minimal);
 
         Assert.IsTrue(decoded.Memory.Span[..reEncoded.Length].SequenceEqual(reEncoded.Span),
@@ -233,7 +233,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
                 DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
             },
             issuerKeys.PrivateKey,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

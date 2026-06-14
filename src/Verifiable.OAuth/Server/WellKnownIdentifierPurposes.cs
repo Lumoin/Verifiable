@@ -35,8 +35,8 @@ public static class WellKnownIdentifierPurposes
     /// GUIDs by default so the encoded creation timestamp gives database
     /// indexes and forensic archives time-locality for free.
     /// </summary>
-    public static IdentifierPurpose OAuthFlowId { get; } =
-        IdentifierPurpose.Create("urn:verifiable:identifier-purpose:oauth:flow_id");
+    public static IdentifierPurpose OAuthFlowId =>
+        WellKnownServerIdentifierPurposes.FlowId;
 
     /// <summary>
     /// JWT identifier (JTI) per

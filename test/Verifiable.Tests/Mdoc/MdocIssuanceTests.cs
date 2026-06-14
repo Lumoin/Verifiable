@@ -112,7 +112,7 @@ internal sealed class MdocIssuanceTests
         //Deliberately undersized (8 bytes, below the ISO §9.1.2.5 16-byte minimum) to prove the
         //issuer rejects it. Routed through the provider like every other salt; the 8 is the point.
         Salt UnderSizedRandom() =>
-            TestSalts.Generate(8, CryptoTags.MdocIssuerSignedItemRandom, SensitiveMemoryPool<byte>.Shared);
+            TestSalts.Generate(8, CryptoTags.MdocIssuerSignedItemRandom, BaseMemoryPool.Shared);
 
         InvalidOperationException ex = Assert.ThrowsExactly<InvalidOperationException>(() =>
             MdocIssuance.BuildDocument(

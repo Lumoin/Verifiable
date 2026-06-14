@@ -57,7 +57,7 @@ internal sealed class JwsMessageTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(jwsMessage);
@@ -86,7 +86,7 @@ internal sealed class JwsMessageTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string compact = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -102,7 +102,7 @@ internal sealed class JwsMessageTests
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid, "JWS signature verification must succeed.");
@@ -123,7 +123,7 @@ internal sealed class JwsMessageTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using PublicKeyMemory publicKeyMemory = CreateEd25519PublicKey();
@@ -132,7 +132,7 @@ internal sealed class JwsMessageTests
             publicKeyMemory,
             TestSetup.Base64UrlEncoder,
             CredentialDeserializer,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid, "JWS message verification must succeed.");
@@ -153,7 +153,7 @@ internal sealed class JwsMessageTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string compact = JwsSerialization.SerializeCompact(originalMessage, TestSetup.Base64UrlEncoder);
@@ -162,7 +162,7 @@ internal sealed class JwsMessageTests
             compact,
             TestSetup.Base64UrlDecoder,
             bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(bytes, JsonOptions)!,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.IsNotNull(parsedMessage);
         Assert.HasCount(1, parsedMessage.Signatures);
@@ -180,8 +180,8 @@ internal sealed class JwsMessageTests
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 
-        using var sig1 = signatureBytes.ToSignature(CryptoTags.P256Signature, SensitiveMemoryPool<byte>.Shared);
-        using var sig2 = signatureBytes.ToSignature(CryptoTags.P256Signature, SensitiveMemoryPool<byte>.Shared);
+        using var sig1 = signatureBytes.ToSignature(CryptoTags.P256Signature, BaseMemoryPool.Shared);
+        using var sig2 = signatureBytes.ToSignature(CryptoTags.P256Signature, BaseMemoryPool.Shared);
 
         using var component1 = new JwsSignatureComponent("encoded", header, sig1);
         using var component2 = new JwsSignatureComponent("encoded", header, sig2);
@@ -202,8 +202,8 @@ internal sealed class JwsMessageTests
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 
-        using var sig1 = signatureBytes.ToSignature(CryptoTags.P256Signature, SensitiveMemoryPool<byte>.Shared);
-        using var sig2 = signatureBytes.ToSignature(CryptoTags.P256Signature, SensitiveMemoryPool<byte>.Shared);
+        using var sig1 = signatureBytes.ToSignature(CryptoTags.P256Signature, BaseMemoryPool.Shared);
+        using var sig2 = signatureBytes.ToSignature(CryptoTags.P256Signature, BaseMemoryPool.Shared);
 
         using var component1 = new JwsSignatureComponent("encoded1", header, sig1);
         using var component2 = new JwsSignatureComponent("encoded2", header, sig2);
@@ -221,7 +221,7 @@ internal sealed class JwsMessageTests
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 
-        using var sig = signatureBytes.ToSignature(CryptoTags.P256Signature, SensitiveMemoryPool<byte>.Shared);
+        using var sig = signatureBytes.ToSignature(CryptoTags.P256Signature, BaseMemoryPool.Shared);
         using var component = new JwsSignatureComponent("encoded", header, sig);
         using var message = new JwsMessage(payload, component, isDetachedPayload: true);
 
@@ -245,7 +245,7 @@ internal sealed class JwsMessageTests
             Ed25519SecretKeyMultibase,
             MulticodecHeaders.Ed25519PrivateKey.Length,
             TestSetup.Base58Decoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
         return new PrivateKeyMemory(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
     }
 
@@ -256,7 +256,7 @@ internal sealed class JwsMessageTests
             Ed25519PublicKeyMultibase,
             MulticodecHeaders.Ed25519PublicKey.Length,
             TestSetup.Base58Decoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
         return new PublicKeyMemory(publicKeyBytes, CryptoTags.Ed25519PublicKey);
     }
 

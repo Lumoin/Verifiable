@@ -10,4 +10,4 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </summary>
 /// <param name="FetchedAt">The UTC instant of the incoming fetch request.</param>
 [DebuggerDisplay("JarFetched FetchedAt={FetchedAt}")]
-public sealed record JarFetched(DateTimeOffset FetchedAt): OAuthFlowInput;
+public sealed record JarFetched(DateTimeOffset FetchedAt): FlowInput;

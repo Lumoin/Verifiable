@@ -18,7 +18,7 @@ internal sealed class BitstringStatusListValidationTests
     private static readonly DateTimeOffset Now = new(2024, 4, 6, 0, 0, 0, TimeSpan.Zero);
     private static readonly string[] RevocationPurposes = [BitstringStatusListConstants.RevocationPurpose];
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     private static BitstringStatusListEntry RevocationEntry(int index) => new()

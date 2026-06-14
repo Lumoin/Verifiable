@@ -47,7 +47,7 @@ internal static class JwtPayloadReader
 
         byte[] payloadBytes;
         using(IMemoryOwner<byte> decoded = TestSetup.Base64UrlDecoder(
-            parts[1], SensitiveMemoryPool<byte>.Shared))
+            parts[1], BaseMemoryPool.Shared))
         {
             //Find the actual decoded length — the decoder may have rented a
             //larger buffer than the base64url-decoded payload occupies.

@@ -184,7 +184,7 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKeyMemory ownership transfers to the returned SymmetricKey, which is owned by the test's InProcessKeySet.")]
     private static SymmetricKey CreateHmacKey()
     {
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(32);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
         SymmetricKeyMemory material;
         try
         {

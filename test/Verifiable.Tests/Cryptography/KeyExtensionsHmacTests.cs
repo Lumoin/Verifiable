@@ -17,7 +17,7 @@ internal sealed class KeyExtensionsHmacTests
         RandomNumberGenerator.Fill(keyBytes);
         byte[] message = "extension-test"u8.ToArray();
 
-        IMemoryOwner<byte> keyOwner = SensitiveMemoryPool<byte>.Shared.Rent(keyBytes.Length);
+        IMemoryOwner<byte> keyOwner = BaseMemoryPool.Shared.Rent(keyBytes.Length);
         keyBytes.AsSpan().CopyTo(keyOwner.Memory.Span);
         using SymmetricKeyMemory key = new(keyOwner, CryptoTags.HmacSha256Key);
 
@@ -25,7 +25,7 @@ internal sealed class KeyExtensionsHmacTests
             message,
             32,
             MicrosoftHmacFunctions.ComputeHmacAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -41,17 +41,17 @@ internal sealed class KeyExtensionsHmacTests
         RandomNumberGenerator.Fill(keyBytes);
         byte[] message = "verify-test"u8.ToArray();
 
-        IMemoryOwner<byte> keyOwner = SensitiveMemoryPool<byte>.Shared.Rent(keyBytes.Length);
+        IMemoryOwner<byte> keyOwner = BaseMemoryPool.Shared.Rent(keyBytes.Length);
         keyBytes.AsSpan().CopyTo(keyOwner.Memory.Span);
         using SymmetricKeyMemory key = new(keyOwner, CryptoTags.HmacSha256Key);
 
         using HmacValue mac = await key.ComputeHmacAsync(
             message, 32, MicrosoftHmacFunctions.ComputeHmacAsync,
-            SensitiveMemoryPool<byte>.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
+            BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await key.VerifyHmacAsync(
             message, mac, MicrosoftHmacFunctions.VerifyHmacAsync,
-            SensitiveMemoryPool<byte>.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
+            BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid);
     }
@@ -66,7 +66,7 @@ internal sealed class KeyExtensionsHmacTests
 
         byte[] expectedMac = HMACSHA256.HashData(keyBytes, message);
 
-        IMemoryOwner<byte> keyOwner = SensitiveMemoryPool<byte>.Shared.Rent(keyBytes.Length);
+        IMemoryOwner<byte> keyOwner = BaseMemoryPool.Shared.Rent(keyBytes.Length);
         keyBytes.AsSpan().CopyTo(keyOwner.Memory.Span);
         using SymmetricKeyMemory key = new(keyOwner, CryptoTags.HmacSha256Key);
 
@@ -74,7 +74,7 @@ internal sealed class KeyExtensionsHmacTests
             message,
             expectedMac.AsMemory(),
             MicrosoftHmacFunctions.VerifyHmacAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -92,7 +92,7 @@ internal sealed class KeyExtensionsHmacTests
         byte[] tampered = HMACSHA256.HashData(keyBytes, message);
         tampered[5] ^= 0xff;
 
-        IMemoryOwner<byte> keyOwner = SensitiveMemoryPool<byte>.Shared.Rent(keyBytes.Length);
+        IMemoryOwner<byte> keyOwner = BaseMemoryPool.Shared.Rent(keyBytes.Length);
         keyBytes.AsSpan().CopyTo(keyOwner.Memory.Span);
         using SymmetricKeyMemory key = new(keyOwner, CryptoTags.HmacSha256Key);
 
@@ -100,7 +100,7 @@ internal sealed class KeyExtensionsHmacTests
             message,
             tampered.AsMemory(),
             MicrosoftHmacFunctions.VerifyHmacAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             null,
             TestContext.CancellationToken).ConfigureAwait(false);
 

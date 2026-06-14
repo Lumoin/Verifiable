@@ -31,7 +31,7 @@ internal sealed class CredentialProofEnforcementFlowTests
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://wallet.client.test";
     private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
@@ -102,7 +102,7 @@ internal sealed class CredentialProofEnforcementFlowTests
         WireProofExpectationSeam(host);
 
         bool seamConsulted = false;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seamConsulted = true;
@@ -135,7 +135,7 @@ internal sealed class CredentialProofEnforcementFlowTests
         WireProofExpectationSeam(host);
 
         bool seamConsulted = false;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seamConsulted = true;
@@ -163,8 +163,8 @@ internal sealed class CredentialProofEnforcementFlowTests
     //Wires the opt-in §F.4 expectation seam: a fixed c_nonce, ES256-only, a 5-minute iat window.
     private static void WireProofExpectationSeam(TestHostShell host)
     {
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.ResolveCredentialProofExpectationAsync =
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().ResolveCredentialProofExpectationAsync =
             (request, accessToken, registration, context, ct) =>
                 ValueTask.FromResult<CredentialProofExpectation?>(new CredentialProofExpectation
                 {
@@ -181,7 +181,7 @@ internal sealed class CredentialProofEnforcementFlowTests
     private static bool WireIssuance(TestHostShell host)
     {
         bool issued = false;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 issued = true;
@@ -224,7 +224,7 @@ internal sealed class CredentialProofEnforcementFlowTests
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
 

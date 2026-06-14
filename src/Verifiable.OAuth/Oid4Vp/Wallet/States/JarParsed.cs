@@ -22,7 +22,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JarParsed FlowId={FlowId} ClientId={Request.ClientId}")]
-public sealed record JarParsed: OAuthFlowState
+public sealed record JarParsed: FlowState
 {
     /// <summary>
     /// The typed Authorization Request Object parsed from the fetched JAR JWT.

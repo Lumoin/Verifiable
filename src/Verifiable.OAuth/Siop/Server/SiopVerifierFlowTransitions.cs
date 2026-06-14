@@ -1,4 +1,4 @@
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Siop.Server.States;
@@ -33,12 +33,12 @@ namespace Verifiable.OAuth.Siop.Server;
 public static class SiopVerifierFlowTransitions
 {
     /// <summary>Creates the transition delegate for the server-side SIOP RP flow PDA.</summary>
-    public static TransitionDelegate<OAuthFlowState, OAuthFlowInput, SiopVerifierStackSymbol> Create() =>
+    public static TransitionDelegate<FlowState, FlowInput, SiopVerifierStackSymbol> Create() =>
         static (state, input, stackTop, cancellationToken) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            TransitionResult<OAuthFlowState, SiopVerifierStackSymbol>? result =
+            TransitionResult<FlowState, SiopVerifierStackSymbol>? result =
                 (state, input) switch
                 {
                     //Any non-terminal state + SiopFlowFailed -> SiopVerifierFlowFailed.
@@ -328,12 +328,12 @@ public static class SiopVerifierFlowTransitions
                     _ => null
                 };
 
-            return ValueTask.FromResult<TransitionResult<OAuthFlowState, SiopVerifierStackSymbol>?>(result);
+            return ValueTask.FromResult<TransitionResult<FlowState, SiopVerifierStackSymbol>?>(result);
         };
 
 
-    private static TransitionResult<OAuthFlowState, SiopVerifierStackSymbol> Transition(
-        OAuthFlowState nextState,
+    private static TransitionResult<FlowState, SiopVerifierStackSymbol> Transition(
+        FlowState nextState,
         StackAction<SiopVerifierStackSymbol> stackAction,
         string label) =>
         new(nextState, stackAction, label);

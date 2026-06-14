@@ -27,7 +27,7 @@ internal sealed class SdCwtVpTokenVerificationTests
 {
     public required TestContext TestContext { get; set; }
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(
         new DateTimeOffset(2026, 5, 26, 12, 0, 0, TimeSpan.Zero));

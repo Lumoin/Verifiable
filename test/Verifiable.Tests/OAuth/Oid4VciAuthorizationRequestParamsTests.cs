@@ -8,6 +8,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -51,7 +52,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     /// <summary>The Credential Issuer Identifier the Wallet sends as the RFC 8707 resource.</summary>
     private const string IssuerResource = "https://credential-issuer.example.com";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     /// <summary>The capabilities the Authorization Code flow tests need.</summary>
     private static readonly ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities =
@@ -75,7 +76,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
 
         string? seenIssuerState = "<unset>";
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             (evaluation, registration, context, ct) =>
             {
                 seenIssuerState = evaluation.RequestedIssuerState;
@@ -104,7 +105,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
 
         string? seenIssuerState = "<unset>";
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             (evaluation, registration, context, ct) =>
             {
                 seenIssuerState = evaluation.RequestedIssuerState;
@@ -136,7 +137,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
 
         //The application owns the Offer store; only an issuer_state it minted correlates. A value
         //it does not recognise — possibly attacker-injected — is denied.
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             (evaluation, registration, context, ct) =>
                 ValueTask.FromResult(
                     string.Equals(evaluation.RequestedIssuerState, OfferIssuerState, StringComparison.Ordinal)
@@ -169,7 +170,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the
@@ -180,7 +181,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
         //DegreeConfigurationId and an authorization_details object for the same configuration, so
         //a naive issuer would grant the type twice (one scope-derived, one details-derived). The
         //library collapses the duplicate so the §6.2 response names the type once.
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
                 ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
                 [
@@ -233,7 +234,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
 
         IReadOnlyList<string>? seenResource = null;
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             (evaluation, registration, context, ct) =>
             {
                 seenResource = evaluation.RequestedResource;
@@ -264,7 +265,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
 
         IReadOnlyList<string>? seenResource = null;
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             (evaluation, registration, context, ct) =>
             {
                 seenResource = evaluation.RequestedResource;

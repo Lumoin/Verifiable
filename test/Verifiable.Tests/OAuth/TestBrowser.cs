@@ -5,6 +5,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 
 using Verifiable.OAuth.Server.Pipeline;
+using Verifiable.Server.Pipeline;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
@@ -49,7 +50,7 @@ internal static class TestBrowser
     /// The authorization code and state extracted from the redirect Location header.
     /// </returns>
     public static async Task<(string Code, string State)> FollowAuthorizeRedirectAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         string? requestUri,
         string? codeChallenge,

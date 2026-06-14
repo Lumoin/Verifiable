@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth;
@@ -27,7 +27,7 @@ namespace Verifiable.OAuth;
 /// The effectful dispatch loop in <see cref="FlowRunner"/> calls
 /// <see cref="ExecuteAsync"/> after each pure PDA transition until the new state
 /// returns <see cref="NullAction.Instance"/> from its
-/// <see cref="OAuthFlowState.NextAction"/> property.
+/// <see cref="FlowState.NextAction"/> property.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("OAuthActionExecutor({handlers.Count} handlers)")]
@@ -35,7 +35,7 @@ public sealed class OAuthActionExecutor
 {
     //Keyed by the concrete OAuthAction subtype. Each value is a delegate
     //that accepts the action as OAuthAction and downcasts internally.
-    private readonly Dictionary<Type, Func<OAuthAction, ExchangeContext, CancellationToken, ValueTask<OAuthFlowInput>>> handlers = new();
+    private readonly Dictionary<Type, Func<OAuthAction, ExchangeContext, CancellationToken, ValueTask<FlowInput>>> handlers = new();
 
 
     /// <summary>
@@ -69,19 +69,19 @@ public sealed class OAuthActionExecutor
 
     /// <summary>
     /// Dispatches <paramref name="action"/> to the registered handler and returns
-    /// the <see cref="OAuthFlowInput"/> to feed into the next pure PDA transition.
+    /// the <see cref="FlowInput"/> to feed into the next pure PDA transition.
     /// </summary>
     /// <param name="action">The action to execute.</param>
     /// <param name="context">
     /// The per-request context bag. Handlers reach the active
-    /// <see cref="AuthorizationServer"/> via
+    /// <see cref="EndpointServer"/> via
     /// <see cref="ExchangeContextServerExtensions.Server"/>.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="InvalidOperationException">
     /// Thrown when no handler is registered for <paramref name="action"/>'s concrete type.
     /// </exception>
-    public ValueTask<OAuthFlowInput> ExecuteAsync(
+    public ValueTask<FlowInput> ExecuteAsync(
         OAuthAction action,
         ExchangeContext context,
         CancellationToken cancellationToken)

@@ -179,7 +179,7 @@ internal sealed class ResourceServerEndToEndTests
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         string thumbprint = dpopKey.GetThumbprint(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         JwtPayload payload = BuildPayload();
         payload[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>
@@ -192,7 +192,7 @@ internal sealed class ResourceServerEndToEndTests
         string ath = await DpopProofValidator.ComputeAthAsync(
             token,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofClaims proofClaims = new()
@@ -210,7 +210,7 @@ internal sealed class ResourceServerEndToEndTests
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient client = new() { BaseAddress = rs.HttpBaseAddress };
@@ -250,7 +250,7 @@ internal sealed class ResourceServerEndToEndTests
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         string thumbprint = dpopKey.GetThumbprint(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         JwtPayload payload = BuildPayload();
         payload[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>
@@ -261,7 +261,7 @@ internal sealed class ResourceServerEndToEndTests
 
         string resourceUrl = new Uri(rs.HttpBaseAddress!, "/protected").ToString();
         string ath = await DpopProofValidator.ComputeAthAsync(
-            token, TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared,
+            token, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofClaims proofClaims = new()
@@ -276,7 +276,7 @@ internal sealed class ResourceServerEndToEndTests
         string proof = await DpopProofConstruction.BuildAsync(
             proofClaims, dpopKey, TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer, MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+            BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient client = new() { BaseAddress = rs.HttpBaseAddress };
 
@@ -331,7 +331,7 @@ internal sealed class ResourceServerEndToEndTests
             HeaderSerializer,
             PayloadSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         return JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);

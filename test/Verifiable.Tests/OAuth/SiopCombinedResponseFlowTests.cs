@@ -47,7 +47,7 @@ internal sealed class SiopCombinedResponseFlowTests
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string RelyingPartyClientId = "https://rp.example.com";
     private const string SiopNonce = "n-siop-combined-01";
@@ -133,7 +133,7 @@ internal sealed class SiopCombinedResponseFlowTests
             //=== Step 4: 200 and the terminal verified state with the expected subject + nonce. ===
             Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
 
-            (OAuthFlowState state, _) = host.GetFlowState(requestHandle);
+            (FlowState state, _) = host.GetFlowState(requestHandle);
             SelfIssuedAuthenticationVerifiedState verified =
                 Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(state);
             Assert.AreEqual(expectedSubject, verified.Subject);
@@ -202,7 +202,7 @@ internal sealed class SiopCombinedResponseFlowTests
             //reason carries the §11.1 nonce=False signal.
             Assert.AreNotEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
 
-            (OAuthFlowState state, _) = host.GetFlowState(requestHandle);
+            (FlowState state, _) = host.GetFlowState(requestHandle);
             SiopVerifierFlowFailedState failed =
                 Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(state);
             Assert.Contains("nonce=False", failed.Reason);
@@ -251,7 +251,7 @@ internal sealed class SiopCombinedResponseFlowTests
 
         Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
 
-        (OAuthFlowState state, _) = host.GetFlowState(requestHandle);
+        (FlowState state, _) = host.GetFlowState(requestHandle);
         SelfIssuedAuthenticationVerifiedState verified =
             Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(state);
         Assert.AreEqual(expectedSubject, verified.Subject);

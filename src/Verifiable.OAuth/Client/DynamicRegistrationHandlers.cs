@@ -1,5 +1,6 @@
 using System.Text;
 using Verifiable.Core;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Client;
 

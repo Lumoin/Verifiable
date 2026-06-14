@@ -15,7 +15,7 @@ namespace Verifiable.OAuth.Oid4Vp.States;
 /// This state owns the <see cref="Jar"/> and must dispose it when superseded.
 /// </remarks>
 [DebuggerDisplay("JarReady FlowId={FlowId}")]
-public sealed record JarReadyState: OAuthFlowState, IDisposable
+public sealed record JarReadyState: FlowState, IDisposable
 {
     private bool disposed;
 

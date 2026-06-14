@@ -22,7 +22,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 public sealed record VerificationSucceeded(
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Claims,
     DateTimeOffset VerifiedAt,
-    Uri? RedirectUri = null): OAuthFlowInput
+    Uri? RedirectUri = null): FlowInput
 {
     /// <inheritdoc/>
     public bool Equals(VerificationSucceeded? other)

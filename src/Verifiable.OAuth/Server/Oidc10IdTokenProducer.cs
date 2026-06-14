@@ -28,7 +28,7 @@ namespace Verifiable.OAuth.Server;
 /// are emitted by <see cref="OidcStandardClaimsContributor"/>; the
 /// RFC 7800 / RFC 9449 §6.1 <c>cnf</c> claim is emitted by
 /// <see cref="CnfClaimContributor"/>. The token endpoint's walking site
-/// merges every <see cref="ServerConfiguration.ClaimIssuer"/>
+/// merges every <see cref="AuthorizationServerIntegration.ClaimIssuer"/>
 /// contribution into this payload before signing.
 /// </para>
 /// <para>

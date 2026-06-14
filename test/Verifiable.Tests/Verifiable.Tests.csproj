@@ -57,14 +57,30 @@
     <ProjectReference Include="..\..\src\Verifiable.Cbor\Verifiable.Cbor.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Core\Verifiable.Core.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Foundation\Verifiable.Foundation.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.JCose\Verifiable.JCose.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Json\Verifiable.Json.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.NSec\Verifiable.NSec.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.OAuth\Verifiable.OAuth.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Sidetree\Verifiable.Sidetree.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Vcalm\Verifiable.Vcalm.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable\Verifiable.csproj" />    
+    <ProjectReference Include="..\..\src\Verifiable\Verifiable.csproj" />
   </ItemGroup>
-    
+
+  <ItemGroup>
+    <!--
+      The protocol-neutral endpoint host lives in Verifiable.Server. Its
+      dispatch model types (CapabilityIdentifier, ServerHttpResponse, FlowState,
+      FlowInput, IncomingRequest, RequestFields, RequestHeaders, EndpointChain)
+      are named across the whole OAuth test suite; a project-level using keeps
+      the per-file using lists focused on the protocol families.
+    -->
+    <Using Include="Verifiable.Server" />
+    <Using Include="Verifiable.Foundation" />
+    <Using Include="Lumoin.Base" />
+  </ItemGroup>
+
 </Project>
+

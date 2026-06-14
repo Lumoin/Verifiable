@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.AuthCode.States;
 /// </summary>
 /// <remarks>Transitions to <see cref="AuthorizationCodeReceivedState"/> when the code arrives.</remarks>
 [DebuggerDisplay("ParCompleted FlowId={FlowId} RequestUri={Par.RequestUri}")]
-public sealed record ParCompletedState: OAuthFlowState
+public sealed record ParCompletedState: FlowState
 {
     /// <summary>
     /// The PKCE parameters. Persisted here because the verifier is needed at the token

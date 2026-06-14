@@ -13,6 +13,7 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -133,7 +134,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
         //Unwire the proof-validation seam AFTER the bound token was minted: a bound token must
         //never silently fall back to bearer, so the credential endpoint fails loud.
-        host.Server.Integration.ValidateDpopProofAsync = null;
+        host.Server.OAuth().ValidateDpopProofAsync = null;
 
         string proof = await BuildCredentialProofAsync(ctx, freshKey: null).ConfigureAwait(false);
         using HttpResponseMessage response = await PostCredentialAsync(ctx, ctx.AccessToken, proof).ConfigureAwait(false);
@@ -161,8 +162,8 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Haip10, Capabilities);
         host.EnableDpop();
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
 
         DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(

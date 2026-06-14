@@ -46,7 +46,7 @@ internal class SdCwtEndToEndTests
 
         //Act - Serialize to CBOR and parse back.
         byte[] cborBytes = SdCwtSerializer.SerializeDisclosure(disclosure);
-        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cborBytes, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cborBytes, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
 
         //Assert - Round-trip preserves data.
         Assert.IsFalse(parsed.IsArrayElement);
@@ -73,7 +73,7 @@ internal class SdCwtEndToEndTests
 
         //Act - Serialize and parse.
         byte[] cborBytes = SdCwtSerializer.SerializeDisclosure(disclosure);
-        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cborBytes, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cborBytes, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
 
         //Assert.
         Assert.IsTrue(parsed.IsArrayElement);
@@ -106,7 +106,7 @@ internal class SdCwtEndToEndTests
 
         //Act - Serialize and parse.
         byte[] cborBytes = SdCwtSerializer.SerializeDisclosure(disclosure);
-        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cborBytes, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cborBytes, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
 
         //Assert - Verify nested structure preserved.
         Assert.AreEqual("credentialSubject", parsed.ClaimName);
@@ -235,7 +235,7 @@ internal class SdCwtEndToEndTests
             {
                 for(int i = 0; i < arrayLength; i++)
                 {
-                    SdDisclosure disclosure = SdCwtSerializer.ReadDisclosure(ref reader, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
+                    SdDisclosure disclosure = SdCwtSerializer.ReadDisclosure(ref reader, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
                     parsed.Add(disclosure);
                 }
                 reader.ReadEndArray();
@@ -330,7 +330,7 @@ internal class SdCwtEndToEndTests
                 TestContext.WriteLine($"  SHA-256 Digest: {Convert.ToHexString(digest)}");
 
                 //Verify round-trip.
-                using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
+                using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
                 Assert.AreEqual(disclosure.ClaimName, parsed.ClaimName);
             }
 
@@ -351,7 +351,7 @@ internal class SdCwtEndToEndTests
     {
         using SdDisclosure original = SdDisclosure.CreateProperty(TestSalts.FromBytes(salt), claimName, value);
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(original);
-        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
 
         Assert.AreEqual(claimName, parsed.ClaimName, $"Claim name mismatch for {claimName}.");
         Assert.AreEqual(value, parsed.ClaimValue, $"Value mismatch for {claimName}.");
@@ -362,7 +362,7 @@ internal class SdCwtEndToEndTests
     {
         using SdDisclosure original = SdDisclosure.CreateProperty(TestSalts.FromBytes(salt), claimName, null);
         byte[] cbor = SdCwtSerializer.SerializeDisclosure(original);
-        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, SensitiveMemoryPool<byte>.Shared);
+        using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
 
         Assert.AreEqual(claimName, parsed.ClaimName, $"Claim name mismatch for {claimName}.");
         Assert.IsNull(parsed.ClaimValue, $"Value should be null for {claimName}.");

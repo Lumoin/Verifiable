@@ -13,7 +13,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -40,7 +40,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
     private const string IssuedCredential =
         "eyJhbGciOiJFUzI1NiJ9.eyJ2Y3QiOiJVbml2ZXJzaXR5RGVncmVlIn0.sig~WyJzYWx0IiwiZGVncmVlIiwiQmFjaGVsb3IiXQ~";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> IssuanceCapabilities =
         ImmutableHashSet.Create(
@@ -68,8 +68,8 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
 
@@ -77,7 +77,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         //encryption MUST be used if credential_response_encryption is included" holds regardless
         //of this flag — the unconditional case is covered separately by
         //PlaintextRequestAskingForEncryptedResponseIsRefusedEvenWhenEncryptionNotRequired.
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(new CredentialIssuerMetadataContribution
             {
                 CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -96,7 +96,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.Integration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
             await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
@@ -138,14 +138,14 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
 
         //encryption_required is false on BOTH legs — encryption is a Client MAY here, NOT a MUST
         //from the policy. The §8.2 final-sentence MUST is what refuses the plaintext substitution.
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(new CredentialIssuerMetadataContribution
             {
                 CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -169,7 +169,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.Integration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
             await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
@@ -208,13 +208,13 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(DeferredCredentialDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
 
         //The issuer requires encrypted requests — the §9.1 substitution defense's policy.
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(new CredentialIssuerMetadataContribution
             {
                 CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -261,12 +261,12 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(DeferredCredentialDecision.Issue([IssuedCredential]));
 
         //§9.1: the issuer requires encrypted requests on the request leg.
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(new CredentialIssuerMetadataContribution
             {
                 CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -281,7 +281,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.Integration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
             await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
@@ -316,13 +316,13 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
 
         //The issuer advertises ONLY ECDH-ES+A256KW — not the plain ECDH-ES the JWK names.
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(new CredentialIssuerMetadataContribution
             {
                 CredentialResponseEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -340,7 +340,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.Integration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
             await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
@@ -366,8 +366,8 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
 
@@ -379,7 +379,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.Integration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
             await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
@@ -415,8 +415,8 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
 
@@ -428,7 +428,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
-        host.Server.Integration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
             await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
 
         const string ExpectedKid = "wallet-response-key-2026";
@@ -485,7 +485,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
     /// </summary>
     private static void WireResponseEncryptionSeam(TestHostShell host)
     {
-        host.Server.Integration.EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
+        host.Server.OAuth().EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
         {
             Dictionary<string, object> jwkDict = new(StringComparer.Ordinal);
             foreach(KeyValuePair<string, object> member in encryption.Jwk!)
@@ -587,7 +587,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
 

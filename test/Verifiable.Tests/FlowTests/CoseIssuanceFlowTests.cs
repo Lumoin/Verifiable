@@ -102,12 +102,12 @@ internal sealed class CoseIssuanceFlowTests
             CredentialToCborBytes,
             CoseProtectedHeaderToCborBytes,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Serialize to CBOR wire format and parse back (simulates network transit).
-        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, SensitiveMemoryPool<byte>.Shared);
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), SensitiveMemoryPool<byte>.Shared);
+        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
+        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
 
         //Verify the signature from the parsed message.
         CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(
@@ -167,7 +167,7 @@ internal sealed class CoseIssuanceFlowTests
             CredentialToCborBytes,
             CoseProtectedHeaderToCborBytes,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Tamper with the payload by flipping bytes.
@@ -180,10 +180,10 @@ internal sealed class CoseIssuanceFlowTests
 
         EncodedCoseProtectedHeader tamperedHeader = EncodedCoseProtectedHeader.FromBytes(
             message.ProtectedHeader.AsReadOnlySpan(),
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
         Signature tamperedSignature = message.Signature.AsReadOnlySpan().ToSignature(
             message.Signature.Tag,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
         using var tamperedMessage = new CoseSign1Message(
             tamperedHeader,
             message.UnprotectedHeader,
@@ -244,7 +244,7 @@ internal sealed class CoseIssuanceFlowTests
             CredentialToCborBytes,
             CoseProtectedHeaderToCborBytes,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         IReadOnlyDictionary<int, object> header = CoseSerialization.ParseProtectedHeader(
@@ -307,7 +307,7 @@ internal sealed class CoseIssuanceFlowTests
             CredentialToCborBytes,
             CoseProtectedHeaderToCborBytes,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         VerifiableCredential deserialized = CredentialFromJsonBytes(message.Payload.Span);

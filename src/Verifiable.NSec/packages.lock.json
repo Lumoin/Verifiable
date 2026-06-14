@@ -129,21 +129,39 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
+          "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )"
         }
       },
       "verifiable.cryptography": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Lumoin.Base": "[0.0.2, )",
+          "Verifiable.Foundation": "[0.0.0, )"
+        }
+      },
+      "verifiable.foundation": {
+        "type": "Project",
+        "dependencies": {
+          "Lumoin.Base": "[0.0.2, )"
+        }
       },
       "verifiable.jcose": {
         "type": "Project",
         "dependencies": {
-          "Verifiable.Cryptography": "[0.0.0, )"
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.jsonpointer": {
         "type": "Project"
+      },
+      "Lumoin.Base": {
+        "type": "CentralTransitive",
+        "requested": "[0.0.2, )",
+        "resolved": "0.0.2",
+        "contentHash": "mFsXJq9SVg0poCevJ13u40iETZ6/fhNgsY/jFV+47PCqyTLz1KAQcjaM12dwUFba4GVcBqAOeNw2QseqOU6X2g=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "CentralTransitive",

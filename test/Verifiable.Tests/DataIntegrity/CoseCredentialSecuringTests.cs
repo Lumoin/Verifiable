@@ -45,7 +45,7 @@ internal sealed class CoseCredentialSecuringTests
             CredentialToCborBytes,
             CoseProtectedHeaderToCborBytes,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(message);
@@ -80,7 +80,7 @@ internal sealed class CoseCredentialSecuringTests
             CredentialToCborBytes,
             CoseProtectedHeaderToCborBytes,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         IReadOnlyDictionary<int, object> header = CoseSerialization.ParseProtectedHeader(message.ProtectedHeader.AsReadOnlySpan());
@@ -105,7 +105,7 @@ internal sealed class CoseCredentialSecuringTests
             CredentialToCborBytes,
             CoseProtectedHeaderToCborBytes,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         VerifiableCredential deserialized = CredentialFromJsonBytes(message.Payload.Span);
@@ -130,11 +130,11 @@ internal sealed class CoseCredentialSecuringTests
             CredentialToCborBytes,
             CoseProtectedHeaderToCborBytes,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, SensitiveMemoryPool<byte>.Shared);
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), SensitiveMemoryPool<byte>.Shared);
+        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
+        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
 
         Assert.IsTrue(message.ProtectedHeader.AsReadOnlySpan().SequenceEqual(parsed.ProtectedHeader.AsReadOnlySpan()), "Protected header must survive CBOR round-trip.");
         Assert.IsTrue(message.Payload.Span.SequenceEqual(parsed.Payload.Span), "Payload must survive CBOR round-trip.");
@@ -165,11 +165,11 @@ internal sealed class CoseCredentialSecuringTests
             CredentialToCborBytes,
             CoseProtectedHeaderToCborBytes,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Use a different P-256 key for verification.
-        var wrongKeyPair = BouncyCastleKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+        var wrongKeyPair = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
         using var wrongPublicKey = wrongKeyPair.PublicKey;
         using var wrongPrivateKey = wrongKeyPair.PrivateKey;
 
@@ -201,7 +201,7 @@ internal sealed class CoseCredentialSecuringTests
             CredentialToCborBytes,
             CoseProtectedHeaderToCborBytes,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             contentType: customContentType,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 

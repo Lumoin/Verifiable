@@ -115,7 +115,7 @@ internal sealed class JwsPresentationFlowTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -155,7 +155,7 @@ internal sealed class JwsPresentationFlowTests
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid);

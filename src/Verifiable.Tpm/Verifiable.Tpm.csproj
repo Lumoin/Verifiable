@@ -17,6 +17,7 @@
   </ItemGroup>
        
    <ItemGroup>
+     <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
      <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
    </ItemGroup>
   

@@ -198,7 +198,7 @@ internal sealed class ResolveIssuerDelegateTests
                 (Dictionary<string, object>)payloadDict,
                 TestSetup.DefaultSerializationOptions),
             base64UrlEncoder: encoder,
-            memoryPool: SensitiveMemoryPool<byte>.Shared,
+            memoryPool: BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jwt = JwsSerialization.SerializeCompact(jws, encoder);
@@ -264,7 +264,7 @@ internal sealed class ResolveIssuerDelegateTests
                 (Dictionary<string, object>)payloadDict,
                 TestSetup.DefaultSerializationOptions),
             base64UrlEncoder: encoder,
-            memoryPool: SensitiveMemoryPool<byte>.Shared,
+            memoryPool: BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jwt = JwsSerialization.SerializeCompact(jws, encoder);

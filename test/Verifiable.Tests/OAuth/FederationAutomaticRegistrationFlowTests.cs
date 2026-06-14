@@ -51,7 +51,7 @@ internal sealed class FederationAutomaticRegistrationFlowTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly EntityTypeIdentifier RpType =
         WellKnownEntityTypeIdentifiers.OpenIdRelyingParty;

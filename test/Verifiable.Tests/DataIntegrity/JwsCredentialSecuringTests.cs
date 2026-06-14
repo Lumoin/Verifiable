@@ -43,7 +43,7 @@ internal sealed class JwsCredentialSecuringTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -58,7 +58,7 @@ internal sealed class JwsCredentialSecuringTests
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid, "JWS credential verification must succeed.");
@@ -81,7 +81,7 @@ internal sealed class JwsCredentialSecuringTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         JwsCredentialVerificationResult result = await CredentialJwsExtensions.VerifyJwsAsync(
@@ -89,7 +89,7 @@ internal sealed class JwsCredentialSecuringTests
             publicKey,
             TestSetup.Base64UrlEncoder,
             CredentialDeserializer,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid, "JWS message verification must succeed.");
@@ -111,13 +111,13 @@ internal sealed class JwsCredentialSecuringTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
         string[] parts = jws.Split('.');
 
-        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], SensitiveMemoryPool<byte>.Shared);
+        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
         Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);
@@ -141,7 +141,7 @@ internal sealed class JwsCredentialSecuringTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         VerifiableCredential deserialized = CredentialDeserializer(jwsMessage.Payload.Span);
@@ -166,7 +166,7 @@ internal sealed class JwsCredentialSecuringTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -177,7 +177,7 @@ internal sealed class JwsCredentialSecuringTests
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid, "Compact serialization round-trip must verify successfully.");
@@ -197,13 +197,13 @@ internal sealed class JwsCredentialSecuringTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         //Use a different P-256 key for verification.
-        var wrongKeyPair = BouncyCastleKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+        var wrongKeyPair = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
         using var wrongPublicKey = wrongKeyPair.PublicKey;
         using var wrongPrivateKey = wrongKeyPair.PrivateKey;
 
@@ -213,7 +213,7 @@ internal sealed class JwsCredentialSecuringTests
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid, "Verification with wrong key must fail.");
@@ -233,14 +233,14 @@ internal sealed class JwsCredentialSecuringTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             mediaType: WellKnownMediaTypes.Jwt.VcLdJwt,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
         string[] parts = jws.Split('.');
 
-        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], SensitiveMemoryPool<byte>.Shared);
+        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
         Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);
@@ -261,14 +261,14 @@ internal sealed class JwsCredentialSecuringTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             contentType: WellKnownMediaTypes.Application.Vp,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
         string[] parts = jws.Split('.');
 
-        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], SensitiveMemoryPool<byte>.Shared);
+        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
         Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);

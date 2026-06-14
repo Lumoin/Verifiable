@@ -139,7 +139,7 @@ internal sealed class JwsIssuanceFlowTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -156,7 +156,7 @@ internal sealed class JwsIssuanceFlowTests
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verificationResult.IsValid);
@@ -208,7 +208,7 @@ internal sealed class JwsIssuanceFlowTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -226,7 +226,7 @@ internal sealed class JwsIssuanceFlowTests
             TestSetup.Base64UrlDecoder,
             HeaderDeserializer,
             CredentialDeserializer,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(verificationResult.IsValid);
@@ -274,14 +274,14 @@ internal sealed class JwsIssuanceFlowTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
         //Decode and verify header.
         string[] parts = jws.Split('.');
-        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], SensitiveMemoryPool<byte>.Shared);
+        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
         var header = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span, JsonOptions);
 
         Assert.IsNotNull(header);
@@ -339,7 +339,7 @@ internal sealed class JwsIssuanceFlowTests
             CredentialSerializer,
             HeaderSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             mediaType: WellKnownMediaTypes.Jwt.VcJwt,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -347,7 +347,7 @@ internal sealed class JwsIssuanceFlowTests
 
         //Decode and verify header has the custom media type.
         string[] parts = jws.Split('.');
-        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], SensitiveMemoryPool<byte>.Shared);
+        using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
         var header = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes.Memory.Span, JsonOptions);
 
         Assert.IsNotNull(header);

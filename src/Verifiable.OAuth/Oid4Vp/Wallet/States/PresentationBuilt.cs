@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet.States;
 /// to <see cref="AuthorizationRequestObject.ResponseUri"/>.
 /// </remarks>
 [DebuggerDisplay("PresentationBuilt FlowId={FlowId} ResponseUri={Request.ResponseUri}")]
-public sealed record PresentationBuilt: OAuthFlowState
+public sealed record PresentationBuilt: FlowState
 {
     /// <summary>
     /// The Authorization Request that must receive the response.

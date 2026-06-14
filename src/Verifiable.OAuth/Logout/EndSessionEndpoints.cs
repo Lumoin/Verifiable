@@ -4,14 +4,14 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Logout;
 
 /// <summary>
 /// Endpoint builder for OpenID Connect RP-Initiated Logout 1.0 — the
 /// <c>end_session_endpoint</c> (<see href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html">OIDC RP-Initiated Logout 1.0</see>).
-/// Register at startup via <see cref="ServerConfiguration.EndpointBuilders"/>.
+/// Register at startup via <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -44,7 +44,7 @@ public static class EndSessionEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="ServerConfiguration.EndpointBuilders"/>.
+    /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
@@ -53,10 +53,10 @@ public static class EndSessionEndpoints
         //Fail-closed: the endpoint must be able to verify the id_token_hint and to
         //terminate the session, so it materializes only when the capability is allowed
         //and both the verification-key resolver and the terminate seam are wired.
-        AuthorizationServer? server = context.Server;
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcRpInitiatedLogout)
-            && server?.Cryptography.VerificationKeyResolver is not null
-            && server?.Integration.TerminateSessionAsync is not null)
+        EndpointServer? server = context.Server;
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcRpInitiatedLogout)
+            && server?.OAuth().Cryptography.VerificationKeyResolver is not null
+            && server?.OAuth().TerminateSessionAsync is not null)
         {
             candidates.Add(BuildEndSession());
         }
@@ -97,9 +97,10 @@ public static class EndSessionEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.Unauthorized(
@@ -129,7 +130,7 @@ public static class EndSessionEndpoints
                         return (null, hintError);
                     }
                 }
-                else if(hasLogoutHint && server.Integration.TerminateSessionByHintAsync is not null)
+                else if(hasLogoutHint && oauth.TerminateSessionByHintAsync is not null)
                 {
                     useLogoutHint = true;
                 }
@@ -163,12 +164,12 @@ public static class EndSessionEndpoints
                 //verified sub/sid path is used.
                 if(useLogoutHint)
                 {
-                    await server.Integration.TerminateSessionByHintAsync!(
+                    await oauth.TerminateSessionByHintAsync!(
                         logoutHint!, registration, context, ct).ConfigureAwait(false);
                 }
                 else
                 {
-                    await server.Integration.TerminateSessionAsync!(
+                    await oauth.TerminateSessionAsync!(
                         subject!, sessionId, registration, context, ct).ConfigureAwait(false);
 
                     //OIDC Back-Channel Logout 1.0: once the local session has ended, fan the
@@ -177,10 +178,10 @@ public static class EndSessionEndpoints
                     //exactly as it advertises. The verified id_token_hint path is the one that
                     //carries the sub/sid the Logout Tokens are built from; the sessionless
                     //logout_hint path leaves any cascade to the app's by-hint terminate.
-                    if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
-                        && server.Integration.DeliverBackChannelLogoutAsync is not null)
+                    if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
+                        && oauth.DeliverBackChannelLogoutAsync is not null)
                     {
-                        await server.Integration.DeliverBackChannelLogoutAsync(
+                        await oauth.DeliverBackChannelLogoutAsync(
                             subject!, sessionId, registration, context, ct).ConfigureAwait(false);
                     }
                 }
@@ -188,7 +189,7 @@ public static class EndSessionEndpoints
                 //§2: redirect to the validated post_logout_redirect_uri (state echoed),
                 //else answer 200 — the session is terminated either way.
                 return redirectLocation is not null
-                    ? ((OAuthFlowInput?)null, ServerHttpResponse.Redirect(redirectLocation))
+                    ? ((FlowInput?)null, ServerHttpResponse.Redirect(redirectLocation))
                     : (null, ServerHttpResponse.Ok());
             },
 
@@ -204,20 +205,21 @@ public static class EndSessionEndpoints
     /// and <c>sid</c> (optional). Returns an error response when verification fails.
     /// </summary>
     private static async ValueTask<(string? Subject, string? SessionId, ServerHttpResponse? Error)> VerifyIdTokenHintAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         string idTokenHint,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         UnverifiedJwsMessage unverified;
         try
         {
             unverified = JwsParsing.ParseCompact(
                 idTokenHint,
-                server.Codecs.Decoder!,
-                bytes => server.Codecs.JwtHeaderDeserializer!(bytes),
-                SensitiveMemoryPool<byte>.Shared);
+                oauth.Codecs.Decoder!,
+                bytes => oauth.Codecs.JwtHeaderDeserializer!(bytes),
+                BaseMemoryPool.Shared);
         }
         catch(Exception ex) when(ex is FormatException or InvalidOperationException)
         {
@@ -246,7 +248,7 @@ public static class EndSessionEndpoints
                     OAuthErrors.InvalidRequest, "id_token_hint header is missing kid."));
             }
 
-            PublicKeyMemory? publicKey = await server.Cryptography.VerificationKeyResolver!(
+            PublicKeyMemory? publicKey = await oauth.Cryptography.VerificationKeyResolver!(
                 new KeyId(kid), registration.TenantId, context, cancellationToken).ConfigureAwait(false);
             if(publicKey is null)
             {
@@ -262,9 +264,9 @@ public static class EndSessionEndpoints
             {
                 verification = await Jws.VerifyAndDecodeAsync<IReadOnlyDictionary<string, object>>(
                     idTokenHint,
-                    server.Codecs.Decoder!,
-                    bytes => server.Codecs.JwtPayloadDeserializer!(bytes),
-                    SensitiveMemoryPool<byte>.Shared,
+                    oauth.Codecs.Decoder!,
+                    bytes => oauth.Codecs.JwtPayloadDeserializer!(bytes),
+                    BaseMemoryPool.Shared,
                     publicKey,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -282,8 +284,8 @@ public static class EndSessionEndpoints
 
             JwtPayload payload = new(verification.Payload);
 
-            Uri issuerUri = server.Integration.ResolveIssuerAsync is not null
-                ? await server.Integration.ResolveIssuerAsync(registration, context, cancellationToken).ConfigureAwait(false)
+            Uri issuerUri = oauth.ResolveIssuerAsync is not null
+                ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken).ConfigureAwait(false))!
                 : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken).ConfigureAwait(false);
 
             if(!payload.TryGetValue(WellKnownJwtClaimNames.Iss, out object? issObj)

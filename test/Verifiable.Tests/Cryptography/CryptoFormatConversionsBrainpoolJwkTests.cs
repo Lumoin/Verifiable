@@ -105,7 +105,7 @@ internal sealed class CryptoFormatConversionsBrainpoolJwkTests
             (CryptoAlgorithm roundTrippedAlgorithm, Purpose roundTrippedPurpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterialOwner) =
                 CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
                     jwkDictionary,
-                    SensitiveMemoryPool<byte>.Shared,
+                    BaseMemoryPool.Shared,
                     TestSetup.Base64UrlDecoder);
 
             try

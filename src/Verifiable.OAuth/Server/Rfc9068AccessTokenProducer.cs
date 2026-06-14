@@ -135,17 +135,18 @@ internal static class Rfc9068AccessTokenProducer
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(algorithm);
 
-        AuthorizationServer server = context.Context.Server
+        EndpointServer server = context.Context.Server
             ?? throw new InvalidOperationException(
                 "IssuanceContext.Context.Server must be set before "
                 + nameof(Rfc9068AccessTokenProducer) + "." + nameof(BuildAsync) + ".");
+        var oauth = server.OAuth();
 
         TimeSpan lifetime =
             context.Registration.GetTokenLifetime(WellKnownTokenTypes.AccessToken)
                 ?? TimeSpan.FromHours(1);
         DateTimeOffset expiresAt = context.IssuedAt.Add(lifetime);
 
-        string jti = await server.Integration.GenerateIdentifierAsync!(
+        string jti = await oauth.GenerateIdentifierAsync!(
             WellKnownIdentifierPurposes.OAuthJti, context.Context, cancellationToken)
             .ConfigureAwait(false);
 
@@ -158,7 +159,7 @@ internal static class Rfc9068AccessTokenProducer
         string issuerValue = context.IssuerUri.OriginalString;
 
         ResolveAccessTokenAudienceDelegate resolver =
-            server.Integration.ResolveAccessTokenAudienceAsync
+            oauth.ResolveAccessTokenAudienceAsync
             ?? DefaultResolveAccessTokenAudienceAsync;
 
         IReadOnlyList<string>? audiences = await resolver(

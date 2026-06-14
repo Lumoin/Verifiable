@@ -22,8 +22,8 @@ namespace Verifiable.Cryptography
     /// </para>
     /// <example>
     /// <code>
-    /// using var signature = await privateKey.SignAsync(data, SensitiveMemoryPool&lt;byte&gt;.Shared);
-    /// bool verified = await publicKey.VerifyAsync(data, signature, SensitiveMemoryPool&lt;byte&gt;.Shared);
+    /// using var signature = await privateKey.SignAsync(data, BaseMemoryPool.Shared);
+    /// bool verified = await publicKey.VerifyAsync(data, signature, BaseMemoryPool.Shared);
     /// </code>
     /// </example>
     /// </remarks>

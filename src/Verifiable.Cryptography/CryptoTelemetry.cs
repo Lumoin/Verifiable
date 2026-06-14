@@ -190,12 +190,6 @@ public static class CryptoTelemetry
     }
 
 
-    /// <summary>
-    /// <c>crypto.lifetime_ms</c> — the duration in milliseconds from when the
-    /// value was constructed to when it was disposed. Set by
-    /// <see cref="SensitiveMemory"/> on all subtypes.
-    /// </summary>
-    public const string LifetimeMs = "crypto.lifetime_ms";
 
     /// <summary>
     /// <c>crypto.purpose</c> — the <see cref="Verifiable.Cryptography.Context.Purpose"/>

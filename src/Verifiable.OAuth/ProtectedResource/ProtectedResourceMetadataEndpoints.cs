@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.ProtectedResource;
 
@@ -44,13 +44,13 @@ public static class ProtectedResourceMetadataEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="ServerConfiguration.EndpointBuilders"/>.
+    /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata))
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata))
         {
             candidates.Add(BuildProtectedResourceMetadata());
         }
@@ -91,9 +91,10 @@ public static class ProtectedResourceMetadataEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -118,9 +119,9 @@ public static class ProtectedResourceMetadataEndpoints
                 Uri resource;
                 try
                 {
-                    resource = server.Integration.ResolveIssuerAsync is not null
-                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false)
+                    resource = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
                         : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
                             .ConfigureAwait(false);
                 }
@@ -133,9 +134,9 @@ public static class ProtectedResourceMetadataEndpoints
 
                 //Application-supplied §2 values the library cannot derive.
                 ProtectedResourceMetadataContribution contribution =
-                    server.Integration.ContributeProtectedResourceMetadataAsync is null
+                    oauth.ContributeProtectedResourceMetadataAsync is null
                         ? ProtectedResourceMetadataContribution.Empty
-                        : await server.Integration.ContributeProtectedResourceMetadataAsync(
+                        : await oauth.ContributeProtectedResourceMetadataAsync(
                             registration, context, ct).ConfigureAwait(false);
 
                 //§2 jwks_uri — read off the chain the dispatcher built, so the
@@ -154,10 +155,10 @@ public static class ProtectedResourceMetadataEndpoints
                 //drops out to the application's signer (which owns the key, the
                 //algorithm, and the spec-required iss claim).
                 string? signedMetadata = null;
-                if(server.Integration.SignProtectedResourceMetadataAsync is not null)
+                if(oauth.SignProtectedResourceMetadataAsync is not null)
                 {
                     JwtPayload claims = BuildMetadataClaims(resource, jwksUri, contribution);
-                    signedMetadata = await server.Integration.SignProtectedResourceMetadataAsync(
+                    signedMetadata = await oauth.SignProtectedResourceMetadataAsync(
                         claims, registration, context, ct).ConfigureAwait(false);
                 }
 

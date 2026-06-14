@@ -47,7 +47,7 @@ internal sealed class Oid4VciNonceEndpointTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, NonceCapabilities);
 
-        host.Server.Integration.IssueCredentialNonceAsync = static (_, _) =>
+        host.Server.OAuth().IssueCredentialNonceAsync = static (_, _) =>
             ValueTask.FromResult("wKI4LT17ac15ES9bw8ac4");
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(

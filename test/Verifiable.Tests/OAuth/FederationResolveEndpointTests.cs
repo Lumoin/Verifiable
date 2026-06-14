@@ -31,7 +31,7 @@ internal sealed class FederationResolveEndpointTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]
@@ -53,7 +53,7 @@ internal sealed class FederationResolveEndpointTests
         EntityIdentifier? observedAnchor = null;
         EntityTypeIdentifier? observedType = null;
 
-        app.Server.Integration.ResolveSubjectTrustChainAsync =
+        app.Server.OAuth().ResolveSubjectTrustChainAsync =
             (sub, trustAnchor, entityTypeFilter, _, _, _) =>
             {
                 observedSubject = sub;
@@ -169,7 +169,7 @@ internal sealed class FederationResolveEndpointTests
 
         using VerifierKeyMaterial resolverKeys = RegisterResolver(app, resolverEntityId, federationKeys);
 
-        app.Server.Integration.ResolveSubjectTrustChainAsync =
+        app.Server.OAuth().ResolveSubjectTrustChainAsync =
             (_, _, _, _, _, _) => ValueTask.FromResult<ResolveResponseContribution?>(null);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -199,7 +199,7 @@ internal sealed class FederationResolveEndpointTests
         using VerifierKeyMaterial resolverKeys = RegisterResolver(app, resolverEntityId, federationKeys);
 
         bool delegateInvoked = false;
-        app.Server.Integration.ResolveSubjectTrustChainAsync =
+        app.Server.OAuth().ResolveSubjectTrustChainAsync =
             (_, _, _, _, _, _) =>
             {
                 delegateInvoked = true;

@@ -5,7 +5,8 @@ using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -62,7 +63,7 @@ internal sealed class Oid4VciCredentialOfferEndpointTests
         using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, OfferCapabilities);
         string segment = material.Registration.TenantId.Value;
 
-        host.Server.Integration.ResolveCredentialOfferAsync =
+        host.Server.OAuth().ResolveCredentialOfferAsync =
             (offerId, context, ct) => ValueTask.FromResult<CredentialOffer?>(
                 string.Equals(offerId, OfferId, StringComparison.Ordinal) ? BuildStoredOffer() : null);
 
@@ -96,7 +97,7 @@ internal sealed class Oid4VciCredentialOfferEndpointTests
         using VerifierKeyMaterial material = host.RegisterClient(ClientId, ClientBaseUri, OfferCapabilities);
         string segment = material.Registration.TenantId.Value;
 
-        host.Server.Integration.ResolveCredentialOfferAsync =
+        host.Server.OAuth().ResolveCredentialOfferAsync =
             (offerId, context, ct) => ValueTask.FromResult<CredentialOffer?>(null);
 
         ServerHttpResponse response = await DispatchOfferAsync(host, segment, "no-such-offer").ConfigureAwait(false);

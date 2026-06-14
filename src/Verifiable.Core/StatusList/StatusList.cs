@@ -27,7 +27,7 @@ namespace Verifiable.Core.StatusList;
 /// </list>
 /// <para>
 /// Memory is managed through <see cref="IMemoryOwner{T}"/> from a <see cref="MemoryPool{T}"/>,
-/// supporting <see cref="SensitiveMemoryPool"/> for proper cryptographic material handling.
+/// supporting <see cref="BaseMemoryPool"/> for proper cryptographic material handling.
 /// Callers must dispose this instance to return memory to the pool.
 /// </para>
 /// <para>
@@ -108,7 +108,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     /// <param name="bitSize">The number of bits per entry.</param>
     /// <param name="pool">
     /// The memory pool to allocate from. Should return exact-size buffers.
-    /// Use <see cref="SensitiveMemoryPool"/> for proper disposal and zeroing.
+    /// Use <see cref="BaseMemoryPool"/> for proper disposal and zeroing.
     /// </param>
     /// <param name="bitOrder">
     /// The order entries are packed within each byte:
@@ -144,7 +144,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     /// <param name="bitSize">The number of bits per entry.</param>
     /// <param name="pool">
     /// The memory pool to allocate the decompressed data into.
-    /// Use <see cref="SensitiveMemoryPool"/> for proper disposal and zeroing.
+    /// Use <see cref="BaseMemoryPool"/> for proper disposal and zeroing.
     /// </param>
     /// <param name="bitOrder">
     /// The order entries are packed within each byte:
@@ -182,7 +182,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     /// <param name="bitSize">The number of bits per entry.</param>
     /// <param name="pool">
     /// The memory pool to copy the data into.
-    /// Use <see cref="SensitiveMemoryPool"/> for proper disposal and zeroing.
+    /// Use <see cref="BaseMemoryPool"/> for proper disposal and zeroing.
     /// </param>
     /// <param name="bitOrder">
     /// The order entries are packed within each byte:

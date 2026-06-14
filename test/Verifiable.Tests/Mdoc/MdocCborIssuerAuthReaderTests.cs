@@ -28,7 +28,7 @@ internal sealed class MdocCborIssuerAuthReaderTests
         byte[] msoBytes = MdocCborMsoReaderTestFixtures.BuildSampleMso();
         byte[] issuerAuthBytes = WrapInCoseSign1WithTag24Payload(msoBytes);
 
-        MdocIssuerAuth issuerAuth = MdocCborIssuerAuthReader.Read(issuerAuthBytes, SensitiveMemoryPool<byte>.Shared);
+        MdocIssuerAuth issuerAuth = MdocCborIssuerAuthReader.Read(issuerAuthBytes, BaseMemoryPool.Shared);
 
         //Parsed view is populated.
         Assert.AreEqual(MdocMsoWellKnownKeys.Version10, issuerAuth.Mso.Version);
@@ -54,7 +54,7 @@ internal sealed class MdocCborIssuerAuthReaderTests
         byte[] issuerAuthBytes = WrapInCoseSign1WithDetachedPayload();
 
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            MdocCborIssuerAuthReader.Read(issuerAuthBytes, SensitiveMemoryPool<byte>.Shared));
+            MdocCborIssuerAuthReader.Read(issuerAuthBytes, BaseMemoryPool.Shared));
     }
 
 
@@ -68,7 +68,7 @@ internal sealed class MdocCborIssuerAuthReaderTests
         byte[] issuerAuthBytes = WrapInCoseSign1WithEmptyBstrPayload();
 
         CborContentException ex = Assert.ThrowsExactly<CborContentException>(() =>
-            MdocCborIssuerAuthReader.Read(issuerAuthBytes, SensitiveMemoryPool<byte>.Shared));
+            MdocCborIssuerAuthReader.Read(issuerAuthBytes, BaseMemoryPool.Shared));
         Assert.Contains("empty", ex.Message);
     }
 
@@ -81,7 +81,7 @@ internal sealed class MdocCborIssuerAuthReaderTests
         byte[] arbitrary = [0x80]; //CBOR empty array
 
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            MdocCborIssuerAuthReader.Read(arbitrary, SensitiveMemoryPool<byte>.Shared));
+            MdocCborIssuerAuthReader.Read(arbitrary, BaseMemoryPool.Shared));
     }
 
 
@@ -96,17 +96,17 @@ internal sealed class MdocCborIssuerAuthReaderTests
         //carriers require a non-zero allocation.
         using EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(
             new byte[] { 0xA0 }, //empty CBOR map
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
         using Signature signature = new byte[] { 0x00 }.AsSpan().ToSignature(
             CryptoTags.AlgorithmAgnosticSignature,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
         using var message = new CoseSign1Message(
             protectedHeader,
             unprotectedHeader: null,
             payload: tag24.WireBytes,
             signature: signature);
 
-        using EncodedCoseSign1 encoded = CoseSerialization.SerializeCoseSign1(message, SensitiveMemoryPool<byte>.Shared);
+        using EncodedCoseSign1 encoded = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
 
         return encoded.AsReadOnlySpan().ToArray();
     }
@@ -137,17 +137,17 @@ internal sealed class MdocCborIssuerAuthReaderTests
         //guard fires before it ever inspects signature bytes.
         using EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(
             new byte[] { 0xA0 },
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
         using Signature signature = new byte[] { 0x00 }.AsSpan().ToSignature(
             CryptoTags.AlgorithmAgnosticSignature,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
         using var message = new CoseSign1Message(
             protectedHeader,
             unprotectedHeader: null,
             payload: ReadOnlyMemory<byte>.Empty,
             signature: signature);
 
-        using EncodedCoseSign1 encoded = CoseSerialization.SerializeCoseSign1(message, SensitiveMemoryPool<byte>.Shared);
+        using EncodedCoseSign1 encoded = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
 
         return encoded.AsReadOnlySpan().ToArray();
     }

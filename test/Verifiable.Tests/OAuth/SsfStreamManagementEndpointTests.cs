@@ -330,7 +330,7 @@ internal sealed class SsfStreamManagementEndpointTests
 
         //An interop-profile §2.7.3 authorizer: each bearer token names its granted
         //scope and coverage follows SsfScopeSatisfies (manage includes read).
-        app.Server.Integration.AuthorizeSsfRequestAsync = static (request, requiredScope, registration, context, ct) =>
+        app.Server.OAuth().AuthorizeSsfRequestAsync = static (request, requiredScope, registration, context, ct) =>
         {
             if(!request.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? header) || header is null)
             {
@@ -409,8 +409,8 @@ internal sealed class SsfStreamManagementEndpointTests
         Dictionary<string, SsfStreamConfiguration> store = RegisterTransmitter(app, out VerifierKeyMaterial material);
         using VerifierKeyMaterial _ = material;
 
-        //Deliberately NOT wiring app.Server.Integration.AuthorizeSsfRequestAsync.
-        Assert.IsNull(app.Server.Integration.AuthorizeSsfRequestAsync,
+        //Deliberately NOT wiring app.Server.OAuth().AuthorizeSsfRequestAsync.
+        Assert.IsNull(app.Server.OAuth().AuthorizeSsfRequestAsync,
             "This test pins the behaviour when the authorization seam is unwired.");
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -465,9 +465,9 @@ internal sealed class SsfStreamManagementEndpointTests
         Dictionary<string, SsfStreamStatus> statusByStream = new(StringComparer.Ordinal);
         HashSet<string> verificationRequested = new(StringComparer.Ordinal);
 
-        app.Server.Integration.UseDefaultSsfJsonParsing();
+        app.Server.OAuth().UseDefaultSsfJsonParsing();
 
-        app.Server.Integration.CreateSsfStreamAsync = (request, registration, context, ct) =>
+        app.Server.OAuth().CreateSsfStreamAsync = (request, registration, context, ct) =>
         {
             if(store.Count > 0)
             {
@@ -502,7 +502,7 @@ internal sealed class SsfStreamManagementEndpointTests
             return ValueTask.FromResult(SsfStreamWriteResult.Success(stream));
         };
 
-        app.Server.Integration.ReadSsfStreamsAsync = (streamId, registration, context, ct) =>
+        app.Server.OAuth().ReadSsfStreamsAsync = (streamId, registration, context, ct) =>
         {
             if(streamId is null)
             {
@@ -513,7 +513,7 @@ internal sealed class SsfStreamManagementEndpointTests
                 store.TryGetValue(streamId, out SsfStreamConfiguration? stream) ? [stream] : null);
         };
 
-        app.Server.Integration.UpdateSsfStreamAsync = (request, registration, context, ct) =>
+        app.Server.OAuth().UpdateSsfStreamAsync = (request, registration, context, ct) =>
         {
             if(!store.TryGetValue(request.StreamId, out SsfStreamConfiguration? existing))
             {
@@ -537,7 +537,7 @@ internal sealed class SsfStreamManagementEndpointTests
             return ValueTask.FromResult(SsfStreamWriteResult.Success(updated));
         };
 
-        app.Server.Integration.ReplaceSsfStreamAsync = (request, registration, context, ct) =>
+        app.Server.OAuth().ReplaceSsfStreamAsync = (request, registration, context, ct) =>
         {
             if(!store.TryGetValue(request.StreamId, out SsfStreamConfiguration? existing))
             {
@@ -563,7 +563,7 @@ internal sealed class SsfStreamManagementEndpointTests
             return ValueTask.FromResult(SsfStreamWriteResult.Success(replaced));
         };
 
-        app.Server.Integration.DeleteSsfStreamAsync = (streamId, registration, context, ct) =>
+        app.Server.OAuth().DeleteSsfStreamAsync = (streamId, registration, context, ct) =>
         {
             statusByStream.Remove(streamId);
 
@@ -572,10 +572,10 @@ internal sealed class SsfStreamManagementEndpointTests
                 : SsfStreamWriteOutcome.NotFound);
         };
 
-        app.Server.Integration.ReadSsfStreamStatusAsync = (streamId, registration, context, ct) =>
+        app.Server.OAuth().ReadSsfStreamStatusAsync = (streamId, registration, context, ct) =>
             ValueTask.FromResult(statusByStream.TryGetValue(streamId, out SsfStreamStatus? status) ? status : null);
 
-        app.Server.Integration.UpdateSsfStreamStatusAsync = (requested, registration, context, ct) =>
+        app.Server.OAuth().UpdateSsfStreamStatusAsync = (requested, registration, context, ct) =>
         {
             if(!statusByStream.ContainsKey(requested.StreamId))
             {
@@ -587,19 +587,19 @@ internal sealed class SsfStreamManagementEndpointTests
             return ValueTask.FromResult(SsfStreamStatusResult.Success(requested));
         };
 
-        app.Server.Integration.AddSsfSubjectAsync = (request, registration, context, ct) =>
+        app.Server.OAuth().AddSsfSubjectAsync = (request, registration, context, ct) =>
             ValueTask.FromResult(store.ContainsKey(request.StreamId)
                 ? SsfStreamOperationOutcome.Success
                 : SsfStreamOperationOutcome.NotFound);
 
-        app.Server.Integration.RemoveSsfSubjectAsync = (request, registration, context, ct) =>
+        app.Server.OAuth().RemoveSsfSubjectAsync = (request, registration, context, ct) =>
             ValueTask.FromResult(store.ContainsKey(request.StreamId)
                 ? SsfStreamOperationOutcome.Success
                 : SsfStreamOperationOutcome.NotFound);
 
         //One verification per stream in this glue: the second request simulates
         //exceeding min_verification_interval (§8.1.4.2 → 429).
-        app.Server.Integration.TriggerSsfVerificationAsync = (request, registration, context, ct) =>
+        app.Server.OAuth().TriggerSsfVerificationAsync = (request, registration, context, ct) =>
         {
             if(!store.ContainsKey(request.StreamId))
             {

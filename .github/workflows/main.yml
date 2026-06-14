@@ -42,14 +42,17 @@ env:
     Verifiable.Core
     Verifiable.Cryptography
     Verifiable.DecentralizedWebNode
+    Verifiable.Foundation
     Verifiable.JCose
     Verifiable.Json
     Verifiable.JsonPointer
     Verifiable.Microsoft
     Verifiable.NSec
     Verifiable.OAuth
+    Verifiable.Server
     Verifiable.Sidetree
     Verifiable.Tpm
+    Verifiable.Vcalm
 
   # These are the test projects that will be reported.
   VERIFIABLE_TESTS: Verifiable.Tests

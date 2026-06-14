@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>W3C VCALM (Verifiable Credential API for Lifecycle Management) services.</Title>
+    <Description>Implementation of the W3C VCALM 1.0 HTTP API for verifiable credential lifecycle management — the issuer and verifier services (credential issue, verify, presentation verify, challenges) over the VC 2.0 data model. Transport-agnostic endpoints hosted on the shared Verifiable.Server dispatch host.</Description>
+    <PackageTags>VCALM VC-API VerifiableCredentials Issuer Verifier W3C DataIntegrity</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+    <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
+    <ProjectReference Include="..\Verifiable.Server\Verifiable.Server.csproj" />
+  </ItemGroup>
+
+</Project>

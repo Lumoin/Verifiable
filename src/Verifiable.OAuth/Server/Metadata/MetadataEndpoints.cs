@@ -5,8 +5,8 @@ using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Dpop;
-using Verifiable.OAuth.Server.Routing;
 using Verifiable.OAuth.Server.Pipeline;
+using Verifiable.Server;
 namespace Verifiable.OAuth.Server.Metadata;
 
 /// <summary>
@@ -14,7 +14,7 @@ namespace Verifiable.OAuth.Server.Metadata;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Register at startup via <see cref="AuthorizationServer.EndpointBuilders"/>:
+/// Register at startup via <see cref="EndpointServer.EndpointBuilders"/>:
 /// </para>
 /// <code>
 /// server.EndpointBuilders.AddRange([
@@ -75,20 +75,28 @@ public static class MetadataEndpoints
 
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="AuthorizationServer.EndpointBuilders"/>.
+    /// <see cref="EndpointServer.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint))
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint))
         {
             candidates.Add(BuildJwks());
         }
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint))
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint))
         {
-            candidates.Add(BuildDiscovery());
+            //RFC 8414 §3.1 permits the same authorization server metadata at
+            //multiple well-known locations derived from the issuer identifier.
+            //The library mounts the identical discovery document twice: as the
+            //OIDC Discovery openid-configuration role and at the RFC 8414 §3
+            //default oauth-authorization-server location. Both candidates share
+            //BuildDiscovery so the served body is byte-identical per tenant; the
+            //distinct role name lets the application resolve each location's URL.
+            candidates.Add(BuildDiscovery(WellKnownEndpointNames.MetadataDiscovery));
+            candidates.Add(BuildDiscovery(WellKnownEndpointNames.MetadataOAuthAuthorizationServer));
         }
 
         return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>(candidates);
@@ -149,16 +157,17 @@ public static class MetadataEndpoints
             //is never reached.
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                if(server.Cryptography.BuildJwksDocumentAsync is null)
+                if(oauth.Cryptography.BuildJwksDocumentAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
                         "BuildJwksDocumentAsync is not configured."));
                 }
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -166,7 +175,7 @@ public static class MetadataEndpoints
                         "Client registration not found in context."));
                 }
 
-                JwksDocument jwks = await server.Cryptography.BuildJwksDocumentAsync(
+                JwksDocument jwks = await oauth.Cryptography.BuildJwksDocumentAsync(
                     registration, context, ct).ConfigureAwait(false);
 
                 string body = BuildJwksJson(jwks);
@@ -180,10 +189,22 @@ public static class MetadataEndpoints
 
 
     /// <summary>
-    /// Builds the OAuth/OIDC discovery endpoint per
+    /// Builds an OAuth/OIDC discovery endpoint per
     /// <see href="https://www.rfc-editor.org/rfc/rfc8414">RFC 8414</see>
-    /// and the OpenID Connect Discovery 1.0 profile that extends it.
+    /// and the OpenID Connect Discovery 1.0 profile that extends it. The
+    /// <paramref name="roleName"/> selects which well-known mount this candidate
+    /// answers — <see cref="WellKnownEndpointNames.MetadataDiscovery"/> for the
+    /// appended OIDC <c>openid-configuration</c> location, or
+    /// <see cref="WellKnownEndpointNames.MetadataOAuthAuthorizationServer"/> for
+    /// the RFC 8414 §3 default <c>oauth-authorization-server</c> location formed
+    /// by path insertion. RFC 8414 §3.1 permits publishing the same metadata at
+    /// multiple well-known locations, so both candidates run this one body
+    /// builder and serve a byte-identical document for the same tenant.
     /// </summary>
+    /// <param name="roleName">
+    /// The <see cref="WellKnownEndpointNames"/> role this candidate carries; the
+    /// application's <c>ResolveEndpointUriAsync</c> maps it to the served URL.
+    /// </param>
     /// <remarks>
     /// <para>
     /// The endpoint is stateless:
@@ -216,10 +237,10 @@ public static class MetadataEndpoints
     /// rationale.
     /// </para>
     /// </remarks>
-    private static EndpointCandidate BuildDiscovery() =>
+    private static EndpointCandidate BuildDiscovery(string roleName) =>
         new()
         {
-            Name = WellKnownEndpointNames.MetadataDiscovery,
+            Name = roleName,
             HttpMethod = WellKnownHttpMethods.Get,
             Capability = WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
             StartsNewFlow = true,
@@ -245,9 +266,10 @@ public static class MetadataEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null,
@@ -259,9 +281,9 @@ public static class MetadataEndpoints
                 Uri issuer;
                 try
                 {
-                    issuer = server.Integration.ResolveIssuerAsync is not null
-                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false)
+                    issuer = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
                         : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
                             .ConfigureAwait(false);
                 }
@@ -452,12 +474,12 @@ public static class MetadataEndpoints
                 //an advertisement without the seam would invite requests the server refuses
                 //with invalid_authorization_details.
                 if((authorizationCodeOnChain || preAuthorizedCodeOnChain)
-                    && server.Integration.ResolveCredentialAuthorizationAsync is not null)
+                    && oauth.ResolveCredentialAuthorizationAsync is not null)
                 {
                     AppendStringArrayField(
                         sb,
                         AuthorizationServerMetadataParameterNames.AuthorizationDetailsTypesSupported,
-                        server.Integration.AuthorizationDetailTypes.RegisteredTypes);
+                        oauth.AuthorizationDetailTypes.RegisteredTypes);
                 }
 
                 //JARM §4: advertise the JWT-secured response modes and signing algorithms
@@ -535,7 +557,7 @@ public static class MetadataEndpoints
                 //RFC 9449 §5.1 — advertise the DPoP proof signature algorithms the AS
                 //accepts whenever DPoP validation is wired (FAPI 2.0 sender-constrained
                 //tokens). Independent of the authorize-endpoint chain.
-                if(server.Integration.ValidateDpopProofAsync is not null)
+                if(oauth.ValidateDpopProofAsync is not null)
                 {
                     AppendStringArrayField(
                         sb,
@@ -549,8 +571,8 @@ public static class MetadataEndpoints
                 //emitted here rather than via a candidate's DiscoveryMetadataKey. The OP
                 //includes a sid in its Logout Tokens (the per-session sid), so session-based
                 //back-channel logout is supported too.
-                if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
-                    && server.Integration.DeliverBackChannelLogoutAsync is not null)
+                if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
+                    && oauth.DeliverBackChannelLogoutAsync is not null)
                 {
                     AppendBooleanField(
                         sb,
@@ -623,10 +645,10 @@ public static class MetadataEndpoints
                 }
 
                 //Application-supplied additional fields merged after the base set.
-                if(server.Integration.ContributeDiscoveryFieldsAsync is not null)
+                if(oauth.ContributeDiscoveryFieldsAsync is not null)
                 {
                     DiscoveryDocumentContribution contributed =
-                        await server.Integration.ContributeDiscoveryFieldsAsync(
+                        await oauth.ContributeDiscoveryFieldsAsync(
                             registration, context, ct).ConfigureAwait(false);
 
                     foreach(DiscoveryField field in contributed.Fields)
@@ -780,18 +802,19 @@ public static class MetadataEndpoints
     /// </remarks>
     private static async ValueTask<IReadOnlyList<string>> ResolveSigningAlgValuesAsync(
         Verifiable.Cryptography.Context.KeyUsageContext usage,
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        if(!registration.SigningKeys.TryGetValue(usage, out SigningKeySet? signingKeySet))
+        var oauth = server.OAuth();
+        if(!((ClientRecord)registration).SigningKeys.TryGetValue(usage, out SigningKeySet? signingKeySet))
         {
             return [];
         }
 
         ServerVerificationKeyResolverDelegate? resolver =
-            server.Cryptography.VerificationKeyResolver;
+            oauth.Cryptography.VerificationKeyResolver;
         if(resolver is null)
         {
             return [];

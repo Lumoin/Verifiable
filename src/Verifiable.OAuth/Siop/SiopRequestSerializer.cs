@@ -1,5 +1,6 @@
 using System.Text;
 using Verifiable.OAuth.Oid4Vp;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Siop;
 

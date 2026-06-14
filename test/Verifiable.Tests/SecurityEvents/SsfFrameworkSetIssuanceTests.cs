@@ -25,7 +25,7 @@ internal sealed class SsfFrameworkSetIssuanceTests
 
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly IsSecurityEventTokenJtiSeenDelegate NeverSeen =
         static (jti, context, cancellationToken) => ValueTask.FromResult(false);

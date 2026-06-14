@@ -32,7 +32,7 @@ internal static class SdJwtVpFixture
 
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>The SD-JWT matrix-format row: name plus the per-run <see cref="FormatRun"/> factory.</summary>

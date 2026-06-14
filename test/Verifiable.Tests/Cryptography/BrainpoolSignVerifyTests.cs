@@ -85,7 +85,7 @@ internal sealed class BrainpoolSignVerifyTests
             Signature signature = await BouncyCastleCryptographicFunctions.SignBrainpoolP256r1Async(
                 keyMaterial.PrivateKey.AsReadOnlyMemory(),
                 SampleData,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 null,
                 TestContext.CancellationToken).ConfigureAwait(false);
             try
@@ -128,7 +128,7 @@ internal sealed class BrainpoolSignVerifyTests
             Signature signature = await signAsync(
                 keyMaterial.PrivateKey.AsReadOnlyMemory(),
                 SampleData,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 null,
                 cancellationToken).ConfigureAwait(false);
             try

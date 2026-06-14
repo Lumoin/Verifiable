@@ -9,7 +9,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <remarks>
 /// <para>
 /// The application skin places input values on the request context bag before
-/// calling <see cref="AuthorizationServer.DispatchAsync"/>. The dispatcher and
+/// calling <see cref="EndpointServer.DispatchAsync"/>. The dispatcher and
 /// endpoint delegates place output values back on the context bag so the
 /// application can read them after dispatch completes.
 /// </para>

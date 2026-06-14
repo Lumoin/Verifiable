@@ -21,9 +21,12 @@ The core value proposition is documents that can be distinctly identified, crypt
 |---------|---------|:-----:|
 | **Verifiable** | CLI tool for library functionality | [![NuGet](https://img.shields.io/nuget/v/Verifiable.svg?style=flat)](https://www.nuget.org/packages/Verifiable/) |
 | **Verifiable.Core** | DIDs, verifiable credentials, and data integrity proofs | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Core.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Core/) |
+| **Verifiable.Foundation** | Dependency-free primitives: pushdown automata, memory-safe `SensitiveMemory` pooling, and buffer tagging | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Foundation.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Foundation/) |
 | **Verifiable.Cryptography** | Cryptographic primitives: salt generation, memory-safe key handling, hash functions | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cryptography.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cryptography/) |
 | **Verifiable.JCose** | JOSE and COSE structures including SD-JWT and selective disclosure | [![NuGet](https://img.shields.io/nuget/v/Verifiable.JCose.svg?style=flat)](https://www.nuget.org/packages/Verifiable.JCose/) |
 | **Verifiable.OAuth** | OAuth 2.0 / OpenID protocol flows: OpenID4VCI, OpenID4VP, HAIP, SIOPv2, OpenID Federation, Shared Signals, AuthZEN | [![NuGet](https://img.shields.io/nuget/v/Verifiable.OAuth.svg?style=flat)](https://www.nuget.org/packages/Verifiable.OAuth/) |
+| **Verifiable.Server** | Transport-neutral endpoint host for credential service HTTP APIs | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Server.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Server/) |
+| **Verifiable.Vcalm** | W3C Verifiable Credential API for Lifecycle Management (VCALM 1.0) | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Vcalm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Vcalm/) |
 | **Verifiable.Json** | JSON serialization converters | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Json.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Json/) |
 | **Verifiable.Cbor** | CBOR serialization for COSE envelopes | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cbor.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cbor/) |
 | **Verifiable.BouncyCastle** | Cross-platform cryptography via BouncyCastle | [![NuGet](https://img.shields.io/nuget/v/Verifiable.BouncyCastle.svg?style=flat)](https://www.nuget.org/packages/Verifiable.BouncyCastle/) |
@@ -54,7 +57,7 @@ The core value proposition is documents that can be distinctly identified, crypt
 
 The library follows data-oriented programming principles where code is separate from immutable data, favoring generic data structures and general-purpose functions implemented as extension methods. Domain types contain raw cryptographic material without encoding artifacts, with encoding handled at serialization boundaries.
 
-Cryptographic operations use a delegate-based extensibility model rather than direct implementations. This allows the same high-level API to work with software keys, TPM-backed keys, HSM keys, or cloud KMS without changing calling code. The `SensitiveMemoryPool` provides exact-size memory allocation for cryptographic material.
+Cryptographic operations use a delegate-based extensibility model rather than direct implementations. This allows the same high-level API to work with software keys, TPM-backed keys, HSM keys, or cloud KMS without changing calling code. The `BaseMemoryPool` from the neutral `Lumoin.Base` package provides exact-size memory allocation for cryptographic material.
 
 The three-party credential flow (Issuer → Holder → Verifier) is modeled explicitly, with clear separation between what each party knows and computes. Internal computation state is not passed between parties; instead, each party derives what it needs from the credential and proof structures.
 
@@ -68,6 +71,7 @@ The library includes the following protocol flows, each with tests. The test sui
 - **High-assurance profile ([HAIP 1.0](https://openid.net/specs/openid4vc-high-assurance-interoperability-profile-1_0.html))** — the OpenID4VP profile used by EUDI-style deployments: encrypted responses and X.509-based request signing.
 - **Credential formats in presentation** — [SD-JWT VC](https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/), [ISO mdoc](https://www.iso.org/standard/69084.html) (ISO/IEC 18013-5), and [SD-CWT](https://datatracker.ietf.org/doc/draft-ietf-spice-sd-cwt/), with holder key binding and selective disclosure.
 - **Verifiable credential data integrity** — issuing and verifying credentials with [W3C Data Integrity](https://www.w3.org/TR/vc-data-integrity/) proofs: EdDSA-RDFC-2022, EdDSA-JCS-2022, and ECDSA-SD-2023.
+- **Credential lifecycle API ([W3C VCALM 1.0](https://www.w3.org/TR/vcalm-1.0/))** — issuer, verifier, and holder HTTP services over a transport-neutral host: issuing credentials (§3.2), verifying credentials and presentations (§3.3), verifiable presentation requests and DID Authentication (§3.4), deriving selectively-disclosed credentials and creating presentations (§3.5), exchanges with multi-step workflows (§3.6), interactions (§3.7), the §3.8 problem-details error model, and Bitstring Status List status management (Appendix C).
 - **OAuth 2.0 / OpenID Connect** — authorization code with [PKCE](https://www.rfc-editor.org/rfc/rfc7636), [pushed authorization requests](https://www.rfc-editor.org/rfc/rfc9126), [signed request objects](https://www.rfc-editor.org/rfc/rfc9101), [DPoP](https://www.rfc-editor.org/rfc/rfc9449), [rich authorization requests](https://www.rfc-editor.org/rfc/rfc9396) with a per-type handler registry, [JWT-secured authorization responses](https://openid.net/specs/oauth-v2-jarm.html), [token introspection](https://www.rfc-editor.org/rfc/rfc7662) with [JWT responses](https://www.rfc-editor.org/rfc/rfc9701), token refresh and revocation, [dynamic client registration](https://www.rfc-editor.org/rfc/rfc7591), and [server](https://www.rfc-editor.org/rfc/rfc8414) and [protected-resource](https://www.rfc-editor.org/rfc/rfc9728) metadata, including the [FAPI 2.0](https://openid.net/specs/fapi-2_0-security-profile.html) security profile and [message signing](https://openid.net/specs/fapi-2_0-message-signing.html) constraints.
 - **[OpenID Federation 1.0](https://openid.net/specs/openid-federation-1_0.html)** — entity configurations, trust chain resolution, metadata policy, trust marks, and client registration.
 - **Shared Signals ([SSF](https://openid.net/specs/openid-sharedsignals-framework-1_0.html), [CAEP](https://openid.net/specs/openid-caep-1_0.html), RISC)** — transmitter and receiver, with push and poll delivery and stream management.
@@ -86,6 +90,9 @@ dotnet add package Verifiable.Json
 
 # For OAuth / OpenID protocol flows (OpenID4VP, Federation, and others)
 dotnet add package Verifiable.OAuth
+
+# For the W3C VCALM 1.0 credential lifecycle HTTP API (issuer, verifier, holder)
+dotnet add package Verifiable.Vcalm
 
 # For BouncyCastle cryptography (cross-platform)
 dotnet add package Verifiable.BouncyCastle

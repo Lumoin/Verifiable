@@ -14,13 +14,13 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// Per
 /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html">OID4VP 1.0 §5.4</see>,
 /// signing and serving happen atomically in one HTTP request.
-/// <see cref="OAuthFlowState.NextAction"/> returns
-/// <see cref="Verifiable.Core.Automata.NullAction.Instance"/>.
+/// <see cref="FlowState.NextAction"/> returns
+/// <see cref="Verifiable.Foundation.Automata.NullAction.Instance"/>.
 /// Transitions to <see cref="VerifierResponseReceivedState"/> when the Wallet POSTs the
 /// encrypted Authorization Response.
 /// </remarks>
 [DebuggerDisplay("VerifierJarServed FlowId={FlowId} ServedAt={ServedAt}")]
-public sealed record VerifierJarServedState: OAuthFlowState
+public sealed record VerifierJarServedState: FlowState
 {
     /// <summary>The UTC instant at which the JAR was served to the Wallet.</summary>
     public required DateTimeOffset ServedAt { get; init; }

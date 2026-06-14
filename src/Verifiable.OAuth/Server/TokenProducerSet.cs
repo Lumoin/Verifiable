@@ -22,15 +22,14 @@ namespace Verifiable.OAuth.Server;
 /// <para>
 /// The set is immutable: <see cref="Add"/> and <see cref="Plus"/> return new
 /// instances rather than mutating in place. Configuration changes happen by
-/// constructing a new <see cref="ServerConfiguration"/> (which carries a new
-/// <see cref="TokenProducerSet"/>) and applying it via
-/// <see cref="AuthorizationServer.ApplyConfiguration"/>.
+/// assigning a new <see cref="TokenProducerSet"/> to
+/// <see cref="AuthorizationServerIntegration.TokenProducers"/>.
 /// </para>
 /// <para>
 /// <strong>Concurrency.</strong>
 /// The set is fully immutable. A single instance is safe for concurrent reads.
 /// Configuration mutation happens through atomic reference swaps on
-/// <see cref="AuthorizationServer.Configuration"/>, never by mutating an
+/// <see cref="EndpointServer.Configuration"/>, never by mutating an
 /// existing set.
 /// </para>
 /// </remarks>

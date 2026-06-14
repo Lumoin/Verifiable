@@ -28,7 +28,7 @@ internal sealed class SubjectIdentifierContributorTests
     public async Task IdTokenTargetEmitsResolvedSubject()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.Server.Integration.ResolveSubjectIdentifierAsync =
+        host.Server.OAuth().ResolveSubjectIdentifierAsync =
             (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
 
         IdTokenTarget target = BuildIdTokenTargetWithServer(host.Server, "subject-X");
@@ -48,7 +48,7 @@ internal sealed class SubjectIdentifierContributorTests
     public async Task UserInfoTargetEmitsResolvedSubject()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.Server.Integration.ResolveSubjectIdentifierAsync =
+        host.Server.OAuth().ResolveSubjectIdentifierAsync =
             (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
 
         UserInfoTarget target = BuildUserInfoTargetWithServer(host.Server, "subject-Y");
@@ -91,7 +91,7 @@ internal sealed class SubjectIdentifierContributorTests
 
 
     private static IdTokenTarget BuildIdTokenTargetWithServer(
-        AuthorizationServer server, string subject)
+        EndpointServer server, string subject)
     {
         ClientRecord registration = ContributorTestFixtures.BuildRegistration();
         ExchangeContext ExchangeContext = new();
@@ -113,7 +113,7 @@ internal sealed class SubjectIdentifierContributorTests
 
 
     private static UserInfoTarget BuildUserInfoTargetWithServer(
-        AuthorizationServer server, string subject)
+        EndpointServer server, string subject)
     {
         ClientRecord registration = ContributorTestFixtures.BuildRegistration();
         ExchangeContext ExchangeContext = new();

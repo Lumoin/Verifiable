@@ -52,7 +52,7 @@ internal sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -80,7 +80,7 @@ internal sealed class JwsTestsWithPredefinedData
             signedJwt,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             publicKey,
             verificationDelegate,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -118,7 +118,7 @@ internal sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -158,7 +158,7 @@ internal sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -181,7 +181,7 @@ internal sealed class JwsTestsWithPredefinedData
             signedJwt,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             publicKey,
             verificationDelegate,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -195,7 +195,7 @@ internal sealed class JwsTestsWithPredefinedData
     /// </summary>
     private static PrivateKeyMemory CreatePrivateKeyMemory(byte[] keyBytes, Tag tag)
     {
-        IMemoryOwner<byte> memoryOwner = SensitiveMemoryPool<byte>.Shared.Rent(keyBytes.Length);
+        IMemoryOwner<byte> memoryOwner = BaseMemoryPool.Shared.Rent(keyBytes.Length);
         keyBytes.CopyTo(memoryOwner.Memory.Span);
         return new PrivateKeyMemory(memoryOwner, tag);
     }
@@ -206,7 +206,7 @@ internal sealed class JwsTestsWithPredefinedData
     /// </summary>
     private static PublicKeyMemory CreatePublicKeyMemory(byte[] keyBytes, Tag tag)
     {
-        IMemoryOwner<byte> memoryOwner = SensitiveMemoryPool<byte>.Shared.Rent(keyBytes.Length);
+        IMemoryOwner<byte> memoryOwner = BaseMemoryPool.Shared.Rent(keyBytes.Length);
         keyBytes.CopyTo(memoryOwner.Memory.Span);
         return new PublicKeyMemory(memoryOwner, tag);
     }

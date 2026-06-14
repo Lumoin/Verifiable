@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.AuthZen;
 

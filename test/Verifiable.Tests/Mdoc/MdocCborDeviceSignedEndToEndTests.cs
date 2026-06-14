@@ -60,7 +60,7 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                     DeviceKey = deviceCoseKey
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             //Wallet side: full-disclosure presentation, device-sign over the
@@ -73,7 +73,7 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                 MdocDeviceNameSpaces.Empty,
                 sessionTranscript,
                 deviceKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsNotNull(presented.DeviceSigned!.DeviceAuth.DeviceSignature,
@@ -82,7 +82,7 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
 
             //Verifier side leg 1: issuer signature.
             bool isIssuerVerified = await issued.VerifyIssuerAuthAsync(
-                issuerKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                issuerKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(isIssuerVerified, "Issuer MSO signature must verify.");
 
             //Verifier side leg 2: digest binding.
@@ -92,7 +92,7 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
             //Verifier side leg 3: device signature.
             bool isDeviceVerified = await presented.VerifyDeviceSignedAsync(
                 sessionTranscript,
-                deviceKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                deviceKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(isDeviceVerified, "Device signature must verify against the device key the MSO bound.");
         }
         finally
@@ -121,7 +121,7 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             byte[] sessionTranscript = SampleSessionTranscript();
@@ -134,7 +134,7 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                     MdocDeviceNameSpaces.Empty,
                     sessionTranscript,
                     deviceKeys.PrivateKey,
-                    SensitiveMemoryPool<byte>.Shared,
+                    BaseMemoryPool.Shared,
                     TestContext.CancellationToken).ConfigureAwait(false);
 
             using(presented)
@@ -153,7 +153,7 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                 //The verbose path still produces a verifiable device signature.
                 bool isVerified = await presented.VerifyDeviceSignedAsync(
                     sessionTranscript,
-                    deviceKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                    deviceKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
                 Assert.IsTrue(isVerified, "The device signature produced by the verbose path must verify.");
             }
         }
@@ -183,14 +183,14 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                 PidDocType,
                 signingTranscript,
                 deviceKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             byte[] differentTranscript = SampleSessionTranscript(nonce: 0xDEAD);
             bool isVerified = await deviceSigned.VerifyAsync(
                 PidDocType,
                 differentTranscript,
-                deviceKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                deviceKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(isVerified,
                 "Verifier MUST reject a device signature when the session transcript bytes differ from signing time.");
@@ -220,7 +220,7 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             byte[] sessionTranscript = SampleSessionTranscript();
@@ -231,12 +231,12 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                 MdocDeviceNameSpaces.Empty,
                 sessionTranscript,
                 deviceKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             (bool result, MdocDeviceSignedVerificationContext? context) = await presented.VerifyDeviceSignedVerboseAsync(
                 sessionTranscript,
-                deviceKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                deviceKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             using(context)
             {
@@ -281,7 +281,7 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             byte[] signingTranscript = SampleSessionTranscript();
@@ -292,14 +292,14 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                 MdocDeviceNameSpaces.Empty,
                 signingTranscript,
                 deviceKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             //Verify against a different session transcript — the session binding fails.
             byte[] differentTranscript = SampleSessionTranscript(nonce: 0xDEAD);
             (bool result, MdocDeviceSignedVerificationContext? context) = await presented.VerifyDeviceSignedVerboseAsync(
                 differentTranscript,
-                deviceKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                deviceKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             using(context)
             {
@@ -331,13 +331,13 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                 PidDocType,
                 transcript,
                 deviceKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             bool isVerified = await deviceSigned.VerifyAsync(
                 PidDocType,
                 transcript,
-                imposterKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                imposterKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(isVerified, "Verification under a different device key must fail.");
         }
@@ -376,13 +376,13 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                 PidDocType,
                 transcript,
                 deviceKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             bool isVerified = await deviceSigned.VerifyAsync(
                 PidDocType,
                 transcript,
-                deviceKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                deviceKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(isVerified,
                 "Device signature over non-empty DeviceNameSpaces must verify.");
@@ -420,7 +420,7 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                     DeviceKey = deviceCoseKey
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             //Resolve the device key tag from the parsed MSO's COSE_Key.
@@ -445,12 +445,12 @@ internal sealed class MdocCborDeviceSignedEndToEndTests
                 MdocDeviceNameSpaces.Empty,
                 transcript,
                 deviceKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             bool isVerified = await presented.VerifyDeviceSignedAsync(
                 transcript,
-                deviceKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                deviceKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(isVerified);
         }
         finally

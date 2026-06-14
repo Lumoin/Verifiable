@@ -10,7 +10,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// is received. The PDA halts here.
 /// </remarks>
 [DebuggerDisplay("VerifierFlowFailed FlowId={FlowId} Reason={Reason}")]
-public sealed record VerifierFlowFailedState: OAuthFlowState
+public sealed record VerifierFlowFailedState: FlowState
 {
     /// <summary>A human-readable description of the failure reason.</summary>
     public required string Reason { get; init; }

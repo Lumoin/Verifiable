@@ -68,7 +68,7 @@ internal class HwTpmRandomTests
     [TestMethod]
     public async Task ExecutorReturnsRequestedBytes()
     {        
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);

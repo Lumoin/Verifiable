@@ -54,7 +54,7 @@ internal sealed class FederationChainPropertyTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     //Class-level fixture. Set up once, shared across all samples in all
     //tests. ClassCleanup tears it down.
@@ -322,7 +322,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         //metadata.federation_entity (the wire shape a real wallet parses).
         Uri intermediateFetchUrl = new(intermediateHost.HttpBaseAddress!,
             $"/connect/{intermediateSegment}/federation_fetch");
-        intermediateHost.Server.Integration.ContributeFederationMetadataAsync = (_, _, _) =>
+        intermediateHost.Server.OAuth().ContributeFederationMetadataAsync = (_, _, _) =>
             ValueTask.FromResult(new FederationEntityConfigurationContribution
             {
                 Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
@@ -335,7 +335,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
             });
 
         Dictionary<string, object> verifierSubjectJwks = BuildSingleEcKeyJwks(verifierFederationKeys.PublicKey);
-        intermediateHost.Server.Integration.ResolveSubordinateStatementAsync = (subject, _, _, _) =>
+        intermediateHost.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
         {
             if(!string.Equals(subject.Value, verifierEntityId.ToString(), StringComparison.Ordinal))
             {
@@ -350,7 +350,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         //the intermediate.
         Uri anchorFetchUrl = new(anchorHost.HttpBaseAddress!,
             $"/connect/{anchorSegment}/federation_fetch");
-        anchorHost.Server.Integration.ContributeFederationMetadataAsync = (_, _, _) =>
+        anchorHost.Server.OAuth().ContributeFederationMetadataAsync = (_, _, _) =>
             ValueTask.FromResult(new FederationEntityConfigurationContribution
             {
                 Metadata = new Dictionary<EntityTypeIdentifier, IReadOnlyDictionary<string, object>>
@@ -363,7 +363,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
             });
 
         Dictionary<string, object> intermediateSubjectJwks = BuildSingleEcKeyJwks(intermediateFederationKeys.PublicKey);
-        anchorHost.Server.Integration.ResolveSubordinateStatementAsync = (subject, _, _, _) =>
+        anchorHost.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
         {
             if(!string.Equals(subject.Value, intermediateEntityId.ToString(), StringComparison.Ordinal))
             {
@@ -471,7 +471,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
             trustAnchors,
             host.Time.GetUtcNow(),
             TimeSpan.FromMinutes(5),
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken).ConfigureAwait(false);
     }
 

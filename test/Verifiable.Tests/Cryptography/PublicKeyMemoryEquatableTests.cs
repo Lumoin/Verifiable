@@ -106,7 +106,7 @@ internal sealed class PublicKeyMemoryEquatableTests
     /// <returns>A new public key memory instance. The caller must dispose it.</returns>
     private static PublicKeyMemory CreatePublicKeyMemory(int size, byte fillByte = 0x00)
     {
-        IMemoryOwner<byte> buffer = SensitiveMemoryPool<byte>.Shared.Rent(size);
+        IMemoryOwner<byte> buffer = BaseMemoryPool.Shared.Rent(size);
         buffer.Memory.Span.Fill(fillByte);
 
         return new PublicKeyMemory(buffer, Tag.Empty);

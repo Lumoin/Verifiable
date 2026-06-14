@@ -13,7 +13,7 @@ namespace Verifiable.OAuth.Server;
 /// <para>
 /// Every delegate on this group has the same shape: <em>the library has a question,
 /// the application supplies an answer</em>. None of the delegates perform protocol
-/// logic — that lives entirely inside <see cref="AuthorizationServer"/>. They only
+/// logic — that lives entirely inside <see cref="EndpointServer"/>. They only
 /// answer questions that depend on the application's deployment choices: which
 /// signal identifies a tenant, where flow state is persisted, what URLs endpoints
 /// are exposed at, and so on.
@@ -25,93 +25,52 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthorizationServerIntegration Validated={IsValidated}")]
-public sealed class AuthorizationServerIntegration
+public sealed class AuthorizationServerIntegration: ServerIntegration
 {
     /// <summary>
-    /// Extracts the <see cref="TenantId"/> from the inbound request. Required.
+    /// The cryptographic-material delegate group (signing, verification, decryption, JWKS
+    /// assembly) the OAuth/OpenID endpoints and token producers use.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Invoked at the start of every request, before any other delegate. The
-    /// implementation reads whichever signal identifies the tenant in this
-    /// deployment — path segment, sub-domain, Host header, mTLS subject/SAN, a
-    /// claim on an upstream JWT, or a combination — from the
-    /// <see cref="ExchangeContext"/> the skin populated.
-    /// </para>
-    /// <para>
-    /// Returning <see langword="null"/> indicates the request carries no
-    /// identifiable tenant; the dispatcher responds with <c>400 invalid_request</c>
-    /// without invoking any further delegates.
-    /// </para>
-    /// </remarks>
-    public ExtractTenantIdDelegate? ExtractTenantIdAsync { get; set; }
+    public AuthorizationServerCryptography Cryptography { get; set; } = new();
+
+    /// <summary>
+    /// The encoding, decoding, hashing, and JWT-serialization delegate group the OAuth/OpenID
+    /// endpoints use.
+    /// </summary>
+    public AuthorizationServerCodecs Codecs { get; set; } = new();
+
+    /// <summary>
+    /// The token producers that compose the response of a token-issuing endpoint.
+    /// </summary>
+    public TokenProducerSet TokenProducers { get; set; } = TokenProducerSet.Empty;
+
+    /// <summary>
+    /// The composed claim-contribution issuer that emits the additional claims merged into
+    /// token payloads.
+    /// </summary>
+    public Verifiable.Core.Assessment.ClaimIssuer<ClaimContributionTarget>? ClaimIssuer { get; set; }
+
+    /// <summary>
+    /// Drives effectful work between pure PDA transitions for OAuth flows that emit
+    /// <see cref="OAuthAction"/> values (e.g. the OID4VP Verifier flow).
+    /// </summary>
+    public OAuthActionExecutor? ActionExecutor { get; set; }
+
+    /// <summary>
+    /// The timing policy applied across all OAuth artifact-issuance and timing-claim
+    /// validation sites. Defaults to <see cref="TimingPolicy.Default"/>.
+    /// </summary>
+    public TimingPolicy Timings { get; set; } = TimingPolicy.Default;
+
 
     /// <summary>
     /// Loads a <see cref="ClientRecord"/> by tenant identifier. Required.
     /// </summary>
-    public LoadClientRegistrationDelegate? LoadClientRegistrationAsync { get; set; }
-
-    /// <summary>
-    /// Persists an <see cref="OAuthFlowState"/> under the internal <c>flowId</c>
-    /// scoped by tenant. Required.
-    /// </summary>
-    /// <remarks>
-    /// The key is always the stable internal flow identifier — never an external
-    /// handle. The application may pattern-match on the state to build secondary
-    /// indexes, for example <c>code → flowId</c> or <c>request_uri_token → flowId</c>.
-    /// </remarks>
-    public SaveServerFlowStateDelegate? SaveFlowStateAsync { get; set; }
-
-    /// <summary>
-    /// Deletes a previously-saved flow state, scoped by tenant. Required
-    /// when the registration uses refresh-token grant
-    /// (<see cref="WellKnownCapabilityIdentifiers.OAuthAuthorizationCode"/> capability
-    /// implicitly enables refresh per RFC 6749 §6) so the AS can rotate
-    /// refresh tokens per RFC 9700 §2.2.2. Optional otherwise; flows that
-    /// never invalidate state can leave this null.
-    /// </summary>
-    public DeleteServerFlowStateDelegate? DeleteFlowStateAsync { get; set; }
-
-    /// <summary>
-    /// Loads an <see cref="OAuthFlowState"/> and step count by the internal
-    /// <c>flowId</c>. Required. The key has already been resolved from any
-    /// external handle by <see cref="ResolveCorrelationKeyAsync"/>.
-    /// </summary>
-    public LoadServerFlowStateDelegate? LoadFlowStateAsync { get; set; }
-
-    /// <summary>
-    /// Resolves an external correlation handle (request_uri token, authorization
-    /// code, device_code, etc.) to the stable internal <c>flowId</c> used as the
-    /// primary persistence key.
-    /// </summary>
-    /// <remarks>
-    /// Required for flows where the external handle differs from the
-    /// <c>flowId</c> (Auth Code with PAR, Device Authorization). Optional for
-    /// flows where the external handle <em>is</em> the <c>flowId</c>. When
-    /// <see langword="null"/>, the external handle is used directly.
-    /// </remarks>
-    public ResolveCorrelationKeyDelegate? ResolveCorrelationKeyAsync { get; set; }
-
-    /// <summary>
-    /// Resolves the absolute URL at which a capability is reachable for a given
-    /// registration in the current request. Required when the server emits
-    /// metadata documents or tokens whose claims include endpoint URLs.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Used by the discovery endpoint to populate <c>jwks_uri</c>,
-    /// <c>token_endpoint</c>, <c>authorization_endpoint</c> and similar fields,
-    /// by the PAR endpoint to compose the <c>request_uri</c> value, by token
-    /// producers to populate the <c>iss</c> claim, and by any other library call
-    /// site that has to embed an absolute URL.
-    /// </para>
-    /// <para>
-    /// The library never composes URLs from path templates. Only the application
-    /// knows the routing scheme — segmented, sub-domained, header-routed, flat —
-    /// and only the application can produce URLs that match the paths it serves.
-    /// </para>
-    /// </remarks>
-    public ResolveEndpointUriDelegate? ResolveEndpointUriAsync { get; set; }
+    public LoadRegistrationDelegate? LoadClientRegistrationAsync
+    {
+        get => LoadRegistrationAsync;
+        set => LoadRegistrationAsync = value;
+    }
 
     /// <summary>
     /// Resolves the authorization server's issuer URI (the <c>iss</c> claim and
@@ -121,34 +80,8 @@ public sealed class AuthorizationServerIntegration
     /// back to <see cref="ExchangeContextServerExtensions.Issuer"/> on the request
     /// context.
     /// </summary>
-    public ResolveIssuerDelegate? ResolveIssuerAsync { get; set; }
-
-    /// <summary>
-    /// Resolves the per-request capability set active for a registration.
-    /// Consulted once per request by
-    /// <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/>; the returned
-    /// set filters which builder-produced candidates land in the chain. Wire
-    /// to <see cref="DefaultCapabilityResolver.ResolveAsync"/> for the
-    /// no-attenuation default (every registration capability is active).
-    /// </summary>
-    /// <remarks>
-    /// Becomes required at <see cref="Validate"/> time in Phase 9h chunk 12
-    /// once <c>TestHostShell</c> wires the library default; until then the
-    /// slot is nullable and unread by dispatch.
-    /// </remarks>
-    public ResolveCapabilitiesDelegate? ResolveCapabilitiesAsync { get; set; }
-
-    /// <summary>
-    /// Invoked at each pipeline inspection stage (see
-    /// <see cref="InspectionStage"/>). Wire to
-    /// <see cref="DefaultInspector.NoOpAsync"/> for deployments that don't
-    /// need observation; supply a custom delegate to record audit trails,
-    /// emit OpenTelemetry events, or forward SSF/CAEP signals.
-    /// </summary>
-    /// <remarks>
-    /// Becomes required at <see cref="Validate"/> time in Phase 9h chunk 12.
-    /// </remarks>
-    public InspectDelegate? InspectAsync { get; set; }
+    //ResolveIssuerAsync is the host-generic base seam (ResolveServerIssuerDelegate over
+    //IRegistrationRecord); the OAuth wiring adapts its ClientRecord resolver to it.
 
     /// <summary>
     /// Maps the authenticated end-user identifier to the subject identifier
@@ -164,30 +97,6 @@ public sealed class AuthorizationServerIntegration
     /// producer reads it in 9h.
     /// </remarks>
     public ResolveSubjectIdentifierDelegate? ResolveSubjectIdentifierAsync { get; set; }
-
-    /// <summary>
-    /// Generates an identifier for a stated <see cref="IdentifierPurpose"/>.
-    /// Threaded through every wire-identifier and correlation-identifier
-    /// generation site in the library; deployments override to inject
-    /// audit-log emission, replay-deterministic identifier reads from an
-    /// event log, deployment-specific formats (ULID, KSUID, …), or any
-    /// other dispatch logic.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Wire to <see cref="DefaultIdentifierGenerator.ForTimeProvider"/>
-    /// for the library default — v7 GUID's 32-character hex string per
-    /// purpose, with the v7 timestamp sourced from the supplied
-    /// <see cref="TimeProvider"/>. The default ignores the purpose
-    /// argument; custom implementations dispatch on it.
-    /// </para>
-    /// <para>
-    /// OI-003 chunk A adds the slot; chunks B–E migrate the existing
-    /// hardcoded sites onto it. Until chunk B lands the slot is wired
-    /// by the test fixture but unread by production code.
-    /// </para>
-    /// </remarks>
-    public GenerateIdentifierDelegate? GenerateIdentifierAsync { get; set; }
 
     /// <summary>
     /// Fetches and validates Client ID Metadata Documents for CIMD clients.
@@ -745,7 +654,8 @@ public sealed class AuthorizationServerIntegration
     /// <c>rfc6749</c>), or supply a custom delegate for bespoke policy.
     /// </para>
     /// </remarks>
-    public ResolvePolicyDelegate? ResolvePolicyAsync { get; set; }
+    //ResolvePolicyAsync is the host-generic base seam (ResolveServerPolicyDelegate over
+    //IRegistrationRecord); the OAuth wiring adapts its ClientRecord resolver to it.
 
     /// <summary>
     /// Resolves the <c>aud</c> claim audience(s) for an RFC 9068 access token
@@ -852,30 +762,17 @@ public sealed class AuthorizationServerIntegration
 
 
     /// <summary>
-    /// Whether <see cref="Validate"/> has been called successfully on this group.
-    /// </summary>
-    public bool IsValidated { get; private set; }
-
-
-    /// <summary>
     /// Validates that the required delegates on this group are set.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// Thrown when one or more required delegates are missing.
     /// </exception>
-    public void Validate()
+    public override void Validate()
     {
         var missing = new List<string>();
 
-        if(ExtractTenantIdAsync is null) { missing.Add(nameof(ExtractTenantIdAsync)); }
-        if(LoadClientRegistrationAsync is null) { missing.Add(nameof(LoadClientRegistrationAsync)); }
-        if(SaveFlowStateAsync is null) { missing.Add(nameof(SaveFlowStateAsync)); }
-        if(LoadFlowStateAsync is null) { missing.Add(nameof(LoadFlowStateAsync)); }
-        if(ResolvePolicyAsync is null) { missing.Add(nameof(ResolvePolicyAsync)); }
-        if(ResolveCapabilitiesAsync is null) { missing.Add(nameof(ResolveCapabilitiesAsync)); }
-        if(InspectAsync is null) { missing.Add(nameof(InspectAsync)); }
+        CollectMissingHostSeams(missing);
         if(ResolveSubjectIdentifierAsync is null) { missing.Add(nameof(ResolveSubjectIdentifierAsync)); }
-        if(GenerateIdentifierAsync is null) { missing.Add(nameof(GenerateIdentifierAsync)); }
 
         if(missing.Count > 0)
         {
@@ -901,5 +798,203 @@ public sealed class AuthorizationServerIntegration
         registry.Register(Oid4Vci.OpenIdCredentialAuthorizationDetailHandler.Handler);
 
         return registry;
+    }
+
+
+    private readonly EventSubject eventSubject = new();
+
+    /// <summary>
+    /// The instance-scoped event stream for client registration lifecycle events.
+    /// </summary>
+    public IObservable<ClientRegistrationEvent> Events => eventSubject;
+
+
+    /// <summary>Emits a <see cref="ClientRegistered"/> event.</summary>
+    public void RegisterClient(
+        ClientRecord registration,
+        RegistrationAccessToken accessToken,
+        ExchangeContext context,
+        TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
+        eventSubject.Emit(new ClientRegistered
+        {
+            ClientId = registration.ClientId,
+            TenantId = registration.TenantId,
+            OccurredAt = timeProvider.GetUtcNow(),
+            Context = context,
+            Registration = registration,
+            AccessToken = accessToken
+        });
+    }
+
+
+    /// <summary>Emits a <see cref="ClientUpdated"/> event.</summary>
+    public void UpdateClient(
+        ClientRecord previous,
+        ClientRecord current,
+        ExchangeContext context,
+        TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(previous);
+        ArgumentNullException.ThrowIfNull(current);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
+        eventSubject.Emit(new ClientUpdated
+        {
+            ClientId = current.ClientId,
+            TenantId = current.TenantId,
+            OccurredAt = timeProvider.GetUtcNow(),
+            Context = context,
+            Previous = previous,
+            Current = current
+        });
+    }
+
+
+    /// <summary>Emits a <see cref="ClientDeregistered"/> event.</summary>
+    public void DeregisterClient(
+        ClientRecord registration,
+        string reason,
+        ExchangeContext context,
+        TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
+        eventSubject.Emit(new ClientDeregistered
+        {
+            ClientId = registration.ClientId,
+            TenantId = registration.TenantId,
+            OccurredAt = timeProvider.GetUtcNow(),
+            Context = context,
+            Reason = reason
+        });
+    }
+
+
+    /// <summary>Emits a <see cref="CapabilityGranted"/> event.</summary>
+    public void GrantCapability(
+        ClientRecord registration,
+        CapabilityIdentifier capability,
+        ExchangeContext context,
+        TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
+        eventSubject.Emit(new CapabilityGranted
+        {
+            ClientId = registration.ClientId,
+            TenantId = registration.TenantId,
+            OccurredAt = timeProvider.GetUtcNow(),
+            Context = context,
+            Capability = capability
+        });
+    }
+
+
+    /// <summary>Emits a <see cref="CapabilityRevoked"/> event.</summary>
+    public void RevokeCapability(
+        ClientRecord registration,
+        CapabilityIdentifier capability,
+        string reason,
+        ExchangeContext context,
+        TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
+        eventSubject.Emit(new CapabilityRevoked
+        {
+            ClientId = registration.ClientId,
+            TenantId = registration.TenantId,
+            OccurredAt = timeProvider.GetUtcNow(),
+            Context = context,
+            Capability = capability,
+            Reason = reason
+        });
+    }
+
+
+    //Instance-scoped copy-on-write event subject. Each integration has its own.
+    private sealed class EventSubject: IObservable<ClientRegistrationEvent>
+    {
+        private volatile IObserver<ClientRegistrationEvent>[] observers = [];
+        private readonly object gate = new();
+
+
+        public IDisposable Subscribe(IObserver<ClientRegistrationEvent> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+
+            lock(gate)
+            {
+                IObserver<ClientRegistrationEvent>[] current = observers;
+                IObserver<ClientRegistrationEvent>[] updated =
+                    new IObserver<ClientRegistrationEvent>[current.Length + 1];
+                current.CopyTo(updated, 0);
+                updated[current.Length] = observer;
+                observers = updated;
+            }
+
+            return new Subscription(this, observer);
+        }
+
+
+        public void Emit(ClientRegistrationEvent value)
+        {
+            IObserver<ClientRegistrationEvent>[] current = observers;
+            foreach(IObserver<ClientRegistrationEvent> observer in current)
+            {
+                observer.OnNext(value);
+            }
+        }
+
+
+        private void Remove(IObserver<ClientRegistrationEvent> observer)
+        {
+            lock(gate)
+            {
+                IObserver<ClientRegistrationEvent>[] current = observers;
+                int index = Array.IndexOf(current, observer);
+                if(index < 0)
+                {
+                    return;
+                }
+
+                IObserver<ClientRegistrationEvent>[] updated =
+                    new IObserver<ClientRegistrationEvent>[current.Length - 1];
+                Array.Copy(current, 0, updated, 0, index);
+                Array.Copy(current, index + 1, updated, index, current.Length - index - 1);
+                observers = updated;
+            }
+        }
+
+
+        private sealed class Subscription(
+            EventSubject subject,
+            IObserver<ClientRegistrationEvent> observer): IDisposable
+        {
+            private bool disposed;
+
+            public void Dispose()
+            {
+                if(!disposed)
+                {
+                    subject.Remove(observer);
+                    disposed = true;
+                }
+            }
+        }
     }
 }

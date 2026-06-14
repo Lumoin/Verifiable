@@ -7,6 +7,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -222,7 +223,7 @@ internal sealed class IdTokenIssuanceTests
     {
         await using TestHostShell host = new(TimeProvider);
         host.SeedTestSubject(subject: SubjectId);
-        host.Server.Integration.ResolveSubjectIdentifierAsync =
+        host.Server.OAuth().ResolveSubjectIdentifierAsync =
             (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
 
         using VerifierKeyMaterial material = host.RegisterDpopClient(
@@ -275,7 +276,7 @@ internal sealed class IdTokenIssuanceTests
         TestHostShell host, VerifierKeyMaterial material, string scope)
     {
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()
         {

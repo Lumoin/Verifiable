@@ -34,7 +34,7 @@ public sealed class SiopVerifierServerFlowKind: StatefulFlowKind
 
 
     /// <inheritdoc/>
-    public override ValueTask<(OAuthFlowState State, int StepCount)> CreateAsync(
+    public override ValueTask<(FlowState State, int StepCount)> CreateAsync(
         string runId,
         TimeProvider timeProvider)
     {
@@ -43,15 +43,15 @@ public sealed class SiopVerifierServerFlowKind: StatefulFlowKind
 
         var pda = SiopVerifierFlowAutomaton.Create(runId, timeProvider);
 
-        return ValueTask.FromResult<(OAuthFlowState, int)>((pda.CurrentState, pda.StepCount));
+        return ValueTask.FromResult<(FlowState, int)>((pda.CurrentState, pda.StepCount));
     }
 
 
     /// <inheritdoc/>
-    public override async ValueTask<(OAuthFlowState State, int StepCount)> StepAsync(
-        OAuthFlowState state,
+    public override async ValueTask<(FlowState State, int StepCount)> StepAsync(
+        FlowState state,
         int stepCount,
-        OAuthFlowInput input,
+        FlowInput input,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
