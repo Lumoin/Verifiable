@@ -220,7 +220,7 @@ public sealed record TrustAssessorVerdict
 /// The Layer-4 assessor seam — the single extension point the party-trust engine drops
 /// out to, mirroring <c>PolicyAssessorDelegate</c> in the DCQL disclosure engine. The
 /// application composes a list of these (the engine behind the seam); a thin caller
-/// (AuthorizationServer, verifier, wallet) invokes the engine.
+/// (EndpointServer, verifier, wallet) invokes the engine.
 /// </summary>
 /// <typeparam name="TMechanismEvidence">The mechanism-specific proof type.</typeparam>
 public delegate ValueTask<TrustAssessorVerdict> TrustAssessorDelegate<TMechanismEvidence>(

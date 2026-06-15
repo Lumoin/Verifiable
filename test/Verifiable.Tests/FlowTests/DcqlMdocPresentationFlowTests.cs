@@ -137,7 +137,7 @@ internal sealed class DcqlMdocPresentationFlowTests
 
             //=== Wallet builds OID4VP SessionTranscript + device-signs ===
             using IMemoryOwner<byte> mdocGeneratedNonce =
-                Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, SensitiveMemoryPool<byte>.Shared);
+                Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, BaseMemoryPool.Shared);
             ReadOnlyMemory<byte> nonceMemory =
                 mdocGeneratedNonce.Memory[..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
             ReadOnlyMemory<byte> sessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
@@ -150,7 +150,7 @@ internal sealed class DcqlMdocPresentationFlowTests
                 MdocDeviceNameSpaces.Empty,
                 sessionTranscript,
                 deviceKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             using MdocDeviceResponse deviceResponse = new(
@@ -166,7 +166,7 @@ internal sealed class DcqlMdocPresentationFlowTests
 
             //Issuer signature (M.3).
             bool isIssuerVerified = await issued.VerifyIssuerAuthAsync(
-                issuerKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                issuerKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(isIssuerVerified, "Issuer MSO signature must verify against the same key used at issuance.");
 
             //Digest binding on the TRIMMED set (M.4). The headline assertion:
@@ -182,7 +182,7 @@ internal sealed class DcqlMdocPresentationFlowTests
             //Device signature against reconstructed transcript (M.3b).
             bool isDeviceVerified = await presented.VerifyDeviceSignedAsync(
                 sessionTranscript,
-                deviceKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                deviceKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1AllowingNilPayload, MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(isDeviceVerified, "Device signature must verify.");
 
             //None of the un-requested items appear in the presentation.
@@ -280,7 +280,7 @@ internal sealed class DcqlMdocPresentationFlowTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             //Ask for one of the two domestic claims.
@@ -331,7 +331,7 @@ internal sealed class DcqlMdocPresentationFlowTests
                 DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
             },
             issuerKeys.PrivateKey,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

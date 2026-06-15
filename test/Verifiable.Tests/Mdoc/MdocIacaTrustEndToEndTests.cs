@@ -81,7 +81,7 @@ internal sealed class MdocIacaTrustEndToEndTests
                     X5Chain = x5Chain
                 },
                 leafPrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             //Build the trust delegate — trust the root cert; verify "now"
@@ -91,11 +91,11 @@ internal sealed class MdocIacaTrustEndToEndTests
                 validateChain: MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [rootTrustAnchor],
                 validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
-                pool: SensitiveMemoryPool<byte>.Shared);
+                pool: BaseMemoryPool.Shared);
 
             //End-to-end: trust resolution + signature verification in one call.
             bool isVerified = await issued.VerifyIssuerAuthAsync(
-                trustDelegate, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                trustDelegate, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(isVerified, "IACA-rooted IssuerAuth must verify under the trust delegate.");
         }
@@ -130,7 +130,7 @@ internal sealed class MdocIacaTrustEndToEndTests
                     X5Chain = [leafCert.RawData, rootCert.RawData]
                 },
                 leafPrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             using PkiCertificateMemory rootTrustAnchor = CopyToPkiCertificate(rootCert.RawData);
@@ -138,10 +138,10 @@ internal sealed class MdocIacaTrustEndToEndTests
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [rootTrustAnchor],
                 validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
-                pool: SensitiveMemoryPool<byte>.Shared);
+                pool: BaseMemoryPool.Shared);
 
             (bool result, MdocIssuerAuthVerificationContext? context) = await issued.VerifyIssuerAuthVerboseAsync(
-                trustDelegate, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                trustDelegate, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             using(context)
             {
@@ -187,7 +187,7 @@ internal sealed class MdocIacaTrustEndToEndTests
                     X5Chain = [leafCert.RawData, rootCert.RawData]
                 },
                 leafPrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             using PkiCertificateMemory imposterAnchor = CopyToPkiCertificate(imposterRootCert.RawData);
@@ -195,10 +195,10 @@ internal sealed class MdocIacaTrustEndToEndTests
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [imposterAnchor],
                 validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
-                pool: SensitiveMemoryPool<byte>.Shared);
+                pool: BaseMemoryPool.Shared);
 
             (bool result, MdocIssuerAuthVerificationContext? context) = await issued.VerifyIssuerAuthVerboseAsync(
-                trustDelegate, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                trustDelegate, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             using(context)
             {
@@ -233,7 +233,7 @@ internal sealed class MdocIacaTrustEndToEndTests
                     //No X5Chain
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             //Build a trust delegate against an empty anchor list — irrelevant
@@ -244,7 +244,7 @@ internal sealed class MdocIacaTrustEndToEndTests
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [],
                 validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
-                pool: SensitiveMemoryPool<byte>.Shared);
+                pool: BaseMemoryPool.Shared);
 
             using MdocIacaTrustResolution resolution = await trustDelegate(
                 issued.IssuerSigned.IssuerAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -288,7 +288,7 @@ internal sealed class MdocIacaTrustEndToEndTests
                     X5Chain = [leafCert.RawData, rootCert.RawData]
                 },
                 leafPrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             using PkiCertificateMemory imposterAnchor = CopyToPkiCertificate(imposterRootCert.RawData);
@@ -296,7 +296,7 @@ internal sealed class MdocIacaTrustEndToEndTests
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [imposterAnchor],
                 validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
-                pool: SensitiveMemoryPool<byte>.Shared);
+                pool: BaseMemoryPool.Shared);
 
             using MdocIacaTrustResolution resolution = await trustDelegate(
                 issued.IssuerSigned.IssuerAuth, TestContext.CancellationToken).ConfigureAwait(false);
@@ -335,7 +335,7 @@ internal sealed class MdocIacaTrustEndToEndTests
                     X5Chain = [rootCert.RawData]
                 },
                 rootPrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             using PkiCertificateMemory rootAnchor = CopyToPkiCertificate(rootCert.RawData);
@@ -343,10 +343,10 @@ internal sealed class MdocIacaTrustEndToEndTests
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [rootAnchor],
                 validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
-                pool: SensitiveMemoryPool<byte>.Shared);
+                pool: BaseMemoryPool.Shared);
 
             bool isVerified = await issued.VerifyIssuerAuthAsync(
-                trustDelegate, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                trustDelegate, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(isVerified,
                 "Single-cert x5chain (bare bstr form per RFC 9360 §2) must verify.");
@@ -374,7 +374,7 @@ internal sealed class MdocIacaTrustEndToEndTests
         byte[] coseSign1 = BuildMinimalCoseSign1WithX5Chain(leafCert.RawData, rootCert.RawData);
 
         IReadOnlyList<PkiCertificateMemory> chain = MdocCborX5ChainExtractor.Extract(
-            coseSign1, SensitiveMemoryPool<byte>.Shared);
+            coseSign1, BaseMemoryPool.Shared);
 
         try
         {
@@ -461,7 +461,7 @@ internal sealed class MdocIacaTrustEndToEndTests
         ECParameters parameters = key.ExportParameters(includePrivateParameters: true);
         byte[] dBytes = parameters.D!;
 
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(dBytes.Length);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(dBytes.Length);
         dBytes.CopyTo(owner.Memory.Span);
 
         return new PrivateKeyMemory(owner, CryptoTags.P256PrivateKey);
@@ -470,7 +470,7 @@ internal sealed class MdocIacaTrustEndToEndTests
 
     private static PkiCertificateMemory CopyToPkiCertificate(byte[] derBytes)
     {
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(derBytes.Length);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(derBytes.Length);
         derBytes.CopyTo(owner.Memory.Span);
 
         return new PkiCertificateMemory(owner, PkiCertificateTags.X509Certificate);

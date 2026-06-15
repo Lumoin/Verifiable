@@ -6,6 +6,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -244,7 +245,7 @@ internal sealed class StepUpAccessTokenClaimsTests
         string? acr, DateTimeOffset authTime)
     {
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()
         {

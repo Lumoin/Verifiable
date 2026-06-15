@@ -37,7 +37,7 @@ internal sealed class SsfHttpFlowTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]
@@ -51,7 +51,7 @@ internal sealed class SsfHttpFlowTests
                 WellKnownCapabilityIdentifiers.SsfTransmitter,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
 
-        app.Server.Integration.ContributeSsfTransmitterMetadataAsync = static (_, _, _) =>
+        app.Server.OAuth().ContributeSsfTransmitterMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(new SsfTransmitterMetadataContribution
             {
                 DeliveryMethodsSupported = [SsfDeliveryMethods.PushHttp, SsfDeliveryMethods.PollHttp]

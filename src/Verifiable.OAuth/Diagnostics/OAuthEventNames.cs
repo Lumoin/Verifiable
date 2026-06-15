@@ -4,44 +4,22 @@ using Verifiable.Cryptography.Text;
 namespace Verifiable.OAuth.Diagnostics;
 
 /// <summary>
-/// Span event names emitted during OAuth authorization server operations.
+/// Span event names emitted during OAuth-specific operations. These events are added
+/// to whichever span is active on <see cref="System.Diagnostics.Activity.Current"/> at the
+/// time the OAuth operation runs (typically the host-loop dispatch span).
 /// </summary>
 /// <remarks>
 /// <para>
-/// Events are points in time within a span. Validation claim results are
-/// emitted as individual events so each check is visible in the trace
-/// without requiring a child span.
+/// Events are points in time within a span. Each event here corresponds to a discrete
+/// observable occurrence in an OAuth endpoint handler that is worth surfacing in traces
+/// for monitoring and alerting purposes.
 /// </para>
 /// </remarks>
 public static class OAuthEventNames
 {
-    /// <summary>The UTF-8 source literal of <see cref="ValidationClaim"/>.</summary>
-    public static ReadOnlySpan<byte> ValidationClaimUtf8 => "oauth.validation.claim"u8;
-
-    /// <summary>
-    /// A single validation claim was evaluated. Tags carry the claim code,
-    /// name, and outcome.
-    /// </summary>
-    public static readonly string ValidationClaim = Utf8Constants.ToInternedString(ValidationClaimUtf8);
-
-    /// <summary>The UTF-8 source literal of <see cref="ValidationPassed"/>.</summary>
-    public static ReadOnlySpan<byte> ValidationPassedUtf8 => "oauth.validation.passed"u8;
-
-    /// <summary>
-    /// All validation claims passed — the request is accepted for processing.
-    /// </summary>
-    public static readonly string ValidationPassed = Utf8Constants.ToInternedString(ValidationPassedUtf8);
-
-    /// <summary>The UTF-8 source literal of <see cref="ValidationFailed"/>.</summary>
-    public static ReadOnlySpan<byte> ValidationFailedUtf8 => "oauth.validation.failed"u8;
-
-    /// <summary>
-    /// One or more validation claims failed — the request is rejected.
-    /// </summary>
-    public static readonly string ValidationFailed = Utf8Constants.ToInternedString(ValidationFailedUtf8);
-
     /// <summary>The UTF-8 source literal of <see cref="ExtraneousAuthorizeParameters"/>.</summary>
-    public static ReadOnlySpan<byte> ExtraneousAuthorizeParametersUtf8 => "oauth.authorize.extraneous_parameters_ignored"u8;
+    public static ReadOnlySpan<byte> ExtraneousAuthorizeParametersUtf8 =>
+        "oauth.authorize.extraneous_parameters_ignored"u8;
 
     /// <summary>
     /// A <c>request_uri</c>-referenced authorization request (PAR per RFC 9126, or JAR by
@@ -50,7 +28,8 @@ public static class OAuthEventNames
     /// parameters and ignores these extras; their presence may indicate a non-conformant client
     /// or a front-channel tampering attempt, so it is surfaced for deployments to alert on.
     /// </summary>
-    public static readonly string ExtraneousAuthorizeParameters = Utf8Constants.ToInternedString(ExtraneousAuthorizeParametersUtf8);
+    public static readonly string ExtraneousAuthorizeParameters =
+        Utf8Constants.ToInternedString(ExtraneousAuthorizeParametersUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DuplicateGrantedCredentialConfigurationCollapsed"/>.</summary>
     public static ReadOnlySpan<byte> DuplicateGrantedCredentialConfigurationCollapsedUtf8 =>
@@ -83,68 +62,21 @@ public static class OAuthEventNames
     public static readonly string LongLivedBearerCredentialTokenRefused =
         Utf8Constants.ToInternedString(LongLivedBearerCredentialTokenRefusedUtf8);
 
-    /// <summary>The UTF-8 source literal of <see cref="StateTransition"/>.</summary>
-    public static ReadOnlySpan<byte> StateTransitionUtf8 => "oauth.flow.state_transition"u8;
+    /// <summary>The UTF-8 source literal of <see cref="Oid4VpClientIdMixUpRejected"/>.</summary>
+    public static ReadOnlySpan<byte> Oid4VpClientIdMixUpRejectedUtf8 =>
+        "oid4vp.wallet.client_id_mixup_rejected"u8;
 
     /// <summary>
-    /// The PDA transitioned to a new state.
+    /// An OID4VP wallet refused an Authorization Request whose <c>client_id</c> did not match the
+    /// Verifier identity the wallet pinned from the QR code or deep link
+    /// (<see cref="Oid4Vp.Wallet.PresentJarOptions.ExpectedVerifierClientId"/>). Resolving the JAR
+    /// signing key by the <c>client_id</c> scheme proves the request is signed by some key bound to
+    /// the asserted identity, but it does not prove that identity is the one the wallet intended to
+    /// answer; a forwarded or substituted request can still carry a validly-signed-but-different
+    /// <c>client_id</c>. The wallet fails the presentation closed before producing any presentation
+    /// or POSTing a response — the OID4VP mix-up defence — and the event surfaces the detection for
+    /// deployments to alert on.
     /// </summary>
-    public static readonly string StateTransition = Utf8Constants.ToInternedString(StateTransitionUtf8);
-
-    /// <summary>The UTF-8 source literal of <see cref="ActionExecuted"/>.</summary>
-    public static ReadOnlySpan<byte> ActionExecutedUtf8 => "oauth.flow.action_executed"u8;
-
-    /// <summary>
-    /// An effectful action was executed by the PDA action loop.
-    /// </summary>
-    public static readonly string ActionExecuted = Utf8Constants.ToInternedString(ActionExecutedUtf8);
-
-    /// <summary>The UTF-8 source literal of <see cref="CorrelationResolved"/>.</summary>
-    public static ReadOnlySpan<byte> CorrelationResolvedUtf8 => "oauth.correlation.resolved"u8;
-
-    /// <summary>
-    /// The correlation key was resolved from an external handle to the
-    /// internal flow identifier.
-    /// </summary>
-    public static readonly string CorrelationResolved = Utf8Constants.ToInternedString(CorrelationResolvedUtf8);
-
-    /// <summary>The UTF-8 source literal of <see cref="CorrelationNotFound"/>.</summary>
-    public static ReadOnlySpan<byte> CorrelationNotFoundUtf8 => "oauth.correlation.not_found"u8;
-
-    /// <summary>
-    /// The correlation key could not be resolved — flow not found.
-    /// </summary>
-    public static readonly string CorrelationNotFound = Utf8Constants.ToInternedString(CorrelationNotFoundUtf8);
-
-    /// <summary>The UTF-8 source literal of <see cref="FlowCreated"/>.</summary>
-    public static ReadOnlySpan<byte> FlowCreatedUtf8 => "oauth.flow.created"u8;
-
-    /// <summary>
-    /// A new flow was created with a fresh internal flow identifier.
-    /// </summary>
-    public static readonly string FlowCreated = Utf8Constants.ToInternedString(FlowCreatedUtf8);
-
-    /// <summary>The UTF-8 source literal of <see cref="ClientRegistered"/>.</summary>
-    public static ReadOnlySpan<byte> ClientRegisteredUtf8 => "oauth.client.registered"u8;
-
-    /// <summary>
-    /// A client was registered.
-    /// </summary>
-    public static readonly string ClientRegistered = Utf8Constants.ToInternedString(ClientRegisteredUtf8);
-
-    /// <summary>The UTF-8 source literal of <see cref="ClientUpdated"/>.</summary>
-    public static ReadOnlySpan<byte> ClientUpdatedUtf8 => "oauth.client.updated"u8;
-
-    /// <summary>
-    /// A client registration was updated (e.g., key rotation).
-    /// </summary>
-    public static readonly string ClientUpdated = Utf8Constants.ToInternedString(ClientUpdatedUtf8);
-
-    /// <summary>The UTF-8 source literal of <see cref="ClientDeregistered"/>.</summary>
-    public static ReadOnlySpan<byte> ClientDeregisteredUtf8 => "oauth.client.deregistered"u8;
-
-    /// <summary>
-    /// A client was deregistered.
-    /// </summary>
-    public static readonly string ClientDeregistered = Utf8Constants.ToInternedString(ClientDeregisteredUtf8);
+    public static readonly string Oid4VpClientIdMixUpRejected =
+        Utf8Constants.ToInternedString(Oid4VpClientIdMixUpRejectedUtf8);
 }

@@ -6,7 +6,7 @@ using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Federation;
 /// <remarks>
 /// <para>
 /// Register at startup via
-/// <see cref="ServerConfiguration.EndpointBuilders"/>:
+/// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>:
 /// </para>
 /// <code>
 /// new EndpointBuilderSet([
@@ -60,23 +60,23 @@ public static class FederationEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="ServerConfiguration.EndpointBuilders"/>.
+    /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
         bool hasFederationSigning =
-            registration.FederationEntityId is not null
-            && registration.SigningKeys.ContainsKey(KeyUsageContext.FederationEntitySignature);
+            ((ClientRecord)registration).FederationEntityId is not null
+            && ((ClientRecord)registration).SigningKeys.ContainsKey(KeyUsageContext.FederationEntitySignature);
 
-        if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.PublishEntityConfiguration)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.PublishEntityConfiguration)
             && hasFederationSigning)
         {
             candidates.Add(BuildEntityConfiguration());
         }
 
-        if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.PublishSubordinateStatement)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.PublishSubordinateStatement)
             && hasFederationSigning)
         {
             candidates.Add(BuildFederationFetch());
@@ -87,15 +87,15 @@ public static class FederationEndpoints
         //key. An entity may therefore advertise its subordinate membership
         //without also issuing Subordinate Statements (though most that list
         //also fetch).
-        if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.ListSubordinates)
-            && registration.FederationEntityId is not null)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.ListSubordinates)
+            && ((ClientRecord)registration).FederationEntityId is not null)
         {
             candidates.Add(BuildFederationList());
         }
 
         //The resolve endpoint returns a SIGNED Resolve Response JWT, so it
         //needs the federation signing key (unlike the unsigned list).
-        if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.ResolveTrustChain)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.ResolveTrustChain)
             && hasFederationSigning)
         {
             candidates.Add(BuildFederationResolve());
@@ -103,7 +103,7 @@ public static class FederationEndpoints
 
         //The explicit registration endpoint returns a SIGNED Explicit
         //Registration Response JWT, so it needs the federation signing key.
-        if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly)
             && hasFederationSigning)
         {
             candidates.Add(BuildFederationRegistration());
@@ -112,7 +112,7 @@ public static class FederationEndpoints
         //The historical keys endpoint returns a SIGNED JWK Set JWT, so it
         //needs the federation signing key (like resolve and explicit
         //registration).
-        if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.PublishHistoricalKeys)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.PublishHistoricalKeys)
             && hasFederationSigning)
         {
             candidates.Add(BuildFederationHistoricalKeys());
@@ -166,9 +166,10 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -176,7 +177,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(registration.FederationEntityId is null)
+                if(((ClientRecord)registration).FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -184,7 +185,7 @@ public static class FederationEndpoints
                         + "ClientRecord.FederationEntityId to be set."));
                 }
 
-                if(!registration.SigningKeys.TryGetValue(
+                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
                         KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
                     || federationKeys.Current.IsEmpty)
                 {
@@ -195,8 +196,8 @@ public static class FederationEndpoints
                         + "with a non-empty Current list."));
                 }
 
-                if(server.Cryptography.SigningKeyResolver is null
-                    || server.Cryptography.VerificationKeyResolver is null)
+                if(oauth.Cryptography.SigningKeyResolver is null
+                    || oauth.Cryptography.VerificationKeyResolver is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -205,7 +206,7 @@ public static class FederationEndpoints
                         + "VerificationKeyResolver to be configured."));
                 }
 
-                EncodeDelegate? base64UrlEncoder = server.Codecs.Encoder;
+                EncodeDelegate? base64UrlEncoder = oauth.Codecs.Encoder;
                 if(base64UrlEncoder is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -218,7 +219,7 @@ public static class FederationEndpoints
                 //library uses elsewhere via ClientRecord.GetDefaultSigningKeyId.
                 KeyId signingKeyId = federationKeys.Current[0];
 
-                PrivateKeyMemory? privateKey = await server.Cryptography.SigningKeyResolver(
+                PrivateKeyMemory? privateKey = await oauth.Cryptography.SigningKeyResolver(
                     signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
                 if(privateKey is null)
                 {
@@ -241,13 +242,13 @@ public static class FederationEndpoints
                 //through the AS pipeline so the integration delegate sees the
                 //full ExchangeContext and may mutate freely per call.
                 FederationEntityConfigurationContribution contribution =
-                    server.Integration.ContributeFederationMetadataAsync is null
+                    oauth.ContributeFederationMetadataAsync is null
                         ? FederationEntityConfigurationContribution.Empty
-                        : await server.Integration.ContributeFederationMetadataAsync(
+                        : await oauth.ContributeFederationMetadataAsync(
                             registration, context, ct).ConfigureAwait(false);
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
-                DateTimeOffset expiresAt = now + server.Timings.FederationEntityConfigurationLifetime;
+                DateTimeOffset expiresAt = now + oauth.Timings.FederationEntityConfigurationLifetime;
 
                 string alg = CryptoFormatConversions.DefaultTagToJwaConverter(privateKey.Tag);
 
@@ -256,12 +257,12 @@ public static class FederationEndpoints
                 //published Entity Configuration matches what the endpoints actually
                 //serve. Automatic (§12.1) first, then explicit (§12.2).
                 List<string> clientRegistrationTypesSupported = [];
-                if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsAutomatically))
+                if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsAutomatically))
                 {
                     clientRegistrationTypesSupported.Add(WellKnownFederationRegistrationTypeValues.Automatic);
                 }
 
-                if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly))
+                if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly))
                 {
                     clientRegistrationTypesSupported.Add(WellKnownFederationRegistrationTypeValues.Explicit);
                 }
@@ -270,7 +271,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.BuildHeader(signingKeyId.Value, alg);
                 Dictionary<string, object> payloadDict =
                     EntityStatementJsonBuilder.BuildConfigurationPayload(
-                        registration.FederationEntityId,
+                        ((ClientRecord)registration).FederationEntityId,
                         now,
                         expiresAt,
                         jwks,
@@ -351,9 +352,10 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -361,7 +363,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(registration.FederationEntityId is null)
+                if(((ClientRecord)registration).FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -369,7 +371,7 @@ public static class FederationEndpoints
                         + "ClientRecord.FederationEntityId to be set."));
                 }
 
-                if(server.Integration.ResolveSubordinateStatementAsync is null)
+                if(oauth.ResolveSubordinateStatementAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -378,7 +380,7 @@ public static class FederationEndpoints
                         + "to be configured."));
                 }
 
-                if(!registration.SigningKeys.TryGetValue(
+                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
                         KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
                     || federationKeys.Current.IsEmpty)
                 {
@@ -389,7 +391,7 @@ public static class FederationEndpoints
                         + "with a non-empty Current list."));
                 }
 
-                if(server.Cryptography.SigningKeyResolver is null)
+                if(oauth.Cryptography.SigningKeyResolver is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -397,7 +399,7 @@ public static class FederationEndpoints
                         + "AuthorizationServerCryptography.SigningKeyResolver to be configured."));
                 }
 
-                EncodeDelegate? base64UrlEncoder = server.Codecs.Encoder;
+                EncodeDelegate? base64UrlEncoder = oauth.Codecs.Encoder;
                 if(base64UrlEncoder is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -434,7 +436,7 @@ public static class FederationEndpoints
                 //statement. Uri equality normalises the empty-vs-"/" path so the
                 //guard is not defeated by a trailing slash.
                 if(Uri.TryCreate(subject.Value, UriKind.Absolute, out Uri? subjectUri)
-                    && subjectUri == registration.FederationEntityId)
+                    && subjectUri == ((ClientRecord)registration).FederationEntityId)
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
@@ -443,7 +445,7 @@ public static class FederationEndpoints
                 }
 
                 SubordinateStatementContribution? contribution =
-                    await server.Integration.ResolveSubordinateStatementAsync(
+                    await oauth.ResolveSubordinateStatementAsync(
                         subject, registration, context, ct).ConfigureAwait(false);
 
                 if(contribution is null)
@@ -456,7 +458,7 @@ public static class FederationEndpoints
                 }
 
                 KeyId signingKeyId = federationKeys.Current[0];
-                PrivateKeyMemory? privateKey = await server.Cryptography.SigningKeyResolver(
+                PrivateKeyMemory? privateKey = await oauth.Cryptography.SigningKeyResolver(
                     signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
                 if(privateKey is null)
                 {
@@ -466,7 +468,7 @@ public static class FederationEndpoints
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
-                DateTimeOffset expiresAt = now + server.Timings.FederationEntityConfigurationLifetime;
+                DateTimeOffset expiresAt = now + oauth.Timings.FederationEntityConfigurationLifetime;
 
                 string alg = CryptoFormatConversions.DefaultTagToJwaConverter(privateKey.Tag);
 
@@ -474,7 +476,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.BuildHeader(signingKeyId.Value, alg);
                 Dictionary<string, object> payloadDict =
                     EntityStatementJsonBuilder.BuildSubordinatePayload(
-                        issuerEntityIdentifier: registration.FederationEntityId,
+                        issuerEntityIdentifier: ((ClientRecord)registration).FederationEntityId,
                         subjectEntityIdentifier: new Uri(subject.Value),
                         issuedAt: now,
                         expiresAt: expiresAt,
@@ -551,9 +553,10 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -561,7 +564,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(registration.FederationEntityId is null)
+                if(((ClientRecord)registration).FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -569,7 +572,7 @@ public static class FederationEndpoints
                         + "ClientRecord.FederationEntityId to be set."));
                 }
 
-                if(server.Integration.ResolveSubordinateListAsync is null)
+                if(oauth.ResolveSubordinateListAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -588,7 +591,7 @@ public static class FederationEndpoints
                 }
 
                 IReadOnlyList<EntityIdentifier> subordinates =
-                    await server.Integration.ResolveSubordinateListAsync(
+                    await oauth.ResolveSubordinateListAsync(
                         entityTypeFilter, registration, context, ct).ConfigureAwait(false)
                     ?? [];
 
@@ -690,9 +693,10 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -700,7 +704,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(registration.FederationEntityId is null)
+                if(((ClientRecord)registration).FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -708,7 +712,7 @@ public static class FederationEndpoints
                         + "ClientRecord.FederationEntityId to be set."));
                 }
 
-                if(server.Integration.ResolveSubjectTrustChainAsync is null)
+                if(oauth.ResolveSubjectTrustChainAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -717,7 +721,7 @@ public static class FederationEndpoints
                         + "to be configured."));
                 }
 
-                if(!registration.SigningKeys.TryGetValue(
+                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
                         KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
                     || federationKeys.Current.IsEmpty)
                 {
@@ -728,7 +732,7 @@ public static class FederationEndpoints
                         + "with a non-empty Current list."));
                 }
 
-                if(server.Cryptography.SigningKeyResolver is null)
+                if(oauth.Cryptography.SigningKeyResolver is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -736,7 +740,7 @@ public static class FederationEndpoints
                         + "AuthorizationServerCryptography.SigningKeyResolver to be configured."));
                 }
 
-                EncodeDelegate? base64UrlEncoder = server.Codecs.Encoder;
+                EncodeDelegate? base64UrlEncoder = oauth.Codecs.Encoder;
                 if(base64UrlEncoder is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -793,7 +797,7 @@ public static class FederationEndpoints
                 }
 
                 ResolveResponseContribution? contribution =
-                    await server.Integration.ResolveSubjectTrustChainAsync(
+                    await oauth.ResolveSubjectTrustChainAsync(
                         subject, trustAnchor, entityTypeFilter, registration, context, ct).ConfigureAwait(false);
 
                 if(contribution is null)
@@ -802,7 +806,7 @@ public static class FederationEndpoints
                 }
 
                 KeyId signingKeyId = federationKeys.Current[0];
-                PrivateKeyMemory? privateKey = await server.Cryptography.SigningKeyResolver(
+                PrivateKeyMemory? privateKey = await oauth.Cryptography.SigningKeyResolver(
                     signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
                 if(privateKey is null)
                 {
@@ -812,7 +816,7 @@ public static class FederationEndpoints
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
-                DateTimeOffset expiresAt = now + server.Timings.FederationEntityConfigurationLifetime;
+                DateTimeOffset expiresAt = now + oauth.Timings.FederationEntityConfigurationLifetime;
 
                 string alg = CryptoFormatConversions.DefaultTagToJwaConverter(privateKey.Tag);
 
@@ -821,7 +825,7 @@ public static class FederationEndpoints
                         signingKeyId.Value, alg, WellKnownFederationMediaTypes.ResolveResponseJwt);
                 Dictionary<string, object> payloadDict =
                     EntityStatementJsonBuilder.BuildResolveResponsePayload(
-                        resolverEntityIdentifier: registration.FederationEntityId,
+                        resolverEntityIdentifier: ((ClientRecord)registration).FederationEntityId,
                         subjectEntityIdentifier: subject.Value,
                         issuedAt: now,
                         expiresAt: expiresAt,
@@ -894,9 +898,10 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -904,7 +909,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(registration.FederationEntityId is null)
+                if(((ClientRecord)registration).FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -912,7 +917,7 @@ public static class FederationEndpoints
                         + "ClientRecord.FederationEntityId to be set."));
                 }
 
-                if(server.Integration.ResolveHistoricalKeysAsync is null)
+                if(oauth.ResolveHistoricalKeysAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -921,7 +926,7 @@ public static class FederationEndpoints
                         + "to be configured."));
                 }
 
-                if(!registration.SigningKeys.TryGetValue(
+                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
                         KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
                     || federationKeys.Current.IsEmpty)
                 {
@@ -932,7 +937,7 @@ public static class FederationEndpoints
                         + "with a non-empty Current list."));
                 }
 
-                if(server.Cryptography.SigningKeyResolver is null)
+                if(oauth.Cryptography.SigningKeyResolver is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -940,7 +945,7 @@ public static class FederationEndpoints
                         + "AuthorizationServerCryptography.SigningKeyResolver to be configured."));
                 }
 
-                EncodeDelegate? base64UrlEncoder = server.Codecs.Encoder;
+                EncodeDelegate? base64UrlEncoder = oauth.Codecs.Encoder;
                 if(base64UrlEncoder is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -950,7 +955,7 @@ public static class FederationEndpoints
                 }
 
                 HistoricalKeysContribution? contribution =
-                    await server.Integration.ResolveHistoricalKeysAsync(
+                    await oauth.ResolveHistoricalKeysAsync(
                         registration, context, ct).ConfigureAwait(false);
 
                 if(contribution is null)
@@ -959,7 +964,7 @@ public static class FederationEndpoints
                 }
 
                 KeyId signingKeyId = federationKeys.Current[0];
-                PrivateKeyMemory? privateKey = await server.Cryptography.SigningKeyResolver(
+                PrivateKeyMemory? privateKey = await oauth.Cryptography.SigningKeyResolver(
                     signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
                 if(privateKey is null)
                 {
@@ -977,7 +982,7 @@ public static class FederationEndpoints
                         signingKeyId.Value, alg, WellKnownFederationMediaTypes.HistoricalKeysJwt);
                 Dictionary<string, object> payloadDict =
                     EntityStatementJsonBuilder.BuildHistoricalKeysPayload(
-                        entityIdentifier: registration.FederationEntityId,
+                        entityIdentifier: ((ClientRecord)registration).FederationEntityId,
                         issuedAt: now,
                         contribution: contribution);
 
@@ -1046,9 +1051,10 @@ public static class FederationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -1056,7 +1062,7 @@ public static class FederationEndpoints
                         "Client registration not found in context."));
                 }
 
-                if(registration.FederationEntityId is null)
+                if(((ClientRecord)registration).FederationEntityId is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -1064,7 +1070,7 @@ public static class FederationEndpoints
                         + "ClientRecord.FederationEntityId to be set."));
                 }
 
-                if(server.Integration.ResolveExplicitRegistrationAsync is null)
+                if(oauth.ResolveExplicitRegistrationAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -1073,7 +1079,7 @@ public static class FederationEndpoints
                         + "to be configured."));
                 }
 
-                if(!registration.SigningKeys.TryGetValue(
+                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
                         KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
                     || federationKeys.Current.IsEmpty)
                 {
@@ -1084,7 +1090,7 @@ public static class FederationEndpoints
                         + "with a non-empty Current list."));
                 }
 
-                if(server.Cryptography.SigningKeyResolver is null)
+                if(oauth.Cryptography.SigningKeyResolver is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError,
@@ -1092,7 +1098,7 @@ public static class FederationEndpoints
                         + "AuthorizationServerCryptography.SigningKeyResolver to be configured."));
                 }
 
-                EncodeDelegate? base64UrlEncoder = server.Codecs.Encoder;
+                EncodeDelegate? base64UrlEncoder = oauth.Codecs.Encoder;
                 if(base64UrlEncoder is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -1117,7 +1123,7 @@ public static class FederationEndpoints
                 string registrationRequest = Encoding.UTF8.GetString(req.Body.Bytes.Span);
 
                 ExplicitRegistrationContribution? contribution =
-                    await server.Integration.ResolveExplicitRegistrationAsync(
+                    await oauth.ResolveExplicitRegistrationAsync(
                         registrationRequest, registration, context, ct).ConfigureAwait(false);
 
                 if(contribution is null)
@@ -1128,7 +1134,7 @@ public static class FederationEndpoints
                 }
 
                 KeyId signingKeyId = federationKeys.Current[0];
-                PrivateKeyMemory? privateKey = await server.Cryptography.SigningKeyResolver(
+                PrivateKeyMemory? privateKey = await oauth.Cryptography.SigningKeyResolver(
                     signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
                 if(privateKey is null)
                 {
@@ -1138,7 +1144,7 @@ public static class FederationEndpoints
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
-                DateTimeOffset expiresAt = now + server.Timings.FederationEntityConfigurationLifetime;
+                DateTimeOffset expiresAt = now + oauth.Timings.FederationEntityConfigurationLifetime;
 
                 string alg = CryptoFormatConversions.DefaultTagToJwaConverter(privateKey.Tag);
 
@@ -1147,7 +1153,7 @@ public static class FederationEndpoints
                         signingKeyId.Value, alg, WellKnownFederationMediaTypes.ExplicitRegistrationResponseJwt);
                 Dictionary<string, object> payloadDict =
                     EntityStatementJsonBuilder.BuildExplicitRegistrationResponsePayload(
-                        opEntityIdentifier: registration.FederationEntityId,
+                        opEntityIdentifier: ((ClientRecord)registration).FederationEntityId,
                         rpEntityIdentifier: contribution.Subject,
                         issuedAt: now,
                         expiresAt: expiresAt,
@@ -1185,18 +1191,19 @@ public static class FederationEndpoints
     /// <c>e</c> / etc. choice without algorithm hardcoding.
     /// </summary>
     private static async ValueTask<IReadOnlyDictionary<string, object>> BuildFederationJwksAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         SigningKeySet federationKeys,
         EncodeDelegate base64UrlEncoder,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         List<object> keys = [];
 
         foreach(KeyId keyId in federationKeys.PublishedKeys)
         {
-            PublicKeyMemory? publicKey = await server.Cryptography.VerificationKeyResolver!(
+            PublicKeyMemory? publicKey = await oauth.Cryptography.VerificationKeyResolver!(
                 keyId, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
             if(publicKey is null)
             {

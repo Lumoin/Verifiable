@@ -214,4 +214,30 @@ internal static class DcqlFixtures
     /// </summary>
     public static PreparedDcqlQuery PidFamilyNameValueConstraintPrepared(params object[] acceptableFamilyNames) =>
         DcqlPreparer.Prepare(PidFamilyNameValueConstraint(acceptableFamilyNames));
+
+
+    /// <summary>
+    /// A DCQL query targeting an embedded VC-DM 2.0 credential rather than an SD-JWT / mdoc, for the
+    /// VCALM §3.4 <c>DigitalCredentialQueryLanguage</c> co-equal query type. The <c>format</c> is the
+    /// credential's most-specific <c>type</c> token (the VC-2.0 DCQL adapter's format projection) and
+    /// the claim path navigates the credential's <c>credentialSubject</c>.
+    /// </summary>
+    /// <param name="credentialType">The VC-DM 2.0 credential type to match (becomes the DCQL format).</param>
+    /// <param name="subjectField">The <c>credentialSubject</c> field the query requires.</param>
+    public static DcqlQuery VcDataModelSubjectField(string credentialType, string subjectField) => new()
+    {
+        Credentials =
+        [
+            new CredentialQuery
+            {
+                Id = "vc",
+                Format = credentialType,
+                Meta = new CredentialQueryMeta(),
+                Claims =
+                [
+                    new ClaimsQuery { Path = DcqlClaimPattern.FromKeys("credentialSubject", subjectField) }
+                ]
+            }
+        ]
+    };
 }

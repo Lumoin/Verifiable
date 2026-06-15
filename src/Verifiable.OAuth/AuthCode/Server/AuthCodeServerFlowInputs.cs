@@ -9,7 +9,7 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// Discriminated union base for inputs to the server-side Authorization Code flow PDA.
 /// </summary>
 [DebuggerDisplay("{GetType().Name,nq}")]
-public abstract record AuthCodeServerFlowInput: OAuthFlowInput;
+public abstract record AuthCodeServerFlowInput: FlowInput;
 
 
 /// <summary>

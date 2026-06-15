@@ -40,7 +40,7 @@ internal sealed class SiopCombinedResponseTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string VerifierClientId = "https://verifier.example.com";
     private const string RequestNonce = "n-combined-0S6_WzA2Mj";
@@ -259,7 +259,7 @@ internal sealed class SiopCombinedResponseTests
             vpToken,
             "pid",
             static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             IssuerLookup,
             MicrosoftEntropyFunctions.ComputeDigestAsync,

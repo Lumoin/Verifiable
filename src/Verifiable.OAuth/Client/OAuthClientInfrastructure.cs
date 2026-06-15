@@ -56,7 +56,7 @@ public sealed class OAuthClientInfrastructure
     /// <summary>
     /// Memory pool used for sensitive allocations (PKCE verifiers, nonces,
     /// JAR payload buffers). Defaults to
-    /// <see cref="SensitiveMemoryPool{T}.Shared"/>.
+    /// <see cref="BaseMemoryPool.Shared"/>.
     /// </summary>
     public MemoryPool<byte> MemoryPool { get; private init; } = null!;
 
@@ -185,7 +185,7 @@ public sealed class OAuthClientInfrastructure
     public ResolveCallbackValidatorDelegate ResolveCallbackValidator { get; private init; } = null!;
 
 
-    //Wallet integration.
+    //Wallet oauth.
 
     /// <summary>
     /// The wallet configuration that backs the OID4VP Wallet convenience
@@ -308,7 +308,7 @@ public sealed class OAuthClientInfrastructure
             ResolveCallbackValidator = resolveCallbackValidator,
             Base64UrlEncoder = base64UrlEncoder,
             TimeProvider = resolvedTimeProvider,
-            MemoryPool = memoryPool ?? SensitiveMemoryPool<byte>.Shared,
+            MemoryPool = memoryPool ?? BaseMemoryPool.Shared,
             FillEntropy = fillEntropy ?? RandomNumberGenerator.Fill,
             GenerateIdentifierAsync = generateIdentifierAsync
                 ?? DefaultIdentifierGenerator.ForTimeProvider(resolvedTimeProvider),

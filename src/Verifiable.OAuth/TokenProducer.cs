@@ -9,7 +9,7 @@ namespace Verifiable.OAuth;
 
 /// <summary>
 /// Emits one token type at a token endpoint. The Authorization Server's token
-/// endpoint walks <see cref="AuthorizationServer.TokenProducers"/>, filters
+/// endpoint walks <see cref="EndpointServer.TokenProducers"/>, filters
 /// by <see cref="RequiredCapability"/> and <see cref="IsApplicable"/>, and for
 /// each applicable producer runs the pipeline:
 /// resolve key (via <see cref="KeyUsage"/>) → producer's <see cref="BuildAsync"/>
@@ -133,13 +133,13 @@ public delegate ValueTask<bool> TokenProducerIsApplicableDelegate(
 /// Producers must populate only the spec-mandated claims for their token type.
 /// Optional or extension claims are added by the composed
 /// <see cref="Verifiable.Core.Assessment.ClaimIssuer{T}"/> on
-/// <see cref="Server.ServerConfiguration.ClaimIssuer"/>, whose rules
+/// <see cref="Server.AuthorizationServerIntegration.ClaimIssuer"/>, whose rules
 /// run after the producer.
 /// </para>
 /// </remarks>
 /// <param name="context">
 /// The per-request issuance context. Producers reach the active
-/// <see cref="AuthorizationServer"/> via
+/// <see cref="EndpointServer"/> via
 /// <see cref="ExchangeContextServerExtensions.Server"/> on
 /// <see cref="IssuanceContext.Context"/>.
 /// </param>

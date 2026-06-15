@@ -22,7 +22,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("BrowserRedirectIssued FlowId={FlowId} RedirectUri={RedirectUri}")]
-public sealed record BrowserRedirectIssued: OAuthFlowState
+public sealed record BrowserRedirectIssued: FlowState
 {
     /// <summary>
     /// The URI the Wallet redirected the user's browser to, as provided in the Verifier's

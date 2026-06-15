@@ -11,7 +11,7 @@ using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -37,7 +37,7 @@ internal sealed class Oid4VciKeyAttestationTests
     private const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
     private const string IssuedCredential = "eyJhbGciOiJFUzI1NiJ9.body.sig";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> IssuanceCapabilities =
         ImmutableHashSet.Create(
@@ -174,8 +174,8 @@ internal sealed class Oid4VciKeyAttestationTests
     {
         VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
 
         Dictionary<string, object> jwtProofConfig = new(StringComparer.Ordinal);
@@ -184,7 +184,7 @@ internal sealed class Oid4VciKeyAttestationTests
             jwtProofConfig["key_attestations_required"] = new Dictionary<string, object>(StringComparer.Ordinal);
         }
 
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync = (_, _, _) =>
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = (_, _, _) =>
             ValueTask.FromResult(new CredentialIssuerMetadataContribution
             {
                 CredentialConfigurationsSupported = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -234,7 +234,7 @@ internal sealed class Oid4VciKeyAttestationTests
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
 

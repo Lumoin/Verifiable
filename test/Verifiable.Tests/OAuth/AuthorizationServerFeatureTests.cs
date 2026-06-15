@@ -24,7 +24,7 @@ using Verifiable.Tests.TestInfrastructure;
 
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Server.Metadata;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server.Routing;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
@@ -53,7 +53,7 @@ internal sealed class AuthorizationServerFeatureTests
 
     private const string IssuerId = "https://issuer.example.com";
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
         ImmutableHashSet.Create(
@@ -290,32 +290,35 @@ internal sealed class AuthorizationServerFeatureTests
 
 
     [TestMethod]
-    public void IntegrationValidateThrowsWhenLoadClientRegistrationAsyncIsMissing()
+    public void IntegrationValidateThrowsWhenLoadRegistrationAsyncIsMissing()
     {
         //AuthorizationServerIntegration.Validate names every missing required
         //delegate in one error so misconfiguration is fixable in a single
         //startup pass. Constructing a fully-populated group with exactly one
-        //required slot null isolates the message to that slot's name.
+        //required slot null isolates the message to that slot's name. The
+        //registration loader is the host-generic LoadRegistrationAsync seam;
+        //LoadClientRegistrationAsync is the OAuth-facing alias that forwards to it.
         AuthorizationServerIntegration integration = new()
         {
             ExtractTenantIdAsync = (ctx, ct) =>
                 ValueTask.FromResult<TenantId?>(null),
-            //LoadClientRegistrationAsync deliberately omitted.
+            //LoadClientRegistrationAsync (LoadRegistrationAsync) deliberately omitted.
             SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
                 ValueTask.CompletedTask,
             LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
-                ValueTask.FromResult<(OAuthFlowState?, int)>((null, 0)),
-            ResolvePolicyAsync = PolicyProfiles.DefaultResolvePolicyAsync
+                ValueTask.FromResult<(FlowState?, int)>((null, 0)),
+            ResolvePolicyAsync = (registration, ctx, ct) =>
+                PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct)
         };
 
         InvalidOperationException ex =
             Assert.ThrowsExactly<InvalidOperationException>(integration.Validate);
 
         Assert.Contains(
-            nameof(AuthorizationServerIntegration.LoadClientRegistrationAsync),
+            nameof(ServerIntegration.LoadRegistrationAsync),
             ex.Message,
             StringComparison.Ordinal,
-            "Error must name LoadClientRegistrationAsync.");
+            "Error must name LoadRegistrationAsync.");
         Assert.IsFalse(integration.IsValidated,
             "IsValidated must remain false after a Validate() that threw.");
     }
@@ -332,11 +335,11 @@ internal sealed class AuthorizationServerFeatureTests
             ExtractTenantIdAsync = (ctx, ct) =>
                 ValueTask.FromResult<TenantId?>(null),
             LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
-                ValueTask.FromResult<ClientRecord?>(null),
+                ValueTask.FromResult<IRegistrationRecord?>(null),
             SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
                 ValueTask.CompletedTask,
             LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
-                ValueTask.FromResult<(OAuthFlowState?, int)>((null, 0))
+                ValueTask.FromResult<(FlowState?, int)>((null, 0))
             //ResolvePolicyAsync deliberately omitted.
         };
 
@@ -1319,7 +1322,7 @@ internal sealed class AuthorizationServerFeatureTests
         //Override BuildJwksDocumentAsync to capture what the delegate receives.
         //This is exactly what an application developer would do — wire a delegate
         //that reads from the context bag to make per-call decisions.
-        app.Server.Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
+        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
         {
             capturedSigningKeyId = registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning);
 
@@ -1376,7 +1379,7 @@ internal sealed class AuthorizationServerFeatureTests
         string segment = keys.Registration.TenantId;
 
         //Wire BuildJwksDocumentAsync to suppress all keys for restricted callers.
-        app.Server.Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
+        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
         {
             bool isRestricted = ctx.TryGetValue("app.restricted", out object? r)
                 && r is bool b && b;
@@ -1512,7 +1515,7 @@ internal sealed class AuthorizationServerFeatureTests
         //allows, so the issuer and any other advertised endpoint (e.g.
         //pushed_authorization_request_endpoint if it were in the set)
         //still emit.
-        app.Server.Integration.ResolveCapabilitiesAsync = (registration, ctx, ct) =>
+        app.Server.OAuth().ResolveCapabilitiesAsync = (registration, ctx, ct) =>
         {
             HashSet<CapabilityIdentifier> attenuated =
                 [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
@@ -1653,7 +1656,7 @@ internal sealed class AuthorizationServerFeatureTests
 
         await using TestHostShell app = new(TimeProvider);
 
-        app.Server.Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
+        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
         {
             callCount++;
             return ValueTask.FromResult(new JwksDocument { Keys = [] });
@@ -1712,7 +1715,7 @@ internal sealed class AuthorizationServerFeatureTests
 
         //The application's cache-aware delegate: serve from cache when available,
         //invalidate on ClientUpdated, recompute on next request.
-        app.Server.Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
+        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
         {
             JwksDocument doc = cachedDocument
                 ?? new JwksDocument { Keys = [new JsonWebKey { Kty = WellKnownKeyTypeValues.Ec, Kid = registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning).Value }] };
@@ -1780,7 +1783,7 @@ internal sealed class AuthorizationServerFeatureTests
 
         await using TestHostShell app = new(TimeProvider);
 
-        app.Server.Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
+        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
         {
             if(ctx.TryGetValue("app.region", out object? region) && region is string r)
             {
@@ -1871,7 +1874,7 @@ internal sealed class AuthorizationServerFeatureTests
         };
 
         //Wire the delegate to serve the precomputed document.
-        app.Server.Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
+        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
             ValueTask.FromResult(precomputedDocument!);
 
         //Ten requests — delegate always serves the precomputed document.
@@ -2008,7 +2011,7 @@ internal sealed class AuthorizationServerFeatureTests
 
         await using TestHostShell app = new(TimeProvider);
 
-        ServerConfiguration configWithCounting = app.Server.Configuration
+        Verifiable.Server.ServerConfiguration configWithCounting = app.Server.Configuration
             .WithEndpointBuilders(new EndpointBuilderSet([
                 AuthCodeEndpoints.Builder,
             Oid4VpEndpoints.Builder,
@@ -2052,7 +2055,7 @@ internal sealed class AuthorizationServerFeatureTests
         // active set; the dispatcher never sees the endpoint, so the chain
         // walk finds no match and the response is 404 (not 403 as under the
         // old post-match capability-check model).
-        app.Server.Integration.ResolveCapabilitiesAsync = static (registration, context, ct) =>
+        app.Server.OAuth().ResolveCapabilitiesAsync = static (registration, context, ct) =>
         {
             HashSet<CapabilityIdentifier> attenuated =
                 [.. registration.AllowedCapabilities.Where(c => c != WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)];
@@ -2104,7 +2107,7 @@ internal sealed class AuthorizationServerFeatureTests
             CreatePreparedQuery(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        (OAuthFlowState State, int _) entry = app.GetFlowState(parHandle);
+        (FlowState State, int _) entry = app.GetFlowState(parHandle);
         Assert.IsNotNull(entry.State);
 
         // Advance past the flow's ExpiresAt by one second so the dispatcher's TTL
@@ -2161,8 +2164,8 @@ internal sealed class AuthorizationServerFeatureTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         string? capturedLoadFlowId = null;
-        LoadServerFlowStateDelegate originalLoad = app.Server.Integration.LoadFlowStateAsync!;
-        app.Server.Integration.LoadFlowStateAsync = async (tenantId, flowId, ctx, ct) =>
+        LoadServerFlowStateDelegate originalLoad = app.Server.OAuth().LoadFlowStateAsync!;
+        app.Server.OAuth().LoadFlowStateAsync = async (tenantId, flowId, ctx, ct) =>
         {
             capturedLoadFlowId = flowId;
             return await originalLoad(tenantId, flowId, ctx, ct).ConfigureAwait(false);
@@ -2199,7 +2202,7 @@ internal sealed class AuthorizationServerFeatureTests
         // the matched endpoint's handler runs. Capturing context.MatchPayload
         // here proves the payload is visible to anything that fires
         // post-match-pre-handler.
-        app.Server.Integration.InspectAsync = (stage, context, ct) =>
+        app.Server.OAuth().InspectAsync = (stage, context, ct) =>
         {
             if(stage is MatchedStage)
             {
@@ -2230,15 +2233,15 @@ internal sealed class AuthorizationServerFeatureTests
 
         List<ExchangeContext> captured = [];
 
-        LoadClientRegistrationDelegate originalLoadReg = app.Server.Integration.LoadClientRegistrationAsync!;
-        app.Server.Integration.LoadClientRegistrationAsync = async (tenantId, ctx, ct) =>
+        LoadRegistrationDelegate originalLoadReg = app.Server.OAuth().LoadClientRegistrationAsync!;
+        app.Server.OAuth().LoadClientRegistrationAsync = async (tenantId, ctx, ct) =>
         {
             captured.Add(ctx);
             return await originalLoadReg(tenantId, ctx, ct).ConfigureAwait(false);
         };
 
-        InspectDelegate originalInspect = app.Server.Integration.InspectAsync!;
-        app.Server.Integration.InspectAsync = (stage, ctx, ct) =>
+        InspectDelegate originalInspect = app.Server.OAuth().InspectAsync!;
+        app.Server.OAuth().InspectAsync = (stage, ctx, ct) =>
         {
             captured.Add(ctx);
             return originalInspect(stage, ctx, ct);
@@ -2270,8 +2273,8 @@ internal sealed class AuthorizationServerFeatureTests
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
         TenantId? capturedTenantId = null;
-        SaveServerFlowStateDelegate originalSave = app.Server.Integration.SaveFlowStateAsync!;
-        app.Server.Integration.SaveFlowStateAsync = async (tenantId, key, state, stepCount, ctx, ct) =>
+        SaveServerFlowStateDelegate originalSave = app.Server.OAuth().SaveFlowStateAsync!;
+        app.Server.OAuth().SaveFlowStateAsync = async (tenantId, key, state, stepCount, ctx, ct) =>
         {
             capturedTenantId = tenantId;
             await originalSave(tenantId, key, state, stepCount, ctx, ct).ConfigureAwait(false);
@@ -2303,8 +2306,8 @@ internal sealed class AuthorizationServerFeatureTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         TenantId? capturedTenantId = null;
-        LoadServerFlowStateDelegate originalLoad = app.Server.Integration.LoadFlowStateAsync!;
-        app.Server.Integration.LoadFlowStateAsync = async (tenantId, flowId, ctx, ct) =>
+        LoadServerFlowStateDelegate originalLoad = app.Server.OAuth().LoadFlowStateAsync!;
+        app.Server.OAuth().LoadFlowStateAsync = async (tenantId, flowId, ctx, ct) =>
         {
             capturedTenantId = tenantId;
             return await originalLoad(tenantId, flowId, ctx, ct).ConfigureAwait(false);

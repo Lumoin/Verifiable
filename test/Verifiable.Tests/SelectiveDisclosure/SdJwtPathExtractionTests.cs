@@ -62,7 +62,7 @@ internal sealed class SdJwtPathExtractionTests
             token,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.HasCount(1, paths);
         Assert.IsTrue(paths.ContainsKey(nameDisclosure));
@@ -96,7 +96,7 @@ internal sealed class SdJwtPathExtractionTests
             token,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.HasCount(1, paths);
         Assert.AreEqual(CredentialPath.Root.Append("address").Append("city"), paths[cityDisclosure]);
@@ -129,7 +129,7 @@ internal sealed class SdJwtPathExtractionTests
             token,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.HasCount(1, paths);
         Assert.AreEqual(CredentialPath.Root.Append("items").Append(1), paths[arrayElementDisclosure]);
@@ -157,7 +157,7 @@ internal sealed class SdJwtPathExtractionTests
         IReadOnlySet<CredentialPath> paths = SdJwtPathExtraction.ExtractAllPaths(
             token,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.Contains(CredentialPath.Root, paths);
         Assert.Contains(CredentialPath.Root.Append(WellKnownJwtClaimNames.Iss), paths);
@@ -185,7 +185,7 @@ internal sealed class SdJwtPathExtractionTests
         IReadOnlySet<CredentialPath> mandatory = SdJwtPathExtraction.ExtractMandatoryPaths(
             token,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.Contains(CredentialPath.Root, mandatory);
         Assert.Contains(CredentialPath.Root.Append(WellKnownJwtClaimNames.Iss), mandatory);
@@ -217,7 +217,7 @@ internal sealed class SdJwtPathExtractionTests
             token,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.IsNotNull(lattice);
         Assert.Contains(CredentialPath.Root.Append("mandatory"), lattice.AllPaths);
@@ -251,7 +251,7 @@ internal sealed class SdJwtPathExtractionTests
             token,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.HasCount(2, paths);
         Assert.AreEqual(CredentialPath.Root.Append("given_name"), paths[disclosure1]);
@@ -277,7 +277,7 @@ internal sealed class SdJwtPathExtractionTests
             token,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.HasCount(0, paths);
     }

@@ -62,7 +62,7 @@ namespace Verifiable.OAuth;
 /// that need finer control — per-caller binding, weighted rotation,
 /// region-specific selection — override the
 /// <see cref="SelectSigningKeyDelegate"/> on
-/// <see cref="AuthorizationServer"/>.
+/// <see cref="EndpointServer"/>.
 /// </para>
 /// <para>
 /// The library's default behaviour when publishing JWKS: emit <see cref="Incoming"/>,

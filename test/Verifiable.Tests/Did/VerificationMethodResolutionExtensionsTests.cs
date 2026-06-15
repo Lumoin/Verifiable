@@ -310,7 +310,7 @@ namespace Verifiable.Tests.Did
 
             var method = didDocument.VerificationMethod![0];
 
-            var keyMaterial = method.ExtractKeyMaterial(SensitiveMemoryPool<byte>.Shared);
+            var keyMaterial = method.ExtractKeyMaterial(BaseMemoryPool.Shared);
 
             using(keyMaterial.keyMaterial)
             {
@@ -326,7 +326,7 @@ namespace Verifiable.Tests.Did
 
             var method = didDocument.VerificationMethod![0];
 
-            using var publicKeyMemory = method.ToPublicKeyMemory(SensitiveMemoryPool<byte>.Shared);
+            using var publicKeyMemory = method.ToPublicKeyMemory(BaseMemoryPool.Shared);
 
             Assert.IsGreaterThan(0, publicKeyMemory.AsReadOnlyMemory().Length, "Public key memory should not be empty.");
             Assert.IsNotNull(publicKeyMemory.Tag, "Tag should be set.");

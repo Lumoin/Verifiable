@@ -7,6 +7,8 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
+using Verifiable.Server.Diagnostics;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -81,7 +83,7 @@ internal sealed class ParRequestIntegrityTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
         string? observedAcrValues = null;
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             (evaluation, _, _, _) =>
             {
                 observedAcrValues = evaluation.RequestedAcrValues;
@@ -215,7 +217,7 @@ internal sealed class ParRequestIntegrityTests
         using ActivityListener listener = new()
         {
             ShouldListenTo = static source => string.Equals(
-                source.Name, OAuthActivitySource.SourceName, StringComparison.Ordinal),
+                source.Name, ServerActivitySource.SourceName, StringComparison.Ordinal),
             Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
@@ -233,7 +235,7 @@ internal sealed class ParRequestIntegrityTests
         {
             return captured
                 .Where(activity => string.Equals(
-                    activity.GetTagItem(OAuthTagNames.TenantId) as string, tenantId, StringComparison.Ordinal))
+                    activity.GetTagItem(ServerTagNames.TenantId) as string, tenantId, StringComparison.Ordinal))
                 .ToList();
         }
     }
@@ -244,7 +246,7 @@ internal sealed class ParRequestIntegrityTests
         TestHostShell host, VerifierKeyMaterial material, RequestFields? pushedFields)
     {
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()
         {

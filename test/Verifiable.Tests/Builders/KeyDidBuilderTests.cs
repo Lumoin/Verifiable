@@ -113,7 +113,7 @@ namespace Verifiable.Tests.Builders
 
             //Sign data.
             var contentToSign = Encoding.UTF8.GetBytes("Hello, DID!");
-            using var signature = await privateKey.SignAsync(contentToSign, SensitiveMemoryPool<byte>.Shared)
+            using var signature = await privateKey.SignAsync(contentToSign, BaseMemoryPool.Shared)
                 .ConfigureAwait(false);
 
             //Verify signature using the verification method by ID.
@@ -121,7 +121,7 @@ namespace Verifiable.Tests.Builders
             var verificationMethod = didDocument.ResolveVerificationMethodReference(verificationMethodId);
             Assert.IsNotNull(verificationMethod, "Verification method should be found by ID.");
 
-            bool isVerified = await verificationMethod.VerifySignatureAsync(contentToSign, signature, SensitiveMemoryPool<byte>.Shared)
+            bool isVerified = await verificationMethod.VerifySignatureAsync(contentToSign, signature, BaseMemoryPool.Shared)
                 .ConfigureAwait(false);
             Assert.IsTrue(isVerified);
         }
@@ -155,12 +155,12 @@ namespace Verifiable.Tests.Builders
             using var sharedSecret1 = await BouncyCastleCryptographicFunctions.DeriveX25519SharedSecretAsync(
                 privateKey.AsReadOnlyMemory(),
                 otherPartyPublicKey.AsReadOnlyMemory(),
-                SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+                BaseMemoryPool.Shared).ConfigureAwait(false);
 
             using var sharedSecret2 = await BouncyCastleCryptographicFunctions.DeriveX25519SharedSecretAsync(
                 otherPartyPrivateKey.AsReadOnlyMemory(),
                 publicKey.AsReadOnlyMemory(),
-                SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+                BaseMemoryPool.Shared).ConfigureAwait(false);
 
             //Verify both parties derived the same shared secret.
             Assert.IsTrue(sharedSecret1.Memory.Span.SequenceEqual(sharedSecret2.Memory.Span),
@@ -173,7 +173,7 @@ namespace Verifiable.Tests.Builders
             //it back to raw bytes to perform ECDH. This tests the round-trip conversion:
             //Raw bytes → KeyFormat → VerificationMethod → Raw bytes → ECDH.
             using var sharedSecret3 = await DeriveSharedSecretAsync(
-                keyAgreementMethod, otherPartyPrivateKey, SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+                keyAgreementMethod, otherPartyPrivateKey, BaseMemoryPool.Shared).ConfigureAwait(false);
 
             Assert.IsTrue(sharedSecret1.Memory.Span.SequenceEqual(sharedSecret3.Memory.Span),
                 "Shared secret from DID verification method should match direct key agreement. This proves the key format conversion pipeline preserves key material correctly.");

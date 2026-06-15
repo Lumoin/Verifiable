@@ -78,7 +78,7 @@ internal sealed class EcdsaSd2023SerializerTests
         byte[] serialized = EcdsaSd2023CborSerializer.SerializeBaseProofBytes(
             baseSignature, publicKeyWithHeader, hmacKey, signatures, mandatoryPointers);
         using var parsed = EcdsaSd2023CborSerializer.ParseBaseProofBytes(
-            serialized, SensitiveMemoryPool<byte>.Shared);
+            serialized, BaseMemoryPool.Shared);
 
         //Assert - Verify header bytes per W3C spec §3.3.13.
         Assert.AreEqual(0xd9, serialized[0], "First header byte must be 0xd9.");
@@ -148,9 +148,9 @@ internal sealed class EcdsaSd2023SerializerTests
         //Act - Serialize with header, parse returns raw key.
         byte[] serialized = EcdsaSd2023CborSerializer.SerializeDerivedProofBytes(
             baseSignature, publicKeyWithHeader, signatures, labelMap, mandatoryIndexes,
-            TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
 
-        using var parsed = EcdsaSd2023CborSerializer.ParseDerivedProofBytes(serialized, TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+        using var parsed = EcdsaSd2023CborSerializer.ParseDerivedProofBytes(serialized, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         //Assert - Verify header bytes per W3C spec §3.3.18.
         Assert.AreEqual(0xd9, serialized[0], "First header byte must be 0xd9.");

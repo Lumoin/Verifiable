@@ -5,7 +5,8 @@ using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
+using Verifiable.Server.Routing;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -73,7 +74,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
         string? seenTransactionId = null;
         string? seenSubject = null;
-        host.Server.Integration.ResolveDeferredCredentialAsync =
+        host.Server.OAuth().ResolveDeferredCredentialAsync =
             (transactionId, accessToken, registration, context, ct) =>
             {
                 seenTransactionId = transactionId;
@@ -115,7 +116,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
 
-        host.Server.Integration.ResolveDeferredCredentialAsync =
+        host.Server.OAuth().ResolveDeferredCredentialAsync =
             static (_, _, _, _, _) => ValueTask.FromResult(DeferredCredentialDecision.Defer(86400));
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
@@ -146,7 +147,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
         DeferredCredentialDecision decision = DeferredCredentialDecision.Refuse(
             DeferredCredentialError.InvalidTransactionId);
-        host.Server.Integration.ResolveDeferredCredentialAsync =
+        host.Server.OAuth().ResolveDeferredCredentialAsync =
             (_, _, _, _, _) => ValueTask.FromResult(decision);
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
@@ -180,7 +181,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
 
         bool seamConsulted = false;
-        host.Server.Integration.ResolveDeferredCredentialAsync =
+        host.Server.OAuth().ResolveDeferredCredentialAsync =
             (_, _, _, _, _) =>
             {
                 seamConsulted = true;
@@ -216,7 +217,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
 
         List<CredentialNotification> seen = [];
-        host.Server.Integration.ProcessCredentialNotificationAsync =
+        host.Server.OAuth().ProcessCredentialNotificationAsync =
             (notification, accessToken, registration, context, ct) =>
             {
                 seen.Add(notification);
@@ -254,7 +255,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
 
         CredentialNotification? seen = null;
-        host.Server.Integration.ProcessCredentialNotificationAsync =
+        host.Server.OAuth().ProcessCredentialNotificationAsync =
             (notification, _, _, _, _) =>
             {
                 seen = notification;
@@ -290,7 +291,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
 
         CredentialNotification? seen = null;
-        host.Server.Integration.ProcessCredentialNotificationAsync =
+        host.Server.OAuth().ProcessCredentialNotificationAsync =
             (notification, _, _, _, _) =>
             {
                 seen = notification;
@@ -328,7 +329,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities);
 
         bool seamConsulted = false;
-        host.Server.Integration.ProcessCredentialNotificationAsync =
+        host.Server.OAuth().ProcessCredentialNotificationAsync =
             (_, _, _, _, _) =>
             {
                 seamConsulted = true;
@@ -389,14 +390,14 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
         //The fail-closed gates keep each endpoint off the chain until its seams are wired;
         //the metadata derives the advertised URLs from the chain.
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-        host.Server.Integration.ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(DeferredCredentialDecision.Defer(60));
-        host.Server.Integration.ProcessCredentialNotificationAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ProcessCredentialNotificationAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialNotificationDecision.Accept);
-        host.Server.Integration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+        host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(CredentialIssuerMetadataContribution.Empty);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
@@ -433,7 +434,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
 

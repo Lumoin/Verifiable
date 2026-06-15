@@ -24,8 +24,8 @@ using Verifiable.OAuth.Server;
 
 using Verifiable.OAuth.Server.Audit;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
 using Verifiable.OAuth.Server.States;
+using Verifiable.Server;
 namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
@@ -34,7 +34,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// <remarks>
 /// <para>
 /// Produces PAR, Authorize (PAR-backed), Direct Authorize, and Token endpoints.
-/// Register at startup via <see cref="AuthorizationServer.EndpointBuilders"/>:
+/// Register at startup via <see cref="EndpointServer.EndpointBuilders"/>:
 /// </para>
 /// <code>
 /// server.EndpointBuilders.AddRange([
@@ -80,18 +80,18 @@ public static class AuthCodeEndpoints
 
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="AuthorizationServer.EndpointBuilders"/>.
+    /// <see cref="EndpointServer.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthPushedAuthorization))
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthPushedAuthorization))
         {
             candidates.Add(BuildPar());
         }
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
         {
             candidates.Add(BuildAuthorize());
             //RFC 9101 §5 — explicit both-present (request + request_uri) rejection on the
@@ -99,27 +99,27 @@ public static class AuthCodeEndpoints
             candidates.Add(BuildAuthorizeRequestObjectConflict());
         }
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization))
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization))
         {
             candidates.Add(BuildDirectAuthorize());
         }
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthPushedAuthorization)
-            && registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthPushedAuthorization)
+            && ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
         {
             candidates.Add(BuildJarPar());
         }
 
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)
-            && registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)
+            && ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
         {
             candidates.Add(BuildAuthorizeJarByValue());
         }
 
         bool hasTokenCapability =
-            registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode) ||
-            registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials) ||
-            registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenExchange);
+            ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode) ||
+            ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials) ||
+            ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenExchange);
 
         if(hasTokenCapability)
         {
@@ -131,8 +131,8 @@ public static class AuthCodeEndpoints
         //Activates only when BOTH the capability and the client-authentication
         //seam are present: an unauthenticated client-credentials grant would
         //mint tokens for anyone claiming a client_id.
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials)
-            && context.Server?.Integration.ValidateClientCredentialsAsync is not null)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials)
+            && context.Server?.OAuth().ValidateClientCredentialsAsync is not null)
         {
             candidates.Add(BuildClientCredentials());
         }
@@ -142,8 +142,8 @@ public static class AuthCodeEndpoints
         //BOTH the capability and the code-validation seam are present: an advertised
         //pre-authorized grant with no seam would mint access tokens for any code string
         //(fail-closed, like client_credentials).
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant)
-            && context.Server?.Integration.ValidatePreAuthorizedCodeAsync is not null)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant)
+            && context.Server?.OAuth().ValidatePreAuthorizedCodeAsync is not null)
         {
             candidates.Add(BuildPreAuthorizedCodeToken());
         }
@@ -151,7 +151,7 @@ public static class AuthCodeEndpoints
         //Refresh-token grant per RFC 6749 §6 is enabled whenever the
         //registration allows AuthorizationCode capability. RFC 9700 §2.2.2
         //rotation is enforced unconditionally on every successful refresh.
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
         {
             candidates.Add(BuildRefreshToken());
         }
@@ -161,9 +161,9 @@ public static class AuthCodeEndpoints
         //are wired: a revocation endpoint that cannot authenticate the client or
         //cannot revoke would be a silent no-op that misleads clients into
         //believing their tokens were killed (fail-closed, like client_credentials).
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenRevocation)
-            && context.Server?.Integration.RevokeTokenAsync is not null
-            && context.Server?.Integration.ValidateClientCredentialsAsync is not null)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenRevocation)
+            && context.Server?.OAuth().RevokeTokenAsync is not null
+            && context.Server?.OAuth().ValidateClientCredentialsAsync is not null)
         {
             candidates.Add(BuildRevocation());
         }
@@ -173,9 +173,9 @@ public static class AuthCodeEndpoints
         //wired: an endpoint that cannot authenticate the caller would leak token
         //state, and one with no store to read could only answer active:false —
         //both fail-closed, like revocation above.
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection)
-            && context.Server?.Integration.IntrospectTokenAsync is not null
-            && context.Server?.Integration.ValidateClientCredentialsAsync is not null)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection)
+            && context.Server?.OAuth().IntrospectTokenAsync is not null
+            && context.Server?.OAuth().ValidateClientCredentialsAsync is not null)
         {
             candidates.Add(BuildIntrospection());
         }
@@ -240,26 +240,27 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
                     || string.IsNullOrWhiteSpace(clientId))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "Missing client_id."));
                 }
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.CodeChallenge, out string? challenge)
                     || string.IsNullOrWhiteSpace(challenge))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "Missing code_challenge."));
                 }
 
                 fields.TryGetValue(OAuthRequestParameterNames.CodeChallengeMethod, out string? method);
                 if(!IsAcceptedPkceMethod(method, context))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
                         "code_challenge_method is not accepted under the active policy."));
                 }
@@ -267,19 +268,19 @@ public static class AuthCodeEndpoints
                 if(!fields.TryGetValue(OAuthRequestParameterNames.RedirectUri, out string? redirectUriString)
                     || !Uri.TryCreate(redirectUriString, UriKind.Absolute, out Uri? redirectUri))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "Missing or invalid redirect_uri."));
                 }
 
                 //RFC 9700 §2.1 + OAuth 2.1 §2.3.1 — redirect_uri exact-match
                 //against the registered set. Parallel to the JAR-PAR check
                 //around line 988; this matcher's MatchesRequest already
-                //asserts context.Registration is non-null, so the read is
+                //asserts context.ClientRegistration is non-null, so the read is
                 //unconditional here.
-                ClientRecord registration = context.Registration!;
+                ClientRecord registration = context.ClientRegistration!;
                 if(!registration.AllowedRedirectUris.Contains(redirectUri))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
                         $"redirect_uri '{redirectUri}' is not among the registered redirect URIs."));
                 }
@@ -287,7 +288,7 @@ public static class AuthCodeEndpoints
                 fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scope);
                 if(context.ScopeRequiredOnRequest && string.IsNullOrEmpty(scope))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
                         "scope is required under the active policy."));
                 }
@@ -306,7 +307,7 @@ public static class AuthCodeEndpoints
                 (int? maxAge, bool isMaxAgeWellFormed) = ReadRequestedMaxAge(fields);
                 if(!isMaxAgeWellFormed)
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "max_age must be a non-negative integer."));
                 }
 
@@ -318,7 +319,7 @@ public static class AuthCodeEndpoints
                     ReadResponseMode(fields, server, context);
                 if(responseModeFailure is not null)
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)responseModeFailure);
+                    return ((FlowInput?)null, (ServerHttpResponse?)responseModeFailure);
                 }
 
                 //RFC 9396 / OID4VCI 1.0 §5.1.1 — authorization_details is shape-validated at
@@ -332,7 +333,7 @@ public static class AuthCodeEndpoints
                         server, authorizationDetails, registration, context, ct).ConfigureAwait(false);
                     if(detailsFailure is not null)
                     {
-                        return ((OAuthFlowInput?)null, (ServerHttpResponse?)detailsFailure);
+                        return ((FlowInput?)null, (ServerHttpResponse?)detailsFailure);
                     }
                 }
 
@@ -345,7 +346,7 @@ public static class AuthCodeEndpoints
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
                 string flowId = context.FlowId!;
-                string requestUriToken = await server.Integration.GenerateIdentifierAsync!(
+                string requestUriToken = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthRequestUriToken, context, ct)
                     .ConfigureAwait(false);
                 Uri requestUri = new($"urn:ietf:params:oauth:request_uri:{requestUriToken}");
@@ -356,7 +357,7 @@ public static class AuthCodeEndpoints
                 DateTimeOffset expiresAt = now + parLifetime;
                 int expiresIn = (int)parLifetime.TotalSeconds;
 
-                return ((OAuthFlowInput?)new ServerParValidated(
+                return ((FlowInput?)new ServerParValidated(
                     FlowId: flowId,
                     RequestUri: requestUri,
                     CodeChallenge: challenge,
@@ -455,18 +456,19 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 if(currentState is not ParRequestReceivedState)
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "Flow not in expected state."));
                 }
 
                 string? subjectId = context.SubjectId;
                 if(string.IsNullOrWhiteSpace(subjectId))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.ServerError(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError, "Subject not authenticated."));
                 }
 
@@ -489,7 +491,7 @@ public static class AuthCodeEndpoints
                 {
                     System.Diagnostics.Activity.Current?.AddEvent(
                         new System.Diagnostics.ActivityEvent(
-                            Diagnostics.OAuthEventNames.ExtraneousAuthorizeParameters));
+                            OAuthEventNames.ExtraneousAuthorizeParameters));
                 }
 
                 ServerHttpResponse? requirementFailure = await EvaluateAuthenticationRequirementsAsync(
@@ -502,19 +504,19 @@ public static class AuthCodeEndpoints
                     requestedResource: parState.Resource).ConfigureAwait(false);
                 if(requirementFailure is not null)
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)requirementFailure);
+                    return ((FlowInput?)null, (ServerHttpResponse?)requirementFailure);
                 }
 
-                string rawCode = await server.Integration.GenerateIdentifierAsync!(
+                string rawCode = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthAuthorizationCode, context, ct)
                     .ConfigureAwait(false);
                 string codeHash = ComputeDigestBase64Url(
                     rawCode,
                     CryptoTags.Sha256Digest,
                     WellKnownHashAlgorithms.Sha256SizeBytes,
-                    server.Codecs.ComputeDigest!,
-                    server.Codecs.Encoder!,
-                    SensitiveMemoryPool<byte>.Shared);
+                    oauth.Codecs.ComputeDigest!,
+                    oauth.Codecs.Encoder!,
+                    BaseMemoryPool.Shared);
 
                 //JARM: the success response parameters are signed into the JWT Response
                 //Document here, where the code exists; BuildResponse encodes it per the
@@ -526,7 +528,7 @@ public static class AuthCodeEndpoints
                         .ConfigureAwait(false);
                 if(jarmFailure is not null)
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)jarmFailure);
+                    return ((FlowInput?)null, (ServerHttpResponse?)jarmFailure);
                 }
 
                 if(jarmResponseJwt is not null)
@@ -534,7 +536,7 @@ public static class AuthCodeEndpoints
                     context.SetJarmResponseJwt(jarmResponseJwt);
                 }
 
-                OAuthFlowInput input = new ServerAuthorizeCompleted(
+                FlowInput input = new ServerAuthorizeCompleted(
                     CodeHash: codeHash,
                     SubjectId: subjectId,
                     AuthTime: authTime,
@@ -543,7 +545,7 @@ public static class AuthCodeEndpoints
                     SessionId: context.SessionId,
                     Acr: context.Acr);
 
-                return ((OAuthFlowInput?)input, (ServerHttpResponse?)null);
+                return ((FlowInput?)input, (ServerHttpResponse?)null);
             },
             BuildResponse = static (state, _, context) =>
             {
@@ -604,26 +606,27 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
                     || string.IsNullOrWhiteSpace(clientId))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "Missing client_id."));
                 }
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.CodeChallenge, out string? challenge)
                     || string.IsNullOrWhiteSpace(challenge))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "Missing code_challenge."));
                 }
 
                 fields.TryGetValue(OAuthRequestParameterNames.CodeChallengeMethod, out string? method);
                 if(!IsAcceptedPkceMethod(method, context))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
                         "code_challenge_method is not accepted under the active policy."));
                 }
@@ -632,7 +635,7 @@ public static class AuthCodeEndpoints
                 //path is refused; the client must push the request first.
                 if(context.RequirePushedAuthorizationRequests)
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
                         "This authorization server requires Pushed Authorization Requests; a direct "
                         + "authorization request is not accepted (FAPI 2.0 §5.2.2)."));
@@ -641,14 +644,14 @@ public static class AuthCodeEndpoints
                 if(!fields.TryGetValue(OAuthRequestParameterNames.RedirectUri, out string? redirectUriString)
                     || !Uri.TryCreate(redirectUriString, UriKind.Absolute, out Uri? redirectUri))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "Missing or invalid redirect_uri."));
                 }
 
                 string? subjectId = context.SubjectId;
                 if(string.IsNullOrWhiteSpace(subjectId))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.ServerError(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError, "Subject not authenticated."));
                 }
 
@@ -667,7 +670,7 @@ public static class AuthCodeEndpoints
                 (int? maxAge, bool isMaxAgeWellFormed) = ReadRequestedMaxAge(fields);
                 if(!isMaxAgeWellFormed)
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "max_age must be a non-negative integer."));
                 }
 
@@ -678,7 +681,7 @@ public static class AuthCodeEndpoints
                     ReadResponseMode(fields, server, context);
                 if(responseModeFailure is not null)
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)responseModeFailure);
+                    return ((FlowInput?)null, (ServerHttpResponse?)responseModeFailure);
                 }
 
                 //RFC 9396 / OID4VCI 1.0 §5.1.1 — same shape-validation as the PAR path; on the
@@ -686,13 +689,13 @@ public static class AuthCodeEndpoints
                 string? authorizationDetails = ReadAuthorizationDetails(fields);
                 if(authorizationDetails is not null)
                 {
-                    //The matcher asserts context.Registration is non-null before this handler runs.
-                    ClientRecord registration = context.Registration!;
+                    //The matcher asserts context.ClientRegistration is non-null before this handler runs.
+                    ClientRecord registration = context.ClientRegistration!;
                     ServerHttpResponse? detailsFailure = await ValidateAuthorizationDetailsShapeAsync(
                         server, authorizationDetails, registration, context, ct).ConfigureAwait(false);
                     if(detailsFailure is not null)
                     {
-                        return ((OAuthFlowInput?)null, (ServerHttpResponse?)detailsFailure);
+                        return ((FlowInput?)null, (ServerHttpResponse?)detailsFailure);
                     }
                 }
 
@@ -715,7 +718,7 @@ public static class AuthCodeEndpoints
                     .ConfigureAwait(false);
                 if(requirementFailure is not null)
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)requirementFailure);
+                    return ((FlowInput?)null, (ServerHttpResponse?)requirementFailure);
                 }
 
                 string flowId = context.FlowId!;
@@ -725,16 +728,16 @@ public static class AuthCodeEndpoints
                 //policy.AuthorizationCodeLifetime (default 600s).
                 DateTimeOffset expiresAt = now + context.AuthorizationCodeLifetime;
 
-                string rawCode = await server.Integration.GenerateIdentifierAsync!(
+                string rawCode = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthAuthorizationCode, context, ct)
                     .ConfigureAwait(false);
                 string codeHash = ComputeDigestBase64Url(
                     rawCode,
                     CryptoTags.Sha256Digest,
                     WellKnownHashAlgorithms.Sha256SizeBytes,
-                    server.Codecs.ComputeDigest!,
-                    server.Codecs.Encoder!,
-                    SensitiveMemoryPool<byte>.Shared);
+                    oauth.Codecs.ComputeDigest!,
+                    oauth.Codecs.Encoder!,
+                    BaseMemoryPool.Shared);
 
                 //JARM: signed here, where the code exists; BuildResponse encodes per the
                 //carried response_mode.
@@ -745,7 +748,7 @@ public static class AuthCodeEndpoints
                         .ConfigureAwait(false);
                 if(jarmFailure is not null)
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)jarmFailure);
+                    return ((FlowInput?)null, (ServerHttpResponse?)jarmFailure);
                 }
 
                 if(jarmResponseJwt is not null)
@@ -753,7 +756,7 @@ public static class AuthCodeEndpoints
                     context.SetJarmResponseJwt(jarmResponseJwt);
                 }
 
-                return ((OAuthFlowInput?)new ServerDirectAuthorizeCompleted(
+                return ((FlowInput?)new ServerDirectAuthorizeCompleted(
                     FlowId: flowId,
                     CodeHash: codeHash,
                     CodeChallenge: challenge,
@@ -829,8 +832,8 @@ public static class AuthCodeEndpoints
             },
 
             BuildInputAsync = static (fields, context, currentState, ct) =>
-                ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>(
-                    ((OAuthFlowInput?)null, ServerHttpResponse.BadRequest(
+                ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>(
+                    ((FlowInput?)null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
                         "An authorization request MUST NOT contain both 'request' and 'request_uri' (RFC 9101 §5)."))),
 
@@ -891,7 +894,8 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 (AuthCodeRequestObject? requestObject, ServerHttpResponse? earlyExit) =
                     await VerifyAndValidateAuthCodeJarAsync(fields, context, server, ct)
@@ -899,14 +903,14 @@ public static class AuthCodeEndpoints
 
                 if(earlyExit is not null)
                 {
-                    return ((OAuthFlowInput?)null, earlyExit);
+                    return ((FlowInput?)null, earlyExit);
                 }
 
                 AuthCodeRequestObject ro = requestObject!;
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
                 string flowId = context.FlowId!;
-                string requestUriToken = await server.Integration.GenerateIdentifierAsync!(
+                string requestUriToken = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthRequestUriToken, context, ct)
                     .ConfigureAwait(false);
                 Uri requestUri = new($"urn:ietf:params:oauth:request_uri:{requestUriToken}");
@@ -920,7 +924,7 @@ public static class AuthCodeEndpoints
                 //The signed request's authorization_details and response_mode ride the same
                 //carry as the bare PAR path — already shape-validated and servability-gated
                 //by VerifyAndValidateAuthCodeJarAsync.
-                return ((OAuthFlowInput?)new ServerParValidated(
+                return ((FlowInput?)new ServerParValidated(
                     FlowId: flowId,
                     RequestUri: requestUri,
                     CodeChallenge: ro.CodeChallenge,
@@ -1018,7 +1022,8 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 (AuthCodeRequestObject? requestObject, ServerHttpResponse? earlyExit) =
                     await VerifyAndValidateAuthCodeJarAsync(fields, context, server, ct)
@@ -1026,7 +1031,7 @@ public static class AuthCodeEndpoints
 
                 if(earlyExit is not null)
                 {
-                    return ((OAuthFlowInput?)null, earlyExit);
+                    return ((FlowInput?)null, earlyExit);
                 }
 
                 AuthCodeRequestObject ro = requestObject!;
@@ -1035,7 +1040,7 @@ public static class AuthCodeEndpoints
                 //is refused; the client must push the request first.
                 if(context.RequirePushedAuthorizationRequests)
                 {
-                    return ((OAuthFlowInput?)null,
+                    return ((FlowInput?)null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest,
                             "This authorization server requires Pushed Authorization Requests; a JAR-by-value "
@@ -1045,7 +1050,7 @@ public static class AuthCodeEndpoints
                 string? subjectId = context.SubjectId;
                 if(string.IsNullOrWhiteSpace(subjectId))
                 {
-                    return ((OAuthFlowInput?)null,
+                    return ((FlowInput?)null,
                         ServerHttpResponse.ServerError(
                             OAuthErrors.ServerError, "Subject not authenticated."));
                 }
@@ -1063,7 +1068,7 @@ public static class AuthCodeEndpoints
                     requestedResource: ro.Resource).ConfigureAwait(false);
                 if(requirementFailure is not null)
                 {
-                    return ((OAuthFlowInput?)null, requirementFailure);
+                    return ((FlowInput?)null, requirementFailure);
                 }
 
                 string flowId = context.FlowId!;
@@ -1073,16 +1078,16 @@ public static class AuthCodeEndpoints
                 //policy.AuthorizationCodeLifetime (default 600s).
                 DateTimeOffset expiresAt = now + context.AuthorizationCodeLifetime;
 
-                string rawCode = await server.Integration.GenerateIdentifierAsync!(
+                string rawCode = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthAuthorizationCode, context, ct)
                     .ConfigureAwait(false);
                 string codeHash = ComputeDigestBase64Url(
                     rawCode,
                     CryptoTags.Sha256Digest,
                     WellKnownHashAlgorithms.Sha256SizeBytes,
-                    server.Codecs.ComputeDigest!,
-                    server.Codecs.Encoder!,
-                    SensitiveMemoryPool<byte>.Shared);
+                    oauth.Codecs.ComputeDigest!,
+                    oauth.Codecs.Encoder!,
+                    BaseMemoryPool.Shared);
 
                 //JARM: signed here, where the code exists; BuildResponse encodes per the
                 //carried response_mode.
@@ -1093,7 +1098,7 @@ public static class AuthCodeEndpoints
                         .ConfigureAwait(false);
                 if(jarmFailure is not null)
                 {
-                    return ((OAuthFlowInput?)null, jarmFailure);
+                    return ((FlowInput?)null, jarmFailure);
                 }
 
                 if(jarmResponseJwt is not null)
@@ -1101,7 +1106,7 @@ public static class AuthCodeEndpoints
                     context.SetJarmResponseJwt(jarmResponseJwt);
                 }
 
-                return ((OAuthFlowInput?)new ServerDirectAuthorizeCompleted(
+                return ((FlowInput?)new ServerDirectAuthorizeCompleted(
                     FlowId: flowId,
                     CodeHash: codeHash,
                     CodeChallenge: ro.CodeChallenge,
@@ -1166,9 +1171,10 @@ public static class AuthCodeEndpoints
         VerifyAndValidateAuthCodeJarAsync(
             RequestFields fields,
             ExchangeContext context,
-            AuthorizationServer server,
+            EndpointServer server,
             CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         if(!fields.TryGetValue(OAuthRequestParameterNames.Request, out string? compactJar)
             || string.IsNullOrWhiteSpace(compactJar))
         {
@@ -1188,7 +1194,7 @@ public static class AuthCodeEndpoints
                 "Missing outer client_id. The library requires an outer client_id alongside a JAR per RFC 9101 §5."));
         }
 
-        ClientRecord? registration = context.Registration;
+        ClientRecord? registration = context.ClientRegistration;
         if(registration is null)
         {
             return (null, ServerHttpResponse.Unauthorized(
@@ -1217,7 +1223,7 @@ public static class AuthCodeEndpoints
                 $"Registration '{registration.ClientId}' has no JAR signing key configured: {ex.Message}"));
         }
 
-        ServerVerificationKeyResolverDelegate? resolver = server.Cryptography.VerificationKeyResolver;
+        ServerVerificationKeyResolverDelegate? resolver = oauth.Cryptography.VerificationKeyResolver;
         if(resolver is null)
         {
             return (null, ServerHttpResponse.ServerError(
@@ -1234,9 +1240,9 @@ public static class AuthCodeEndpoints
                 $"Verification key '{verificationKeyId.Value}' is unavailable."));
         }
 
-        JwtHeaderDeserializer? headerDeserializer = server.Codecs.JwtHeaderDeserializer;
-        JwtPayloadDeserializer? payloadDeserializer = server.Codecs.JwtPayloadDeserializer;
-        DecodeDelegate? decoder = server.Codecs.Decoder;
+        JwtHeaderDeserializer? headerDeserializer = oauth.Codecs.JwtHeaderDeserializer;
+        JwtPayloadDeserializer? payloadDeserializer = oauth.Codecs.JwtPayloadDeserializer;
+        DecodeDelegate? decoder = oauth.Codecs.Decoder;
 
         if(headerDeserializer is null || payloadDeserializer is null || decoder is null)
         {
@@ -1258,7 +1264,7 @@ public static class AuthCodeEndpoints
             decoder,
             headerDeserializer,
             payloadDeserializer,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken).ConfigureAwait(false);
 
         if(verification is JarRejected rejected)
@@ -1275,7 +1281,7 @@ public static class AuthCodeEndpoints
         string? jarAuthorizationDetails;
         {
             string[] jarParts = compactJar.Split('.');
-            using IMemoryOwner<byte> payloadBytes = decoder(jarParts[1], SensitiveMemoryPool<byte>.Shared);
+            using IMemoryOwner<byte> payloadBytes = decoder(jarParts[1], BaseMemoryPool.Shared);
             jarAuthorizationDetails = JwkJsonReader.ExtractArrayAsString(
                 payloadBytes.Memory.Span, OAuthRequestParameterNames.AuthorizationDetailsUtf8);
         }
@@ -1423,9 +1429,10 @@ public static class AuthCodeEndpoints
         IReadOnlyDictionary<string, object> claims,
         ClientRecord registration,
         ExchangeContext context,
-        AuthorizationServer server,
+        EndpointServer server,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         if(!claims.ContainsKey(WellKnownJwtClaimNames.Aud))
         {
             return ServerHttpResponse.BadRequest(
@@ -1436,9 +1443,9 @@ public static class AuthCodeEndpoints
         Uri issuerUri;
         try
         {
-            issuerUri = server.Integration.ResolveIssuerAsync is not null
-                ? await server.Integration.ResolveIssuerAsync(registration, context, cancellationToken)
-                    .ConfigureAwait(false)
+            issuerUri = oauth.ResolveIssuerAsync is not null
+                ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
+                    .ConfigureAwait(false))!
                 : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
                     .ConfigureAwait(false);
         }
@@ -1471,7 +1478,7 @@ public static class AuthCodeEndpoints
 
     /// <summary>
     /// Default producer list when
-    /// <see cref="ServerConfiguration.TokenProducers"/> is empty. Single producer
+    /// <see cref="AuthorizationServerIntegration.TokenProducers"/> is empty. Single producer
     /// matches the library's historical access-token-only response shape.
     /// </summary>
     private static readonly IReadOnlyList<TokenProducer> DefaultTokenProducers =
@@ -1486,11 +1493,12 @@ public static class AuthCodeEndpoints
     /// don't each re-issue the resolver call.
     /// </summary>
     private static async ValueTask<OidcClaims?> PreResolveOidcClaimsAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         IssuanceContext issuance,
         CancellationToken cancellationToken)
     {
-        ResolveOidcClaimsDelegate? resolve = server.Integration.ResolveOidcClaimsAsync;
+        var oauth = server.OAuth();
+        ResolveOidcClaimsDelegate? resolve = oauth.ResolveOidcClaimsAsync;
         if(resolve is null)
         {
             return null;
@@ -1531,24 +1539,25 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// Runs the configured <see cref="ServerConfiguration.ClaimIssuer"/>
+    /// Runs the configured <see cref="AuthorizationServerIntegration.ClaimIssuer"/>
     /// against <paramref name="target"/> and merges every
     /// <see cref="ClaimOutcome.Success"/> contribution into
     /// <paramref name="payload"/> via the indexer. No-op when the
     /// configuration has no issuer wired.
     /// </summary>
     private static async ValueTask MergeContributedClaimsAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClaimContributionTarget? target,
         JwtPayload payload,
         CancellationToken cancellationToken)
     {
-        if(target is null || server.Configuration.ClaimIssuer is not { } issuer)
+        var oauth = server.OAuth();
+        if(target is null || oauth.ClaimIssuer is not { } issuer)
         {
             return;
         }
 
-        string correlationId = await server.Integration.GenerateIdentifierAsync!(
+        string correlationId = await oauth.GenerateIdentifierAsync!(
             WellKnownIdentifierPurposes.OAuthCorrelationId, null, cancellationToken)
             .ConfigureAwait(false);
         ClaimIssueResult result = await issuer.GenerateClaimsAsync(
@@ -1622,7 +1631,8 @@ public static class AuthCodeEndpoints
                     && !string.IsNullOrWhiteSpace(code) ? code : null,
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 if(currentState is not ServerCodeIssuedState codeState)
                 {
@@ -1641,9 +1651,9 @@ public static class AuthCodeEndpoints
                     verifier,
                     CryptoTags.Sha256Digest,
                     WellKnownHashAlgorithms.Sha256SizeBytes,
-                    server.Codecs.ComputeDigest!,
-                    server.Codecs.Encoder!,
-                    SensitiveMemoryPool<byte>.Shared);
+                    oauth.Codecs.ComputeDigest!,
+                    oauth.Codecs.Encoder!,
+                    BaseMemoryPool.Shared);
                 //Fixed-time: this comparison decides the grant, so a match-length
                 //timing oracle on it must not exist even though the challenge
                 //itself transited the front channel.
@@ -1664,7 +1674,7 @@ public static class AuthCodeEndpoints
                 //the context. Use that rather than re-loading by client_id; doing the
                 //lookup again under a different identifier would conflate clientId
                 //and tenantId, which the protocol layer keeps distinct.
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.Unauthorized(
@@ -1674,9 +1684,9 @@ public static class AuthCodeEndpoints
                 Uri issuerUri;
                 try
                 {
-                    issuerUri = server.Integration.ResolveIssuerAsync is not null
-                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false)
+                    issuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
                         : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
                             .ConfigureAwait(false);
                 }
@@ -1766,7 +1776,7 @@ public static class AuthCodeEndpoints
                 };
 
                 IReadOnlyList<TokenProducer> producers =
-                    server.Configuration.TokenProducers.Count > 0 ? server.Configuration.TokenProducers : DefaultTokenProducers;
+                    oauth.TokenProducers.Count > 0 ? oauth.TokenProducers : DefaultTokenProducers;
 
                 //One-time OidcClaims resolution per request — every
                 //IdTokenTarget / UserInfoTarget built below in the producer
@@ -1807,7 +1817,7 @@ public static class AuthCodeEndpoints
                         server, registration, producer.KeyUsage, context, ct)
                         .ConfigureAwait(false);
 
-                    PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
+                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
                         signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
 
                     if(signingKey is null)
@@ -1825,7 +1835,7 @@ public static class AuthCodeEndpoints
 
                     JwtPayload payload = output.Payload;
 
-                    //Composed contributor walk via ServerConfiguration.ClaimIssuer.
+                    //Composed contributor walk via AuthorizationServerIntegration.ClaimIssuer.
                     //Emits scope-driven extension claims (profile / email /
                     //address / phone / cnf / acr / amr) after the producer
                     //returned its spec-mandated baseline.
@@ -1838,13 +1848,13 @@ public static class AuthCodeEndpoints
 
                     using JwsMessage jws = await unsigned.SignAsync(
                         signingKey,
-                        server.Codecs.JwtHeaderSerializer!,
-                        server.Codecs.JwtPayloadSerializer!,
-                        server.Codecs.Encoder!,
-                        SensitiveMemoryPool<byte>.Shared,
+                        oauth.Codecs.JwtHeaderSerializer!,
+                        oauth.Codecs.JwtPayloadSerializer!,
+                        oauth.Codecs.Encoder!,
+                        BaseMemoryPool.Shared,
                         ct).ConfigureAwait(false);
 
-                    string compactJws = JwsSerialization.SerializeCompact(jws, server.Codecs.Encoder!);
+                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
 
                     issuedTokens[producer.ResponseField] = compactJws;
 
@@ -1882,14 +1892,14 @@ public static class AuthCodeEndpoints
                 //value — the application owns the entropy source and its
                 //provenance tracking; the library never fills from the OS
                 //CSPRNG directly.
-                string refreshToken = await server.Integration.GenerateIdentifierAsync!(
+                string refreshToken = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthRefreshToken, context, ct)
                     .ConfigureAwait(false);
                 DateTimeOffset refreshExpiresAt = now + context.RefreshTokenLifetime;
 
-                if(server.Integration.SaveFlowStateAsync is not null)
+                if(oauth.SaveFlowStateAsync is not null)
                 {
-                    string refreshFlowId = await server.Integration.GenerateIdentifierAsync!(
+                    string refreshFlowId = await oauth.GenerateIdentifierAsync!(
                         WellKnownIdentifierPurposes.OAuthRefreshFlowId, context, ct)
                         .ConfigureAwait(false);
                     ServerRefreshTokenIssuedState refreshState = new()
@@ -1916,7 +1926,7 @@ public static class AuthCodeEndpoints
                         //selection), the granted result is that authorization.
                         AuthorizationDetails = codeState.AuthorizationDetails ?? grantedDetailsJson
                     };
-                    await server.Integration.SaveFlowStateAsync(
+                    await oauth.SaveFlowStateAsync(
                         registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, ct)
                         .ConfigureAwait(false);
                 }
@@ -2091,9 +2101,10 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.Unauthorized(
@@ -2103,7 +2114,7 @@ public static class AuthCodeEndpoints
                 //RFC 6749 §4.4.2: the client MUST authenticate. The seam owns the
                 //method (client_secret_basic/post, private_key_jwt, mTLS) and the
                 //credential comparison; the builder guarantees it is wired.
-                bool clientAuthenticated = await server.Integration.ValidateClientCredentialsAsync!(
+                bool clientAuthenticated = await oauth.ValidateClientCredentialsAsync!(
                     context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
                 if(!clientAuthenticated)
                 {
@@ -2167,9 +2178,9 @@ public static class AuthCodeEndpoints
                 Uri issuerUri;
                 try
                 {
-                    issuerUri = server.Integration.ResolveIssuerAsync is not null
-                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false)
+                    issuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
                         : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
                             .ConfigureAwait(false);
                 }
@@ -2196,8 +2207,8 @@ public static class AuthCodeEndpoints
                 };
 
                 IReadOnlyList<TokenProducer> producers =
-                    server.Configuration.TokenProducers.Count > 0
-                        ? server.Configuration.TokenProducers
+                    oauth.TokenProducers.Count > 0
+                        ? oauth.TokenProducers
                         : DefaultTokenProducers;
 
                 OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
@@ -2225,7 +2236,7 @@ public static class AuthCodeEndpoints
 
                     KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
                         server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
-                    PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
+                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
                         signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
                     if(signingKey is null)
                     {
@@ -2247,13 +2258,13 @@ public static class AuthCodeEndpoints
                     UnsignedJwt unsigned = new(output.Header, payload);
                     using JwsMessage jws = await unsigned.SignAsync(
                         signingKey,
-                        server.Codecs.JwtHeaderSerializer!,
-                        server.Codecs.JwtPayloadSerializer!,
-                        server.Codecs.Encoder!,
-                        SensitiveMemoryPool<byte>.Shared,
+                        oauth.Codecs.JwtHeaderSerializer!,
+                        oauth.Codecs.JwtPayloadSerializer!,
+                        oauth.Codecs.Encoder!,
+                        BaseMemoryPool.Shared,
                         ct).ConfigureAwait(false);
 
-                    string compactJws = JwsSerialization.SerializeCompact(jws, server.Codecs.Encoder!);
+                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
                     issuedTokens[producer.ResponseField] = compactJws;
 
                     if(WellKnownTokenTypes.IsAccessToken(producer.ResponseField))
@@ -2359,9 +2370,10 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.Unauthorized(
@@ -2386,7 +2398,7 @@ public static class AuthCodeEndpoints
                 //The application owns the pre-authorized code store; the builder guarantees
                 //the seam is wired. It resolves the subject and tells the library which §6.3
                 //error a refusal maps to.
-                PreAuthorizedCodeDecision decision = await server.Integration.ValidatePreAuthorizedCodeAsync!(
+                PreAuthorizedCodeDecision decision = await oauth.ValidatePreAuthorizedCodeAsync!(
                     preAuthorizedCode, transactionCode, clientId, registration, context, ct).ConfigureAwait(false);
 
                 if(!decision.IsGranted)
@@ -2430,9 +2442,9 @@ public static class AuthCodeEndpoints
                 Uri issuerUri;
                 try
                 {
-                    issuerUri = server.Integration.ResolveIssuerAsync is not null
-                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false)
+                    issuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
                         : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
                             .ConfigureAwait(false);
                 }
@@ -2474,8 +2486,8 @@ public static class AuthCodeEndpoints
                 };
 
                 IReadOnlyList<TokenProducer> producers =
-                    server.Configuration.TokenProducers.Count > 0
-                        ? server.Configuration.TokenProducers
+                    oauth.TokenProducers.Count > 0
+                        ? oauth.TokenProducers
                         : DefaultTokenProducers;
 
                 OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
@@ -2503,7 +2515,7 @@ public static class AuthCodeEndpoints
 
                     KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
                         server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
-                    PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
+                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
                         signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
                     if(signingKey is null)
                     {
@@ -2525,13 +2537,13 @@ public static class AuthCodeEndpoints
                     UnsignedJwt unsigned = new(output.Header, payload);
                     using JwsMessage jws = await unsigned.SignAsync(
                         signingKey,
-                        server.Codecs.JwtHeaderSerializer!,
-                        server.Codecs.JwtPayloadSerializer!,
-                        server.Codecs.Encoder!,
-                        SensitiveMemoryPool<byte>.Shared,
+                        oauth.Codecs.JwtHeaderSerializer!,
+                        oauth.Codecs.JwtPayloadSerializer!,
+                        oauth.Codecs.Encoder!,
+                        BaseMemoryPool.Shared,
                         ct).ConfigureAwait(false);
 
-                    string compactJws = JwsSerialization.SerializeCompact(jws, server.Codecs.Encoder!);
+                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
                     issuedTokens[producer.ResponseField] = compactJws;
 
                     if(WellKnownTokenTypes.IsAccessToken(producer.ResponseField))
@@ -2691,13 +2703,14 @@ public static class AuthCodeEndpoints
     /// <c>invalid_authorization_details</c> failure response otherwise.
     /// </returns>
     private static async ValueTask<ServerHttpResponse?> ValidateAuthorizationDetailsShapeAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         string authorizationDetailsJson,
         ClientRecord registration,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        ParseAuthorizationDetailListDelegate? parse = server.Integration.ParseAuthorizationDetailsAsync;
+        var oauth = server.OAuth();
+        ParseAuthorizationDetailListDelegate? parse = oauth.ParseAuthorizationDetailsAsync;
         if(parse is null)
         {
             return ServerHttpResponse.BadRequest(
@@ -2718,7 +2731,7 @@ public static class AuthCodeEndpoints
             server, registration, context, cancellationToken).ConfigureAwait(false);
 
         string? shapeError = AuthorizationDetailsShapeError(
-            server.Integration.AuthorizationDetailTypes, details, requiredLocation,
+            oauth.AuthorizationDetailTypes, details, requiredLocation,
             registration.AllowedAuthorizationDetailsTypes);
         if(shapeError is not null)
         {
@@ -2808,27 +2821,28 @@ public static class AuthCodeEndpoints
     /// <see langword="null"/> (the AS is the issuer, so no <c>locations</c> is required).
     /// </summary>
     private static async ValueTask<string?> ResolveRequiredAuthorizationDetailsLocationAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        if(server.Integration.ContributeCredentialIssuerMetadataAsync is null)
+        var oauth = server.OAuth();
+        if(oauth.ContributeCredentialIssuerMetadataAsync is null)
         {
             return null;
         }
 
         CredentialIssuerMetadataContribution contribution =
-            await server.Integration.ContributeCredentialIssuerMetadataAsync(
+            await oauth.ContributeCredentialIssuerMetadataAsync(
                 registration, context, cancellationToken).ConfigureAwait(false);
         if(contribution.AuthorizationServers is not { Count: > 0 })
         {
             return null;
         }
 
-        Uri issuer = server.Integration.ResolveIssuerAsync is not null
-            ? await server.Integration.ResolveIssuerAsync(registration, context, cancellationToken)
-                .ConfigureAwait(false)
+        Uri issuer = oauth.ResolveIssuerAsync is not null
+            ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
+                .ConfigureAwait(false))!
             : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -2853,10 +2867,11 @@ public static class AuthCodeEndpoints
     /// response otherwise.
     /// </returns>
     private static ServerHttpResponse? GuardCredentialAccessTokenProtection(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         bool isSenderConstrained)
     {
+        var oauth = server.OAuth();
         if(isSenderConstrained)
         {
             return null;
@@ -2867,7 +2882,7 @@ public static class AuthCodeEndpoints
         TimeSpan lifetime =
             registration.GetTokenLifetime(WellKnownTokenTypes.AccessToken) ?? TimeSpan.FromHours(1);
 
-        if(lifetime <= server.Timings.CredentialAccessTokenSenderConstraintThreshold)
+        if(lifetime <= oauth.Timings.CredentialAccessTokenSenderConstraintThreshold)
         {
             return null;
         }
@@ -2876,14 +2891,14 @@ public static class AuthCodeEndpoints
         //on the request's trace before failing closed.
         System.Diagnostics.Activity.Current?.AddEvent(
             new System.Diagnostics.ActivityEvent(
-                Diagnostics.OAuthEventNames.LongLivedBearerCredentialTokenRefused));
+                OAuthEventNames.LongLivedBearerCredentialTokenRefused));
 
         return ServerHttpResponse.BadRequest(
             OAuthErrors.InvalidRequest,
             "A long-lived Access Token giving access to Credentials MUST NOT be issued unless "
             + "sender-constrained (OID4VCI 1.0 §13.10). Issue a sender-constrained (DPoP) token, "
             + "or shorten the access-token lifetime to at most "
-            + $"{(int)server.Timings.CredentialAccessTokenSenderConstraintThreshold.TotalSeconds} seconds.");
+            + $"{(int)oauth.Timings.CredentialAccessTokenSenderConstraintThreshold.TotalSeconds} seconds.");
     }
 
 
@@ -2902,7 +2917,7 @@ public static class AuthCodeEndpoints
     /// authorization details are in play; a failure response otherwise.
     /// </returns>
     private static async ValueTask<(string? ResponseJson, IReadOnlyList<object>? ClaimDetails, ServerHttpResponse? Failure)> ResolveGrantedAuthorizationDetailsAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         string? tokenRequestDetailsJson,
         string? authorizedDetailsJson,
         string subject,
@@ -2910,13 +2925,14 @@ public static class AuthCodeEndpoints
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         if(tokenRequestDetailsJson is null && authorizedDetailsJson is null)
         {
             return (null, null, null);
         }
 
-        ParseAuthorizationDetailListDelegate? parse = server.Integration.ParseAuthorizationDetailsAsync;
-        ResolveCredentialAuthorizationDelegate? resolve = server.Integration.ResolveCredentialAuthorizationAsync;
+        ParseAuthorizationDetailListDelegate? parse = oauth.ParseAuthorizationDetailsAsync;
+        ResolveCredentialAuthorizationDelegate? resolve = oauth.ResolveCredentialAuthorizationAsync;
         if(parse is null || resolve is null)
         {
             return (null, null, ServerHttpResponse.BadRequest(
@@ -2946,7 +2962,7 @@ public static class AuthCodeEndpoints
             }
 
             string? shapeError = AuthorizationDetailsShapeError(
-                server.Integration.AuthorizationDetailTypes, parsed, requiredLocation,
+                oauth.AuthorizationDetailTypes, parsed, requiredLocation,
                 registration.AllowedAuthorizationDetailsTypes);
             if(shapeError is not null)
             {
@@ -3067,7 +3083,7 @@ public static class AuthCodeEndpoints
             //request's trace (observational; does not change the single-grant outcome).
             System.Diagnostics.Activity.Current?.AddEvent(
                 new System.Diagnostics.ActivityEvent(
-                    Diagnostics.OAuthEventNames.DuplicateGrantedCredentialConfigurationCollapsed));
+                    OAuthEventNames.DuplicateGrantedCredentialConfigurationCollapsed));
         }
 
         return deduplicated;
@@ -3202,7 +3218,8 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 //ResolveCorrelationKeyAsync + LoadFlowStateAsync delivered
                 //the persisted refresh-token state; pattern-match to recover
@@ -3216,7 +3233,7 @@ public static class AuthCodeEndpoints
                         OAuthErrors.InvalidGrant, "refresh_token is not valid."));
                 }
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.Unauthorized(
@@ -3236,9 +3253,9 @@ public static class AuthCodeEndpoints
                 Uri issuerUri;
                 try
                 {
-                    issuerUri = server.Integration.ResolveIssuerAsync is not null
-                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false)
+                    issuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
                         : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
                             .ConfigureAwait(false);
                 }
@@ -3334,8 +3351,8 @@ public static class AuthCodeEndpoints
                 };
 
                 IReadOnlyList<TokenProducer> producers =
-                    server.Configuration.TokenProducers.Count > 0
-                        ? server.Configuration.TokenProducers
+                    oauth.TokenProducers.Count > 0
+                        ? oauth.TokenProducers
                         : DefaultTokenProducers;
 
                 //One-time OidcClaims resolution per request — see BuildToken
@@ -3367,7 +3384,7 @@ public static class AuthCodeEndpoints
 
                     KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
                         server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
-                    PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
+                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
                         signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
                     if(signingKey is null)
                     {
@@ -3381,7 +3398,7 @@ public static class AuthCodeEndpoints
                         issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
                     JwtPayload payload = output.Payload;
 
-                    //Composed contributor walk via ServerConfiguration.ClaimIssuer.
+                    //Composed contributor walk via AuthorizationServerIntegration.ClaimIssuer.
                     //See BuildToken for rationale.
                     ClaimContributionTarget? contributionTarget =
                         BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
@@ -3391,13 +3408,13 @@ public static class AuthCodeEndpoints
                     UnsignedJwt unsigned = new(output.Header, payload);
                     using JwsMessage jws = await unsigned.SignAsync(
                         signingKey,
-                        server.Codecs.JwtHeaderSerializer!,
-                        server.Codecs.JwtPayloadSerializer!,
-                        server.Codecs.Encoder!,
-                        SensitiveMemoryPool<byte>.Shared,
+                        oauth.Codecs.JwtHeaderSerializer!,
+                        oauth.Codecs.JwtPayloadSerializer!,
+                        oauth.Codecs.Encoder!,
+                        BaseMemoryPool.Shared,
                         ct).ConfigureAwait(false);
 
-                    string compactJws = JwsSerialization.SerializeCompact(jws, server.Codecs.Encoder!);
+                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
                     issuedTokens[producer.ResponseField] = compactJws;
 
                     string jti = ExtractJti(payload);
@@ -3431,14 +3448,14 @@ public static class AuthCodeEndpoints
                 //invalid_grant naturally. The value rides the identifier seam
                 //so the application owns the entropy source and its
                 //provenance tracking.
-                string newRefreshToken = await server.Integration.GenerateIdentifierAsync!(
+                string newRefreshToken = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthRefreshToken, context, ct)
                     .ConfigureAwait(false);
                 DateTimeOffset newRefreshExpiresAt = now + context.RefreshTokenLifetime;
 
-                if(server.Integration.SaveFlowStateAsync is not null)
+                if(oauth.SaveFlowStateAsync is not null)
                 {
-                    string newRefreshFlowId = await server.Integration.GenerateIdentifierAsync!(
+                    string newRefreshFlowId = await oauth.GenerateIdentifierAsync!(
                         WellKnownIdentifierPurposes.OAuthRefreshFlowId, context, ct)
                         .ConfigureAwait(false);
                     ServerRefreshTokenIssuedState newRefreshState = new()
@@ -3463,7 +3480,7 @@ public static class AuthCodeEndpoints
                         //detail-less grant keeps a null slot.
                         AuthorizationDetails = storedRefresh.AuthorizationDetails
                     };
-                    await server.Integration.SaveFlowStateAsync(
+                    await oauth.SaveFlowStateAsync(
                         registration.TenantId, newRefreshFlowId, newRefreshState, stepCount: 0, context, ct)
                         .ConfigureAwait(false);
                 }
@@ -3473,9 +3490,9 @@ public static class AuthCodeEndpoints
                 //anyway, but the refresh-token-index entry persists until
                 //the application's delegate prunes it. DeleteFlowStateAsync
                 //is the standardised mechanism for that pruning.
-                if(server.Integration.DeleteFlowStateAsync is not null)
+                if(oauth.DeleteFlowStateAsync is not null)
                 {
-                    await server.Integration.DeleteFlowStateAsync(
+                    await oauth.DeleteFlowStateAsync(
                         registration.TenantId, storedRefresh.FlowId, context, ct)
                         .ConfigureAwait(false);
                 }
@@ -3617,9 +3634,10 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.Unauthorized(
@@ -3629,7 +3647,7 @@ public static class AuthCodeEndpoints
                 //RFC 7009 §2.1: the client MUST authenticate using the same method
                 //it uses at the token endpoint. The seam owns the method and the
                 //credential comparison; the candidate gate guarantees it is wired.
-                bool clientAuthenticated = await server.Integration.ValidateClientCredentialsAsync!(
+                bool clientAuthenticated = await oauth.ValidateClientCredentialsAsync!(
                     context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
                 if(!clientAuthenticated)
                 {
@@ -3652,7 +3670,7 @@ public static class AuthCodeEndpoints
                 //application scopes the revocation to that client's tokens and
                 //cascades refresh -> access. An unrecognized token_type_hint is a
                 //hint, not an error.
-                await server.Integration.RevokeTokenAsync!(
+                await oauth.RevokeTokenAsync!(
                     token, tokenTypeHint, registration, context, ct).ConfigureAwait(false);
 
                 //RFC 7009 §2.2: HTTP 200 with an empty body whether the token was
@@ -3703,9 +3721,10 @@ public static class AuthCodeEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.Unauthorized(
@@ -3715,7 +3734,7 @@ public static class AuthCodeEndpoints
                 //RFC 7662 §2.3: a caller authenticating with client credentials that
                 //fail authentication gets HTTP 401. The candidate gate guarantees the
                 //seam is wired.
-                bool clientAuthenticated = await server.Integration.ValidateClientCredentialsAsync!(
+                bool clientAuthenticated = await oauth.ValidateClientCredentialsAsync!(
                     context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
                 if(!clientAuthenticated)
                 {
@@ -3739,7 +3758,7 @@ public static class AuthCodeEndpoints
                 //token (or one this caller may not see). An unrecognized token_type_hint is
                 //a hint, not an error. A well-formed, authorized query for an inactive token
                 //is NOT an error (RFC 7662 §2.3) — it answers 200 with {"active":false}.
-                TokenIntrospectionResult result = await server.Integration.IntrospectTokenAsync!(
+                TokenIntrospectionResult result = await oauth.IntrospectTokenAsync!(
                     token, tokenTypeHint, registration, context, ct).ConfigureAwait(false);
 
                 //RFC 9701 §4: a resource server asks for a signed JWT response by sending
@@ -3985,13 +4004,14 @@ public static class AuthCodeEndpoints
     /// request rather than downgrading to an unsigned body the caller did not ask for.
     /// </summary>
     private static async ValueTask<ServerHttpResponse> BuildSignedIntrospectionResponseAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ExchangeContext context,
         ClientRecord registration,
         TokenIntrospectionResult result,
         CancellationToken cancellationToken)
     {
-        if(!registration.SigningKeys.TryGetValue(
+        var oauth = server.OAuth();
+        if(!((ClientRecord)registration).SigningKeys.TryGetValue(
                 KeyUsageContext.IntrospectionResponseSigning, out SigningKeySet? introspectionKeys)
             || introspectionKeys.Current.IsEmpty)
         {
@@ -4001,10 +4021,10 @@ public static class AuthCodeEndpoints
                 + "signing key is configured for this caller.");
         }
 
-        if(server.Cryptography.SigningKeyResolver is null
-            || server.Codecs.JwtHeaderSerializer is null
-            || server.Codecs.JwtPayloadSerializer is null
-            || server.Codecs.Encoder is null)
+        if(oauth.Cryptography.SigningKeyResolver is null
+            || oauth.Codecs.JwtHeaderSerializer is null
+            || oauth.Codecs.JwtPayloadSerializer is null
+            || oauth.Codecs.Encoder is null)
         {
             return ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
@@ -4012,7 +4032,7 @@ public static class AuthCodeEndpoints
         }
 
         KeyId signingKeyId = introspectionKeys.Current[0];
-        PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver(
+        PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver(
             signingKeyId, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
         if(signingKey is null)
         {
@@ -4024,9 +4044,9 @@ public static class AuthCodeEndpoints
         Uri issuerUri;
         try
         {
-            issuerUri = server.Integration.ResolveIssuerAsync is not null
-                ? await server.Integration.ResolveIssuerAsync(registration, context, cancellationToken)
-                    .ConfigureAwait(false)
+            issuerUri = oauth.ResolveIssuerAsync is not null
+                ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
+                    .ConfigureAwait(false))!
                 : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
                     .ConfigureAwait(false);
         }
@@ -4056,12 +4076,12 @@ public static class AuthCodeEndpoints
         UnsignedJwt unsigned = new(header, payload);
         using JwsMessage jws = await unsigned.SignAsync(
             signingKey,
-            server.Codecs.JwtHeaderSerializer,
-            server.Codecs.JwtPayloadSerializer,
-            server.Codecs.Encoder,
-            SensitiveMemoryPool<byte>.Shared,
+            oauth.Codecs.JwtHeaderSerializer,
+            oauth.Codecs.JwtPayloadSerializer,
+            oauth.Codecs.Encoder,
+            BaseMemoryPool.Shared,
             cancellationToken).ConfigureAwait(false);
-        string responseJwt = JwsSerialization.SerializeCompact(jws, server.Codecs.Encoder);
+        string responseJwt = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder);
 
         return ServerHttpResponse.Ok(responseJwt, WellKnownMediaTypes.Application.TokenIntrospectionJwt);
     }
@@ -4138,7 +4158,7 @@ public static class AuthCodeEndpoints
 
         if(context.EmitIssOnRedirect)
         {
-            Uri? issuer = context.Registration?.IssuerUri ?? context.Issuer;
+            Uri? issuer = context.ClientRegistration?.IssuerUri ?? context.Issuer;
             if(issuer is not null)
             {
                 location += $"&iss={Uri.EscapeDataString(issuer.ToString())}";
@@ -4206,8 +4226,9 @@ public static class AuthCodeEndpoints
     /// rather than falling back to an unsigned redirect the client is not expecting.
     /// </summary>
     private static (string? ResponseMode, ServerHttpResponse? Failure) ReadResponseMode(
-        RequestFields fields, AuthorizationServer server, ExchangeContext context)
+        RequestFields fields, EndpointServer server, ExchangeContext context)
     {
+        var oauth = server.OAuth();
         fields.TryGetValue(OAuthRequestParameterNames.ResponseMode, out string? responseMode);
         if(responseMode is null)
         {
@@ -4227,22 +4248,23 @@ public static class AuthCodeEndpoints
     /// (<see cref="ReadResponseMode"/>) and signed-request paths so the gate cannot drift.
     /// </summary>
     private static ServerHttpResponse? ValidateJarmResponseModeServability(
-        string responseMode, AuthorizationServer server, ExchangeContext context)
+        string responseMode, EndpointServer server, ExchangeContext context)
     {
+        var oauth = server.OAuth();
         if(!JarmResponseModes.IsJwtSecuredResponseMode(responseMode))
         {
             return null;
         }
 
-        ClientRecord? registration = context.Registration;
+        ClientRecord? registration = context.ClientRegistration;
         bool isJarmServable = registration is not null
-            && registration.SigningKeys.TryGetValue(
+            && ((ClientRecord)registration).SigningKeys.TryGetValue(
                 KeyUsageContext.AuthorizationResponseSigning, out SigningKeySet? jarmKeys)
             && !jarmKeys.Current.IsEmpty
-            && server.Cryptography.SigningKeyResolver is not null
-            && server.Codecs.JwtHeaderSerializer is not null
-            && server.Codecs.JwtPayloadSerializer is not null
-            && server.Codecs.Encoder is not null;
+            && oauth.Cryptography.SigningKeyResolver is not null
+            && oauth.Codecs.JwtHeaderSerializer is not null
+            && oauth.Codecs.JwtPayloadSerializer is not null
+            && oauth.Codecs.Encoder is not null;
 
         if(!isJarmServable)
         {
@@ -4269,27 +4291,28 @@ public static class AuthCodeEndpoints
     /// the same issuer URL, the placement FAPI 2.0 Message Signing §5.4.1 prescribes.
     /// </remarks>
     private static async ValueTask<(string? ResponseJwt, ServerHttpResponse? Failure)> TryIssueJarmResponseJwtAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ExchangeContext context,
         string? responseMode,
         string clientId,
         IReadOnlyDictionary<string, object> responseParameters,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         if(responseMode is null || !JarmResponseModes.IsJwtSecuredResponseMode(responseMode))
         {
             return (null, null);
         }
 
-        ClientRecord? registration = context.Registration;
+        ClientRecord? registration = context.ClientRegistration;
         if(registration is null
-            || !registration.SigningKeys.TryGetValue(
+            || !((ClientRecord)registration).SigningKeys.TryGetValue(
                 KeyUsageContext.AuthorizationResponseSigning, out SigningKeySet? jarmKeys)
             || jarmKeys.Current.IsEmpty
-            || server.Cryptography.SigningKeyResolver is null
-            || server.Codecs.JwtHeaderSerializer is null
-            || server.Codecs.JwtPayloadSerializer is null
-            || server.Codecs.Encoder is null)
+            || oauth.Cryptography.SigningKeyResolver is null
+            || oauth.Codecs.JwtHeaderSerializer is null
+            || oauth.Codecs.JwtPayloadSerializer is null
+            || oauth.Codecs.Encoder is null)
         {
             return (null, ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
@@ -4298,7 +4321,7 @@ public static class AuthCodeEndpoints
         }
 
         KeyId signingKeyId = jarmKeys.Current[0];
-        PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver(
+        PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver(
             signingKeyId, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
         if(signingKey is null)
         {
@@ -4310,9 +4333,9 @@ public static class AuthCodeEndpoints
         Uri issuerUri;
         try
         {
-            issuerUri = server.Integration.ResolveIssuerAsync is not null
-                ? await server.Integration.ResolveIssuerAsync(registration, context, cancellationToken)
-                    .ConfigureAwait(false)
+            issuerUri = oauth.ResolveIssuerAsync is not null
+                ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
+                    .ConfigureAwait(false))!
                 : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
                     .ConfigureAwait(false);
         }
@@ -4332,10 +4355,10 @@ public static class AuthCodeEndpoints
             clientId,
             expiresAt,
             responseParameters,
-            server.Codecs.Encoder,
-            server.Codecs.JwtHeaderSerializer,
-            server.Codecs.JwtPayloadSerializer,
-            SensitiveMemoryPool<byte>.Shared,
+            oauth.Codecs.Encoder,
+            oauth.Codecs.JwtHeaderSerializer,
+            oauth.Codecs.JwtPayloadSerializer,
+            BaseMemoryPool.Shared,
             cancellationToken).ConfigureAwait(false);
 
         return (responseJwt, null);
@@ -4375,7 +4398,7 @@ public static class AuthCodeEndpoints
     /// §4.1.2.1 error redirect.
     /// </summary>
     private static async ValueTask<ServerHttpResponse> BuildAuthorizeErrorResponseAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ExchangeContext context,
         Uri redirectUri,
         string error,
@@ -4385,6 +4408,7 @@ public static class AuthCodeEndpoints
         string? clientId,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         if(responseMode is not null
             && clientId is not null
             && JarmResponseModes.IsJwtSecuredResponseMode(responseMode))
@@ -4497,7 +4521,7 @@ public static class AuthCodeEndpoints
 
 
     private static async ValueTask<ServerHttpResponse?> EvaluateAuthenticationRequirementsAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ExchangeContext context,
         string? requestedAcrValues,
         int? requestedMaxAge,
@@ -4513,6 +4537,7 @@ public static class AuthCodeEndpoints
         string? requestedIssuerState = null,
         string? requestedResource = null)
     {
+        var oauth = server.OAuth();
         if(requestedMaxAge is int maxAge)
         {
             //RFC 9470 §5 / OIDC Core §3.1.2.1 — max_age bounds the elapsed seconds since the
@@ -4541,8 +4566,8 @@ public static class AuthCodeEndpoints
             }
         }
 
-        if(server.Integration.EvaluateAuthorizationRequestAsync is { } evaluateRequest
-            && context.Registration is { } registration)
+        if(oauth.EvaluateAuthorizationRequestAsync is { } evaluateRequest
+            && context.ClientRegistration is { } registration)
         {
             AuthorizationRequestDecision decision = await evaluateRequest(
                 new AuthorizationRequestEvaluation

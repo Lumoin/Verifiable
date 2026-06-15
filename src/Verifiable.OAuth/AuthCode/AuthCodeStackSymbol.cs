@@ -5,7 +5,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// </summary>
 /// <remarks>
 /// This type is <c>TStackSymbol</c> in
-/// <c>PushdownAutomaton&lt;OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol&gt;</c>.
+/// <c>PushdownAutomaton&lt;FlowState, FlowInput, AuthCodeStackSymbol&gt;</c>.
 /// <see cref="Base"/> is the sentinel always present at the bottom of the stack.
 /// The linear authorization code flow never pushes or pops.
 /// </remarks>

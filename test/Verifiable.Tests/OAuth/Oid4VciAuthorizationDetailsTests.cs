@@ -8,6 +8,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -48,7 +49,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     private const string DegreeConfigurationId = "UniversityDegree_dc_sd_jwt";
     private const string LicenseConfigurationId = "org.iso.18013.5.1.mDL";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     /// <summary>The capabilities the Authorization Code flow tests need.</summary>
     private static readonly ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities =
@@ -67,7 +68,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." This plain-bearer credential flow stays within the
@@ -76,7 +77,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
 
         IReadOnlyList<CredentialAuthorizationDetail>? seenDetails = null;
         string? seenSubject = null;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 seenDetails = details;
@@ -143,10 +144,10 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         bool seamCalled = false;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 seamCalled = true;
@@ -218,13 +219,13 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //§13.10: keep the plain-bearer credential token within the long-lived threshold.
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
         IReadOnlyList<CredentialAuthorizationDetail>? seenDetails = null;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 seenDetails = details;
@@ -254,13 +255,13 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //§13.10: keep the plain-bearer credential token within the long-lived threshold.
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
         IReadOnlyList<CredentialAuthorizationDetail>? seenDetails = null;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 seenDetails = details;
@@ -295,10 +296,10 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         bool seamCalled = false;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 seamCalled = true;
@@ -327,7 +328,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         await AssertParRejectsAsync(host, material, "{ not json").ConfigureAwait(false);
         await AssertParRejectsAsync(host, material,
@@ -362,7 +363,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         ServerHttpResponse tokenResponse = await RunAuthCodeFlowAsync(
             host, material, parDetails: SingleDetail(DegreeConfigurationId)).ConfigureAwait(false);
@@ -381,9 +382,9 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) => ValueTask.FromResult(
                 CredentialAuthorizationDecision.Deny(
                     CredentialAuthorizationDenialReason.UnknownCredentialConfiguration));
@@ -393,7 +394,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         Assert.AreEqual(400, unknownResponse.StatusCode, unknownResponse.Body);
         Assert.Contains(OAuthErrors.InvalidAuthorizationDetails, unknownResponse.Body);
 
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) => ValueTask.FromResult(
                 CredentialAuthorizationDecision.Deny(
                     CredentialAuthorizationDenialReason.AuthorizationDenied));
@@ -419,19 +420,19 @@ internal sealed class Oid4VciAuthorizationDetailsTests
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant));
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //§13.10: the Pre-Authorized Code grant mints a plain-bearer credential token; keep it
         //within the long-lived threshold so it is not refused as an unconstrained long-lived token.
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(SubjectId));
 
         IReadOnlyList<CredentialAuthorizationDetail>? seenDetails = null;
         string? seenSubject = null;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 seenDetails = details;
@@ -481,14 +482,14 @@ internal sealed class Oid4VciAuthorizationDetailsTests
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         ServerHttpResponse unwired = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
         Assert.AreEqual(200, unwired.StatusCode, unwired.Body);
         Assert.DoesNotContain("authorization_details_types_supported", unwired.Body,
             "An unwired decision seam must not advertise authorization details support.");
 
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequested(details));
 
         ServerHttpResponse wired = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
@@ -513,11 +514,11 @@ internal sealed class Oid4VciAuthorizationDetailsTests
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequested(details));
 
-        host.Server.Integration.AuthorizationDetailTypes.Register(new AuthorizationDetailHandler
+        host.Server.OAuth().AuthorizationDetailTypes.Register(new AuthorizationDetailHandler
         {
             Type = "payment_initiation",
             ValidateShape = (detail, validation) => null
@@ -546,11 +547,11 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
         int resolveCount = 0;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 resolveCount++;
@@ -609,10 +610,10 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequested(details));
 
         (ServerHttpResponse tokenResponse, string refreshToken) = await RunAuthCodeFlowCapturingRefreshAsync(
@@ -649,10 +650,10 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequested(details));
 
         (_, string firstRefreshToken) = await RunAuthCodeFlowCapturingRefreshAsync(
@@ -684,10 +685,10 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequested(details));
 
         (_, string refreshToken) = await RunAuthCodeFlowCapturingRefreshAsync(
@@ -721,10 +722,10 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         bool seamCalled = false;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 seamCalled = true;
@@ -803,8 +804,8 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
-        host.Server.Integration.AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
 
         //RFC 9396 §5: "is an object of known type but containing unknown fields."
         await AssertParRejectsAsync(host, material,
@@ -842,8 +843,8 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
-        host.Server.Integration.AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
 
         await AssertParAcceptsAsync(host, material,
             """[{"type":"openid_credential","credential_configuration_id":"UniversityDegree_dc_sd_jwt","vendor_extension":{"anything":true}}]""").ConfigureAwait(false);
@@ -862,10 +863,10 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //The server supports payment_initiation, but the client registered only openid_credential.
-        host.Server.Integration.AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
+        host.Server.OAuth().AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
         host.SetAllowedAuthorizationDetailsTypes(
             material, ImmutableHashSet.Create(AuthorizationDetailsTypeValues.OpenIdCredential));
 
@@ -893,19 +894,19 @@ internal sealed class Oid4VciAuthorizationDetailsTests
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant));
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
+        host.Server.OAuth().AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
         host.SetAllowedAuthorizationDetailsTypes(
             material, ImmutableHashSet.Create(AuthorizationDetailsTypeValues.OpenIdCredential));
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(SubjectId));
 
         bool seamCalled = false;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 seamCalled = true;
@@ -945,8 +946,8 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
-        host.Server.Integration.AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
 
         Assert.IsNull(material.Registration.AllowedAuthorizationDetailsTypes,
             "The fixture client registers no authorization_details_types restriction.");

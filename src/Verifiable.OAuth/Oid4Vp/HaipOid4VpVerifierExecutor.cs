@@ -47,7 +47,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <see cref="AuthorizationServerCryptography.DecryptionKeyResolver"/>),
 /// client registration lookup (<see cref="AuthorizationServerIntegration.LoadClientRegistrationAsync"/>),
 /// and the Base64url encoder (<see cref="AuthorizationServerCodecs.Encoder"/>) are
-/// read from the <see cref="AuthorizationServer"/> instance at call time — they
+/// read from the <see cref="EndpointServer"/> instance at call time — they
 /// are not captured at construction.
 /// </para>
 /// </remarks>
@@ -271,13 +271,14 @@ public static class HaipOid4VpVerifierExecutor
 
         executor.Register<SignJarAction>(async (action, context, ct) =>
         {
-            AuthorizationServer server = context.Server!;
+            EndpointServer server = context.Server!;
+            var oauth = server.OAuth();
 
             TenantId tenantId = context.TenantId
                 ?? throw new InvalidOperationException(
                     "Tenant identifier not found in context.");
 
-            PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
+            PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
                 action.SigningKeyId, tenantId, context, ct).ConfigureAwait(false);
 
             if(signingKey is null)
@@ -286,7 +287,7 @@ public static class HaipOid4VpVerifierExecutor
                     $"Signing key '{action.SigningKeyId}' not found.");
             }
 
-            ClientRecord? registration = await server.Integration.LoadClientRegistrationAsync!(
+            ClientRecord? registration = (ClientRecord?)await oauth.LoadClientRegistrationAsync!(
                 tenantId, context, ct).ConfigureAwait(false);
 
             if(registration is null)
@@ -310,10 +311,10 @@ public static class HaipOid4VpVerifierExecutor
             //Stamp JAR timing claims using the dispatcher's per-request VerifiedAt
             //when available so all effectful work in this request shares one
             //instant; fall back to the active TimeProvider otherwise. The window
-            //size is policy, sourced from server.Timings per FAPI 2.0 §5.2.2
+            //size is policy, sourced from oauth.Timings per FAPI 2.0 §5.2.2
             //Clause 13.
             DateTimeOffset now = context.VerifiedAt ?? server.TimeProvider.GetUtcNow();
-            TimeSpan requestObjectLifetime = server.Timings.Oid4VpRequestObjectLifetime;
+            TimeSpan requestObjectLifetime = oauth.Timings.Oid4VpRequestObjectLifetime;
 
             //SignJarAction carries the per-flow response_mode (captured at
             //PAR time onto VerifierParReceivedState and propagated through
@@ -333,7 +334,7 @@ public static class HaipOid4VpVerifierExecutor
                 payloadSerializer: payloadSerializer,
                 dcqlQuerySerializer: dcqlQuerySerializer,
                 clientMetadataSerializer: clientMetadataSerializer,
-                encoder: server.Codecs.Encoder!,
+                encoder: oauth.Codecs.Encoder!,
                 pool: pool,
                 transactionData: action.TransactionData,
                 walletNonce: action.WalletNonce,
@@ -427,7 +428,7 @@ public static class HaipOid4VpVerifierExecutor
                     encryptAgreement,
                     deriveKey,
                     encryptAead,
-                    server.Codecs.Encoder!,
+                    oauth.Codecs.Encoder!,
                     pool,
                     cancellationToken: ct).ConfigureAwait(false);
             }
@@ -446,9 +447,10 @@ public static class HaipOid4VpVerifierExecutor
 
         executor.Register<DecryptResponseAction>(async (action, context, ct) =>
         {
-            AuthorizationServer server = context.Server!;
+            EndpointServer server = context.Server!;
+            var oauth = server.OAuth();
 
-            PrivateKeyMemory? decryptionKey = await server.Cryptography.DecryptionKeyResolver!(
+            PrivateKeyMemory? decryptionKey = await oauth.Cryptography.DecryptionKeyResolver!(
                 action.DecryptionKeyId, context, ct).ConfigureAwait(false);
 
             if(decryptionKey is null)
@@ -549,7 +551,7 @@ public static class HaipOid4VpVerifierExecutor
 
             context.SetTransactionNonce(action.Nonce);
 
-            ClientRecord registration = context.Registration
+            ClientRecord registration = context.ClientRegistration
                 ?? throw new InvalidOperationException(
                     "Client registration not found in context.");
 
@@ -570,7 +572,7 @@ public static class HaipOid4VpVerifierExecutor
                 expectedTransactionDataHashes =
                     await TransactionDataHasher.ComputeSha256Async(
                         txData,
-                        server.Codecs.Encoder!,
+                        oauth.Codecs.Encoder!,
                         pool,
                         ct).ConfigureAwait(false);
             }
@@ -756,11 +758,12 @@ public static class HaipOid4VpVerifierExecutor
         //the handler skips the JWE parse / decrypt / enc-allowlist gate.
         executor.Register<ProcessVpTokenAction>(async (action, context, ct) =>
         {
-            AuthorizationServer server = context.Server!;
+            EndpointServer server = context.Server!;
+            var oauth = server.OAuth();
 
             context.SetTransactionNonce(action.Nonce);
 
-            ClientRecord registration = context.Registration
+            ClientRecord registration = context.ClientRegistration
                 ?? throw new InvalidOperationException(
                     "Client registration not found in context.");
 
@@ -776,7 +779,7 @@ public static class HaipOid4VpVerifierExecutor
                 expectedTransactionDataHashes =
                     await TransactionDataHasher.ComputeSha256Async(
                         txData,
-                        server.Codecs.Encoder!,
+                        oauth.Codecs.Encoder!,
                         pool,
                         ct).ConfigureAwait(false);
             }

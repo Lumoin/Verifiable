@@ -59,7 +59,7 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string SiopNonce = "n-siop-trust-fabric-01";
 
@@ -204,7 +204,7 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
 
         Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
 
-        (OAuthFlowState state, _) = host.GetFlowState(requestHandle);
+        (FlowState state, _) = host.GetFlowState(requestHandle);
         SelfIssuedAuthenticationVerifiedState authenticated =
             Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(state);
         Assert.AreEqual(expectedSubject, authenticated.Subject);

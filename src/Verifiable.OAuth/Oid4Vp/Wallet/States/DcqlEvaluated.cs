@@ -15,7 +15,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet.States;
 /// credential and assembles the VP token payload.
 /// </remarks>
 [DebuggerDisplay("DcqlEvaluated FlowId={FlowId} MatchCount={MatchedPresentationsByQueryId.Count}")]
-public sealed record DcqlEvaluated: OAuthFlowState
+public sealed record DcqlEvaluated: FlowState
 {
     /// <summary>
     /// The Authorization Request that produced the DCQL query.

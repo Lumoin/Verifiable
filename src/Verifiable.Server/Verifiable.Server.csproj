@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Protocol-neutral endpoint host for Verifiable services.</Title>
+    <Description>Transport-agnostic endpoint dispatch host shared by the OAuth/OpenID, W3C VCALM, and DIDComm protocol families. Carries the request/response model, endpoint routing and pipeline, flow-state dispatch, and the per-family integration registry.</Description>
+    <PackageTags>endpoint dispatch routing transport-agnostic VerifiableCredentials</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+    <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -36,7 +36,7 @@ internal sealed class Oid4VciWalletClientTests
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://wallet.client.test";
     private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
@@ -145,7 +145,7 @@ internal sealed class Oid4VciWalletClientTests
         var requestKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory requestPublic = requestKeys.PublicKey;
         using PrivateKeyMemory requestPrivate = requestKeys.PrivateKey;
-        host.Server.Integration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
             await DecryptAsync(jwe, requestPrivate, ct).ConfigureAwait(false);
 
         CredentialOffer offer = ComposeOffer(material);
@@ -198,7 +198,7 @@ internal sealed class Oid4VciWalletClientTests
 
         //The Issuer stores the by-reference offer the wallet will fetch and drive to issuance.
         CredentialOffer storedOffer = ComposeOffer(material);
-        host.Server.Integration.ResolveCredentialOfferAsync =
+        host.Server.OAuth().ResolveCredentialOfferAsync =
             (offerId, context, ct) => ValueTask.FromResult<CredentialOffer?>(
                 string.Equals(offerId, OfferId, StringComparison.Ordinal) ? storedOffer : null);
 
@@ -402,21 +402,21 @@ internal sealed class Oid4VciWalletClientTests
         IssuerSeamObservations observations = new();
         string? mintedNonce = null;
 
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
             ValueTask.FromResult(string.Equals(code, PreAuthorizedCode, StringComparison.Ordinal)
                 ? PreAuthorizedCodeDecision.Grant(EndUserSubject, WellKnownScopes.OpenId)
                 : PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode));
 
-        host.Server.Integration.IssueCredentialNonceAsync = (_, _) =>
+        host.Server.OAuth().IssueCredentialNonceAsync = (_, _) =>
         {
             mintedNonce = $"c-nonce-{Guid.NewGuid():N}";
 
             return ValueTask.FromResult(mintedNonce);
         };
 
-        host.Server.Integration.IssueCredentialAsync = async (request, _, _, _, ct) =>
+        host.Server.OAuth().IssueCredentialAsync = async (request, _, _, _, ct) =>
         {
             string proof = request.Proofs[Oid4VciCredentialParameterNames.JwtProofType][0];
             (PublicKeyMemory proofKey, string? proofNonce, string? proofAudience) = ReadProof(proof);
@@ -450,7 +450,7 @@ internal sealed class Oid4VciWalletClientTests
     //the recipient key from the request's jwk.
     private static void WireResponseEncryptionSeam(TestHostShell host)
     {
-        host.Server.Integration.EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
+        host.Server.OAuth().EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
         {
             Dictionary<string, object> jwkDict = new(StringComparer.Ordinal);
             foreach(KeyValuePair<string, object> member in encryption.Jwk!)

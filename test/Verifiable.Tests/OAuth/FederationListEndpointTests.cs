@@ -62,7 +62,7 @@ internal sealed class FederationListEndpointTests
         EntityTypeIdentifier? observedFilter = null;
         bool filterObserved = false;
 
-        app.Server.Integration.ResolveSubordinateListAsync = (entityTypeFilter, _, _, _) =>
+        app.Server.OAuth().ResolveSubordinateListAsync = (entityTypeFilter, _, _, _) =>
         {
             observedFilter = entityTypeFilter;
             filterObserved = true;
@@ -122,7 +122,7 @@ internal sealed class FederationListEndpointTests
 
         //The application filters its membership by the parsed entity_type:
         //only the openid_relying_party subordinate comes back.
-        app.Server.Integration.ResolveSubordinateListAsync = (entityTypeFilter, _, _, _) =>
+        app.Server.OAuth().ResolveSubordinateListAsync = (entityTypeFilter, _, _, _) =>
         {
             observedFilter = entityTypeFilter;
 
@@ -178,7 +178,7 @@ internal sealed class FederationListEndpointTests
             federationSigningKeyPair: federationKeys,
             baseCapabilities: capabilities);
 
-        app.Server.Integration.ResolveSubordinateListAsync = (_, _, _, _) =>
+        app.Server.OAuth().ResolveSubordinateListAsync = (_, _, _, _) =>
             ValueTask.FromResult<IReadOnlyList<EntityIdentifier>>([]);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);

@@ -4,6 +4,7 @@ using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -182,7 +183,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()
         {
@@ -221,7 +222,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         //The deployment owns the assurance-level semantics: "loa-high" is satisfied only
         //by an established acr equal to "loa-high"; anything else is denied as an unmet
         //authentication requirement.
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             static (evaluation, _, _, _) =>
                 ValueTask.FromResult(
                     string.Equals(evaluation.EstablishedAcr, "loa-high", StringComparison.Ordinal)
@@ -253,7 +254,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             static (evaluation, _, _, _) =>
                 ValueTask.FromResult(
                     string.Equals(evaluation.EstablishedAcr, "loa-high", StringComparison.Ordinal)
@@ -288,7 +289,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         string? observedRequested = null;
         string? observedEstablished = null;
         string? observedScope = null;
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             (evaluation, _, _, _) =>
             {
                 observedRequested = evaluation.RequestedAcrValues;
@@ -348,7 +349,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             static (_, _, _, _) =>
                 ValueTask.FromResult(AuthorizationRequestDecision.Deny(
                     AuthorizationDenialReason.AccessDenied, "Resource owner declined consent."));
@@ -381,7 +382,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
         string? observedScope = null;
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             (evaluation, _, _, _) =>
             {
                 observedScope = evaluation.RequestedScope;
@@ -390,7 +391,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
             };
 
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields parFields = new()
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -444,7 +445,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         DateTimeOffset? authTime = null, string? establishedAcr = null)
     {
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()
         {

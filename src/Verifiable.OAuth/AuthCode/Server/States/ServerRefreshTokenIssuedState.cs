@@ -27,7 +27,7 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ServerRefreshTokenIssued ClientId={ClientId,nq} IssuedAt={IssuedAt} Bound={Confirmation is not null}")]
-public sealed record ServerRefreshTokenIssuedState: OAuthFlowState
+public sealed record ServerRefreshTokenIssuedState: FlowState
 {
     /// <summary>The OAuth client identifier the refresh token was issued to.</summary>
     public required string ClientId { get; init; }

@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.AuthCode.States;
 /// Transitions to <see cref="TokenReceivedState"/> after a successful token exchange.
 /// </remarks>
 [DebuggerDisplay("AuthorizationCodeReceived FlowId={FlowId}")]
-public sealed record AuthorizationCodeReceivedState: OAuthFlowState
+public sealed record AuthorizationCodeReceivedState: FlowState
 {
     /// <summary>
     /// The authorization code from the redirect. Single-use; must not be logged.
@@ -27,7 +27,7 @@ public sealed record AuthorizationCodeReceivedState: OAuthFlowState
 
     /// <summary>
     /// The <c>iss</c> parameter echoed back in the redirect. Must be validated against
-    /// <see cref="OAuthFlowState.ExpectedIssuer"/> per
+    /// <see cref="FlowState.ExpectedIssuer"/> per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.4">RFC 9700 §4.4</see>
     /// when present. Absent in plain RFC 6749 flows that do not require issuer identification.
     /// </summary>

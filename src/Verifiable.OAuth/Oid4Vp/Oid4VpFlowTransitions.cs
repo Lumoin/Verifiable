@@ -1,4 +1,4 @@
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Server;
@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <remarks>
 /// <para>
 /// The delegate returned by <see cref="Create"/> is <c>δ</c> in
-/// <c>PushdownAutomaton&lt;OAuthFlowState, OAuthFlowInput, Oid4VpStackSymbol&gt;</c>.
+/// <c>PushdownAutomaton&lt;FlowState, FlowInput, Oid4VpStackSymbol&gt;</c>.
 /// It is a pure dispatch table: no I/O, randomness, or time reads occur inside the
 /// transition function. All effectful values arrive pre-computed inside the input records.
 /// </para>
@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 ///     <description>
 ///       Mix-up defense
 ///       (<see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.4">RFC 9700 §4.4</see>):
-///       <see cref="OAuthFlowState.ExpectedIssuer"/> is set at initiation and carried through
+///       <see cref="FlowState.ExpectedIssuer"/> is set at initiation and carried through
 ///       all states.
 ///     </description>
 ///   </item>
@@ -46,12 +46,12 @@ namespace Verifiable.OAuth.Oid4Vp;
 public static class Oid4VpFlowTransitions
 {
     /// <summary>Creates the transition delegate for the OID4VP authorization flow PDA.</summary>
-    public static TransitionDelegate<OAuthFlowState, OAuthFlowInput, Oid4VpStackSymbol> Create() =>
+    public static TransitionDelegate<FlowState, FlowInput, Oid4VpStackSymbol> Create() =>
         static (state, input, stackTop, cancellationToken) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            TransitionResult<OAuthFlowState, Oid4VpStackSymbol>? result = (state, input) switch
+            TransitionResult<FlowState, Oid4VpStackSymbol>? result = (state, input) switch
             {
                 (not (PresentationVerifiedState or FlowFailed), Fail fail) =>
                     Transition(
@@ -194,12 +194,12 @@ public static class Oid4VpFlowTransitions
                 _ => null
             };
 
-            return ValueTask.FromResult<TransitionResult<OAuthFlowState, Oid4VpStackSymbol>?>(result);
+            return ValueTask.FromResult<TransitionResult<FlowState, Oid4VpStackSymbol>?>(result);
         };
 
 
-    private static TransitionResult<OAuthFlowState, Oid4VpStackSymbol> Transition(
-        OAuthFlowState nextState,
+    private static TransitionResult<FlowState, Oid4VpStackSymbol> Transition(
+        FlowState nextState,
         StackAction<Oid4VpStackSymbol> stackAction,
         string label) =>
         new(nextState, stackAction, label);

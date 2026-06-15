@@ -12,4 +12,4 @@ namespace Verifiable.OAuth;
 /// </param>
 /// <param name="FailedAt">The UTC instant the failure was recorded.</param>
 [DebuggerDisplay("Fail Reason={Reason}")]
-public sealed record Fail(string Reason, DateTimeOffset FailedAt): OAuthFlowInput;
+public sealed record Fail(string Reason, DateTimeOffset FailedAt): FlowInput;

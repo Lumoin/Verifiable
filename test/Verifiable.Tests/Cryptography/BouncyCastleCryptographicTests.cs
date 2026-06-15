@@ -20,7 +20,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void Ed25519KeyPairHasNonEmptyMaterial()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -32,7 +32,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task Ed25519SignatureVerifies()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -44,7 +44,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task P256SignatureVerifies()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -56,7 +56,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task P384SignatureVerifies()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateP384Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateP384Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -68,7 +68,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task P521SignatureVerifies()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateP521Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateP521Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -80,7 +80,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task Secp256k1SignatureVerifies()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateSecp256k1Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateSecp256k1Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -92,7 +92,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void X25519KeyPairHasNonEmptyMaterial()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateX25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -104,18 +104,18 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task X25519SharedSecretDerivationIsSymmetric()
         {
-            var aliceKeys = BouncyCastleKeyMaterialCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var aliceKeys = BouncyCastleKeyMaterialCreator.CreateX25519Keys(BaseMemoryPool.Shared);
             using var alicePub = aliceKeys.PublicKey;
             using var alicePriv = aliceKeys.PrivateKey;
 
-            var bobKeys = BouncyCastleKeyMaterialCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var bobKeys = BouncyCastleKeyMaterialCreator.CreateX25519Keys(BaseMemoryPool.Shared);
             using var bobPub = bobKeys.PublicKey;
             using var bobPriv = bobKeys.PrivateKey;
 
             using var aliceSecret = await BouncyCastleCryptographicFunctions.DeriveX25519SharedSecretAsync(
-                alicePriv.AsReadOnlyMemory(), bobPub.AsReadOnlyMemory(), SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+                alicePriv.AsReadOnlyMemory(), bobPub.AsReadOnlyMemory(), BaseMemoryPool.Shared).ConfigureAwait(false);
             using var bobSecret = await BouncyCastleCryptographicFunctions.DeriveX25519SharedSecretAsync(
-                bobPriv.AsReadOnlyMemory(), alicePub.AsReadOnlyMemory(), SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+                bobPriv.AsReadOnlyMemory(), alicePub.AsReadOnlyMemory(), BaseMemoryPool.Shared).ConfigureAwait(false);
 
             Assert.IsTrue(aliceSecret.Memory.Span.SequenceEqual(bobSecret.Memory.Span));
         }
@@ -124,7 +124,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task Rsa2048SignatureVerifies()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateRsa2048Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -136,7 +136,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task Rsa4096SignatureVerifies()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateRsa4096Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateRsa4096Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -148,7 +148,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void MlDsa44KeyPairHasCorrectPublicKeySize()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -160,7 +160,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task MlDsa44SignatureVerifies()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -172,7 +172,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task MlDsa44TamperedSignatureFailsVerification()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -184,7 +184,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void MlDsa65KeyPairHasCorrectPublicKeySize()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -196,7 +196,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task MlDsa65SignatureVerifies()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -208,17 +208,17 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task MlDsa65WrongKeyDoesNotVerify()
         {
-            var aliceKeys = BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(SensitiveMemoryPool<byte>.Shared);
+            var aliceKeys = BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(BaseMemoryPool.Shared);
             using var alicePublicKey = aliceKeys.PublicKey;
             using var alicePrivateKey = aliceKeys.PrivateKey;
 
-            var bobKeys = BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(SensitiveMemoryPool<byte>.Shared);
+            var bobKeys = BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(BaseMemoryPool.Shared);
             using var bobPublicKey = bobKeys.PublicKey;
             using var bobPrivateKey = bobKeys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
             using var signature = await BouncyCastleCryptographicFunctions.SignMlDsa65Async(
-                alicePrivateKey.AsReadOnlyMemory(), data, SensitiveMemoryPool<byte>.Shared,
+                alicePrivateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             bool isValid = await BouncyCastleCryptographicFunctions.VerifyMlDsa65Async(
@@ -232,7 +232,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void MlDsa87KeyPairHasCorrectPublicKeySize()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa87Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa87Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -244,7 +244,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task MlDsa87SignatureVerifies()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa87Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateMlDsa87Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -256,7 +256,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void MlKem512KeyPairHasCorrectPublicKeySize()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateMlKem512Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateMlKem512Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -278,7 +278,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void MlKem768KeyPairHasCorrectPublicKeySize()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -300,21 +300,21 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void MlKem768DifferentKeysProduceDifferentSecrets()
         {
-            var aliceKeys = BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(SensitiveMemoryPool<byte>.Shared);
+            var aliceKeys = BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(BaseMemoryPool.Shared);
             using var alicePublicKey = aliceKeys.PublicKey;
             using var alicePrivateKey = aliceKeys.PrivateKey;
 
-            var bobKeys = BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(SensitiveMemoryPool<byte>.Shared);
+            var bobKeys = BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(BaseMemoryPool.Shared);
             using var bobPublicKey = bobKeys.PublicKey;
             using var bobPrivateKey = bobKeys.PrivateKey;
 
             var (ciphertext, senderSecret) = BouncyCastleCryptographicFunctions.EncapsulateMlKem768(
-                alicePublicKey.AsReadOnlyMemory(), SensitiveMemoryPool<byte>.Shared);
+                alicePublicKey.AsReadOnlyMemory(), BaseMemoryPool.Shared);
             using var ct = ciphertext;
             using var ss = senderSecret;
 
             using var wrongSecret = BouncyCastleCryptographicFunctions.DecapsulateMlKem768(
-                bobPrivateKey.AsReadOnlyMemory(), ct.Memory, SensitiveMemoryPool<byte>.Shared);
+                bobPrivateKey.AsReadOnlyMemory(), ct.Memory, BaseMemoryPool.Shared);
 
             Assert.IsFalse(ss.Memory.Span.SequenceEqual(wrongSecret.Memory.Span));
         }
@@ -323,7 +323,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void MlKem1024KeyPairHasCorrectPublicKeySize()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateMlKem1024Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateMlKem1024Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -349,7 +349,7 @@ namespace Verifiable.Tests.Cryptography
             VerificationDelegate verify)
         {
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await sign(privateKey.AsReadOnlyMemory(), data, SensitiveMemoryPool<byte>.Shared,
+            using var signature = await sign(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsGreaterThan(0, signature.AsReadOnlyMemory().Length);
@@ -367,7 +367,7 @@ namespace Verifiable.Tests.Cryptography
             VerificationDelegate verify)
         {
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await sign(privateKey.AsReadOnlyMemory(), data, SensitiveMemoryPool<byte>.Shared,
+            using var signature = await sign(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             byte[] tamperedBytes = signature.AsReadOnlyMemory().ToArray();
@@ -385,15 +385,15 @@ namespace Verifiable.Tests.Cryptography
             Func<ReadOnlyMemory<byte>, MemoryPool<byte>, (IMemoryOwner<byte> Ciphertext, IMemoryOwner<byte> SharedSecret)> encapsulate,
             Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, MemoryPool<byte>, IMemoryOwner<byte>> decapsulate)
         {
-            var keys = createKeys(SensitiveMemoryPool<byte>.Shared);
+            var keys = createKeys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            var (ciphertext, senderSecret) = encapsulate(publicKey.AsReadOnlyMemory(), SensitiveMemoryPool<byte>.Shared);
+            var (ciphertext, senderSecret) = encapsulate(publicKey.AsReadOnlyMemory(), BaseMemoryPool.Shared);
             using var ct = ciphertext;
             using var ss = senderSecret;
 
-            using var receiverSecret = decapsulate(privateKey.AsReadOnlyMemory(), ct.Memory, SensitiveMemoryPool<byte>.Shared);
+            using var receiverSecret = decapsulate(privateKey.AsReadOnlyMemory(), ct.Memory, BaseMemoryPool.Shared);
 
             Assert.AreEqual(32, ss.Memory.Length);
             Assert.AreEqual(32, receiverSecret.Memory.Length);

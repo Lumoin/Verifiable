@@ -23,7 +23,7 @@ internal sealed class SdCwtVerificationTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
 

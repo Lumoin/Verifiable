@@ -28,7 +28,7 @@ internal sealed class BitstringStatusListCodecTests
     /// </summary>
     private const int Example4Index = 94567;
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]

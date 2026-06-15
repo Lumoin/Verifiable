@@ -14,11 +14,11 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// and
 /// <see href="https://www.rfc-editor.org/rfc/rfc9126">RFC 9126</see>,
 /// the PAR response is sent immediately. JAR signing is deferred to the JAR request
-/// endpoint. <see cref="OAuthFlowState.NextAction"/> returns
-/// <see cref="Verifiable.Core.Automata.NullAction.Instance"/>.
+/// endpoint. <see cref="FlowState.NextAction"/> returns
+/// <see cref="Verifiable.Foundation.Automata.NullAction.Instance"/>.
 /// </remarks>
 [DebuggerDisplay("VerifierParReceived FlowId={FlowId} ParHandle={ParHandle}")]
-public sealed record VerifierParReceivedState: OAuthFlowState
+public sealed record VerifierParReceivedState: FlowState
 {
     /// <summary>
     /// The PAR response carrying the generated <c>request_uri</c> and
@@ -41,7 +41,7 @@ public sealed record VerifierParReceivedState: OAuthFlowState
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 §4.1.1</see>.
     /// </summary>
     /// <remarks>
-    /// The token is unrelated to <see cref="OAuthFlowState.FlowId"/>; the flow
+    /// The token is unrelated to <see cref="FlowState.FlowId"/>; the flow
     /// identifier never leaves the server process. The application's
     /// <see cref="Verifiable.OAuth.Server.AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/>
     /// maps inbound tokens back to flow identifiers.

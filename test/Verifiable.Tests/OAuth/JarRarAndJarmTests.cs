@@ -13,6 +13,7 @@ using Verifiable.OAuth.Jarm;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -32,7 +33,7 @@ internal sealed class JarRarAndJarmTests
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://wallet.client.test";
     private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
@@ -76,14 +77,14 @@ internal sealed class JarRarAndJarmTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterJarClient(host);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
         IReadOnlyList<CredentialAuthorizationDetail>? seenDetails = null;
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
             {
                 seenDetails = details;
@@ -138,12 +139,12 @@ internal sealed class JarRarAndJarmTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterJarClient(host);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         //OID4VCI 1.0 §13.10: keep the plain-bearer credential token within the long-lived
         //threshold ("Long-lived Access Tokens giving access to Credentials MUST not be issued
         //unless sender-constrained"; lifetimes longer than 5 minutes are considered long lived).
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-        host.Server.Integration.ResolveCredentialAuthorizationAsync =
+        host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             static (details, subject, registration, context, ct) =>
                 ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
                 [
@@ -230,7 +231,7 @@ internal sealed class JarRarAndJarmTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterJarClient(host);
-        host.Server.Integration.UseDefaultAuthorizationDetailsJsonParsing();
+        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         Dictionary<string, object> claims = BuildJarClaims(material, pkce);

@@ -13,7 +13,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet.States;
 /// response.
 /// </remarks>
 [DebuggerDisplay("RequestUriReceived FlowId={FlowId} RequestUri={RequestUri}")]
-public sealed record RequestUriReceived: OAuthFlowState
+public sealed record RequestUriReceived: FlowState
 {
     /// <summary>
     /// The <c>request_uri</c> from which the JAR JWT must be fetched.

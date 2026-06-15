@@ -39,7 +39,7 @@ namespace Verifiable.Cbor.Mdoc;
 /// <para>
 /// Pool-routed carriers (per-item random salts, the device-side COSE wire
 /// bytes) are rented from the supplied <paramref name="pool"/>; pass the same
-/// <see cref="SensitiveMemoryPool{T}"/> the rest of the verification flow uses
+/// <see cref="BaseMemoryPool"/> the rest of the verification flow uses
 /// so the carriers' <c>Length</c> reflects the exact byte count.
 /// </para>
 /// </remarks>

@@ -3,8 +3,8 @@ using Verifiable.Core;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Routing;
 using Verifiable.OAuth.Server.States;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.AuthCode.Server;
 
@@ -39,7 +39,7 @@ internal static class DpopTokenEndpointValidation
     /// code-grant where the binding is being ESTABLISHED.
     /// </param>
     public static async ValueTask<DpopValidationOutcome> ValidateAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ExchangeContext context,
         ClientRecord registration,
         Uri issuerUri,
@@ -48,6 +48,7 @@ internal static class DpopTokenEndpointValidation
         bool dpopRequired,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(registration);
@@ -63,11 +64,11 @@ internal static class DpopTokenEndpointValidation
             return DpopValidationOutcome.NoBinding;
         }
 
-        if(server.Integration.ValidateDpopProofAsync is null
-            || server.Integration.IssueDpopNonceAsync is null
-            || server.Integration.ValidateDpopNonceAsync is null
-            || server.Integration.ResolveServerHmacKeyAsync is null
-            || server.Integration.GetHmacKeySetAsync is null)
+        if(oauth.ValidateDpopProofAsync is null
+            || oauth.IssueDpopNonceAsync is null
+            || oauth.ValidateDpopNonceAsync is null
+            || oauth.ResolveServerHmacKeyAsync is null
+            || oauth.GetHmacKeySetAsync is null)
         {
             return DpopValidationOutcome.Failure(ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
@@ -77,7 +78,7 @@ internal static class DpopTokenEndpointValidation
         if(dpopProofString is null)
         {
             //Required but absent — issue a fresh nonce challenge.
-            string freshNonce = await server.Integration.IssueDpopNonceAsync(
+            string freshNonce = await oauth.IssueDpopNonceAsync(
                 issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
             return DpopValidationOutcome.Failure(ServerHttpResponse
                 .BadRequest(OAuthErrors.UseDpopNonce, "DPoP proof required.")
@@ -93,7 +94,7 @@ internal static class DpopTokenEndpointValidation
             NonceRequired = false
         };
 
-        DpopProofValidationResult proofResult = await server.Integration.ValidateDpopProofAsync(
+        DpopProofValidationResult proofResult = await oauth.ValidateDpopProofAsync(
             validationRequest, cancellationToken).ConfigureAwait(false);
 
         if(!proofResult.IsSuccess)
@@ -101,7 +102,7 @@ internal static class DpopTokenEndpointValidation
             if(proofResult.FailureReason is DpopProofValidationFailureReason.NonceMissing
                 or DpopProofValidationFailureReason.NonceMismatch)
             {
-                string freshNonce = await server.Integration.IssueDpopNonceAsync(
+                string freshNonce = await oauth.IssueDpopNonceAsync(
                     issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
                 return DpopValidationOutcome.Failure(ServerHttpResponse
                     .BadRequest(OAuthErrors.UseDpopNonce, "DPoP nonce required.")
@@ -125,12 +126,12 @@ internal static class DpopTokenEndpointValidation
 
         if(proofResult.Claims!.Nonce is not null)
         {
-            DpopNonceValidationResult nonceResult = await server.Integration.ValidateDpopNonceAsync(
+            DpopNonceValidationResult nonceResult = await oauth.ValidateDpopNonceAsync(
                 proofResult.Claims.Nonce, issuerUri, registration.TenantId, context, cancellationToken)
                 .ConfigureAwait(false);
             if(!nonceResult.IsSuccess)
             {
-                string freshNonce = await server.Integration.IssueDpopNonceAsync(
+                string freshNonce = await oauth.IssueDpopNonceAsync(
                     issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
                 return DpopValidationOutcome.Failure(ServerHttpResponse
                     .BadRequest(OAuthErrors.UseDpopNonce,
@@ -140,7 +141,7 @@ internal static class DpopTokenEndpointValidation
         }
         else if(dpopRequired)
         {
-            string freshNonce = await server.Integration.IssueDpopNonceAsync(
+            string freshNonce = await oauth.IssueDpopNonceAsync(
                 issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
             return DpopValidationOutcome.Failure(ServerHttpResponse
                 .BadRequest(OAuthErrors.UseDpopNonce, "DPoP nonce required.")

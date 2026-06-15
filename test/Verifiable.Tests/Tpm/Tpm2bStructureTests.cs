@@ -27,7 +27,7 @@ internal class Tpm2bStructureTests
             0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20
         ];
         var reader = new TpmReader(data);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using Tpm2bDigest digest = Tpm2bDigest.Parse(ref reader, pool);
 
@@ -43,7 +43,7 @@ internal class Tpm2bStructureTests
     [TestMethod]
     public void Tpm2bDigestCreateEmptyIsEmpty()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using Tpm2bDigest digest = Tpm2bDigest.Empty;
 
@@ -56,7 +56,7 @@ internal class Tpm2bStructureTests
     {
         byte[] data = [0x00, 0x00]; //Size = 0.
         var reader = new TpmReader(data);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using Tpm2bDigest digest = Tpm2bDigest.Parse(ref reader, pool);
 
@@ -67,7 +67,7 @@ internal class Tpm2bStructureTests
     [TestMethod]
     public void Tpm2bDigestSerializedSizeIsCorrect()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] testData = new byte[64];
 
         using Tpm2bDigest digest = Tpm2bDigest.Create(testData, pool);
@@ -79,7 +79,7 @@ internal class Tpm2bStructureTests
     [TestMethod]
     public void Tpm2bDigestCreateCopiesData()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] original = [0x01, 0x02, 0x03, 0x04];
 
         using Tpm2bDigest digest = Tpm2bDigest.Create(original, pool);
@@ -100,7 +100,7 @@ internal class Tpm2bStructureTests
             0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00
         ];
         var reader = new TpmReader(data);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using Tpm2bNonce nonce = Tpm2bNonce.Parse(ref reader, pool);
 
@@ -113,7 +113,7 @@ internal class Tpm2bStructureTests
     [TestMethod]
     public void Tpm2bNonceCreateRandomGeneratesCorrectLength()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         const int NonceLength = 32;
 
         using Tpm2bNonce nonce = Tpm2bNonce.CreateRandom(NonceLength, pool);
@@ -131,7 +131,7 @@ internal class Tpm2bStructureTests
             0x70, 0x61, 0x73, 0x73, 0x77, 0x6F, 0x72, 0x64 //"password" in ASCII.
         ];
         var reader = new TpmReader(data);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using Tpm2bAuth auth = Tpm2bAuth.Parse(ref reader, pool);
 
@@ -142,7 +142,7 @@ internal class Tpm2bStructureTests
     [TestMethod]
     public void Tpm2bAuthCreateFromPasswordTrimsTrailingZeros()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         //Password with trailing null characters would be trimmed.
         using Tpm2bAuth auth = Tpm2bAuth.CreateFromPassword("test", pool);
@@ -153,7 +153,7 @@ internal class Tpm2bStructureTests
     [TestMethod]
     public void Tpm2bAuthCreateEmptyIsEmpty()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using Tpm2bAuth auth = Tpm2bAuth.CreateEmpty(pool);
 

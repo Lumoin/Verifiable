@@ -16,7 +16,8 @@ using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -111,30 +112,30 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
 
         //ValidateClientCredentialsAsync is the gate for the client_credentials
         //grant — without it the grant endpoint does not exist (fail-closed).
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
 
         //RevokeTokenAsync + ValidateClientCredentialsAsync together gate the RFC 7009
         //revocation endpoint — both must be wired for revocation_endpoint to be advertised.
-        host.Server.Integration.RevokeTokenAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().RevokeTokenAsync = static (_, _, _, _, _) =>
             ValueTask.CompletedTask;
 
         //Global Token Revocation: capability + the default JSON parse seam + the
         //revoke-subject seam + client auth gate the endpoint — wiring them advertises
         //global_token_revocation_endpoint.
-        host.Server.Integration.UseDefaultGlobalTokenRevocationJsonParsing();
-        host.Server.Integration.RevokeSubjectTokensAsync = static (_, _, _, _) =>
+        host.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
+        host.Server.OAuth().RevokeSubjectTokensAsync = static (_, _, _, _) =>
             ValueTask.FromResult(GlobalTokenRevocationOutcome.Initiated);
 
         //RP-Initiated Logout: capability + TerminateSessionAsync + the (host-wired)
         //verification-key resolver gate the end_session endpoint — wiring the seam
         //advertises end_session_endpoint.
-        host.Server.Integration.TerminateSessionAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().TerminateSessionAsync = static (_, _, _, _, _) =>
             ValueTask.CompletedTask;
 
         //Back-Channel Logout: capability + the deliver (fan-out) seam advertise
         //backchannel_logout_supported / backchannel_logout_session_supported.
-        host.Server.Integration.DeliverBackChannelLogoutAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().DeliverBackChannelLogoutAsync = static (_, _, _, _, _) =>
             ValueTask.CompletedTask;
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
@@ -236,7 +237,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: TokenServerCapabilities);
 
-        host.Server.Integration.ContributeSsfTransmitterMetadataAsync = static (_, _, _) =>
+        host.Server.OAuth().ContributeSsfTransmitterMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(new SsfTransmitterMetadataContribution
             {
                 DeliveryMethodsSupported = [SsfDeliveryMethods.PushHttp, SsfDeliveryMethods.PollHttp],
@@ -279,7 +280,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: TokenServerCapabilities);
 
-        host.Server.Integration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+        host.Server.OAuth().ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(new Verifiable.OAuth.ProtectedResource.ProtectedResourceMetadataContribution
             {
                 ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage],
@@ -288,7 +289,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
 
         //RFC 9728 §4: the co-located AS enumerates its protected resources in
         //its own metadata through the existing discovery-fields seam.
-        host.Server.Integration.ContributeDiscoveryFieldsAsync = static (registration, _, _) =>
+        host.Server.OAuth().ContributeDiscoveryFieldsAsync = static (registration, _, _) =>
             ValueTask.FromResult(new DiscoveryDocumentContribution(
                 [new DiscoveryStringArrayField(
                     AuthorizationServerMetadataParameterNames.ProtectedResources,
@@ -469,7 +470,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         TestHostShell host, VerifierKeyMaterial material, string scope)
     {
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()
         {

@@ -41,7 +41,7 @@ public sealed class WalletFlowKind: StatefulFlowKind
     /// <see cref="CreateAsync"/> signature. Always throws — use
     /// <see cref="WalletFlowAutomaton.Create"/> directly.
     /// </remarks>
-    public override ValueTask<(OAuthFlowState State, int StepCount)> CreateAsync(
+    public override ValueTask<(FlowState State, int StepCount)> CreateAsync(
         string runId,
         TimeProvider timeProvider) =>
         throw new InvalidOperationException(
@@ -50,10 +50,10 @@ public sealed class WalletFlowKind: StatefulFlowKind
 
 
     /// <inheritdoc/>
-    public override async ValueTask<(OAuthFlowState State, int StepCount)> StepAsync(
-        OAuthFlowState state,
+    public override async ValueTask<(FlowState State, int StepCount)> StepAsync(
+        FlowState state,
         int stepCount,
-        OAuthFlowInput input,
+        FlowInput input,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {

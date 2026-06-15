@@ -47,7 +47,7 @@ internal static class SdCwtVpFixture
     private const string FamilyNamePath = "/101";
     private const string EmailPath = "/103";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>The SD-CWT matrix-format row: name plus the per-run <see cref="FormatRun"/> factory.</summary>

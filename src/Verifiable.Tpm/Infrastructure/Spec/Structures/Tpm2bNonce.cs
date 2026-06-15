@@ -44,7 +44,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Shared empty instance backed by <see cref="EmptyMemoryOwner"/>.
     /// </summary>
-    private static readonly Tpm2bNonce EmptyInstance = new(Cryptography.EmptyMemoryOwner.Instance);
+    private static readonly Tpm2bNonce EmptyInstance = new(Foundation.EmptyMemoryOwner.Instance);
 
     /// <summary>
     /// Initializes a new nonce with the specified storage.

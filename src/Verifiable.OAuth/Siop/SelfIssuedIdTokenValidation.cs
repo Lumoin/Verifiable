@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.Siop;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is a free-standing RP primitive with no <c>AuthorizationServer</c> coupling — a
+/// This is a free-standing RP primitive with no <c>EndpointServer</c> coupling — a
 /// verifier website, a wallet checking a peer, or an agent all validate the same way.
 /// JSON field extraction uses <see cref="JwkJsonReader"/> (span-based UTF-8 scanning);
 /// signature verification composes <see cref="Jws.VerifyAsync"/>; the subject key is

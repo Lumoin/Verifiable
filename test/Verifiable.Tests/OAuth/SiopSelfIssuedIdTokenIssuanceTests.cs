@@ -24,7 +24,7 @@ internal sealed class SiopSelfIssuedIdTokenIssuanceTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://verifier.example.org/cb";
     private const string RequestNonce = "n-0S6_WzA2Mj";

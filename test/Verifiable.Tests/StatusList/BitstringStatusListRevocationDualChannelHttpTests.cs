@@ -43,7 +43,7 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
 
     private FakeTimeProvider TimeProvider { get; } = new(new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string Issuer = "https://issuer.example/";
     private const string ReceiverAudience = "https://receiver.example/ssf";

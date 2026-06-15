@@ -4,14 +4,17 @@ $projects = @(
     'Verifiable.Core',
     'Verifiable.Cryptography',
     'Verifiable.DecentralizedWebNode',
+    'Verifiable.Foundation',
     'Verifiable.JCose',
     'Verifiable.Json',
-	'Verifiable.JsonPointer',
+    'Verifiable.JsonPointer',
     'Verifiable.Microsoft',
     'Verifiable.NSec',
     'Verifiable.OAuth',
+    'Verifiable.Server',
     'Verifiable.Sidetree',
-    'Verifiable.Tpm'
+    'Verifiable.Tpm',
+    'Verifiable.Vcalm'
 )
 
 $outputDir = './generated-nugets'

@@ -89,7 +89,7 @@ internal sealed class MdocCborIssuanceEndToEndTests
                     DeviceKey = deviceCoseKey
                 },
                 signingKey: issuerKeys.PrivateKey,
-                signaturePool: SensitiveMemoryPool<byte>.Shared,
+                signaturePool: BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             //IssuerAuth + per-item WireBytes are non-nullable on the signed
@@ -126,11 +126,11 @@ internal sealed class MdocCborIssuanceEndToEndTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             bool isVerified = await signed.VerifyIssuerAuthAsync(
-                imposterKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                imposterKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(isVerified, "Verification under a different issuer key must fail.");
         }
@@ -166,7 +166,7 @@ internal sealed class MdocCborIssuanceEndToEndTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             IReadOnlyDictionary<uint, ReadOnlyMemory<byte>> nsDigests =
@@ -206,7 +206,7 @@ internal sealed class MdocCborIssuanceEndToEndTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             using(signed)
@@ -216,7 +216,7 @@ internal sealed class MdocCborIssuanceEndToEndTests
                 //Verbose captures, it does not reconstruct: the threaded payload must be
                 //byte-identical to the COSE_Sign1 payload the signature actually covers.
                 using CoseSign1Message message = CoseSerialization.ParseCoseSign1(
-                    signed.IssuerSigned.IssuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), SensitiveMemoryPool<byte>.Shared);
+                    signed.IssuerSigned.IssuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), BaseMemoryPool.Shared);
                 Assert.IsTrue(
                     message.Payload.Span.SequenceEqual(signedMsoPayload.Span),
                     "The signed MSO payload must equal the produced document's COSE_Sign1 payload.");
@@ -255,11 +255,11 @@ internal sealed class MdocCborIssuanceEndToEndTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             (bool result, MdocIssuerAuthVerificationContext? context) = await signed.VerifyIssuerAuthVerboseAsync(
-                issuerKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                issuerKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             using(context)
             {
@@ -299,11 +299,11 @@ internal sealed class MdocCborIssuanceEndToEndTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             (bool result, MdocIssuerAuthVerificationContext? context) = await signed.VerifyIssuerAuthVerboseAsync(
-                imposterKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                imposterKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             using(context)
             {
@@ -344,14 +344,14 @@ internal sealed class MdocCborIssuanceEndToEndTests
                     DeviceKey = deviceCoseKey
                 },
                 signingKey: issuerKeys.PrivateKey,
-                signaturePool: SensitiveMemoryPool<byte>.Shared,
+                signaturePool: BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsNotNull(signed.IssuerSigned.IssuerAuth);
 
             //Round-trip the wire bytes through the M.2 reader.
             ReadOnlyMemory<byte> wireBytes = signed.IssuerSigned.IssuerAuth.EncodedCoseSign1.AsReadOnlyMemory();
-            MdocIssuerAuth roundTripped = MdocCborIssuerAuthReader.Read(wireBytes.Span, SensitiveMemoryPool<byte>.Shared);
+            MdocIssuerAuth roundTripped = MdocCborIssuerAuthReader.Read(wireBytes.Span, BaseMemoryPool.Shared);
 
             Assert.AreEqual(signed.IssuerSigned.IssuerAuth.Mso.DocType, roundTripped.Mso.DocType);
             Assert.AreEqual(signed.IssuerSigned.IssuerAuth.Mso.DigestAlgorithm, roundTripped.Mso.DigestAlgorithm);
@@ -361,7 +361,7 @@ internal sealed class MdocCborIssuanceEndToEndTests
 
             //Verify the COSE_Sign1 signature under the issuer's public key.
             bool isVerified = await roundTripped.VerifyAsync(
-                issuerKeys.PublicKey, SensitiveMemoryPool<byte>.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
+                issuerKeys.PublicKey, BaseMemoryPool.Shared, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(isVerified, $"Round-tripped IssuerAuth signature must verify under {digestAlgorithm}.");
         }

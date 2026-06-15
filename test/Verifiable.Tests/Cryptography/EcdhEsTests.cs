@@ -22,7 +22,7 @@ internal sealed class EcdhEsTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly JwtHeaderSerializer JwtHeaderSerializer =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(

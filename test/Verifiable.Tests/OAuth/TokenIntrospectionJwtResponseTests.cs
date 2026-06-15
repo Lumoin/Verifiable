@@ -10,7 +10,8 @@ using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -34,7 +35,7 @@ internal sealed class TokenIntrospectionJwtResponseTests
 
     private static readonly Uri ClientBaseUri = new("https://rs.introspection.client.test");
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> IntrospectionCapabilities =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection);
@@ -102,9 +103,9 @@ internal sealed class TokenIntrospectionJwtResponseTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterSigningCapableResourceServer(host);
 
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(new TokenIntrospectionResult
             {
                 IsActive = true,
@@ -147,9 +148,9 @@ internal sealed class TokenIntrospectionJwtResponseTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterSigningCapableResourceServer(host);
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(new TokenIntrospectionResult { IsActive = false });
 
         ServerHttpResponse response = await DispatchIntrospectionAsync(
@@ -261,9 +262,9 @@ internal sealed class TokenIntrospectionJwtResponseTests
 
     private static void WireActiveToken(TestHostShell host)
     {
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().IntrospectTokenAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(new TokenIntrospectionResult
             {
                 IsActive = true,

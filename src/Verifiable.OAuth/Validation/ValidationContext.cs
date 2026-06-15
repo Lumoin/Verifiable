@@ -15,7 +15,7 @@ namespace Verifiable.OAuth.Validation;
 /// <para>
 /// One of four per-request context shapes that serve different lifecycles:
 /// <see cref="ExchangeContext"/> (per-request bag, populated at dispatch entry
-/// by the skin); <see cref="OAuthFlowState"/> (persistent cross-request
+/// by the skin); <see cref="FlowState"/> (persistent cross-request
 /// carrier for state-machine progress); <see cref="Verifiable.OAuth.IssuanceContext"/>
 /// (per-token-endpoint-call refined view for the token producer / claim
 /// contributor walk); and this <see cref="ValidationContext"/>
@@ -26,7 +26,7 @@ namespace Verifiable.OAuth.Validation;
 /// stage of request processing. Per-request data lives on
 /// <see cref="ExchangeContext"/> via typed extensions; stage-bounded data
 /// lives on the appropriate stage-specific typed record; persistent
-/// cross-request data lives on <see cref="OAuthFlowState"/>. Policy values
+/// cross-request data lives on <see cref="FlowState"/>. Policy values
 /// resolved at dispatch entry have per-request lifetime and consumers in all
 /// three downstream contexts; pattern fit places them on
 /// <see cref="ExchangeContext"/> via
@@ -52,7 +52,7 @@ public sealed record ValidationContext
     public IReadOnlyDictionary<string, string>? Fields { get; init; }
 
     /// <summary>The current flow state loaded from persistence.</summary>
-    public OAuthFlowState? FlowState { get; init; }
+    public FlowState? FlowState { get; init; }
 
     /// <summary>The parsed JWT payload claims.</summary>
     public IReadOnlyDictionary<string, object>? TokenClaims { get; init; }
@@ -78,8 +78,8 @@ public sealed record ValidationContext
     /// </summary>
     /// <remarks>
     /// Application code that owns the active
-    /// <see cref="Verifiable.OAuth.Server.AuthorizationServer"/> should pass
-    /// <c>server.Timings.ClockSkewTolerance</c> here so all validation sites
+    /// <see cref="Verifiable.OAuth.Server.EndpointServer"/> should pass
+    /// <c>oauth.Timings.ClockSkewTolerance</c> here so all validation sites
     /// in the deployment share one source of truth. See
     /// <see cref="Verifiable.OAuth.Server.TimingPolicy.ClockSkewTolerance"/>.
     /// </remarks>
@@ -94,7 +94,7 @@ public sealed record ValidationContext
     /// <see cref="Verifiable.OAuth.Server.PolicyExchangeContextExtensions.KbJwtMaxAgeWindow"/>
     /// policy: the KB-JWT <c>iat</c> freshness check uses the policy window when
     /// set, otherwise this value. Application code owning the active
-    /// <see cref="Verifiable.OAuth.Server.AuthorizationServer"/> aligns it with
+    /// <see cref="Verifiable.OAuth.Server.EndpointServer"/> aligns it with
     /// the deployment's KB-JWT freshness policy.
     /// </remarks>
     public TimeSpan KbJwtMaxAge { get; init; } = TimeSpan.FromMinutes(5);

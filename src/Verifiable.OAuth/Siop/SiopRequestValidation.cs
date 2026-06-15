@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.Siop;
 /// <para>
 /// This is the mirror of <see cref="SelfIssuedIdTokenValidation"/>: that primitive is the
 /// RP validating the OP's <c>id_token</c> response, this one is the OP validating the RP's
-/// request. It is a free-standing primitive with no <c>AuthorizationServer</c>, executor,
+/// request. It is a free-standing primitive with no <c>EndpointServer</c>, executor,
 /// dispatch, or HTTP coupling — a wallet, an agent, or a test harness all validate the
 /// same way.
 /// </para>

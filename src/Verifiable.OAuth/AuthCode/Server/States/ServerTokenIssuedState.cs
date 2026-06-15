@@ -28,7 +28,7 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ServerTokenIssued FlowId={FlowId} SubjectId={SubjectId}")]
-public sealed record ServerTokenIssuedState: OAuthFlowState
+public sealed record ServerTokenIssuedState: FlowState
 {
     /// <summary>
     /// The set of audit records for tokens emitted in this response, keyed by

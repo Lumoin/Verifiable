@@ -3,7 +3,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
@@ -24,7 +24,7 @@ internal static class CredentialEndpointDpopValidation
     /// constraint is satisfied or the token is an ordinary bearer token with no binding.
     /// </summary>
     public static async ValueTask<ServerHttpResponse?> EnforceAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ExchangeContext context,
         ClientRecord registration,
         JwtPayload accessToken,
@@ -33,6 +33,7 @@ internal static class CredentialEndpointDpopValidation
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         string? boundThumbprint = ReadConfirmationThumbprint(accessToken);
         if(boundThumbprint is null)
         {
@@ -51,9 +52,9 @@ internal static class CredentialEndpointDpopValidation
 
         //A bound token with no DPoP enforcement wired is a misconfiguration — fail loud rather
         //than fall back to bearer, which would silently drop the proof-of-possession check.
-        if(server.Integration.ValidateDpopProofAsync is null
-            || server.Integration.IssueDpopNonceAsync is null
-            || server.Integration.ValidateDpopNonceAsync is null)
+        if(oauth.ValidateDpopProofAsync is null
+            || oauth.IssueDpopNonceAsync is null
+            || oauth.ValidateDpopNonceAsync is null)
         {
             return ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
@@ -67,7 +68,7 @@ internal static class CredentialEndpointDpopValidation
         context.IncomingRequest?.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoP, out dpopProof);
         if(dpopProof is null)
         {
-            string freshNonce = await server.Integration.IssueDpopNonceAsync(
+            string freshNonce = await oauth.IssueDpopNonceAsync(
                 issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
             return ServerHttpResponse
@@ -77,7 +78,7 @@ internal static class CredentialEndpointDpopValidation
         }
 
         string htu = $"{issuerUri.GetLeftPart(UriPartial.Authority)}{context.IncomingRequest!.Path}";
-        DpopProofValidationResult proofResult = await server.Integration.ValidateDpopProofAsync(
+        DpopProofValidationResult proofResult = await oauth.ValidateDpopProofAsync(
             new DpopProofValidationRequest
             {
                 Proof = dpopProof,
@@ -94,7 +95,7 @@ internal static class CredentialEndpointDpopValidation
             if(proofResult.FailureReason is DpopProofValidationFailureReason.NonceMissing
                 or DpopProofValidationFailureReason.NonceMismatch)
             {
-                string freshNonce = await server.Integration.IssueDpopNonceAsync(
+                string freshNonce = await oauth.IssueDpopNonceAsync(
                     issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
                 return ServerHttpResponse
@@ -118,12 +119,12 @@ internal static class CredentialEndpointDpopValidation
 
         if(proofResult.Claims!.Nonce is not null)
         {
-            DpopNonceValidationResult nonceResult = await server.Integration.ValidateDpopNonceAsync(
+            DpopNonceValidationResult nonceResult = await oauth.ValidateDpopNonceAsync(
                 proofResult.Claims.Nonce, issuerUri, registration.TenantId, context, cancellationToken)
                 .ConfigureAwait(false);
             if(!nonceResult.IsSuccess)
             {
-                string freshNonce = await server.Integration.IssueDpopNonceAsync(
+                string freshNonce = await oauth.IssueDpopNonceAsync(
                     issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
                 return ServerHttpResponse
@@ -157,15 +158,19 @@ internal static class CredentialEndpointDpopValidation
 
 
     private static async ValueTask<Uri> ResolveIssuerAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
-        CancellationToken cancellationToken) =>
-        server.Integration.ResolveIssuerAsync is not null
-            ? await server.Integration.ResolveIssuerAsync(registration, context, cancellationToken)
-                .ConfigureAwait(false)
+        CancellationToken cancellationToken)
+    {
+        var oauth = server.OAuth();
+
+        return oauth.ResolveIssuerAsync is not null
+            ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
+                .ConfigureAwait(false))!
             : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
                 .ConfigureAwait(false);
+    }
 
 
     /// <summary>Reads <c>cnf.jkt</c> off the validated Access Token, tolerating either dictionary view.</summary>

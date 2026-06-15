@@ -48,5 +48,5 @@ public sealed record PresentationResult
     /// The terminal PDA state after the response was posted. For the cross-device
     /// flow this is always <see cref="ResponseSent"/>.
     /// </summary>
-    public required OAuthFlowState TerminalState { get; init; }
+    public required FlowState TerminalState { get; init; }
 }

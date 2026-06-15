@@ -80,12 +80,12 @@ internal static class TestSalts
     /// <param name="bytes">The salt bytes to wrap. Copied into a pool-rented buffer.</param>
     /// <param name="pool">
     /// The memory pool to allocate from. Defaults to
-    /// <see cref="SensitiveMemoryPool{T}.Shared"/> when omitted.
+    /// <see cref="BaseMemoryPool.Shared"/> when omitted.
     /// </param>
     /// <returns>A new <see cref="Salt"/> owning a copy of <paramref name="bytes"/>.</returns>
     public static Salt FromBytes(ReadOnlySpan<byte> bytes, MemoryPool<byte>? pool = null)
     {
-        MemoryPool<byte> resolvedPool = pool ?? SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> resolvedPool = pool ?? BaseMemoryPool.Shared;
         IMemoryOwner<byte> owner = resolvedPool.Rent(bytes.Length);
 
         try
@@ -118,13 +118,13 @@ internal static class TestSalts
     /// </param>
     /// <param name="pool">
     /// The memory pool to allocate from. Defaults to
-    /// <see cref="SensitiveMemoryPool{T}.Shared"/> when omitted.
+    /// <see cref="BaseMemoryPool.Shared"/> when omitted.
     /// </param>
     public static GenerateDisclosureSaltDelegate DefaultGenerator(
         int byteLength = 16,
         MemoryPool<byte>? pool = null)
     {
-        MemoryPool<byte> resolvedPool = pool ?? SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> resolvedPool = pool ?? BaseMemoryPool.Shared;
         return () => Generate(byteLength, TestSaltTag, resolvedPool);
     }
 
@@ -139,11 +139,11 @@ internal static class TestSalts
     /// </summary>
     /// <param name="byteLength">Salt length in bytes. RFC 9901 §4.2.2 mandates at least 16 (128 bits).</param>
     /// <param name="tag">The purpose/provenance tag; the provider stamps its own entries onto it.</param>
-    /// <param name="pool">The memory pool to allocate from. Defaults to <see cref="SensitiveMemoryPool{T}.Shared"/>.</param>
+    /// <param name="pool">The memory pool to allocate from. Defaults to <see cref="BaseMemoryPool.Shared"/>.</param>
     /// <returns>A fresh <see cref="Salt"/>; the caller owns and disposes it (or transfers ownership).</returns>
     public static Salt Generate(int byteLength, Tag tag, MemoryPool<byte>? pool = null)
     {
-        MemoryPool<byte> resolvedPool = pool ?? SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> resolvedPool = pool ?? BaseMemoryPool.Shared;
 
         return MicrosoftEntropyFunctions.GenerateSalt(byteLength, tag, resolvedPool).Result;
     }
@@ -154,7 +154,7 @@ internal static class TestSalts
     /// provider. See <see cref="Generate(int, Tag, MemoryPool{byte})"/>.
     /// </summary>
     /// <param name="tag">The purpose/provenance tag; the provider stamps its own entries onto it.</param>
-    /// <param name="pool">The memory pool to allocate from. Defaults to <see cref="SensitiveMemoryPool{T}.Shared"/>.</param>
+    /// <param name="pool">The memory pool to allocate from. Defaults to <see cref="BaseMemoryPool.Shared"/>.</param>
     /// <returns>A fresh <see cref="Salt"/>; the caller owns and disposes it (or transfers ownership).</returns>
     public static Salt Generate(Tag tag, MemoryPool<byte>? pool = null) =>
         Generate(Salt.RecommendedByteLength, tag, pool);
@@ -169,7 +169,7 @@ internal static class TestSalts
     /// <param name="bytesSequence">The sequence of salts, returned in order.</param>
     /// <param name="pool">
     /// The memory pool to allocate from. Defaults to
-    /// <see cref="SensitiveMemoryPool{T}.Shared"/> when omitted.
+    /// <see cref="BaseMemoryPool.Shared"/> when omitted.
     /// </param>
     public static GenerateDisclosureSaltDelegate FromQueue(
         IEnumerable<byte[]> bytesSequence,

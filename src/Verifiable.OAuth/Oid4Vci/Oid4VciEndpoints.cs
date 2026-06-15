@@ -5,15 +5,15 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
-using static Verifiable.OAuth.Server.EndpointInput;
+using Verifiable.Server;
+using static Verifiable.Server.EndpointInput;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
 /// <summary>
 /// Endpoint builder module for OpenID for Verifiable Credential Issuance
 /// (<see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html">OID4VCI 1.0</see>).
-/// Register at startup via <see cref="ServerConfiguration.EndpointBuilders"/>.
+/// Register at startup via <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
 /// </summary>
 /// <remarks>
 /// The Credential Issuer is, in OAuth terms, a resource server that MAY also be the
@@ -26,7 +26,7 @@ public static class Oid4VciEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="ServerConfiguration.EndpointBuilders"/>.
+    /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
@@ -35,9 +35,9 @@ public static class Oid4VciEndpoints
         //OID4VCI 1.0 §7 Nonce Endpoint materializes only when the capability is allowed AND
         //the nonce-issuance seam is wired — fail-closed: an advertised Nonce Endpoint that
         //cannot mint a c_nonce would break every key-bound Credential Request.
-        AuthorizationServer? server = context.Server;
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciNonceEndpoint)
-            && server?.Integration.IssueCredentialNonceAsync is not null)
+        EndpointServer? server = context.Server;
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciNonceEndpoint)
+            && server?.OAuth().IssueCredentialNonceAsync is not null)
         {
             candidates.Add(BuildNonceEndpoint());
         }
@@ -46,9 +46,9 @@ public static class Oid4VciEndpoints
         //AND both the request-parse seam and the issuance seam are wired — fail-closed: an
         //advertised Credential Endpoint that cannot parse the request or cannot mint would be
         //a fail-open authorization boundary that 200s without issuing.
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint)
-            && server?.Integration.ParseCredentialRequestAsync is not null
-            && server.Integration.IssueCredentialAsync is not null)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint)
+            && server?.OAuth().ParseCredentialRequestAsync is not null
+            && server?.OAuth().IssueCredentialAsync is not null)
         {
             candidates.Add(BuildCredentialEndpoint());
         }
@@ -57,8 +57,8 @@ public static class Oid4VciEndpoints
         //allowed AND the resolution seam is wired — fail-closed: only the application's
         //deferred-transaction store can tell an unknown transaction_id from an issuance still
         //in flight.
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciDeferredCredentialEndpoint)
-            && server?.Integration.ResolveDeferredCredentialAsync is not null)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciDeferredCredentialEndpoint)
+            && server?.OAuth().ResolveDeferredCredentialAsync is not null)
         {
             candidates.Add(BuildDeferredCredentialEndpoint());
         }
@@ -66,8 +66,8 @@ public static class Oid4VciEndpoints
         //OID4VCI 1.0 §11 Notification Endpoint materializes only when the capability is allowed
         //AND the processing seam is wired — fail-closed: only the application's notification_id
         //store can validate the identifier and act on the event.
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciNotificationEndpoint)
-            && server?.Integration.ProcessCredentialNotificationAsync is not null)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciNotificationEndpoint)
+            && server?.OAuth().ProcessCredentialNotificationAsync is not null)
         {
             candidates.Add(BuildNotificationEndpoint());
         }
@@ -76,8 +76,8 @@ public static class Oid4VciEndpoints
         //allowed AND the contribution seam is wired — fail-closed: the document's REQUIRED
         //credential_configurations_supported is application data the library cannot derive, so
         //an advertised metadata endpoint without it could only emit a non-conformant document.
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciCredentialIssuerMetadata)
-            && server?.Integration.ContributeCredentialIssuerMetadataAsync is not null)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciCredentialIssuerMetadata)
+            && server?.OAuth().ContributeCredentialIssuerMetadataAsync is not null)
         {
             candidates.Add(BuildCredentialIssuerMetadata());
         }
@@ -86,8 +86,8 @@ public static class Oid4VciEndpoints
         //allowed AND the resolve seam is wired — fail-closed: only the application's offer store
         //can produce the offer the credential_offer_uri points at, so an advertised endpoint
         //without it could only 404 every fetch.
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciCredentialOfferEndpoint)
-            && server?.Integration.ResolveCredentialOfferAsync is not null)
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciCredentialOfferEndpoint)
+            && server?.OAuth().ResolveCredentialOfferAsync is not null)
         {
             candidates.Add(BuildCredentialOfferEndpoint());
         }
@@ -133,12 +133,13 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 //OID4VCI 1.0 §7.2: c_nonce is a server-chosen, unpredictable challenge the
                 //application mints (and later validates at the Credential Endpoint). The
                 //library owns only the wire shape; the gate guarantees the seam is wired.
-                string credentialNonce = await server.Integration.IssueCredentialNonceAsync!(
+                string credentialNonce = await oauth.IssueCredentialNonceAsync!(
                     context, ct).ConfigureAwait(false);
 
                 StringBuilder sb = JsonAppender.Rent();
@@ -210,7 +211,8 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 //§4.1.3: the offer is addressed by the id the credential_offer_uri carries. The
                 //test fixture passes it as the "id" request field; a production deployment that
@@ -224,7 +226,7 @@ public static class Oid4VciEndpoints
                 //The application owns the offer store; the gate guarantees the seam is wired. An
                 //unknown or expired id resolves to null and is answered 404 — there is no offer
                 //to serve.
-                CredentialOffer? offer = await server.Integration.ResolveCredentialOfferAsync!(
+                CredentialOffer? offer = await oauth.ResolveCredentialOfferAsync!(
                     offerId, context, ct).ConfigureAwait(false);
                 if(offer is null)
                 {
@@ -284,9 +286,10 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return Respond(ServerHttpResponse.Unauthorized(
@@ -347,7 +350,7 @@ public static class Oid4VciEndpoints
                 bool wasRequestEncrypted = decryptedBody is not null;
                 requestBody = decryptedBody ?? requestBody;
 
-                CredentialRequest? request = await server.Integration.ParseCredentialRequestAsync!(
+                CredentialRequest? request = await oauth.ParseCredentialRequestAsync!(
                     requestBody, context, ct).ConfigureAwait(false);
                 if(request is null)
                 {
@@ -442,7 +445,7 @@ public static class Oid4VciEndpoints
                 //The application owns proof verification (its c_nonce store), the supported
                 //Credential Configurations, and the signing key; the gate guarantees the seam
                 //is wired. accessToken carries the subject the grant bound issuance to.
-                CredentialIssuanceDecision decision = await server.Integration.IssueCredentialAsync!(
+                CredentialIssuanceDecision decision = await oauth.IssueCredentialAsync!(
                     request, accessToken!, registration, context, ct).ConfigureAwait(false);
 
                 //§8.3: a deferral answers 202 with transaction_id + interval; the Wallet later
@@ -588,9 +591,10 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return Respond(ServerHttpResponse.Unauthorized(
@@ -709,7 +713,7 @@ public static class Oid4VciEndpoints
 
                 //The application owns the deferred-transaction store; the gate guarantees the
                 //seam is wired.
-                DeferredCredentialDecision decision = await server.Integration.ResolveDeferredCredentialAsync!(
+                DeferredCredentialDecision decision = await oauth.ResolveDeferredCredentialAsync!(
                     transactionId!, accessToken!, registration, context, ct).ConfigureAwait(false);
 
                 if(decision.IsIssued)
@@ -795,18 +799,19 @@ public static class Oid4VciEndpoints
     /// </summary>
     private static async ValueTask<(bool IsRequestEncryptionRequired, bool IsResponseEncryptionRequired)>
         ReadEncryptionRequirementsAsync(
-            AuthorizationServer server,
+            EndpointServer server,
             ClientRecord registration,
             ExchangeContext context,
             CancellationToken cancellationToken)
     {
-        if(server.Integration.ContributeCredentialIssuerMetadataAsync is null)
+        var oauth = server.OAuth();
+        if(oauth.ContributeCredentialIssuerMetadataAsync is null)
         {
             return (false, false);
         }
 
         CredentialIssuerMetadataContribution contribution =
-            await server.Integration.ContributeCredentialIssuerMetadataAsync(
+            await oauth.ContributeCredentialIssuerMetadataAsync(
                 registration, context, cancellationToken).ConfigureAwait(false);
 
         return (
@@ -840,12 +845,13 @@ public static class Oid4VciEndpoints
     /// seam composes into the JWE header and the JWK's alg are the same string.
     /// </summary>
     private static async ValueTask<ServerHttpResponse?> ValidateResponseEncryptionParametersAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         CredentialResponseEncryption? encryption,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         if(encryption is null)
         {
             return null;
@@ -860,13 +866,13 @@ public static class Oid4VciEndpoints
                 "credential_response_encryption must carry jwk (with a §10 alg member) and enc.");
         }
 
-        if(server.Integration.ContributeCredentialIssuerMetadataAsync is null)
+        if(oauth.ContributeCredentialIssuerMetadataAsync is null)
         {
             return null;
         }
 
         CredentialIssuerMetadataContribution contribution =
-            await server.Integration.ContributeCredentialIssuerMetadataAsync(
+            await oauth.ContributeCredentialIssuerMetadataAsync(
                 registration, context, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyDictionary<string, object>? responseEncryption = contribution.CredentialResponseEncryption;
@@ -952,20 +958,21 @@ public static class Oid4VciEndpoints
     /// issuance is advertised). An unwired contribution advertises neither, so neither is enforced.
     /// </summary>
     private static async ValueTask<ServerHttpResponse?> ValidateConfigurationConstraintsAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         CredentialRequest request,
         JwtPayload accessToken,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        if(server.Integration.ContributeCredentialIssuerMetadataAsync is null)
+        var oauth = server.OAuth();
+        if(oauth.ContributeCredentialIssuerMetadataAsync is null)
         {
             return null;
         }
 
         CredentialIssuerMetadataContribution contribution =
-            await server.Integration.ContributeCredentialIssuerMetadataAsync(
+            await oauth.ContributeCredentialIssuerMetadataAsync(
                 registration, context, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyDictionary<string, object>? configuration = LookupRequestedConfiguration(contribution, request);
@@ -977,7 +984,7 @@ public static class Oid4VciEndpoints
         }
 
         ServerHttpResponse? attestationFailure = ValidateKeyAttestationRequirement(
-            configuration, request, server.Codecs.Decoder);
+            configuration, request, oauth.Codecs.Decoder);
         if(attestationFailure is not null)
         {
             return attestationFailure;
@@ -1135,7 +1142,7 @@ public static class Oid4VciEndpoints
         }
 
         string headerSegment = jwtProof.AsSpan(0, firstDot).ToString();
-        using IMemoryOwner<byte> headerOwner = decoder(headerSegment, SensitiveMemoryPool<byte>.Shared);
+        using IMemoryOwner<byte> headerOwner = decoder(headerSegment, BaseMemoryPool.Shared);
 
         return JwkJsonReader.ContainsKey(
             headerOwner.Memory.Span, AttestationProofParameterNames.KeyAttestationUtf8);
@@ -1239,25 +1246,26 @@ public static class Oid4VciEndpoints
     /// </summary>
     private static async ValueTask<(string? DecryptedBody, ServerHttpResponse? Failure)>
         DecryptCredentialRequestBodyAsync(
-            AuthorizationServer server,
+            EndpointServer server,
             ClientRecord registration,
             string requestBody,
             ExchangeContext context,
             CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         if(!IsCompactJwe(requestBody))
         {
             return (null, null);
         }
 
-        if(server.Integration.DecryptCredentialRequestAsync is null)
+        if(oauth.DecryptCredentialRequestAsync is null)
         {
             return (null, CredentialError(
                 Oid4VciCredentialErrors.InvalidCredentialRequest,
                 "The request is encrypted but this Credential Issuer does not accept encrypted requests."));
         }
 
-        string? decrypted = await server.Integration.DecryptCredentialRequestAsync(
+        string? decrypted = await oauth.DecryptCredentialRequestAsync(
             requestBody, registration, context, cancellationToken).ConfigureAwait(false);
         if(decrypted is null)
         {
@@ -1292,7 +1300,7 @@ public static class Oid4VciEndpoints
     /// such a request in clear.
     /// </summary>
     private static async ValueTask<ServerHttpResponse> FinishCredentialResponseAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         CredentialResponseEncryption? encryption,
         string responseJson,
@@ -1300,6 +1308,7 @@ public static class Oid4VciEndpoints
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         if(encryption is null)
         {
             ServerHttpResponse plain = isDeferredPending
@@ -1316,14 +1325,14 @@ public static class Oid4VciEndpoints
                 "credential_response_encryption must carry the jwk and enc members.");
         }
 
-        if(server.Integration.EncryptCredentialResponseAsync is null)
+        if(oauth.EncryptCredentialResponseAsync is null)
         {
             return CredentialError(
                 Oid4VciCredentialErrors.InvalidEncryptionParameters,
                 "This Credential Issuer does not support encrypted Credential Responses.");
         }
 
-        string? encrypted = await server.Integration.EncryptCredentialResponseAsync(
+        string? encrypted = await oauth.EncryptCredentialResponseAsync(
             responseJson, encryption, registration, context, cancellationToken).ConfigureAwait(false);
         if(encrypted is null)
         {
@@ -1407,9 +1416,10 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return Respond(ServerHttpResponse.Unauthorized(
@@ -1489,7 +1499,7 @@ public static class Oid4VciEndpoints
 
                 //The application owns the notification_id store; the gate guarantees the seam
                 //is wired.
-                CredentialNotificationDecision decision = await server.Integration.ProcessCredentialNotificationAsync!(
+                CredentialNotificationDecision decision = await oauth.ProcessCredentialNotificationAsync!(
                     notification, accessToken!, registration, context, ct).ConfigureAwait(false);
 
                 if(!decision.IsAccepted)
@@ -1588,9 +1598,10 @@ public static class Oid4VciEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return Respond(ServerHttpResponse.ServerError(
@@ -1610,9 +1621,9 @@ public static class Oid4VciEndpoints
                 Uri issuer;
                 try
                 {
-                    issuer = server.Integration.ResolveIssuerAsync is not null
-                        ? await server.Integration.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false)
+                    issuer = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
                         : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
                             .ConfigureAwait(false);
                 }
@@ -1659,9 +1670,9 @@ public static class Oid4VciEndpoints
                 //Application-supplied catalog the library cannot derive; the gate guarantees the
                 //seam is wired.
                 CredentialIssuerMetadataContribution contribution =
-                    server.Integration.ContributeCredentialIssuerMetadataAsync is null
+                    oauth.ContributeCredentialIssuerMetadataAsync is null
                         ? CredentialIssuerMetadataContribution.Empty
-                        : await server.Integration.ContributeCredentialIssuerMetadataAsync(
+                        : await oauth.ContributeCredentialIssuerMetadataAsync(
                             registration, context, ct).ConfigureAwait(false);
 
                 //§12.2.4 inner-REQUIRED members the library understands are a LIBRARY GUARANTEE: a
@@ -1693,7 +1704,7 @@ public static class Oid4VciEndpoints
                 //claim set backs both, so the signed and unsigned forms cannot diverge.
                 bool prefersSignedMetadata = PrefersSignedMetadata(
                     ReadSingleHeader(context, WellKnownHttpHeaderNames.Accept));
-                bool canSignMetadata = server.Integration.SignCredentialIssuerMetadataAsync is not null;
+                bool canSignMetadata = oauth.SignCredentialIssuerMetadataAsync is not null;
 
                 string? signedMetadata = null;
                 if(canSignMetadata)
@@ -1701,7 +1712,7 @@ public static class Oid4VciEndpoints
                     JwtPayload claims = BuildIssuerMetadataClaims(
                         issuer, credentialEndpoint, nonceEndpoint,
                         deferredCredentialEndpoint, notificationEndpoint, contribution);
-                    signedMetadata = await server.Integration.SignCredentialIssuerMetadataAsync!(
+                    signedMetadata = await oauth.SignCredentialIssuerMetadataAsync!(
                         claims, registration, context, ct).ConfigureAwait(false);
                 }
 

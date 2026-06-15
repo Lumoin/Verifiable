@@ -10,6 +10,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Jarm;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -39,7 +40,7 @@ internal sealed class JarmAuthorizeFlowTests
 
     private const string RequestState = "S8NJ7uqk5fY4EjNvP_G_FtyJu6pUsvH9jsYni9dMAJw";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly string[] AllowedAlgorithms = [WellKnownJwaValues.Es256];
 
@@ -152,7 +153,7 @@ internal sealed class JarmAuthorizeFlowTests
         //JARM §2.1: the JWT carries the response parameters even for an error response.
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterJarmClient(host);
-        host.Server.Integration.EvaluateAuthorizationRequestAsync =
+        host.Server.OAuth().EvaluateAuthorizationRequestAsync =
             (evaluation, registration, context, ct) => ValueTask.FromResult(
                 AuthorizationRequestDecision.Deny(AuthorizationDenialReason.AccessDenied));
 

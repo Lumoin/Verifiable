@@ -11,7 +11,7 @@ internal sealed class HmacValueTests
     [TestMethod]
     public void LengthMatchesUnderlyingBufferLength()
     {
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(32);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
         owner.Memory.Span.Clear();
 
         using HmacValue value = new(owner, CryptoTags.HmacSha256Value);
@@ -25,10 +25,10 @@ internal sealed class HmacValueTests
     {
         byte[] sharedBytes = [1, 2, 3, 4, 5, 6, 7, 8];
 
-        IMemoryOwner<byte> owner1 = SensitiveMemoryPool<byte>.Shared.Rent(sharedBytes.Length);
+        IMemoryOwner<byte> owner1 = BaseMemoryPool.Shared.Rent(sharedBytes.Length);
         sharedBytes.CopyTo(owner1.Memory.Span);
 
-        IMemoryOwner<byte> owner2 = SensitiveMemoryPool<byte>.Shared.Rent(sharedBytes.Length);
+        IMemoryOwner<byte> owner2 = BaseMemoryPool.Shared.Rent(sharedBytes.Length);
         sharedBytes.CopyTo(owner2.Memory.Span);
 
         using HmacValue a = new(owner1, CryptoTags.HmacSha256Value);
@@ -44,10 +44,10 @@ internal sealed class HmacValueTests
     [TestMethod]
     public void TwoInstancesWithDifferentBytesAreNotEqual()
     {
-        IMemoryOwner<byte> owner1 = SensitiveMemoryPool<byte>.Shared.Rent(8);
+        IMemoryOwner<byte> owner1 = BaseMemoryPool.Shared.Rent(8);
         new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 }.CopyTo(owner1.Memory.Span);
 
-        IMemoryOwner<byte> owner2 = SensitiveMemoryPool<byte>.Shared.Rent(8);
+        IMemoryOwner<byte> owner2 = BaseMemoryPool.Shared.Rent(8);
         new byte[] { 8, 7, 6, 5, 4, 3, 2, 1 }.CopyTo(owner2.Memory.Span);
 
         using HmacValue a = new(owner1, CryptoTags.HmacSha256Value);
@@ -69,7 +69,7 @@ internal sealed class HmacValueTests
     [TestMethod]
     public void DebuggerDisplayContainsLengthAndHexPreview()
     {
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(32);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
         new byte[]
         {
             0xb0, 0x34, 0x4c, 0x61, 0xd8, 0xdb, 0x38, 0x53,

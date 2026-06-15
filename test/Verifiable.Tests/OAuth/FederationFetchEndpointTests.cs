@@ -27,7 +27,7 @@ internal sealed class FederationFetchEndpointTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string AnchorEntityId = "https://anchor.example.com";
     private const string SubordinateEntityId = "https://subordinate.example.com";
@@ -43,7 +43,7 @@ internal sealed class FederationFetchEndpointTests
 
         using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
 
-        app.Server.Integration.ResolveSubordinateStatementAsync = (subject, _, _, _) =>
+        app.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
         {
             if(!string.Equals(subject.Value, SubordinateEntityId, StringComparison.Ordinal))
             {
@@ -111,7 +111,7 @@ internal sealed class FederationFetchEndpointTests
         using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
 
         //The anchor knows no subordinates → every sub resolves to null.
-        app.Server.Integration.ResolveSubordinateStatementAsync =
+        app.Server.OAuth().ResolveSubordinateStatementAsync =
             (_, _, _, _) => ValueTask.FromResult<SubordinateStatementContribution?>(null);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -139,7 +139,7 @@ internal sealed class FederationFetchEndpointTests
         using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
 
         bool delegateInvoked = false;
-        app.Server.Integration.ResolveSubordinateStatementAsync = (_, _, _, _) =>
+        app.Server.OAuth().ResolveSubordinateStatementAsync = (_, _, _, _) =>
         {
             delegateInvoked = true;
             return ValueTask.FromResult<SubordinateStatementContribution?>(null);

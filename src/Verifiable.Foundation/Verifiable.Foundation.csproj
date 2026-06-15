@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Domain-agnostic foundation primitives for Verifiable.</Title>
+    <Description>The foundation leaf every Verifiable library sits on, resting on the neutral Lumoin.Base bedrock package for its memory pool and metadata tag primitives. Carries protocol- and domain-neutral infrastructure — beginning with the pushdown-automaton flow engine (Verifiable.Foundation.Automata) — that the higher layers reference explicitly rather than letting it accrete into whichever leaf was already universally reachable.</Description>
+    <PackageTags>foundation pushdown-automaton infrastructure VerifiableCredentials</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Lumoin.Base" />
+  </ItemGroup>
+
+</Project>

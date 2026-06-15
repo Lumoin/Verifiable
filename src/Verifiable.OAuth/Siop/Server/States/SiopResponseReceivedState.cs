@@ -1,12 +1,12 @@
 using System.Diagnostics;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Server.States;
 
 /// <summary>
 /// The Wallet's Self-Issued ID Token has been received and recorded against the transaction, but
-/// not yet verified. Overrides <see cref="OAuthFlowState.NextAction"/> to declare a
+/// not yet verified. Overrides <see cref="FlowState.NextAction"/> to declare a
 /// <see cref="ValidateSelfIssuedIdToken"/> action: the effectful §11.1 validation runs through the
 /// <see cref="OAuthActionExecutor"/> (not in the pure transition), producing the
 /// <see cref="SelfIssuedAuthenticationVerified"/> / <see cref="SiopFlowFailed"/> input that
@@ -14,7 +14,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// verifier's response-received state.
 /// </summary>
 [DebuggerDisplay("SiopResponseReceivedState FlowId={FlowId} ReceivedAt={ReceivedAt}")]
-public sealed record SiopResponseReceivedState: OAuthFlowState
+public sealed record SiopResponseReceivedState: FlowState
 {
     /// <summary>The compact Self-Issued ID Token the Wallet POSTed. Preserved for audit and replay detection.</summary>
     public required string IdToken { get; init; }

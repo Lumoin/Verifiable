@@ -9,7 +9,7 @@ namespace Verifiable.OAuth.Siop.Server;
 /// <remarks>
 /// <para>
 /// The Relying-Party application places the transaction inputs on the request context bag before
-/// calling <see cref="AuthorizationServer.DispatchAsync"/> at the request-preparation endpoint:
+/// calling <see cref="EndpointServer.DispatchAsync"/> at the request-preparation endpoint:
 /// the <c>nonce</c> the Self-Issued ID Token must echo, the <c>client_id</c> the token's
 /// <c>aud</c> must equal, and the signing algorithms the RP accepts. The preparation endpoint
 /// reads these to mint the <see cref="States.SiopRequestPreparedState"/> the response endpoint

@@ -646,45 +646,55 @@
         "type": "Project",
         "dependencies": {
           "BouncyCastle.Cryptography": "[2.6.2, )",
-          "Verifiable.Core": "[0.0.0, )"
+          "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.cbor": {
         "type": "Project",
         "dependencies": {
           "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )"
         }
       },
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
+          "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )"
         }
       },
       "verifiable.cryptography": {
-        "type": "Project"
-      },
-      "verifiable.geometry": {
         "type": "Project",
         "dependencies": {
-          "Verifiable.Cryptography": "[0.0.0, )"
+          "Lumoin.Base": "[0.0.2, )",
+          "Verifiable.Foundation": "[0.0.0, )"
+        }
+      },
+      "verifiable.foundation": {
+        "type": "Project",
+        "dependencies": {
+          "Lumoin.Base": "[0.0.2, )"
         }
       },
       "verifiable.jcose": {
         "type": "Project",
         "dependencies": {
-          "Verifiable.Cryptography": "[0.0.0, )"
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.json": {
         "type": "Project",
         "dependencies": {
           "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )",
-          "Verifiable.OAuth": "[0.0.0, )"
+          "Verifiable.OAuth": "[0.0.0, )",
+          "Verifiable.Vcalm": "[0.0.0, )"
         }
       },
       "verifiable.jsonpointer": {
@@ -694,20 +704,32 @@
         "type": "Project",
         "dependencies": {
           "System.Security.Cryptography.ProtectedData": "[10.0.8, )",
-          "Verifiable.Core": "[0.0.0, )"
+          "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.nsec": {
         "type": "Project",
         "dependencies": {
           "NSec.Cryptography": "[26.4.0, )",
-          "Verifiable.Core": "[0.0.0, )"
+          "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.oauth": {
         "type": "Project",
         "dependencies": {
           "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )",
+          "Verifiable.JCose": "[0.0.0, )",
+          "Verifiable.Server": "[0.0.0, )"
+        }
+      },
+      "verifiable.server": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )"
         }
       },
@@ -720,7 +742,17 @@
       "verifiable.tpm": {
         "type": "Project",
         "dependencies": {
-          "Verifiable.Cryptography": "[0.0.0, )"
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )"
+        }
+      },
+      "verifiable.vcalm": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )",
+          "Verifiable.JCose": "[0.0.0, )",
+          "Verifiable.Server": "[0.0.0, )"
         }
       },
       "BouncyCastle.Cryptography": {
@@ -728,6 +760,12 @@
         "requested": "[2.6.2, )",
         "resolved": "2.6.2",
         "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
+      },
+      "Lumoin.Base": {
+        "type": "CentralTransitive",
+        "requested": "[0.0.2, )",
+        "resolved": "0.0.2",
+        "contentHash": "mFsXJq9SVg0poCevJ13u40iETZ6/fhNgsY/jFV+47PCqyTLz1KAQcjaM12dwUFba4GVcBqAOeNw2QseqOU6X2g=="
       },
       "NSec.Cryptography": {
         "type": "CentralTransitive",

@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// Wallet's <c>id_token</c> against the transaction.
 /// </summary>
 [DebuggerDisplay("SiopRequestPreparedState FlowId={FlowId} ClientId={ClientId} Nonce={Nonce}")]
-public sealed record SiopRequestPreparedState: OAuthFlowState
+public sealed record SiopRequestPreparedState: FlowState
 {
     /// <summary>The RP's <c>client_id</c> — the expected <c>aud</c> of the Self-Issued ID Token.</summary>
     public required string ClientId { get; init; }

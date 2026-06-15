@@ -4,7 +4,6 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
@@ -26,21 +25,22 @@ internal static class CredentialEndpointProofValidation
     /// seam).
     /// </summary>
     public static async ValueTask<ServerHttpResponse?> EnforceAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ExchangeContext context,
         ClientRecord registration,
         CredentialRequest request,
         JwtPayload accessToken,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         //Opt-in: with no expectation seam the endpoint validates no proofs and defers to the
         //issuance seam — the established default path stays byte-for-byte unchanged.
-        if(server.Integration.ResolveCredentialProofExpectationAsync is null)
+        if(oauth.ResolveCredentialProofExpectationAsync is null)
         {
             return null;
         }
 
-        CredentialProofExpectation? expectation = await server.Integration.ResolveCredentialProofExpectationAsync(
+        CredentialProofExpectation? expectation = await oauth.ResolveCredentialProofExpectationAsync(
             request, accessToken, registration, context, cancellationToken).ConfigureAwait(false);
         if(expectation is null)
         {
@@ -49,7 +49,7 @@ internal static class CredentialEndpointProofValidation
             return null;
         }
 
-        if(server.Codecs.Encoder is null || server.Codecs.Decoder is null)
+        if(oauth.Codecs.Encoder is null || oauth.Codecs.Decoder is null)
         {
             return ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
@@ -113,13 +113,14 @@ internal static class CredentialEndpointProofValidation
 
     //Runs the §F.4 jwt-proof batch and maps the first failure to its §8.3.1.2 error.
     private static async ValueTask<ServerHttpResponse?> ValidateJwtProofsAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         CredentialProofExpectation expectation,
         IReadOnlyList<string> jwtProofs,
         string expectedAudience,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         Func<string, bool> isAlgAcceptable = BuildAlgAcceptancePredicate(expectation.AcceptableProofSigningAlgorithms);
 
         //§F.1 kid/x5c key-reference resolution is opt-in: with both seams unwired the batch resolves
@@ -135,10 +136,10 @@ internal static class CredentialEndpointProofValidation
             expectation.KidResolver,
             expectation.X509Verification,
             context,
-            server.Codecs.Encoder!,
-            server.Codecs.Decoder!,
+            oauth.Codecs.Encoder!,
+            oauth.Codecs.Decoder!,
             server.TimeProvider,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             expectation.IatSkew,
             cancellationToken).ConfigureAwait(false);
 
@@ -219,14 +220,15 @@ internal static class CredentialEndpointProofValidation
 
     //§F.1: aud MUST be the Credential Issuer Identifier — the resolved issuer for this request.
     private static async ValueTask<string> ResolveAudienceAsync(
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        Uri issuer = server.Integration.ResolveIssuerAsync is not null
-            ? await server.Integration.ResolveIssuerAsync(registration, context, cancellationToken)
-                .ConfigureAwait(false)
+        var oauth = server.OAuth();
+        Uri issuer = oauth.ResolveIssuerAsync is not null
+            ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
+                .ConfigureAwait(false))!
             : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
                 .ConfigureAwait(false);
 

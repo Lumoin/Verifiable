@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Server;
 
@@ -42,7 +42,7 @@ public static class AuthCodeFlowAutomaton
     /// <see cref="FlowFailed"/> with an empty <c>FlowId</c> — it is superseded
     /// immediately by the first <see cref="Initiate"/> transition.
     /// </returns>
-    public static PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> Create(
+    public static PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> Create(
         string runId,
         TimeProvider timeProvider)
     {
@@ -51,7 +51,7 @@ public static class AuthCodeFlowAutomaton
 
         DateTimeOffset now = timeProvider.GetUtcNow();
 
-        return new PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol>(
+        return new PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol>(
             runId: runId,
             initialState: new FlowFailed
             {
@@ -82,15 +82,15 @@ public static class AuthCodeFlowAutomaton
     /// <paramref name="state"/> and <paramref name="stepCount"/>, ready to accept
     /// the next input.
     /// </returns>
-    public static PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> CreateFromSnapshot(
-        OAuthFlowState state,
+    public static PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> CreateFromSnapshot(
+        FlowState state,
         int stepCount,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        return new PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol>(
+        return new PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol>(
             runId: Guid.CreateVersion7(timeProvider.GetUtcNow()).ToString("N"),
             savedState: state,
             savedStack: [AuthCodeStackSymbol.Base],

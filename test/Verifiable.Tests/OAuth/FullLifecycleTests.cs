@@ -21,7 +21,7 @@ using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server.Routing;
 using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Wallet;
 using Verifiable.Tests.TestDataProviders;
@@ -47,7 +47,7 @@ internal sealed class FullLifecycleTests
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string WalletClientId = "https://wallet.client.test";
     private static readonly Uri WalletBaseUri = new("https://wallet.client.test");
@@ -123,7 +123,7 @@ internal sealed class FullLifecycleTests
         using PrivateKeyMemory sdJwtIssuerPrivate = sdJwtIssuerKeys.PrivateKey;
 
         WireIssuerSeams(host, sdJwtIssuerPrivate, out LifecycleIssuerState issuerState);
-        host.Server.Integration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
             await DecryptAsync(jwe, requestEncryptionPrivate).ConfigureAwait(false);
 
         //=== Act 1, step 1: the Issuer hands the Wallet a Credential Offer (§4). ===
@@ -253,7 +253,7 @@ internal sealed class FullLifecycleTests
         VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
             presentation, "pid",
             static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             IssuerLookup,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
@@ -277,9 +277,9 @@ internal sealed class FullLifecycleTests
 
         //=== Act 3: a resource server introspects the issuance access token — signed per
         //RFC 9701 so the verdict itself is attestable. ===
-        host.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(true);
-        host.Server.Integration.IntrospectTokenAsync = (token, _, _, _, _) =>
+        host.Server.OAuth().IntrospectTokenAsync = (token, _, _, _, _) =>
             ValueTask.FromResult(new TokenIntrospectionResult
             {
                 IsActive = string.Equals(token, accessToken, StringComparison.Ordinal),
@@ -338,21 +338,21 @@ internal sealed class FullLifecycleTests
         state = issuerState;
         string? mintedNonce = null;
 
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
             ValueTask.FromResult(string.Equals(code, PreAuthorizedCode, StringComparison.Ordinal)
                 ? PreAuthorizedCodeDecision.Grant(EndUserSubject, WellKnownScopes.OpenId)
                 : PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode));
 
-        host.Server.Integration.IssueCredentialNonceAsync = (_, _) =>
+        host.Server.OAuth().IssueCredentialNonceAsync = (_, _) =>
         {
             mintedNonce = $"c-nonce-{Guid.NewGuid():N}";
 
             return ValueTask.FromResult(mintedNonce);
         };
 
-        host.Server.Integration.IssueCredentialAsync = async (request, accessTokenPayload, _, _, ct) =>
+        host.Server.OAuth().IssueCredentialAsync = async (request, accessTokenPayload, _, _, ct) =>
         {
             //Verify the holder proof: signature against the header jwk, c_nonce freshness.
             string proof = request.Proofs[Oid4VciCredentialParameterNames.JwtProofType][0];
@@ -383,14 +383,14 @@ internal sealed class FullLifecycleTests
             return CredentialIssuanceDecision.Defer(TransactionId, 60);
         };
 
-        host.Server.Integration.ResolveDeferredCredentialAsync = (transactionId, _, _, _, _) =>
+        host.Server.OAuth().ResolveDeferredCredentialAsync = (transactionId, _, _, _, _) =>
             ValueTask.FromResult(
                 string.Equals(transactionId, TransactionId, StringComparison.Ordinal)
                     && issuerState.PendingCredential is string credential
                 ? DeferredCredentialDecision.Issue([credential], NotificationIdValue)
                 : DeferredCredentialDecision.Refuse(DeferredCredentialError.InvalidTransactionId));
 
-        host.Server.Integration.ProcessCredentialNotificationAsync = (notification, _, _, _, _) =>
+        host.Server.OAuth().ProcessCredentialNotificationAsync = (notification, _, _, _, _) =>
         {
             issuerState.AcknowledgedNotificationId = notification.NotificationId;
 
@@ -400,7 +400,7 @@ internal sealed class FullLifecycleTests
                     : CredentialNotificationDecision.RejectUnknownId());
         };
 
-        host.Server.Integration.EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
+        host.Server.OAuth().EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
         {
             Dictionary<string, object> jwkDict = new(StringComparer.Ordinal);
             foreach(KeyValuePair<string, object> member in encryption.Jwk!)

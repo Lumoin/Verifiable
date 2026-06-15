@@ -127,12 +127,13 @@ public static class SiopVerifierExecutor
         //application skin to serve, and emits the served input that steps the PDA forward.
         executor.Register<SignSiopRequestObject>(async (action, context, cancellationToken) =>
         {
-            AuthorizationServer server = context.Server!;
+            EndpointServer server = context.Server!;
+            var oauth = server.OAuth();
 
             TenantId tenantId = context.TenantId
                 ?? throw new InvalidOperationException("Tenant identifier not found in context.");
 
-            PrivateKeyMemory? signingKey = await server.Cryptography.SigningKeyResolver!(
+            PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
                 action.SigningKeyId, tenantId, context, cancellationToken).ConfigureAwait(false);
 
             if(signingKey is null)
@@ -143,10 +144,10 @@ public static class SiopVerifierExecutor
 
             //Stamp timing claims from the dispatcher's per-request VerifiedAt when available so all
             //effectful work in this request shares one instant; fall back to the active TimeProvider
-            //otherwise. The exp - nbf window is policy, sourced from server.Timings, reusing the
+            //otherwise. The exp - nbf window is policy, sourced from oauth.Timings, reusing the
             //request-object lifetime axis the OID4VP JAR also reads.
             DateTimeOffset now = context.VerifiedAt ?? timeProvider.GetUtcNow();
-            DateTimeOffset exp = now + server.Timings.Oid4VpRequestObjectLifetime;
+            DateTimeOffset exp = now + oauth.Timings.Oid4VpRequestObjectLifetime;
 
             JwtHeader header = new()
             {
@@ -217,7 +218,7 @@ public static class SiopVerifierExecutor
         //handler and the §12 combined handler. Returns the verified verdict on success (the caller
         //layers any further checks on top), or a SiopFlowFailed naming the failing §11.1 / §11.2
         //check. The replay consult is the same server-store EFFECT both paths perform.
-        async ValueTask<OAuthFlowInput> ValidateIdTokenAsync(
+        async ValueTask<FlowInput> ValidateIdTokenAsync(
             string idToken,
             string expectedAudience,
             string expectedNonce,
@@ -248,11 +249,11 @@ public static class SiopVerifierExecutor
                 //temporal check accepts the token in — falling back to a bounded window when the
                 //token (already validated as unexpired) somehow carries no exp. The consultation is
                 //a server-store EFFECT: it runs only when the handler ran under a dispatched
-                //AuthorizationServer (context carries the server and the resolved tenant). The
+                //EndpointServer (context carries the server and the resolved tenant). The
                 //free-standing executor primitive — exercised with a bare ExchangeContext and no
                 //server-backed store — has no store to consult, the same no-store-not-Required
                 //proceed JtiReplayGuard itself applies.
-                AuthorizationServer? server = context.Server;
+                EndpointServer? server = context.Server;
                 TenantId? tenantId = context.TenantId;
                 if(server is not null && tenantId is not null)
                 {
@@ -320,7 +321,7 @@ public static class SiopVerifierExecutor
             //SIOPv2 §12: the id_token authenticates the End-User (§11.1) and the vp_token carries
             //issuer-attested claims — BOTH bound to the same transaction. Run the id_token §11.1 +
             //§11.2 path first (including the replay consult); a miss there fails the whole flow.
-            OAuthFlowInput idTokenVerdict = await ValidateIdTokenAsync(
+            FlowInput idTokenVerdict = await ValidateIdTokenAsync(
                 action.IdToken, action.ExpectedAudience, action.ExpectedNonce,
                 action.AllowedAlgorithms, context, cancellationToken).ConfigureAwait(false);
 
@@ -412,9 +413,10 @@ public static class SiopVerifierExecutor
             //decryption private key off the server, validates the JWE enc header against the advertised
             //set BEFORE any cryptographic operation, decrypts to recover the inner compact id_token
             //JWS, then runs the shared §11.1 + §11.2 validation on it.
-            AuthorizationServer server = context.Server!;
+            EndpointServer server = context.Server!;
+            var oauth = server.OAuth();
 
-            if(server.Cryptography.DecryptionKeyResolver is null)
+            if(oauth.Cryptography.DecryptionKeyResolver is null)
             {
                 return new SiopFlowFailed
                 {
@@ -426,7 +428,7 @@ public static class SiopVerifierExecutor
                 };
             }
 
-            PrivateKeyMemory? resolvedKey = await server.Cryptography.DecryptionKeyResolver(
+            PrivateKeyMemory? resolvedKey = await oauth.Cryptography.DecryptionKeyResolver(
                 action.DecryptionKeyId, context, cancellationToken).ConfigureAwait(false);
 
             if(resolvedKey is null)

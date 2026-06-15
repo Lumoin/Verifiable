@@ -44,7 +44,7 @@ internal sealed class MultiHostHttpLifecycleTests
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string IssuerHostName = "issuer";
     private const string IssuerClientId = "https://wallet.client.test";
@@ -114,7 +114,7 @@ internal sealed class MultiHostHttpLifecycleTests
         app.RegisterIssuerTrust(SdJwtIssuerId, sdJwtIssuerPublic);
 
         WireIssuerSeamsState seamState = WireIssuerSeams(
-            app.Host(IssuerHostName).Server.Integration, sdJwtIssuerPrivate);
+            app.Host(IssuerHostName).Server.OAuth(), sdJwtIssuerPrivate);
 
         await app.StartHttpHostAsync(IssuerHostName, TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer issuerHost = app.Host(IssuerHostName);

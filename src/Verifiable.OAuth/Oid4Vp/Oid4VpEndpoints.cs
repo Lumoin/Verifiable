@@ -15,7 +15,7 @@ using Verifiable.OAuth.Server;
 
 using Verifiable.OAuth.Server.Audit;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
 namespace Verifiable.OAuth.Oid4Vp;
 
 /// <summary>
@@ -44,7 +44,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// endpoints.
 /// </para>
 /// <para>
-/// Register at startup via <see cref="AuthorizationServer.EndpointBuilders"/>:
+/// Register at startup via <see cref="EndpointServer.EndpointBuilders"/>:
 /// </para>
 /// <code>
 /// server.EndpointBuilders.AddRange([
@@ -97,11 +97,11 @@ public static class Oid4VpEndpoints
 
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="AuthorizationServer.EndpointBuilders"/>.
+    /// <see cref="EndpointServer.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
-        if(!registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.VcVerifiablePresentation))
+        if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.VcVerifiablePresentation))
         {
             return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>([]);
         }
@@ -157,9 +157,10 @@ public static class Oid4VpEndpoints
 
             BuildInputAsync = async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null,
@@ -202,7 +203,7 @@ public static class Oid4VpEndpoints
 
                 //Generate the external opaque token. Distinct random value from flowId
                 //per the architecture rule "flowId never leaves the server process."
-                string parHandle = await server.Integration.GenerateIdentifierAsync!(
+                string parHandle = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.Oid4VpParHandle, context, ct)
                     .ConfigureAwait(false);
 
@@ -212,7 +213,7 @@ public static class Oid4VpEndpoints
 
                 //Ask the application to compose the absolute request_uri URL using the
                 //deployment's routing scheme. The library does not compose URLs.
-                if(server.Integration.ResolveEndpointUriAsync is null)
+                if(oauth.ResolveEndpointUriAsync is null)
                 {
                     return (null,
                         ServerHttpResponse.ServerError(
@@ -221,7 +222,7 @@ public static class Oid4VpEndpoints
                             "The OID4VP PAR endpoint requires it to compose the request_uri URL."));
                 }
 
-                Uri? requestUri = await server.Integration.ResolveEndpointUriAsync(
+                Uri? requestUri = await oauth.ResolveEndpointUriAsync(
                     Oid4VpEndpointKeys.RequestUri,
                     registration,
                     context,
@@ -241,7 +242,7 @@ public static class Oid4VpEndpoints
                 context.SetGeneratedRequestUri(requestUri);
 
                 //Pull the request_uri lifetime from policy per RFC 9126 §2.2.
-                int expiresIn = (int)server.Timings.Oid4VpRequestUriLifetime.TotalSeconds;
+                int expiresIn = (int)oauth.Timings.Oid4VpRequestUriLifetime.TotalSeconds;
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
@@ -258,7 +259,7 @@ public static class Oid4VpEndpoints
                     context,
                     ct).ConfigureAwait(false);
 
-                return ((OAuthFlowInput?)new ServerParReceived(
+                return ((FlowInput?)new ServerParReceived(
                     FlowId: flowId,
                     ParHandle: parHandle,
                     Par: new ParResponse(requestUri, expiresIn),
@@ -327,7 +328,8 @@ public static class Oid4VpEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 if(currentState is not VerifierParReceivedState parReceived)
                 {
@@ -336,7 +338,7 @@ public static class Oid4VpEndpoints
                         "Flow not in expected state for JAR request."));
                 }
 
-                if(server.ActionExecutor is null)
+                if(oauth.ActionExecutor is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
                         OAuthErrors.ServerError, "Action executor not configured."));
@@ -390,7 +392,7 @@ public static class Oid4VpEndpoints
 
                     DateTimeOffset postNow = server.TimeProvider.GetUtcNow();
 
-                    return ((OAuthFlowInput?)new ServerWalletPostReceived(
+                    return ((FlowInput?)new ServerWalletPostReceived(
                         walletNonce,
                         walletMetadataJson,
                         postNow), null);
@@ -403,13 +405,13 @@ public static class Oid4VpEndpoints
                 //VerifierParReceivedState + ResponsePosted transition.
                 TenantId? tenantId = context.TenantId;
                 if(tenantId.HasValue
-                    && server.Integration.LoadClientRegistrationAsync is { } loadAsync
-                    && server.Codecs.DcqlQuerySerializer is { } dcqlSerializer
-                    && server.Codecs.ClientMetadataSerializer is { } clientMetadataSerializer
-                    && server.Codecs.JwtHeaderSerializer is { } headerSerializer
-                    && server.Codecs.JwtPayloadSerializer is { } payloadSerializer)
+                    && oauth.LoadClientRegistrationAsync is { } loadAsync
+                    && oauth.Codecs.DcqlQuerySerializer is { } dcqlSerializer
+                    && oauth.Codecs.ClientMetadataSerializer is { } clientMetadataSerializer
+                    && oauth.Codecs.JwtHeaderSerializer is { } headerSerializer
+                    && oauth.Codecs.JwtPayloadSerializer is { } payloadSerializer)
                 {
-                    ClientRecord? registration = await loadAsync(
+                    ClientRecord? registration = (ClientRecord?)await loadAsync(
                         tenantId.Value, context, ct).ConfigureAwait(false);
 
                     if(registration is not null
@@ -437,7 +439,7 @@ public static class Oid4VpEndpoints
                 //is threaded from the PAR state so the JAR carries the
                 //descriptors and the response-verification step can recompute
                 //expected hashes.
-                OAuthFlowInput signed = await server.ActionExecutor.ExecuteAsync(
+                FlowInput signed = await oauth.ActionExecutor.ExecuteAsync(
                     new SignJarAction(
                         parReceived.ParHandle,
                         parReceived.Nonce,
@@ -476,13 +478,14 @@ public static class Oid4VpEndpoints
     private static async ValueTask<string> BuildUnsignedJarForRedirectUriPrefixAsync(
         VerifierParReceivedState parReceived,
         ClientRecord registration,
-        AuthorizationServer server,
+        EndpointServer server,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         JarClaimSerializer<DcqlQuery> dcqlQuerySerializer,
         JarClaimSerializer<VerifierClientMetadata> clientMetadataSerializer,
         CancellationToken cancellationToken)
     {
+        var oauth = server.OAuth();
         if(registration.ResponseUri is null)
         {
             throw new InvalidOperationException(
@@ -498,7 +501,7 @@ public static class Oid4VpEndpoints
         }
 
         DateTimeOffset now = server.TimeProvider.GetUtcNow();
-        TimeSpan lifetime = server.Timings.Oid4VpRequestObjectLifetime;
+        TimeSpan lifetime = oauth.Timings.Oid4VpRequestObjectLifetime;
 
         return await HaipProfile.BuildUnsignedJarAsync(
             now: now,
@@ -513,7 +516,7 @@ public static class Oid4VpEndpoints
             payloadSerializer: payloadSerializer,
             dcqlQuerySerializer: dcqlQuerySerializer,
             clientMetadataSerializer: clientMetadataSerializer,
-            encoder: server.Codecs.Encoder!,
+            encoder: oauth.Codecs.Encoder!,
             transactionData: parReceived.TransactionData,
             walletNonce: null,
             additionalHeaderClaims: parReceived.JarAdditionalHeaderClaims,
@@ -580,7 +583,8 @@ public static class Oid4VpEndpoints
 
             BuildInputAsync = static (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 //VerifierJarServedState is the JAR-served path; VerifierParReceivedState
                 //is the inline (no-JAR) path for the redirect_uri prefix per
@@ -588,7 +592,7 @@ public static class Oid4VpEndpoints
                 if(currentState is not VerifierJarServedState
                     and not VerifierParReceivedState)
                 {
-                    return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
+                    return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest,
                             "Flow not in expected state for direct_post.")));
@@ -598,12 +602,12 @@ public static class Oid4VpEndpoints
                     out string? compactJwe)
                     || string.IsNullOrWhiteSpace(compactJwe))
                 {
-                    return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
+                    return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest, "Missing response parameter.")));
                 }
 
-                return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>(
+                return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>(
                     (new ResponsePosted(compactJwe, server.TimeProvider.GetUtcNow()), null));
             },
 
@@ -685,7 +689,8 @@ public static class Oid4VpEndpoints
 
             BuildInputAsync = static (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
                 //VerifierJarServedState is the JAR-served path; VerifierParReceivedState
                 //is the inline (no-JAR) path for the redirect_uri prefix per
@@ -693,7 +698,7 @@ public static class Oid4VpEndpoints
                 if(currentState is not VerifierJarServedState
                     and not VerifierParReceivedState)
                 {
-                    return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
+                    return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest,
                             "Flow not in expected state for direct_post.")));
@@ -703,12 +708,12 @@ public static class Oid4VpEndpoints
                         out string? vpTokenJson)
                     || string.IsNullOrWhiteSpace(vpTokenJson))
                 {
-                    return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>((null,
+                    return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>((null,
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest, "Missing vp_token parameter.")));
                 }
 
-                return ValueTask.FromResult<(OAuthFlowInput?, ServerHttpResponse?)>(
+                return ValueTask.FromResult<(FlowInput?, ServerHttpResponse?)>(
                     (new ResponsePostedUnencrypted(vpTokenJson, server.TimeProvider.GetUtcNow()), null));
             },
 

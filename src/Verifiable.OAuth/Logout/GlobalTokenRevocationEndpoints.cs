@@ -5,7 +5,7 @@ using Verifiable.Core.SecurityEvents;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Logout;
 
@@ -13,7 +13,7 @@ namespace Verifiable.OAuth.Logout;
 /// Endpoint builder for the Global Token Revocation command
 /// (<see href="https://datatracker.ietf.org/doc/draft-parecki-oauth-global-token-revocation/">draft-parecki-oauth-global-token-revocation §3</see>)
 /// — <c>POST application/json</c> with a single <c>sub_id</c> RFC 9493 Subject
-/// Identifier. Register at startup via <see cref="ServerConfiguration.EndpointBuilders"/>.
+/// Identifier. Register at startup via <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -37,7 +37,7 @@ public static class GlobalTokenRevocationEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="ServerConfiguration.EndpointBuilders"/>.
+    /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
@@ -46,11 +46,11 @@ public static class GlobalTokenRevocationEndpoints
         //Fail-closed: the command revokes every token a subject holds, so it
         //materializes only when the capability is allowed AND the parse seam, the
         //revoke-subject seam, and client authentication are all wired.
-        AuthorizationServer? server = context.Server;
-        if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation)
-            && server?.Integration.ParseGlobalTokenRevocationRequestAsync is not null
-            && server?.Integration.RevokeSubjectTokensAsync is not null
-            && server?.Integration.ValidateClientCredentialsAsync is not null)
+        EndpointServer? server = context.Server;
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation)
+            && server?.OAuth().ParseGlobalTokenRevocationRequestAsync is not null
+            && server?.OAuth().RevokeSubjectTokensAsync is not null
+            && server?.OAuth().ValidateClientCredentialsAsync is not null)
         {
             candidates.Add(BuildGlobalTokenRevocation());
         }
@@ -92,9 +92,10 @@ public static class GlobalTokenRevocationEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
 
-                ClientRecord? registration = context.Registration;
+                ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
                     return (null, ServerHttpResponse.Unauthorized(
@@ -104,7 +105,7 @@ public static class GlobalTokenRevocationEndpoints
                 //§3.5: the request MUST be authenticated (the draft recommends
                 //private_key_jwt). The seam owns the method; the gate guarantees it
                 //is wired.
-                bool clientAuthenticated = await server.Integration.ValidateClientCredentialsAsync!(
+                bool clientAuthenticated = await oauth.ValidateClientCredentialsAsync!(
                     context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
                 if(!clientAuthenticated)
                 {
@@ -121,7 +122,7 @@ public static class GlobalTokenRevocationEndpoints
 
                 string requestBody = Encoding.UTF8.GetString(req.Body.Bytes.Span);
 
-                GlobalTokenRevocationRequest? request = await server.Integration.ParseGlobalTokenRevocationRequestAsync!(
+                GlobalTokenRevocationRequest? request = await oauth.ParseGlobalTokenRevocationRequestAsync!(
                     requestBody, context, ct).ConfigureAwait(false);
                 if(request is null)
                 {
@@ -139,7 +140,7 @@ public static class GlobalTokenRevocationEndpoints
                         "The sub_id is not a recognized, well-formed Subject Identifier."));
                 }
 
-                GlobalTokenRevocationOutcome outcome = await server.Integration.RevokeSubjectTokensAsync!(
+                GlobalTokenRevocationOutcome outcome = await oauth.RevokeSubjectTokensAsync!(
                     request.SubId, registration, context, ct).ConfigureAwait(false);
 
                 //§3 status-code mapping. 204 conveys "revocation initiated"; 403/404/422
@@ -147,7 +148,7 @@ public static class GlobalTokenRevocationEndpoints
                 return outcome switch
                 {
                     GlobalTokenRevocationOutcome.Initiated =>
-                        ((OAuthFlowInput?)null, ServerHttpResponse.NoContent()),
+                        ((FlowInput?)null, ServerHttpResponse.NoContent()),
                     GlobalTokenRevocationOutcome.SubjectNotFound =>
                         (null, ServerHttpResponse.NotFound()),
                     GlobalTokenRevocationOutcome.Forbidden =>

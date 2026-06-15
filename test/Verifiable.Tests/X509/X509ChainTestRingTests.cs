@@ -21,7 +21,7 @@ internal sealed class X509ChainTestRingTests
 
     private const string DnsName = "verifier.example.com";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]

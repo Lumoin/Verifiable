@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet.States;
 /// scope of this PDA.
 /// </remarks>
 [DebuggerDisplay("ResponseSent FlowId={FlowId} ResponseUri={ResponseUri}")]
-public sealed record ResponseSent: OAuthFlowState
+public sealed record ResponseSent: FlowState
 {
     /// <summary>The <c>response_uri</c> to which the response was POSTed.</summary>
     public required Uri ResponseUri { get; init; }

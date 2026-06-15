@@ -14,12 +14,12 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 /// <see cref="ErrorCode"/> maps directly to the OAuth 2.0 wire error value returned
 /// in the token or authorize error response — <c>invalid_grant</c>,
 /// <c>invalid_request</c>, <c>unauthorized_client</c>, <c>server_error</c>, etc.
-/// <see cref="OAuthFlowState.FlowId"/> and <see cref="Reason"/> are for server-side
+/// <see cref="FlowState.FlowId"/> and <see cref="Reason"/> are for server-side
 /// audit logging only and are never forwarded to the client.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ServerFlowFailed FlowId={FlowId} ErrorCode={ErrorCode}")]
-public sealed record ServerFlowFailedState: OAuthFlowState
+public sealed record ServerFlowFailedState: FlowState
 {
     /// <summary>
     /// The OAuth 2.0 error code for the wire response, e.g. <c>invalid_grant</c>,

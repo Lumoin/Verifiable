@@ -23,4 +23,4 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 public sealed record ServerWalletPostReceived(
     string WalletNonce,
     string? WalletMetadataJson,
-    DateTimeOffset ReceivedAt): OAuthFlowInput;
+    DateTimeOffset ReceivedAt): FlowInput;

@@ -49,7 +49,7 @@ internal sealed class MdocVpTokenVerificationTests
                 await ProduceVpTokenAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
 
             using IMemoryOwner<byte> nonceOwner = Oid4VpMdocPresentation.DecodeMdocGeneratedNonceForTransmissionRoundTrip(
-                transmittedNonce, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+                transmittedNonce, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
 
             VpTokenParsed parsed = await VerifyAsync(
                 vpTokenValue, TrustAnchorFor(issuerKeys.PublicKey), nonceOwner.Memory).ConfigureAwait(false);
@@ -94,7 +94,7 @@ internal sealed class MdocVpTokenVerificationTests
                 await ProduceVpTokenAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
 
             using IMemoryOwner<byte> nonceOwner = Oid4VpMdocPresentation.DecodeMdocGeneratedNonceForTransmissionRoundTrip(
-                transmittedNonce, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+                transmittedNonce, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
 
             //The trust framework resolves a key that did not sign the MSO — the issuer-auth
             //COSE_Sign1 verification fails, so CredentialSignatureValid is false.
@@ -129,7 +129,7 @@ internal sealed class MdocVpTokenVerificationTests
             //reconstructed SessionTranscript, so the device signature fails — but the issuer-auth
             //signature and digest binding are independent and still hold.
             using IMemoryOwner<byte> wrongNonce =
-                Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, SensitiveMemoryPool<byte>.Shared);
+                Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, BaseMemoryPool.Shared);
             ReadOnlyMemory<byte> wrongNonceMemory =
                 wrongNonce.Memory[..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
 
@@ -160,7 +160,7 @@ internal sealed class MdocVpTokenVerificationTests
         using MdocDocument issued = await IssueAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
 
         using IMemoryOwner<byte> mdocGeneratedNonce =
-            Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, SensitiveMemoryPool<byte>.Shared);
+            Oid4VpMdocSessionTranscriptEncoder.GenerateMdocGeneratedNonce(System.Security.Cryptography.RandomNumberGenerator.Fill, BaseMemoryPool.Shared);
         ReadOnlyMemory<byte> nonceMemory =
             mdocGeneratedNonce.Memory[..Oid4VpMdocSessionTranscriptEncoder.MinimumMdocGeneratedNonceLength];
         ReadOnlyMemory<byte> sessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
@@ -173,7 +173,7 @@ internal sealed class MdocVpTokenVerificationTests
             MdocDeviceNameSpaces.Empty,
             sessionTranscript,
             deviceKeys.PrivateKey,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         using MdocDeviceResponse deviceResponse = new(
@@ -216,7 +216,7 @@ internal sealed class MdocVpTokenVerificationTests
             MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes,
             CoseSerialization.BuildSigStructure,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken);
     }
 
@@ -228,7 +228,7 @@ internal sealed class MdocVpTokenVerificationTests
     /// </summary>
     private static ResolveMdocIssuerKeyDelegate TrustAnchorFor(PublicKeyMemory trustedIssuerKey) =>
         (issuerAuth, cancellationToken) => ValueTask.FromResult(
-            MdocIacaTrustResolution.Success(ClonePublicKey(trustedIssuerKey, SensitiveMemoryPool<byte>.Shared)));
+            MdocIacaTrustResolution.Success(ClonePublicKey(trustedIssuerKey, BaseMemoryPool.Shared)));
 
 
     private static string DecodeElementValue(ReadOnlyMemory<byte> encodedElementValue)
@@ -270,7 +270,7 @@ internal sealed class MdocVpTokenVerificationTests
                 DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
             },
             issuerKeys.PrivateKey,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

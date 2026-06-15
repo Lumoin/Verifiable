@@ -76,7 +76,7 @@ internal sealed class JarAuthCodeClientTests
                 RedirectUri = RedirectUri,
                 HeaderSerializer = HeaderSerializer,
                 PayloadSerializer = PayloadSerializer,
-                MemoryPool = SensitiveMemoryPool<byte>.Shared
+                MemoryPool = BaseMemoryPool.Shared
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -107,7 +107,7 @@ internal sealed class JarAuthCodeClientTests
                 RedirectUri = RedirectUri,
                 HeaderSerializer = HeaderSerializer,
                 PayloadSerializer = PayloadSerializer,
-                MemoryPool = SensitiveMemoryPool<byte>.Shared
+                MemoryPool = BaseMemoryPool.Shared
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -144,7 +144,7 @@ internal sealed class JarAuthCodeClientTests
                     RedirectUri = RedirectUri,
                     HeaderSerializer = HeaderSerializer,
                     PayloadSerializer = PayloadSerializer,
-                    MemoryPool = SensitiveMemoryPool<byte>.Shared
+                    MemoryPool = BaseMemoryPool.Shared
                 },
                 cts.Token).ConfigureAwait(false);
         }).ConfigureAwait(false);
@@ -175,7 +175,7 @@ internal sealed class JarAuthCodeClientTests
                     RedirectUri = RedirectUri,
                     HeaderSerializer = HeaderSerializer,
                     PayloadSerializer = PayloadSerializer,
-                    MemoryPool = SensitiveMemoryPool<byte>.Shared
+                    MemoryPool = BaseMemoryPool.Shared
                 },
                 cts.Token).ConfigureAwait(false);
         }).ConfigureAwait(false);
@@ -264,7 +264,7 @@ internal sealed class JarAuthCodeClientPqTests
                 RedirectUri = RedirectUri,
                 HeaderSerializer = HeaderSerializer,
                 PayloadSerializer = PayloadSerializer,
-                MemoryPool = SensitiveMemoryPool<byte>.Shared
+                MemoryPool = BaseMemoryPool.Shared
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 

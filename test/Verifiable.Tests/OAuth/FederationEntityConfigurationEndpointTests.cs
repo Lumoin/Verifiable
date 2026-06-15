@@ -41,7 +41,7 @@ internal sealed class FederationEntityConfigurationEndpointTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]
@@ -79,7 +79,7 @@ internal sealed class FederationEntityConfigurationEndpointTests
         //configuration; the test pulls the JAR signing public key off the
         //already-registered VerifierKeyMaterial so chain validation paths
         //downstream can use it.
-        app.Server.Integration.ContributeFederationMetadataAsync = (_, _, _) =>
+        app.Server.OAuth().ContributeFederationMetadataAsync = (_, _, _) =>
         {
             Dictionary<string, object> openIdRelyingPartyMetadata = new(StringComparer.Ordinal)
             {
@@ -200,7 +200,7 @@ internal sealed class FederationEntityConfigurationEndpointTests
         using VerifierKeyMaterial keys = app.RegisterFederationCapableClient(
             ClientId, baseUri, federationEntityId, federationKeys, capabilities);
 
-        app.Server.Integration.ContributeFederationMetadataAsync = (_, _, _) =>
+        app.Server.OAuth().ContributeFederationMetadataAsync = (_, _, _) =>
         {
             Dictionary<string, object> openIdProviderMetadata = new(StringComparer.Ordinal)
             {
@@ -301,7 +301,7 @@ internal sealed class FederationEntityConfigurationEndpointTests
         //registration — Alice and Bob get different organization_name
         //claims. This proves queries flow through the AS pipeline at
         //request time and that mutation is per-call.
-        app.Server.Integration.ContributeFederationMetadataAsync = (registration, _, _) =>
+        app.Server.OAuth().ContributeFederationMetadataAsync = (registration, _, _) =>
         {
             string organizationName = string.Equals(
                 registration.FederationEntityId?.ToString(),

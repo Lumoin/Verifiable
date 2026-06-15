@@ -28,7 +28,7 @@ internal sealed class BitstringStatusListBatchRevocationTests
     private const string RevocationListUrl = "https://issuer.example/status/revocation";
     private const string SuspensionListUrl = "https://issuer.example/status/suspension";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     public TestContext TestContext { get; set; } = null!;
 

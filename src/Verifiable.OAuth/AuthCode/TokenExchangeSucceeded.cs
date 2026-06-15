@@ -19,4 +19,4 @@ public sealed record TokenExchangeSucceeded(
     int? ExpiresIn,
     string? RefreshToken,
     string? Scope,
-    DateTimeOffset ReceivedAt): OAuthFlowInput;
+    DateTimeOffset ReceivedAt): FlowInput;

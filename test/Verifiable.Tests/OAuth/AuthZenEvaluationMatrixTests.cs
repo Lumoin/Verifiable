@@ -83,8 +83,8 @@ internal sealed class AuthZenEvaluationMatrixTests
             new Uri(ClientId),
             ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
 
-        app.Server.Integration.UseDefaultAuthZenJsonParsing();
-        app.Server.Integration.EvaluateAccessAsync = Policy;
+        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        app.Server.OAuth().EvaluateAccessAsync = Policy;
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");

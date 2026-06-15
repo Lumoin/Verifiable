@@ -24,7 +24,7 @@ internal sealed class CoseTests
     public async Task SignAndVerifyWithExplicitDelegateSucceeds()
     {
         var headerMap = new Dictionary<int, object> { [CoseHeaderParameters.Alg] = WellKnownCoseAlgorithms.Es256 };
-        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), SensitiveMemoryPool<byte>.Shared);
+        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), BaseMemoryPool.Shared);
         byte[] payload = BuildTestPayload();
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -38,7 +38,7 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(message);
@@ -60,7 +60,7 @@ internal sealed class CoseTests
     public async Task SignAndVerifyWithResolverBinderSucceeds()
     {
         var headerMap = new Dictionary<int, object> { [CoseHeaderParameters.Alg] = WellKnownCoseAlgorithms.Es256 };
-        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), SensitiveMemoryPool<byte>.Shared);
+        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), BaseMemoryPool.Shared);
         byte[] payload = BuildTestPayload();
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -76,7 +76,7 @@ internal sealed class CoseTests
             unprotectedHeader: null,
             payload,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             resolverState,
             ResolvePrivateKeyMaterial,
             0,
@@ -88,7 +88,7 @@ internal sealed class CoseTests
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
             message,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             resolverState,
             ResolvePublicKeyMaterial,
             0,
@@ -103,7 +103,7 @@ internal sealed class CoseTests
     public async Task SignAndVerifyWithP384ExplicitDelegateSucceeds()
     {
         var headerMap = new Dictionary<int, object> { [CoseHeaderParameters.Alg] = WellKnownCoseAlgorithms.Es384 };
-        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), SensitiveMemoryPool<byte>.Shared);
+        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), BaseMemoryPool.Shared);
         byte[] payload = BuildTestPayload();
 
         var keyPair = TestKeyMaterialProvider.CreateP384KeyMaterial();
@@ -117,7 +117,7 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             privateKey,
             MicrosoftCryptographicFunctions.SignP384Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
@@ -135,7 +135,7 @@ internal sealed class CoseTests
     public async Task SignAndVerifyWithP521ExplicitDelegateSucceeds()
     {
         var headerMap = new Dictionary<int, object> { [CoseHeaderParameters.Alg] = WellKnownCoseAlgorithms.Es512 };
-        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), SensitiveMemoryPool<byte>.Shared);
+        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), BaseMemoryPool.Shared);
         byte[] payload = BuildTestPayload();
 
         var keyPair = TestKeyMaterialProvider.CreateP521KeyMaterial();
@@ -149,7 +149,7 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             privateKey,
             MicrosoftCryptographicFunctions.SignP521Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
@@ -167,7 +167,7 @@ internal sealed class CoseTests
     public async Task VerifyWithWrongKeyFails()
     {
         var headerMap = new Dictionary<int, object> { [CoseHeaderParameters.Alg] = WellKnownCoseAlgorithms.Es256 };
-        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), SensitiveMemoryPool<byte>.Shared);
+        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), BaseMemoryPool.Shared);
         byte[] payload = BuildTestPayload();
 
         var signingKeyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -185,7 +185,7 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             signingPrivateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
@@ -203,7 +203,7 @@ internal sealed class CoseTests
     public async Task SerializeAndParseRoundTripSucceeds()
     {
         var headerMap = new Dictionary<int, object> { [CoseHeaderParameters.Alg] = WellKnownCoseAlgorithms.Es256 };
-        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), SensitiveMemoryPool<byte>.Shared);
+        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), BaseMemoryPool.Shared);
         byte[] payload = BuildTestPayload();
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -217,11 +217,11 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, SensitiveMemoryPool<byte>.Shared);
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), SensitiveMemoryPool<byte>.Shared);
+        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
+        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
 
         Assert.IsTrue(message.ProtectedHeader.AsReadOnlySpan().SequenceEqual(parsed.ProtectedHeader.AsReadOnlySpan()), "Protected header must round-trip.");
         Assert.IsTrue(message.Payload.Span.SequenceEqual(parsed.Payload.Span), "Payload must round-trip.");

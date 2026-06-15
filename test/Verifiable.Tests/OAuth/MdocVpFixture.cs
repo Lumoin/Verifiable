@@ -41,7 +41,7 @@ internal static class MdocVpFixture
     private static readonly string PidDocType = EudiPid.AttestationType;
     private static readonly string PidNamespace = EudiPid.Mdoc.Namespace;
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>The mdoc matrix-format row: name plus the per-run <see cref="FormatRun"/> factory.</summary>

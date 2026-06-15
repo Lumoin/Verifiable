@@ -6,7 +6,7 @@ namespace Verifiable.OAuth;
 /// <summary>
 /// Library-shipped claim contribution profiles. Each method returns a
 /// list of <see cref="ClaimDelegate{T}"/> the application composes into
-/// its <see cref="Server.ServerConfiguration.ClaimIssuer"/>.
+/// its <see cref="Server.AuthorizationServerIntegration.ClaimIssuer"/>.
 /// </summary>
 /// <remarks>
 /// <para>

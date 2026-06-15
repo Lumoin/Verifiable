@@ -120,7 +120,7 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
         await using FormatRun run = await SdCwtVpFixture.Format.StartAsync(
             TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
 
-        OAuthFlowState state = await DriveFlowAsync(
+        FlowState state = await DriveFlowAsync(
             run,
             SdCwtVpFixture.BuildSdCwtTrustedAuthoritiesPreparedQuery(SdCwtVpFixture.IssuerId))
             .ConfigureAwait(false);
@@ -139,7 +139,7 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
         await using FormatRun run = await SdCwtVpFixture.Format.StartAsync(
             TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
 
-        OAuthFlowState state = await DriveFlowAsync(
+        FlowState state = await DriveFlowAsync(
             run,
             SdCwtVpFixture.BuildSdCwtTrustedAuthoritiesPreparedQuery("https://stranger.example.com"))
             .ConfigureAwait(false);
@@ -155,7 +155,7 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
     /// a non-200 direct_post (the wallet client throws), which is swallowed so the caller can
     /// assert on the flow state either way.
     /// </summary>
-    private async Task<OAuthFlowState> DriveFlowAsync(FormatRun run, PreparedDcqlQuery query)
+    private async Task<FlowState> DriveFlowAsync(FormatRun run, PreparedDcqlQuery query)
     {
         TestHostShell app = run.App;
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(

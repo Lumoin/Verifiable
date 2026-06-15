@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Federation;
 

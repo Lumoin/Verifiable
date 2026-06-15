@@ -7,6 +7,7 @@ using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -38,7 +39,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     /// <summary>The End-User the offered Credential is about — the seam-resolved subject.</summary>
     private const string OfferSubject = "urn:uuid:end-user-42";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     /// <summary>
     /// The capabilities the grant needs: the grant capability itself, plus
@@ -75,7 +76,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
         string? seenCode = null;
         string? seenTxCode = null;
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
             {
                 seenCode = code;
@@ -178,7 +179,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
 
         bool seamCalled = false;
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
             {
                 seamCalled = true;
@@ -244,7 +245,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
 
@@ -276,7 +277,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
 
@@ -319,7 +320,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities);
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
 
@@ -356,7 +357,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         int expectedStatus,
         string expectedError)
     {
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) => ValueTask.FromResult(decision);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(

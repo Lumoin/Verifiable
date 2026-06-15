@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.Server;
 
@@ -9,7 +9,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// The Wallet's ENCRYPTED Self-Issued ID Token response has been received and recorded against the
 /// transaction, but not yet decrypted or verified: the <c>id_token</c> arrived as a compact JWE
 /// encrypted to the Relying Party's public encryption key. Overrides
-/// <see cref="OAuthFlowState.NextAction"/> to declare a <see cref="DecryptSiopResponse"/> action:
+/// <see cref="FlowState.NextAction"/> to declare a <see cref="DecryptSiopResponse"/> action:
 /// the effectful JWE decryption (validating <c>enc</c> against <see cref="AllowedEncAlgorithms"/>
 /// first) and the §11.1 validation of the recovered inner id_token run through the
 /// <see cref="OAuthActionExecutor"/> (not in the pure transition), producing the
@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// <see cref="Verifiable.OAuth.Oid4Vp.Server.States.VerifierResponseReceivedState"/>.
 /// </summary>
 [DebuggerDisplay("SiopEncryptedResponseReceivedState FlowId={FlowId} ReceivedAt={ReceivedAt}")]
-public sealed record SiopEncryptedResponseReceivedState: OAuthFlowState
+public sealed record SiopEncryptedResponseReceivedState: FlowState
 {
     /// <summary>The compact JWE (five dot-separated segments) the Wallet POSTed. Preserved for audit and replay detection.</summary>
     public required string EncryptedIdToken { get; init; }

@@ -20,7 +20,7 @@ internal sealed class SymmetricKeyMemoryTests
     [TestMethod]
     public void ConstructorWithNullTagThrows()
     {
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(32);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
         try
         {
             Assert.ThrowsExactly<ArgumentNullException>(() =>
@@ -39,7 +39,7 @@ internal sealed class SymmetricKeyMemoryTests
         byte[] keyBytes = new byte[32];
         RandomNumberGenerator.Fill(keyBytes);
 
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(32);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
         keyBytes.CopyTo(owner.Memory.Span);
 
         using SymmetricKeyMemory key = new(owner, CryptoTags.HmacSha256Key);
@@ -54,7 +54,7 @@ internal sealed class SymmetricKeyMemoryTests
         byte[] expected = new byte[32];
         RandomNumberGenerator.Fill(expected);
 
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(32);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
         expected.AsSpan().CopyTo(owner.Memory.Span);
 
         using SymmetricKeyMemory key = new(owner, CryptoTags.HmacSha256Key);

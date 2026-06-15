@@ -20,7 +20,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void P256KeyPairHasNonEmptyMaterial()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -32,7 +32,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task P256SignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -44,7 +44,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void P384KeyPairHasNonEmptyMaterial()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateP384Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateP384Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -56,7 +56,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task P384SignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateP384Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateP384Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -68,7 +68,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void P521KeyPairHasNonEmptyMaterial()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateP521Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateP521Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -80,7 +80,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task P521SignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateP521Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateP521Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -92,7 +92,7 @@ namespace Verifiable.Tests.Cryptography
         [SkipOnMacOSTestMethod]
         public void Secp256k1KeyPairHasNonEmptyMaterial()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateSecp256k1Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateSecp256k1Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -104,7 +104,7 @@ namespace Verifiable.Tests.Cryptography
         [SkipOnMacOSTestMethod]
         public async Task Secp256k1SignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateSecp256k1Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateSecp256k1Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -116,7 +116,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void Rsa2048KeyPairHasNonEmptyMaterial()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -128,7 +128,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task Rsa2048SignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -140,7 +140,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void Rsa4096KeyPairHasNonEmptyMaterial()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateRsa4096Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa4096Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -152,7 +152,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task Rsa4096SignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateRsa4096Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa4096Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -164,7 +164,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task RsaSha256Pkcs1SignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -176,7 +176,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task RsaSha256PssSignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -188,7 +188,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task RsaSha384Pkcs1SignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -200,7 +200,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task RsaSha384PssSignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa2048Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -212,7 +212,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task RsaSha512Pkcs1SignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateRsa4096Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa4096Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -224,7 +224,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task RsaSha512PssSignatureVerifies()
         {
-            var keys = MicrosoftKeyMaterialCreator.CreateRsa4096Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = MicrosoftKeyMaterialCreator.CreateRsa4096Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -240,7 +240,7 @@ namespace Verifiable.Tests.Cryptography
             VerificationDelegate verify)
         {
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await sign(privateKey.AsReadOnlyMemory(), data, SensitiveMemoryPool<byte>.Shared,
+            using var signature = await sign(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsGreaterThan(0, signature.AsReadOnlyMemory().Length);

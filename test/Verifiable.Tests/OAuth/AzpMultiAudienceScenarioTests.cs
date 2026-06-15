@@ -8,6 +8,7 @@ using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -160,10 +161,8 @@ internal sealed class AzpMultiAudienceScenarioTests
         rules.Add(new ClaimDelegate<ClaimContributionTarget>(
             new(contributor), [MultiAudienceClaimId, AuthorizedPartyClaimId]));
 
-        ServerConfiguration configuration = host.Server.Configuration.WithClaimIssuer(
-            new ClaimIssuer<ClaimContributionTarget>(
-                WellKnownAssessorIds.ClaimContributors, rules, TimeProvider));
-        host.Server.ApplyConfiguration(configuration);
+        host.Server.OAuth().ClaimIssuer = new ClaimIssuer<ClaimContributionTarget>(
+            WellKnownAssessorIds.ClaimContributors, rules, TimeProvider);
     }
 
 
@@ -225,7 +224,7 @@ internal sealed class AzpMultiAudienceScenarioTests
         TestHostShell host, VerifierKeyMaterial material)
     {
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()
         {
@@ -300,7 +299,7 @@ internal sealed class AzpMultiAudienceScenarioTests
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             IatSkew,
             tenantId: default,
             new ExchangeContext(),

@@ -65,7 +65,7 @@ internal static class JsonSerializerOptionsExtensions
         options.Converters.Add(new VerifierClientMetadataConverter());
 
         //Status list converters.
-        options.Converters.Add(new StatusListJsonConverter(SensitiveMemoryPool<byte>.Shared));
+        options.Converters.Add(new StatusListJsonConverter(BaseMemoryPool.Shared));
         options.Converters.Add(new StatusListReferenceJsonConverter());
         options.Converters.Add(new StatusClaimJsonConverter());
         options.Converters.Add(new StatusListAggregationJsonConverter());

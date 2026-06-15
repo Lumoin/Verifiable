@@ -45,7 +45,7 @@ namespace Verifiable.Tests.DataIntegrity
                 Ed25519SecretKeyMultibase,
                 MulticodecHeaders.Ed25519PrivateKey.Length,
                 TestSetup.Base58Decoder,
-                SensitiveMemoryPool<byte>.Shared);
+                BaseMemoryPool.Shared);
             return new PrivateKeyMemory(bytes, CryptoTags.Ed25519PrivateKey);
         }
 
@@ -55,7 +55,7 @@ namespace Verifiable.Tests.DataIntegrity
                 Ed25519PublicKeyMultibase,
                 MulticodecHeaders.Ed25519PublicKey.Length,
                 TestSetup.Base58Decoder,
-                SensitiveMemoryPool<byte>.Shared);
+                BaseMemoryPool.Shared);
             return new PublicKeyMemory(bytes, CryptoTags.Ed25519PublicKey);
         }
     }

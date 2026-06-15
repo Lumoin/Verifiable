@@ -8,8 +8,8 @@ namespace Verifiable.Cryptography.Provider;
 /// </summary>
 /// <remarks>
 /// Examples: <c>Verifiable.Microsoft</c>, <c>Verifiable.BouncyCastle</c>.
-/// Used as a <see cref="Verifiable.Cryptography.Tag"/> key so that any code
-/// holding a <see cref="Verifiable.Cryptography.SensitiveMemory"/> instance
+/// Used as a <see cref="Lumoin.Base.Tag"/> key so that any code
+/// holding a <see cref="Verifiable.Foundation.SensitiveMemory"/> instance
 /// can retrieve the full provenance chain without an event subscription.
 /// </remarks>
 [DebuggerDisplay("ProviderLibrary {Name} {Version}")]

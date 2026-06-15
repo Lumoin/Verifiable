@@ -37,12 +37,12 @@ internal sealed class DpopJwkUtilitiesTests
         using var publicKey = keys.PublicKey;
 
         string viaDpop = DpopJwkUtilities.ComputeThumbprint(
-            publicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            publicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
             publicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder);
         using IMemoryOwner<byte> directHash = JwkThumbprintUtilities.ComputeECThumbprint(
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             jwk[WellKnownJwkMemberNames.Crv],
             jwk[WellKnownJwkMemberNames.Kty],
             jwk[WellKnownJwkMemberNames.X],
@@ -63,12 +63,12 @@ internal sealed class DpopJwkUtilitiesTests
             originalPublicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder);
 
         using PublicKeyMemory reconstructed = DpopJwkUtilities.PublicKeyFromJwk(
-            jwk, WellKnownJwaValues.Es256, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+            jwk, WellKnownJwaValues.Es256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
 
         string originalThumbprint = DpopJwkUtilities.ComputeThumbprint(
-            originalPublicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            originalPublicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         string reconstructedThumbprint = DpopJwkUtilities.ComputeThumbprint(
-            reconstructed, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            reconstructed, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         Assert.AreEqual(originalThumbprint, reconstructedThumbprint,
             "JWK round-trip must preserve the thumbprint identity.");
@@ -105,12 +105,12 @@ internal sealed class DpopJwkUtilitiesTests
         using var publicKey = keys.PublicKey;
 
         string viaDpop = DpopJwkUtilities.ComputeThumbprint(
-            publicKey, WellKnownJwaValues.Rs256, TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            publicKey, WellKnownJwaValues.Rs256, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
             publicKey, WellKnownJwaValues.Rs256, TestSetup.Base64UrlEncoder);
         using IMemoryOwner<byte> directHash = JwkThumbprintUtilities.ComputeRsaThumbprint(
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             jwk[WellKnownJwkMemberNames.E],
             jwk[WellKnownJwkMemberNames.Kty],
             jwk[WellKnownJwkMemberNames.N]);
@@ -130,12 +130,12 @@ internal sealed class DpopJwkUtilitiesTests
             originalPublicKey, WellKnownJwaValues.Rs256, TestSetup.Base64UrlEncoder);
 
         using PublicKeyMemory reconstructed = DpopJwkUtilities.PublicKeyFromJwk(
-            jwk, WellKnownJwaValues.Rs256, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+            jwk, WellKnownJwaValues.Rs256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
 
         string originalThumbprint = DpopJwkUtilities.ComputeThumbprint(
-            originalPublicKey, WellKnownJwaValues.Rs256, TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            originalPublicKey, WellKnownJwaValues.Rs256, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         string reconstructedThumbprint = DpopJwkUtilities.ComputeThumbprint(
-            reconstructed, WellKnownJwaValues.Rs256, TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            reconstructed, WellKnownJwaValues.Rs256, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         Assert.AreEqual(originalThumbprint, reconstructedThumbprint,
             "JWK round-trip must preserve the thumbprint identity for RSA keys.");
@@ -171,12 +171,12 @@ internal sealed class DpopJwkUtilitiesTests
         using var publicKey = keys.PublicKey;
 
         string viaDpop = DpopJwkUtilities.ComputeThumbprint(
-            publicKey, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            publicKey, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
             publicKey, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlEncoder);
         using IMemoryOwner<byte> directHash = JwkThumbprintUtilities.ComputeEdDsaThumbprint(
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             jwk[WellKnownJwkMemberNames.Crv],
             jwk[WellKnownJwkMemberNames.Kty],
             jwk[WellKnownJwkMemberNames.X]);
@@ -196,12 +196,12 @@ internal sealed class DpopJwkUtilitiesTests
             originalPublicKey, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlEncoder);
 
         using PublicKeyMemory reconstructed = DpopJwkUtilities.PublicKeyFromJwk(
-            jwk, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared);
+            jwk, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
 
         string originalThumbprint = DpopJwkUtilities.ComputeThumbprint(
-            originalPublicKey, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            originalPublicKey, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         string reconstructedThumbprint = DpopJwkUtilities.ComputeThumbprint(
-            reconstructed, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            reconstructed, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         Assert.AreEqual(originalThumbprint, reconstructedThumbprint,
             "JWK round-trip must preserve the thumbprint identity for Ed25519 keys.");

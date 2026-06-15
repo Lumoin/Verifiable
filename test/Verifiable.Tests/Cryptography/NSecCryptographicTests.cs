@@ -21,7 +21,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void Ed25519KeyPairHasNonEmptyMaterial()
         {
-            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -33,12 +33,12 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task Ed25519SignatureVerifies()
         {
-            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await privateKey.SignAsync(data, NSecCryptographicFunctions.SignEd25519Async, SensitiveMemoryPool<byte>.Shared)
+            using var signature = await privateKey.SignAsync(data, NSecCryptographicFunctions.SignEd25519Async, BaseMemoryPool.Shared)
                 .ConfigureAwait(false);
 
             Assert.IsTrue(await publicKey.VerifyAsync(data, signature, NSecCryptographicFunctions.VerifyEd25519Async)
@@ -49,12 +49,12 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task Ed25519IdentifiedKeySignatureVerifies()
         {
-            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKey = new PublicKey(keys.PublicKey, "ed25519-test", NSecCryptographicFunctions.VerifyEd25519Async);
             using var privateKey = new PrivateKey(keys.PrivateKey, "ed25519-test", NSecCryptographicFunctions.SignEd25519Async);
 
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await privateKey.SignAsync(data, SensitiveMemoryPool<byte>.Shared).ConfigureAwait(false);
+            using var signature = await privateKey.SignAsync(data, BaseMemoryPool.Shared).ConfigureAwait(false);
 
             Assert.IsTrue(await publicKey.VerifyAsync(data, signature).ConfigureAwait(false));
         }
@@ -63,7 +63,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void X25519KeyPairHasNonEmptyMaterial()
         {
-            var keys = NSecKeyMaterialCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = NSecKeyMaterialCreator.CreateX25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 

@@ -11,6 +11,7 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -67,7 +68,7 @@ internal sealed class EndSessionLogoutTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
         List<(string Subject, string? SessionId)> terminated = [];
-        host.Server.Integration.TerminateSessionAsync = (sub, sid, _, _, _) =>
+        host.Server.OAuth().TerminateSessionAsync = (sub, sid, _, _, _) =>
         {
             terminated.Add((sub, sid));
             return ValueTask.CompletedTask;
@@ -101,7 +102,7 @@ internal sealed class EndSessionLogoutTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
         bool terminated = false;
-        host.Server.Integration.TerminateSessionAsync = (_, _, _, _, _) =>
+        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) =>
         {
             terminated = true;
             return ValueTask.CompletedTask;
@@ -132,7 +133,7 @@ internal sealed class EndSessionLogoutTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
         bool terminated = false;
-        host.Server.Integration.TerminateSessionAsync = (_, _, _, _, _) =>
+        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) =>
         {
             terminated = true;
             return ValueTask.CompletedTask;
@@ -165,7 +166,7 @@ internal sealed class EndSessionLogoutTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
         bool terminated = false;
-        host.Server.Integration.TerminateSessionAsync = (_, _, _, _, _) =>
+        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) =>
         {
             terminated = true;
             return ValueTask.CompletedTask;
@@ -201,7 +202,7 @@ internal sealed class EndSessionLogoutTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
         bool terminated = false;
-        host.Server.Integration.TerminateSessionAsync = (_, _, _, _, _) =>
+        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) =>
         {
             terminated = true;
             return ValueTask.CompletedTask;
@@ -244,7 +245,7 @@ internal sealed class EndSessionLogoutTests
         host.EnableDpop();
 
         List<(string Subject, string? SessionId)> terminated = [];
-        host.Server.Integration.TerminateSessionAsync = (sub, sid, _, _, _) =>
+        host.Server.OAuth().TerminateSessionAsync = (sub, sid, _, _, _) =>
         {
             terminated.Add((sub, sid));
             return ValueTask.CompletedTask;
@@ -337,8 +338,8 @@ internal sealed class EndSessionLogoutTests
 
         //Wiring the terminate seam activates the end_session_endpoint candidate (and thus its
         //discovery field); the ui_locales_supported field is app-contributed.
-        host.Server.Integration.TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
-        host.Server.Integration.ContributeDiscoveryFieldsAsync = static (_, _, _) =>
+        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
+        host.Server.OAuth().ContributeDiscoveryFieldsAsync = static (_, _, _) =>
             ValueTask.FromResult(new DiscoveryDocumentContribution(
                 [new DiscoveryStringArrayField(
                     AuthorizationServerMetadataParameterNames.UiLocalesSupported,
@@ -380,10 +381,10 @@ internal sealed class EndSessionLogoutTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
         //The endpoint gate still requires the id_token_hint terminate seam; wire it (unused here).
-        host.Server.Integration.TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
+        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
 
         List<string> hints = [];
-        host.Server.Integration.TerminateSessionByHintAsync = (hint, _, _, _) =>
+        host.Server.OAuth().TerminateSessionByHintAsync = (hint, _, _, _) =>
         {
             hints.Add(hint);
             return ValueTask.CompletedTask;
@@ -415,7 +416,7 @@ internal sealed class EndSessionLogoutTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
-        host.Server.Integration.TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
+        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
         //TerminateSessionByHintAsync intentionally left unwired.
 
         ServerHttpResponse response = await EndSessionAsync(host, material, new RequestFields
@@ -444,12 +445,12 @@ internal sealed class EndSessionLogoutTests
 
         List<string> order = [];
         (string Subject, string? SessionId) delivered = default;
-        host.Server.Integration.TerminateSessionAsync = (_, _, _, _, _) =>
+        host.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) =>
         {
             order.Add("terminate");
             return ValueTask.CompletedTask;
         };
-        host.Server.Integration.DeliverBackChannelLogoutAsync = (sub, sid, _, _, _) =>
+        host.Server.OAuth().DeliverBackChannelLogoutAsync = (sub, sid, _, _, _) =>
         {
             order.Add("deliver");
             delivered = (sub, sid);
@@ -493,7 +494,7 @@ internal sealed class EndSessionLogoutTests
         TestHostShell host, VerifierKeyMaterial material, string sessionId)
     {
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()
         {

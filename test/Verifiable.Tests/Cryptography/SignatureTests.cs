@@ -203,11 +203,11 @@ internal sealed class SignatureTests
 
 
     /// <summary>
-    /// Creates a <see cref="Signature"/> from raw bytes using <see cref="SensitiveMemoryPool{T}"/>.
+    /// Creates a <see cref="Signature"/> from raw bytes using <see cref="BaseMemoryPool"/>.
     /// </summary>
     private static Signature CreateSignature(byte[] bytes, Tag tag)
     {
-        var pool = SensitiveMemoryPool<byte>.Shared;
+        var pool = BaseMemoryPool.Shared;
         var owner = pool.Rent(bytes.Length);
         bytes.CopyTo(owner.Memory.Span);
 

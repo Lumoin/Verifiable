@@ -8,7 +8,7 @@ namespace Verifiable.OAuth;
 /// <summary>
 /// Per-token-endpoint-call refined view, constructed from
 /// <see cref="ExchangeContext"/> + the loaded
-/// <see cref="OAuthFlowState"/> + resolved values. Lives only during the
+/// <see cref="FlowState"/> + resolved values. Lives only during the
 /// token producer / claim contributor walk.
 /// </summary>
 /// <remarks>

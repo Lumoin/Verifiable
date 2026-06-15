@@ -22,61 +22,61 @@ namespace Verifiable.Tests.TestDataProviders
     internal static class TestKeyMaterialProvider
     {
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P256Source = new(() =>
-            MicrosoftKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared));
+            MicrosoftKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P384Source = new(() =>
-            MicrosoftKeyMaterialCreator.CreateP384Keys(SensitiveMemoryPool<byte>.Shared));
+            MicrosoftKeyMaterialCreator.CreateP384Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P521Source = new(() =>
-            MicrosoftKeyMaterialCreator.CreateP521Keys(SensitiveMemoryPool<byte>.Shared));
+            MicrosoftKeyMaterialCreator.CreateP521Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Secp256k1Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateSecp256k1Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateSecp256k1Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Rsa2048Source = new(() =>
-            MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared));
+            MicrosoftKeyMaterialCreator.CreateRsa2048Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Rsa4096Source = new(() =>
-            MicrosoftKeyMaterialCreator.CreateRsa4096Keys(SensitiveMemoryPool<byte>.Shared));
+            MicrosoftKeyMaterialCreator.CreateRsa4096Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> Ed25519Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> X25519Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateX25519Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateX25519Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> P256ExchangeSource = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlDsa44Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlDsa65Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlDsa87Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateMlDsa87Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateMlDsa87Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlKem512Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateMlKem512Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateMlKem512Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlKem768Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlKem1024Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateMlKem1024Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateMlKem1024Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP256r1Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateBrainpoolP256r1Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateBrainpoolP256r1Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP320r1Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateBrainpoolP320r1Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateBrainpoolP320r1Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP384r1Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateBrainpoolP384r1Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateBrainpoolP384r1Keys(BaseMemoryPool.Shared));
 
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP512r1Source = new(() =>
-            BouncyCastleKeyMaterialCreator.CreateBrainpoolP512r1Keys(SensitiveMemoryPool<byte>.Shared));
+            BouncyCastleKeyMaterialCreator.CreateBrainpoolP512r1Keys(BaseMemoryPool.Shared));
 
 
         /// <summary>
@@ -207,7 +207,7 @@ namespace Verifiable.Tests.TestDataProviders
         /// (e.g., wrong-key verification scenarios).
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshP256KeyMaterial()
-            => MicrosoftKeyMaterialCreator.CreateP256Keys(SensitiveMemoryPool<byte>.Shared);
+            => MicrosoftKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new P-256 exchange key pair (BouncyCastle backend).
@@ -216,108 +216,108 @@ namespace Verifiable.Tests.TestDataProviders
         /// in a JAR and the private key later decrypts the <c>direct_post.jwt</c> response.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshP256ExchangeKeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new P-384 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshP384KeyMaterial()
-            => MicrosoftKeyMaterialCreator.CreateP384Keys(SensitiveMemoryPool<byte>.Shared);
+            => MicrosoftKeyMaterialCreator.CreateP384Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new P-521 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshP521KeyMaterial()
-            => MicrosoftKeyMaterialCreator.CreateP521Keys(SensitiveMemoryPool<byte>.Shared);
+            => MicrosoftKeyMaterialCreator.CreateP521Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new secp256k1 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshSecp256k1KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateSecp256k1Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateSecp256k1Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new RSA-2048 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshRsa2048KeyMaterial()
-            => MicrosoftKeyMaterialCreator.CreateRsa2048Keys(SensitiveMemoryPool<byte>.Shared);
+            => MicrosoftKeyMaterialCreator.CreateRsa2048Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new RSA-4096 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshRsa4096KeyMaterial()
-            => MicrosoftKeyMaterialCreator.CreateRsa4096Keys(SensitiveMemoryPool<byte>.Shared);
+            => MicrosoftKeyMaterialCreator.CreateRsa4096Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new Ed25519 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshEd25519KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new ML-DSA-44 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshMlDsa44KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new ML-DSA-65 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshMlDsa65KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new ML-DSA-87 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshMlDsa87KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateMlDsa87Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateMlDsa87Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new ML-KEM-512 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshMlKem512KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateMlKem512Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateMlKem512Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new ML-KEM-768 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshMlKem768KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new ML-KEM-1024 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshMlKem1024KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateMlKem1024Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateMlKem1024Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new Brainpool P-256r1 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshBrainpoolP256r1KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP256r1Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP256r1Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new Brainpool P-320r1 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshBrainpoolP320r1KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP320r1Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP320r1Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new Brainpool P-384r1 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshBrainpoolP384r1KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP384r1Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP384r1Keys(BaseMemoryPool.Shared);
 
         /// <summary>
         /// Generates a brand-new Brainpool P-512r1 key pair. Use when tests require distinct keys.
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateFreshBrainpoolP512r1KeyMaterial()
-            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP512r1Keys(SensitiveMemoryPool<byte>.Shared);
+            => BouncyCastleKeyMaterialCreator.CreateBrainpoolP512r1Keys(BaseMemoryPool.Shared);
 
 
         /// <summary>
         /// Creates an independently disposable deep copy of the source key material.
-        /// The copy allocates from <see cref="SensitiveMemoryPool{T}"/> and preserves the
+        /// The copy allocates from <see cref="BaseMemoryPool"/> and preserves the
         /// original <see cref="Tag"/> metadata on each key.
         /// </summary>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned key material instances.")]
@@ -334,7 +334,7 @@ namespace Verifiable.Tests.TestDataProviders
         private static PublicKeyMemory CopyPublicKey(PublicKeyMemory source)
         {
             ReadOnlySpan<byte> bytes = source.AsReadOnlySpan();
-            IMemoryOwner<byte> buffer = SensitiveMemoryPool<byte>.Shared.Rent(bytes.Length);
+            IMemoryOwner<byte> buffer = BaseMemoryPool.Shared.Rent(bytes.Length);
             bytes.CopyTo(buffer.Memory.Span);
 
             return new PublicKeyMemory(buffer, source.Tag);
@@ -344,7 +344,7 @@ namespace Verifiable.Tests.TestDataProviders
         private static PrivateKeyMemory CopyPrivateKey(PrivateKeyMemory source)
         {
             ReadOnlySpan<byte> bytes = source.AsReadOnlySpan();
-            IMemoryOwner<byte> buffer = SensitiveMemoryPool<byte>.Shared.Rent(bytes.Length);
+            IMemoryOwner<byte> buffer = BaseMemoryPool.Shared.Rent(bytes.Length);
             bytes.CopyTo(buffer.Memory.Span);
 
             return new PrivateKeyMemory(buffer, source.Tag);

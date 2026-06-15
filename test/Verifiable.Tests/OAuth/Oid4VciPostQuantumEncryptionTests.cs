@@ -56,7 +56,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
     //not a WellKnownJweAlgorithms member, until the IANA registration is final.
     private const string MlKem768JweAlgorithm = "ML-KEM-768";
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> IssuanceCapabilities =
         ImmutableHashSet.Create(
@@ -82,8 +82,8 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential], "notif-pq-1"));
         WireMlKemResponseEncryptionSeam(host);
 
@@ -127,8 +127,8 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.IssueCredentialAsync = static (_, _, _, _, _) =>
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireMlKemResponseEncryptionSeam(host);
 
@@ -170,7 +170,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
         PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         issuerPrivate = issuerKeys.PrivateKey;
         PrivateKeyMemory capturedPrivate = issuerPrivate;
-        host.Server.Integration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+        host.Server.OAuth().DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
             await DecryptEcdhJweAsync(jwe, capturedPrivate).ConfigureAwait(false);
 
         return issuerPublic;
@@ -233,7 +233,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
     /// </summary>
     private static void WireMlKemResponseEncryptionSeam(TestHostShell host)
     {
-        host.Server.Integration.EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
+        host.Server.OAuth().EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>
         {
             string recipientPub = (string)encryption.Jwk!["pub"];
             using IMemoryOwner<byte> recipientKeyBytes = TestSetup.Base64UrlDecoder(recipientPub, Pool);
@@ -344,7 +344,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
 

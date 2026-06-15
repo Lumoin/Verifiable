@@ -25,7 +25,7 @@ internal sealed class KbJwtIssuanceTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly JwtHeaderSerializer HeaderSerializer =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(

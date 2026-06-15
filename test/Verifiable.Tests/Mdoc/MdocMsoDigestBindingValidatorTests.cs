@@ -88,7 +88,7 @@ internal sealed class MdocMsoDigestBindingValidatorTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             MdocDigestBindingResult result = signed.VerifyDigestBinding();
@@ -141,7 +141,7 @@ internal sealed class MdocMsoDigestBindingValidatorTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             //Build a tampered NameSpaces map: same items, but item[0] has
@@ -216,7 +216,7 @@ internal sealed class MdocMsoDigestBindingValidatorTests
             validityInfo: SampleValidity());
 
         using MdocIssuerAuth issuerAuth = new(
-            mso, EncodedCoseSign1.FromBytes(new byte[1], SensitiveMemoryPool<byte>.Shared));
+            mso, EncodedCoseSign1.FromBytes(new byte[1], BaseMemoryPool.Shared));
         using MdocIssuerSigned issuerSigned = new(nameSpaces, issuerAuth);
 
         MdocDigestBindingResult result = MdocMsoDigestBindingValidator.Validate(issuerSigned);
@@ -243,7 +243,7 @@ internal sealed class MdocMsoDigestBindingValidatorTests
                     DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             MdocDigestBindingResult result = signed.VerifyDigestBinding();

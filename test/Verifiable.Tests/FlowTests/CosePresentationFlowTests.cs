@@ -105,10 +105,10 @@ internal sealed class CosePresentationFlowTests
             CredentialToCborBytes,
             CoseProtectedHeaderToCborBytes,
             CoseSerialization.BuildSigStructure,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, SensitiveMemoryPool<byte>.Shared);
+        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
         string coseBase64 = Convert.ToBase64String(coseBytes.AsReadOnlyMemory().Span);
 
         //Holder wraps the COSE bytes as an EnvelopedVerifiableCredential (data: URL) in a presentation.
@@ -139,7 +139,7 @@ internal sealed class CosePresentationFlowTests
 
         //Verifier decodes the COSE bytes from the data: URL, parses, and verifies the signature.
         byte[] decodedCose = Convert.FromBase64String(envelopedId[VcCoseDataUrlPrefix.Length..]);
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(decodedCose, SensitiveMemoryPool<byte>.Shared);
+        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(decodedCose, BaseMemoryPool.Shared);
 
         CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(
             parsed,

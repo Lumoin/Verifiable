@@ -28,8 +28,7 @@ namespace Verifiable.Tests
             foreach(var originalData in testData)
             {                
                 //Test our Base64Url encoder/decoder roundtrip.
-                var pool = SensitiveMemoryPool<char>.Shared;
-                var memPool = SensitiveMemoryPool<byte>.Shared;
+                var memPool = BaseMemoryPool.Shared;
 
                 //Encode using our Base64Url encoder.
                 string ourBase64Url = TestSetup.Base64UrlEncoder(originalData);
@@ -70,7 +69,6 @@ namespace Verifiable.Tests
             string manualBase64Url = base64.TrimEnd('=').Replace('+', '-').Replace('/', '_');
             
             //Our Base64Url encoder.
-            var pool = SensitiveMemoryPool<char>.Shared;
             string ourBase64Url = TestSetup.Base64UrlEncoder(testData);
             
             //Should match manual conversion.
@@ -94,7 +92,6 @@ namespace Verifiable.Tests
                 (Data: new byte[] { 0x48, 0x65, 0x6C, 0x6C }, ExpectedPadding: 2), // 4 bytes -> 2 padding chars
             };
 
-            var pool = SensitiveMemoryPool<char>.Shared;
             ReadOnlySpan<byte> emptyCodecHeader = ReadOnlySpan<byte>.Empty;
 
             foreach(var (data, expectedPadding) in testCases)
@@ -132,7 +129,6 @@ namespace Verifiable.Tests
             string directBase64 = Encoding.UTF8.GetString(directBase64Buffer[..bytesWritten]);
             
             //Our Base64Url encoder (should use same Base64 underneath).
-            var pool = SensitiveMemoryPool<char>.Shared;
             string ourBase64Url = TestSetup.Base64UrlEncoder(testData);
 
             //Convert our result back to Base64 for comparison.

@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
@@ -44,7 +44,7 @@ namespace Verifiable.Tests.OAuth;
 [DebuggerDisplay("TestWallet ExpectedVerifierClientId={ExpectedVerifierClientId}")]
 internal sealed class TestWallet
 {
-    private Dictionary<string, (OAuthFlowState State, int StepCount)> FlowStore { get; } = [];
+    private Dictionary<string, (FlowState State, int StepCount)> FlowStore { get; } = [];
     private Dictionary<string, string> CredentialStore { get; }
     private TimeProvider Time { get; }
     private PrivateKeyMemory HolderPrivateKey { get; }
@@ -109,7 +109,7 @@ internal sealed class TestWallet
         ArgumentNullException.ThrowIfNull(requestUri);
         ArgumentException.ThrowIfNullOrWhiteSpace(walletFlowId);
 
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> pda =
+        PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pda =
             WalletFlowAutomaton.Create(
                 runId: Guid.NewGuid().ToString(),
                 requestUri: requestUri,
@@ -145,8 +145,8 @@ internal sealed class TestWallet
         ArgumentNullException.ThrowIfNull(requestUri);
         ArgumentException.ThrowIfNullOrWhiteSpace(walletNonce);
 
-        (OAuthFlowState state, int steps) = FlowStore[walletFlowId];
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> pda =
+        (FlowState state, int steps) = FlowStore[walletFlowId];
+        PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pda =
             WalletFlowAutomaton.CreateFromSnapshot(state, steps, Time);
 
         await pda.StepAsync(
@@ -207,10 +207,10 @@ internal sealed class TestWallet
             json => JsonSerializer.Deserialize<VerifierClientMetadata>(
                 json, TestSetup.DefaultSerializationOptions)!,
             StateParameterPolicy.Required,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken).ConfigureAwait(false);
 
-        (OAuthFlowState state, int steps) = FlowStore[walletFlowId];
+        (FlowState state, int steps) = FlowStore[walletFlowId];
 
         //request_uri_method=post path — verify the JAR echoes the wallet_nonce
         //we sent. The state machine alone cannot enforce this (transitions are
@@ -225,7 +225,7 @@ internal sealed class TestWallet
                 $"OID4VP 1.0 §5.10 requires the Verifier to bind the Wallet's nonce into the JAR.");
         }
 
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> pda =
+        PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pda =
             WalletFlowAutomaton.CreateFromSnapshot(state, steps, Time);
 
         await pda.StepAsync(
@@ -233,7 +233,7 @@ internal sealed class TestWallet
             cancellationToken).ConfigureAwait(false);
 
         FlowStore[walletFlowId] = (pda.CurrentState, pda.StepCount);
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> pdaDcql =
+        PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pdaDcql =
             WalletFlowAutomaton.CreateFromSnapshot(pda.CurrentState, pda.StepCount, Time);
 
         PreparedDcqlQuery preparedQuery = DcqlPreparer.Prepare(parsedRequest.DcqlQuery!);
@@ -248,7 +248,7 @@ internal sealed class TestWallet
             cancellationToken).ConfigureAwait(false);
 
         FlowStore[walletFlowId] = (pdaDcql.CurrentState, pdaDcql.StepCount);
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> pdaSelected =
+        PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pdaSelected =
             WalletFlowAutomaton.CreateFromSnapshot(pdaDcql.CurrentState, pdaDcql.StepCount, Time);
 
         //For a single credential, the VP token is the serialized SD-JWT.
@@ -282,8 +282,8 @@ internal sealed class TestWallet
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(walletFlowId);
 
-        (OAuthFlowState state, int steps) = FlowStore[walletFlowId];
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> pda =
+        (FlowState state, int steps) = FlowStore[walletFlowId];
+        PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pda =
             WalletFlowAutomaton.CreateFromSnapshot(state, steps, Time);
 
         PresentationBuilt presentationBuilt = (PresentationBuilt)pda.CurrentState;
@@ -324,7 +324,7 @@ internal sealed class TestWallet
             BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await pda.StepAsync(
@@ -369,8 +369,8 @@ internal sealed class TestWallet
         ArgumentNullException.ThrowIfNull(preResolvedEncryptionKey);
         ArgumentException.ThrowIfNullOrEmpty(selectedEnc);
 
-        (OAuthFlowState state, int steps) = FlowStore[walletFlowId];
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> pda =
+        (FlowState state, int steps) = FlowStore[walletFlowId];
+        PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pda =
             WalletFlowAutomaton.CreateFromSnapshot(state, steps, Time);
 
         PresentationBuilt presentationBuilt = (PresentationBuilt)pda.CurrentState;
@@ -407,7 +407,7 @@ internal sealed class TestWallet
             ConcatKdf.DefaultKeyDerivationDelegate,
             BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await pda.StepAsync(
@@ -443,8 +443,8 @@ internal sealed class TestWallet
         ArgumentException.ThrowIfNullOrWhiteSpace(walletFlowId);
         ArgumentNullException.ThrowIfNull(redirectUri);
 
-        (OAuthFlowState state, int steps) = FlowStore[walletFlowId];
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> pda =
+        (FlowState state, int steps) = FlowStore[walletFlowId];
+        PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pda =
             WalletFlowAutomaton.CreateFromSnapshot(state, steps, Time);
 
         await pda.StepAsync(
@@ -460,7 +460,7 @@ internal sealed class TestWallet
     /// Returns the current flow state and step count for a given flow identifier.
     /// Used by tests to assert on intermediate and terminal PDA states.
     /// </summary>
-    public (OAuthFlowState State, int StepCount) GetFlowState(string walletFlowId) =>
+    public (FlowState State, int StepCount) GetFlowState(string walletFlowId) =>
         FlowStore[walletFlowId];
 
 
@@ -479,7 +479,7 @@ internal sealed class TestWallet
         CancellationToken cancellationToken)
     {
         using SdToken<string> token = SdJwtSerializer.ParseToken(
-            sdJwtWithoutKb, TestSetup.Base64UrlDecoder, SensitiveMemoryPool<byte>.Shared, TestSalts.TestSaltTag);
+            sdJwtWithoutKb, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag);
 
         //Minimal disclosure (data minimization) computed through the same Core engine
         //every flow runs — DcqlDisclosure over the parsed token. A null set means a
@@ -493,7 +493,7 @@ internal sealed class TestWallet
             selectedClaimNames is null
                 ? static _ => true
                 : disclosure => disclosure.ClaimName is not null && selectedClaimNames.Contains(disclosure.ClaimName),
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         string hashInput = SdJwtSerializer.GetSdJwtForHashing(presentationToken, TestSetup.Base64UrlEncoder);
         byte[] hashInputBytes = Encoding.UTF8.GetBytes(hashInput);
@@ -504,7 +504,7 @@ internal sealed class TestWallet
             transactionDataHashes = await TransactionDataHasher.ComputeSha256Async(
                 txData,
                 TestSetup.Base64UrlEncoder,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -519,11 +519,11 @@ internal sealed class TestWallet
                 (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
             static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken,
             transactionDataHashes).ConfigureAwait(false);
 
-        using SdToken<string> tokenWithKb = presentationToken.WithKeyBinding(compactKbJwt, SensitiveMemoryPool<byte>.Shared);
+        using SdToken<string> tokenWithKb = presentationToken.WithKeyBinding(compactKbJwt, BaseMemoryPool.Shared);
 
         return SdJwtSerializer.SerializeToken(tokenWithKb, TestSetup.Base64UrlEncoder);
     }

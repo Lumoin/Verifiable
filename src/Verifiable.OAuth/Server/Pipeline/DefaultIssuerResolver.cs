@@ -84,6 +84,6 @@ internal static class DefaultIssuerResolver
             $"{nameof(ClientRecord.IssuerUri)} set and the request context does not " +
             "carry an Issuer URI. Either declare the canonical URL on the registration, or " +
             "have the ASP.NET skin populate the issuer on every request, or supply a custom " +
-            $"{nameof(ResolveIssuerDelegate)} via {nameof(AuthorizationServer)}.{nameof(AuthorizationServer.Integration)}.{nameof(AuthorizationServerIntegration.ResolveIssuerAsync)}.");
+            $"{nameof(ResolveIssuerDelegate)} via {nameof(EndpointServer)}.{nameof(EndpointServer.Integration)}.{nameof(AuthorizationServerIntegration.ResolveIssuerAsync)}.");
     }
 }

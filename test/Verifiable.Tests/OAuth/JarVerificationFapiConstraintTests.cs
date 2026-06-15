@@ -24,7 +24,7 @@ internal sealed class JarVerificationFapiConstraintTests
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private static readonly TimeSpan ClockSkew = TimeSpan.FromSeconds(5);
 

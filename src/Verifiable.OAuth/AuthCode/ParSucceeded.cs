@@ -14,4 +14,4 @@ namespace Verifiable.OAuth.AuthCode;
 [DebuggerDisplay("ParSucceeded RequestUri={Par.RequestUri}")]
 public sealed record ParSucceeded(
     ParResponse Par,
-    DateTimeOffset ReceivedAt): OAuthFlowInput;
+    DateTimeOffset ReceivedAt): FlowInput;

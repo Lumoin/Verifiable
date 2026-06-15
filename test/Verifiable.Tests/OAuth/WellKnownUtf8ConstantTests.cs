@@ -28,6 +28,8 @@ internal sealed class WellKnownUtf8ConstantTests
         [
             typeof(Verifiable.JCose.WellKnownJwtClaimNames).Assembly,
             typeof(OAuthRequestParameterNames).Assembly,
+            typeof(Verifiable.Server.Diagnostics.ServerTagNames).Assembly,
+            typeof(Verifiable.Vcalm.VcalmParameterNames).Assembly,
             typeof(Verifiable.Core.SecurityEvents.SubjectIdentifierFormats).Assembly,
             typeof(Verifiable.Cryptography.RsaUtilities).Assembly
         ];

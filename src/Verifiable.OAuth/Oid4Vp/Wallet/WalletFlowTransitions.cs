@@ -1,5 +1,5 @@
 using System.Threading.Tasks;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Server;
@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// <remarks>
 /// <para>
 /// The delegate returned by <see cref="Create"/> is <c>δ</c> in
-/// <c>PushdownAutomaton&lt;OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol&gt;</c>.
+/// <c>PushdownAutomaton&lt;FlowState, FlowInput, WalletFlowStackSymbol&gt;</c>.
 /// It is a pure dispatch table: no I/O, randomness, or time reads occur inside the
 /// transition function. All effectful values arrive pre-computed inside the input records.
 /// </para>
@@ -34,10 +34,10 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 public static class WalletFlowTransitions
 {
     /// <summary>Creates the transition delegate for the Wallet-side OID4VP presentation flow PDA.</summary>
-    public static TransitionDelegate<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> Create() =>
+    public static TransitionDelegate<FlowState, FlowInput, WalletFlowStackSymbol> Create() =>
         (state, input, _, _) =>
         {
-            TransitionResult<OAuthFlowState, WalletFlowStackSymbol>? result = (state, input) switch
+            TransitionResult<FlowState, WalletFlowStackSymbol>? result = (state, input) switch
             {
                 (RequestUriReceived received, JarReceived jar) =>
                     Transition(
@@ -166,12 +166,12 @@ public static class WalletFlowTransitions
                 _ => null
             };
 
-            return ValueTask.FromResult<TransitionResult<OAuthFlowState, WalletFlowStackSymbol>?>(result);
+            return ValueTask.FromResult<TransitionResult<FlowState, WalletFlowStackSymbol>?>(result);
         };
 
 
-    private static TransitionResult<OAuthFlowState, WalletFlowStackSymbol> Transition(
-        OAuthFlowState nextState,
+    private static TransitionResult<FlowState, WalletFlowStackSymbol> Transition(
+        FlowState nextState,
         StackAction<WalletFlowStackSymbol> stackAction,
         string label) =>
         new(nextState, stackAction, label);

@@ -131,7 +131,7 @@ internal sealed class Oid4VpMdocFlowIntegrationTests
 
         await using(run)
         {
-            OAuthFlowState state = await DriveFlowAsync(
+            FlowState state = await DriveFlowAsync(
                 run, MdocVpFixture.BuildMdocTrustedAuthoritiesPreparedQuery(authorityKeyIdentifier))
                 .ConfigureAwait(false);
 
@@ -154,7 +154,7 @@ internal sealed class Oid4VpMdocFlowIntegrationTests
         await using(run)
         {
             //"stranger-aki" base64url-encoded — a value no certificate in the chain bears.
-            OAuthFlowState state = await DriveFlowAsync(
+            FlowState state = await DriveFlowAsync(
                 run, MdocVpFixture.BuildMdocTrustedAuthoritiesPreparedQuery("c3RyYW5nZXItYWtp"))
                 .ConfigureAwait(false);
 
@@ -170,7 +170,7 @@ internal sealed class Oid4VpMdocFlowIntegrationTests
     /// a non-200 direct_post (the wallet client throws), which is swallowed so the caller can
     /// assert on the flow state either way.
     /// </summary>
-    private async Task<OAuthFlowState> DriveFlowAsync(FormatRun run, PreparedDcqlQuery query)
+    private async Task<FlowState> DriveFlowAsync(FormatRun run, PreparedDcqlQuery query)
     {
         TestHostShell app = run.App;
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(

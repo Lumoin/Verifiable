@@ -20,7 +20,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// <see cref="SiopRequestPreparedState"/> on the same-device (by-value) path.
 /// </remarks>
 [DebuggerDisplay("SiopRequestObjectServedState FlowId={FlowId} ClientId={ClientId} ServedAt={ServedAt}")]
-public sealed record SiopRequestObjectServedState: OAuthFlowState
+public sealed record SiopRequestObjectServedState: FlowState
 {
     /// <summary>The UTC instant at which the Request Object was served to the Wallet.</summary>
     public required DateTimeOffset ServedAt { get; init; }

@@ -562,6 +562,36 @@ namespace Verifiable.JCose
 
 
         /// <summary>
+        /// Media types in the <c>text</c> top-level type.
+        /// </summary>
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The media-type constants are organized like this on purpose.")]
+        public static class Text
+        {
+            /// <summary>The UTF-8 source literal of <see cref="Html"/>.</summary>
+            public static ReadOnlySpan<byte> HtmlUtf8 => "text/html"u8;
+
+            /// <summary>
+            /// The HTML content-type, <c>text/html</c>, per
+            /// <see href="https://www.rfc-editor.org/rfc/rfc2854">RFC 2854</see>. The W3C VCALM 1.0
+            /// §3.7.4 interaction protocols response returns a <c>text/html</c> body when the
+            /// interaction URL is fetched with an unrecognized <c>Accept</c> header, directing a human
+            /// being to software that understands how to process interaction URLs.
+            /// </summary>
+            public static readonly string Html = Utf8Constants.ToInternedString(HtmlUtf8);
+
+
+            /// <summary>
+            /// Returns <see langword="true"/> if <paramref name="mediaType"/> is the
+            /// <c>text/html</c> media type, comparing case-insensitively per RFC 9110 §8.3.1.
+            /// </summary>
+            /// <param name="mediaType">The media type.</param>
+            /// <returns><see langword="true"/> if <paramref name="mediaType"/> is <see cref="Html"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsHtml(string mediaType) =>
+                ReferenceEquals(mediaType, Html) || StringComparer.OrdinalIgnoreCase.Equals(mediaType, Html);
+        }
+
+
+        /// <summary>
         /// JWT <c>typ</c> header values (short forms without the <c>application/</c> prefix).
         /// </summary>
         /// <remarks>

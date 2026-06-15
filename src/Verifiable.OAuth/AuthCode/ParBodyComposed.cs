@@ -14,4 +14,4 @@ namespace Verifiable.OAuth.AuthCode;
 [DebuggerDisplay("ParBodyComposed")]
 public sealed record ParBodyComposed(
     string EncodedBody,
-    DateTimeOffset ComposedAt): OAuthFlowInput;
+    DateTimeOffset ComposedAt): FlowInput;

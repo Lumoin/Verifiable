@@ -5,7 +5,7 @@ namespace Verifiable.OAuth.Server;
 
 /// <summary>
 /// Base record for all client registration lifecycle events emitted via
-/// <see cref="AuthorizationServer.Events"/>.
+/// <see cref="EndpointServer.Events"/>.
 /// </summary>
 /// <remarks>
 /// <para>

@@ -159,7 +159,7 @@ public static class HaipProfile
     /// Timing-claim policy lives in
     /// <see cref="Server.TimingPolicy"/>; the executor's action handler reads
     /// <see cref="Server.TimingPolicy.Oid4VpRequestObjectLifetime"/> from the
-    /// <see cref="Server.AuthorizationServer"/> and passes it here. The
+    /// <see cref="Server.EndpointServer"/> and passes it here. The
     /// <c>iat</c> and <c>nbf</c> claims are stamped at <paramref name="now"/>;
     /// <c>exp</c> is stamped at <c>now + requestObjectLifetime</c>. The
     /// resulting <c>exp - nbf</c> window satisfies

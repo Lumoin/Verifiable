@@ -57,7 +57,7 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>The memory pool used for all transient signing/verification buffers.</summary>
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     /// <summary>The OP / SSF Transmitter issuer the Receiver is configured to expect.</summary>
     private const string OpIssuer = "https://op.example/";
@@ -139,9 +139,9 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
         using VerifierKeyMaterial material = op.RegisterClient(GtrClientId, GtrClientBaseUri, GtrCapabilities);
 
         using HttpClient transmitterClient = new();
-        op.Server.Integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
-        op.Server.Integration.UseDefaultGlobalTokenRevocationJsonParsing();
-        op.Server.Integration.RevokeSubjectTokensAsync = async (subId, _, _, ct) =>
+        op.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+        op.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
+        op.Server.OAuth().RevokeSubjectTokensAsync = async (subId, _, _, ct) =>
         {
             //CAEP 1.0 §3.1 + Interop Profile: a session-revoked event carrying a non-empty
             //reason_admin is the conformant transmitter shape.

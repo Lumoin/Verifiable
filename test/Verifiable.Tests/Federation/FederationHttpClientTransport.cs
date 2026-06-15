@@ -120,9 +120,9 @@ internal static class FederationHttpClientTransport
         try
         {
             using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(
-                parts[0], SensitiveMemoryPool<byte>.Shared);
+                parts[0], BaseMemoryPool.Shared);
             using IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(
-                parts[1], SensitiveMemoryPool<byte>.Shared);
+                parts[1], BaseMemoryPool.Shared);
             headerDict = DecodeJsonObject(headerBytes.Memory.Span);
             payloadDict = DecodeJsonObject(payloadBytes.Memory.Span);
         }

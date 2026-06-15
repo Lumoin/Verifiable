@@ -274,7 +274,7 @@ internal sealed class SecdsaAlgorithmsHardwareTests
     [TestMethod]
     public async Task TpmEcdhZGenProducesValidOutputPoint()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
@@ -400,7 +400,7 @@ internal sealed class SecdsaAlgorithmsHardwareTests
     [TestMethod]
     public async Task TpmSignsAndPureNetVerifiesFullSecdsaPath()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
@@ -528,7 +528,7 @@ internal sealed class SecdsaAlgorithmsHardwareTests
     [TestMethod]
     public async Task TpmFullSecdsaProtocolFlowBothHardwareBoundariesHold()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);

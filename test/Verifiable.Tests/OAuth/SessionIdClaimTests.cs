@@ -6,6 +6,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -127,7 +128,7 @@ internal sealed class SessionIdClaimTests
         TestHostShell host, VerifierKeyMaterial material, string scope, string? sessionId)
     {
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()
         {

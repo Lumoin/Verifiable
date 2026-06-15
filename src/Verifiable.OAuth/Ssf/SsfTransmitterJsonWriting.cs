@@ -1,5 +1,6 @@
 using System.Text;
 using Verifiable.Core.SecurityEvents;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Ssf;
 

@@ -1,4 +1,4 @@
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Server;
@@ -35,8 +35,12 @@ public static class WalletFlowAutomaton
     /// </param>
     /// <param name="expectedVerifierClientId">
     /// The Verifier client identifier the Wallet expects to see in the JAR.
-    /// Used for mix-up defense — the Wallet rejects JARs whose <c>client_id</c>
-    /// does not match.
+    /// Carried into the initial state as <see cref="States.RequestUriReceived.ExpectedIssuer"/>
+    /// for trace correlation. The mix-up-defence rejection itself happens in
+    /// <see cref="Oid4VpWalletClient"/> before the PDA is stepped — every parse path
+    /// funnels through its <c>EnforceExpectedClientIdContract</c> choke point, which
+    /// fails the presentation closed when the parsed <c>client_id</c> does not match
+    /// this value.
     /// </param>
     /// <param name="flowId">
     /// Stable identifier for this presentation flow instance. Typically a UUID
@@ -47,11 +51,11 @@ public static class WalletFlowAutomaton
     /// Maximum duration the Wallet waits before treating the flow as expired.
     /// Defaults to five minutes when not supplied. Application code that owns
     /// both wallet and authorization-server PDAs should pass
-    /// <c>server.Timings.MaximumFlowLifetime</c> here so the two sides agree
+    /// <c>oauth.Timings.MaximumFlowLifetime</c> here so the two sides agree
     /// on the lifetime ceiling. See
     /// <see cref="Verifiable.OAuth.Server.TimingPolicy.MaximumFlowLifetime"/>.
     /// </param>
-    public static PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> Create(
+    public static PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> Create(
         string runId,
         Uri requestUri,
         string expectedVerifierClientId,
@@ -68,7 +72,7 @@ public static class WalletFlowAutomaton
         DateTimeOffset now = timeProvider.GetUtcNow();
         TimeSpan duration = maxFlowDuration ?? TimeSpan.FromMinutes(5);
 
-        return new PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol>(
+        return new PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol>(
             runId: runId,
             initialState: new RequestUriReceived
             {
@@ -93,15 +97,15 @@ public static class WalletFlowAutomaton
     /// <param name="state">The persisted flow state, typically loaded from a database.</param>
     /// <param name="stepCount">The step count at the time the state was persisted.</param>
     /// <param name="timeProvider">The time provider used for expiry checks.</param>
-    public static PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol> CreateFromSnapshot(
-        OAuthFlowState state,
+    public static PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> CreateFromSnapshot(
+        FlowState state,
         int stepCount,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        return new PushdownAutomaton<OAuthFlowState, OAuthFlowInput, WalletFlowStackSymbol>(
+        return new PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol>(
             runId: Guid.CreateVersion7(timeProvider.GetUtcNow()).ToString("N"),
             savedState: state,
             savedStack: [WalletFlowStackSymbol.Base],

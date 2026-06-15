@@ -282,7 +282,7 @@ internal static class FederationTestRing
             compactJws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             publicKey,
             verificationDelegate,
             cancellationToken).ConfigureAwait(false);
@@ -413,7 +413,7 @@ internal static class FederationTestRing
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken).ConfigureAwait(false);
 
         string compactJws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -454,7 +454,7 @@ internal static class FederationTestRing
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             cancellationToken).ConfigureAwait(false);
 
         string compactJws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
@@ -522,7 +522,7 @@ internal static class FederationTestRing
 
     private static PrivateKeyMemory CreatePrivateKeyMemory(byte[] bytes, Tag tag)
     {
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(bytes.Length);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(bytes.Length);
         bytes.CopyTo(owner.Memory.Span);
         return new PrivateKeyMemory(owner, tag);
     }
@@ -530,7 +530,7 @@ internal static class FederationTestRing
 
     private static PublicKeyMemory CreatePublicKeyMemory(byte[] bytes, Tag tag)
     {
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(bytes.Length);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(bytes.Length);
         bytes.CopyTo(owner.Memory.Span);
         return new PublicKeyMemory(owner, tag);
     }

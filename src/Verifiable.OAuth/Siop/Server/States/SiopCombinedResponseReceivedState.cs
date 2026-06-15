@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Server.States;
@@ -8,7 +8,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// The Wallet's SIOPv2 §12 combined response has been received and recorded against the transaction,
 /// but not yet verified: one Authorization Response carrying BOTH a Self-Issued ID Token
 /// (<c>id_token</c>) AND a Verifiable Presentation (<c>vp_token</c>). Overrides
-/// <see cref="OAuthFlowState.NextAction"/> to declare a <see cref="ValidateCombinedSiopResponse"/>
+/// <see cref="FlowState.NextAction"/> to declare a <see cref="ValidateCombinedSiopResponse"/>
 /// action: the effectful §11.1 id_token validation, the <c>vp_token</c> presentation verification,
 /// and the §12 binding checks run through the <see cref="OAuthActionExecutor"/> (not in the pure
 /// transition), producing the <see cref="SelfIssuedAuthenticationVerified"/> /
@@ -16,7 +16,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// <see cref="SiopResponseReceivedState"/>, which carries only the id_token.
 /// </summary>
 [DebuggerDisplay("SiopCombinedResponseReceivedState FlowId={FlowId} ReceivedAt={ReceivedAt}")]
-public sealed record SiopCombinedResponseReceivedState: OAuthFlowState
+public sealed record SiopCombinedResponseReceivedState: FlowState
 {
     /// <summary>The compact Self-Issued ID Token the Wallet POSTed. Preserved for audit and replay detection.</summary>
     public required string IdToken { get; init; }

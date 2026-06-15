@@ -33,7 +33,7 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// replay-deterministic identifier injection. Stored as a factory taking
 /// <see cref="TimeProvider"/> rather than a static method because the time
 /// source isn't ambiently available — the caller (typically
-/// <see cref="AuthorizationServer"/> construction) binds the time source.
+/// <see cref="EndpointServer"/> construction) binds the time source.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("DefaultIdentifierGenerator")]

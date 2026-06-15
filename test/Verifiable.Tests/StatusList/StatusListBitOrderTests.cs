@@ -37,7 +37,7 @@ internal sealed class StatusListBitOrderTests
     [DataRow(BitOrder.MostSignificantFirst, StatusListBitSize.EightBits)]
     public void RoundTripsAcrossByteBoundariesUnderBothBitOrders(BitOrder bitOrder, StatusListBitSize bitSize)
     {
-        using var list = StatusListType.Create(MultiByteCapacity, bitSize, SensitiveMemoryPool<byte>.Shared, bitOrder);
+        using var list = StatusListType.Create(MultiByteCapacity, bitSize, BaseMemoryPool.Shared, bitOrder);
         int valueCount = 1 << (int)bitSize;
 
         //Walk every index so the within-byte offset cycles through all positions.
@@ -58,7 +58,7 @@ internal sealed class StatusListBitOrderTests
     [DataRow(BitOrder.MostSignificantFirst)]
     public void CapacityIsIndependentOfBitOrder(BitOrder bitOrder)
     {
-        using var list = StatusListType.Create(MultiByteCapacity, StatusListBitSize.TwoBits, SensitiveMemoryPool<byte>.Shared, bitOrder);
+        using var list = StatusListType.Create(MultiByteCapacity, StatusListBitSize.TwoBits, BaseMemoryPool.Shared, bitOrder);
 
         Assert.AreEqual(MultiByteCapacity, list.Capacity);
     }
@@ -67,7 +67,7 @@ internal sealed class StatusListBitOrderTests
     [TestMethod]
     public void FirstIndexPacksAtLeastSignificantBitForIetfOrder()
     {
-        using var list = StatusListType.Create(8, StatusListBitSize.OneBit, SensitiveMemoryPool<byte>.Shared, BitOrder.LeastSignificantFirst);
+        using var list = StatusListType.Create(8, StatusListBitSize.OneBit, BaseMemoryPool.Shared, BitOrder.LeastSignificantFirst);
         list[0] = 1;
 
         Assert.AreEqual((byte)0x01, list.AsSpan()[0]);
@@ -78,7 +78,7 @@ internal sealed class StatusListBitOrderTests
     public void FirstIndexPacksAtMostSignificantBitForW3cOrder()
     {
         //W3C Bitstring Status List: "the first index, with a value of zero, is located at the left-most bit".
-        using var list = StatusListType.Create(8, StatusListBitSize.OneBit, SensitiveMemoryPool<byte>.Shared, BitOrder.MostSignificantFirst);
+        using var list = StatusListType.Create(8, StatusListBitSize.OneBit, BaseMemoryPool.Shared, BitOrder.MostSignificantFirst);
         list[0] = 1;
 
         Assert.AreEqual((byte)0x80, list.AsSpan()[0]);
@@ -88,8 +88,8 @@ internal sealed class StatusListBitOrderTests
     [TestMethod]
     public void SameLogicalStatusesDifferInRawBytesAcrossBitOrders()
     {
-        using var ietf = StatusListType.Create(8, StatusListBitSize.OneBit, SensitiveMemoryPool<byte>.Shared, BitOrder.LeastSignificantFirst);
-        using var w3c = StatusListType.Create(8, StatusListBitSize.OneBit, SensitiveMemoryPool<byte>.Shared, BitOrder.MostSignificantFirst);
+        using var ietf = StatusListType.Create(8, StatusListBitSize.OneBit, BaseMemoryPool.Shared, BitOrder.LeastSignificantFirst);
+        using var w3c = StatusListType.Create(8, StatusListBitSize.OneBit, BaseMemoryPool.Shared, BitOrder.MostSignificantFirst);
         ietf[0] = 1; ietf[3] = 1;
         w3c[0] = 1; w3c[3] = 1;
 
@@ -106,8 +106,8 @@ internal sealed class StatusListBitOrderTests
     [TestMethod]
     public void ListsThatDifferOnlyInBitOrderAreNotEqual()
     {
-        using var ietf = StatusListType.Create(MultiByteCapacity, StatusListBitSize.OneBit, SensitiveMemoryPool<byte>.Shared, BitOrder.LeastSignificantFirst);
-        using var w3c = StatusListType.Create(MultiByteCapacity, StatusListBitSize.OneBit, SensitiveMemoryPool<byte>.Shared, BitOrder.MostSignificantFirst);
+        using var ietf = StatusListType.Create(MultiByteCapacity, StatusListBitSize.OneBit, BaseMemoryPool.Shared, BitOrder.LeastSignificantFirst);
+        using var w3c = StatusListType.Create(MultiByteCapacity, StatusListBitSize.OneBit, BaseMemoryPool.Shared, BitOrder.MostSignificantFirst);
 
         Assert.AreNotEqual(ietf, w3c);
     }

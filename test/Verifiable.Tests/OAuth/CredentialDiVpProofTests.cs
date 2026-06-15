@@ -48,7 +48,7 @@ internal sealed class CredentialDiVpProofTests
     private FakeTimeProvider TimeProvider { get; } = new(
         new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://wallet.client.test";
     private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
@@ -122,7 +122,7 @@ internal sealed class CredentialDiVpProofTests
 
         WireDiVpExpectationSeam(host, KeyDidResolverSeam);
         bool seamIssued = false;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seamIssued = true;
@@ -321,10 +321,10 @@ internal sealed class CredentialDiVpProofTests
             holderDidDocument, holderPrivate, CredentialNonce, issuerIdentifier).ConfigureAwait(false);
 
         //No expectation seam at all — the §F.4 / §F.2 check is entirely the issuance seam's job.
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         CredentialRequest? seenRequest = null;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seenRequest = request;
@@ -384,7 +384,7 @@ internal sealed class CredentialDiVpProofTests
 
         WireDiVpExpectationSeam(host, webResolver);
         bool seamIssued = false;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seamIssued = true;
@@ -489,7 +489,7 @@ internal sealed class CredentialDiVpProofTests
 
         WireDiVpExpectationSeam(host, webResolver);
         bool seamIssued = false;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 seamIssued = true;
@@ -568,8 +568,8 @@ internal sealed class CredentialDiVpProofTests
     //Wires the opt-in di_vp expectation seam: the expected c_nonce plus the DI verification seams.
     private static void WireDiVpExpectationSeam(TestHostShell host, DidResolver resolver)
     {
-        host.Server.Integration.UseDefaultCredentialRequestJsonParsing();
-        host.Server.Integration.ResolveCredentialProofExpectationAsync =
+        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        host.Server.OAuth().ResolveCredentialProofExpectationAsync =
             (request, accessToken, registration, context, ct) =>
                 ValueTask.FromResult<CredentialProofExpectation?>(new CredentialProofExpectation
                 {
@@ -605,7 +605,7 @@ internal sealed class CredentialDiVpProofTests
     private static bool WireSeamTripwire(TestHostShell host)
     {
         bool consulted = false;
-        host.Server.Integration.IssueCredentialAsync =
+        host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
             {
                 consulted = true;
@@ -832,7 +832,7 @@ internal sealed class CredentialDiVpProofTests
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
-        host.Server.Integration.ValidatePreAuthorizedCodeAsync =
+        host.Server.OAuth().ValidatePreAuthorizedCodeAsync =
             (code, txCode, clientId, registration, context, ct) =>
                 ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, WellKnownScopes.OpenId));
 

@@ -8,7 +8,7 @@ namespace Verifiable.OAuth;
 /// <summary>
 /// Discriminated target for claim contribution. Each
 /// <see cref="Verifiable.Core.Assessment.ClaimDelegate{T}"/> registered on
-/// <see cref="ServerConfiguration.ClaimIssuer"/> receives a target and
+/// <see cref="AuthorizationServerIntegration.ClaimIssuer"/> receives a target and
 /// pattern-matches to decide whether to contribute claims for that
 /// target.
 /// </summary>

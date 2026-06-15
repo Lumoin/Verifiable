@@ -38,7 +38,7 @@ internal sealed class BitstringStatusListCredentialDataIntegrityTests
     private static readonly DateTimeOffset Now = new(2024, 6, 15, 12, 0, 0, TimeSpan.Zero);
     private static readonly ExchangeContext EmptyContext = new();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;
     private static CredentialBuilder CredentialBuilder { get; } = new CredentialBuilder();
     private static WebDidBuilder WebDidBuilder { get; } = new WebDidBuilder();

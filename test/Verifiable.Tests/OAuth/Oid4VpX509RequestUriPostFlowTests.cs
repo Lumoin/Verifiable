@@ -86,7 +86,7 @@ internal sealed class Oid4VpX509RequestUriPostFlowTests
         //wallet_metadata.jwks on the §5.10 POST; the private side decrypts the
         //JWE-wrapped JAR.
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> walletExchangeKeys =
-            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(SensitiveMemoryPool<byte>.Shared);
+            BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys(BaseMemoryPool.Shared);
         using PublicKeyMemory walletEncPublic = walletExchangeKeys.PublicKey;
         using PrivateKeyMemory walletEncPrivate = walletExchangeKeys.PrivateKey;
 

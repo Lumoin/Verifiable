@@ -13,4 +13,4 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 §5</see>.
 /// </param>
 [DebuggerDisplay("JarSigned")]
-public sealed record JarSigned(SignedJar Jar): OAuthFlowInput;
+public sealed record JarSigned(SignedJar Jar): FlowInput;

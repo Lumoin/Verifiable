@@ -206,7 +206,7 @@ internal sealed class InProcessKeySetTests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "SymmetricKeyMemory ownership transfers to the returned SymmetricKey, owned by the InProcessKeySet under test.")]
     private static SymmetricKey CreateHmacMaterial()
     {
-        IMemoryOwner<byte> owner = SensitiveMemoryPool<byte>.Shared.Rent(32);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
         SymmetricKeyMemory material;
         try
         {

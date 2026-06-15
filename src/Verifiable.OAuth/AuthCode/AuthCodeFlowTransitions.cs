@@ -1,5 +1,5 @@
 using System.Threading.Tasks;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Server;
 
@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// <remarks>
 /// <para>
 /// The delegate returned by <see cref="Create"/> is <c>δ</c> in
-/// <c>PushdownAutomaton&lt;OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol&gt;</c>.
+/// <c>PushdownAutomaton&lt;FlowState, FlowInput, AuthCodeStackSymbol&gt;</c>.
 /// It is a pure dispatch table: no I/O, randomness, or time reads occur inside the
 /// transition function. All effectful values arrive pre-computed inside the input records.
 /// </para>
@@ -24,7 +24,7 @@ namespace Verifiable.OAuth.AuthCode;
 ///       Mix-up defense
 ///       (<see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.4">RFC 9700 §4.4</see>):
 ///       the <see cref="CodeReceived.IssuerId"/> in the redirect must be validated against
-///       <see cref="OAuthFlowState.ExpectedIssuer"/> by the caller before constructing
+///       <see cref="FlowState.ExpectedIssuer"/> by the caller before constructing
 ///       <see cref="CodeReceived"/>. The transition function carries the validated value
 ///       into <see cref="AuthorizationCodeReceivedState.IssuerId"/>.
 ///     </description>
@@ -45,12 +45,12 @@ public static class AuthCodeFlowTransitions
     /// <summary>
     /// Creates the transition delegate for the Authorization Code flow PDA.
     /// </summary>
-    public static TransitionDelegate<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> Create() =>
+    public static TransitionDelegate<FlowState, FlowInput, AuthCodeStackSymbol> Create() =>
         static (state, input, stackTop, cancellationToken) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            TransitionResult<OAuthFlowState, AuthCodeStackSymbol>? result = (state, input) switch
+            TransitionResult<FlowState, AuthCodeStackSymbol>? result = (state, input) switch
             {
                 (not (TokenReceivedState or FlowFailed), Fail fail) =>
                     Transition(
@@ -160,12 +160,12 @@ public static class AuthCodeFlowTransitions
                 _ => null
             };
 
-            return ValueTask.FromResult<TransitionResult<OAuthFlowState, AuthCodeStackSymbol>?>(result);
+            return ValueTask.FromResult<TransitionResult<FlowState, AuthCodeStackSymbol>?>(result);
         };
 
 
-    private static TransitionResult<OAuthFlowState, AuthCodeStackSymbol>? Transition(
-        OAuthFlowState nextState,
+    private static TransitionResult<FlowState, AuthCodeStackSymbol>? Transition(
+        FlowState nextState,
         StackAction<AuthCodeStackSymbol> stackAction,
         string label) =>
         new(nextState, stackAction, label);

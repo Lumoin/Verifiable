@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.Cryptography;
 
 using Verifiable.Core.Model.Dcql;
@@ -10,14 +10,14 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// The encrypted <c>direct_post.jwt</c> Authorization Response has been received.
 /// </summary>
 /// <remarks>
-/// Overrides <see cref="OAuthFlowState.NextAction"/> to produce a
+/// Overrides <see cref="FlowState.NextAction"/> to produce a
 /// <see cref="DecryptResponseAction"/>, driving the effectful dispatch loop to
 /// decrypt the JWE — validating <c>enc</c> against <see cref="AllowedEncAlgorithms"/>
 /// first — and verify the VP token before advancing to
 /// <see cref="Verifiable.OAuth.Oid4Vp.States.PresentationVerifiedState"/>.
 /// </remarks>
 [DebuggerDisplay("VerifierResponseReceived FlowId={FlowId} ReceivedAt={ReceivedAt}")]
-public sealed record VerifierResponseReceivedState: OAuthFlowState
+public sealed record VerifierResponseReceivedState: FlowState
 {
     /// <summary>
     /// The raw JWE compact serialization from the HTTP POST body.

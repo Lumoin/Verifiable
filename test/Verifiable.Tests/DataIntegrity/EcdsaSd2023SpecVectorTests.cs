@@ -341,7 +341,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             SerializeProofOptions,
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -424,7 +424,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
 
         //Verify W3C Example 81 base signature verifies against our computed signature data.
         byte[] w3cBaseSignatureBytes = Convert.FromHexString(BaseSignatureHex);
-        using var w3cBaseSignatureMemory = SensitiveMemoryPool<byte>.Shared.Rent(w3cBaseSignatureBytes.Length);
+        using var w3cBaseSignatureMemory = BaseMemoryPool.Shared.Rent(w3cBaseSignatureBytes.Length);
         w3cBaseSignatureBytes.CopyTo(w3cBaseSignatureMemory.Memory.Span);
         using var w3cBaseSignature = new Signature(w3cBaseSignatureMemory, CryptoTags.P256Signature);
 
@@ -452,7 +452,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             var statementBytes = Encoding.UTF8.GetBytes(statement);
 
             byte[] w3cSigBytes = Convert.FromHexString(NonMandatorySignaturesHex[i]);
-            using var w3cSigMemory = SensitiveMemoryPool<byte>.Shared.Rent(w3cSigBytes.Length);
+            using var w3cSigMemory = BaseMemoryPool.Shared.Rent(w3cSigBytes.Length);
             w3cSigBytes.CopyTo(w3cSigMemory.Memory.Span);
             using var w3cSig = new Signature(w3cSigMemory, CryptoTags.P256Signature);
 
@@ -532,7 +532,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             SerializeProofOptions,
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -573,7 +573,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -637,7 +637,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             EcdsaSd2023CborSerializer.SerializeDerivedProof,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -663,7 +663,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken).ConfigureAwait(false);
 
@@ -672,7 +672,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             derivedCredential.Proof[0].ProofValue!,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         Assert.HasCount(
             DerivedFilteredSignaturesHex.Length,
@@ -738,7 +738,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             multibaseKey,
             MulticodecHeaders.P256PublicKey.Length,
             TestSetup.Base58Decoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         return new PublicKeyMemory(keyBytes, CryptoTags.P256PublicKey);
     }
@@ -749,7 +749,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             multibaseKey,
             MulticodecHeaders.P256PrivateKey.Length,
             TestSetup.Base58Decoder,
-            SensitiveMemoryPool<byte>.Shared);
+            BaseMemoryPool.Shared);
 
         return new PrivateKeyMemory(keyBytes, CryptoTags.P256PrivateKey);
     }

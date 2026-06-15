@@ -64,7 +64,7 @@ internal sealed class DcqlPresentationFlowTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
     private static EncodeDelegate Encoder => TestSetup.Base64UrlEncoder;
     private static DecodeDelegate Decoder => TestSetup.Base64UrlDecoder;
 

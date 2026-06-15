@@ -6,6 +6,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Keys;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -36,8 +37,8 @@ internal sealed class TenantIdThreadingTests
 
         ConcurrentBag<TenantId> observed = [];
         ServerSigningKeyResolverDelegate previous =
-            host.Server.Cryptography.SigningKeyResolver!;
-        host.Server.Cryptography.SigningKeyResolver = (keyId, tenantId, ctx, ct) =>
+            host.Server.OAuth().Cryptography.SigningKeyResolver!;
+        host.Server.OAuth().Cryptography.SigningKeyResolver = (keyId, tenantId, ctx, ct) =>
         {
             observed.Add(tenantId);
             return previous(keyId, tenantId, ctx, ct);
@@ -71,7 +72,7 @@ internal sealed class TenantIdThreadingTests
         //the broader test suite's JAR-receiving paths.
         await using TestHostShell host = new(TimeProvider);
         ServerVerificationKeyResolverDelegate resolver =
-            host.Server.Cryptography.VerificationKeyResolver!;
+            host.Server.OAuth().Cryptography.VerificationKeyResolver!;
 
         //Smoke: call the resolver directly with a fabricated tenant to
         //confirm the delegate accepts the new four-parameter shape.
@@ -93,8 +94,8 @@ internal sealed class TenantIdThreadingTests
 
         ConcurrentBag<TenantId> observed = [];
         ResolveServerHmacKeyDelegate previous =
-            host.Server.Integration.ResolveServerHmacKeyAsync!;
-        host.Server.Integration.ResolveServerHmacKeyAsync = (kid, tenantId, ctx, ct) =>
+            host.Server.OAuth().ResolveServerHmacKeyAsync!;
+        host.Server.OAuth().ResolveServerHmacKeyAsync = (kid, tenantId, ctx, ct) =>
         {
             observed.Add(tenantId);
             return previous(kid, tenantId, ctx, ct);
@@ -106,7 +107,7 @@ internal sealed class TenantIdThreadingTests
         ExchangeContext ctx = new();
         ctx.SetTenantId(tenant.Value);
 
-        _ = await host.Server.Integration.IssueDpopNonceAsync!(
+        _ = await host.Server.OAuth().IssueDpopNonceAsync!(
             new Uri("https://issuer.test/abcd1234"),
             tenant,
             ctx,
@@ -129,7 +130,7 @@ internal sealed class TenantIdThreadingTests
         string tenant = keys.Registration.TenantId.Value;
 
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()
         {

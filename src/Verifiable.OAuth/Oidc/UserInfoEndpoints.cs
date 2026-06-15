@@ -9,7 +9,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth.Jar;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Oidc;
 
@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Oidc;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Register at startup via <see cref="ServerConfiguration.EndpointBuilders"/>:
+/// Register at startup via <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>:
 /// </para>
 /// <code>
 /// EndpointBuilders = new EndpointBuilderSet(
@@ -55,7 +55,7 @@ namespace Verifiable.OAuth.Oidc;
 /// validation, the <c>iss</c> / <c>exp</c> / scope checks, and a minimal
 /// response body carrying the validated <c>sub</c>. Chunk 11 adds the
 /// per-subject claim emission via the
-/// <see cref="ServerConfiguration.ClaimIssuer"/> contributor walk against
+/// <see cref="AuthorizationServerIntegration.ClaimIssuer"/> contributor walk against
 /// <see cref="UserInfoTarget"/>.
 /// </para>
 /// <para>
@@ -71,11 +71,11 @@ public static class UserInfoEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate. Pass this to
-    /// <see cref="ServerConfiguration.EndpointBuilders"/>.
+    /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
     public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
     {
-        if(!registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcUserInfo))
+        if(!((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcUserInfo))
         {
             return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>([]);
         }
@@ -119,14 +119,15 @@ public static class UserInfoEndpoints
 
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
-                AuthorizationServer server = context.Server!;
-                ClientRecord registration = context.Registration!;
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+                ClientRecord registration = context.ClientRegistration!;
 
                 //RFC 6750 §2 — the bearer token rides on the Authorization
                 //header.
                 if(!BearerTokenValidation.TryExtractBearer(context, out string? bearerToken))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Unauthorized(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Unauthorized(
                         OAuthErrors.InvalidToken,
                         "Missing or malformed Authorization header."));
                 }
@@ -137,7 +138,7 @@ public static class UserInfoEndpoints
 
                 if(validationFailure is not null)
                 {
-                    return ((OAuthFlowInput?)null, validationFailure);
+                    return ((FlowInput?)null, validationFailure);
                 }
 
                 //OIDC Core §5.3.1 — the access token MUST carry the openid
@@ -147,7 +148,7 @@ public static class UserInfoEndpoints
                     || scopeObj is not string scope
                     || !WellKnownScopes.ContainsOpenId(scope))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Forbidden(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Forbidden(
                         OAuthErrors.InsufficientScope,
                         "UserInfo requires the openid scope per OIDC Core §5.3.1."));
                 }
@@ -156,7 +157,7 @@ public static class UserInfoEndpoints
                     || subObj is not string subject
                     || string.IsNullOrEmpty(subject))
                 {
-                    return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Unauthorized(
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Unauthorized(
                         OAuthErrors.InvalidToken,
                         "Validated access token does not carry a sub claim."));
                 }
@@ -166,7 +167,7 @@ public static class UserInfoEndpoints
                 //pattern so per-rule contributors don't each re-issue the
                 //resolver call.
                 Oidc.OidcClaims? preResolvedClaims = null;
-                ResolveOidcClaimsDelegate? resolve = server.Integration.ResolveOidcClaimsAsync;
+                ResolveOidcClaimsDelegate? resolve = oauth.ResolveOidcClaimsAsync;
                 if(resolve is not null)
                 {
                     preResolvedClaims = await resolve(
@@ -180,7 +181,7 @@ public static class UserInfoEndpoints
                 //via AuthorizationServerIntegration.ResolveSubjectIdentifierAsync;
                 //scope-driven extension claims (profile / email / address /
                 //phone) flow through the other contributors registered on
-                //ServerConfiguration.ClaimIssuer.
+                //AuthorizationServerIntegration.ClaimIssuer.
                 UserInfoTarget target = new(registration, subject, scope, context)
                 {
                     ResolvedOidcClaims = preResolvedClaims
@@ -188,11 +189,11 @@ public static class UserInfoEndpoints
 
                 Dictionary<string, object> responseClaims = new(StringComparer.Ordinal);
 
-                string correlationId = await server.Integration.GenerateIdentifierAsync!(
+                string correlationId = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthCorrelationId, context, ct)
                     .ConfigureAwait(false);
                 ClaimIssueResult contributionResult =
-                    await server.Configuration.ClaimIssuer.GenerateClaimsAsync(
+                    await oauth.ClaimIssuer!.GenerateClaimsAsync(
                         target, correlationId, ct)
                         .ConfigureAwait(false);
 
@@ -206,7 +207,7 @@ public static class UserInfoEndpoints
                 }
 
                 string body = BuildResponseBody(responseClaims);
-                return ((OAuthFlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Ok(
+                return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.Ok(
                     body, WellKnownMediaTypes.Application.Json));
             },
 

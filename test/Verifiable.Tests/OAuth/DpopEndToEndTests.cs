@@ -11,6 +11,7 @@ using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -233,7 +234,7 @@ internal sealed class DpopEndToEndTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
-        (OAuthClient client, ClientRegistration registration, Dictionary<string, OAuthFlowState> clientFlowStore) =
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             host.CreateInProcessOAuthClientAndRegistration(
                 material.Registration,
                 RedirectUri.OriginalString,

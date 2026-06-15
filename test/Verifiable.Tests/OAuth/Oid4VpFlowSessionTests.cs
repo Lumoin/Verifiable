@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using Verifiable.BouncyCastle;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
@@ -42,7 +42,7 @@ internal sealed class Oid4VpFlowSessionTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     /// <summary>
     /// In-memory secret store keyed by <see cref="KeyId"/>. Each test instance has its
@@ -59,7 +59,7 @@ internal sealed class Oid4VpFlowSessionTests
     [TestMethod]
     public async Task ParControllerStepsToParCompleted()
     {
-        OAuthFlowState state = CreateUninitializedState();
+        FlowState state = CreateUninitializedState();
         int stepCount = 0;
 
         //Step 1 — Initiate.
@@ -118,7 +118,7 @@ internal sealed class Oid4VpFlowSessionTests
         //Store the private key in the key store and record its ID.
         KeyId keyId = StoreDecryptionKey(exchangeKeys.PrivateKey);
 
-        (OAuthFlowState state, int stepCount) = await DriveToParCompleted(
+        (FlowState state, int stepCount) = await DriveToParCompleted(
             "session-response-1", keyId).ConfigureAwait(false);
 
         using SignedJar jar = await CreateMinimalSignedJarAsync(
@@ -172,7 +172,7 @@ internal sealed class Oid4VpFlowSessionTests
     public async Task UndefinedInputReturnsHaltedWithUnchangedStateAndStepCount()
     {
         KeyId keyId = StoreDecryptionKey();
-        (OAuthFlowState state, int stepCount) = await DriveToParCompleted(
+        (FlowState state, int stepCount) = await DriveToParCompleted(
             "session-halt-1", keyId).ConfigureAwait(false);
 
         Oid4VpStepResult result = await Oid4VpFlowSession.StepAsync(
@@ -201,7 +201,7 @@ internal sealed class Oid4VpFlowSessionTests
     public async Task FailInputTransitionsToFlowFailedAndSubsequentStepHalts()
     {
         KeyId keyId = StoreDecryptionKey();
-        (OAuthFlowState state, int stepCount) = await DriveToParCompleted(
+        (FlowState state, int stepCount) = await DriveToParCompleted(
             "session-fail-1", keyId).ConfigureAwait(false);
 
         Oid4VpStepResult failed = await Oid4VpFlowSession.StepAsync(
@@ -239,7 +239,7 @@ internal sealed class Oid4VpFlowSessionTests
     public async Task StepCountReflectsSnapshotPosition()
     {
         KeyId keyId = StoreDecryptionKey();
-        (OAuthFlowState parState, int parStepCount) = await DriveToParCompleted(
+        (FlowState parState, int parStepCount) = await DriveToParCompleted(
             "session-stepcount-1", keyId).ConfigureAwait(false);
 
         Assert.AreEqual(3, parStepCount,
@@ -262,11 +262,11 @@ internal sealed class Oid4VpFlowSessionTests
     }
 
 
-    private async ValueTask<(OAuthFlowState, int)> DriveToParCompleted(
+    private async ValueTask<(FlowState, int)> DriveToParCompleted(
         string flowId,
         KeyId keyId)
     {
-        OAuthFlowState state = CreateUninitializedState();
+        FlowState state = CreateUninitializedState();
         int stepCount = 0;
 
         (state, stepCount) = await StepAsync(state, stepCount, CreateInitiate(flowId)).ConfigureAwait(false);
@@ -286,10 +286,10 @@ internal sealed class Oid4VpFlowSessionTests
     }
 
 
-    private async ValueTask<(OAuthFlowState, int)> StepAsync(
-        OAuthFlowState state,
+    private async ValueTask<(FlowState, int)> StepAsync(
+        FlowState state,
         int stepCount,
-        OAuthFlowInput input)
+        FlowInput input)
     {
         Oid4VpStepResult result = await Oid4VpFlowSession.StepAsync(
             state, stepCount, input,

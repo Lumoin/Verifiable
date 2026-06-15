@@ -15,7 +15,7 @@ public static class JwkThumbprintUtilities
     /// <summary>
     /// Default memory pool for exact length (and potentially sensitive) memory operations.
     /// </summary>
-    private static MemoryPool<byte> DefaultPool { get; } = SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> DefaultPool { get; } = BaseMemoryPool.Shared;
 
     /// <summary>
     /// SHA-256 hash size in bytes as defined by <see href="https://tools.ietf.org/html/rfc6234">RFC 6234</see>

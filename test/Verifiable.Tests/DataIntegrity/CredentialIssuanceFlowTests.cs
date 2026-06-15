@@ -268,7 +268,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -281,7 +281,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -351,7 +351,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -364,7 +364,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -427,7 +427,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -445,7 +445,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -502,7 +502,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Encoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -520,7 +520,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeProofOptions,
             TestSetup.Base58Decoder,
             MicrosoftEntropyFunctions.ComputeDigestAsync,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 

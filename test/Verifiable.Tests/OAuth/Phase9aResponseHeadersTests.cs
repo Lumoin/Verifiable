@@ -6,6 +6,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Registration;
+using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -165,7 +166,7 @@ internal sealed class Phase9aResponseHeadersTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
         PkceParameters pkce = PkceGeneration.Generate(
-            TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+            TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         string verifier = pkce.EncodedVerifier;
         string challenge = pkce.EncodedChallenge;
 

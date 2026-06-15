@@ -372,7 +372,7 @@ internal sealed class JwsAccessTokenValidatorTests
             HeaderSerializer,
             PayloadSerializer,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         return JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
@@ -401,7 +401,7 @@ internal sealed class JwsAccessTokenValidatorTests
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             IatSkew,
             tenantId: default,
             new ExchangeContext(),

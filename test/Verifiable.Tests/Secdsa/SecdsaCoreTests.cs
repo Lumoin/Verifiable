@@ -306,7 +306,7 @@ internal sealed class SecdsaCoreTests
         EcPoint[] generators = [EcMath.G];
         EcPoint[] publicKeys = [dPoint];
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         SchnorrZkProof proof = await SchnorrZkp.GenerateAsync(
@@ -330,7 +330,7 @@ internal sealed class SecdsaCoreTests
         EcPoint[] generators = [EcMath.G, hPoint];
         EcPoint[] publicKeys = [point0, point1];
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         SchnorrZkProof proof = await SchnorrZkp.GenerateAsync(
@@ -355,7 +355,7 @@ internal sealed class SecdsaCoreTests
         EcPoint[] generators = [EcMath.G, hPoint];
         EcPoint[] publicKeys = [point0, point1];
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         SchnorrZkProof proofWithD1 = await SchnorrZkp.GenerateAsync(
@@ -386,7 +386,7 @@ internal sealed class SecdsaCoreTests
         EcPoint[] generators = [EcMath.G, y];
         EcPoint[] publicKeys = [gPrime, yPrime];
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         SchnorrZkProof proof = await SchnorrZkp.GenerateAsync(
@@ -408,7 +408,7 @@ internal sealed class SecdsaCoreTests
         byte[] binding1 = SHA256.HashData("Context A."u8);
         byte[] binding2 = SHA256.HashData("Context B."u8);
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         SchnorrZkProof proof1 = await SchnorrZkp.GenerateAsync(

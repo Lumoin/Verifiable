@@ -14,7 +14,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// </param>
 /// <param name="IssuerId">
 /// The <c>iss</c> parameter from the redirect. Must be validated against
-/// <see cref="OAuthFlowState.ExpectedIssuer"/> per
+/// <see cref="FlowState.ExpectedIssuer"/> per
 /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.4">RFC 9700 §4.4</see>.
 /// </param>
 /// <param name="ReceivedAt">The UTC instant the redirect was received.</param>
@@ -23,4 +23,4 @@ public sealed record CodeReceived(
     string Code,
     string State,
     string IssuerId,
-    DateTimeOffset ReceivedAt): OAuthFlowInput;
+    DateTimeOffset ReceivedAt): FlowInput;

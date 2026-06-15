@@ -22,7 +22,7 @@ namespace Verifiable.OAuth.Oid4Vp.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PresentationVerified FlowId={FlowId} VerifiedAt={VerifiedAt}")]
-public sealed record PresentationVerifiedState: OAuthFlowState
+public sealed record PresentationVerifiedState: FlowState
 {
     /// <summary>
     /// The verified and extracted claims, keyed by DCQL credential query identifier.

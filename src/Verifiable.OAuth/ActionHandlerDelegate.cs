@@ -16,7 +16,7 @@ namespace Verifiable.OAuth;
 /// type in its registry.
 /// </para>
 /// <para>
-/// The handler reaches the <see cref="AuthorizationServer"/> instance for key
+/// The handler reaches the <see cref="EndpointServer"/> instance for key
 /// resolvers, encoder delegates, and other server configuration via
 /// <see cref="ExchangeContextServerExtensions.Server"/> on
 /// <paramref name="context"/>; the dispatcher places the active server on the
@@ -30,7 +30,7 @@ namespace Verifiable.OAuth;
 /// <param name="context">The per-request context bag.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>The input to feed into the next PDA transition.</returns>
-public delegate ValueTask<OAuthFlowInput> ActionHandlerDelegate<in TAction>(
+public delegate ValueTask<FlowInput> ActionHandlerDelegate<in TAction>(
     TAction action,
     ExchangeContext context,
     CancellationToken cancellationToken) where TAction: OAuthAction;

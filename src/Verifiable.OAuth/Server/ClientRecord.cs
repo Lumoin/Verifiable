@@ -20,7 +20,7 @@ namespace Verifiable.OAuth.Server;
 /// <para>
 /// <see cref="ClientRecord"/> is pure data — it carries no delegates and
 /// performs no I/O. All effectful operations (loading, saving, CIMD fetch) are
-/// performed by the delegates in <see cref="AuthorizationServer"/>.
+/// performed by the delegates in <see cref="EndpointServer"/>.
 /// </para>
 /// <para>
 /// The <see cref="TenantId"/> is the opaque identifier the application uses to
@@ -63,8 +63,15 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ClientRecord ClientId={ClientId} TenantId={TenantId}")]
-public sealed record ClientRecord
+public sealed record ClientRecord: IRegistrationRecord
 {
+    /// <summary>
+    /// The host-generic capability projection. Forwards <see cref="AllowedCapabilities"/>
+    /// so the dispatch host reads the same set through the neutral
+    /// <see cref="IRegistrationRecord"/> seam.
+    /// </summary>
+    IReadOnlySet<CapabilityIdentifier> IRegistrationRecord.AllowedCapabilities => AllowedCapabilities;
+
     /// <summary>
     /// The client identifier. May be an opaque string, a CIMD URL, or a DID.
     /// </summary>

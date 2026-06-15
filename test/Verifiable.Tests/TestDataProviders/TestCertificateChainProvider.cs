@@ -85,14 +85,14 @@ internal static class TestCertificateChainProvider
         IReadOnlyList<PkiCertificateMemory> caChain =
             MicrosoftX509Functions.ParseX5c(
                 [Convert.ToBase64String(caDer)],
-                SensitiveMemoryPool<byte>.Shared);
+                BaseMemoryPool.Shared);
 
         IReadOnlyList<PkiCertificateMemory> leafChain;
         try
         {
             leafChain = MicrosoftX509Functions.ParseX5c(
                 [Convert.ToBase64String(leafDer)],
-                SensitiveMemoryPool<byte>.Shared);
+                BaseMemoryPool.Shared);
         }
         catch
         {
@@ -101,7 +101,7 @@ internal static class TestCertificateChainProvider
         }
 
         IMemoryOwner<byte> privateKeyOwner =
-            SensitiveMemoryPool<byte>.Shared.Rent(leafPrivKeyBytes.Length);
+            BaseMemoryPool.Shared.Rent(leafPrivKeyBytes.Length);
         leafPrivKeyBytes.CopyTo(privateKeyOwner.Memory);
         PrivateKeyMemory signingKey =
             new(privateKeyOwner, CryptoTags.P256PrivateKey);

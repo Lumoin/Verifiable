@@ -15,7 +15,7 @@ namespace Verifiable.OAuth.Server.States;
 /// the window expire naturally.
 /// </remarks>
 [DebuggerDisplay("JtiSeenState Issuer={Issuer,nq} Jti={Jti,nq} SeenAt={SeenAt}")]
-public sealed record JtiSeenState: OAuthFlowState
+public sealed record JtiSeenState: FlowState
 {
     /// <summary>The issuer URI string the jti was observed under.</summary>
     public required string Issuer { get; init; }

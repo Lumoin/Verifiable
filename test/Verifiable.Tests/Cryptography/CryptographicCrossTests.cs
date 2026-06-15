@@ -20,13 +20,13 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task BouncyCastleKeysVerifiedByNSecOnEd25519()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
             using var signature = await NSecCryptographicFunctions.SignEd25519Async(
-                privateKey.AsReadOnlyMemory(), data, SensitiveMemoryPool<byte>.Shared,
+                privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(await NSecCryptographicFunctions.VerifyEd25519Async(
@@ -38,13 +38,13 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task NSecKeysVerifiedByBouncyCastleOnEd25519()
         {
-            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
             using var signature = await BouncyCastleCryptographicFunctions.SignEd25519Async(
-                privateKey.AsReadOnlyMemory(), data, SensitiveMemoryPool<byte>.Shared,
+                privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(await BouncyCastleCryptographicFunctions.VerifyEd25519Async(
@@ -56,13 +56,13 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task NSecSignedVerifiedByBouncyCastleOnEd25519()
         {
-            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
             using var signature = await NSecCryptographicFunctions.SignEd25519Async(
-                privateKey.AsReadOnlyMemory(), data, SensitiveMemoryPool<byte>.Shared,
+                privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(await BouncyCastleCryptographicFunctions.VerifyEd25519Async(
@@ -74,13 +74,13 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public async Task BouncyCastleSignedVerifiedByNSecOnEd25519()
         {
-            var keys = BouncyCastleKeyMaterialCreator.CreateEd25519Keys(SensitiveMemoryPool<byte>.Shared);
+            var keys = BouncyCastleKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
             using var signature = await BouncyCastleCryptographicFunctions.SignEd25519Async(
-                privateKey.AsReadOnlyMemory(), data, SensitiveMemoryPool<byte>.Shared,
+                privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(await NSecCryptographicFunctions.VerifyEd25519Async(

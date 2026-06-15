@@ -4,6 +4,7 @@ using Verifiable.JCose;
 using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
+using Verifiable.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -32,7 +33,7 @@ internal sealed class DpopProofConstructionTests
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         string[] parts = proof.Split('.');
@@ -55,7 +56,7 @@ internal sealed class DpopProofConstructionTests
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofHeader header = DecodeHeader(proof);
@@ -77,7 +78,7 @@ internal sealed class DpopProofConstructionTests
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         IReadOnlyDictionary<string, string> expectedJwk = DpopJwkUtilities.ToJwk(
@@ -103,7 +104,7 @@ internal sealed class DpopProofConstructionTests
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofClaims parsed = DecodeClaims(proof);
@@ -130,7 +131,7 @@ internal sealed class DpopProofConstructionTests
             TestSetup.Base64UrlEncoder,
             DpopTestSupport.Serializer,
             MicrosoftCryptographicFunctions.SignP256Async,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofClaims parsed = DecodeClaims(proof);
@@ -151,7 +152,7 @@ internal sealed class DpopProofConstructionTests
     private static DpopProofHeader DecodeHeader(string proof)
     {
         string[] parts = proof.Split('.');
-        using System.Buffers.IMemoryOwner<byte> bytes = TestSetup.Base64UrlDecoder(parts[0], SensitiveMemoryPool<byte>.Shared);
+        using System.Buffers.IMemoryOwner<byte> bytes = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
         return DpopTestSupport.ParseHeaderJson(bytes.Memory);
     }
 
@@ -159,7 +160,7 @@ internal sealed class DpopProofConstructionTests
     private static DpopProofClaims DecodeClaims(string proof)
     {
         string[] parts = proof.Split('.');
-        using System.Buffers.IMemoryOwner<byte> bytes = TestSetup.Base64UrlDecoder(parts[1], SensitiveMemoryPool<byte>.Shared);
+        using System.Buffers.IMemoryOwner<byte> bytes = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
         return DpopTestSupport.ParseClaimsJson(bytes.Memory);
     }
 }

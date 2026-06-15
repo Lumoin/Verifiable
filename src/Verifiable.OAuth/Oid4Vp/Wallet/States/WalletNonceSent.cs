@@ -17,7 +17,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet.States;
 /// for.
 /// </remarks>
 [DebuggerDisplay("WalletNonceSent FlowId={FlowId} WalletNonce={WalletNonce}")]
-public sealed record WalletNonceSent: OAuthFlowState
+public sealed record WalletNonceSent: FlowState
 {
     /// <summary>
     /// The <c>request_uri</c> the Wallet POSTed to.

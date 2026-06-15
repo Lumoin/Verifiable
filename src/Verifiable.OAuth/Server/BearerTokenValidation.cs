@@ -4,7 +4,6 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Jar;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Routing;
 
 namespace Verifiable.OAuth.Server;
 
@@ -121,7 +120,7 @@ public static class BearerTokenValidation
     /// <see cref="AuthorizationServerCodecs.JwtPayloadDeserializer"/>.
     /// </summary>
     /// <param name="bearerToken">The compact-JWS access token, exactly as presented on the wire.</param>
-    /// <param name="server">The authorization server holding codecs, cryptography, and integration.</param>
+    /// <param name="server">The authorization server holding codecs, cryptography, and integration delegates.</param>
     /// <param name="registration">The client (tenant) the request belongs to.</param>
     /// <param name="context">The per-request context bag.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -131,7 +130,7 @@ public static class BearerTokenValidation
     /// </returns>
     public static async ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateAsync(
         string bearerToken,
-        AuthorizationServer server,
+        EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
         CancellationToken cancellationToken)
@@ -141,16 +140,18 @@ public static class BearerTokenValidation
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
 
-        if(server.Codecs.JwtHeaderDeserializer is null
-            || server.Codecs.JwtPayloadDeserializer is null
-            || server.Codecs.Decoder is null)
+        var oauth = server.OAuth();
+
+        if(oauth.Codecs.JwtHeaderDeserializer is null
+            || oauth.Codecs.JwtPayloadDeserializer is null
+            || oauth.Codecs.Decoder is null)
         {
             return (null, ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
                 "AuthorizationServerCodecs is not fully configured for bearer-token validation."));
         }
 
-        if(server.Cryptography.VerificationKeyResolver is null)
+        if(oauth.Cryptography.VerificationKeyResolver is null)
         {
             return (null, ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
@@ -164,9 +165,9 @@ public static class BearerTokenValidation
         {
             unverified = JwsParsing.ParseCompact(
                 bearerToken,
-                server.Codecs.Decoder,
-                bytes => server.Codecs.JwtHeaderDeserializer(bytes),
-                SensitiveMemoryPool<byte>.Shared);
+                oauth.Codecs.Decoder,
+                bytes => oauth.Codecs.JwtHeaderDeserializer(bytes),
+                BaseMemoryPool.Shared);
         }
         catch(Exception ex) when(ex is FormatException or InvalidOperationException)
         {
@@ -201,7 +202,7 @@ public static class BearerTokenValidation
             }
 
             //3. Resolve the verification key.
-            PublicKeyMemory? publicKey = await server.Cryptography.VerificationKeyResolver(
+            PublicKeyMemory? publicKey = await oauth.Cryptography.VerificationKeyResolver(
                 new KeyId(kid), registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
             if(publicKey is null)
@@ -219,9 +220,9 @@ public static class BearerTokenValidation
             {
                 signatureValid = await Jws.VerifyAsync<object?>(
                     bearerToken,
-                    server.Codecs.Decoder,
+                    oauth.Codecs.Decoder,
                     static (ReadOnlySpan<byte> _) => (object?)null,
-                    SensitiveMemoryPool<byte>.Shared,
+                    BaseMemoryPool.Shared,
                     publicKey,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -243,7 +244,7 @@ public static class BearerTokenValidation
             JwtPayload payload;
             try
             {
-                payload = new JwtPayload(server.Codecs.JwtPayloadDeserializer(unverified.Payload.Span));
+                payload = new JwtPayload(oauth.Codecs.JwtPayloadDeserializer(unverified.Payload.Span));
             }
             catch(Exception ex) when(ex is FormatException or InvalidOperationException)
             {
@@ -256,9 +257,9 @@ public static class BearerTokenValidation
             Uri issuerUri;
             try
             {
-                issuerUri = server.Integration.ResolveIssuerAsync is not null
-                    ? await server.Integration.ResolveIssuerAsync(registration, context, cancellationToken)
-                        .ConfigureAwait(false)
+                issuerUri = oauth.ResolveIssuerAsync is not null
+                    ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
+                        .ConfigureAwait(false))!
                     : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
                         .ConfigureAwait(false);
             }

@@ -137,6 +137,18 @@ public static class WellKnownEndpointNames
 
     public static readonly string MetadataDiscovery = Utf8Constants.ToInternedString(MetadataDiscoveryUtf8);
 
+    //OAuth 2.0 Authorization Server Metadata (RFC 8414 §3): the same discovery
+    //document published at the default well-known location formed by INSERTING
+    // /.well-known/oauth-authorization-server between the host component and the
+    //path component of the issuer identifier (the path-bearing rule, distinct
+    //from the appended openid-configuration mount). RFC 8414 §3.1 permits the
+    //same metadata at multiple well-known locations, so this role is a second
+    //mount of the body MetadataDiscovery serves.
+    /// <summary>The UTF-8 source literal of <see cref="MetadataOAuthAuthorizationServer"/>.</summary>
+    public static ReadOnlySpan<byte> MetadataOAuthAuthorizationServerUtf8 => "Metadata.OAuthAuthorizationServer"u8;
+
+    public static readonly string MetadataOAuthAuthorizationServer = Utf8Constants.ToInternedString(MetadataOAuthAuthorizationServerUtf8);
+
     //Federation family
     /// <summary>The UTF-8 source literal of <see cref="FederationEntityConfiguration"/>.</summary>
     public static ReadOnlySpan<byte> FederationEntityConfigurationUtf8 => "Federation.EntityConfiguration"u8;

@@ -60,7 +60,7 @@ public delegate ValueTask<TpmResult<TpmResponse>> TpmSubmitHandler(
 /// </para>
 /// <code>
 /// using var tpm = TpmDevice.Open();
-/// using var pool = SensitiveMemoryPool&lt;byte&gt;.Shared;
+/// using var pool = BaseMemoryPool.Shared;
 ///
 /// using TpmResponse response = (await tpm.SubmitAsync(commandBytes, pool)).Value;
 /// //Parse response...
@@ -319,7 +319,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// <see cref="Failure"/> for diagnostic details.
     /// </para>
     /// <para>
-    /// For sensitive operations, use <see cref="SensitiveMemoryPool{T}"/> to ensure
+    /// For sensitive operations, use <see cref="BaseMemoryPool"/> to ensure
     /// the response bytes are securely cleared when disposed.
     /// </para>
     /// </remarks>

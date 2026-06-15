@@ -71,7 +71,7 @@ internal class HwTpmSessionTests
     [TestMethod]
     public async Task StartAuthSessionCreatesValidSession()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
@@ -110,7 +110,7 @@ internal class HwTpmSessionTests
     [TestMethod]
     public async Task GetRandomWithAuditSessionVerifiesIntegrity()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
@@ -177,7 +177,7 @@ internal class HwTpmSessionTests
     [TestMethod]
     public async Task MultipleCommandsWithSameSessionUpdateNonces()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);

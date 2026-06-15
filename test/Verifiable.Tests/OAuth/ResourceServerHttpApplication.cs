@@ -92,7 +92,7 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             integration.TimeProvider,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             integration.AccessTokenIatSkew,
             tenantId: default,
             ExchangeContext,
@@ -143,7 +143,7 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
                 TestSetup.Base64UrlEncoder,
                 TestSetup.Base64UrlDecoder,
                 integration.TimeProvider,
-                SensitiveMemoryPool<byte>.Shared,
+                BaseMemoryPool.Shared,
                 integration.DpopFreshnessWindow,
                 context.RequestAborted).ConfigureAwait(false);
 

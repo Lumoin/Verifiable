@@ -25,11 +25,11 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ParRequestReceived FlowId={FlowId} RequestUri={RequestUri}")]
-public sealed record ParRequestReceivedState: OAuthFlowState
+public sealed record ParRequestReceivedState: FlowState
 {
     /// <summary>
     /// The <c>request_uri</c> assigned to this PAR entry and returned to the client.
-    /// The application maps this to <see cref="OAuthFlowState.FlowId"/> so the
+    /// The application maps this to <see cref="FlowState.FlowId"/> so the
     /// authorization endpoint can load this state by <c>request_uri</c>.
     /// </summary>
     public required Uri RequestUri { get; init; }

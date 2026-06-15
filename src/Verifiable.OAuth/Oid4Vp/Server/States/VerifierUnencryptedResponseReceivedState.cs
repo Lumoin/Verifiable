@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 
 using Verifiable.Core.Model.Dcql;
 
@@ -12,14 +12,14 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// the JAR's <c>response_mode</c> is <c>direct_post</c> per OID4VP 1.0 §8.2.
 /// </summary>
 /// <remarks>
-/// Overrides <see cref="OAuthFlowState.NextAction"/> to produce a
+/// Overrides <see cref="FlowState.NextAction"/> to produce a
 /// <see cref="ProcessVpTokenAction"/>, driving the effectful dispatch loop
 /// to verify the VP token (no decryption — the JSON is already in plaintext)
 /// before advancing to
 /// <see cref="Verifiable.OAuth.Oid4Vp.States.PresentationVerifiedState"/>.
 /// </remarks>
 [DebuggerDisplay("VerifierUnencryptedResponseReceived FlowId={FlowId} ReceivedAt={ReceivedAt}")]
-public sealed record VerifierUnencryptedResponseReceivedState: OAuthFlowState
+public sealed record VerifierUnencryptedResponseReceivedState: FlowState
 {
     /// <summary>
     /// The plaintext <c>vp_token</c> JSON string. Preserved for audit and

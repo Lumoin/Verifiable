@@ -39,7 +39,7 @@ internal sealed class JoseTokenClassifierTests
             bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("Header JSON parsed to null.");
 
-    private static MemoryPool<byte> Pool => SensitiveMemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]

@@ -36,7 +36,7 @@ internal sealed class HmacFunctionsTests
     {
         (HmacValue Result, CryptoEvent? Event) outcome = await MicrosoftHmacFunctions.ComputeHmacAsync(
             TestCase1Data, TestCase1Key, 32, CryptoTags.HmacSha256Value,
-            SensitiveMemoryPool<byte>.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
+            BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HmacValue result = outcome.Result;
         string actualHex = Convert.ToHexStringLower(result.AsReadOnlySpan());
@@ -50,7 +50,7 @@ internal sealed class HmacFunctionsTests
     {
         (HmacValue Result, CryptoEvent? Event) outcome = await MicrosoftHmacFunctions.ComputeHmacAsync(
             TestCase2Data, TestCase2Key, 32, CryptoTags.HmacSha256Value,
-            SensitiveMemoryPool<byte>.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
+            BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HmacValue result = outcome.Result;
         Assert.AreEqual(TestCase2HmacSha256Hex, Convert.ToHexStringLower(result.AsReadOnlySpan()));
@@ -62,7 +62,7 @@ internal sealed class HmacFunctionsTests
     {
         (HmacValue Result, CryptoEvent? Event) outcome = await MicrosoftHmacFunctions.ComputeHmacAsync(
             TestCase2Data, TestCase2Key, 48, CryptoTags.HmacSha384Value,
-            SensitiveMemoryPool<byte>.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
+            BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HmacValue result = outcome.Result;
         Assert.AreEqual(TestCase2HmacSha384Hex, Convert.ToHexStringLower(result.AsReadOnlySpan()));
@@ -74,7 +74,7 @@ internal sealed class HmacFunctionsTests
     {
         (HmacValue Result, CryptoEvent? Event) outcome = await MicrosoftHmacFunctions.ComputeHmacAsync(
             TestCase2Data, TestCase2Key, 64, CryptoTags.HmacSha512Value,
-            SensitiveMemoryPool<byte>.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
+            BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HmacValue result = outcome.Result;
         Assert.AreEqual(TestCase2HmacSha512Hex, Convert.ToHexStringLower(result.AsReadOnlySpan()));
@@ -88,7 +88,7 @@ internal sealed class HmacFunctionsTests
 
         (bool IsValid, CryptoEvent? Event) outcome = await MicrosoftHmacFunctions.VerifyHmacAsync(
             TestCase1Data, TestCase1Key, expectedMac, CryptoTags.HmacSha256Value,
-            SensitiveMemoryPool<byte>.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
+            BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(outcome.IsValid);
         Assert.IsInstanceOfType<HmacVerifiedEvent>(outcome.Event);
@@ -104,7 +104,7 @@ internal sealed class HmacFunctionsTests
 
         (bool IsValid, CryptoEvent? Event) outcome = await MicrosoftHmacFunctions.VerifyHmacAsync(
             TestCase1Data, TestCase1Key, tampered, CryptoTags.HmacSha256Value,
-            SensitiveMemoryPool<byte>.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
+            BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(outcome.IsValid);
         Assert.AreEqual(VerificationOutcome.Invalid, ((HmacVerifiedEvent)outcome.Event!).Outcome);
@@ -120,7 +120,7 @@ internal sealed class HmacFunctionsTests
 
         (bool IsValid, CryptoEvent? Event) outcome = await MicrosoftHmacFunctions.VerifyHmacAsync(
             TestCase1Data, wrongKey, expectedMac, CryptoTags.HmacSha256Value,
-            SensitiveMemoryPool<byte>.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
+            BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(outcome.IsValid);
     }
@@ -134,7 +134,7 @@ internal sealed class HmacFunctionsTests
         await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             _ = await MicrosoftHmacFunctions.ComputeHmacAsync(
                 TestCase1Data, TestCase1Key, 32, emptyTag,
-                SensitiveMemoryPool<byte>.Shared, null, TestContext.CancellationToken)
+                BaseMemoryPool.Shared, null, TestContext.CancellationToken)
                 .ConfigureAwait(false)).ConfigureAwait(false);
     }
 
@@ -154,12 +154,12 @@ internal sealed class HmacFunctionsTests
         })
         {
             (HmacValue Result, CryptoEvent? _) computed = await MicrosoftHmacFunctions.ComputeHmacAsync(
-                message, key, outputLength, tag, SensitiveMemoryPool<byte>.Shared, null,
+                message, key, outputLength, tag, BaseMemoryPool.Shared, null,
                 TestContext.CancellationToken).ConfigureAwait(false);
             using HmacValue mac = computed.Result;
 
             (bool IsValid, CryptoEvent? _) verified = await MicrosoftHmacFunctions.VerifyHmacAsync(
-                message, key, mac.AsReadOnlyMemory(), tag, SensitiveMemoryPool<byte>.Shared,
+                message, key, mac.AsReadOnlyMemory(), tag, BaseMemoryPool.Shared,
                 null, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(verified.IsValid, $"Round-trip must succeed for {tag}.");

@@ -9,7 +9,7 @@ namespace Verifiable.OAuth.AuthCode.States;
 /// </summary>
 /// <remarks>Transitions to <see cref="ParRequestReadyState"/> when the PAR request body is composed.</remarks>
 [DebuggerDisplay("PkceGenerated FlowId={FlowId}")]
-public sealed record PkceGeneratedState: OAuthFlowState
+public sealed record PkceGeneratedState: FlowState
 {
     /// <summary>The PKCE verifier and challenge for this flow.</summary>
     public required PkceParameters Pkce { get; init; }

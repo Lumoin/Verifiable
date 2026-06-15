@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
@@ -21,7 +21,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     [TestMethod]
     public async Task InitiateTransitionsToPkceGenerated()
     {
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda = CreatePda();
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
 
         bool stepped = await pda.StepAsync(
             CreateInitiate("flow-1"),
@@ -37,7 +37,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     [TestMethod]
     public async Task ParBodyComposedTransitionsToParRequestReady()
     {
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda = CreatePda();
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
         await pda.StepAsync(CreateInitiate("flow-2"), TestContext.CancellationToken).ConfigureAwait(false);
 
         bool stepped = await pda.StepAsync(
@@ -52,7 +52,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     [TestMethod]
     public async Task ParSucceededTransitionsToParCompletedWithCorrectExpiry()
     {
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda = CreatePda();
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
         await pda.StepAsync(CreateInitiate("flow-3"), TestContext.CancellationToken).ConfigureAwait(false);
         await pda.StepAsync(
             new ParBodyComposed("body", TimeProvider.GetUtcNow()),
@@ -75,7 +75,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     [TestMethod]
     public async Task CodeReceivedTransitionsToAuthorizationCodeReceived()
     {
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda = CreatePda();
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
         await RunToParCompleted(pda, "flow-4", TestContext.CancellationToken).ConfigureAwait(false);
 
         bool stepped = await pda.StepAsync(
@@ -96,7 +96,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     [TestMethod]
     public async Task TokenExchangeSucceededTransitionsToTokenReceived()
     {
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda = CreatePda();
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
         await RunToParCompleted(pda, "flow-5", TestContext.CancellationToken).ConfigureAwait(false);
         await pda.StepAsync(
             new CodeReceived("code", "state", "https://as.example.com", TimeProvider.GetUtcNow()),
@@ -123,7 +123,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     [TestMethod]
     public async Task FullHappyPathReachesTokenReceived()
     {
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda = CreatePda();
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
 
         await pda.StepAsync(CreateInitiate("flow-6"), TestContext.CancellationToken).ConfigureAwait(false);
         await pda.StepAsync(
@@ -150,7 +150,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     [TestMethod]
     public async Task FailInputTransitionsToFlowFailedFromAnyNonTerminalState()
     {
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda = CreatePda();
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
         await pda.StepAsync(CreateInitiate("flow-7"), TestContext.CancellationToken).ConfigureAwait(false);
 
         DateTimeOffset failedAt = TimeProvider.GetUtcNow();
@@ -168,7 +168,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     [TestMethod]
     public async Task PdaHaltsAfterTokenReceived()
     {
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda = CreatePda();
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
         await pda.StepAsync(CreateInitiate("flow-8"), TestContext.CancellationToken).ConfigureAwait(false);
         await RunToTokenReceived(pda, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -184,7 +184,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     [TestMethod]
     public async Task StackDepthRemainsOneOnLinearFlow()
     {
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda = CreatePda();
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
         await pda.StepAsync(CreateInitiate("flow-9"), TestContext.CancellationToken).ConfigureAwait(false);
         await RunToTokenReceived(pda, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -195,7 +195,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     [TestMethod]
     public async Task UndefinedInputOnWrongStateHaltsPda()
     {
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda = CreatePda();
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
         await pda.StepAsync(CreateInitiate("flow-10"), TestContext.CancellationToken).ConfigureAwait(false);
 
         bool stepped = await pda.StepAsync(
@@ -207,7 +207,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     }
 
 
-    private PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> CreatePda() =>
+    private PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> CreatePda() =>
         AuthCodeFlowAutomaton.Create(Guid.NewGuid().ToString(), TimeProvider);
 
     private Initiate CreateInitiate(string flowId)
@@ -224,10 +224,10 @@ internal sealed class AuthCodeFlowTransitionsTests
     }
 
     private static PkceParameters CreatePkceParameters() =>
-        PkceGeneration.Generate(TestSetup.Base64UrlEncoder, SensitiveMemoryPool<byte>.Shared);
+        PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
     private async System.Threading.Tasks.ValueTask RunToParCompleted(
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda,
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda,
         string flowId,
         System.Threading.CancellationToken cancellationToken)
     {
@@ -243,7 +243,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     }
 
     private async System.Threading.Tasks.ValueTask RunToTokenReceived(
-        PushdownAutomaton<OAuthFlowState, OAuthFlowInput, AuthCodeStackSymbol> pda,
+        PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda,
         System.Threading.CancellationToken cancellationToken)
     {
         await pda.StepAsync(

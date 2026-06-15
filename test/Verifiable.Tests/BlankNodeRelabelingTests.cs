@@ -99,7 +99,7 @@ internal sealed class BlankNodeRelabelingW3CTests
             W3CHmacKey,
             MicrosoftHmacFunctions.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CanonicalStatement, relabeled);
@@ -125,7 +125,7 @@ internal sealed class BlankNodeRelabelingW3CTests
             W3CHmacKey,
             MicrosoftHmacFunctions.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(ExpectedRelabeled, actual);
@@ -151,7 +151,7 @@ internal sealed class BlankNodeRelabelingW3CTests
             W3CHmacKey,
             MicrosoftHmacFunctions.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(ExpectedRelabeled, actual);
@@ -177,7 +177,7 @@ internal sealed class BlankNodeRelabelingW3CTests
             W3CHmacKey,
             MicrosoftHmacFunctions.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(ExpectedRelabeled, actual);
@@ -203,7 +203,7 @@ internal sealed class BlankNodeRelabelingW3CTests
             W3CHmacKey,
             MicrosoftHmacFunctions.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(ExpectedRelabeled, actual);
@@ -231,7 +231,7 @@ internal sealed class BlankNodeRelabelingW3CTests
             W3CHmacKey,
             MicrosoftHmacFunctions.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(3, result.LabelMap);
@@ -307,7 +307,7 @@ internal sealed class BlankNodeRelabelingW3CTests
             W3CHmacKey,
             MicrosoftHmacFunctions.ComputeHmacAsync,
             TestSetup.Base64UrlEncoder,
-            SensitiveMemoryPool<byte>.Shared,
+            BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(expectedRelabeled.Length, actualRelabeled);

@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Core.Automata;
+using Verifiable.Foundation.Automata;
 using Verifiable.Core.Dcql;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -19,12 +19,12 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// Carries everything <see cref="VerifierParReceivedState"/> carried (so the
 /// JAR-signing action has the same inputs available) plus the
 /// <see cref="WalletNonce"/> the Wallet sent, which the JAR-signing handler
-/// echoes as the JAR's <c>wallet_nonce</c> claim. <see cref="OAuthFlowState.NextAction"/>
-/// returns <see cref="Verifiable.Core.Automata.NullAction.Instance"/> — JAR
+/// echoes as the JAR's <c>wallet_nonce</c> claim. <see cref="FlowState.NextAction"/>
+/// returns <see cref="Verifiable.Foundation.Automata.NullAction.Instance"/> — JAR
 /// signing is dispatched by the endpoint handler, not auto-produced.
 /// </remarks>
 [DebuggerDisplay("VerifierWalletPostReceived FlowId={FlowId} WalletNonce={WalletNonce}")]
-public sealed record VerifierWalletPostReceivedState: OAuthFlowState
+public sealed record VerifierWalletPostReceivedState: FlowState
 {
     /// <summary>The PAR response carrying <c>request_uri</c> and <c>expires_in</c>.</summary>
     public required ParResponse Par { get; init; }

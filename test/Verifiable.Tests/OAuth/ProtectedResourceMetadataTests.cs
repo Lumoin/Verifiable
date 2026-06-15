@@ -38,7 +38,7 @@ internal sealed class ProtectedResourceMetadataTests
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial resource = RegisterProtectedResource(app);
 
-        app.Server.Integration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+        app.Server.OAuth().ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(new ProtectedResourceMetadataContribution
             {
                 AuthorizationServers = ["https://as.example.com"],
@@ -116,7 +116,7 @@ internal sealed class ProtectedResourceMetadataTests
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial resource = RegisterProtectedResource(app);
 
-        app.Server.Integration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+        app.Server.OAuth().ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(new ProtectedResourceMetadataContribution
             {
                 ScopesSupported = [WellKnownScopes.SsfRead]
@@ -126,7 +126,7 @@ internal sealed class ProtectedResourceMetadataTests
         //JWS — the library's contract is "assemble the correct claims, embed
         //the returned JWT"; the key and algorithm are the application's.
         JwtPayload? signedClaims = null;
-        app.Server.Integration.SignProtectedResourceMetadataAsync = (claims, _, _, _) =>
+        app.Server.OAuth().SignProtectedResourceMetadataAsync = (claims, _, _, _) =>
         {
             signedClaims = claims;
             return ValueTask.FromResult<string?>("header.payload.signature");
@@ -204,12 +204,12 @@ internal sealed class ProtectedResourceMetadataTests
         //The SSF transmitter is the resource server: its stream endpoint
         //requires a bearer token, and its RFC 9728 document advertises the
         //SSF scopes — the CAEP interop scope-discovery story.
-        app.Server.Integration.UseDefaultSsfJsonParsing();
-        app.Server.Integration.CreateSsfStreamAsync = static (request, registration, context, ct) =>
+        app.Server.OAuth().UseDefaultSsfJsonParsing();
+        app.Server.OAuth().CreateSsfStreamAsync = static (request, registration, context, ct) =>
             ValueTask.FromResult(SsfStreamWriteResult.Failed(SsfStreamWriteOutcome.Forbidden));
-        app.Server.Integration.AuthorizeSsfRequestAsync = static (request, requiredScope, registration, context, ct) =>
+        app.Server.OAuth().AuthorizeSsfRequestAsync = static (request, requiredScope, registration, context, ct) =>
             ValueTask.FromResult(SsfRequestAuthorization.Unauthorized);
-        app.Server.Integration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+        app.Server.OAuth().ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
             ValueTask.FromResult(new ProtectedResourceMetadataContribution
             {
                 ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage]
@@ -277,10 +277,10 @@ internal sealed class ProtectedResourceMetadataTests
                 WellKnownCapabilityIdentifiers.SsfTransmitter,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
 
-        app.Server.Integration.UseDefaultSsfJsonParsing();
-        app.Server.Integration.CreateSsfStreamAsync = static (request, registration, context, ct) =>
+        app.Server.OAuth().UseDefaultSsfJsonParsing();
+        app.Server.OAuth().CreateSsfStreamAsync = static (request, registration, context, ct) =>
             ValueTask.FromResult(SsfStreamWriteResult.Failed(SsfStreamWriteOutcome.Forbidden));
-        app.Server.Integration.AuthorizeSsfRequestAsync = static (request, requiredScope, registration, context, ct) =>
+        app.Server.OAuth().AuthorizeSsfRequestAsync = static (request, requiredScope, registration, context, ct) =>
             ValueTask.FromResult(SsfRequestAuthorization.Unauthorized);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
