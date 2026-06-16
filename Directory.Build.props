@@ -90,6 +90,7 @@
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Copyright>Lumoin</Copyright>
     <PackageIcon>resources/verifiable-nuget-logo.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageProjectUrl>https://github.com/lumoin/Verifiable/</PackageProjectUrl>
     <Company>Lumoin</Company>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -128,6 +129,16 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
     <None Include="../../resources/verifiable-nuget-logo.png">
       <Pack>True</Pack>
       <PackagePath>/resources</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <!-- Pack the repository README into library packages. The Verifiable CLI packs its own README. -->
+  <ItemGroup Condition="!$(MSBuildProjectName.EndsWith('Tests'))
+                    AND !$(MSBuildProjectName.EndsWith('.Benchmarks'))
+                    AND $(MSBuildProjectName) != 'Verifiable'">
+    <None Include="$(MSBuildThisFileDirectory)README.md">
+      <Pack>True</Pack>
+      <PackagePath>/</PackagePath>
     </None>
   </ItemGroup>
 

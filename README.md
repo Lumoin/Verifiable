@@ -21,7 +21,7 @@ The core value proposition is documents that can be distinctly identified, crypt
 |---------|---------|:-----:|
 | **Verifiable** | CLI tool for library functionality | [![NuGet](https://img.shields.io/nuget/v/Verifiable.svg?style=flat)](https://www.nuget.org/packages/Verifiable/) |
 | **Verifiable.Core** | DIDs, verifiable credentials, and data integrity proofs | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Core.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Core/) |
-| **Verifiable.Foundation** | Dependency-free primitives: pushdown automata, memory-safe `SensitiveMemory` pooling, and buffer tagging | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Foundation.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Foundation/) |
+| **Verifiable.Foundation** | Domain-neutral primitives: pushdown automata and the `SensitiveMemory` abstraction | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Foundation.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Foundation/) |
 | **Verifiable.Cryptography** | Cryptographic primitives: salt generation, memory-safe key handling, hash functions | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cryptography.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cryptography/) |
 | **Verifiable.JCose** | JOSE and COSE structures including SD-JWT and selective disclosure | [![NuGet](https://img.shields.io/nuget/v/Verifiable.JCose.svg?style=flat)](https://www.nuget.org/packages/Verifiable.JCose/) |
 | **Verifiable.OAuth** | OAuth 2.0 / OpenID protocol flows: OpenID4VCI, OpenID4VP, HAIP, SIOPv2, OpenID Federation, Shared Signals, AuthZEN | [![NuGet](https://img.shields.io/nuget/v/Verifiable.OAuth.svg?style=flat)](https://www.nuget.org/packages/Verifiable.OAuth/) |
@@ -57,7 +57,7 @@ The core value proposition is documents that can be distinctly identified, crypt
 
 The library follows data-oriented programming principles where code is separate from immutable data, favoring generic data structures and general-purpose functions implemented as extension methods. Domain types contain raw cryptographic material without encoding artifacts, with encoding handled at serialization boundaries.
 
-Cryptographic operations use a delegate-based extensibility model rather than direct implementations. This allows the same high-level API to work with software keys, TPM-backed keys, HSM keys, or cloud KMS without changing calling code. The `BaseMemoryPool` from the neutral `Lumoin.Base` package provides exact-size memory allocation for cryptographic material.
+Cryptographic operations use a delegate-based extensibility model rather than direct implementations. This allows the same high-level API to work with software keys, TPM-backed keys, HSM keys, or cloud KMS without changing calling code.
 
 The three-party credential flow (Issuer → Holder → Verifier) is modeled explicitly, with clear separation between what each party knows and computes. Internal computation state is not passed between parties; instead, each party derives what it needs from the credential and proof structures.
 
