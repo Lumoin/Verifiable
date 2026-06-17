@@ -4,7 +4,6 @@ using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
@@ -68,7 +67,7 @@ internal sealed class TpmVirtualDeviceTests
         Assert.IsTrue(virtualDevice.HasResponse(command));
         Assert.IsFalse(virtualDevice.HasResponse([0x80, 0x01, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x01, 0x7B]));
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         TpmResult<TpmResponse> result = await virtualDevice.SubmitAsync(
             command, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -88,7 +87,7 @@ internal sealed class TpmVirtualDeviceTests
         var virtualDevice = new TpmVirtualDevice();
         byte[] command = [0x80, 0x01, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x01, 0x7B, 0x00, 0x10];
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         TpmResult<TpmResponse> result = await virtualDevice.SubmitAsync(
             command, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -122,7 +121,7 @@ internal sealed class TpmVirtualDeviceTests
     public async Task ReplaysGetRandomThroughExecutor()
     {
         const int RequestedBytes = 16;
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 

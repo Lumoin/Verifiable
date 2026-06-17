@@ -1,5 +1,3 @@
-using Verifiable.Cryptography;
-
 namespace Verifiable.Apdu;
 
 /// <summary>

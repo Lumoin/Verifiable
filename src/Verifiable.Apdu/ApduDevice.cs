@@ -28,7 +28,7 @@ namespace Verifiable.Apdu;
 /// </para>
 /// <code>
 /// using var device = ApduDevice.Create(nfcTransceive);
-/// using var pool = SensitiveMemoryPool&lt;byte&gt;.Shared;
+/// MemoryPool&lt;byte&gt; pool = BaseMemoryPool.Shared;
 ///
 /// ApduResult&lt;ApduResponse&gt; result = await device.TransceiveAsync(commandBytes, pool, ct);
 /// </code>

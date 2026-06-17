@@ -4,7 +4,6 @@ using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
@@ -90,7 +89,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(
             pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -126,7 +125,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(
             pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -147,7 +146,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(
             pool, TestContext.CancellationToken).ConfigureAwait(false);

@@ -1,7 +1,5 @@
 using System;
 using System.Buffers;
-using Verifiable.Cryptography;
-
 using Verifiable.Apdu;
 
 namespace Verifiable.Tests.Apdu;
@@ -14,7 +12,7 @@ internal sealed class CommandApduTests
     [TestMethod]
     public void Case1HeaderOnly()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> command = CommandApdu.BuildCase1(
             0x00, 0xFB, 0x00, 0x00, pool);
@@ -30,7 +28,7 @@ internal sealed class CommandApduTests
     [TestMethod]
     public void Case2ShortLeEncoding()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> command = CommandApdu.BuildCase2(
             0x00, 0xFD, 0x00, 0x00, 3, useExtended: false, pool);
@@ -47,7 +45,7 @@ internal sealed class CommandApduTests
     [TestMethod]
     public void Case2ShortLeZeroMeans256()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> command = CommandApdu.BuildCase2(
             0x00, 0xCA, 0xDF, 0x30, 0, useExtended: false, pool);
@@ -60,7 +58,7 @@ internal sealed class CommandApduTests
     [TestMethod]
     public void Case2ExtendedLeEncoding()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> command = CommandApdu.BuildCase2(
             0x00, 0xCB, 0x3F, 0xFF, 0, useExtended: true, pool);
@@ -77,7 +75,7 @@ internal sealed class CommandApduTests
     [TestMethod]
     public void Case3ShortLcEncoding()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] data = [0x5C, 0x01, 0x7E];
 
         using IMemoryOwner<byte> command = CommandApdu.BuildCase3(
@@ -98,7 +96,7 @@ internal sealed class CommandApduTests
     [TestMethod]
     public void Case3ExtendedLcForLargeData()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] data = new byte[300];
         Array.Fill(data, (byte)0xAA);
 
@@ -118,7 +116,7 @@ internal sealed class CommandApduTests
     [TestMethod]
     public void Case4ShortEncoding()
     {
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] data = [0x5C, 0x03, 0x5F, 0xC1, 0x02];
 
         using IMemoryOwner<byte> command = CommandApdu.BuildCase4(
@@ -139,7 +137,7 @@ internal sealed class CommandApduTests
     {
         //From the CardForensics trace, exchange #5:
         //00 A4 04 00 09 A0 00 00 03 08 00 00 10 00 00
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         byte[] aid = [0xA0, 0x00, 0x00, 0x03, 0x08, 0x00, 0x00, 0x10, 0x00];
 
         using IMemoryOwner<byte> command = CommandApdu.BuildCase4(

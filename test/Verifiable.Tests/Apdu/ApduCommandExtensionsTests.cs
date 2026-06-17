@@ -3,8 +3,6 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
-using Verifiable.Cryptography;
-
 using Verifiable.Apdu;
 
 namespace Verifiable.Tests.Apdu;
@@ -40,7 +38,7 @@ internal sealed class ApduCommandExtensionsTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         ApduResult<SelectResponse> result = await device.SelectAsync(
             WellKnownAid.Mrtd, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -69,7 +67,7 @@ internal sealed class ApduCommandExtensionsTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         ApduResult<SelectResponse> result = await device.SelectAsync(
             WellKnownAid.Mrtd, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -90,7 +88,7 @@ internal sealed class ApduCommandExtensionsTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         ApduResult<SelectResponse> result = await device.SelectAsync(
             WellKnownAid.Mrtd, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -115,7 +113,7 @@ internal sealed class ApduCommandExtensionsTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         ApduResult<ReadBinaryResponse> result = await device.ReadBinaryAsync(
             0x7F12, 5, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -166,7 +164,7 @@ internal sealed class ApduCommandExtensionsTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         ApduResult<ReadBinaryResponse> result = await device.ReadBinaryAsync(
             0, 4, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -199,7 +197,7 @@ internal sealed class ApduCommandExtensionsTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         ApduResult<GetChallengeResponse> result = await device.GetChallengeAsync(
             8, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -227,7 +225,7 @@ internal sealed class ApduCommandExtensionsTests
     {
         using var device = ApduDevice.Create(static (command, pool, ct) =>
             ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0)));
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await device.ReadBinaryAsync(0x8000, 1, pool, TestContext.CancellationToken)).ConfigureAwait(false);
@@ -238,7 +236,7 @@ internal sealed class ApduCommandExtensionsTests
     {
         using var device = ApduDevice.Create(static (command, pool, ct) =>
             ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0)));
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await device.ReadBinaryAsync(0, 0, pool, TestContext.CancellationToken)).ConfigureAwait(false);
@@ -252,7 +250,7 @@ internal sealed class ApduCommandExtensionsTests
     {
         using var device = ApduDevice.Create(static (command, pool, ct) =>
             ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0)));
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await device.GetChallengeAsync(0, pool, TestContext.CancellationToken)).ConfigureAwait(false);

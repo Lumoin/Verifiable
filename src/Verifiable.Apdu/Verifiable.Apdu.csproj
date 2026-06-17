@@ -7,7 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
+    <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
+    <PackageReference Include="Lumoin.Base" />
   </ItemGroup>
 
 </Project>

@@ -1,8 +1,6 @@
 using System;
 using System.Buffers;
 using System.Threading.Tasks;
-using Verifiable.Cryptography;
-
 using Verifiable.Apdu;
 
 namespace Verifiable.Tests.Apdu;
@@ -22,7 +20,7 @@ internal sealed class ApduRecorderTests
 
         using var device = ApduDevice.Create(virtualCard.TransceiveAsync);
         using var recorder = new ApduRecorder();
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using(device.Subscribe(recorder))
         {
@@ -48,7 +46,7 @@ internal sealed class ApduRecorderTests
 
         using var device = ApduDevice.Create(virtualCard.TransceiveAsync);
         using var recorder = new ApduRecorder();
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         IDisposable subscription = device.Subscribe(recorder);
 
@@ -82,7 +80,7 @@ internal sealed class ApduRecorderTests
 
         using var captureDevice = ApduDevice.Create(originalCard.TransceiveAsync);
         using var recorder = new ApduRecorder();
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using(captureDevice.Subscribe(recorder))
         {
@@ -157,7 +155,7 @@ internal sealed class ApduRecorderTests
 
         using var device = ApduDevice.Create(virtualCard.TransceiveAsync);
         using var recorder = new ApduRecorder();
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         using(device.Subscribe(recorder))
         {

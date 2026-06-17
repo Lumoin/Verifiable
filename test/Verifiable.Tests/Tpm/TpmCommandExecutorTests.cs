@@ -3,7 +3,6 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
@@ -92,7 +91,7 @@ internal sealed class TpmCommandExecutorTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -133,7 +132,7 @@ internal sealed class TpmCommandExecutorTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -158,7 +157,7 @@ internal sealed class TpmCommandExecutorTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 

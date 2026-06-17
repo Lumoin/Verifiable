@@ -1,8 +1,6 @@
 using System;
 using System.Buffers;
 using System.Threading.Tasks;
-using Verifiable.Cryptography;
-
 using Verifiable.Apdu;
 
 namespace Verifiable.Tests.Apdu;
@@ -21,7 +19,7 @@ internal sealed class VirtualCardTests
         byte[] fciResponse = [0x61, 0x11, 0x4F, 0x06, 0x00, 0x00, 0x10, 0x00, 0x01, 0x00, 0x90, 0x00];
         virtualCard.Register(selectPiv, fciResponse);
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         ApduResult<ApduResponse> result = await virtualCard.TransceiveAsync(
             selectPiv, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -38,7 +36,7 @@ internal sealed class VirtualCardTests
         var virtualCard = new VirtualCard();
         byte[] unknownCommand = [0x00, 0xFF, 0x00, 0x00];
 
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
         ApduResult<ApduResponse> result = await virtualCard.TransceiveAsync(
             unknownCommand, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -111,7 +109,7 @@ internal sealed class VirtualCardTests
         virtualCard.Register(selectPiv, response);
 
         using var device = ApduDevice.Create(virtualCard.TransceiveAsync);
-        MemoryPool<byte> pool = SensitiveMemoryPool<byte>.Shared;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
 
         ApduResult<ApduResponse> result = await device.TransceiveAsync(
             selectPiv, pool, TestContext.CancellationToken).ConfigureAwait(false);
