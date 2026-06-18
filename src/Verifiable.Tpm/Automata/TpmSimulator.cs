@@ -1,8 +1,10 @@
 using System;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
@@ -32,10 +34,13 @@ namespace Verifiable.Tpm.Automata;
 /// physical TPM does; the simulator is not safe for concurrent calls to <see cref="SubmitAsync"/>.
 /// </para>
 /// <para>
-/// <strong>Scope.</strong> This lifecycle skeleton models <c>_TPM_Init</c>, <c>TPM2_Startup()</c>,
-/// <c>TPM2_Shutdown()</c>, <c>TPM2_SelfTest()</c>, and <c>TPM2_GetTestResult()</c> — no cryptography.
-/// Its primary value is letting destructive and lockout state-machine scenarios be exercised in
-/// software, never against real hardware.
+/// <strong>Scope.</strong> The simulator models the lifecycle commands <c>_TPM_Init</c>,
+/// <c>TPM2_Startup()</c>, <c>TPM2_Shutdown()</c>, <c>TPM2_SelfTest()</c>, and
+/// <c>TPM2_GetTestResult()</c>, plus <c>TPM2_GetRandom()</c>, which is the first command driven through
+/// the fine-grained action layer: its transition declares a <see cref="TpmRngAction"/>, the effectful
+/// loop draws octets from the injected RNG backend, and the transition frames the
+/// <c>TPM2B_DIGEST</c> response. Its primary value is letting destructive and lockout state-machine
+/// scenarios be exercised in software, never against real hardware.
 /// </para>
 /// <para>
 /// <strong>Skeleton limitations.</strong> Failure Mode is reachable only via an explicit
@@ -52,18 +57,28 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 {
     private readonly PushdownAutomaton<TpmSimulatorState, TpmSimulatorInput, TpmSimulatorStackSymbol> automaton;
     private readonly TimeProvider timeProvider;
+    private readonly FillEntropyDelegate rng;
+    private ulong rngCounter;
 
     /// <summary>
     /// Creates a simulator for a TPM that is powered off and awaiting <c>_TPM_Init</c>.
     /// </summary>
     /// <param name="tpmId">A stable identifier for this simulated TPM; also the automaton's run identifier.</param>
     /// <param name="selfTest">The modelled self-test behaviour, used to drive Failure Mode deterministically.</param>
+    /// <param name="rng">
+    /// The random-number backend used by <c>TPM2_GetRandom()</c>. The simulator models the device's RNG,
+    /// not a real entropy source, so the default is a deterministic counter stream seeded per instance —
+    /// reproducible for replay yet distinct across successive draws (so nonces and salts do not collide).
+    /// Tests inject a fixed pattern or a platform CSPRNG via this delegate. The delegate must fill the
+    /// entire destination span.
+    /// </param>
     /// <param name="timeProvider">The time source for trace timestamps. Defaults to <see cref="TimeProvider.System"/>.</param>
-    public TpmSimulator(string tpmId, TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes, TimeProvider? timeProvider = null)
+    public TpmSimulator(string tpmId, TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes, FillEntropyDelegate? rng = null, TimeProvider? timeProvider = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tpmId);
 
         this.timeProvider = timeProvider ?? TimeProvider.System;
+        this.rng = rng ?? FillDeterministic;
         automaton = new PushdownAutomaton<TpmSimulatorState, TpmSimulatorInput, TpmSimulatorStackSymbol>(
             runId: tpmId,
             initialState: TpmSimulatorState.PoweredOff(tpmId, selfTest),
@@ -89,8 +104,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// </summary>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>A task that completes when the indication has been applied.</returns>
-    public ValueTask PowerOnAsync(CancellationToken cancellationToken = default) =>
-        StepAsync(new TpmInitSignal(), cancellationToken);
+    public async ValueTask PowerOnAsync(CancellationToken cancellationToken = default)
+    {
+        //_TPM_Init is a pure lifecycle transition that declares no effect, so it is stepped directly
+        //through the automaton rather than the effectful runner (which would need a memory pool it
+        //has no use for here). The automaton still emits the single trace entry for the step.
+        _ = await automaton.StepAsync(new TpmInitSignal(), cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Processes a command and produces its response. Has the <see cref="TpmSubmitHandler"/> shape.
@@ -111,7 +131,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return SerializeResponse(new TpmHeaderOnlyResponse(malformedResponseCode), pool);
         }
 
-        await StepAsync(input, cancellationToken).ConfigureAwait(false);
+        await RunWithEffectsAsync(input, pool, cancellationToken).ConfigureAwait(false);
 
         TpmResponseIntent intent = automaton.CurrentState.ResponseIntent
             ?? new TpmHeaderOnlyResponse(TpmRcConstants.TPM_RC_FAILURE);
@@ -119,19 +139,72 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         return SerializeResponse(intent, pool);
     }
 
-    private async ValueTask StepAsync(TpmSimulatorInput input, CancellationToken cancellationToken)
+    private async ValueTask RunWithEffectsAsync(TpmSimulatorInput input, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
-        _ = await PdaRunner.StepWithEffectsAsync<TpmSimulatorState, TpmSimulatorInput, int>(
+        _ = await PdaRunner.StepWithEffectsAsync<TpmSimulatorState, TpmSimulatorInput, RngActionContext>(
             automaton.CurrentState,
             automaton.StepCount,
             input,
             step: StepCoreAsync,
             actionExtractor: static state => state.NextAction,
-            actionExecutor: static (action, _, _) =>
-                throw new NotSupportedException($"The lifecycle simulator declares no effectful actions; got '{action.GetType().Name}'."),
-            actionContext: 0,
+            actionExecutor: static (action, context, _) => ExecuteAction(action, context),
+            actionContext: new RngActionContext(rng, pool),
             timeProvider,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    //Executes the effectful work a transition declared. The only effect in this slice is drawing
+    //random octets for TPM2_GetRandom(); the result is fed back as a TpmRandomGenerated input so the
+    //pure transition can frame the response without ever touching the RNG or a buffer itself.
+    private static ValueTask<TpmSimulatorInput> ExecuteAction(PdaAction action, RngActionContext context) =>
+        action switch
+        {
+            TpmRngAction rngAction => ValueTask.FromResult<TpmSimulatorInput>(GenerateRandom(rngAction, context)),
+            _ => throw new NotSupportedException($"No executor is registered for action '{action.GetType().Name}'.")
+        };
+
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the rented buffer transfers to the returned TpmRandomGenerated, then to the TpmRandomResponse intent, and is released by SerializeResponse after framing.")]
+    private static TpmRandomGenerated GenerateRandom(TpmRngAction action, RngActionContext context)
+    {
+        //Rent at least one octet so a zero-length request still yields a valid (empty) buffer.
+        IMemoryOwner<byte> owner = context.Pool.Rent(Math.Max(action.ByteCount, 1));
+        try
+        {
+            context.Rng(owner.Memory.Span[..action.ByteCount]);
+        }
+        catch
+        {
+            owner.Dispose();
+            throw;
+        }
+
+        return new TpmRandomGenerated(owner, action.ByteCount);
+    }
+
+    //The default deterministic RNG backend: a per-instance counter stream. Reproducible across runs
+    //yet advancing across draws, so successive TPM2_GetRandom() calls return distinct octets. Not a
+    //real entropy source — provenance is the concern of TpmEntropyProvider, not the device model.
+    private void FillDeterministic(Span<byte> destination)
+    {
+        Span<byte> block = stackalloc byte[sizeof(ulong)];
+        for(int i = 0; i < destination.Length; i += sizeof(ulong))
+        {
+            BinaryPrimitives.WriteUInt64LittleEndian(block, rngCounter);
+            rngCounter++;
+
+            int take = Math.Min(sizeof(ulong), destination.Length - i);
+            block[..take].CopyTo(destination[i..(i + take)]);
+        }
+    }
+
+    //Caller-supplied context threaded to the action executor without closure capture: the injected
+    //RNG backend and the per-call memory pool.
+    private readonly struct RngActionContext(FillEntropyDelegate rng, MemoryPool<byte> pool)
+    {
+        public FillEntropyDelegate Rng { get; } = rng;
+
+        public MemoryPool<byte> Pool { get; } = pool;
     }
 
     //Bridges the runner's value-threaded step to the live automaton (design decision D2: one live
@@ -211,6 +284,23 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 break;
             }
+            case TpmCcConstants.TPM_CC_GetRandom:
+            {
+                //TPM2_GetRandom() carries a single UINT16 bytesRequested parameter (Part 3, 16.1); a
+                //command whose parameter area is too short to unmarshal it is a shortfall, which the
+                //TPM reports as TPM_RC_INSUFFICIENT ("not enough octets in the input buffer"), not the
+                //size-value-out-of-range TPM_RC_SIZE (Part 2, Table 4).
+                if(reader.Remaining < sizeof(ushort))
+                {
+                    malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+                    return false;
+                }
+
+                input = new TpmGetRandomRequested(reader.ReadUInt16());
+
+                break;
+            }
             default:
             {
                 input = new TpmUnsupportedCommandReceived(commandCode);
@@ -238,22 +328,59 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Justification = "TpmResponse takes ownership of the rented buffer and is owned by the returned TpmResult, which the caller disposes.")]
     private static TpmResult<TpmResponse> SerializeResponse(TpmResponseIntent intent, MemoryPool<byte> pool)
     {
-        int parameterSize = intent is TpmTestResultResponse { ResponseCode: TpmRcConstants.TPM_RC_SUCCESS }
-            ? sizeof(ushort) + sizeof(uint)
-            : 0;
-        int total = TpmHeader.HeaderSize + parameterSize;
-
-        IMemoryOwner<byte> owner = pool.Rent(total);
-        var writer = new TpmWriter(owner.Memory.Span);
-        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)total, (uint)intent.ResponseCode);
-        header.WriteTo(ref writer);
-
-        if(intent is TpmTestResultResponse { ResponseCode: TpmRcConstants.TPM_RC_SUCCESS } testResultResponse)
+        //The TpmRandomResponse intent is the terminal owner of the RNG buffer rented by the action
+        //executor; release it in the finally regardless of how framing completes (its octets are
+        //copied into the framed TPM2B_DIGEST on the success path).
+        IMemoryOwner<byte>? randomBuffer = (intent as TpmRandomResponse)?.RandomBytes;
+        try
         {
-            writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
-            writer.WriteUInt32((uint)testResultResponse.TestResult);
-        }
+            int parameterSize = intent switch
+            {
+                TpmTestResultResponse { ResponseCode: TpmRcConstants.TPM_RC_SUCCESS } => sizeof(ushort) + sizeof(uint),
+                TpmRandomResponse random => sizeof(ushort) + random.Length,
+                _ => 0
+            };
+            int total = TpmHeader.HeaderSize + parameterSize;
 
-        return TpmResult<TpmResponse>.Success(new TpmResponse(owner, total));
+            IMemoryOwner<byte> owner = pool.Rent(total);
+            try
+            {
+                var writer = new TpmWriter(owner.Memory.Span);
+                var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)total, (uint)intent.ResponseCode);
+                header.WriteTo(ref writer);
+
+                switch(intent)
+                {
+                    case TpmTestResultResponse { ResponseCode: TpmRcConstants.TPM_RC_SUCCESS } testResultResponse:
+                    {
+                        writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
+                        writer.WriteUInt32((uint)testResultResponse.TestResult);
+
+                        break;
+                    }
+                    case TpmRandomResponse randomResponse:
+                    {
+                        writer.WriteTpm2b(randomResponse.RandomBytes.Memory.Span[..randomResponse.Length]);
+
+                        break;
+                    }
+                    default:
+                    {
+                        break;
+                    }
+                }
+
+                return TpmResult<TpmResponse>.Success(new TpmResponse(owner, total));
+            }
+            catch
+            {
+                owner.Dispose();
+                throw;
+            }
+        }
+        finally
+        {
+            randomBuffer?.Dispose();
+        }
     }
 }

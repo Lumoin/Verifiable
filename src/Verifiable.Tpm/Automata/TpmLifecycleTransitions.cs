@@ -22,19 +22,43 @@ namespace Verifiable.Tpm.Automata;
 public static class TpmLifecycleTransitions
 {
     /// <summary>
+    /// The largest number of octets the simulated TPM returns from a single <c>TPM2_GetRandom()</c>.
+    /// </summary>
+    /// <remarks>
+    /// TPM 2.0 Library Part 3, clause 16.1: a request larger than fits in a <c>TPM2B_DIGEST</c> is not
+    /// an error — the TPM returns only as much as fits, which is the largest digest it can produce. The
+    /// simulator models a TPM whose largest digest is SHA-512 (64 octets), so a request is clamped here.
+    /// </remarks>
+    public const int MaxRandomBytes = 64;
+
+    /// <summary>
     /// Creates the transition delegate for a TPM lifecycle automaton.
     /// </summary>
     /// <returns>The transition function.</returns>
     public static TransitionDelegate<TpmSimulatorState, TpmSimulatorInput, TpmSimulatorStackSymbol> Create() =>
         static (state, input, stackTop, cancellationToken) =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol>? result = input switch
+            //TpmRandomGenerated is the internal RNG fold-back: it must always be consumed into the
+            //disposable TpmRandomResponse so the pooled buffer is never orphaned, so it is neither
+            //cancellation-gated nor NextAction-reset here. Every externally-supplied input honours
+            //cancellation and starts from a cleared NextAction, so an action left pending by an aborted
+            //prior effect (e.g. an RNG backend that threw) cannot re-fire against a later command.
+            TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol>? result;
+            if(input is TpmRandomGenerated generated)
             {
-                TpmInitSignal => OnInit(state),
-                _ => OnCommand(state, input)
-            };
+                result = OnRandomGenerated(state, generated);
+            }
+            else
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                TpmSimulatorState ready = state with { NextAction = NullAction.Instance };
+                result = input switch
+                {
+                    TpmInitSignal => OnInit(ready),
+                    _ => OnCommand(ready, input)
+                };
+            }
 
             return ValueTask.FromResult(result);
         };
@@ -64,6 +88,7 @@ public static class TpmLifecycleTransitions
             TpmShutdownRequested shutdown => OnShutdown(state, shutdown.ShutdownType),
             TpmSelfTestRequested => OnSelfTest(state),
             TpmTestResultRequested => OnTestResult(state),
+            TpmGetRandomRequested getRandom => OnGetRandom(state, getRandom.BytesRequested),
             _ => throw new System.InvalidOperationException($"Command input '{input.GetType().Name}' passed precondition gating but has no dispatch handler.")
         };
     }
@@ -148,6 +173,33 @@ public static class TpmLifecycleTransitions
             "GetTestResult");
     }
 
+    //TPM2_GetRandom() is the first command that needs an effect: the pure transition cannot draw
+    //random octets, so it declares a TpmRngAction and leaves no response yet. The effectful loop
+    //fills a pooled buffer via the injected RNG backend and feeds the octets back as a
+    //TpmRandomGenerated input, which OnRandomGenerated turns into the framed response.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnGetRandom(TpmSimulatorState state, ushort bytesRequested)
+    {
+        //A request larger than the largest digest is clamped, not rejected (clause 16.1).
+        int byteCount = System.Math.Min((int)bytesRequested, MaxRandomBytes);
+
+        return Transition(
+            state with
+            {
+                NextAction = new TpmRngAction(byteCount),
+                ResponseIntent = null
+            },
+            "GetRandom:Requested");
+    }
+
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnRandomGenerated(TpmSimulatorState state, TpmRandomGenerated generated) =>
+        Transition(
+            state with
+            {
+                NextAction = NullAction.Instance,
+                ResponseIntent = new TpmRandomResponse(TpmRcConstants.TPM_RC_SUCCESS, generated.Bytes, generated.Length)
+            },
+            "GetRandom:Completed");
+
     private static TpmCcConstants CommandCodeOf(TpmSimulatorInput input) =>
         input switch
         {
@@ -155,6 +207,7 @@ public static class TpmLifecycleTransitions
             TpmShutdownRequested => TpmCcConstants.TPM_CC_Shutdown,
             TpmSelfTestRequested => TpmCcConstants.TPM_CC_SelfTest,
             TpmTestResultRequested => TpmCcConstants.TPM_CC_GetTestResult,
+            TpmGetRandomRequested => TpmCcConstants.TPM_CC_GetRandom,
             TpmUnsupportedCommandReceived unsupported => unsupported.CommandCode,
             _ => throw new System.InvalidOperationException($"Input '{input.GetType().Name}' is not a command and must not reach command dispatch.")
         };

@@ -1,12 +1,15 @@
+using System.Buffers;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Automata;
 
 /// <summary>
-/// The input alphabet of the TPM simulator's pushdown automaton. Inputs arrive from two sources: the
-/// platform (<see cref="TpmInitSignal"/>) and the command transport (the command-arrived records,
-/// parsed from the wire by <see cref="TpmSimulator"/> before they enter the automaton).
+/// The input alphabet of the TPM simulator's pushdown automaton. Inputs arrive from three sources: the
+/// platform (<see cref="TpmInitSignal"/>), the command transport (the command-arrived records, parsed
+/// from the wire by <see cref="TpmSimulator"/> before they enter the automaton), and the effectful
+/// loop (the action-result records, such as <see cref="TpmRandomGenerated"/>, fed back after a
+/// <see cref="TpmAction"/> has been executed by a backend).
 /// </summary>
 public abstract record TpmSimulatorInput;
 
@@ -43,6 +46,30 @@ public sealed record TpmSelfTestRequested(bool IsFullTest): TpmSimulatorInput;
 /// operationally and in <see cref="TpmLifecyclePhase.FailureMode"/>.
 /// </summary>
 public sealed record TpmTestResultRequested: TpmSimulatorInput;
+
+/// <summary>
+/// A <c>TPM2_GetRandom()</c> command (TPM 2.0 Library Part 3, clause 16.1). Permitted only while
+/// operational; on success it draws random octets through the action layer.
+/// </summary>
+/// <param name="BytesRequested">
+/// The number of octets the caller requested. The transition clamps this to the largest digest the
+/// simulated TPM can return before declaring the RNG action (clause 16.1: requesting more than fits
+/// in a <c>TPM2B_DIGEST</c> is not an error — the TPM returns only what fits).
+/// </param>
+public sealed record TpmGetRandomRequested(ushort BytesRequested): TpmSimulatorInput;
+
+/// <summary>
+/// The result of executing a <see cref="TpmRngAction"/>: the random octets produced by the RNG
+/// backend, fed back into the automaton by the effectful loop so the transition can frame the
+/// <c>TPM2_GetRandom()</c> response. This input is internal to the effect loop and never arrives from
+/// the command transport.
+/// </summary>
+/// <param name="Bytes">
+/// The pooled buffer holding the produced octets. Ownership flows to the <see cref="TpmRandomResponse"/>
+/// the transition produces and is released by <see cref="TpmSimulator"/> once the response is framed.
+/// </param>
+/// <param name="Length">The number of valid octets in <paramref name="Bytes"/> (the clamped count).</param>
+public sealed record TpmRandomGenerated(IMemoryOwner<byte> Bytes, int Length): TpmSimulatorInput;
 
 /// <summary>
 /// A command whose code the lifecycle skeleton does not yet model. It is gated by the current phase

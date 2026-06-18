@@ -26,7 +26,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <code>
 /// FillEntropyDelegate csprng = RandomNumberGenerator.Fill;
-/// FillEntropyDelegate tpm    = TpmEntropyProvider.Fill;
+/// FillEntropyDelegate tpm    = tpmEntropyProvider.Fill;
 /// </code>
 /// </remarks>
 public delegate void FillEntropyDelegate(Span<byte> destination);

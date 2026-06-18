@@ -189,7 +189,16 @@ internal sealed class TpmSimulatorLifecycleTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
-        TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, new GetRandomInput(16)).ConfigureAwait(false);
+        //TPM2_PCR_Read is not modelled by this slice, so while operational it is rejected as an unknown
+        //command code. (TPM2_GetRandom is modelled and would instead succeed here.)
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        using IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
+        Memory<byte> command = owner.Memory[..TpmHeader.HeaderSize];
+        var writer = new TpmWriter(command.Span);
+        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)TpmHeader.HeaderSize, (uint)TpmCcConstants.TPM_CC_PCR_Read);
+        header.WriteTo(ref writer);
+
+        TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, command).ConfigureAwait(false);
 
         Assert.AreEqual(TpmRcConstants.TPM_RC_COMMAND_CODE, responseCode);
     }
@@ -308,6 +317,152 @@ internal sealed class TpmSimulatorLifecycleTests
         Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, (TpmRcConstants)header.Code);
         Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase);
     }
+
+    [TestMethod]
+    public async Task GetRandomReturnsRequestedBytesThroughExecutor()
+    {
+        const int RequestedBytes = 16;
+        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmResponseRegistry registry = CreateRandomRegistry();
+
+        TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
+            device, new GetRandomInput(RequestedBytes), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result.ResponseCode}'.");
+        using GetRandomResponse response = result.Value;
+        Assert.AreEqual(RequestedBytes, response.RandomBytes.Size);
+    }
+
+    [TestMethod]
+    public async Task GetRandomClampsRequestToLargestDigest()
+    {
+        //Part 3, 16.1: a request larger than fits in a TPM2B_DIGEST is not an error; the TPM returns
+        //only as much as fits (the largest digest it can produce).
+        const ushort OversizedRequest = 200;
+        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmResponseRegistry registry = CreateRandomRegistry();
+
+        TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
+            device, new GetRandomInput(OversizedRequest), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result.ResponseCode}'.");
+        using GetRandomResponse response = result.Value;
+        Assert.AreEqual(TpmLifecycleTransitions.MaxRandomBytes, response.RandomBytes.Size);
+    }
+
+    [TestMethod]
+    public async Task GetRandomBeforeStartupReturnsInitialize()
+    {
+        var simulator = new TpmSimulator("tpm-getrandom-init");
+        await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, new GetRandomInput(16)).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_INITIALIZE, responseCode);
+        Assert.AreEqual(TpmLifecyclePhase.Initializing, simulator.CurrentPhase);
+    }
+
+    [TestMethod]
+    public async Task GetRandomEmitsActionLoopTrace()
+    {
+        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        var observer = new TestObserver<TraceEntry<TpmSimulatorState, TpmSimulatorInput>>();
+        using IDisposable subscription = simulator.Subscribe(observer);
+
+        TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, new GetRandomInput(16)).ConfigureAwait(false);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, responseCode);
+
+        //Two transitions: the command declares the RNG action, then the action result is folded back.
+        var entries = observer.Received;
+        Assert.HasCount(2, entries);
+        Assert.AreEqual("GetRandom:Requested", entries[0].Label);
+        Assert.AreEqual("GetRandom:Completed", entries[1].Label);
+        Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase);
+    }
+
+    [TestMethod]
+    public async Task SuccessiveGetRandomDrawsDiffer()
+    {
+        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmResponseRegistry registry = CreateRandomRegistry();
+
+        TpmResult<GetRandomResponse> firstResult = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
+            device, new GetRandomInput(32), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        TpmResult<GetRandomResponse> secondResult = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
+            device, new GetRandomInput(32), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(firstResult.IsSuccess);
+        Assert.IsTrue(secondResult.IsSuccess);
+        using GetRandomResponse first = firstResult.Value;
+        using GetRandomResponse second = secondResult.Value;
+
+        //The default deterministic RNG advances across draws, so two successive results differ — a
+        //value backend that returned the same octets twice would break nonce uniqueness.
+        Assert.IsFalse(
+            first.RandomBytes.AsReadOnlySpan().SequenceEqual(second.RandomBytes.AsReadOnlySpan()),
+            "Successive deterministic draws must differ.");
+    }
+
+    [TestMethod]
+    public async Task GetRandomWithoutParameterReturnsInsufficient()
+    {
+        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+
+        //A GetRandom command framed without its UINT16 bytesRequested parameter cannot be unmarshalled,
+        //which the TPM reports as TPM_RC_INSUFFICIENT (Part 2, Table 4), not TPM_RC_SIZE.
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        using IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
+        Memory<byte> command = owner.Memory[..TpmHeader.HeaderSize];
+        var writer = new TpmWriter(command.Span);
+        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)TpmHeader.HeaderSize, (uint)TpmCcConstants.TPM_CC_GetRandom);
+        header.WriteTo(ref writer);
+
+        TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, command).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_INSUFFICIENT, responseCode);
+    }
+
+    [TestMethod]
+    public async Task FailedRandomDrawDoesNotCorruptNextCommand()
+    {
+        //An injected RNG backend that always throws models a hardware entropy failure.
+        void ThrowingRng(Span<byte> destination) => throw new InvalidOperationException("entropy backend failed");
+
+        var simulator = new TpmSimulator("tpm-rng-throws", TpmSelfTestBehavior.Passes, ThrowingRng);
+        await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, await SubmitForCodeAsync(simulator, new StartupInput(TpmSuConstants.TPM_SU_CLEAR)).ConfigureAwait(false));
+
+        //The faulted draw surfaces as an exception rather than silently corrupting state.
+        bool threw = false;
+        try
+        {
+            _ = await SubmitForCodeAsync(simulator, new GetRandomInput(16)).ConfigureAwait(false);
+        }
+        catch(InvalidOperationException)
+        {
+            threw = true;
+        }
+
+        Assert.IsTrue(threw, "A throwing RNG backend must surface, not be swallowed.");
+
+        //The next command must return ITS OWN response, not a stale random response left by the aborted
+        //draw's pending action.
+        TpmRcConstants testResult = await SubmitForTestResultBodyAsync(simulator).ConfigureAwait(false);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, testResult);
+        Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase);
+    }
+
+    private static TpmResponseRegistry CreateRandomRegistry() =>
+        new TpmResponseRegistry().Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
     private async Task<TpmSimulator> CreateOperationalAsync(TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes)
     {

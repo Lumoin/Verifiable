@@ -149,7 +149,16 @@ public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
         ArgumentNullException.ThrowIfNull(pool);
 
         IMemoryOwner<byte> owner = pool.Rent(byteLength);
-        fillEntropy(owner.Memory.Span);
+        try
+        {
+            fillEntropy(owner.Memory.Span);
+        }
+        catch
+        {
+            //A throwing entropy source (e.g. a TPM/HSM fill that fails) must not leak the rented buffer.
+            owner.Dispose();
+            throw;
+        }
 
         return new Nonce(owner, tag, lifetime);
     }
