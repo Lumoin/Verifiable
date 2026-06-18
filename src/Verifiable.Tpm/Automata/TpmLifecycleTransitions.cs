@@ -1,6 +1,10 @@
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using Verifiable.Foundation.Automata;
+using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Infrastructure.Spec.Structures;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Automata;
@@ -89,6 +93,7 @@ public static class TpmLifecycleTransitions
             TpmSelfTestRequested => OnSelfTest(state),
             TpmTestResultRequested => OnTestResult(state),
             TpmGetRandomRequested getRandom => OnGetRandom(state, getRandom.BytesRequested),
+            TpmGetCapabilityRequested getCapability => OnGetCapability(state, getCapability.Capability, getCapability.Property, getCapability.PropertyCount),
             _ => throw new System.InvalidOperationException($"Command input '{input.GetType().Name}' passed precondition gating but has no dispatch handler.")
         };
     }
@@ -200,6 +205,82 @@ public static class TpmLifecycleTransitions
             },
             "GetRandom:Completed");
 
+    //Sim-side fixed device-identity property values; the lockout/DA variable properties are read from
+    //the live state instead.
+    private const uint SimFamilyIndicator = 0x322E_3000;  //"2.0\0" packed as a UINT32.
+    private const uint SimSpecLevel = 0u;
+    private const uint SimSpecRevision = 184u;            //Mirrors the v184 spec corpus this models.
+    private const uint SimManufacturer = 0x53_49_4D_55;   //"SIMU" — the simulator's synthetic vendor id.
+
+    //TPM2_GetCapability() is a pure, state-derived response (no action layer): it reports a window of
+    //TPM_PT properties starting at the requested tag (Part 3, clause 30.2), the prerequisite for
+    //reading the dictionary-attack/lockout state the PIN flow exercises.
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the capability data transfers to the TpmCapabilityResponse intent and is disposed by TpmSimulator.SerializeResponse after the response is framed.")]
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnGetCapability(TpmSimulatorState state, TpmCapConstants capability, uint property, uint propertyCount)
+    {
+        //Only the TPM-properties capability is modelled (it carries the lockout/DA state the PIN flow
+        //reads). A conformant TPM answers a valid-but-unimplemented capability with TPM_RC_SUCCESS and
+        //an empty list (Part 3, 30.2); the simulator instead returns TPM_RC_VALUE as a deliberate
+        //"not modelled" signal until further capability arms are added.
+        if(capability != TpmCapConstants.TPM_CAP_TPM_PROPERTIES)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_GetCapability, TpmRcConstants.TPM_RC_VALUE);
+        }
+
+        //Return the supported properties whose tag is at or after the requested start, in ascending
+        //order, up to propertyCount; moreData signals that the window was truncated (Part 3, 30.2).
+        //Sort defensively so the windowing/paging contract does not silently depend on the literal
+        //order of BuildTpmProperties.
+        List<TpmsTaggedProperty> all = BuildTpmProperties(state);
+        all.Sort(static (left, right) => left.Property.CompareTo(right.Property));
+        List<TpmsTaggedProperty> selected = new();
+        bool moreData = false;
+        for(int i = 0; i < all.Count; i++)
+        {
+            TpmsTaggedProperty candidate = all[i];
+            if(candidate.Property < property)
+            {
+                continue;
+            }
+
+            if((uint)selected.Count >= propertyCount)
+            {
+                moreData = true;
+
+                break;
+            }
+
+            selected.Add(candidate);
+        }
+
+        TpmsCapabilityData data = TpmsCapabilityData.CreateTpmProperties(selected);
+
+        return Transition(
+            state with { ResponseIntent = new TpmCapabilityResponse(TpmRcConstants.TPM_RC_SUCCESS, data, moreData ? TpmiYesNo.Yes : TpmiYesNo.No) },
+            "GetCapability");
+    }
+
+    //The TPM_PT properties the simulator reports, in ascending tag order: fixed device identity
+    //(constants) followed by the variable lockout/DA properties read from the live state (Part 1, 17.8).
+    private static List<TpmsTaggedProperty> BuildTpmProperties(TpmSimulatorState state)
+    {
+        uint permanent = state.IsInLockout ? (uint)TpmaPermanent.IN_LOCKOUT : 0u;
+
+        return new List<TpmsTaggedProperty>
+        {
+            new(TpmPtConstants.TPM_PT_FAMILY_INDICATOR, SimFamilyIndicator),
+            new(TpmPtConstants.TPM_PT_LEVEL, SimSpecLevel),
+            new(TpmPtConstants.TPM_PT_REVISION, SimSpecRevision),
+            new(TpmPtConstants.TPM_PT_MANUFACTURER, SimManufacturer),
+            new(TpmPtConstants.TPM_PT_PERMANENT, permanent),
+            new(TpmPtConstants.TPM_PT_LOCKOUT_COUNTER, state.FailedTries),
+            new(TpmPtConstants.TPM_PT_MAX_AUTH_FAIL, state.MaxTries),
+            new(TpmPtConstants.TPM_PT_LOCKOUT_INTERVAL, state.RecoveryTime),
+            new(TpmPtConstants.TPM_PT_LOCKOUT_RECOVERY, state.LockoutRecovery)
+        };
+    }
+
     private static TpmCcConstants CommandCodeOf(TpmSimulatorInput input) =>
         input switch
         {
@@ -208,6 +289,7 @@ public static class TpmLifecycleTransitions
             TpmSelfTestRequested => TpmCcConstants.TPM_CC_SelfTest,
             TpmTestResultRequested => TpmCcConstants.TPM_CC_GetTestResult,
             TpmGetRandomRequested => TpmCcConstants.TPM_CC_GetRandom,
+            TpmGetCapabilityRequested => TpmCcConstants.TPM_CC_GetCapability,
             TpmUnsupportedCommandReceived unsupported => unsupported.CommandCode,
             _ => throw new System.InvalidOperationException($"Input '{input.GetType().Name}' is not a command and must not reach command dispatch.")
         };

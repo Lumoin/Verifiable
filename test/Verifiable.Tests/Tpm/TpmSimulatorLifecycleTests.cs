@@ -1,14 +1,17 @@
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
+using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
+using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
@@ -461,8 +464,159 @@ internal sealed class TpmSimulatorLifecycleTests
         Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase);
     }
 
+    [TestMethod]
+    public async Task GetDictionaryAttackParametersReadsSimulatorDefaults()
+    {
+        //The headline V.5a path: the client-side DA-parameters carrier reads the simulator's lockout
+        //state end-to-end via TPM2_GetCapability(TPM_PROPERTIES), with no real hardware.
+        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+
+        TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result}'.");
+        TpmDictionaryAttackParameters parameters = result.Value;
+        Assert.AreEqual(0u, parameters.LockoutCounter);
+        Assert.AreEqual(TpmSimulatorState.DefaultMaxTries, parameters.MaxAuthFail);
+        Assert.AreEqual(TimeSpan.FromSeconds(TpmSimulatorState.DefaultRecoveryTimeSeconds), parameters.LockoutInterval);
+        Assert.AreEqual(TimeSpan.FromSeconds(TpmSimulatorState.DefaultLockoutRecoverySeconds), parameters.LockoutRecovery);
+        Assert.IsFalse(parameters.IsLockedOut);
+    }
+
+    [TestMethod]
+    public async Task GetCapabilityAllowedInFailureMode()
+    {
+        TpmSimulator simulator = await CreateOperationalAsync(TpmSelfTestBehavior.Fails).ConfigureAwait(false);
+        _ = await SubmitForCodeAsync(simulator, new SelfTestInput(IsFullTest: false)).ConfigureAwait(false);
+        Assert.AreEqual(TpmLifecyclePhase.FailureMode, simulator.CurrentPhase);
+
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmResponseRegistry registry = CreateCapabilityRegistry();
+
+        //Clause 10.4: Failure Mode admits TPM2_GetTestResult() and TPM2_GetCapability().
+        TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+            device, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_LOCKOUT_COUNTER), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"GetCapability must be permitted in Failure Mode; got '{result}'.");
+        result.Value.Dispose();
+    }
+
+    [TestMethod]
+    public async Task GetCapabilityBeforeStartupReturnsInitialize()
+    {
+        var simulator = new TpmSimulator("tpm-getcap-init");
+        await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_LOCKOUT_COUNTER)).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_INITIALIZE, responseCode);
+    }
+
+    [TestMethod]
+    public async Task GetCapabilityForUnsupportedCapabilityReturnsValue()
+    {
+        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+
+        //Only TPM_CAP_TPM_PROPERTIES is modelled this slice; another capability category is rejected.
+        TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, GetCapabilityInput.ForAlgorithms()).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, responseCode);
+    }
+
+    [TestMethod]
+    public async Task GetCapabilityPagesWhenWindowTruncated()
+    {
+        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmResponseRegistry registry = CreateCapabilityRegistry();
+
+        //Requesting fewer than the available lockout properties truncates the window and sets moreData.
+        TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+            device, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_LOCKOUT_COUNTER, count: 2), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result}'.");
+        using GetCapabilityResponse response = result.Value;
+        Assert.IsTrue(response.MoreData.IsYes, "A truncated property window must set moreData.");
+        var properties = response.CapabilityData.TpmProperties;
+        Assert.IsNotNull(properties);
+        Assert.HasCount(2, properties);
+    }
+
+    [TestMethod]
+    public async Task GetCapabilityPagingGathersEveryPropertyExactlyOnce()
+    {
+        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmResponseRegistry registry = CreateCapabilityRegistry();
+
+        //Page the full property set in windows of two, following moreData exactly as the DA carrier
+        //does, and assert the rounds cover every reported property once, strictly ascending — the
+        //paging-convergence contract the windowing relies on.
+        var collected = new List<uint>();
+        uint property = TpmPtConstants.TPM_PT_FAMILY_INDICATOR;
+        bool more = true;
+        while(more)
+        {
+            TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+                device, GetCapabilityInput.ForTpmProperties(property, count: 2), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result}'.");
+            using GetCapabilityResponse response = result.Value;
+            var properties = response.CapabilityData.TpmProperties;
+            Assert.IsNotNull(properties);
+            if(properties.Count == 0)
+            {
+                break;
+            }
+
+            foreach(var tagged in properties)
+            {
+                collected.Add(tagged.Property);
+                property = tagged.Property + 1;
+            }
+
+            more = response.MoreData.IsYes;
+        }
+
+        Assert.HasCount(9, collected);
+        for(int i = 1; i < collected.Count; i++)
+        {
+            Assert.IsGreaterThan(collected[i - 1], collected[i], "Paged properties must be strictly ascending across rounds.");
+        }
+    }
+
+    [TestMethod]
+    public async Task GetCapabilityReportsNotInLockoutByDefault()
+    {
+        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmResponseRegistry registry = CreateCapabilityRegistry();
+
+        //TPM_PT_PERMANENT carries the IN_LOCKOUT bit; a freshly-started TPM is not in lockout, so the
+        //bit is clear. Driving it SET requires authorization failures, which arrive with V.5b.
+        TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
+            device, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_PERMANENT, count: 1), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result}'.");
+        using GetCapabilityResponse response = result.Value;
+        var properties = response.CapabilityData.TpmProperties;
+        Assert.IsNotNull(properties);
+        Assert.HasCount(1, properties);
+        Assert.AreEqual(TpmPtConstants.TPM_PT_PERMANENT, properties[0].Property);
+        var permanent = (TpmaPermanent)properties[0].Value;
+        Assert.IsFalse(permanent.HasFlag(TpmaPermanent.IN_LOCKOUT), "A freshly-started TPM must not report IN_LOCKOUT.");
+    }
+
     private static TpmResponseRegistry CreateRandomRegistry() =>
         new TpmResponseRegistry().Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
+
+    private static TpmResponseRegistry CreateCapabilityRegistry() =>
+        new TpmResponseRegistry().Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);
 
     private async Task<TpmSimulator> CreateOperationalAsync(TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes)
     {

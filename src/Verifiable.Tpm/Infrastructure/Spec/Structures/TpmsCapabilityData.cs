@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
@@ -106,6 +107,67 @@ public sealed class TpmsCapabilityData: IDisposable
     {
         EccCurves = eccCurves;
     }
+
+    /// <summary>
+    /// Creates capability data for the <c>TPM_CAP_TPM_PROPERTIES</c> arm from a list of tagged
+    /// properties. This is the server-side counterpart to <see cref="Parse"/>, used when producing a
+    /// <c>TPM2_GetCapability()</c> response.
+    /// </summary>
+    /// <param name="properties">The tagged properties, in ascending property order.</param>
+    /// <returns>The capability data.</returns>
+    public static TpmsCapabilityData CreateTpmProperties(IReadOnlyList<TpmsTaggedProperty> properties)
+    {
+        ArgumentNullException.ThrowIfNull(properties);
+
+        return new TpmsCapabilityData(TpmCapConstants.TPM_CAP_TPM_PROPERTIES, properties);
+    }
+
+    /// <summary>
+    /// Writes this capability data to a TPM writer (capability selector followed by the union arm).
+    /// Only the <c>TPM_CAP_TPM_PROPERTIES</c> arm is supported; other arms are written as they are
+    /// modelled.
+    /// </summary>
+    /// <param name="writer">The writer.</param>
+    /// <exception cref="NotSupportedException">Thrown for an arm without write support.</exception>
+    public void WriteTo(ref TpmWriter writer)
+    {
+        writer.WriteUInt32((uint)Capability);
+
+        switch(Capability)
+        {
+            case TpmCapConstants.TPM_CAP_TPM_PROPERTIES:
+            {
+                IReadOnlyList<TpmsTaggedProperty> properties = TpmProperties ?? Array.Empty<TpmsTaggedProperty>();
+                writer.WriteUInt32((uint)properties.Count);
+                for(int i = 0; i < properties.Count; i++)
+                {
+                    writer.WriteUInt32(properties[i].Property);
+                    writer.WriteUInt32(properties[i].Value);
+                }
+
+                break;
+            }
+            default:
+            {
+                throw new NotSupportedException($"Writing TPMS_CAPABILITY_DATA for capability '{Capability}' is not supported.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the serialized size in octets of this capability data (capability selector plus the union
+    /// arm), for sizing a response buffer before framing.
+    /// </summary>
+    /// <returns>The serialized size in octets.</returns>
+    /// <exception cref="NotSupportedException">Thrown for an arm without write support.</exception>
+    [SuppressMessage("Design", "CA1024:Use properties where appropriate",
+        Justification = "Mirrors the WriteTo serialization and throws NotSupportedException for unmodelled arms, so a method rather than a property is appropriate.")]
+    public int GetSerializedSize() => Capability switch
+    {
+        TpmCapConstants.TPM_CAP_TPM_PROPERTIES =>
+            sizeof(uint) + sizeof(uint) + ((TpmProperties?.Count ?? 0) * (sizeof(uint) + sizeof(uint))),
+        _ => throw new NotSupportedException($"Serialized size for capability '{Capability}' is not supported.")
+    };
 
     /// <summary>
     /// Parses capability data from a TPM reader.

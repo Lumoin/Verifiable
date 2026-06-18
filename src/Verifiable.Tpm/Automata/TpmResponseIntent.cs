@@ -1,4 +1,5 @@
 using System.Buffers;
+using Verifiable.Tpm.Infrastructure.Spec.Structures;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Automata;
@@ -48,3 +49,16 @@ public sealed record TpmTestResultResponse(TpmRcConstants ResponseCode, TpmRcCon
 /// <param name="RandomBytes">The pooled buffer holding the produced octets; disposed after framing.</param>
 /// <param name="Length">The number of valid octets in <paramref name="RandomBytes"/>.</param>
 public sealed record TpmRandomResponse(TpmRcConstants ResponseCode, IMemoryOwner<byte> RandomBytes, int Length): TpmResponseIntent(ResponseCode);
+
+/// <summary>
+/// The successful response to <c>TPM2_GetCapability()</c>: a <c>moreData</c> flag followed by the
+/// capability data (TPM 2.0 Library Part 3, clause 30.2).
+/// </summary>
+/// <remarks>
+/// <see cref="CapabilityData"/> is disposable (some union arms own pooled memory); <see cref="TpmSimulator"/>
+/// disposes it after framing, as the terminal owner.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="CapabilityData">The capability-data union arm to return.</param>
+/// <param name="MoreData">Whether more properties are available beyond those returned.</param>
+public sealed record TpmCapabilityResponse(TpmRcConstants ResponseCode, TpmsCapabilityData CapabilityData, TpmiYesNo MoreData): TpmResponseIntent(ResponseCode);

@@ -8,6 +8,7 @@ using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Infrastructure.Spec.Structures;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Automata;
@@ -301,6 +302,24 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 break;
             }
+            case TpmCcConstants.TPM_CC_GetCapability:
+            {
+                //capability (UINT32) + property (UINT32) + propertyCount (UINT32) (Part 3, 30.2). A
+                //parameter area too short to unmarshal these is a shortfall (TPM_RC_INSUFFICIENT).
+                if(reader.Remaining < 3 * sizeof(uint))
+                {
+                    malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+                    return false;
+                }
+
+                var capability = (TpmCapConstants)reader.ReadUInt32();
+                uint property = reader.ReadUInt32();
+                uint propertyCount = reader.ReadUInt32();
+                input = new TpmGetCapabilityRequested(capability, property, propertyCount);
+
+                break;
+            }
             default:
             {
                 input = new TpmUnsupportedCommandReceived(commandCode);
@@ -332,12 +351,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //executor; release it in the finally regardless of how framing completes (its octets are
         //copied into the framed TPM2B_DIGEST on the success path).
         IMemoryOwner<byte>? randomBuffer = (intent as TpmRandomResponse)?.RandomBytes;
+        TpmsCapabilityData? capabilityData = (intent as TpmCapabilityResponse)?.CapabilityData;
         try
         {
             int parameterSize = intent switch
             {
                 TpmTestResultResponse { ResponseCode: TpmRcConstants.TPM_RC_SUCCESS } => sizeof(ushort) + sizeof(uint),
                 TpmRandomResponse random => sizeof(ushort) + random.Length,
+                TpmCapabilityResponse capabilityResponse => sizeof(byte) + capabilityResponse.CapabilityData.GetSerializedSize(),
                 _ => 0
             };
             int total = TpmHeader.HeaderSize + parameterSize;
@@ -364,6 +385,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                         break;
                     }
+                    case TpmCapabilityResponse capabilityResponse:
+                    {
+                        capabilityResponse.MoreData.WriteTo(ref writer);
+                        capabilityResponse.CapabilityData.WriteTo(ref writer);
+
+                        break;
+                    }
                     default:
                     {
                         break;
@@ -381,6 +409,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         finally
         {
             randomBuffer?.Dispose();
+            capabilityData?.Dispose();
         }
     }
 }

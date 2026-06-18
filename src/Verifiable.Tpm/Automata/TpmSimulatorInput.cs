@@ -59,6 +59,15 @@ public sealed record TpmTestResultRequested: TpmSimulatorInput;
 public sealed record TpmGetRandomRequested(ushort BytesRequested): TpmSimulatorInput;
 
 /// <summary>
+/// A <c>TPM2_GetCapability()</c> command (TPM 2.0 Library Part 3, clause 30.2). Permitted while
+/// operational and in <see cref="TpmLifecyclePhase.FailureMode"/> (Part 1, clause 10.4).
+/// </summary>
+/// <param name="Capability">The capability category to query.</param>
+/// <param name="Property">The first property (tag) to return.</param>
+/// <param name="PropertyCount">The maximum number of properties to return.</param>
+public sealed record TpmGetCapabilityRequested(TpmCapConstants Capability, uint Property, uint PropertyCount): TpmSimulatorInput;
+
+/// <summary>
 /// The result of executing a <see cref="TpmRngAction"/>: the random octets produced by the RNG
 /// backend, fed back into the automaton by the effectful loop so the transition can frame the
 /// <c>TPM2_GetRandom()</c> response. This input is internal to the effect loop and never arrives from

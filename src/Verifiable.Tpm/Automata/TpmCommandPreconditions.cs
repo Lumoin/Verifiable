@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Automata;
 /// <c>TPM2_Startup()</c> answers <c>TPM_RC_INITIALIZE</c> to anything but <c>TPM2_Startup()</c>
 /// (clause 10.2.2), and a TPM in <see cref="TpmLifecyclePhase.FailureMode"/> answers
 /// <c>TPM_RC_FAILURE</c> to anything but <c>TPM2_GetTestResult()</c> and <c>TPM2_GetCapability()</c>
-/// (clause 10.4). <c>TPM2_GetCapability()</c> joins the table when it is modelled.
+/// (clause 10.4), both of which the table admits in that phase.
 /// </para>
 /// </remarks>
 public static class TpmCommandPreconditions
@@ -32,7 +32,8 @@ public static class TpmCommandPreconditions
             [TpmCcConstants.TPM_CC_Shutdown] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_SelfTest] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_GetTestResult] = new[] { TpmLifecyclePhase.Operational, TpmLifecyclePhase.FailureMode }.ToFrozenSet(),
-            [TpmCcConstants.TPM_CC_GetRandom] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet()
+            [TpmCcConstants.TPM_CC_GetRandom] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_GetCapability] = new[] { TpmLifecyclePhase.Operational, TpmLifecyclePhase.FailureMode }.ToFrozenSet()
         }.ToFrozenDictionary();
 
     /// <summary>

@@ -42,6 +42,15 @@ public readonly record struct TpmiYesNo(byte Value): ITpmWireType
     }
 
     /// <summary>
+    /// Writes this value to a TPM writer as a single byte.
+    /// </summary>
+    /// <param name="writer">The writer.</param>
+    public void WriteTo(ref TpmWriter writer)
+    {
+        writer.WriteByte(Value);
+    }
+
+    /// <summary>
     /// Implicitly converts to bool for convenient usage.
     /// </summary>
     /// <param name="value">The TPMI_YES_NO value.</param>
