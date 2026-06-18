@@ -296,6 +296,35 @@ internal sealed class VcalmMultiStepExchangeTests
 
 
     /// <summary>
+    /// §3.6 multi-tenant issuance-in-exchange: TWO tenants run the present-then-issue workflow on ONE
+    /// host, each minting its credential under its OWN issuer key (resolved per tenant). The two minted
+    /// verification methods differ — no tenant's exchange mints under another tenant's identity. This is
+    /// the full §3.6 PDA flow proof that complements the resolution-level
+    /// <c>ExchangeIssuanceResolvesPerTenantWithIssuerFallback</c> test.
+    /// </summary>
+    [TestMethod]
+    public async Task IssueStepMintsUnderEachTenantsOwnIssuerKey()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        IssuerSigningContext issuerA = await CreateFreshIssuerSigningContextAsync().ConfigureAwait(false);
+        IssuerSigningContext issuerB = await CreateFreshIssuerSigningContextAsync().ConfigureAwait(false);
+
+        (string segmentA, string segmentB) = RegisterTwoTenantExchange(app, holder, issuerA, issuerB);
+
+        string mintedVmA = await RunIssueExchangeAndGetMintedVmAsync(app, segmentA, holder).ConfigureAwait(false);
+        string mintedVmB = await RunIssueExchangeAndGetMintedVmAsync(app, segmentB, holder).ConfigureAwait(false);
+
+        Assert.AreEqual(issuerA.Descriptor.VerificationMethodId, mintedVmA,
+            "Tenant A's exchange mints the credential under tenant A's issuer key.");
+        Assert.AreEqual(issuerB.Descriptor.VerificationMethodId, mintedVmB,
+            "Tenant B's exchange mints the credential under tenant B's issuer key.");
+        Assert.AreNotEqual(mintedVmA, mintedVmB,
+            "The two tenants' exchanges mint under distinct per-tenant issuer keys.");
+    }
+
+
+    /// <summary>
     /// §3.6 offered-completion non-leak: the vcapi reply that offers a minted credential back to the
     /// client carries ONLY the artifact (<c>verifiablePresentation</c>) plus the optional
     /// <c>referenceId</c> — it MUST NOT leak internal state: the accumulated <c>variables.results</c>,
@@ -841,6 +870,139 @@ internal sealed class VcalmMultiStepExchangeTests
 
         return new IssuerSigningContext(descriptor, issuerDid);
     }
+
+
+    //A FRESH, distinct issuer signing context (its own Ed25519 key + did:key) — the precondition for a
+    //multi-tenant test where each tenant must mint under a different key (CreateIssuerSigningContextAsync
+    //uses the fixed test vector, which would collapse two tenants onto one issuer).
+    private async Task<IssuerSigningContext> CreateFreshIssuerSigningContextAsync()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
+            TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
+
+        DidDocument issuerDidDocument = await KeyDidBuilder.BuildAsync(
+            keyPair.PublicKey,
+            MultikeyVerificationMethodTypeInfo.Instance,
+            includeDefaultContext: false,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        string verificationMethodId = issuerDidDocument.VerificationMethod![0].Id!;
+        string issuerDid = issuerDidDocument.Id!.ToString();
+
+        keyPair.PublicKey.Dispose();
+        OwnedKeys.Add(keyPair.PrivateKey);
+
+        VcalmProofDescriptor descriptor = new()
+        {
+            PrivateKey = keyPair.PrivateKey,
+            VerificationMethodId = verificationMethodId,
+            Cryptosuite = EddsaJcs2022CryptosuiteInfo.Instance,
+            Canonicalize = JcsCanonicalizer,
+            ContextResolver = null,
+            EncodeProofValue = ProofValueCodecs.EncodeBase58Btc,
+            SerializeCredential = SerializeCredential,
+            DeserializeCredential = DeserializeCredential,
+            SerializeProofOptions = SerializeProofOptions,
+            Encoder = TestSetup.Base58Encoder,
+            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync
+        };
+
+        return new IssuerSigningContext(descriptor, issuerDid);
+    }
+
+
+    //Registers two exchange tenants on one host, each with its own issuer and its own present-then-issue
+    //workflow (whose template names that tenant's issuer). The exchange issuance and the workflow resolve
+    //per tenant off the dispatcher-stamped context.TenantId; the exchange-flow-id resolution and the
+    //identity-based present verification are shared. The holder presents client-side to both tenants.
+    private (string SegmentA, string SegmentB) RegisterTwoTenantExchange(
+        TestHostShell app, HolderSigningContext holder, IssuerSigningContext issuerA, IssuerSigningContext issuerB)
+    {
+        VerifierKeyMaterial materialA = app.RegisterClient(
+            "https://multistep-a.client.test", new Uri("https://multistep-a.client.test"), Capabilities);
+        RegisteredMaterials.Add(materialA);
+        VerifierKeyMaterial materialB = app.RegisterClient(
+            "https://multistep-b.client.test", new Uri("https://multistep-b.client.test"), Capabilities);
+        RegisteredMaterials.Add(materialB);
+
+        string segmentA = materialA.Registration.TenantId.Value;
+        string segmentB = materialB.Registration.TenantId.Value;
+
+        VcalmIntegration vcalm = app.Server.Vcalm();
+        vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+
+        Dictionary<string, VcalmCredentialIssuance> issuanceBySegment = new(StringComparer.Ordinal)
+        {
+            [segmentA] = new VcalmCredentialIssuance
+            {
+                ConfiguredIssuer = issuerA.IssuerDid, SigningDescriptors = [issuerA.Descriptor], MemoryPool = Pool
+            },
+            [segmentB] = new VcalmCredentialIssuance
+            {
+                ConfiguredIssuer = issuerB.IssuerDid, SigningDescriptors = [issuerB.Descriptor], MemoryPool = Pool
+            }
+        };
+        Dictionary<string, VcalmWorkflowConfiguration> workflowBySegment = new(StringComparer.Ordinal)
+        {
+            [segmentA] = PresentThenIssueWorkflow(issuerA.IssuerDid),
+            [segmentB] = PresentThenIssueWorkflow(issuerB.IssuerDid)
+        };
+
+        vcalm.ResolveVcalmExchangeIssuanceAsync = (context, _) =>
+            ValueTask.FromResult(issuanceBySegment.GetValueOrDefault(Seg(context)));
+        vcalm.ResolveVcalmWorkflowForExchangeAsync = (exchangeId, context, _) =>
+            ValueTask.FromResult(workflowBySegment.GetValueOrDefault(Seg(context)));
+
+        vcalm.ResolveVcalmExchangeFlowIdAsync = (exchangeId, _, _) =>
+            ValueTask.FromResult(ResolveExchangeFlowId(app, exchangeId));
+
+        vcalm.VcalmExchangeVerification = new VcalmCredentialVerification
+        {
+            Resolver = KeyDidResolverSeam,
+            Canonicalize = JcsCanonicalizer,
+            ContextResolver = null,
+            DecodeProofValue = ProofValueCodecs.DecodeBase58Btc,
+            SerializeCredential = SerializeCredential,
+            SerializePresentation = SerializePresentation,
+            SerializeProofOptions = SerializeProofOptions,
+            Decoder = TestSetup.Base58Decoder,
+            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MemoryPool = Pool
+        };
+
+        return (segmentA, segmentB);
+    }
+
+
+    //Runs one tenant's present-then-issue exchange end to end (create -> initiate -> present -> the
+    //engine advances to the issue step and offers the minted credential back) and returns the minted
+    //credential's proof verification method — the cryptographic witness of WHICH tenant's key signed it.
+    private async Task<string> RunIssueExchangeAndGetMintedVmAsync(TestHostShell app, string segment, HolderSigningContext holder)
+    {
+        string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
+        (string challenge, string domain) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
+        string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
+
+        ServerHttpResponse offered = await app.DispatchVcalmExchangeByIdAsync(
+            segment, "POST", exchangeId, present, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, offered.StatusCode, offered.Body);
+        using JsonDocument offeredDoc = JsonDocument.Parse(offered.Body);
+        JsonElement vp = offeredDoc.RootElement.GetProperty(VcalmParameterNames.VerifiablePresentation);
+        JsonElement issuedCredential = vp.GetProperty("verifiableCredential")[0];
+        JsonElement proof = issuedCredential.GetProperty("proof");
+        JsonElement firstProof = proof.ValueKind == JsonValueKind.Array ? proof[0] : proof;
+
+        return firstProof.GetProperty("verificationMethod").GetString()!;
+    }
+
+
+    //The dispatcher-stamped tenant segment on the request context — the key the per-tenant exchange
+    //issuance and workflow resolvers scope themselves by.
+    private static string Seg(ExchangeContext context) =>
+        context.TenantId is { } tenant
+            ? tenant.Value
+            : throw new InvalidOperationException("The dispatcher did not stamp a tenant on the request context.");
 
 
     //--- Helpers -----------------------------------------------------------------------------------

@@ -70,6 +70,7 @@
       CA1000: Static members on generic types. Standard C# practice, no usability issue.
       CA1002: Don't expose List<T>. Library types are sealed; List<T> ergonomics preferred.
       CA1031: Catch general exception. Used in debugger display code where any failure must be swallowed.
+      CA1508: Avoid dead conditional code. The dataflow analysis false-positives on fail-closed length, null and header guards in cryptographic and wire-parsing code; those defensive guards are kept by design rather than removed to satisfy the analyzer.
       CA1711: Names ending in 'Delegate'. Applied to actual delegate declarations where the suffix is correct.
       CA1716: Identifier contains type name. The library name, namespace and typename are as designed.
       CA1720: Identifier contains type name. The library name, namespace and typename are as designed.
@@ -78,7 +79,7 @@
       CA2225: Named alternatives for operators. Only consumed from C# and F#, both support operators natively.
       CA2227: Read-only collection properties. POCOs require settable properties for deserialization.
     -->
-    <NoWarn>$(NoWarn);CA1000;CA1002;CA1031;CA1711;CA1716;CA1720;CA1724;CA1819;CA2225;CA2227</NoWarn>
+    <NoWarn>$(NoWarn);CA1000;CA1002;CA1031;CA1508;CA1711;CA1716;CA1720;CA1724;CA1819;CA2225;CA2227</NoWarn>
   </PropertyGroup>
 
   <!-- Common nuget package parameters and resources. -->
@@ -90,6 +91,7 @@
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Copyright>Lumoin</Copyright>
     <PackageIcon>resources/verifiable-nuget-logo.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageProjectUrl>https://github.com/lumoin/Verifiable/</PackageProjectUrl>
     <Company>Lumoin</Company>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -128,6 +130,16 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
     <None Include="../../resources/verifiable-nuget-logo.png">
       <Pack>True</Pack>
       <PackagePath>/resources</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <!-- Pack the repository README into library packages. The Verifiable CLI packs its own README. -->
+  <ItemGroup Condition="!$(MSBuildProjectName.EndsWith('Tests'))
+                    AND !$(MSBuildProjectName.EndsWith('.Benchmarks'))
+                    AND $(MSBuildProjectName) != 'Verifiable'">
+    <None Include="$(MSBuildThisFileDirectory)README.md">
+      <Pack>True</Pack>
+      <PackagePath>/</PackagePath>
     </None>
   </ItemGroup>
 

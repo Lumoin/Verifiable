@@ -42,6 +42,11 @@ internal static class McpToolNames
     public const string ViewDid = "ViewDid";
 
     /// <summary>
+    /// Emits a CycloneDX cryptographic bill of materials (CBOM).
+    /// </summary>
+    public const string EmitCbom = "EmitCbom";
+
+    /// <summary>
     /// All available tool names.
     /// </summary>
     public static readonly string[] All =
@@ -52,6 +57,7 @@ internal static class McpToolNames
         CreateDid,
         RevokeDid,
         ListDids,
-        ViewDid
+        ViewDid,
+        EmitCbom
     ];
 }

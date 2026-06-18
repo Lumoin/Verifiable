@@ -3,7 +3,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
 using System.CommandLine;
+using System.IO;
 using System.Threading.Tasks;
+using Verifiable.Core;
 
 namespace Verifiable;
 
@@ -48,6 +50,10 @@ internal static class Program
 
     private static async Task<int> RunCliAsync(string[] args)
     {
+        //Wire the cryptographic provider once for every provider-dependent command.
+        //This is the reusable seam future did/vc commands also build on.
+        CryptoProviderStartup.EnsureRegistered();
+
         RootCommand rootCommand = new("A command line tool for security elements, DIDs and VCs");
 
         //Global option for disabling colors.
@@ -245,6 +251,51 @@ internal static class Program
                 TcgEventLogFormatter.WriteFull(log, reveal, pcrFilter, chronological);
             }
 
+            return 0;
+        });
+
+        //CBOM command: emit a CycloneDX 1.6 Cryptographic Bill of Materials.
+        Option<bool> declarativeOption = new("--declarative")
+        {
+            Description = "Emit the declarative (capabilities) CBOM from the registry. This is the default."
+        };
+        Option<bool> observeOption = new("--observe")
+        {
+            Description = "Run a real crypto workload through the wired provider and emit the observed (runtime) CBOM."
+        };
+        Option<string?> cbomOutputOption = new("--output", "-o") { Description = "Write the CBOM JSON to a file." };
+
+        Command cbomCommand = new("cbom", "Emit a CycloneDX cryptographic bill of materials (CBOM).")
+        {
+            declarativeOption,
+            observeOption,
+            cbomOutputOption
+        };
+        rootCommand.Subcommands.Add(cbomCommand);
+
+        cbomCommand.SetAction(async parseResult =>
+        {
+            bool observe = parseResult.GetValue(observeOption);
+            string? outputPath = parseResult.GetValue(cbomOutputOption);
+
+            Result<string, string> result = observe
+                ? await VerifiableOperations.EmitObservedCbomAsync().ConfigureAwait(false)
+                : VerifiableOperations.EmitDeclarativeCbom();
+
+            if(!result.IsSuccess)
+            {
+                await Console.Error.WriteLineAsync(ConsoleFormatter.Error(result.Error!)).ConfigureAwait(false);
+                return 1;
+            }
+
+            if(outputPath is not null)
+            {
+                await File.WriteAllTextAsync(outputPath, result.Value).ConfigureAwait(false);
+                Console.WriteLine($"CBOM written to: {Path.GetFullPath(outputPath)}");
+                return 0;
+            }
+
+            Console.WriteLine(result.Value);
             return 0;
         });
 

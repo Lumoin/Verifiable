@@ -40,6 +40,37 @@ public delegate ValueTask<VcalmCreatePresentationRequest?> ParseVcalmCreatePrese
 
 
 /// <summary>
+/// Resolves the §3.5.1 selective-disclosure derive configuration for the tenant the current request
+/// was dispatched to, so a single host serves many holder tenants, each deriving under its own keys.
+/// The dispatcher stamps the resolved tenant on <paramref name="context"/> (<c>context.TenantId</c>);
+/// the application keys its per-tenant holder configuration off it. When wired, this seam SUPERSEDES
+/// the single, server-global <see cref="VcalmIntegration.VcalmCredentialDerivation"/> for the §3.5.1
+/// endpoint; a single-tenant holder wires the flat value and leaves this null.
+/// </summary>
+/// <param name="context">The per-request context bag, carrying the resolved tenant identity.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The tenant's derive configuration, or <see langword="null"/> when the tenant has none.</returns>
+public delegate ValueTask<VcalmCredentialDerivation?> ResolveVcalmCredentialDerivationDelegate(
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Resolves the §3.5.2 presentation-signing configuration for the tenant the current request was
+/// dispatched to, so a single host serves many holder tenants, each signing presentations under its
+/// own key. When wired, this seam SUPERSEDES the single, server-global
+/// <see cref="VcalmIntegration.VcalmPresentationSigning"/> for the §3.5.2 endpoint; a single-tenant
+/// holder wires the flat value and leaves this null.
+/// </summary>
+/// <param name="context">The per-request context bag, carrying the resolved tenant identity.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The tenant's presentation-signing configuration, or <see langword="null"/> when none.</returns>
+public delegate ValueTask<VcalmPresentationSigning?> ResolveVcalmPresentationSigningDelegate(
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
 /// Persists a presentation the VCALM 1.0 §3.5.2 <c>POST /presentations</c> endpoint secured, keyed by
 /// its id, so the §3.5.3 <c>GET /presentations</c>, §3.5.4 <c>GET /presentations/{id}</c>, and §3.5.5
 /// <c>DELETE /presentations/{id}</c> interfaces can list, retrieve, and delete it. The application

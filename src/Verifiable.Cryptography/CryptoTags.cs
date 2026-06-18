@@ -730,4 +730,55 @@ public static class CryptoTags
         (typeof(HashAlgorithmName), HashAlgorithmName.SHA512),
         (typeof(Purpose), Purpose.Hmac),
         (typeof(EncodingScheme), EncodingScheme.Raw));
+
+
+    /// <summary>
+    /// The curated set of every <see cref="Tag"/> declared on <see cref="CryptoTags"/>,
+    /// in declaration order. This is the declarative source for a Cryptographic Bill of
+    /// Materials (CBOM): it enumerates the cryptographic assets the library can describe,
+    /// independent of which backend provider happens to be wired at runtime.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The list is hand-maintained rather than reflected so the surface stays
+    /// browser/AOT/trim-clean: enumerating static properties via reflection would
+    /// defeat the trimmer and pull metadata into AOT images. When a new convenience
+    /// tag is added above, add it here too.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<Tag> AllTags { get; } =
+    [
+        P256PublicKey, P256PrivateKey, P256Signature, P256ExchangePublicKey, P256ExchangePrivateKey,
+        P384PublicKey, P384PrivateKey, P384Signature, P384ExchangePublicKey, P384ExchangePrivateKey,
+        P521PublicKey, P521PrivateKey, P521Signature, P521ExchangePublicKey, P521ExchangePrivateKey,
+        Secp256k1PublicKey, Secp256k1PrivateKey, Secp256k1Signature,
+        Rsa2048PublicKey, Rsa2048PrivateKey, Rsa2048Signature,
+        Rsa4096PublicKey, Rsa4096PrivateKey, Rsa4096Signature,
+        RsaSha256Pkcs1Signature, RsaSha256PssSignature,
+        RsaSha384Pkcs1Signature, RsaSha384PssSignature,
+        RsaSha512Pkcs1Signature, RsaSha512PssSignature,
+        Ed25519PublicKey, Ed25519PrivateKey, Ed25519Signature,
+        X25519PublicKey, X25519PrivateKey,
+        WindowsPlatformEncrypted,
+        MlDsa44PublicKey, MlDsa44PrivateKey, MlDsa44Signature,
+        MlDsa65PublicKey, MlDsa65PrivateKey, MlDsa65Signature,
+        MlDsa87PublicKey, MlDsa87PrivateKey, MlDsa87Signature,
+        MlKem512PublicKey, MlKem512PrivateKey,
+        MlKem768PublicKey, MlKem768PrivateKey,
+        MlKem1024PublicKey, MlKem1024PrivateKey,
+        AesGcmIv, AesGcmCiphertext, AesGcmAuthTag, AesGcmAad, AesGcmDecryptedContent, AesGcmCek,
+        BrainpoolP256r1PublicKey, BrainpoolP256r1PrivateKey, BrainpoolP256r1Signature,
+        BrainpoolP320r1PublicKey, BrainpoolP320r1PrivateKey, BrainpoolP320r1Signature,
+        BrainpoolP384r1PublicKey, BrainpoolP384r1PrivateKey, BrainpoolP384r1Signature,
+        BrainpoolP512r1PublicKey, BrainpoolP512r1PrivateKey, BrainpoolP512r1Signature,
+        BrainpoolP256r1ExchangePublicKey, BrainpoolP256r1ExchangePrivateKey,
+        BrainpoolP320r1ExchangePublicKey, BrainpoolP320r1ExchangePrivateKey,
+        BrainpoolP384r1ExchangePublicKey, BrainpoolP384r1ExchangePrivateKey,
+        BrainpoolP512r1ExchangePublicKey, BrainpoolP512r1ExchangePrivateKey,
+        MdocIssuerSignedItemRandom, WireDecodedDisclosureSalt,
+        CoseEncodedSign1, AlgorithmAgnosticSignature, CoseEncodedMac0, CoseEncodedProtectedHeader,
+        Sha256Digest, Sha384Digest, Sha512Digest,
+        HmacSha256Key, HmacSha384Key, HmacSha512Key,
+        HmacSha256Value, HmacSha384Value, HmacSha512Value
+    ];
 }

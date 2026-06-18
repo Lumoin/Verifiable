@@ -49,7 +49,8 @@ public static class VcalmIssuerEndpoints
             //and the signing configuration are both wired (fail-closed — an issuer that cannot read
             //its body or cannot secure a credential would be a dead route).
             if(server?.Vcalm().ParseVcalmIssueCredentialAsync is not null
-                && server?.Vcalm().VcalmCredentialIssuance is not null)
+                && (server?.Vcalm().VcalmCredentialIssuance is not null
+                    || server?.Vcalm().ResolveVcalmCredentialIssuanceAsync is not null))
             {
                 candidates.Add(BuildCredentialsIssue());
             }
@@ -226,7 +227,22 @@ public static class VcalmIssuerEndpoints
         CancellationToken cancellationToken)
     {
         var oauth = server.Vcalm();
-        VcalmCredentialIssuance issuance = oauth.VcalmCredentialIssuance!;
+
+        //§3.2.1 issuance configuration, resolved for the request's tenant: the per-tenant
+        //ResolveVcalmCredentialIssuanceAsync when wired, else the single server-global
+        //VcalmCredentialIssuance. A multi-tenant host secures each tenant's credentials under that
+        //tenant's own issuer identity and signing key off this one code path.
+        VcalmCredentialIssuance? issuance = await oauth
+            .ResolveEffectiveCredentialIssuanceAsync(context, cancellationToken).ConfigureAwait(false);
+        if(issuance is null)
+        {
+            //The §3.2.1 route materialized for this tenant (it has the issuer capability and a parse
+            //seam) but no signing identity resolved for it — a server misconfiguration. Fail closed:
+            //an issuer that cannot secure a credential does not emit a signed-but-wrong result.
+            return ServerHttpResponse.ServerError(
+                ServerErrors.ServerError, "No VCALM issuance configuration resolved for this tenant.");
+        }
+
         VerifiableCredential credential = request.Credential!;
 
         //§3.2.1 / §2.4: the issuer MUST NOT sign a structurally invalid credential. A Verifiable

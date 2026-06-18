@@ -200,6 +200,58 @@ internal sealed class VcalmHolderEndpointTests
 
 
     /// <summary>
+    /// §3.5.1 multi-tenant derive: TWO holder tenants on ONE host, each with its OWN per-tenant-resolved
+    /// derive configuration, derive their OWN ecdsa-sd-2023 base credential (each issued under a distinct
+    /// verification method). Each derived credential carries its own base-issuer verification method, and
+    /// the two differ — neither tenant derives or attributes the other's credential. The full §3.5.1 flow
+    /// proof complementing the resolution-level fail-closed test.
+    /// </summary>
+    [TestMethod]
+    public async Task EachTenantDerivesItsOwnCredentialUnderItsOwnResolvedConfig()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        VerifierKeyMaterial materialA = app.RegisterClient(
+            "https://derive-a.client.test", new Uri("https://derive-a.client.test"), HolderCapabilities);
+        RegisteredMaterials.Add(materialA);
+        VerifierKeyMaterial materialB = app.RegisterClient(
+            "https://derive-b.client.test", new Uri("https://derive-b.client.test"), HolderCapabilities);
+        RegisteredMaterials.Add(materialB);
+
+        string segmentA = materialA.Registration.TenantId.Value;
+        string segmentB = materialB.Registration.TenantId.Value;
+
+        //Two distinct base credentials — distinct ecdsa-sd-2023 issuers AND distinct verification methods.
+        const string VmA = "did:example:issuer-a#key-1";
+        const string VmB = "did:example:issuer-b#key-1";
+        DataIntegritySecuredCredential baseA = await CreateBaseProofedCredentialAsync(CreateSdIssuerKeys(), VmA).ConfigureAwait(false);
+        DataIntegritySecuredCredential baseB = await CreateBaseProofedCredentialAsync(CreateSdIssuerKeys(), VmB).ConfigureAwait(false);
+
+        VcalmIntegration vcalm = app.Server.Vcalm();
+        vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+
+        //Per-tenant derive configuration resolved off the dispatcher-stamped tenant.
+        Dictionary<string, VcalmCredentialDerivation> derivationBySegment = new(StringComparer.Ordinal)
+        {
+            [segmentA] = BuildDerivationConfig(),
+            [segmentB] = BuildDerivationConfig()
+        };
+        vcalm.ResolveVcalmCredentialDerivationAsync = (context, _) =>
+            ValueTask.FromResult(derivationBySegment.GetValueOrDefault(DeriveTenantSegment(context)));
+
+        using JsonDocument derivedA = await PostDeriveAsync(app, segmentA, DeriveBody(baseA), expectedStatus: 201).ConfigureAwait(false);
+        using JsonDocument derivedB = await PostDeriveAsync(app, segmentB, DeriveBody(baseB), expectedStatus: 201).ConfigureAwait(false);
+
+        Assert.AreEqual(VmA, ProofVerificationMethod(derivedA),
+            "Tenant A's derived credential carries tenant A's base-issuer verification method.");
+        Assert.AreEqual(VmB, ProofVerificationMethod(derivedB),
+            "Tenant B's derived credential carries tenant B's base-issuer verification method.");
+        Assert.AreNotEqual(ProofVerificationMethod(derivedA), ProofVerificationMethod(derivedB),
+            "Each tenant derives its own credential under its own resolved config — no cross-tenant bleed.");
+    }
+
+
+    /// <summary>
     /// §3.8 process-safety on the §3.5.1 derive path: a <c>selectivePointer</c> that is syntactically
     /// valid (RFC 6901) but does NOT resolve in the supplied credential makes the fragment selector throw
     /// (<c>ArgumentException</c> / <c>NotImplementedException</c> for an array index). That is
@@ -621,7 +673,60 @@ internal sealed class VcalmHolderEndpointTests
 
     //Issuer base-signs the standard test credential with ecdsa-sd-2023 so the holder has a derivable
     //base credential (the realistic §3.5.1 input — what the issuer delivered to the holder).
-    private async Task<DataIntegritySecuredCredential> CreateBaseProofedCredentialAsync(SdIssuerContext sd)
+    private Task<DataIntegritySecuredCredential> CreateBaseProofedCredentialAsync(SdIssuerContext sd) =>
+        CreateBaseProofedCredentialAsync(sd, SdIssuerVerificationMethodId);
+
+
+    //The ecdsa-sd-2023 derive configuration (selective-disclosure seams over the RDFC canonicalizer);
+    //it carries no signing key — derive re-discloses the base proof. A multi-tenant test wires one per
+    //tenant to exercise the per-tenant ResolveVcalmCredentialDerivationAsync resolution path.
+    private static VcalmCredentialDerivation BuildDerivationConfig() => new()
+    {
+        Canonicalize = RdfcCanonicalizer,
+        ContextResolver = ContextResolver,
+        PartitionStatements = JsonLdSelection.PartitionStatements,
+        SelectFragments = JsonLdSelection.SelectFragments,
+        ParseBaseProof = EcdsaSd2023CborSerializer.ParseBaseProof,
+        SerializeDerivedProof = EcdsaSd2023CborSerializer.SerializeDerivedProof,
+        SerializeCredential = SerializeCredential,
+        DeserializeCredential = DeserializeCredential,
+        Encoder = TestSetup.Base64UrlEncoder,
+        Decoder = TestSetup.Base64UrlDecoder,
+        MemoryPool = Pool
+    };
+
+
+    //The §3.5.1 derive request body for a base credential, disclosing the degree name (plus the
+    //mandatory /issuer and /type).
+    private static string DeriveBody(DataIntegritySecuredCredential baseCredential) =>
+        "{\"verifiableCredential\":" + SerializeCredential(baseCredential)
+            + ",\"options\":{\"selectivePointers\":[\"/credentialSubject/degree/name\"]}}";
+
+
+    //The verification method the derived credential's proof carries — for §3.5.1 derive this is the base
+    //credential's issuer verification method, threaded through the derivation.
+    private static string ProofVerificationMethod(JsonDocument derivedCredential)
+    {
+        JsonElement proof = derivedCredential.RootElement.GetProperty(VcalmParameterNames.Proof);
+        JsonElement first = proof.ValueKind == JsonValueKind.Array ? proof[0] : proof;
+
+        return first.GetProperty("verificationMethod").GetString()!;
+    }
+
+
+    //The dispatcher-stamped tenant segment on the request context — the key the per-tenant derive
+    //resolver scopes itself by.
+    private static string DeriveTenantSegment(ExchangeContext context) =>
+        context.TenantId is { } tenant
+            ? tenant.Value
+            : throw new InvalidOperationException("The dispatcher did not stamp a tenant on the request context.");
+
+
+    //Base-signs the standard test credential with an ecdsa-sd-2023 proof under the given verification
+    //method id, so a multi-tenant test can give each tenant a base credential with a DISTINCT issuer
+    //verification method (the derived proof carries it through).
+    private async Task<DataIntegritySecuredCredential> CreateBaseProofedCredentialAsync(
+        SdIssuerContext sd, string verificationMethodId)
     {
         VerifiableCredential credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(
             CredentialSecuringMaterial.UnsignedCredentialJson, JsonOptions)!;
@@ -635,7 +740,7 @@ internal sealed class VcalmHolderEndpointTests
         return await credential.CreateBaseProofAsync(
             sd.IssuerPrivateKey,
             sd.EphemeralKeyPair,
-            SdIssuerVerificationMethodId,
+            verificationMethodId,
             TimeProvider.GetUtcNow().UtcDateTime,
             mandatoryPaths,
             () => RandomNumberGenerator.GetBytes(32),

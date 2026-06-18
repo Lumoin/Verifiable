@@ -7,12 +7,15 @@ using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Security;
 using System;
 using System.Buffers;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
+using Verifiable.Cryptography.Provider;
+using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 
 namespace Verifiable.BouncyCastle;
 
@@ -57,6 +60,18 @@ public static class BouncyCastleKeyAgreementFunctions
     private const int AesGcmTagLength = 16;
     private const int AesGcmIvLength = 12;
 
+    private static readonly ProviderLibrary ProviderLib = new(
+        typeof(BouncyCastleKeyAgreementFunctions).Assembly.GetName().Name ?? "Verifiable.BouncyCastle",
+        typeof(BouncyCastleKeyAgreementFunctions).Assembly.GetName().Version?.ToString() ?? "Unknown");
+
+    //BouncyCastle is an independently versioned NuGet package — its assembly
+    //version is the most meaningful CBOM identifier.
+    private static readonly CryptoLibraryInfo CryptoLib = new(
+        "Org.BouncyCastle.Cryptography",
+        typeof(Org.BouncyCastle.Security.SecureRandom).Assembly.GetName().Version?.ToString() ?? "Unknown");
+
+    private static readonly ProviderClass ProviderCls = new(nameof(BouncyCastleKeyAgreementFunctions));
+
 
     /// <summary>
     /// Performs ECDH key agreement on the encrypt side using P-256.
@@ -85,6 +100,15 @@ public static class BouncyCastleKeyAgreementFunctions
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
         ArgumentNullException.ThrowIfNull(pool);
+
+        ProviderOperation operation = new(nameof(EcdhKeyAgreementEncryptP256Async));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            activity.SetTag(CryptoTelemetry.Key.Curve, "P-256");
+        }
 
         var secCurve = SecNamedCurves.GetByName("secp256r1");
         var domainParams = new ECDomainParameters(
@@ -178,6 +202,15 @@ public static class BouncyCastleKeyAgreementFunctions
     {
         ArgumentNullException.ThrowIfNull(epk);
         ArgumentNullException.ThrowIfNull(pool);
+
+        ProviderOperation operation = new(nameof(EcdhKeyAgreementDecryptP256Async));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            activity.SetTag(CryptoTelemetry.Key.Curve, "P-256");
+        }
 
         var curve = SecNamedCurves.GetByName("secp256r1");
         var domainParams = new ECDomainParameters(
@@ -298,6 +331,14 @@ public static class BouncyCastleKeyAgreementFunctions
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
         ArgumentNullException.ThrowIfNull(pool);
 
+        ProviderOperation operation = new(nameof(EcdhKeyAgreementEncryptX25519Async));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "X25519");
+        }
+
         var keyPairGenerator = new X25519KeyPairGenerator();
         keyPairGenerator.Init(new X25519KeyGenerationParameters(new SecureRandom()));
         Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair ephemeralPair = keyPairGenerator.GenerateKeyPair();
@@ -342,6 +383,14 @@ public static class BouncyCastleKeyAgreementFunctions
         ArgumentNullException.ThrowIfNull(pool);
         cancellationToken.ThrowIfCancellationRequested();
 
+        ProviderOperation operation = new(nameof(EcdhKeyAgreementDecryptX25519Async));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "X25519");
+        }
+
         //The span ctor copies the scalar into BouncyCastle's own buffer — no naked
         //byte[] of private-key material for us to track, and the caller's buffer is untouched.
         var privateKeyParam = new X25519PrivateKeyParameters(privateKeyBytes.Span);
@@ -374,6 +423,15 @@ public static class BouncyCastleKeyAgreementFunctions
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
         ArgumentNullException.ThrowIfNull(pool);
+
+        ProviderOperation operation = new(nameof(EcdhEncryptNistAsync));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
+        }
 
         X9ECParameters curve = SecNamedCurves.GetByName(curveName)
             ?? throw new NotSupportedException($"NIST curve '{curveName}' is not registered in BouncyCastle.");
@@ -431,6 +489,15 @@ public static class BouncyCastleKeyAgreementFunctions
         ArgumentNullException.ThrowIfNull(pool);
         cancellationToken.ThrowIfCancellationRequested();
 
+        ProviderOperation operation = new(nameof(EcdhDecryptNistAsync));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
+        }
+
         X9ECParameters curve = SecNamedCurves.GetByName(curveName)
             ?? throw new NotSupportedException($"NIST curve '{curveName}' is not registered in BouncyCastle.");
         var domainParams = new ECDomainParameters(curve.Curve, curve.G, curve.N, curve.H, curve.GetSeed());
@@ -472,6 +539,15 @@ public static class BouncyCastleKeyAgreementFunctions
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
         ArgumentNullException.ThrowIfNull(pool);
+
+        ProviderOperation operation = new(nameof(EcdhEncryptBrainpoolAsync));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
+        }
 
         X9ECParameters curve = ECNamedCurveTable.GetByName(curveName)
             ?? throw new NotSupportedException($"Brainpool curve '{curveName}' is not registered in BouncyCastle.");
@@ -529,6 +605,15 @@ public static class BouncyCastleKeyAgreementFunctions
         ArgumentNullException.ThrowIfNull(pool);
         cancellationToken.ThrowIfCancellationRequested();
 
+        ProviderOperation operation = new(nameof(EcdhDecryptBrainpoolAsync));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
+        }
+
         X9ECParameters curve = ECNamedCurveTable.GetByName(curveName)
             ?? throw new NotSupportedException($"Brainpool curve '{curveName}' is not registered in BouncyCastle.");
         var domainParams = new ECDomainParameters(curve.Curve, curve.G, curve.N, curve.H, curve.GetSeed());
@@ -568,6 +653,18 @@ public static class BouncyCastleKeyAgreementFunctions
             source.Slice(source.Length - destination.Length, destination.Length).CopyTo(destination);
         }
     }
+
+
+    //Maps a SEC/Brainpool curve name to the JOSE display form used in telemetry.
+    //NIST secpNNNr1 names map to the P-NNN display form; the Brainpool curves
+    //pass through unchanged.
+    private static string MapCurveDisplay(string curveName) => curveName switch
+    {
+        "secp256r1" => "P-256",
+        "secp384r1" => "P-384",
+        "secp521r1" => "P-521",
+        _ => curveName
+    };
 
 
     /// <summary>

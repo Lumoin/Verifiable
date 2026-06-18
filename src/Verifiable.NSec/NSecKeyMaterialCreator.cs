@@ -1,8 +1,13 @@
 using NSec.Cryptography;
 using System;
 using System.Buffers;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
+using Verifiable.Cryptography.Provider;
+using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 using Key = NSec.Cryptography.Key;
 
 namespace Verifiable.NSec
@@ -15,6 +20,18 @@ namespace Verifiable.NSec
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned key material instances.")]
     public static class NSecKeyMaterialCreator
     {
+        private static readonly ProviderLibrary ProviderLib = new(
+            typeof(NSecKeyMaterialCreator).Assembly.GetName().Name ?? "Verifiable.NSec",
+            typeof(NSecKeyMaterialCreator).Assembly.GetName().Version?.ToString() ?? "Unknown");
+
+        //NSec wraps the native libsodium binary; its assembly version is the meaningful CBOM identifier.
+        private static readonly CryptoLibraryInfo CryptoLib = new(
+            "NSec.Cryptography",
+            typeof(global::NSec.Cryptography.SignatureAlgorithm).Assembly.GetName().Version?.ToString() ?? "Unknown");
+
+        private static readonly ProviderClass ProviderCls = new(nameof(NSecKeyMaterialCreator));
+
+
         /// <summary>
         /// Creates fresh Ed25519 key material using the NSec cryptographic backend.
         /// </summary>
@@ -22,7 +39,20 @@ namespace Verifiable.NSec
         /// <returns>A new key pair. The caller is responsible for disposing each key individually.</returns>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEd25519Keys(MemoryPool<byte> memoryPool)
         {
-            return CreateKeys(SignatureAlgorithm.Ed25519, memoryPool, CryptoTags.Ed25519PublicKey, CryptoTags.Ed25519PrivateKey);
+            ProviderOperation operation = new(nameof(CreateEd25519Keys));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                CryptoAlgorithm keyAlgorithm = CryptoTags.Ed25519PrivateKey.Get<CryptoAlgorithm>();
+                activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+                activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+                activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            }
+
+            PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> material = CreateKeys(SignatureAlgorithm.Ed25519, memoryPool, CryptoTags.Ed25519PublicKey, CryptoTags.Ed25519PrivateKey);
+
+            return material;
         }
 
 
@@ -33,7 +63,20 @@ namespace Verifiable.NSec
         /// <returns>A new key pair. The caller is responsible for disposing each key individually.</returns>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateX25519Keys(MemoryPool<byte> memoryPool)
         {
-            return CreateKeys(KeyAgreementAlgorithm.X25519, memoryPool, CryptoTags.X25519PublicKey, CryptoTags.X25519PrivateKey);
+            ProviderOperation operation = new(nameof(CreateX25519Keys));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                CryptoAlgorithm keyAlgorithm = CryptoTags.X25519PrivateKey.Get<CryptoAlgorithm>();
+                activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+                activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+                activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            }
+
+            PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> material = CreateKeys(KeyAgreementAlgorithm.X25519, memoryPool, CryptoTags.X25519PublicKey, CryptoTags.X25519PrivateKey);
+
+            return material;
         }
 
 

@@ -38,6 +38,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Verifiable.Tpm\Verifiable.Tpm.csproj" />
     <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+    <ProjectReference Include="..\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />
   </ItemGroup>
 
 </Project>

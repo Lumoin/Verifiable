@@ -53,7 +53,8 @@ public static class VcalmHolderEndpoints
             //wired (fail-closed — a holder surface that cannot read its body or cannot derive would be
             //a dead route).
             if(server?.Vcalm().ParseVcalmDeriveCredentialAsync is not null
-                && server?.Vcalm().VcalmCredentialDerivation is not null)
+                && (server?.Vcalm().VcalmCredentialDerivation is not null
+                    || server?.Vcalm().ResolveVcalmCredentialDerivationAsync is not null))
             {
                 candidates.Add(BuildDeriveCredential());
             }
@@ -61,7 +62,8 @@ public static class VcalmHolderEndpoints
             //§3.5.2 create-presentation materializes only when the parse seam and the signing
             //configuration are both wired.
             if(server?.Vcalm().ParseVcalmCreatePresentationAsync is not null
-                && server?.Vcalm().VcalmPresentationSigning is not null)
+                && (server?.Vcalm().VcalmPresentationSigning is not null
+                    || server?.Vcalm().ResolveVcalmPresentationSigningAsync is not null))
             {
                 candidates.Add(BuildCreatePresentation());
             }
@@ -343,7 +345,17 @@ public static class VcalmHolderEndpoints
         CancellationToken cancellationToken)
     {
         var vcalm = server.Vcalm();
-        VcalmCredentialDerivation derivation = vcalm.VcalmCredentialDerivation!;
+
+        //§3.5.1 derive configuration, resolved for the request's tenant (the per-tenant resolver or the
+        //flat server-global value). A multi-tenant holder host derives each tenant's credentials under
+        //that tenant's own keys.
+        VcalmCredentialDerivation? derivation = await vcalm
+            .ResolveEffectiveCredentialDerivationAsync(context, cancellationToken).ConfigureAwait(false);
+        if(derivation is null)
+        {
+            return ServerHttpResponse.ServerError(
+                ServerErrors.ServerError, "No VCALM credential-derivation configuration resolved for this tenant.");
+        }
 
         DataIntegritySecuredCredential derived;
         try
@@ -387,7 +399,18 @@ public static class VcalmHolderEndpoints
         CancellationToken cancellationToken)
     {
         var vcalm = server.Vcalm();
-        VcalmPresentationSigning signing = vcalm.VcalmPresentationSigning!;
+
+        //§3.5.2 presentation-signing configuration, resolved for the request's tenant (the per-tenant
+        //resolver or the flat server-global value). A multi-tenant holder host signs each tenant's
+        //presentations under that tenant's own key.
+        VcalmPresentationSigning? signing = await vcalm
+            .ResolveEffectivePresentationSigningAsync(context, cancellationToken).ConfigureAwait(false);
+        if(signing is null)
+        {
+            return ServerHttpResponse.ServerError(
+                ServerErrors.ServerError, "No VCALM presentation-signing configuration resolved for this tenant.");
+        }
+
         VcalmCreatePresentationOptions options = request.Options;
 
         //§3.5.2 verificationMethod: the request value, else the instance's configured default ("If

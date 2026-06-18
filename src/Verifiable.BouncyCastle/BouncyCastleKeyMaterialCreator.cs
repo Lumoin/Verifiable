@@ -7,8 +7,13 @@ using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Security;
 using System;
 using System.Buffers;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
+using Verifiable.Cryptography.Provider;
+using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 
 namespace Verifiable.BouncyCastle;
 
@@ -20,6 +25,18 @@ namespace Verifiable.BouncyCastle;
 public static class BouncyCastleKeyMaterialCreator
 {
     private static readonly SecureRandom random = new();
+
+    private static readonly ProviderLibrary ProviderLib = new(
+        typeof(BouncyCastleKeyMaterialCreator).Assembly.GetName().Name ?? "Verifiable.BouncyCastle",
+        typeof(BouncyCastleKeyMaterialCreator).Assembly.GetName().Version?.ToString() ?? "Unknown");
+
+    //BouncyCastle is an independently versioned NuGet package — its assembly
+    //version is the most meaningful CBOM identifier.
+    private static readonly CryptoLibraryInfo CryptoLib = new(
+        "Org.BouncyCastle.Cryptography",
+        typeof(Org.BouncyCastle.Security.SecureRandom).Assembly.GetName().Version?.ToString() ?? "Unknown");
+
+    private static readonly ProviderClass ProviderCls = new(nameof(BouncyCastleKeyMaterialCreator));
 
 
     /// <summary>Creates a P-256 key pair for signing and verification.</summary>
@@ -89,6 +106,17 @@ public static class BouncyCastleKeyMaterialCreator
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
 
+        ProviderOperation operation = new(nameof(CreateEd25519Keys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = CryptoTags.Ed25519PrivateKey.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
         var generator = new Ed25519KeyPairGenerator();
         generator.Init(new Ed25519KeyGenerationParameters(random));
         AsymmetricCipherKeyPair keyPair = generator.GenerateKeyPair();
@@ -112,6 +140,17 @@ public static class BouncyCastleKeyMaterialCreator
     public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateX25519Keys(MemoryPool<byte> memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
+
+        ProviderOperation operation = new(nameof(CreateX25519Keys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = CryptoTags.X25519PrivateKey.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
 
         var generator = new X25519KeyPairGenerator();
         generator.Init(new X25519KeyGenerationParameters(random));
@@ -152,6 +191,17 @@ public static class BouncyCastleKeyMaterialCreator
     public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256ExchangeKeys(MemoryPool<byte> memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
+
+        ProviderOperation operation = new(nameof(CreateP256ExchangeKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = CryptoTags.P256ExchangePrivateKey.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
 
         var secCurve = SecNamedCurves.GetByName("secp256r1");
         var domainParams = new ECDomainParameters(
@@ -387,6 +437,17 @@ public static class BouncyCastleKeyMaterialCreator
         Tag privateKeyTag,
         MemoryPool<byte> memoryPool)
     {
+        ProviderOperation operation = new(nameof(CreateBrainpoolEcKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
         //Brainpool curves live in the TeleTrust namespace; ECNamedCurveTable
         //is the unified lookup that covers SEC, NIST, X9.62 and TeleTrust in
         //one call. The remainder of the flow (compressed encoding, scalar
@@ -440,6 +501,17 @@ public static class BouncyCastleKeyMaterialCreator
         Tag privateKeyTag,
         MemoryPool<byte> memoryPool)
     {
+        ProviderOperation operation = new(nameof(CreateBrainpoolExchangeKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
         X9ECParameters curve = ECNamedCurveTable.GetByName(brainpoolCurveName)
             ?? throw new NotSupportedException($"Brainpool curve '{brainpoolCurveName}' is not registered in BouncyCastle.");
 
@@ -489,6 +561,17 @@ public static class BouncyCastleKeyMaterialCreator
         Tag privateKeyTag,
         MemoryPool<byte> memoryPool)
     {
+        ProviderOperation operation = new(nameof(CreateNistExchangeKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
         var curve = SecNamedCurves.GetByName(secCurveName);
         var domainParams = new ECDomainParameters(
             curve.Curve, curve.G, curve.N, curve.H, curve.GetSeed());
@@ -533,6 +616,17 @@ public static class BouncyCastleKeyMaterialCreator
         Tag privateKeyTag,
         MemoryPool<byte> memoryPool)
     {
+        ProviderOperation operation = new(nameof(CreateEcKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
         var curve = SecNamedCurves.GetByName(secCurveName);
         var domainParams = new ECDomainParameters(
             curve.Curve, curve.G, curve.N, curve.H, curve.GetSeed());
@@ -582,6 +676,19 @@ public static class BouncyCastleKeyMaterialCreator
             _ => throw new NotSupportedException($"The RSA key size {keySizeInBits} bits is not supported.")
         };
 
+        var (publicKeyTag, privateKeyTag) = GetTags(keySizeInBits);
+
+        ProviderOperation operation = new(nameof(CreateRsaKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
         var generator = new RsaKeyPairGenerator();
         var keyGenParam = new KeyGenerationParameters(random, keySizeInBits);
         generator.Init(keyGenParam);
@@ -602,7 +709,6 @@ public static class BouncyCastleKeyMaterialCreator
             privateKeyParam.DQ,
             privateKeyParam.QInv)).GetDerEncoded();
 
-        var (publicKeyTag, privateKeyTag) = GetTags(keySizeInBits);
         var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(derEncodedPublicKey, memoryPool), publicKeyTag);
         var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool), privateKeyTag);
 
@@ -620,6 +726,17 @@ public static class BouncyCastleKeyMaterialCreator
         Tag publicKeyTag,
         Tag privateKeyTag)
     {
+        ProviderOperation operation = new(nameof(CreateMlDsaKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
         var keyGenParameters = new MLDsaKeyGenerationParameters(random, parameters);
         var keyPairGen = new MLDsaKeyPairGenerator();
         keyPairGen.Init(keyGenParameters);
@@ -644,6 +761,17 @@ public static class BouncyCastleKeyMaterialCreator
         Tag publicKeyTag,
         Tag privateKeyTag)
     {
+        ProviderOperation operation = new(nameof(CreateMlKemKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
         var keyGenParameters = new MLKemKeyGenerationParameters(random, parameters);
         var keyPairGen = new MLKemKeyPairGenerator();
         keyPairGen.Init(keyGenParameters);

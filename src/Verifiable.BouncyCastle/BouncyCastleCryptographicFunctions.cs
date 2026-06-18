@@ -12,11 +12,14 @@ using Org.BouncyCastle.Math;
 using System;
 using System.Buffers;
 using System.Collections.Frozen;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Provider;
+using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 
 namespace Verifiable.BouncyCastle
 {
@@ -29,6 +32,19 @@ namespace Verifiable.BouncyCastle
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned objects.")]
     public static class BouncyCastleCryptographicFunctions
     {
+        private static readonly ProviderLibrary ProviderLib = new(
+            typeof(BouncyCastleCryptographicFunctions).Assembly.GetName().Name ?? "Verifiable.BouncyCastle",
+            typeof(BouncyCastleCryptographicFunctions).Assembly.GetName().Version?.ToString() ?? "Unknown");
+
+        //BouncyCastle is an independently versioned NuGet package — its assembly
+        //version is the most meaningful CBOM identifier.
+        private static readonly CryptoLibraryInfo CryptoLib = new(
+            "Org.BouncyCastle.Cryptography",
+            typeof(Org.BouncyCastle.Security.SecureRandom).Assembly.GetName().Version?.ToString() ?? "Unknown");
+
+        private static readonly ProviderClass ProviderCls = new(nameof(BouncyCastleCryptographicFunctions));
+
+
         /// <summary>
         /// Signs data using Ed25519 (EdDSA over Curve25519).
         /// </summary>
@@ -40,6 +56,15 @@ namespace Verifiable.BouncyCastle
         public static ValueTask<Signature> SignEd25519Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
+
+            ProviderOperation operation = new(nameof(SignEd25519Async));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
+            }
+
             AsymmetricKeyParameter keyParameter = new Ed25519PrivateKeyParameters(privateKeyBytes.ToArray(), 0);
             var privateKey = (Ed25519PrivateKeyParameters)keyParameter;
 
@@ -65,6 +90,14 @@ namespace Verifiable.BouncyCastle
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         public static ValueTask<bool> VerifyEd25519Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
+            ProviderOperation operation = new(nameof(VerifyEd25519Async));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Verify);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
+            }
+
             var publicKey = new Ed25519PublicKeyParameters(publicKeyMaterial.ToArray(), 0);
             var validator = new Ed25519Signer();
             validator.Init(forSigning: false, publicKey);
@@ -681,6 +714,15 @@ namespace Verifiable.BouncyCastle
         /// <returns>A pool-allocated signature in IEEE P1363 encoding.</returns>
         private static ValueTask<Signature> SignEcdsaAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, string curveName, Tag signatureTag, int componentSize)
         {
+            ProviderOperation operation = new(nameof(SignEcdsaAsync));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
+                activity.SetTag(CryptoTelemetry.Signature.Curve, MapEcdsaCurve(curveName));
+            }
+
             X9ECParameters curveParams = ECNamedCurveTable.GetByName(curveName);
             ECDomainParameters domainParams = new(curveParams.Curve, curveParams.G, curveParams.N, curveParams.H);
 
@@ -724,6 +766,15 @@ namespace Verifiable.BouncyCastle
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         private static ValueTask<bool> VerifyEcdsaAsync(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, string curveName, int componentSize)
         {
+            ProviderOperation operation = new(nameof(VerifyEcdsaAsync));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Verify);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
+                activity.SetTag(CryptoTelemetry.Signature.Curve, MapEcdsaCurve(curveName));
+            }
+
             X9ECParameters curveParams = ECNamedCurveTable.GetByName(curveName);
             ECDomainParameters domainParams = new(curveParams.Curve, curveParams.G, curveParams.N, curveParams.H);
 
@@ -761,6 +812,14 @@ namespace Verifiable.BouncyCastle
         /// <returns>A pool-allocated RSA PKCS#1 v1.5 signature.</returns>
         private static ValueTask<Signature> SignRsaPkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, IDigest digest, Tag signatureTag)
         {
+            ProviderOperation operation = new(nameof(SignRsaPkcs1Async));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+            }
+
             RsaPrivateCrtKeyParameters privateKey = ParseRsaPrivateKey(privateKeyBytes.Span);
             RsaDigestSigner signer = new(digest);
             signer.Init(forSigning: true, privateKey);
@@ -785,6 +844,14 @@ namespace Verifiable.BouncyCastle
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         private static ValueTask<bool> VerifyRsaPkcs1Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, IDigest digest)
         {
+            ProviderOperation operation = new(nameof(VerifyRsaPkcs1Async));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Verify);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+            }
+
             RsaKeyParameters publicKey = ParseRsaPublicKey(publicKeyMaterial.Span);
             RsaDigestSigner verifier = new(digest);
             verifier.Init(forSigning: false, publicKey);
@@ -807,6 +874,14 @@ namespace Verifiable.BouncyCastle
         /// <returns>A pool-allocated RSA-PSS signature.</returns>
         private static ValueTask<Signature> SignRsaPssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, IDigest digest, Tag signatureTag)
         {
+            ProviderOperation operation = new(nameof(SignRsaPssAsync));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+            }
+
             RsaPrivateCrtKeyParameters privateKey = ParseRsaPrivateKey(privateKeyBytes.Span);
             PssSigner signer = new(new RsaEngine(), digest, digest.GetDigestSize());
             signer.Init(forSigning: true, privateKey);
@@ -832,6 +907,14 @@ namespace Verifiable.BouncyCastle
         /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
         private static ValueTask<bool> VerifyRsaPssAsync(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, IDigest digest)
         {
+            ProviderOperation operation = new(nameof(VerifyRsaPssAsync));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Verify);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+            }
+
             RsaKeyParameters publicKey = ParseRsaPublicKey(publicKeyMaterial.Span);
             PssSigner verifier = new(new RsaEngine(), digest, digest.GetDigestSize());
             verifier.Init(forSigning: false, publicKey);
@@ -852,6 +935,14 @@ namespace Verifiable.BouncyCastle
             MemoryPool<byte> signaturePool,
             Tag signatureTag)
         {
+            ProviderOperation operation = new(nameof(SignMlDsaAsync));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ML-DSA");
+            }
+
             var privateKey = MLDsaPrivateKeyParameters.FromEncoding(parameters, privateKeyBytes.ToArray());
             var signer = new MLDsaSigner(parameters, deterministic: true);
             signer.Init(forSigning: true, privateKey);
@@ -875,6 +966,14 @@ namespace Verifiable.BouncyCastle
             ReadOnlyMemory<byte> signature,
             ReadOnlyMemory<byte> publicKeyMaterial)
         {
+            ProviderOperation operation = new(nameof(VerifyMlDsaAsync));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Verify);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ML-DSA");
+            }
+
             var publicKey = MLDsaPublicKeyParameters.FromEncoding(parameters, publicKeyMaterial.ToArray());
             var verifier = new MLDsaSigner(parameters, deterministic: true);
             verifier.Init(forSigning: false, publicKey);
@@ -972,6 +1071,22 @@ namespace Verifiable.BouncyCastle
             byte[] modulusBytes = RsaUtilities.Decode(publicKeyMaterial);
             return new RsaKeyParameters(isPrivate: false, new BigInteger(1, modulusBytes), BigInteger.ValueOf(65537));
         }
+
+
+        /// <summary>
+        /// Maps a SEC/Brainpool curve name to the JOSE display form used in telemetry.
+        /// NIST <c>secpNNNr1</c> names map to the <c>P-NNN</c> display form; secp256k1 and
+        /// the Brainpool curves pass through unchanged.
+        /// </summary>
+        /// <param name="curveName">The SEC or Brainpool curve name.</param>
+        /// <returns>The telemetry display name for the curve.</returns>
+        private static string MapEcdsaCurve(string curveName) => curveName switch
+        {
+            "secp256r1" => "P-256",
+            "secp384r1" => "P-384",
+            "secp521r1" => "P-521",
+            _ => curveName
+        };
 
 
         /// <summary>
