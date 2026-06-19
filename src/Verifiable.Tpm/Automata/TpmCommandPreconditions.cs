@@ -33,7 +33,9 @@ public static class TpmCommandPreconditions
             [TpmCcConstants.TPM_CC_SelfTest] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_GetTestResult] = new[] { TpmLifecyclePhase.Operational, TpmLifecyclePhase.FailureMode }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_GetRandom] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
-            [TpmCcConstants.TPM_CC_GetCapability] = new[] { TpmLifecyclePhase.Operational, TpmLifecyclePhase.FailureMode }.ToFrozenSet()
+            [TpmCcConstants.TPM_CC_GetCapability] = new[] { TpmLifecyclePhase.Operational, TpmLifecyclePhase.FailureMode }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_NV_DefineSpace] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_NV_Read] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet()
         }.ToFrozenDictionary();
 
     /// <summary>

@@ -81,7 +81,21 @@ public static class TpmResponseCodecExtensions
         /// See TPM 2.0 Part 3, Section 28.4 - TPM2_FlushContext.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec FlushContext => TpmResponseCodec.NoParameters();
+        public static TpmResponseCodec FlushContext => TpmResponseCodec.NoParameters(FlushContextResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_NV_DefineSpace response. This command has no response handles and no response
+        /// parameters (TPM 2.0 Library Part 3, Section 31.3).
+        /// </summary>
+        public static TpmResponseCodec NvDefineSpace => TpmResponseCodec.NoParameters(NvDefineSpaceResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_NV_Read response.
+        /// </summary>
+        /// <remarks>
+        /// Response parameters: data (TPM2B_MAX_NV_BUFFER). See TPM 2.0 Library Part 3, Section 31.13.
+        /// </remarks>
+        public static TpmResponseCodec NvRead => TpmResponseCodec.Create(NvReadResponse.Parse);
 
         /// <summary>
         /// Codec for TPM2_CreatePrimary response.

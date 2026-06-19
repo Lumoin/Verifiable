@@ -75,6 +75,7 @@ internal delegate ITpmWireType TpmResponseParserInternal(ref TpmReader reader, u
 public sealed class TpmResponseCodec
 {
     private readonly TpmResponseParserInternal? parser;
+    private readonly ITpmWireType? emptyResponse;
 
     /// <summary>
     /// Gets the number of handles in the response handle area.
@@ -86,10 +87,17 @@ public sealed class TpmResponseCodec
     /// </summary>
     public bool HasResponseParameters => parser != null;
 
-    private TpmResponseCodec(int outHandleCount, TpmResponseParserInternal? parser)
+    /// <summary>
+    /// Gets the singleton response instance the executor returns for a parameterless command, or
+    /// <see langword="null"/> when none was supplied.
+    /// </summary>
+    internal ITpmWireType? EmptyResponse => emptyResponse;
+
+    private TpmResponseCodec(int outHandleCount, TpmResponseParserInternal? parser, ITpmWireType? emptyResponse = null)
     {
         OutHandleCount = outHandleCount;
         this.parser = parser;
+        this.emptyResponse = emptyResponse;
     }
 
     /// <summary>
@@ -123,6 +131,19 @@ public sealed class TpmResponseCodec
     public static TpmResponseCodec NoParameters()
     {
         return new TpmResponseCodec(0, null);
+    }
+
+    /// <summary>
+    /// Creates a codec for a command with no output handles and no response parameters, supplying the
+    /// singleton response instance the executor returns on success.
+    /// </summary>
+    /// <param name="emptyResponse">The parameterless response instance (e.g. a command's <c>Instance</c>).</param>
+    /// <returns>The codec.</returns>
+    public static TpmResponseCodec NoParameters(ITpmWireType emptyResponse)
+    {
+        ArgumentNullException.ThrowIfNull(emptyResponse);
+
+        return new TpmResponseCodec(0, null, emptyResponse);
     }
 
     /// <summary>

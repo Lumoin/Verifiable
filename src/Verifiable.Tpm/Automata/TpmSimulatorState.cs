@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Immutable;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
@@ -54,6 +56,16 @@ namespace Verifiable.Tpm.Automata;
 /// The seconds to wait after a failed <c>lockoutAuth</c> use before it may be retried
 /// (<c>lockoutRecovery</c>, reported as <c>TPM_PT_LOCKOUT_RECOVERY</c>).
 /// </param>
+/// <param name="NvIndexes">
+/// The defined NV Indexes, keyed by handle. Populated by <c>TPM2_NV_DefineSpace()</c> and consulted by
+/// <c>TPM2_NV_Read()</c>; the dictionary-attack/PIN flow drives authorization failures through a
+/// DA-protected NV Index (TPM 2.0 Library Part 1, clause 17.8.1).
+/// </param>
+/// <param name="OwnerAuth">
+/// The owner-hierarchy authorization value. Owner authorization is not dictionary-attack protected
+/// (clause 17.8.1), so a wrong owner authValue is a plain bad-authorization, never a counter-feeding
+/// auth-failure. Empty by default; <c>TPM2_HierarchyChangeAuth()</c> (a later slice) sets it.
+/// </param>
 /// <param name="NextAction">The effectful action the runner must execute next; <see cref="NullAction.Instance"/> when none.</param>
 /// <param name="ResponseIntent">The logical response produced by the last command, or <see langword="null"/> when none (e.g. after <c>_TPM_Init</c>).</param>
 public sealed record TpmSimulatorState(
@@ -66,6 +78,8 @@ public sealed record TpmSimulatorState(
     uint MaxTries,
     uint RecoveryTime,
     uint LockoutRecovery,
+    ImmutableDictionary<uint, NvIndexState> NvIndexes,
+    ReadOnlyMemory<byte> OwnerAuth,
     PdaAction NextAction,
     TpmResponseIntent? ResponseIntent)
 {
@@ -105,6 +119,8 @@ public sealed record TpmSimulatorState(
             DefaultMaxTries,
             DefaultRecoveryTimeSeconds,
             DefaultLockoutRecoverySeconds,
+            ImmutableDictionary<uint, NvIndexState>.Empty,
+            ReadOnlyMemory<byte>.Empty,
             NullAction.Instance,
             null);
 }

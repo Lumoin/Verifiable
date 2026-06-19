@@ -1,4 +1,6 @@
+using System;
 using System.Buffers;
+using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
@@ -66,6 +68,43 @@ public sealed record TpmGetRandomRequested(ushort BytesRequested): TpmSimulatorI
 /// <param name="Property">The first property (tag) to return.</param>
 /// <param name="PropertyCount">The maximum number of properties to return.</param>
 public sealed record TpmGetCapabilityRequested(TpmCapConstants Capability, uint Property, uint PropertyCount): TpmSimulatorInput;
+
+/// <summary>
+/// A <c>TPM2_NV_DefineSpace()</c> command (TPM 2.0 Library Part 3, clause 31.3). Reserves space for an
+/// NV Index with the given attributes and authorization value, authorized by the owner hierarchy. Only
+/// the index-defining fields the simulator models are carried; the Name algorithm and access policy are
+/// consumed during parsing but not retained in this slice.
+/// </summary>
+/// <param name="AuthHandle">The provisioning hierarchy authorizing the definition (<c>TPM_RH_OWNER</c> in this slice).</param>
+/// <param name="OwnerAuthSupplied">The authorization value the caller supplied for the provisioning hierarchy (the password session's plaintext authValue).</param>
+/// <param name="NvIndex">The handle of the NV Index to define.</param>
+/// <param name="Attributes">The Index attributes (<c>TPMA_NV</c>), whose <c>TPMA_NV_NO_DA</c> bit decides dictionary-attack protection.</param>
+/// <param name="IndexAuth">The authorization value assigned to the new Index.</param>
+/// <param name="DataSize">The size in octets of the Index data area.</param>
+public sealed record TpmNvDefineSpaceRequested(
+    uint AuthHandle,
+    ReadOnlyMemory<byte> OwnerAuthSupplied,
+    uint NvIndex,
+    TpmaNv Attributes,
+    ReadOnlyMemory<byte> IndexAuth,
+    ushort DataSize): TpmSimulatorInput;
+
+/// <summary>
+/// A <c>TPM2_NV_Read()</c> command (TPM 2.0 Library Part 3, clause 31.13). Reads data from an NV Index
+/// after authorizing against it. This slice models Index authorization (the authorization handle is the
+/// Index itself); owner- and policy-authorized reads arrive later.
+/// </summary>
+/// <param name="AuthHandle">The authorization handle (<c>TPMI_RH_NV_AUTH</c>); for Index authorization this equals <paramref name="NvIndex"/>.</param>
+/// <param name="NvIndex">The NV Index to read.</param>
+/// <param name="AuthSupplied">The authorization value the caller supplied (the password session's plaintext authValue), compared against the Index authValue.</param>
+/// <param name="Size">The number of octets requested.</param>
+/// <param name="Offset">The octet offset into the Index data area.</param>
+public sealed record TpmNvReadRequested(
+    uint AuthHandle,
+    uint NvIndex,
+    ReadOnlyMemory<byte> AuthSupplied,
+    ushort Size,
+    ushort Offset): TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmRngAction"/>: the random octets produced by the RNG

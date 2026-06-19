@@ -7,7 +7,9 @@ using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tpm.Infrastructure;
+using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Infrastructure.Spec.Handles;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
@@ -247,8 +249,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        //Only the two structurally valid command tags are accepted; an authorization area carried by a
-        //sessions-tagged command is not parsed until sessions are modelled.
+        //Only the two structurally valid command tags are accepted. A sessions-tagged command's
+        //authorization area is parsed by the per-command handlers that require it (the NV commands);
+        //commands that take no authorization ignore it.
         if(header.Tag != (ushort)TpmStConstants.TPM_ST_NO_SESSIONS && header.Tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
         {
             malformedResponseCode = TpmRcConstants.TPM_RC_BAD_TAG;
@@ -320,6 +323,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 break;
             }
+            case TpmCcConstants.TPM_CC_NV_DefineSpace:
+            {
+                return TryParseNvDefineSpace(ref reader, header.Tag, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_NV_Read:
+            {
+                return TryParseNvRead(ref reader, header.Tag, out input, out malformedResponseCode);
+            }
             default:
             {
                 input = new TpmUnsupportedCommandReceived(commandCode);
@@ -327,6 +338,295 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 break;
             }
         }
+
+        return true;
+    }
+
+    //TPM2_NV_DefineSpace() is authorized, so its wire layout after the header is: handle area
+    //(@authHandle, 1 handle), authorization area (a single password session), then parameters
+    //(auth as TPM2B_AUTH, publicInfo as TPM2B_NV_PUBLIC). The Name algorithm and access policy carried in
+    //the public area are consumed for correct framing but not retained by this slice's NV model.
+    private static bool TryParseNvDefineSpace(ref TpmReader reader, ushort tag, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        //An authorized command must carry an authorization area, signalled by TPM_ST_SESSIONS. A command sent
+        //without one is reported here as TPM_RC_AUTH_MISSING. When such a command also has another error (for
+        //example arriving before TPM2_Startup()), Part 3 clause 5.1 makes the order of error reporting
+        //non-normative, so answering the missing-authorization here rather than the lifecycle error is
+        //conformant; the production executor always frames a session area, so this is an off-path guard.
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @authHandle (the provisioning hierarchy).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint authHandle = reader.ReadUInt32();
+
+        if(!TryReadPasswordAuthArea(ref reader, out ReadOnlyMemory<byte> ownerAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: auth (TPM2B_AUTH) — the authorization value assigned to the new Index.
+        if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> indexAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: publicInfo (TPM2B_NV_PUBLIC) — a UINT16 size prefix wrapping the TPMS_NV_PUBLIC.
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ushort publicSize = reader.ReadUInt16();
+        if(reader.Remaining < publicSize)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        //TPMS_NV_PUBLIC: nvIndex (UINT32) + nameAlg (UINT16) + attributes (TPMA_NV) + authPolicy (TPM2B_DIGEST) + dataSize (UINT16).
+        int publicStart = reader.Consumed;
+        if(reader.Remaining < sizeof(uint) + sizeof(ushort) + sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint nvIndex = reader.ReadUInt32();
+        _ = reader.ReadUInt16();
+        var attributes = (TpmaNv)reader.ReadUInt32();
+        if(!TrySkipTpm2b(ref reader, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ushort dataSize = reader.ReadUInt16();
+
+        //The declared public-area size must match the octets it actually spans (Part 3, 5.2).
+        if(reader.Consumed - publicStart != publicSize)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        //publicInfo is the last parameter, so no octets may follow it; a command whose declared size carries
+        //surplus is malformed (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        input = new TpmNvDefineSpaceRequested(authHandle, ownerAuth, nvIndex, attributes, indexAuth, dataSize);
+
+        return true;
+    }
+
+    //TPM2_NV_Read() is authorized, so its wire layout after the header is: handle area (@authHandle,
+    //nvIndex — 2 handles), authorization area (a single password session), then parameters (size, offset).
+    private static bool TryParseNvRead(ref TpmReader reader, ushort tag, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        //As in TryParseNvDefineSpace, an authorized command must carry an authorization area. A missing one
+        //is TPM_RC_AUTH_MISSING; when the command has multiple errors the reporting order is non-normative
+        //(Part 3, clause 5.1), and the production executor always frames a session area.
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @authHandle then nvIndex.
+        if(reader.Remaining < 2 * sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint authHandle = reader.ReadUInt32();
+        uint nvIndex = reader.ReadUInt32();
+
+        if(!TryReadPasswordAuthArea(ref reader, out ReadOnlyMemory<byte> suppliedAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameters: size (UINT16) + offset (UINT16).
+        if(reader.Remaining < 2 * sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ushort size = reader.ReadUInt16();
+        ushort offset = reader.ReadUInt16();
+
+        //size and offset are the final parameters; no octets may follow them (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        input = new TpmNvReadRequested(authHandle, nvIndex, suppliedAuth, size, offset);
+
+        return true;
+    }
+
+    //Reads a command authorization area carrying a single password session and yields the supplied
+    //authorization value (the hmac field, which for a TPM_RS_PW session is the plaintext authValue).
+    //Only one password session is modelled this slice: HMAC, policy, and multiple sessions arrive later.
+    private static bool TryReadPasswordAuthArea(ref TpmReader reader, out ReadOnlyMemory<byte> suppliedAuth, out TpmRcConstants malformedResponseCode)
+    {
+        suppliedAuth = ReadOnlyMemory<byte>.Empty;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint authorizationSize = reader.ReadUInt32();
+        if(authorizationSize > (uint)reader.Remaining)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTHSIZE;
+
+            return false;
+        }
+
+        int sessionsStart = reader.Consumed;
+
+        //TPMS_AUTH_COMMAND: sessionHandle (UINT32) + nonceCaller (TPM2B) + sessionAttributes (BYTE) + hmac (TPM2B).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint sessionHandle = reader.ReadUInt32();
+        if(sessionHandle != (uint)TpmRh.TPM_RH_PW)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_TYPE;
+
+            return false;
+        }
+
+        if(!TrySkipTpm2b(ref reader, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        if(reader.Remaining < sizeof(byte))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        _ = reader.ReadByte();
+
+        if(!TryReadTpm2b(ref reader, out suppliedAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //The single modelled session must account for exactly the declared authorization octets; any
+        //surplus means additional sessions, which this slice does not model.
+        if(reader.Consumed - sessionsStart != (int)authorizationSize)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTHSIZE;
+
+            return false;
+        }
+
+        return true;
+    }
+
+    //Reads a TPM2B (UINT16 size prefix + octets) and copies the octets into durable model memory.
+    private static bool TryReadTpm2b(ref TpmReader reader, out ReadOnlyMemory<byte> bytes, out TpmRcConstants malformedResponseCode)
+    {
+        bytes = ReadOnlyMemory<byte>.Empty;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ushort size = reader.ReadUInt16();
+        if(reader.Remaining < size)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        if(size > 0)
+        {
+            bytes = reader.ReadBytes(size).ToArray();
+        }
+
+        return true;
+    }
+
+    //Skips a TPM2B (UINT16 size prefix + octets) without copying — used for fields the model does not retain.
+    private static bool TrySkipTpm2b(ref TpmReader reader, out TpmRcConstants malformedResponseCode)
+    {
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ushort size = reader.ReadUInt16();
+        if(reader.Remaining < size)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        reader.Skip(size);
 
         return true;
     }

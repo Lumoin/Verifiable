@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Infrastructure.Spec.Handles;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
@@ -94,6 +96,8 @@ public static class TpmLifecycleTransitions
             TpmTestResultRequested => OnTestResult(state),
             TpmGetRandomRequested getRandom => OnGetRandom(state, getRandom.BytesRequested),
             TpmGetCapabilityRequested getCapability => OnGetCapability(state, getCapability.Capability, getCapability.Property, getCapability.PropertyCount),
+            TpmNvDefineSpaceRequested defineSpace => OnNvDefineSpace(state, defineSpace),
+            TpmNvReadRequested nvRead => OnNvRead(state, nvRead),
             _ => throw new System.InvalidOperationException($"Command input '{input.GetType().Name}' passed precondition gating but has no dispatch handler.")
         };
     }
@@ -281,6 +285,104 @@ public static class TpmLifecycleTransitions
         };
     }
 
+    //TPM2_NV_DefineSpace() reserves an NV Index, authorized by the owner hierarchy. The DA/PIN flow uses
+    //such an Index as the dictionary-attack-protected entity (Part 1, clause 17.8.1), so the simulator
+    //records its handle, authValue, attributes, and size; the data area and written-ness arrive with
+    //TPM2_NV_Write().
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnNvDefineSpace(TpmSimulatorState state, TpmNvDefineSpaceRequested request)
+    {
+        //Authorization is resolved before the command body runs, mirroring the reference dispatcher which
+        //validates the handle area and session authorization (Part 3, clause 5.5) ahead of the command
+        //actions. So provisioning-handle and owner-authValue checks precede the nvIndex-range/already-defined
+        //body checks; a request that is both mis-authorized and malformed answers the authorization failure.
+
+        //Only the owner hierarchy is modelled as the provisioning authority this slice; the platform
+        //hierarchy carries its own authValue and arrives later. The authorization handle is resolved in the
+        //handle area, so an invalid provisioning handle is rejected first.
+        if(request.AuthHandle != (uint)TpmRh.TPM_RH_OWNER)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_DefineSpace, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        //Owner authorization is not dictionary-attack protected (clause 17.8.1): a wrong owner authValue is
+        //a plain bad-authorization, never an auth-failure that feeds the lockout counter. The comparison is
+        //constant-time so a mismatch leaks no timing about the secret.
+        if(!CryptographicOperations.FixedTimeEquals(request.OwnerAuthSupplied.Span, state.OwnerAuth.Span))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_DefineSpace, TpmRcConstants.TPM_RC_BAD_AUTH);
+        }
+
+        //Command body: the handle must lie in the NV-Index range, its most-significant octet being
+        //TPM_HT_NV_INDEX (Part 2, 7.2).
+        if((byte)(request.NvIndex >> 24) != (byte)TpmHt.TPM_HT_NV_INDEX)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_DefineSpace, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        //A handle that is already defined cannot be redefined (Part 3, clause 31.3).
+        if(state.NvIndexes.ContainsKey(request.NvIndex))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_DefineSpace, TpmRcConstants.TPM_RC_NV_DEFINED);
+        }
+
+        var index = new NvIndexState(request.NvIndex, request.IndexAuth, request.Attributes, request.DataSize);
+
+        return Transition(
+            state with
+            {
+                NvIndexes = state.NvIndexes.SetItem(request.NvIndex, index),
+                ResponseIntent = new TpmHeaderOnlyResponse(TpmRcConstants.TPM_RC_SUCCESS)
+            },
+            "NvDefineSpace");
+    }
+
+    //TPM2_NV_Read() authorizes against an NV Index, then reads its data. This slice models Index
+    //authorization (the authorization handle is the Index itself) and the authorization outcomes that the
+    //DA/PIN flow turns on; the data-returning path and the lockout-counter coupling (clause 17.8.3) arrive
+    //with TPM2_NV_Write() and the DA-machinery slice respectively.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnNvRead(TpmSimulatorState state, TpmNvReadRequested request)
+    {
+        //The Index must exist (Part 3, clause 31.13).
+        if(!state.NvIndexes.TryGetValue(request.NvIndex, out NvIndexState? index))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Read, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        //Only Index authorization (authHandle == nvIndex) is modelled this slice; owner- and
+        //policy-authorized reads against the same Index arrive later.
+        if(request.AuthHandle != request.NvIndex)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Read, TpmRcConstants.TPM_RC_AUTH_TYPE);
+        }
+
+        //Constant-time comparison of the supplied authorization against the Index authValue. A mismatch is
+        //an auth-failure for a DA-protected Index (clause 17.8.3 — feeds the lockout counter in the
+        //DA-machinery slice) and a plain bad-authorization for a non-DA Index (clause 17.8.1).
+        if(!CryptographicOperations.FixedTimeEquals(request.AuthSupplied.Span, index.AuthValue.Span))
+        {
+            TpmRcConstants failureCode = index.IsDaProtected
+                ? TpmRcConstants.TPM_RC_AUTH_FAIL
+                : TpmRcConstants.TPM_RC_BAD_AUTH;
+
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Read, failureCode);
+        }
+
+        //The session authValue matched; the command body then checks that the Index permits authValue-based
+        //reading. With TPMA_NV_AUTHREAD clear the Index authValue cannot authorize a read (Part 2, clause
+        //13.4), so the read is refused with TPM_RC_NV_AUTHORIZATION even though the value matched (Part 3,
+        //clause 31.13 access checks). A wrong value still fails earlier as an auth-failure/bad-auth, so this
+        //is reached only on a correct value against a non-AUTHREAD Index.
+        if(!index.IsAuthReadAllowed)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Read, TpmRcConstants.TPM_RC_NV_AUTHORIZATION);
+        }
+
+        //Authorization succeeded. TPM2_NV_Write() — the only command that sets TPMA_NV_WRITTEN — is not
+        //modelled this slice, so every defined Index is still uninitialized and a read returns
+        //TPM_RC_NV_UNINITIALIZED (Part 3, clause 31.13). The data-returning response lands with NV_Write.
+        return Reject(state, TpmCcConstants.TPM_CC_NV_Read, TpmRcConstants.TPM_RC_NV_UNINITIALIZED);
+    }
+
     private static TpmCcConstants CommandCodeOf(TpmSimulatorInput input) =>
         input switch
         {
@@ -290,6 +392,8 @@ public static class TpmLifecycleTransitions
             TpmTestResultRequested => TpmCcConstants.TPM_CC_GetTestResult,
             TpmGetRandomRequested => TpmCcConstants.TPM_CC_GetRandom,
             TpmGetCapabilityRequested => TpmCcConstants.TPM_CC_GetCapability,
+            TpmNvDefineSpaceRequested => TpmCcConstants.TPM_CC_NV_DefineSpace,
+            TpmNvReadRequested => TpmCcConstants.TPM_CC_NV_Read,
             TpmUnsupportedCommandReceived unsupported => unsupported.CommandCode,
             _ => throw new System.InvalidOperationException($"Input '{input.GetType().Name}' is not a command and must not reach command dispatch.")
         };

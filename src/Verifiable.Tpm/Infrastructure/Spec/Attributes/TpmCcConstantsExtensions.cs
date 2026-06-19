@@ -91,6 +91,18 @@ public static partial class TpmCcConstantsExtensions
         TpmCcConstants.TPM_CC_GetCapability
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 0),
 
+        //Section 31.3 - TPM2_NV_DefineSpace.
+        //Handle area: @authHandle (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_NV_DefineSpace
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 31.13 - TPM2_NV_Read.
+        //Handle area: @authHandle, nvIndex (2 handles; authHandle requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_NV_Read
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
+
         //Section 22.4 - TPM2_PCR_Read.
         //Handle area: none (0 handles).
         //Response: no handles.

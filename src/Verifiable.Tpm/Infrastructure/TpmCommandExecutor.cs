@@ -262,10 +262,10 @@ public static class TpmCommandExecutor
                 }
                 else
                 {
-                    //Command has no response parameters - use default/singleton.
-                    if(typeof(TResponse) == typeof(FlushContextResponse))
+                    //Command has no response parameters - use the codec's parameterless response singleton.
+                    if(codec.EmptyResponse is TResponse emptyResponse)
                     {
-                        typedResponse = (TResponse)(ITpmWireType)FlushContextResponse.Instance;
+                        typedResponse = emptyResponse;
                     }
                     else
                     {
