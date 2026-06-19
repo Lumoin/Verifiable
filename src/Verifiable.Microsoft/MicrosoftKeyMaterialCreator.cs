@@ -1,8 +1,13 @@
 using System;
 using System.Buffers;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
+using Verifiable.Cryptography.Provider;
+using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 
 namespace Verifiable.Microsoft;
 
@@ -13,6 +18,21 @@ namespace Verifiable.Microsoft;
     Justification = "The caller is responsible for disposing the returned key material instances.")]
 public static class MicrosoftKeyMaterialCreator
 {
+    private static readonly ProviderLibrary ProviderLib = new(
+        typeof(MicrosoftKeyMaterialCreator).Assembly.GetName().Name
+            ?? "Verifiable.Microsoft",
+        typeof(MicrosoftKeyMaterialCreator).Assembly.GetName().Version?.ToString()
+            ?? "Unknown");
+
+    private static readonly CryptoLibraryInfo CryptoLib = new(
+        "System.Security.Cryptography",
+        typeof(RandomNumberGenerator).Assembly.GetName().Version?.ToString()
+            ?? System.Environment.Version.ToString());
+
+    private static readonly ProviderClass ProviderCls =
+        new(nameof(MicrosoftKeyMaterialCreator));
+
+
     /// <summary>Creates a P-256 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
@@ -90,6 +110,17 @@ public static class MicrosoftKeyMaterialCreator
     public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256ExchangeKeys(MemoryPool<byte> memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
+
+        ProviderOperation operation = new(nameof(CreateP256ExchangeKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = CryptoTags.P256ExchangePrivateKey.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
 
         using ECDiffieHellman ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
         ECParameters parameters = ecdh.ExportParameters(includePrivateParameters: true);
@@ -176,6 +207,17 @@ public static class MicrosoftKeyMaterialCreator
         Tag privateKeyTag,
         MemoryPool<byte> memoryPool)
     {
+        ProviderOperation operation = new(nameof(CreateEcExchangeKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
         using ECDiffieHellman ecdh = ECDiffieHellman.Create(namedCurve);
         ECParameters parameters = ecdh.ExportParameters(includePrivateParameters: true);
 
@@ -215,6 +257,18 @@ public static class MicrosoftKeyMaterialCreator
         ECCurve namedCurve,
         MemoryPool<byte> memoryPool)
     {
+        ProviderOperation operation = new(nameof(CreateEcKeys));
+        var (publicKeyTag, privateKeyTag) = GetTags(namedCurve);
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
         static (Tag PublicKeyTag, Tag PrivateKeyTag) GetTags(ECCurve namedCurve) =>
             namedCurve.Oid.FriendlyName switch
             {
@@ -232,7 +286,6 @@ public static class MicrosoftKeyMaterialCreator
         byte[] compressedKeyMaterial = EllipticCurveUtilities.Compress(
             parameters.Q.X, parameters.Q.Y);
 
-        var (publicKeyTag, privateKeyTag) = GetTags(namedCurve);
         var publicKeyMemory = new PublicKeyMemory(
             AsPooledMemory(compressedKeyMaterial, memoryPool), publicKeyTag);
         var privateKeyMemory = new PrivateKeyMemory(
@@ -252,6 +305,18 @@ public static class MicrosoftKeyMaterialCreator
         int keySizeInBits,
         MemoryPool<byte> memoryPool)
     {
+        ProviderOperation operation = new(nameof(CreateRsaKeys));
+        var (publicKeyTag, privateKeyTag) = GetTags(keySizeInBits);
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
         static (Tag PublicKeyTag, Tag PrivateKeyTag) GetTags(int keySizeInBits) =>
             keySizeInBits switch
             {
@@ -265,7 +330,6 @@ public static class MicrosoftKeyMaterialCreator
         RSAParameters parameters = key.ExportParameters(includePrivateParameters: true);
 
         byte[] derEncodedPublicKey = RsaUtilities.Encode(parameters.Modulus!);
-        var (publicKeyTag, privateKeyTag) = GetTags(keySizeInBits);
 
         var publicKeyMemory = new PublicKeyMemory(
             AsPooledMemory(derEncodedPublicKey, memoryPool), publicKeyTag);

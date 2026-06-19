@@ -100,6 +100,12 @@ public static class CryptosuiteInfoExtensions
         public static EcdsaSd2023CryptosuiteInfo EcdsaSd2023 => EcdsaSd2023CryptosuiteInfo.Instance;
 
         /// <summary>
+        /// BBS cryptosuite with unlinkable selective disclosure using BLS12-381 G2 signatures and RDFC-1.0 canonicalization.
+        /// See <see href="https://www.w3.org/TR/vc-di-bbs/#bbs-2023">BBS Cryptosuites §3.4</see>.
+        /// </summary>
+        public static Bbs2023CryptosuiteInfo Bbs2023 => Bbs2023CryptosuiteInfo.Instance;
+
+        /// <summary>
         /// Resolves a cryptosuite name to its corresponding <see cref="CryptosuiteInfo"/> instance.
         /// </summary>
         /// <param name="cryptosuiteName">The cryptosuite identifier from a proof's <c>cryptosuite</c> property.</param>
@@ -129,6 +135,7 @@ public static class CryptosuiteInfoExtensions
             var n when n == EddsaRdfc2022CryptosuiteInfo.Instance.CryptosuiteName => EddsaRdfc2022CryptosuiteInfo.Instance,
             var n when n == EddsaJcs2022CryptosuiteInfo.Instance.CryptosuiteName => EddsaJcs2022CryptosuiteInfo.Instance,
             var n when n == EcdsaSd2023CryptosuiteInfo.Instance.CryptosuiteName => EcdsaSd2023CryptosuiteInfo.Instance,
+            var n when n == Bbs2023CryptosuiteInfo.Instance.CryptosuiteName => Bbs2023CryptosuiteInfo.Instance,
             _ => new UnknownCryptosuiteInfo(cryptosuiteName)
         };
     }

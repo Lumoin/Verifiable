@@ -2,10 +2,13 @@ using NSec.Cryptography;
 using System;
 using System.Buffers;
 using System.Collections.Frozen;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Provider;
+using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 using PublicKey = NSec.Cryptography.PublicKey;
 
 namespace Verifiable.NSec;
@@ -16,6 +19,18 @@ namespace Verifiable.NSec;
 /// </summary>
 public static class NSecCryptographicFunctions
 {
+    private static readonly ProviderLibrary ProviderLib = new(
+        typeof(NSecCryptographicFunctions).Assembly.GetName().Name ?? "Verifiable.NSec",
+        typeof(NSecCryptographicFunctions).Assembly.GetName().Version?.ToString() ?? "Unknown");
+
+    //NSec wraps the native libsodium binary; its assembly version is the meaningful CBOM identifier.
+    private static readonly CryptoLibraryInfo CryptoLib = new(
+        "NSec.Cryptography",
+        typeof(global::NSec.Cryptography.SignatureAlgorithm).Assembly.GetName().Version?.ToString() ?? "Unknown");
+
+    private static readonly ProviderClass ProviderCls = new(nameof(NSecCryptographicFunctions));
+
+
     /// <summary>
     /// Signs data using Ed25519 via NSec.
     /// </summary>
@@ -32,6 +47,14 @@ public static class NSecCryptographicFunctions
         FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signaturePool);
+
+        ProviderOperation operation = new(nameof(SignEd25519Async));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
+        }
 
         var algorithm = SignatureAlgorithm.Ed25519;
         _ = Key.TryImport(algorithm, privateKeyBytes.Span, KeyBlobFormat.RawPrivateKey, out Key? signingKey);
@@ -58,7 +81,16 @@ public static class NSecCryptographicFunctions
         ReadOnlyMemory<byte> publicKeyMaterial,
         FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
     {
+        ProviderOperation operation = new(nameof(VerifyEd25519Async));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Verify);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
+        }
+
         var publicKey = PublicKey.Import(SignatureAlgorithm.Ed25519, publicKeyMaterial.Span, KeyBlobFormat.RawPublicKey);
+
         return ValueTask.FromResult(SignatureAlgorithm.Ed25519.Verify(publicKey, dataToVerify.Span, signature.Span));
     }
 }

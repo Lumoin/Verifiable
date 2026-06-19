@@ -107,6 +107,33 @@ public delegate ValueTask<VcalmIssueCredentialRequest?> ParseVcalmIssueCredentia
 
 
 /// <summary>
+/// Resolves the §3.2.1 issuance configuration — the configured issuer identity and its one-or-more
+/// signing descriptors — for the tenant the current request was dispatched to, so a single host can
+/// serve many tenants, each securing credentials under its OWN issuer identity and signing key. The
+/// dispatcher stamps the resolved tenant on <paramref name="context"/> (read via <c>context.TenantId</c>
+/// / <c>context.Registration</c>); the application keys its per-tenant issuer store off it, exactly as
+/// the storage and challenge seams scope themselves per tenant.
+/// </summary>
+/// <remarks>
+/// When wired, this seam SUPERSEDES the single, server-global
+/// <see cref="VcalmIntegration.VcalmCredentialIssuance"/> for the §3.2.1 issuer endpoint: the endpoint
+/// resolves the issuance configuration per request rather than reading one shared value. A deployment
+/// hosting a single issuer wires the flat <see cref="VcalmIntegration.VcalmCredentialIssuance"/> and
+/// leaves this null; a multi-tenant deployment wires this and resolves the per-tenant value. A
+/// <see langword="null"/> result for a tenant that is nonetheless allowed the
+/// <see cref="WellKnownVcalmCapabilities.VcalmIssuer"/> capability is a server misconfiguration the
+/// §3.2.1 endpoint surfaces as a fail-closed error (an issuer route with no signing identity cannot
+/// secure a credential).
+/// </remarks>
+/// <param name="context">The per-request context bag, carrying the resolved tenant identity.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The tenant's issuance configuration, or <see langword="null"/> when the tenant has none.</returns>
+public delegate ValueTask<VcalmCredentialIssuance?> ResolveVcalmCredentialIssuanceDelegate(
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
 /// Persists a credential the VCALM 1.0 §3.2.1 <c>POST /credentials/issue</c> endpoint secured, keyed
 /// by its <c>credentialId</c>, so the §3.2.2 <c>GET /credentials/{id}</c> and §3.2.3
 /// <c>DELETE /credentials/{id}</c> interfaces can retrieve and delete it. The application owns the

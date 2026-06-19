@@ -12,5 +12,12 @@
     <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
     <ProjectReference Include="..\Verifiable.JsonPointer\Verifiable.JsonPointer.csproj" />
   </ItemGroup>
+
+  <!-- The bbs-2023 Data Integrity cryptosuite consumes the BBS primitive and the managed
+       BLS12-381 algebraic backends; Core is pulled transitively by both. -->
+  <ItemGroup>
+    <PackageReference Include="Lumoin.Veridical.Bbs" />
+    <PackageReference Include="Lumoin.Veridical.Backends.Managed" />
+  </ItemGroup>
     
 </Project>

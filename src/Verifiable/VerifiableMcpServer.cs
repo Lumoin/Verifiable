@@ -78,4 +78,18 @@ internal sealed class VerifiableMcpServer
 
         return result.Value!;
     }
+
+
+    [McpServerTool(Name = McpToolNames.EmitCbom), Description("Emit a CycloneDX cryptographic bill of materials (CBOM). Use mode 'declarative' (default) for the library's full crypto capabilities, or 'observed' to run a real crypto workload and report what actually executed. Returns CycloneDX 1.6 JSON.")]
+    public static async Task<string> EmitCbom(
+        [Description("The CBOM mode: 'declarative' (default) or 'observed'.")] string? mode = null)
+    {
+        bool isObserved = string.Equals(mode, "observed", System.StringComparison.OrdinalIgnoreCase);
+
+        var result = isObserved
+            ? await VerifiableOperations.EmitObservedCbomAsync().ConfigureAwait(false)
+            : VerifiableOperations.EmitDeclarativeCbom();
+
+        return result.IsSuccess ? result.Value! : result.Error!;
+    }
 }

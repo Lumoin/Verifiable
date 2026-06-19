@@ -62,7 +62,8 @@ public static class VcalmStatusEndpoints
             //library never owns the signing key, so an instance with no §C.1 issuance does not
             //advertise list creation.
             if(server?.Vcalm().ParseVcalmCreateStatusListAsync is not null
-                && server?.Vcalm().VcalmStatusListIssuance is not null)
+                && (server?.Vcalm().VcalmStatusListIssuance is not null
+                    || server?.Vcalm().ResolveVcalmStatusListIssuanceAsync is not null))
             {
                 candidates.Add(BuildCreateStatusList());
             }
@@ -253,7 +254,17 @@ public static class VcalmStatusEndpoints
         CancellationToken cancellationToken)
     {
         var vcalm = server.Vcalm();
-        VcalmCredentialIssuance issuance = vcalm.VcalmStatusListIssuance!;
+
+        //§C.1 status-list signing configuration, resolved for the request's tenant (the per-tenant
+        //resolver or the flat server-global value). A multi-tenant host secures each tenant's status
+        //lists under that tenant's own issuer identity and key.
+        VcalmCredentialIssuance? issuance = await vcalm
+            .ResolveEffectiveStatusListIssuanceAsync(context, cancellationToken).ConfigureAwait(false);
+        if(issuance is null)
+        {
+            return ServerHttpResponse.ServerError(
+                ServerErrors.ServerError, "No VCALM status-list issuance configuration resolved for this tenant.");
+        }
 
         //§C.1 id: the caller-supplied id when present, else minted through the host-generic
         //identifier-generation seam ("If not provided, the service will generate one.") so a

@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
@@ -7,6 +8,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
+using Verifiable.Cryptography.Provider;
+using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 
 namespace Verifiable.Microsoft;
 
@@ -25,6 +28,20 @@ public static class MicrosoftKeyAgreementFunctions
 {
     private const int AesGcmTagLength = 16;
     private const int AesGcmIvLength = 12;
+
+    private static readonly ProviderLibrary ProviderLib = new(
+        typeof(MicrosoftKeyAgreementFunctions).Assembly.GetName().Name
+            ?? "Verifiable.Microsoft",
+        typeof(MicrosoftKeyAgreementFunctions).Assembly.GetName().Version?.ToString()
+            ?? "Unknown");
+
+    private static readonly CryptoLibraryInfo CryptoLib = new(
+        "System.Security.Cryptography",
+        typeof(RandomNumberGenerator).Assembly.GetName().Version?.ToString()
+            ?? System.Environment.Version.ToString());
+
+    private static readonly ProviderClass ProviderCls =
+        new(nameof(MicrosoftKeyAgreementFunctions));
 
 
     /// <summary>
@@ -46,6 +63,15 @@ public static class MicrosoftKeyAgreementFunctions
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
         ArgumentNullException.ThrowIfNull(pool);
+
+        ProviderOperation operation = new(nameof(EcdhKeyAgreementEncryptP256Async));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(ECCurve.NamedCurves.nistP256));
+        }
 
         ReadOnlySpan<byte> recipientUncompressed = recipientPublicKey.AsReadOnlySpan();
         ReadOnlySpan<byte> recipientX = EllipticCurveUtilities.SliceXCoordinate(recipientUncompressed);
@@ -123,6 +149,15 @@ public static class MicrosoftKeyAgreementFunctions
         ArgumentNullException.ThrowIfNull(epk);
         ArgumentNullException.ThrowIfNull(pool);
 
+        ProviderOperation operation = new(nameof(EcdhKeyAgreementDecryptP256Async));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(ECCurve.NamedCurves.nistP256));
+        }
+
         //Split the uncompressed point into X and Y coordinates.
         ReadOnlySpan<byte> point = epk.AsReadOnlySpan();
         const int coordinateLength = 32;
@@ -193,6 +228,15 @@ public static class MicrosoftKeyAgreementFunctions
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
         ArgumentNullException.ThrowIfNull(pool);
 
+        ProviderOperation operation = new(nameof(EcdhEncryptNistAsync));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(namedCurve));
+        }
+
         ReadOnlySpan<byte> recipientUncompressed = recipientPublicKey.AsReadOnlySpan();
         ReadOnlySpan<byte> recipientX = EllipticCurveUtilities.SliceXCoordinate(recipientUncompressed);
         ReadOnlySpan<byte> recipientY = EllipticCurveUtilities.SliceYCoordinate(recipientUncompressed);
@@ -258,6 +302,16 @@ public static class MicrosoftKeyAgreementFunctions
     {
         ArgumentNullException.ThrowIfNull(epk);
         ArgumentNullException.ThrowIfNull(pool);
+
+        ProviderOperation operation = new(nameof(EcdhDecryptNistAsync));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyAgreement);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(namedCurve));
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
 
         //Split the uncompressed point into X and Y coordinates (length-aware per curve).
@@ -291,6 +345,17 @@ public static class MicrosoftKeyAgreementFunctions
             CryptographicOperations.ZeroMemory(sharedSecret);
         }
     }
+
+
+    private static string MapCurveDisplay(ECCurve curve) =>
+        curve.Oid.FriendlyName switch
+        {
+            "nistP256" => "P-256",
+            "nistP384" => "P-384",
+            "nistP521" => "P-521",
+            "secP256k1" => "secp256k1",
+            _ => curve.Oid.FriendlyName ?? "Unknown"
+        };
 
 
     //Named-curve OIDs for the SEC1 ECPrivateKey import in CreateRecipientEcdh.

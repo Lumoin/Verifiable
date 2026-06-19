@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Core;
 using Verifiable.Server;
 
 namespace Verifiable.Vcalm;
@@ -104,6 +105,34 @@ public sealed class VcalmIntegration: ServerIntegration
     public VcalmCredentialIssuance? VcalmCredentialIssuance { get; set; }
 
     /// <summary>
+    /// Resolves the §3.2.1 issuance configuration for the tenant the current request was dispatched to,
+    /// so a single host serves many tenants each securing credentials under its own issuer identity and
+    /// signing key — the multi-tenant counterpart of the single, server-global
+    /// <see cref="VcalmCredentialIssuance"/>. When wired it SUPERSEDES <see cref="VcalmCredentialIssuance"/>
+    /// for the §3.2.1 issuer endpoint; when null, the endpoint reads the flat
+    /// <see cref="VcalmCredentialIssuance"/>. A deployment wires exactly one of the two: the flat value
+    /// for a single issuer, this resolver for per-tenant issuers. The application keys its per-tenant
+    /// store off <c>context.TenantId</c>, exactly as the issued-credential and challenge stores do.
+    /// </summary>
+    public ResolveVcalmCredentialIssuanceDelegate? ResolveVcalmCredentialIssuanceAsync { get; set; }
+
+    /// <summary>
+    /// The §3.2.1 issuance configuration in effect for the current request: the per-tenant
+    /// <see cref="ResolveVcalmCredentialIssuanceAsync"/> when wired, otherwise the single, server-global
+    /// <see cref="VcalmCredentialIssuance"/>. The issuer endpoint resolves issuance through this so the
+    /// single-tenant and multi-tenant wirings share one code path.
+    /// </summary>
+    /// <param name="context">The per-request context bag, carrying the resolved tenant identity.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The issuance configuration for the request's tenant, or <see langword="null"/> when none is configured.</returns>
+    public ValueTask<VcalmCredentialIssuance?> ResolveEffectiveCredentialIssuanceAsync(
+        ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        ResolveVcalmCredentialIssuanceAsync is { } resolve
+            ? resolve(context, cancellationToken)
+            : ValueTask.FromResult(VcalmCredentialIssuance);
+
+    /// <summary>
     /// Persists a credential the VCALM 1.0 §3.2.1 endpoint secured, keyed by its <c>credentialId</c>,
     /// so the §3.2.2 / §3.2.3 retrieval / deletion interfaces can reach it. Optional — when unwired
     /// the issuer is stateless and the §3.2.2 / §3.2.3 MAY interfaces do not materialize.
@@ -159,6 +188,30 @@ public sealed class VcalmIntegration: ServerIntegration
     public VcalmCredentialIssuance? VcalmStatusListIssuance { get; set; }
 
     /// <summary>
+    /// Resolves the §C.1 status-list signing configuration for the tenant the current request was
+    /// dispatched to, so a single host serves many tenants each securing their status lists under their
+    /// own issuer identity and key — the multi-tenant counterpart of the single, server-global
+    /// <see cref="VcalmStatusListIssuance"/>. When wired it SUPERSEDES <see cref="VcalmStatusListIssuance"/>
+    /// for the §C.1 endpoint; when null, the endpoint reads the flat value.
+    /// </summary>
+    public ResolveVcalmCredentialIssuanceDelegate? ResolveVcalmStatusListIssuanceAsync { get; set; }
+
+    /// <summary>
+    /// The §C.1 status-list signing configuration in effect for the current request: the per-tenant
+    /// <see cref="ResolveVcalmStatusListIssuanceAsync"/> when wired, otherwise the single, server-global
+    /// <see cref="VcalmStatusListIssuance"/>.
+    /// </summary>
+    /// <param name="context">The per-request context bag, carrying the resolved tenant identity.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The status-list issuance for the request's tenant, or <see langword="null"/> when none.</returns>
+    public ValueTask<VcalmCredentialIssuance?> ResolveEffectiveStatusListIssuanceAsync(
+        ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        ResolveVcalmStatusListIssuanceAsync is { } resolve
+            ? resolve(context, cancellationToken)
+            : ValueTask.FromResult(VcalmStatusListIssuance);
+
+    /// <summary>
     /// The number of entries a NEW §C.1 status list holds. Defaults to the W3C Bitstring Status List
     /// §3.2 herd-privacy minimum (131072). A larger value is permitted; a smaller one is rejected by
     /// the codec.
@@ -212,6 +265,29 @@ public sealed class VcalmIntegration: ServerIntegration
     public VcalmCredentialDerivation? VcalmCredentialDerivation { get; set; }
 
     /// <summary>
+    /// Resolves the §3.5.1 derive configuration for the tenant the current request was dispatched to, so
+    /// a single host serves many holder tenants each deriving under their own keys — the multi-tenant
+    /// counterpart of the single, server-global <see cref="VcalmCredentialDerivation"/>. When wired it
+    /// SUPERSEDES <see cref="VcalmCredentialDerivation"/> for the §3.5.1 endpoint.
+    /// </summary>
+    public ResolveVcalmCredentialDerivationDelegate? ResolveVcalmCredentialDerivationAsync { get; set; }
+
+    /// <summary>
+    /// The §3.5.1 derive configuration in effect for the current request: the per-tenant
+    /// <see cref="ResolveVcalmCredentialDerivationAsync"/> when wired, otherwise the single,
+    /// server-global <see cref="VcalmCredentialDerivation"/>.
+    /// </summary>
+    /// <param name="context">The per-request context bag, carrying the resolved tenant identity.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The derive configuration for the request's tenant, or <see langword="null"/> when none.</returns>
+    public ValueTask<VcalmCredentialDerivation?> ResolveEffectiveCredentialDerivationAsync(
+        ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        ResolveVcalmCredentialDerivationAsync is { } resolve
+            ? resolve(context, cancellationToken)
+            : ValueTask.FromResult(VcalmCredentialDerivation);
+
+    /// <summary>
     /// Parses a VCALM 1.0 §3.5.2 <c>/presentations</c> request body into the neutral
     /// <see cref="VcalmCreatePresentationRequest"/>. Required when the
     /// <see cref="WellKnownVcalmCapabilities.VcalmHolder"/> capability is allowed — the §3.5.2 endpoint
@@ -228,6 +304,30 @@ public sealed class VcalmIntegration: ServerIntegration
     /// §3.5.2 endpoint cannot secure a presentation (fail-closed; the route does not materialize).
     /// </summary>
     public VcalmPresentationSigning? VcalmPresentationSigning { get; set; }
+
+    /// <summary>
+    /// Resolves the §3.5.2 presentation-signing configuration for the tenant the current request was
+    /// dispatched to, so a single host serves many holder tenants each signing presentations under
+    /// their own key — the multi-tenant counterpart of the single, server-global
+    /// <see cref="VcalmPresentationSigning"/>. When wired it SUPERSEDES <see cref="VcalmPresentationSigning"/>
+    /// for the §3.5.2 endpoint.
+    /// </summary>
+    public ResolveVcalmPresentationSigningDelegate? ResolveVcalmPresentationSigningAsync { get; set; }
+
+    /// <summary>
+    /// The §3.5.2 presentation-signing configuration in effect for the current request: the per-tenant
+    /// <see cref="ResolveVcalmPresentationSigningAsync"/> when wired, otherwise the single, server-global
+    /// <see cref="VcalmPresentationSigning"/>.
+    /// </summary>
+    /// <param name="context">The per-request context bag, carrying the resolved tenant identity.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The presentation-signing configuration for the request's tenant, or <see langword="null"/> when none.</returns>
+    public ValueTask<VcalmPresentationSigning?> ResolveEffectivePresentationSigningAsync(
+        ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        ResolveVcalmPresentationSigningAsync is { } resolve
+            ? resolve(context, cancellationToken)
+            : ValueTask.FromResult(VcalmPresentationSigning);
 
     /// <summary>
     /// Persists a presentation the VCALM 1.0 §3.5.2 endpoint secured, keyed by its id, so the §3.5.3 /
@@ -376,13 +476,41 @@ public sealed class VcalmIntegration: ServerIntegration
     public VcalmCredentialIssuance? VcalmExchangeIssuance { get; set; }
 
     /// <summary>
-    /// The §3.6 issuance-in-exchange signing configuration the engine uses, preferring the dedicated
-    /// <see cref="VcalmExchangeIssuance"/> and falling back to the issuer-role
-    /// <see cref="VcalmCredentialIssuance"/>. An exchange role co-hosted with an issuer role shares the
-    /// one signing configuration; a stand-alone workflow service wires the dedicated value.
+    /// Resolves the §3.6 issuance-in-exchange signing configuration for the tenant the current request
+    /// was dispatched to, so a single host serves many tenants each minting exchange credentials under
+    /// their own issuer identity and key — the multi-tenant counterpart of the dedicated, server-global
+    /// <see cref="VcalmExchangeIssuance"/>. When wired it SUPERSEDES <see cref="VcalmExchangeIssuance"/>
+    /// for the §3.6 engine; when null, the engine reads the flat value, then the issuer fallback.
     /// </summary>
-    public VcalmCredentialIssuance? EffectiveExchangeIssuance =>
-        VcalmExchangeIssuance ?? VcalmCredentialIssuance;
+    public ResolveVcalmCredentialIssuanceDelegate? ResolveVcalmExchangeIssuanceAsync { get; set; }
+
+    /// <summary>
+    /// The §3.6 issuance-in-exchange signing configuration in effect for the current request, preferring
+    /// the per-tenant <see cref="ResolveVcalmExchangeIssuanceAsync"/>, then the dedicated flat
+    /// <see cref="VcalmExchangeIssuance"/>, then falling back to the issuer-role
+    /// <see cref="ResolveEffectiveCredentialIssuanceAsync"/> (itself per-tenant or flat). An exchange
+    /// role co-hosted with an issuer role shares the one signing configuration; a stand-alone workflow
+    /// service wires the dedicated value or resolver.
+    /// </summary>
+    /// <param name="context">The per-request context bag, carrying the resolved tenant identity.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The exchange issuance for the request's tenant, or <see langword="null"/> when none resolves.</returns>
+    public async ValueTask<VcalmCredentialIssuance?> ResolveEffectiveExchangeIssuanceAsync(
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        if(ResolveVcalmExchangeIssuanceAsync is { } resolve)
+        {
+            VcalmCredentialIssuance? perTenant = await resolve(context, cancellationToken).ConfigureAwait(false);
+            if(perTenant is not null)
+            {
+                return perTenant;
+            }
+        }
+
+        return VcalmExchangeIssuance
+            ?? await ResolveEffectiveCredentialIssuanceAsync(context, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Parses a VCALM 1.0 §3.6.7 <c>POST /callbacks/{localCallbackId}</c> request body into the neutral

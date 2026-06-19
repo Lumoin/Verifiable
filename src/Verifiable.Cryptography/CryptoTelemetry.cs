@@ -166,6 +166,54 @@ public static class CryptoTelemetry
 
 
     /// <summary>
+    /// Attribute names specific to signing and verification spans.
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible",
+        Justification = "Intentional grouping of related constants — same pattern as WellKnownMediaTypes.")]
+    public static class Signature
+    {
+        /// <summary>Signature algorithm family, e.g. <c>ECDSA</c>, <c>Ed25519</c>, <c>RSA</c>, or <c>ML-DSA</c>.</summary>
+        public const string Algorithm = "crypto.signature.algorithm";
+
+        /// <summary>Named curve for elliptic-curve signatures, e.g. <c>P-256</c>; absent for non-curve algorithms.</summary>
+        public const string Curve = "crypto.signature.curve";
+    }
+
+
+    /// <summary>
+    /// Attribute names specific to key generation and key agreement spans.
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible",
+        Justification = "Intentional grouping of related constants — same pattern as WellKnownMediaTypes.")]
+    public static class Key
+    {
+        /// <summary>Key algorithm family, e.g. <c>ECDSA</c>, <c>Ed25519</c>, <c>RSA</c>, <c>X25519</c>, or <c>ECDH</c>.</summary>
+        public const string Algorithm = "crypto.key.algorithm";
+
+        /// <summary>
+        /// The numeric <see cref="Verifiable.Cryptography.Context.CryptoAlgorithm.Algorithm"/> code of the
+        /// generated key. This is the authoritative algorithm identity an observer resolves with
+        /// <see cref="Verifiable.Cryptography.Context.CryptoAlgorithm.FromCode(int)"/> to describe the key the
+        /// same way the declarative view does, so observed and declarative descriptions agree by construction.
+        /// </summary>
+        public const string AlgorithmCode = "crypto.key.algorithm_code";
+
+        /// <summary>Named curve for elliptic-curve keys, e.g. <c>P-256</c>; absent for non-curve algorithms.</summary>
+        public const string Curve = "crypto.key.curve";
+
+        /// <summary>The key-material role: <c>private-key</c> or <c>public-key</c>.</summary>
+        public const string Type = "crypto.key.type";
+
+        /// <summary>
+        /// The cryptographic primitive the generated key serves, stated by the producer that
+        /// knows it unambiguously. One of the <see cref="WellKnownCryptographicPrimitives"/>
+        /// values, e.g. <c>signature</c>, <c>keyagree</c>, or <c>kem</c>.
+        /// </summary>
+        public const string Primitive = "crypto.key.primitive";
+    }
+
+
+    /// <summary>
     /// Activity name constants used when starting spans on
     /// <see cref="CryptoActivitySource.Source"/>.
     /// </summary>
@@ -187,6 +235,18 @@ public static class CryptoTelemetry
 
         /// <summary>Activity name for HMAC verify operations.</summary>
         public const string HmacVerify = "crypto.hmac.verify";
+
+        /// <summary>Activity name for signing operations.</summary>
+        public const string Sign = "crypto.sign";
+
+        /// <summary>Activity name for signature verification operations.</summary>
+        public const string Verify = "crypto.verify";
+
+        /// <summary>Activity name for key-pair generation.</summary>
+        public const string KeyGen = "crypto.keygen";
+
+        /// <summary>Activity name for key-agreement (ECDH) operations.</summary>
+        public const string KeyAgreement = "crypto.key_agreement";
     }
 
 

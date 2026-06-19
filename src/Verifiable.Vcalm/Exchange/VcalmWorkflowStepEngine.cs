@@ -177,7 +177,8 @@ public static class VcalmWorkflowStepEngine
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        VcalmCredentialIssuance? issuance = vcalm.EffectiveExchangeIssuance;
+        VcalmCredentialIssuance? issuance = await vcalm
+            .ResolveEffectiveExchangeIssuanceAsync(context, cancellationToken).ConfigureAwait(false);
         if(issuance is null)
         {
             //Fail-closed: a step that mints credentials needs the issuance seam. Without it the engine

@@ -1,11 +1,14 @@
 using System;
 using System.Buffers;
 using System.Collections.Frozen;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Provider;
+using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 
 namespace Verifiable.Microsoft
 {
@@ -15,6 +18,21 @@ namespace Verifiable.Microsoft
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned objects.")]
     public static class MicrosoftCryptographicFunctions
     {
+        private static readonly ProviderLibrary ProviderLib = new(
+            typeof(MicrosoftCryptographicFunctions).Assembly.GetName().Name
+                ?? "Verifiable.Microsoft",
+            typeof(MicrosoftCryptographicFunctions).Assembly.GetName().Version?.ToString()
+                ?? "Unknown");
+
+        private static readonly CryptoLibraryInfo CryptoLib = new(
+            "System.Security.Cryptography",
+            typeof(RandomNumberGenerator).Assembly.GetName().Version?.ToString()
+                ?? System.Environment.Version.ToString());
+
+        private static readonly ProviderClass ProviderCls =
+            new(nameof(MicrosoftCryptographicFunctions));
+
+
         public static ValueTask<bool> VerifyP256Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             return VerifyECDsa(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, ECCurve.NamedCurves.nistP256, HashAlgorithmName.SHA256);
@@ -149,6 +167,15 @@ namespace Verifiable.Microsoft
 
         private static ValueTask<bool> VerifyECDsa(ReadOnlySpan<byte> dataToVerify, ReadOnlySpan<byte> signature, ReadOnlySpan<byte> publicKeyMaterial, ECCurve curve, HashAlgorithmName hashAlgorithmName)
         {
+            ProviderOperation operation = new(nameof(VerifyECDsa));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Verify);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
+                activity.SetTag(CryptoTelemetry.Signature.Curve, MapCurveDisplay(curve));
+            }
+
             if(EllipticCurveUtilities.IsCompressed(publicKeyMaterial))
             {
                 var curveType = curve.Oid.FriendlyName!.Equals("secP256k1", StringComparison.Ordinal) ? EllipticCurveTypes.Secp256k1 : EllipticCurveTypes.NistCurves;
@@ -174,6 +201,15 @@ namespace Verifiable.Microsoft
 
         private static ValueTask<Signature> SignECDsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, MemoryPool<byte> signaturePool, ECCurve curve, HashAlgorithmName hashAlgorithmName, Tag signatureTag)
         {
+            ProviderOperation operation = new(nameof(SignECDsa));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
+                activity.SetTag(CryptoTelemetry.Signature.Curve, MapCurveDisplay(curve));
+            }
+
             var key = ECDsa.Create(new ECParameters
             {
                 Curve = curve,
@@ -189,6 +225,14 @@ namespace Verifiable.Microsoft
 
         private static ValueTask<bool> VerifyRsaAsync(ReadOnlySpan<byte> dataToVerify, ReadOnlySpan<byte> signature, ReadOnlySpan<byte> publicKeyMaterial, HashAlgorithmName hashAlgorithmName, RSASignaturePadding padding)
         {
+            ProviderOperation operation = new(nameof(VerifyRsaAsync));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Verify);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+            }
+
             using(RSA rsa = RSA.Create())
             {
                 try
@@ -211,6 +255,14 @@ namespace Verifiable.Microsoft
 
         private static ValueTask<Signature> SignRsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, MemoryPool<byte> signaturePool, HashAlgorithmName hashAlgorithmName, RSASignaturePadding padding, Tag signatureTag)
         {
+            ProviderOperation operation = new(nameof(SignRsa));
+            using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+            }
+
             using(RSA rsa = RSA.Create())
             {
                 rsa.ImportRSAPrivateKey(privateKeyBytes, out _);
@@ -221,5 +273,16 @@ namespace Verifiable.Microsoft
                 return ValueTask.FromResult(new Signature(memoryPooledSignature, signatureTag));
             }
         }
+
+
+        private static string MapCurveDisplay(ECCurve curve) =>
+            curve.Oid.FriendlyName switch
+            {
+                "nistP256" => "P-256",
+                "nistP384" => "P-384",
+                "nistP521" => "P-521",
+                "secP256k1" => "secp256k1",
+                _ => curve.Oid.FriendlyName ?? "Unknown"
+            };
     }
 }

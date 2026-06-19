@@ -452,6 +452,20 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     }
 
 
+    /// <summary>
+    /// Reconstructs a <see cref="CryptoAlgorithm"/> from its numeric <see cref="Algorithm"/> code.
+    /// </summary>
+    /// <param name="algorithm">The numeric algorithm code, e.g. obtained from a telemetry tag.</param>
+    /// <returns>The <see cref="CryptoAlgorithm"/> with the given code.</returns>
+    /// <remarks>
+    /// The identity of a <see cref="CryptoAlgorithm"/> is its code: equality, <see cref="CryptoAlgorithmNames"/>,
+    /// and consumers that switch on the well-known instances all compare by code. Reconstructing from a code
+    /// therefore yields a value equal to the corresponding well-known instance. This is the inverse of stamping
+    /// <see cref="Algorithm"/> onto a span, letting an observer resolve the algorithm a producer recorded.
+    /// </remarks>
+    public static CryptoAlgorithm FromCode(int algorithm) => new(algorithm);
+
+
     /// <inheritdoc />
     public override string ToString() => CryptoAlgorithmNames.GetName(this);
 
