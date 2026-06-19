@@ -186,6 +186,20 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     }
 
     /// <summary>
+    /// Creates a sized public buffer template for an ECC restricted storage key, suitable as the parent
+    /// of <c>TPM2_Create()</c>.
+    /// </summary>
+    /// <param name="nameAlg">The hash algorithm for Name computation.</param>
+    /// <param name="curve">The ECC curve.</param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateEccStorageParentTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmEccCurveConstants curve)
+    {
+        return FromTemplate(TpmtPublic.CreateEccStorageParentTemplate(nameAlg, curve));
+    }
+
+    /// <summary>
     /// Releases the memory owned by this structure.
     /// </summary>
     public void Dispose()

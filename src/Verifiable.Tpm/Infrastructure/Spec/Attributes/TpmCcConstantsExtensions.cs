@@ -78,6 +78,18 @@ public static partial class TpmCcConstantsExtensions
         TpmCcConstants.TPM_CC_CreatePrimary
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
 
+        //Section 12.1 - TPM2_Create.
+        //Handle area: @parentHandle (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_Create
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 12.2 - TPM2_Load.
+        //Handle area: @parentHandle (1 handle, requires auth).
+        //Response: objectHandle (1 handle).
+        TpmCcConstants.TPM_CC_Load
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
         //Section 28.4 - TPM2_FlushContext.
         //Handle area: none (0 handles).
         //Note: flushHandle is in the parameter area, not handle area.

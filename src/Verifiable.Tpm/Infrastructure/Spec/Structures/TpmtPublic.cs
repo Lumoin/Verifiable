@@ -233,6 +233,49 @@ public sealed class TpmtPublic: IDisposable
     }
 
     /// <summary>
+    /// Creates a public area template for an ECC restricted storage key, the kind of key that can act as
+    /// a parent for <c>TPM2_Create()</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A parent must be a restricted decryption (storage) key with a symmetric definition: it wraps the
+    /// sensitive area of its children under that symmetric key. The attributes are:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description><see cref="TpmaObject.FIXED_TPM"/> / <see cref="TpmaObject.FIXED_PARENT"/>: the key is non-duplicable.</description></item>
+    ///   <item><description><see cref="TpmaObject.SENSITIVE_DATA_ORIGIN"/>: the TPM generates the sensitive data.</description></item>
+    ///   <item><description><see cref="TpmaObject.USER_WITH_AUTH"/>: USER-role actions may be authorized with the authValue.</description></item>
+    ///   <item><description><see cref="TpmaObject.RESTRICTED"/> + <see cref="TpmaObject.DECRYPT"/>: a storage parent (TPM 2.0 Part 1, Section 25.2).</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="nameAlg">The hash algorithm for Name computation.</param>
+    /// <param name="curve">The ECC curve.</param>
+    /// <returns>The public area template.</returns>
+    public static TpmtPublic CreateEccStorageParentTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmEccCurveConstants curve)
+    {
+        TpmaObject objectAttributes =
+            TpmaObject.FIXED_TPM |
+            TpmaObject.FIXED_PARENT |
+            TpmaObject.SENSITIVE_DATA_ORIGIN |
+            TpmaObject.USER_WITH_AUTH |
+            TpmaObject.RESTRICTED |
+            TpmaObject.DECRYPT;
+
+        TpmuPublicParms parameters = TpmuPublicParms.Ecc(
+            TpmsEccParms.ForStorage(curve, TpmtSymDefObject.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB)));
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_ECC,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Empty,
+            parameters,
+            TpmuPublicId.EmptyEcc());
+    }
+
+    /// <summary>
     /// Releases the memory owned by this structure.
     /// </summary>
     public void Dispose()

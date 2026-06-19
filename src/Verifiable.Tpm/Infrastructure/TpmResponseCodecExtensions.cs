@@ -126,6 +126,40 @@ public static class TpmResponseCodecExtensions
                 CreatePrimaryResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>
+        /// Codec for TPM2_Create response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// No response handle (the created object is not loaded). Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>outPrivate (TPM2B_PRIVATE) - the parent-wrapped private blob.</description></item>
+        ///   <item><description>outPublic (TPM2B_PUBLIC) - the public area of the created object.</description></item>
+        ///   <item><description>creationData (TPM2B_CREATION_DATA), creationHash (TPM2B_DIGEST), creationTicket (TPMT_TK_CREATION).</description></item>
+        /// </list>
+        /// <para>
+        /// Named <c>CreateObject</c> rather than <c>Create</c> to avoid colliding with the
+        /// <see cref="TpmResponseCodec.Create{TResponse}"/> factory. See TPM 2.0 Part 3, Section 12.1.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec CreateObject => TpmResponseCodec.Create(CreateResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_Load response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response handle: objectHandle (TPMI_DH_OBJECT). Response parameters: name (TPM2B_NAME).
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 12.2 - TPM2_Load.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec Load => TpmResponseCodec.CreateWithHandle(
+            static (ref TpmReader reader, uint handle, System.Buffers.MemoryPool<byte> pool) =>
+                LoadResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
+
+        /// <summary>
         /// Codec for TPM2_GetCapability response.
         /// </summary>
         /// <remarks>
