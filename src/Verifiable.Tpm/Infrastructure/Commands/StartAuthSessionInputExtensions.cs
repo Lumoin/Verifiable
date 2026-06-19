@@ -21,7 +21,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 ///   <item><description><strong>Bound and salted:</strong> Maximum security with both binding and salt.</description></item>
 /// </list>
 /// <para>
-/// See TPM 2.0 Part 1, Section 19.6 for session binding and salting details.
+/// See TPM 2.0 Part 1, Section 17.6 for session binding and salting details.
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The analyzer is not up to date with latest syntax.")]
@@ -58,6 +58,46 @@ public static class StartAuthSessionInputExtensions
             {
                 TpmKey = (uint)TpmRh.TPM_RH_NULL,
                 Bind = (uint)TpmRh.TPM_RH_NULL,
+                NonceCaller = nonce,
+                EncryptedSalt = ReadOnlyMemory<byte>.Empty,
+                SessionType = TpmSeConstants.TPM_SE_HMAC,
+                AuthHash = authHash
+            };
+        }
+
+        /// <summary>
+        /// Creates a bound, unsalted HMAC session against the supplied entity.
+        /// </summary>
+        /// <param name="bind">
+        /// The handle of the entity to bind to (an object or NV index handle, or a permanent handle such as
+        /// a hierarchy). The TPM reads this entity's authorization value when deriving the session key, so
+        /// the caller must pass the same handle to the entity whose authValue it feeds to
+        /// <see cref="Sessions.TpmSession.CreateBoundAsync"/>.
+        /// </param>
+        /// <param name="authHash">The hash algorithm for the session.</param>
+        /// <returns>A StartAuthSessionInput configured for a bound, unsalted HMAC session.</returns>
+        /// <remarks>
+        /// <para>
+        /// Binding folds the bind entity's authValue into the session key
+        /// (<c>sessionKey = KDFa(authHash, bindAuthValue, "ATH", nonceTPM, nonceCaller, bits)</c>, Part 1
+        /// §17.6.10 eq 20), so a session that subsequently authorizes the bind entity omits that authValue from
+        /// the per-command HMAC key (Part 1 §17.6.10 eq 21/22).
+        /// </para>
+        /// <para>
+        /// The generated <see cref="StartAuthSessionInput.NonceCaller"/> is the nonceCaller that the key
+        /// derivation also consumes; read it back from the returned input and pass it verbatim to
+        /// <see cref="Sessions.TpmSession.CreateBoundAsync"/> so the host and the TPM derive the same key.
+        /// </para>
+        /// </remarks>
+        public static StartAuthSessionInput CreateBoundUnsaltedHmacSession(uint bind, TpmAlgIdConstants authHash)
+        {
+            byte[] nonce = new byte[GetDigestSize(authHash)];
+            RandomNumberGenerator.Fill(nonce);
+
+            return new StartAuthSessionInput
+            {
+                TpmKey = (uint)TpmRh.TPM_RH_NULL,
+                Bind = bind,
                 NonceCaller = nonce,
                 EncryptedSalt = ReadOnlyMemory<byte>.Empty,
                 SessionType = TpmSeConstants.TPM_SE_HMAC,

@@ -100,6 +100,16 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         Tpm2bNonce nonceTPM,
         TpmAlgIdConstants sessionAlg,
         MemoryPool<byte> pool)
+        : this(sessionHandle, nonceTPM, sessionAlg, Tpm2bAuth.CreateEmpty(pool), pool)
+    {
+    }
+
+    private TpmSession(
+        TpmHandle sessionHandle,
+        Tpm2bNonce nonceTPM,
+        TpmAlgIdConstants sessionAlg,
+        Tpm2bAuth sessionKey,
+        MemoryPool<byte> pool)
     {
         this.sessionHandle = sessionHandle;
         this.sessionAlg = sessionAlg;
@@ -111,11 +121,90 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         //Generate initial nonceCaller for first command.
         nonceCaller = Tpm2bNonce.CreateRandom(digestSize, pool);
 
-        //Initialize sessionKey and authValue as empty.
-        sessionKey = Tpm2bAuth.CreateEmpty(pool);
+        //The session key is empty for an unbound/unsalted session and the KDFa-derived key for a
+        //bound or salted session; authValue starts empty (the caller sets the authorized entity's value).
+        this.sessionKey = sessionKey;
         authValue = Tpm2bAuth.CreateEmpty(pool);
 
         SessionAttributes = TpmaSession.CONTINUE_SESSION;
+    }
+
+    /// <summary>
+    /// Creates a bound HMAC session from a <c>TPM2_StartAuthSession</c> response, deriving the session key
+    /// from the bind entity's authorization value.
+    /// </summary>
+    /// <param name="sessionHandle">The session handle from StartAuthSession.</param>
+    /// <param name="bindAuthValue">
+    /// The bind entity's authorization value (trailing zeros already removed per TPM 2.0 Library Part 1,
+    /// Section 17.6.4). The session key incorporates it, so when this session authorizes the bind entity the
+    /// caller supplies no per-command authorization value (the binding covers it).
+    /// </param>
+    /// <param name="startNonceCaller">The caller nonce sent in the StartAuthSession command.</param>
+    /// <param name="nonceTPM">
+    /// The TPM nonce from the StartAuthSession response. Ownership transfers to the returned session; if key
+    /// derivation fails this method disposes it before the exception propagates, so the caller never disposes
+    /// it after a successful argument check.
+    /// </param>
+    /// <param name="sessionAlg">The session hash algorithm.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="cancellationToken">A token observed across the key-derivation HMACs.</param>
+    /// <returns>The established bound session.</returns>
+    /// <remarks>
+    /// <para>
+    /// Per TPM 2.0 Library Part 1, Section 17.6.10 (equation 20) and Section 17.6.12 (equation 25) the session
+    /// key is <c>KDFa(sessionAlg, (bindAuthValue || salt), "ATH", nonceTPM, nonceCaller, bits)</c> — the bind
+    /// authorization value first, then the salt. This bound (unsalted) path has no salt, so the KDF key is the
+    /// bind authorization value alone; the salted path appends the salt after it. The context values are the
+    /// initial StartAuthSession nonces (nonceTPM then nonceCaller), not the rolling per-command ones.
+    /// </para>
+    /// </remarks>
+    public static async ValueTask<TpmSession> CreateBoundAsync(
+        TpmHandle sessionHandle,
+        ReadOnlyMemory<byte> bindAuthValue,
+        ReadOnlyMemory<byte> startNonceCaller,
+        Tpm2bNonce nonceTPM,
+        TpmAlgIdConstants sessionAlg,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(nonceTPM);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        Tpm2bAuth sessionKey;
+        try
+        {
+            int size = GetDigestSize(sessionAlg);
+
+            IMemoryOwner<byte> derived = await Kdfa.DeriveAsync(
+                ToHashAlgorithmName(sessionAlg),
+                bindAuthValue,
+                "ATH",
+                nonceTPM.AsReadOnlyMemory(),
+                startNonceCaller,
+                size * 8,
+                pool,
+                cancellationToken).ConfigureAwait(false);
+
+            try
+            {
+                sessionKey = Tpm2bAuth.Create(derived.Memory.Span[..size], pool);
+            }
+            finally
+            {
+                derived.Memory.Span[..size].Clear();
+                derived.Dispose();
+            }
+        }
+        catch
+        {
+            //nonceTPM ownership has not yet passed to a session, so a derivation failure disposes it here
+            //rather than leaking the pooled buffer (the project forbids leaks on exception paths).
+            nonceTPM.Dispose();
+
+            throw;
+        }
+
+        return new TpmSession(sessionHandle, nonceTPM, sessionAlg, sessionKey, pool);
     }
 
     /// <inheritdoc/>
@@ -138,7 +227,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// <param name="value">The authorization value.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <remarks>
-    /// Per spec Part 1, Section 19.6.4, trailing zeros should be removed from
+    /// Per spec Part 1, Section 17.6.4, trailing zeros should be removed from
     /// password-based authValues before use.
     /// </remarks>
     public void SetAuthValue(ReadOnlySpan<byte> value, MemoryPool<byte> pool)

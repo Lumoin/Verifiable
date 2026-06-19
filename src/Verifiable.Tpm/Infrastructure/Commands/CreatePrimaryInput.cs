@@ -132,13 +132,18 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
     /// <param name="curve">The ECC curve.</param>
     /// <param name="scheme">The signing scheme.</param>
     /// <param name="pool">The memory pool.</param>
+    /// <param name="noDa">
+    /// When <see langword="true"/>, sets TPMA_OBJECT.noDA so that authorization failures against the key do not
+    /// advance the TPM's dictionary-attack lockout counter. Defaults to <see langword="false"/>.
+    /// </param>
     /// <returns>The command input.</returns>
     public static CreatePrimaryInput ForEccSigningKey(
         TpmRh hierarchy,
         string? password,
         TpmEccCurveConstants curve,
         TpmtEccScheme scheme,
-        MemoryPool<byte> pool)
+        MemoryPool<byte> pool,
+        bool noDa = false)
     {
         var objectAttributes =
             TpmaObject.FIXED_TPM |
@@ -146,6 +151,11 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
             TpmaObject.SENSITIVE_DATA_ORIGIN |
             TpmaObject.USER_WITH_AUTH |
             TpmaObject.SIGN_ENCRYPT;
+
+        if(noDa)
+        {
+            objectAttributes |= TpmaObject.NO_DA;
+        }
 
         var inSensitive = string.IsNullOrEmpty(password)
             ? Tpm2bSensitiveCreate.CreateEmpty(pool)
