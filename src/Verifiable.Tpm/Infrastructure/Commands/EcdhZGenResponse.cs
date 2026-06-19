@@ -1,7 +1,6 @@
 using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
@@ -55,23 +54,6 @@ public sealed class EcdhZGenResponse: IDisposable, ITpmWireType
         Tpm2bEccParameter x = Tpm2bEccParameter.Parse(ref reader, pool);
         Tpm2bEccParameter y = Tpm2bEccParameter.Parse(ref reader, pool);
         return new EcdhZGenResponse(x, y);
-    }
-
-    /// <summary>
-    /// Reconstructs the uncompressed point encoding
-    /// (<see cref="EllipticCurveUtilities.UncompressedCoordinateFormat"/> || X || Y).
-    /// </summary>
-    /// <returns>The uncompressed point bytes.</returns>
-    public byte[] ToUncompressedPoint()
-    {
-        ReadOnlySpan<byte> xSpan = OutPointX.AsReadOnlySpan();
-        ReadOnlySpan<byte> ySpan = OutPointY.AsReadOnlySpan();
-
-        byte[] result = new byte[1 + xSpan.Length + ySpan.Length];
-        result[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
-        xSpan.CopyTo(result.AsSpan(1));
-        ySpan.CopyTo(result.AsSpan(1 + xSpan.Length));
-        return result;
     }
 
     /// <inheritdoc/>
