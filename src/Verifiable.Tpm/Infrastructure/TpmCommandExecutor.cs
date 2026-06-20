@@ -31,8 +31,8 @@ namespace Verifiable.Tpm.Infrastructure;
 ///   <item><description>Submitting to TPM device asynchronously.</description></item>
 ///   <item><description>Parsing response: header, handles, parameterSize split, auth area.</description></item>
 ///   <item><description>Computing rpHash for response verification via the registered digest primitive.</description></item>
-///   <item><description>Invoking codec parser on parameters only.</description></item>
 ///   <item><description>Verifying session HMACs via the registered HMAC primitive.</description></item>
+///   <item><description>Invoking codec parser on parameters only, after the session HMACs verify.</description></item>
 /// </list>
 /// <para>
 /// <b>Design:</b>
@@ -266,42 +266,13 @@ public static class TpmCommandExecutor
 
                 TpmResponseLayout layout = layoutResult.Value;
 
-                //Parse response parameters using codec.
-                TResponse typedResponse;
-                if(codec.HasResponseParameters && layout.ParametersLength > 0)
-                {
-                    ReadOnlySpan<byte> parametersArea = response.AsReadOnlySpan().Slice(layout.ParametersStart, layout.ParametersLength);
-                    var paramReader = new TpmReader(parametersArea);
-
-                    ITpmWireType parsed = codec.ParseResponse(ref paramReader, layout.OutHandles, pool);
-
-                    if(parsed is not TResponse typed)
-                    {
-                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_FAILURE);
-                    }
-
-                    typedResponse = typed;
-
-                    //Verify no trailing bytes.
-                    if(paramReader.Remaining > 0)
-                    {
-                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
-                    }
-                }
-                else
-                {
-                    //Command has no response parameters - use the codec's parameterless response singleton.
-                    if(codec.EmptyResponse is TResponse emptyResponse)
-                    {
-                        typedResponse = emptyResponse;
-                    }
-                    else
-                    {
-                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_FAILURE);
-                    }
-                }
-
-                //Parse and verify sessions.
+                //Verify the session HMAC(s) BEFORE interpreting the response parameters, then parse with the
+                //codec. rpHash is computed over the response parameter bytes as received, so verification does
+                //not need the typed parse; deferring the parse until after verification keeps a forged or
+                //corrupt response from being interpreted, and leaves the seam where response-parameter
+                //DECRYPTION will slot in. The order mirrors ms-tpm-20-ref: the TPM encrypts the first response
+                //parameter before computing rpHash (TPM 2.0 Part 1, Section 21), so on the caller side the
+                //first parameter is decrypted only after the response HMAC verifies.
                 if(layout.HasSessions && sessions.Count > 0)
                 {
                     //Compute rpHash only if we have sessions that need it.
@@ -381,6 +352,41 @@ public static class TpmCommandExecutor
                     finally
                     {
                         rpHashOwner?.Dispose();
+                    }
+                }
+
+                //Interpret the response parameters with the codec, now that the session HMAC is verified.
+                TResponse typedResponse;
+                if(codec.HasResponseParameters && layout.ParametersLength > 0)
+                {
+                    ReadOnlySpan<byte> parametersArea = response.AsReadOnlySpan().Slice(layout.ParametersStart, layout.ParametersLength);
+                    var paramReader = new TpmReader(parametersArea);
+
+                    ITpmWireType parsed = codec.ParseResponse(ref paramReader, layout.OutHandles, pool);
+
+                    if(parsed is not TResponse typed)
+                    {
+                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_FAILURE);
+                    }
+
+                    typedResponse = typed;
+
+                    //Verify no trailing bytes.
+                    if(paramReader.Remaining > 0)
+                    {
+                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_SIZE);
+                    }
+                }
+                else
+                {
+                    //Command has no response parameters - use the codec's parameterless response singleton.
+                    if(codec.EmptyResponse is TResponse emptyResponse)
+                    {
+                        typedResponse = emptyResponse;
+                    }
+                    else
+                    {
+                        return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_FAILURE);
                     }
                 }
 
