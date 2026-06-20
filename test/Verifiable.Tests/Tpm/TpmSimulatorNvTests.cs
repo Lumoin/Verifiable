@@ -221,7 +221,7 @@ internal sealed class TpmSimulatorNvTests
         using TpmPasswordSession session = TpmPasswordSession.Create(CorrectAuth, pool);
         var readInput = new NvReadInput(AuthHandle: (uint)TpmRh.TPM_RH_OWNER, NvIndex: NvIndexHandle, Size: 8, Offset: 0);
         TpmResult<NvReadResponse> result = await TpmCommandExecutor.ExecuteAsync<NvReadResponse>(
-            device, readInput, [session], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            device, readInput, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(TpmRcConstants.TPM_RC_AUTH_TYPE, result.ResponseCode);
     }
@@ -264,7 +264,7 @@ internal sealed class TpmSimulatorNvTests
         using var input = new NvDefineSpaceInput(TpmRh.TPM_RH_OWNER, auth, publicInfo);
 
         return await TpmCommandExecutor.ExecuteAsync<NvDefineSpaceResponse>(
-            device, input, [ownerSession], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            device, input, [ownerSession], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     private async Task DefineDaIndexAsync(TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry)
@@ -288,7 +288,7 @@ internal sealed class TpmSimulatorNvTests
         var readInput = new NvReadInput(AuthHandle: NvIndexHandle, NvIndex: NvIndexHandle, Size: 8, Offset: 0);
 
         return await TpmCommandExecutor.ExecuteAsync<NvReadResponse>(
-            device, readInput, [session], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            device, readInput, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     private async Task<TpmSimulator> CreateOperationalAsync(TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes)

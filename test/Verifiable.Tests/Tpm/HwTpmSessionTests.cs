@@ -86,6 +86,7 @@ internal class HwTpmSessionTests
             Tpm,
             startInput,
             [],
+            null,
             pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
@@ -102,6 +103,7 @@ internal class HwTpmSessionTests
             Tpm,
             flushInput,
             [],
+            null,
             pool,
             registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -126,6 +128,7 @@ internal class HwTpmSessionTests
             Tpm,
             startInput,
             [],
+            null,
             pool,
             registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -153,6 +156,7 @@ internal class HwTpmSessionTests
             Tpm,
             getRandomInput,
             [session],
+            null,
             pool,
             registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -169,6 +173,7 @@ internal class HwTpmSessionTests
             Tpm,
             flushInput,
             [],
+            null,
             pool,
             registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -189,7 +194,7 @@ internal class HwTpmSessionTests
         //Create session.
         var startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
-            Tpm, startInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
 
@@ -211,7 +216,7 @@ internal class HwTpmSessionTests
         {
             var getRandomInput = new GetRandomInput(RandomBytesPerIteration);
             TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
-                Tpm, getRandomInput, [session], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                Tpm, getRandomInput, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(result.IsSuccess, $"GetRandom iteration {i} failed: '{result.ResponseCode}'.");
 
@@ -224,7 +229,7 @@ internal class HwTpmSessionTests
         //Flush session.
         var flushInput = FlushContextInput.ForHandle(startResponse.SessionHandle.Value);
         TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
-            Tpm, flushInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Tpm, flushInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(flushResult.IsSuccess, $"FlushContext failed: '{flushResult.ResponseCode}'.");
     }
@@ -286,7 +291,7 @@ internal class HwTpmSessionTests
         using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
 
         TpmResult<CreatePrimaryResponse> primaryResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
-            Tpm, primaryInput, [ownerAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Tpm, primaryInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(primaryResult.IsSuccess, $"CreatePrimary failed: '{primaryResult.ResponseCode}'.");
 
@@ -301,7 +306,7 @@ internal class HwTpmSessionTests
             StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(objectHandle, SessionAlg);
 
             TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
-                Tpm, startInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                Tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (bound) failed: '{startResult.ResponseCode}'.");
 
@@ -335,7 +340,7 @@ internal class HwTpmSessionTests
                 var getRandomInput = new GetRandomInput(NumberOfRandomBytes);
 
                 TpmResult<GetRandomResponse> randomResult = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
-                    Tpm, getRandomInput, [session], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                    Tpm, getRandomInput, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
                 Assert.IsTrue(randomResult.IsSuccess,
                     $"Bound-session GetRandom failed: '{randomResult.ResponseCode}'. A failure here means the host-derived bound session key diverged from the TPM's.");
@@ -347,7 +352,7 @@ internal class HwTpmSessionTests
                 //Flush the session.
                 var flushSession = FlushContextInput.ForHandle(startResponse.SessionHandle.Value);
                 TpmResult<FlushContextResponse> flushSessionResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
-                    Tpm, flushSession, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                    Tpm, flushSession, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
                 Assert.IsTrue(flushSessionResult.IsSuccess, $"FlushContext (session) failed: '{flushSessionResult.ResponseCode}'.");
             }
@@ -361,7 +366,110 @@ internal class HwTpmSessionTests
             //Flush the transient bind object regardless of the outcome above.
             var flushObject = FlushContextInput.ForHandle(objectHandle);
             _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
-                Tpm, flushObject, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                Tpm, flushObject, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+
+    [TestMethod]
+    public async Task HmacSessionAuthorizingObjectComputesCpHashOverEntityName()
+    {
+        //cpHash is computed over entity NAMES, not handle values (Part 1 eq 15). This authorizes a storage
+        //PARENT OBJECT (whose Name is nameAlg||H(public), not its handle) over an HMAC session via TPM2_Create:
+        //the command HMAC only verifies when the executor feeds the parent's Name into cpHash. The fail-fast
+        //refusal to authorize an object without its Name is covered deterministically in TpmCommandExecutorTests;
+        //here the real TPM confirms the positive direction end-to-end. The parent is noDA, so a regression that
+        //produced a wrong cpHash would return BAD_AUTH without advancing this box's dictionary-attack counter.
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
+        _ = registry.Register(TpmCcConstants.TPM_CC_Create, TpmResponseCodec.CreateObject);
+        _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
+        _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
+
+        const string ParentSecret = "parent-secret";
+        const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
+
+        using CreatePrimaryInput parentInput = CreatePrimaryInput.ForEccStorageParent(
+            TpmRh.TPM_RH_OWNER, ParentSecret, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreatePrimaryResponse> parentResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            Tpm, parentInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(parentResult.IsSuccess, $"CreatePrimary storage parent failed: '{parentResult.ResponseCode}'.");
+
+        using CreatePrimaryResponse parent = parentResult.Value;
+        uint parentHandle = parent.ObjectHandle.Value;
+
+        //The Name is a public identifier (a hash of the public area), not key material.
+        ReadOnlyMemory<byte> parentName = parent.Name.Span.ToArray();
+        byte[] parentAuth = System.Text.Encoding.UTF8.GetBytes(ParentSecret);
+
+        try
+        {
+            bool withName = await CreateChildUnderParentAsync(parentHandle, parentAuth, [parentName], SessionAlg, pool, registry).ConfigureAwait(false);
+            Assert.IsTrue(withName, "Create over an HMAC session must succeed when cpHash is computed over the parent's Name.");
+        }
+        finally
+        {
+            var flushParent = FlushContextInput.ForHandle(parentHandle);
+            _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+                Tpm, flushParent, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+
+    /// <summary>
+    /// Starts a fresh unbound HMAC session that authorizes <paramref name="parentHandle"/> with
+    /// <paramref name="parentAuth"/>, runs TPM2_Create of a child under it (optionally supplying the parent
+    /// Name for cpHash), and returns whether Create succeeded. The session is flushed before return; on
+    /// success the wrapped child blob is disposed (TPM2_Create loads nothing).
+    /// </summary>
+    private async Task<bool> CreateChildUnderParentAsync(
+        uint parentHandle,
+        byte[] parentAuth,
+        IReadOnlyList<ReadOnlyMemory<byte>>? handleNames,
+        TpmAlgIdConstants sessionAlg,
+        MemoryPool<byte> pool,
+        TpmResponseRegistry registry)
+    {
+        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(sessionAlg);
+        TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
+            Tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
+
+        //nonceTPM ownership transfers to the session, so this response is deliberately not disposed.
+        StartAuthSessionResponse startResponse = startResult.Value;
+        using var session = new TpmSession(
+            new TpmHandle(startResponse.SessionHandle.Value), startResponse.NonceTPM, sessionAlg, pool);
+        session.SetAuthValue(parentAuth, pool);
+
+        try
+        {
+            using var createInput = CreateInput.ForEccSigningChild(
+                parentHandle, null, TpmEccCurveConstants.TPM_ECC_NIST_P256,
+                TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256), pool);
+
+            TpmResult<CreateResponse> createResult = await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
+                Tpm, createInput, [session], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+            if(createResult.IsSuccess)
+            {
+                using CreateResponse created = createResult.Value;
+                TestContext.WriteLine($"Create succeeded: wrapped child blob {created.OutPrivate.Length} bytes.");
+
+                return true;
+            }
+
+            TestContext.WriteLine($"Create rejected (expected for the control run): '{createResult.ResponseCode}'.");
+
+            return false;
+        }
+        finally
+        {
+            var flushSession = FlushContextInput.ForHandle(startResponse.SessionHandle.Value);
+            _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+                Tpm, flushSession, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         }
     }
 }

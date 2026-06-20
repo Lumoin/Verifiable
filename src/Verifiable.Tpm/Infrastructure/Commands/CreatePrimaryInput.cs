@@ -266,12 +266,17 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
     /// <param name="authPassword">Optional authValue for the parent (<see langword="null"/> for none).</param>
     /// <param name="curve">The ECC curve.</param>
     /// <param name="pool">The memory pool.</param>
+    /// <param name="noDa">
+    /// When <see langword="true"/>, sets TPMA_OBJECT.noDA so that authorization failures against the parent do
+    /// not advance the TPM's dictionary-attack lockout counter. Defaults to <see langword="false"/>.
+    /// </param>
     /// <returns>A <see cref="CreatePrimaryInput"/> configured for a storage parent.</returns>
     public static CreatePrimaryInput ForEccStorageParent(
         TpmRh hierarchy,
         string? authPassword,
         TpmEccCurveConstants curve,
-        MemoryPool<byte> pool)
+        MemoryPool<byte> pool,
+        bool noDa = false)
     {
         Tpm2bSensitiveCreate inSensitive = string.IsNullOrEmpty(authPassword)
             ? Tpm2bSensitiveCreate.CreateEmpty(pool)
@@ -279,7 +284,8 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
 
         Tpm2bPublic inPublic = Tpm2bPublic.CreateEccStorageParentTemplate(
             TpmAlgIdConstants.TPM_ALG_SHA256,
-            curve);
+            curve,
+            noDa);
 
         return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
     }

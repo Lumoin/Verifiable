@@ -80,6 +80,7 @@ internal class HwTpmRandomTests
             Tpm,
             input,
             [],
+            null,
             pool,
             registry, TestContext.CancellationToken).ConfigureAwait(false);
 

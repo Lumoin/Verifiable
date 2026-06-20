@@ -11,6 +11,7 @@ using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Infrastructure.Spec.Handles;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
 using Verifiable.Tpm.Structures;
 using Verifiable.Tpm.Structures.Spec.Constants;
@@ -63,6 +64,18 @@ public static class TpmCommandExecutor
     /// <param name="device">The TPM device.</param>
     /// <param name="input">The command input.</param>
     /// <param name="sessions">The sessions (empty for no auth).</param>
+    /// <param name="handleNames">
+    /// The Name of each command handle, in handle order, or <see langword="null"/> when no handle needs an
+    /// explicit Name. Per TPM 2.0 Part 1 equation 15 cpHash is computed over entity Names, not handle values.
+    /// The executor derives the Name of a permanent, PCR, or session handle itself (its Name is the 4-byte
+    /// handle value), so the corresponding entry may be left empty (or the whole argument left
+    /// <see langword="null"/> when every handle is of those kinds). The Name of a transient or persistent
+    /// object or an NV index is <c>nameAlg || H(publicArea)</c> - a value only the caller has, from a
+    /// Load/CreatePrimary response or computed from the NV public area - so its entry MUST be supplied;
+    /// authorizing such an entity over an HMAC session without its Name throws <see cref="ArgumentException"/>
+    /// rather than producing a cpHash the TPM would reject. When non-null the count must equal the command's
+    /// handle count.
+    /// </param>
     /// <param name="pool">The memory pool.</param>
     /// <param name="registry">The response codec registry.</param>
     /// <param name="cancellationToken">Token to observe across the device round-trip and crypto primitives.</param>
@@ -71,6 +84,7 @@ public static class TpmCommandExecutor
         TpmDevice device,
         ITpmCommandInput input,
         IReadOnlyList<TpmSessionBase> sessions,
+        IReadOnlyList<ReadOnlyMemory<byte>>? handleNames,
         MemoryPool<byte> pool,
         TpmResponseRegistry registry,
         CancellationToken cancellationToken = default)
@@ -93,6 +107,13 @@ public static class TpmCommandExecutor
         TpmaCc commandAttributes = commandCode.GetCommandAttributes();
         int inputHandleCount = commandAttributes.C_HANDLES;
         int inputHandleSize = inputHandleCount * sizeof(uint);
+
+        if(handleNames is not null && handleNames.Count != inputHandleCount)
+        {
+            throw new ArgumentException(
+                $"handleNames must supply exactly {inputHandleCount} name(s) for command '{commandCode}'; got {handleNames.Count}.",
+                nameof(handleNames));
+        }
 
         //Determine request tag.
         bool hasSessions = sessions.Count > 0;
@@ -138,6 +159,7 @@ public static class TpmCommandExecutor
         TpmAlgIdConstants sessionHashAlg = TpmAlgIdConstants.TPM_ALG_NULL;
         IMemoryOwner<byte>? cpHashOwner = null;
         Memory<byte> cpHashMemory = Memory<byte>.Empty;
+        IMemoryOwner<byte>? namesOwner = null;
 
         try
         {
@@ -155,11 +177,17 @@ public static class TpmCommandExecutor
 
                 if(sessionHashAlg != TpmAlgIdConstants.TPM_ALG_NULL)
                 {
+                    //cpHash is computed over entity Names (Part 1 eq 15), not handle values. The executor derives
+                    //the Name of a permanent/PCR/session handle (Name == handle); an object or NV index Name must
+                    //come from handleNames or this throws rather than producing a cpHash the TPM would reject.
+                    ReadOnlyMemory<byte> cpHashHandleArea = ResolveCpHashHandleArea(
+                        handlesMemory, inputHandleCount, handleNames, pool, out namesOwner);
+
                     int cpHashSize = GetDigestSize(sessionHashAlg);
                     cpHashOwner = pool.Rent(cpHashSize);
                     cpHashMemory = cpHashOwner.Memory[..cpHashSize];
                     await ComputeCpHashAsync(
-                        sessionHashAlg, commandCode, handlesMemory, parametersMemory, cpHashMemory, pool, cancellationToken).ConfigureAwait(false);
+                        sessionHashAlg, commandCode, cpHashHandleArea, parametersMemory, cpHashMemory, pool, cancellationToken).ConfigureAwait(false);
                 }
             }
 
@@ -369,7 +397,86 @@ public static class TpmCommandExecutor
         finally
         {
             cpHashOwner?.Dispose();
+            namesOwner?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Resolves the handle-area input to cpHash: the concatenation of each handle's entity Name in handle
+    /// order (TPM 2.0 Part 1, equation 15). A permanent, PCR, or session handle's Name is its 4-byte handle
+    /// value (derived here); a transient or persistent object or an NV index has Name <c>nameAlg ||
+    /// H(publicArea)</c>, which only the caller knows, so it must be supplied in <paramref name="handleNames"/>.
+    /// </summary>
+    /// <param name="handlesMemory">The pre-serialized big-endian handle values.</param>
+    /// <param name="handleCount">The number of command handles.</param>
+    /// <param name="handleNames">The caller-supplied per-handle Names, or <see langword="null"/>.</param>
+    /// <param name="pool">The memory pool for the concatenated Names buffer.</param>
+    /// <param name="namesOwner">
+    /// Receives the rented buffer backing the returned memory (or <see langword="null"/> when no buffer is
+    /// rented); the caller owns and disposes it.
+    /// </param>
+    /// <returns>The concatenated Names to feed into cpHash.</returns>
+    /// <exception cref="ArgumentException">
+    /// An object or NV-index handle has no supplied Name, so cpHash cannot be computed correctly.
+    /// </exception>
+    private static ReadOnlyMemory<byte> ResolveCpHashHandleArea(
+        ReadOnlyMemory<byte> handlesMemory,
+        int handleCount,
+        IReadOnlyList<ReadOnlyMemory<byte>>? handleNames,
+        MemoryPool<byte> pool,
+        out IMemoryOwner<byte>? namesOwner)
+    {
+        namesOwner = null;
+        if(handleCount == 0)
+        {
+            return ReadOnlyMemory<byte>.Empty;
+        }
+
+        ReadOnlyMemory<byte>[] names = new ReadOnlyMemory<byte>[handleCount];
+        int namesLength = 0;
+        for(int i = 0; i < handleCount; i++)
+        {
+            ReadOnlyMemory<byte> handleBytes = handlesMemory.Slice(i * sizeof(uint), sizeof(uint));
+
+            //The most-significant octet of a handle is its TPM_HT handle type.
+            byte handleType = handleBytes.Span[0];
+            bool isNamedEntity =
+                handleType == (byte)TpmHt.TPM_HT_TRANSIENT
+                || handleType == (byte)TpmHt.TPM_HT_PERSISTENT
+                || handleType == (byte)TpmHt.TPM_HT_NV_INDEX;
+
+            ReadOnlyMemory<byte> name;
+            if(handleNames is not null && !handleNames[i].IsEmpty)
+            {
+                name = handleNames[i];
+            }
+            else if(isNamedEntity)
+            {
+                uint handle = BinaryPrimitives.ReadUInt32BigEndian(handleBytes.Span);
+
+                throw new ArgumentException(
+                    $"Handle {i} (0x{handle:X8}) is an object or NV index; its cpHash Name must be supplied in handleNames to authorize it over an HMAC session.",
+                    nameof(handleNames));
+            }
+            else
+            {
+                name = handleBytes;
+            }
+
+            names[i] = name;
+            namesLength += name.Length;
+        }
+
+        namesOwner = pool.Rent(Math.Max(namesLength, 1));
+        Memory<byte> namesMemory = namesOwner.Memory[..namesLength];
+        int offset = 0;
+        for(int i = 0; i < handleCount; i++)
+        {
+            names[i].Span.CopyTo(namesMemory.Span[offset..]);
+            offset += names[i].Length;
+        }
+
+        return namesMemory;
     }
 
     /// <summary>

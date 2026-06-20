@@ -206,7 +206,7 @@ public sealed class TpmEntropyProvider
             int chunk = Math.Min(destination.Length - offset, TpmLifecycleTransitions.MaxRandomBytes);
 
             ValueTask<TpmResult<GetRandomResponse>> task = TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
-                device, new GetRandomInput((ushort)chunk), [], pool, registry);
+                device, new GetRandomInput((ushort)chunk), [], null, pool, registry);
 
             if(!task.IsCompleted)
             {

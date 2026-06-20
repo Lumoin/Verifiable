@@ -60,7 +60,7 @@ public static class TpmDictionaryAttackExtensions
             GetCapabilityInput input = GetCapabilityInput.ForTpmProperties(property);
 
             TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-                device, input, [], pool, registry, cancellationToken).ConfigureAwait(false);
+                device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
             if(!result.IsSuccess)
             {

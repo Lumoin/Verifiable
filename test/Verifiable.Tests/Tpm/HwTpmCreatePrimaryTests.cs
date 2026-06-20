@@ -93,6 +93,7 @@ internal class HwTpmCreatePrimaryTests
             Tpm,
             input,
             [ownerAuth],
+            null,
             pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(result, "CreatePrimary");
@@ -112,6 +113,7 @@ internal class HwTpmCreatePrimaryTests
             Tpm,
             flushInput,
             [],
+            null,
             pool,
             registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -141,6 +143,7 @@ internal class HwTpmCreatePrimaryTests
             Tpm,
             input,
             [ownerAuth],
+            null,
             pool,
             registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -157,6 +160,7 @@ internal class HwTpmCreatePrimaryTests
             Tpm,
             flushInput,
             [],
+            null,
             pool,
             registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -188,6 +192,7 @@ internal class HwTpmCreatePrimaryTests
             Tpm,
             input,
             [ownerAuth],
+            null,
             pool,
             registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -201,6 +206,7 @@ internal class HwTpmCreatePrimaryTests
             Tpm,
             flushInput,
             [],
+            null,
             pool,
             registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -235,6 +241,7 @@ internal class HwTpmCreatePrimaryTests
                 Tpm,
                 input,
                 [ownerAuth],
+                null,
                 pool,
                 registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -252,7 +259,7 @@ internal class HwTpmCreatePrimaryTests
             }
 
             var flushInput = FlushContextInput.ForHandle(response.ObjectHandle.Value);
-            _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(Tpm, flushInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(Tpm, flushInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         Assert.IsNotNull(firstKeyName);

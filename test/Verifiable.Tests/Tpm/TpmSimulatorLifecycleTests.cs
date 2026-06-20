@@ -332,7 +332,7 @@ internal sealed class TpmSimulatorLifecycleTests
         TpmResponseRegistry registry = CreateRandomRegistry();
 
         TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
-            device, new GetRandomInput(RequestedBytes), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            device, new GetRandomInput(RequestedBytes), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result.ResponseCode}'.");
         using GetRandomResponse response = result.Value;
@@ -352,7 +352,7 @@ internal sealed class TpmSimulatorLifecycleTests
         TpmResponseRegistry registry = CreateRandomRegistry();
 
         TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
-            device, new GetRandomInput(OversizedRequest), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            device, new GetRandomInput(OversizedRequest), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result.ResponseCode}'.");
         using GetRandomResponse response = result.Value;
@@ -399,9 +399,9 @@ internal sealed class TpmSimulatorLifecycleTests
         TpmResponseRegistry registry = CreateRandomRegistry();
 
         TpmResult<GetRandomResponse> firstResult = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
-            device, new GetRandomInput(32), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            device, new GetRandomInput(32), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         TpmResult<GetRandomResponse> secondResult = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
-            device, new GetRandomInput(32), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            device, new GetRandomInput(32), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(firstResult.IsSuccess);
         Assert.IsTrue(secondResult.IsSuccess);
@@ -497,7 +497,7 @@ internal sealed class TpmSimulatorLifecycleTests
 
         //Clause 10.4: Failure Mode admits TPM2_GetTestResult() and TPM2_GetCapability().
         TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-            device, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_LOCKOUT_COUNTER), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            device, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_LOCKOUT_COUNTER), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"GetCapability must be permitted in Failure Mode; got '{result}'.");
         result.Value.Dispose();
@@ -535,7 +535,7 @@ internal sealed class TpmSimulatorLifecycleTests
 
         //Requesting fewer than the available lockout properties truncates the window and sets moreData.
         TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-            device, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_LOCKOUT_COUNTER, count: 2), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            device, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_LOCKOUT_COUNTER, count: 2), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result}'.");
         using GetCapabilityResponse response = result.Value;
@@ -562,7 +562,7 @@ internal sealed class TpmSimulatorLifecycleTests
         while(more)
         {
             TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-                device, GetCapabilityInput.ForTpmProperties(property, count: 2), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                device, GetCapabilityInput.ForTpmProperties(property, count: 2), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result}'.");
             using GetCapabilityResponse response = result.Value;
@@ -600,7 +600,7 @@ internal sealed class TpmSimulatorLifecycleTests
         //TPM_PT_PERMANENT carries the IN_LOCKOUT bit; a freshly-started TPM is not in lockout, so the
         //bit is clear. Driving it SET requires authorization failures, which arrive with V.5b.
         TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-            device, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_PERMANENT, count: 1), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            device, GetCapabilityInput.ForTpmProperties(TpmPtConstants.TPM_PT_PERMANENT, count: 1), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result}'.");
         using GetCapabilityResponse response = result.Value;

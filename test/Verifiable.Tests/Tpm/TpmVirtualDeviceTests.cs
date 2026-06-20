@@ -144,7 +144,7 @@ internal sealed class TpmVirtualDeviceTests
         using(TpmDevice captureDevice = TpmDevice.Create(CaptureHandler))
         {
             TpmResult<GetRandomResponse> warmup = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
-                captureDevice, new GetRandomInput(RequestedBytes), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                captureDevice, new GetRandomInput(RequestedBytes), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(warmup.IsSuccess);
             warmup.Value.Dispose();
@@ -158,7 +158,7 @@ internal sealed class TpmVirtualDeviceTests
 
         using TpmDevice replayDevice = TpmDevice.Create(virtualDevice.SubmitAsync);
         TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
-            replayDevice, new GetRandomInput(RequestedBytes), [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            replayDevice, new GetRandomInput(RequestedBytes), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"Expected success, got '{result.ResponseCode}'.");
         using GetRandomResponse response = result.Value;

@@ -75,7 +75,7 @@ internal class HwTpmCreateLoadTests
         using var ownerAuth = TpmPasswordSession.CreateEmpty(pool);
 
         TpmResult<CreatePrimaryResponse> parentResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
-            Tpm, parentInput, [ownerAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Tpm, parentInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         AssertUtilities.AssertSuccess(parentResult, "CreatePrimary storage parent");
         using CreatePrimaryResponse parent = parentResult.Value;
         uint parentHandle = parent.ObjectHandle.Value;
@@ -91,7 +91,7 @@ internal class HwTpmCreateLoadTests
             using var parentAuth = TpmPasswordSession.CreateEmpty(pool);
 
             TpmResult<CreateResponse> createResult = await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
-                Tpm, createInput, [parentAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                Tpm, createInput, [parentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             AssertUtilities.AssertSuccess(createResult, "Create child key");
 
             using CreateResponse created = createResult.Value;
@@ -125,7 +125,7 @@ internal class HwTpmCreateLoadTests
         using var parentAuth = TpmPasswordSession.CreateEmpty(pool);
 
         TpmResult<LoadResponse> loadResult = await TpmCommandExecutor.ExecuteAsync<LoadResponse>(
-            Tpm, loadInput, [parentAuth], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Tpm, loadInput, [parentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         AssertUtilities.AssertSuccess(loadResult, "Load child key");
 
         using LoadResponse loaded = loadResult.Value;
@@ -144,7 +144,7 @@ internal class HwTpmCreateLoadTests
     {
         var flushInput = FlushContextInput.ForHandle(handle);
         TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
-            Tpm, flushInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Tpm, flushInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(flushResult.IsSuccess, $"FlushContext failed: '{flushResult.ResponseCode}'.");
     }

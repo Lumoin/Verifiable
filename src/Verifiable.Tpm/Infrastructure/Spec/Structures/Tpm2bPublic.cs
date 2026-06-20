@@ -191,12 +191,14 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// </summary>
     /// <param name="nameAlg">The hash algorithm for Name computation.</param>
     /// <param name="curve">The ECC curve.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA so authorization failures against the key do not advance the dictionary-attack lockout counter.</param>
     /// <returns>The sized public buffer.</returns>
     public static Tpm2bPublic CreateEccStorageParentTemplate(
         TpmAlgIdConstants nameAlg,
-        TpmEccCurveConstants curve)
+        TpmEccCurveConstants curve,
+        bool noDa = false)
     {
-        return FromTemplate(TpmtPublic.CreateEccStorageParentTemplate(nameAlg, curve));
+        return FromTemplate(TpmtPublic.CreateEccStorageParentTemplate(nameAlg, curve, noDa));
     }
 
     /// <summary>

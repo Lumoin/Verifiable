@@ -250,10 +250,12 @@ public sealed class TpmtPublic: IDisposable
     /// </remarks>
     /// <param name="nameAlg">The hash algorithm for Name computation.</param>
     /// <param name="curve">The ECC curve.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA so authorization failures against the key do not advance the dictionary-attack lockout counter.</param>
     /// <returns>The public area template.</returns>
     public static TpmtPublic CreateEccStorageParentTemplate(
         TpmAlgIdConstants nameAlg,
-        TpmEccCurveConstants curve)
+        TpmEccCurveConstants curve,
+        bool noDa = false)
     {
         TpmaObject objectAttributes =
             TpmaObject.FIXED_TPM |
@@ -262,6 +264,11 @@ public sealed class TpmtPublic: IDisposable
             TpmaObject.USER_WITH_AUTH |
             TpmaObject.RESTRICTED |
             TpmaObject.DECRYPT;
+
+        if(noDa)
+        {
+            objectAttributes |= TpmaObject.NO_DA;
+        }
 
         TpmuPublicParms parameters = TpmuPublicParms.Ecc(
             TpmsEccParms.ForStorage(curve, TpmtSymDefObject.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB)));
