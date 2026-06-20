@@ -1,6 +1,7 @@
 using System;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
+using Verifiable.Tpm.Infrastructure.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -68,6 +69,25 @@ public readonly record struct StartAuthSessionInput: ITpmCommandInput
     /// </summary>
     public required TpmAlgIdConstants AuthHash { get; init; }
 
+    /// <summary>
+    /// Symmetric algorithm for session-based parameter encryption (TPMT_SYM_DEF).
+    /// </summary>
+    /// <remarks>
+    /// Defaults to <see cref="TpmtSymDef.Null"/> (no parameter encryption). Set
+    /// <see cref="TpmtSymDef.Xor(TpmAlgIdConstants)"/> to negotiate XOR obfuscation. Because the default value
+    /// of the underlying struct carries <see cref="TpmAlgIdConstants.TPM_ALG_ERROR"/> rather than
+    /// <see cref="TpmAlgIdConstants.TPM_ALG_NULL"/>, the accessor maps an unset value to
+    /// <see cref="TpmtSymDef.Null"/> so an input constructed without specifying a symmetric algorithm still
+    /// serializes a valid null definition.
+    /// </remarks>
+    public TpmtSymDef Symmetric
+    {
+        get => symmetric.Algorithm == TpmAlgIdConstants.TPM_ALG_ERROR ? TpmtSymDef.Null : symmetric;
+        init => symmetric = value;
+    }
+
+    private readonly TpmtSymDef symmetric;
+
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_StartAuthSession;
 
@@ -76,11 +96,11 @@ public readonly record struct StartAuthSessionInput: ITpmCommandInput
     {
         //Handles: tpmKey + bind.
         //Parameters: nonceCaller (size + data) + encryptedSalt (size + data) +
-        //sessionType + symmetric (null alg) + authHash.
+        //sessionType + symmetric (TPMT_SYM_DEF) + authHash.
         return sizeof(uint) + sizeof(uint) +
                (sizeof(ushort) + NonceCaller.Length) +
                (sizeof(ushort) + EncryptedSalt.Length) +
-               sizeof(byte) + sizeof(ushort) + sizeof(ushort);
+               sizeof(byte) + Symmetric.SerializedSize + sizeof(ushort);
     }
 
     /// <inheritdoc/>
@@ -96,8 +116,7 @@ public readonly record struct StartAuthSessionInput: ITpmCommandInput
         writer.WriteTpm2b(NonceCaller.Span);
         writer.WriteTpm2b(EncryptedSalt.Span);
         writer.WriteByte((byte)SessionType);
-        //TPMT_SYM_DEF with null algorithm (no parameter encryption).
-        writer.WriteUInt16((ushort)TpmAlgIdConstants.TPM_ALG_NULL);
+        Symmetric.WriteTo(ref writer);
         writer.WriteUInt16((ushort)AuthHash);
     }
 }

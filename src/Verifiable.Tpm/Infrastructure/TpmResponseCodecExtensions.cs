@@ -41,10 +41,15 @@ public static class TpmResponseCodecExtensions
         ///   <item><description>TPM2B_DIGEST randomBytes - the random data.</description></item>
         /// </list>
         /// <para>
+        /// The first (and only) response parameter, <c>randomBytes</c>, is a <c>TPM2B_DIGEST</c> sized buffer,
+        /// so it is eligible for session-based parameter encryption (the <c>encrypt</c> attribute).
+        /// </para>
+        /// <para>
         /// See TPM 2.0 Part 3, Section 16.1 - TPM2_GetRandom.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec GetRandom => TpmResponseCodec.Create(GetRandomResponse.Parse);
+        public static TpmResponseCodec GetRandom => TpmResponseCodec.Create(
+            GetRandomResponse.Parse, responseFirstParameterIsEncryptable: true);
 
         /// <summary>
         /// Codec for TPM2_StartAuthSession response.

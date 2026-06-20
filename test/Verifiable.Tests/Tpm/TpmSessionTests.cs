@@ -78,7 +78,7 @@ internal sealed class TpmSessionTests
         Tpm2bNonce nonceTpm = Tpm2bNonce.CreateRandom(digestSize, pool);
 
         using TpmSession session = await TpmSession.CreateBoundAsync(
-            sessionHandle, bindAuth, startNonceCaller, nonceTpm, sessionAlg, pool, TestContext.CancellationToken).ConfigureAwait(false);
+            sessionHandle, bindAuth, startNonceCaller, nonceTpm, sessionAlg, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(sessionHandle.Value, session.SessionHandle.Value, "The session must keep its StartAuthSession handle.");
         Assert.AreEqual(sessionAlg, session.HashAlgorithm, "The session must report its hash algorithm.");
@@ -99,7 +99,7 @@ internal sealed class TpmSessionTests
         Tpm2bNonce nonceTpm = Tpm2bNonce.CreateRandom(32, pool);
 
         using TpmSession session = await TpmSession.CreateBoundAsync(
-            sessionHandle, ReadOnlyMemory<byte>.Empty, new byte[32], nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, pool, TestContext.CancellationToken).ConfigureAwait(false);
+            sessionHandle, ReadOnlyMemory<byte>.Empty, new byte[32], nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(sessionHandle.Value, session.SessionHandle.Value);
     }
@@ -111,7 +111,7 @@ internal sealed class TpmSessionTests
 
         await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
             await TpmSession.CreateBoundAsync(
-                new TpmHandle(0x02000000u), new byte[] { 0x01 }, new byte[32], null!, TpmAlgIdConstants.TPM_ALG_SHA256, pool, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                new TpmHandle(0x02000000u), new byte[] { 0x01 }, new byte[32], null!, TpmAlgIdConstants.TPM_ALG_SHA256, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
     [TestMethod]
@@ -122,7 +122,7 @@ internal sealed class TpmSessionTests
         {
             await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
                 await TpmSession.CreateBoundAsync(
-                    new TpmHandle(0x02000000u), new byte[] { 0x01 }, new byte[32], nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, null!, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                    new TpmHandle(0x02000000u), new byte[] { 0x01 }, new byte[32], nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, null!, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
         finally
         {

@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
+using Verifiable.Tpm.Infrastructure.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -33,6 +34,15 @@ public static class StartAuthSessionInputExtensions
         /// Creates an unbound, unsalted HMAC session.
         /// </summary>
         /// <param name="authHash">The hash algorithm for the session.</param>
+        /// <param name="symmetric">
+        /// The symmetric algorithm to negotiate for session-based parameter encryption, or
+        /// <see langword="null"/> for none (<see cref="TpmtSymDef.Null"/>). Pass
+        /// <see cref="TpmtSymDef.Xor(TpmAlgIdConstants)"/> to enable XOR obfuscation; the per-command
+        /// <c>decrypt</c>/<c>encrypt</c> attributes then select which parameters are protected. Note that an
+        /// unbound, unsalted session has an empty session key, so parameter encryption derives only from the
+        /// authValue (Part 1 §19.1); a bound or salted session is required to secure it for commands without an
+        /// authValue.
+        /// </param>
         /// <returns>A StartAuthSessionInput configured for an unbound, unsalted HMAC session.</returns>
         /// <remarks>
         /// <para>
@@ -49,7 +59,7 @@ public static class StartAuthSessionInputExtensions
         ///   <item><description>Testing and development scenarios.</description></item>
         /// </list>
         /// </remarks>
-        public static StartAuthSessionInput CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants authHash)
+        public static StartAuthSessionInput CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants authHash, TpmtSymDef? symmetric = null)
         {
             byte[] nonce = new byte[GetDigestSize(authHash)];
             RandomNumberGenerator.Fill(nonce);
@@ -61,7 +71,8 @@ public static class StartAuthSessionInputExtensions
                 NonceCaller = nonce,
                 EncryptedSalt = ReadOnlyMemory<byte>.Empty,
                 SessionType = TpmSeConstants.TPM_SE_HMAC,
-                AuthHash = authHash
+                AuthHash = authHash,
+                Symmetric = symmetric ?? TpmtSymDef.Null
             };
         }
 
@@ -75,6 +86,12 @@ public static class StartAuthSessionInputExtensions
         /// <see cref="Sessions.TpmSession.CreateBoundAsync"/>.
         /// </param>
         /// <param name="authHash">The hash algorithm for the session.</param>
+        /// <param name="symmetric">
+        /// The symmetric algorithm to negotiate for session-based parameter encryption, or
+        /// <see langword="null"/> for none (<see cref="TpmtSymDef.Null"/>). Pass
+        /// <see cref="TpmtSymDef.Xor(TpmAlgIdConstants)"/> to enable XOR obfuscation; a bound session has a
+        /// non-empty session key, so it secures parameter encryption even for commands without an authValue.
+        /// </param>
         /// <returns>A StartAuthSessionInput configured for a bound, unsalted HMAC session.</returns>
         /// <remarks>
         /// <para>
@@ -89,7 +106,7 @@ public static class StartAuthSessionInputExtensions
         /// <see cref="Sessions.TpmSession.CreateBoundAsync"/> so the host and the TPM derive the same key.
         /// </para>
         /// </remarks>
-        public static StartAuthSessionInput CreateBoundUnsaltedHmacSession(uint bind, TpmAlgIdConstants authHash)
+        public static StartAuthSessionInput CreateBoundUnsaltedHmacSession(uint bind, TpmAlgIdConstants authHash, TpmtSymDef? symmetric = null)
         {
             byte[] nonce = new byte[GetDigestSize(authHash)];
             RandomNumberGenerator.Fill(nonce);
@@ -101,7 +118,8 @@ public static class StartAuthSessionInputExtensions
                 NonceCaller = nonce,
                 EncryptedSalt = ReadOnlyMemory<byte>.Empty,
                 SessionType = TpmSeConstants.TPM_SE_HMAC,
-                AuthHash = authHash
+                AuthHash = authHash,
+                Symmetric = symmetric ?? TpmtSymDef.Null
             };
         }
 

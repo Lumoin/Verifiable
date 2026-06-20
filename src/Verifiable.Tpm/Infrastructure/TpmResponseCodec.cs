@@ -88,16 +88,32 @@ public sealed class TpmResponseCodec
     public bool HasResponseParameters => parser != null;
 
     /// <summary>
+    /// Gets whether the first response parameter is a sized buffer eligible for session-based parameter
+    /// encryption (the command's <c>encrypt</c> attribute).
+    /// </summary>
+    /// <remarks>
+    /// Per TPM 2.0 Library Part 1, Section 19.1 only the first response parameter can be encrypted, and only
+    /// when it has an explicit size field. The executor decrypts the first response parameter (after the
+    /// response HMAC verifies) only when an <c>encrypt</c> session is present and this is <see langword="true"/>.
+    /// </remarks>
+    public bool ResponseFirstParameterIsEncryptable { get; }
+
+    /// <summary>
     /// Gets the singleton response instance the executor returns for a parameterless command, or
     /// <see langword="null"/> when none was supplied.
     /// </summary>
     internal ITpmWireType? EmptyResponse => emptyResponse;
 
-    private TpmResponseCodec(int outHandleCount, TpmResponseParserInternal? parser, ITpmWireType? emptyResponse = null)
+    private TpmResponseCodec(
+        int outHandleCount,
+        TpmResponseParserInternal? parser,
+        ITpmWireType? emptyResponse = null,
+        bool responseFirstParameterIsEncryptable = false)
     {
         OutHandleCount = outHandleCount;
         this.parser = parser;
         this.emptyResponse = emptyResponse;
+        ResponseFirstParameterIsEncryptable = responseFirstParameterIsEncryptable;
     }
 
     /// <summary>
@@ -105,11 +121,19 @@ public sealed class TpmResponseCodec
     /// </summary>
     /// <typeparam name="TResponse">The response type.</typeparam>
     /// <param name="parser">The parser delegate.</param>
+    /// <param name="responseFirstParameterIsEncryptable">
+    /// Whether the first response parameter is a sized buffer eligible for parameter encryption.
+    /// </param>
     /// <returns>The codec.</returns>
-    public static TpmResponseCodec Create<TResponse>(TpmResponseParser<TResponse> parser)
+    public static TpmResponseCodec Create<TResponse>(
+        TpmResponseParser<TResponse> parser,
+        bool responseFirstParameterIsEncryptable = false)
         where TResponse : ITpmWireType
     {
-        return new TpmResponseCodec(0, (ref TpmReader r, uint[] _, MemoryPool<byte> p) => parser(ref r, p));
+        return new TpmResponseCodec(
+            0,
+            (ref TpmReader r, uint[] _, MemoryPool<byte> p) => parser(ref r, p),
+            responseFirstParameterIsEncryptable: responseFirstParameterIsEncryptable);
     }
 
     /// <summary>
@@ -117,11 +141,19 @@ public sealed class TpmResponseCodec
     /// </summary>
     /// <typeparam name="TResponse">The response type.</typeparam>
     /// <param name="parser">The parser delegate that receives the handle.</param>
+    /// <param name="responseFirstParameterIsEncryptable">
+    /// Whether the first response parameter is a sized buffer eligible for parameter encryption.
+    /// </param>
     /// <returns>The codec.</returns>
-    public static TpmResponseCodec CreateWithHandle<TResponse>(TpmResponseParserWithHandle<TResponse> parser)
+    public static TpmResponseCodec CreateWithHandle<TResponse>(
+        TpmResponseParserWithHandle<TResponse> parser,
+        bool responseFirstParameterIsEncryptable = false)
         where TResponse : ITpmWireType
     {
-        return new TpmResponseCodec(1, (ref TpmReader r, uint[] h, MemoryPool<byte> p) => parser(ref r, h[0], p));
+        return new TpmResponseCodec(
+            1,
+            (ref TpmReader r, uint[] h, MemoryPool<byte> p) => parser(ref r, h[0], p),
+            responseFirstParameterIsEncryptable: responseFirstParameterIsEncryptable);
     }
 
     /// <summary>
