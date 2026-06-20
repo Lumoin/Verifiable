@@ -50,6 +50,18 @@ internal sealed class StartAuthSessionInputTests
     }
 
     [TestMethod]
+    public void AesCfbSymmetricSerializesIntoParameterArea()
+    {
+        StartAuthSessionInput input = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(
+            0x80000001u, TpmAlgIdConstants.TPM_ALG_SHA256, TpmtSymDef.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB));
+
+        TpmtSymDef parsed = RoundTripSymmetric(input);
+        Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_AES, parsed.Algorithm);
+        Assert.AreEqual((ushort)128, parsed.KeyBits);
+        Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_CFB, parsed.Mode, "A block-cipher symmetric definition must carry the CFB mode on the wire.");
+    }
+
+    [TestMethod]
     public void SerializedSizeAccountsForXorSymmetric()
     {
         StartAuthSessionInput nullSym = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(TpmAlgIdConstants.TPM_ALG_SHA256);

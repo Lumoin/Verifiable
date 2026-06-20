@@ -116,6 +116,113 @@ internal sealed class TpmParameterEncryptionTests
         Assert.IsEmpty(empty);
     }
 
+    //NIST SP800-38A, Appendix F.3.13 (CFB128-AES128.Encrypt) — the gold-standard, independent known-answer
+    //vector for full-block CFB. Anchors the cipher core absolutely; the SUT (AesCfb) shares no code with it.
+    private static byte[] NistKey { get; } = Convert.FromHexString("2b7e151628aed2a6abf7158809cf4f3c");
+
+    private static byte[] NistIv { get; } = Convert.FromHexString("000102030405060708090a0b0c0d0e0f");
+
+    private static byte[] NistPlaintext { get; } = Convert.FromHexString(
+        "6bc1bee22e409f96e93d7e117393172a" +
+        "ae2d8a571e03ac9c9eb76fac45af8e51" +
+        "30c81c46a35ce411e5fbc1191a0a52ef" +
+        "f69f2445df4f9b17ad2b417be66c3710");
+
+    private static byte[] NistCipher { get; } = Convert.FromHexString(
+        "3b3fd92eb72dad20333449f8e83cfb4a" +
+        "c8a64537a0b3a93fcde3cdad9f1ce58b" +
+        "26751f67a3cbb140b1808cf187a4f4df" +
+        "c04b05357c5d1c0eeac4c66f9ff7f2e6");
+
+    [TestMethod]
+    public void AesCfb128MatchesNistSp80038aVectors()
+    {
+        byte[] ciphertext = (byte[])NistPlaintext.Clone();
+        TpmParameterEncryption.AesCfb(NistKey, NistIv, ciphertext, encrypting: true);
+        Assert.IsTrue(ciphertext.AsSpan().SequenceEqual(NistCipher),
+            "AES-CFB128 encryption must match the NIST SP800-38A F.3.13 vector.");
+
+        byte[] recovered = (byte[])NistCipher.Clone();
+        TpmParameterEncryption.AesCfb(NistKey, NistIv, recovered, encrypting: false);
+        Assert.IsTrue(recovered.AsSpan().SequenceEqual(NistPlaintext),
+            "AES-CFB128 decryption must invert the NIST SP800-38A F.3.13 vector.");
+    }
+
+    [TestMethod]
+    [DataRow(17)]   //One full block plus a partial final block.
+    [DataRow(31)]   //Just short of two blocks.
+    [DataRow(45)]   //Two full blocks plus a partial final block.
+    public void AesCfb128PartialBlockMatchesNistVectorPrefix(int length)
+    {
+        //CFB-128 is a stream over the per-block keystream, so the leading 'length' ciphertext octets are
+        //independent of the total length. The first 'length' octets of the F.3.13 ciphertext are therefore an
+        //independent known-answer for a partial-final-block input — pinning the partial path, not just a
+        //self-consistent round-trip.
+        byte[] partial = NistPlaintext.AsSpan(0, length).ToArray();
+        TpmParameterEncryption.AesCfb(NistKey, NistIv, partial, encrypting: true);
+        Assert.IsTrue(partial.AsSpan().SequenceEqual(NistCipher.AsSpan(0, length)),
+            $"AES-CFB128 of the first {length} bytes must equal the NIST ciphertext prefix.");
+
+        TpmParameterEncryption.AesCfb(NistKey, NistIv, partial, encrypting: false);
+        Assert.IsTrue(partial.AsSpan().SequenceEqual(NistPlaintext.AsSpan(0, length)),
+            $"AES-CFB128 must invert the first {length} bytes.");
+    }
+
+    [TestMethod]
+    [DataRow(16, 1)]
+    [DataRow(16, 15)]
+    [DataRow(16, 16)]
+    [DataRow(16, 17)]   //Spans a full block plus a partial final block.
+    [DataRow(16, 31)]
+    [DataRow(16, 33)]
+    [DataRow(16, 64)]
+    [DataRow(32, 17)]   //AES-256 key, exercises the keyBits path + partial block.
+    [DataRow(32, 48)]
+    public void AesCfbRoundTripsArbitraryLengths(int keyBytes, int dataLength)
+    {
+        //Deterministic inputs: the round-trip property is the assertion, and determinism avoids the ~1/256
+        //chance a tiny ciphertext coincides with its plaintext. Non-triviality is pinned by the NIST KAT above.
+        byte[] key = new byte[keyBytes];
+        byte[] iv = new byte[16];
+        byte[] plaintext = new byte[dataLength];
+        for(int i = 0; i < key.Length; i++)
+        {
+            key[i] = (byte)(0x40 + i);
+        }
+        for(int i = 0; i < iv.Length; i++)
+        {
+            iv[i] = (byte)(0x90 + i);
+        }
+        for(int i = 0; i < plaintext.Length; i++)
+        {
+            plaintext[i] = (byte)(0x11 + i);
+        }
+
+        byte[] working = (byte[])plaintext.Clone();
+        TpmParameterEncryption.AesCfb(key, iv, working, encrypting: true);
+        TpmParameterEncryption.AesCfb(key, iv, working, encrypting: false);
+        Assert.IsTrue(working.AsSpan().SequenceEqual(plaintext),
+            $"AES-CFB ({keyBytes * 8}-bit key) must round-trip {dataLength} bytes, including a partial final block.");
+    }
+
+    [TestMethod]
+    public async Task CfbAsyncRoundTripsThroughKdfa()
+    {
+        //The full KDFa("CFB") → key/IV → AES-CFB composition must round-trip when the same hash, key, nonces,
+        //and key size are used with the direction flipped.
+        byte[] plaintext = new byte[40];
+        RandomNumberGenerator.Fill(plaintext);
+        byte[] working = (byte[])plaintext.Clone();
+
+        await TpmParameterEncryption.CfbAsync(
+            HashAlgorithmName.SHA256, 128, Key, NonceNewer, NonceOlder, working, encrypting: true, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsFalse(working.AsSpan().SequenceEqual(plaintext), "Encryption must change the data.");
+
+        await TpmParameterEncryption.CfbAsync(
+            HashAlgorithmName.SHA256, 128, Key, NonceNewer, NonceOlder, working, encrypting: false, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(working.AsSpan().SequenceEqual(plaintext), "Applying CFB encrypt then decrypt with the same key/nonces must recover the original.");
+    }
+
     private static HashAlgorithmName Hash(string algName) => algName switch
     {
         "SHA1" => HashAlgorithmName.SHA1,

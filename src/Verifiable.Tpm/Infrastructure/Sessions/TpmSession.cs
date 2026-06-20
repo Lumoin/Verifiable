@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -395,7 +396,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
 
         //Command direction (Part 1 §19.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM.
         await ApplyParameterEncryptionAsync(
-            firstParameterData, nonceCaller, nonceTPM, pool, cancellationToken).ConfigureAwait(false);
+            firstParameterData, nonceCaller, nonceTPM, encrypting: true, pool, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -409,18 +410,24 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         //Response direction (Part 1 §19.2): nonceNewer = nonceTPM (the value adopted in VerifyAndUpdateAsync),
         //nonceOlder = nonceCaller (this command's caller nonce, not yet rolled).
         await ApplyParameterEncryptionAsync(
-            firstParameterData, nonceTPM, nonceCaller, pool, cancellationToken).ConfigureAwait(false);
+            firstParameterData, nonceTPM, nonceCaller, encrypting: false, pool, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Applies the session's parameter-encryption scheme over the first-parameter data in place, with the
-    /// supplied nonce ordering. XOR is self-inverse, so the same routine serves command encryption and response
-    /// decryption.
+    /// supplied nonce ordering and direction.
     /// </summary>
+    /// <remarks>
+    /// XOR obfuscation is self-inverse so <paramref name="encrypting"/> does not affect it; AES-CFB is
+    /// direction-dependent, so the flag selects encryption versus decryption.
+    /// </remarks>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
+        Justification = "Although this method is statically reachable on browser, the AES-CFB branch is selected only when the session negotiated an AES TPMT_SYM_DEF, which can only be agreed with a real TPM (none exists on browser), so the browser-unsupported AES path is unreachable there at runtime. The XOR branch uses no browser-unsupported API and stays browser-clean.")]
     private async ValueTask ApplyParameterEncryptionAsync(
         Memory<byte> data,
         Tpm2bNonce nonceNewer,
         Tpm2bNonce nonceOlder,
+        bool encrypting,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
     {
@@ -430,26 +437,41 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
                 "Parameter encryption was requested on a session with no symmetric algorithm (TPM_ALG_NULL).");
         }
 
-        if(!Symmetric.IsXor)
-        {
-            throw new NotSupportedException(
-                $"Session parameter encryption with symmetric algorithm '{Symmetric.Algorithm}' is not supported; only XOR obfuscation is implemented.");
-        }
-
         //sessionValue = sessionKey || authValue (Part 1 §19.1). For a session that does not authorize an
         //entity the authValue is empty, so sessionValue reduces to sessionKey.
         (IMemoryOwner<byte>? sessionValueOwner, ReadOnlyMemory<byte> sessionValue) = BuildSessionValue(pool);
 
         try
         {
-            await TpmParameterEncryption.XorAsync(
-                ToHashAlgorithmName(sessionAlg),
-                sessionValue,
-                nonceNewer.AsReadOnlyMemory(),
-                nonceOlder.AsReadOnlyMemory(),
-                data,
-                pool,
-                cancellationToken).ConfigureAwait(false);
+            if(Symmetric.IsXor)
+            {
+                await TpmParameterEncryption.XorAsync(
+                    ToHashAlgorithmName(sessionAlg),
+                    sessionValue,
+                    nonceNewer.AsReadOnlyMemory(),
+                    nonceOlder.AsReadOnlyMemory(),
+                    data,
+                    pool,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else if(Symmetric.Algorithm == TpmAlgIdConstants.TPM_ALG_AES && Symmetric.Mode == TpmAlgIdConstants.TPM_ALG_CFB)
+            {
+                await TpmParameterEncryption.CfbAsync(
+                    ToHashAlgorithmName(sessionAlg),
+                    Symmetric.KeyBits,
+                    sessionValue,
+                    nonceNewer.AsReadOnlyMemory(),
+                    nonceOlder.AsReadOnlyMemory(),
+                    data,
+                    encrypting,
+                    pool,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                throw new NotSupportedException(
+                    $"Session parameter encryption with symmetric algorithm '{Symmetric.Algorithm}' mode '{Symmetric.Mode}' is not supported; only XOR obfuscation and AES-CFB are implemented.");
+            }
         }
         finally
         {

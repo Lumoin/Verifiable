@@ -221,6 +221,122 @@ internal sealed class TpmParameterEncryptionExecutorTests
     }
 
     [TestMethod]
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The canned nonceTPM ownership transfers to the bound TpmSession, disposed by the using statement.")]
+    public async Task EncryptedResponseCfbDecryptsToKnownPlaintext()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
+
+        const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
+        const int KeyBits = 128;
+        byte[] sessionKey = DeriveBoundSessionKeyOracle(SessionAlg);
+
+        //Block-multiple plaintext so the independent oracle CFB needs no partial-block handling.
+        byte[] plaintext = BuildPattern(32, 0x11);
+        byte[] nonceTpmNew = BuildPattern(32, 0x7E);
+        const byte ResponseAttributes = (byte)(TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT);
+
+        ValueTask<TpmResult<TpmResponse>> Handler(
+            ReadOnlyMemory<byte> command,
+            MemoryPool<byte> handlerPool,
+            CancellationToken cancellationToken)
+        {
+            byte[] nonceCaller = ExtractCommandNonceCaller(command.Span);
+            byte[] frame = BuildCfbEncryptedGetRandomResponse(sessionKey, nonceCaller, nonceTpmNew, plaintext, ResponseAttributes, KeyBits);
+
+            return ValueTask.FromResult(SuccessFrame(frame, handlerPool));
+        }
+
+        using var device = TpmDevice.Create(Handler);
+
+        using TpmSession session = await TpmSession.CreateBoundAsync(
+            new TpmHandle(0x02000000u),
+            BindAuth,
+            StartNonceCaller,
+            Tpm2bNonce.Create(StartNonceTpm, pool),
+            SessionAlg,
+            pool,
+            symmetric: TpmtSymDef.Aes(KeyBits, TpmAlgIdConstants.TPM_ALG_CFB),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT;
+
+        var input = new GetRandomInput((ushort)plaintext.Length);
+        TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
+            device, input, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"Encrypted (CFB) GetRandom must verify and decrypt: '{result.ResponseCode}'.");
+
+        using GetRandomResponse response = result.Value;
+        Assert.IsTrue(response.RandomBytes.AsReadOnlySpan().SequenceEqual(plaintext),
+            "The AES-CFB-decrypted first response parameter must equal the plaintext the scripted TPM encrypted.");
+    }
+
+    [TestMethod]
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The canned nonceTPM ownership transfers to the bound TpmSession, disposed by the using statement.")]
+    public async Task FirstCommandParameterIsCfbEncryptedOnTheWire()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
+
+        const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
+        const int KeyBits = 128;
+        byte[] sessionKey = DeriveBoundSessionKeyOracle(SessionAlg);
+        byte[] plaintext = BuildPattern(32, 0x44); //Block-multiple.
+
+        byte[]? observedCommand = null;
+        ValueTask<TpmResult<TpmResponse>> Handler(
+            ReadOnlyMemory<byte> command,
+            MemoryPool<byte> handlerPool,
+            CancellationToken cancellationToken)
+        {
+            observedCommand = command.ToArray();
+            byte[] frame = BuildErrorFrame(TpmRcConstants.TPM_RC_VALUE);
+
+            return ValueTask.FromResult(SuccessFrame(frame, handlerPool));
+        }
+
+        using var device = TpmDevice.Create(Handler);
+
+        using TpmSession session = await TpmSession.CreateBoundAsync(
+            new TpmHandle(0x02000000u),
+            BindAuth,
+            StartNonceCaller,
+            Tpm2bNonce.Create(StartNonceTpm, pool),
+            SessionAlg,
+            pool,
+            symmetric: TpmtSymDef.Aes(KeyBits, TpmAlgIdConstants.TPM_ALG_CFB),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.DECRYPT;
+
+        using var input = new EncryptableProbeInput(plaintext, pool);
+        TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
+            device, input, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsTpmError);
+        Assert.IsNotNull(observedCommand);
+
+        byte[] nonceCaller = ExtractCommandNonceCaller(observedCommand);
+        byte[] encryptedFirstParam = ExtractCommandFirstParameterData(observedCommand);
+
+        Assert.HasCount(plaintext.Length, encryptedFirstParam, "Parameter encryption must not change the data length.");
+        Assert.IsFalse(encryptedFirstParam.AsSpan().SequenceEqual(plaintext), "The first command parameter must be encrypted on the wire.");
+
+        //Command direction (Part 1 §19.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM (the session's
+        //current nonceTPM, which for the first command is the StartAuthSession nonceTPM).
+        (byte[] key, byte[] iv) = DeriveCfbKeyIv(sessionKey, nonceCaller, StartNonceTpm, KeyBits);
+        byte[] recovered = CfbReference(key, iv, encryptedFirstParam, encrypting: false);
+
+        Assert.IsTrue(recovered.AsSpan().SequenceEqual(plaintext),
+            "AES-CFB decrypting the captured first parameter with the independent oracle must recover the plaintext.");
+    }
+
+    [TestMethod]
     public async Task DecryptAttributeOnNonEncryptableCommandThrows()
     {
         await AssertExecuteThrowsAsync(
@@ -362,11 +478,29 @@ internal sealed class TpmParameterEncryptionExecutorTests
 
     private static byte[] BuildEncryptedGetRandomResponse(byte[] sessionKey, byte[] nonceCaller, byte[] nonceTpmNew, byte[] plaintext, byte attributes)
     {
-        //Encrypt the first response parameter: response direction nonceNewer = nonceTPM, nonceOlder = nonceCaller.
+        //Encrypt the first response parameter with XOR: response direction nonceNewer = nonceTPM, nonceOlder = nonceCaller.
         byte[] mask = SP800108HmacCounterKdf.DeriveBytes(
             sessionKey, HashAlgorithmName.SHA256, Encoding.ASCII.GetBytes("XOR"), Concat(nonceTpmNew, nonceCaller), plaintext.Length);
         byte[] encrypted = Xor(plaintext, mask);
 
+        return FrameEncryptedSessionResponse(sessionKey, nonceCaller, nonceTpmNew, encrypted, attributes);
+    }
+
+    private static byte[] BuildCfbEncryptedGetRandomResponse(byte[] sessionKey, byte[] nonceCaller, byte[] nonceTpmNew, byte[] plaintext, byte attributes, int keyBits)
+    {
+        //Encrypt the first response parameter with AES-CFB: response direction nonceNewer = nonceTPM, nonceOlder = nonceCaller.
+        (byte[] key, byte[] iv) = DeriveCfbKeyIv(sessionKey, nonceTpmNew, nonceCaller, keyBits);
+        byte[] encrypted = CfbReference(key, iv, plaintext, encrypting: true);
+
+        return FrameEncryptedSessionResponse(sessionKey, nonceCaller, nonceTpmNew, encrypted, attributes);
+    }
+
+    /// <summary>
+    /// Frames a TPM_ST_SESSIONS GetRandom response carrying an already-encrypted first parameter, computing the
+    /// rpHash (over the encrypted bytes) and the response HMAC exactly as the TPM would.
+    /// </summary>
+    private static byte[] FrameEncryptedSessionResponse(byte[] sessionKey, byte[] nonceCaller, byte[] nonceTpmNew, byte[] encrypted, byte attributes)
+    {
         //randomBytes parameter area: TPM2B size (the unencrypted size field) + encrypted data.
         byte[] paramArea = new byte[sizeof(ushort) + encrypted.Length];
         BinaryPrimitives.WriteUInt16BigEndian(paramArea, (ushort)encrypted.Length);
@@ -394,6 +528,49 @@ internal sealed class TpmParameterEncryptionExecutorTests
         authArea.CopyTo(frame, HeaderSize + sizeof(uint) + paramArea.Length);
 
         return frame;
+    }
+
+    /// <summary>
+    /// Derives the AES-CFB key and IV the TPM would use: KDFa(SHA-256, sessionValue, "CFB", nonceNewer,
+    /// nonceOlder, keyBits + 128) via the independent SP800-108 oracle; key = MSB octets, IV = next 16 octets.
+    /// </summary>
+    private static (byte[] Key, byte[] Iv) DeriveCfbKeyIv(byte[] sessionValue, byte[] nonceNewer, byte[] nonceOlder, int keyBits)
+    {
+        int keySize = (keyBits + 7) / 8;
+        byte[] material = SP800108HmacCounterKdf.DeriveBytes(
+            sessionValue, HashAlgorithmName.SHA256, Encoding.ASCII.GetBytes("CFB"), Concat(nonceNewer, nonceOlder), keySize + 16);
+
+        return (material[..keySize], material[keySize..(keySize + 16)]);
+    }
+
+    /// <summary>
+    /// A test-local, independently-written AES full-block CFB-128 transform (block-multiple data only), used as
+    /// the oracle cipher for the executor mini-responder. Independent of the production <c>AesCfb</c>; the
+    /// production primitive is anchored separately against the NIST SP800-38A vector.
+    /// </summary>
+    private static byte[] CfbReference(byte[] key, byte[] iv, byte[] data, bool encrypting)
+    {
+        const int BlockSize = 16;
+        using Aes aes = Aes.Create();
+        aes.Key = key;
+
+        byte[] output = new byte[data.Length];
+        byte[] feedback = (byte[])iv.Clone();
+        byte[] keystream = new byte[BlockSize];
+
+        for(int offset = 0; offset < data.Length; offset += BlockSize)
+        {
+            _ = aes.EncryptEcb(feedback, keystream, PaddingMode.None);
+            for(int i = 0; i < BlockSize; i++)
+            {
+                output[offset + i] = (byte)(data[offset + i] ^ keystream[i]);
+            }
+
+            //Full-block feedback: encryption feeds back produced ciphertext, decryption the consumed ciphertext.
+            Array.Copy(encrypting ? output : data, offset, feedback, 0, BlockSize);
+        }
+
+        return output;
     }
 
     private static byte[] BuildErrorFrame(TpmRcConstants responseCode)
