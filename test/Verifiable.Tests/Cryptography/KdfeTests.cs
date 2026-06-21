@@ -50,7 +50,7 @@ internal sealed class KdfeTests
     public async Task KdfeMatchesKnownAnswer(string algName, string label, int outputBytes, string expectedHex)
     {
         using IMemoryOwner<byte> actual = await Kdfe.DeriveAsync(
-            Hash(algName), Z, label, PartyU, PartyV, outputBytes * 8, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+            WellKnownHashAlgorithms.ToHashAlgorithmName(algName), Z, label, PartyU, PartyV, outputBytes * 8, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(expectedHex, Convert.ToHexStringLower(actual.Memory.Span[..outputBytes]),
             $"KDFe({algName}, '{label}', {outputBytes} bytes) must match the known-answer vector.");
@@ -111,15 +111,6 @@ internal sealed class KdfeTests
         await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
             await Kdfe.DeriveAsync(HashAlgorithmName.SHA256, Z, "SECRET", PartyU, PartyV, 100, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
-
-    private static HashAlgorithmName Hash(string algName) => algName switch
-    {
-        "SHA1" => HashAlgorithmName.SHA1,
-        "SHA256" => HashAlgorithmName.SHA256,
-        "SHA384" => HashAlgorithmName.SHA384,
-        "SHA512" => HashAlgorithmName.SHA512,
-        _ => throw new ArgumentException($"Unmapped hash algorithm '{algName}'.", nameof(algName))
-    };
 
     private static byte[] BuildPattern(int length, int seed)
     {

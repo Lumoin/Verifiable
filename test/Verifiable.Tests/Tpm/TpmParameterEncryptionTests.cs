@@ -1,8 +1,8 @@
 using System;
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Text;
 using System.Threading.Tasks;
+using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure.Sessions;
 
 namespace Verifiable.Tests.Tpm;
@@ -14,15 +14,17 @@ namespace Verifiable.Tests.Tpm;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The oracle is .NET's <see cref="SP800108HmacCounterKdf"/> — an independent implementation of the KDFa
-/// construction — composed with a hand-written XOR. The system under test routes through the project's KDFa
-/// and registered HMAC primitive, so a divergence in the label, field order, counter, or byte layout fails the
-/// comparison. This is the same non-circular oracle strategy as <c>KdfaTests</c>.
+/// The mask is verified against the project's own <see cref="Kdfa.DeriveAsync"/> with the <c>"XOR"</c> label,
+/// XORed by hand over the plaintext; the system under test (<see cref="TpmParameterEncryption.XorAsync"/>) is
+/// expected to apply that exact mask. KDFa itself is pinned by its own known-answer vectors (<c>KdfaTests</c>),
+/// so this isolates that XorAsync passes the right label and nonce order and XORs only the data. The AES-CFB
+/// path is pinned separately against the NIST SP800-38A vectors. The library's registered crypto is used
+/// throughout; the test performs no raw cryptographic operations.
 /// </para>
 /// <para>
 /// The session-key and per-command nonces are unobservable secret state with no public accessor, so this
-/// primitive-level KAT (plus the hardware encrypted-GetRandom test) is how parameter-encryption correctness is
-/// validated without a production test seam.
+/// primitive-level KAT (plus the hardware/software-TPM encrypted-GetRandom tests) is how parameter-encryption
+/// correctness is validated without a production test seam.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -44,9 +46,9 @@ internal sealed class TpmParameterEncryptionTests
     [DataRow("SHA256", 48)]   //Two blocks.
     [DataRow("SHA384", 50)]
     [DataRow("SHA512", 70)]
-    public async Task XorMatchesSp800108MaskOracle(string algName, int dataLength)
+    public async Task XorMatchesKdfaMask(string algName, int dataLength)
     {
-        HashAlgorithmName algorithm = Hash(algName);
+        HashAlgorithmName algorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(algName);
 
         byte[] plaintext = new byte[dataLength];
         for(int i = 0; i < dataLength; i++)
@@ -54,13 +56,17 @@ internal sealed class TpmParameterEncryptionTests
             plaintext[i] = (byte)(0x30 + i);
         }
 
-        //Independent oracle: mask = KDFa(...,"XOR",...) via SP800-108, then XOR by hand.
-        byte[] mask = SP800108HmacCounterKdf.DeriveBytes(
-            Key, algorithm, Encoding.ASCII.GetBytes("XOR"), Concat(NonceNewer, NonceOlder), dataLength);
-        byte[] expected = new byte[dataLength];
-        for(int i = 0; i < dataLength; i++)
+        //Reference: mask = KDFa("XOR") via the project's own KDF (KdfaTests pins KDFa to known answers), XORed
+        //by hand; XorAsync must apply that exact mask.
+        byte[] expected = (byte[])plaintext.Clone();
+        using(IMemoryOwner<byte> mask = await Kdfa.DeriveAsync(
+            algorithm, Key, "XOR", NonceNewer, NonceOlder, dataLength * 8, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
         {
-            expected[i] = (byte)(plaintext[i] ^ mask[i]);
+            ReadOnlySpan<byte> maskSpan = mask.Memory.Span[..dataLength];
+            for(int i = 0; i < dataLength; i++)
+            {
+                expected[i] ^= maskSpan[i];
+            }
         }
 
         byte[] actual = (byte[])plaintext.Clone();
@@ -68,7 +74,7 @@ internal sealed class TpmParameterEncryptionTests
             algorithm, Key, NonceNewer, NonceOlder, actual, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(actual.AsSpan().SequenceEqual(expected),
-            $"XOR({algName}, {dataLength} bytes) must equal data XOR the SP800-108 'XOR'-label mask.");
+            $"XOR({algName}, {dataLength} bytes) must equal data XOR the KDFa 'XOR'-label mask.");
     }
 
     [TestMethod]
@@ -221,23 +227,5 @@ internal sealed class TpmParameterEncryptionTests
         await TpmParameterEncryption.CfbAsync(
             HashAlgorithmName.SHA256, 128, Key, NonceNewer, NonceOlder, working, encrypting: false, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(working.AsSpan().SequenceEqual(plaintext), "Applying CFB encrypt then decrypt with the same key/nonces must recover the original.");
-    }
-
-    private static HashAlgorithmName Hash(string algName) => algName switch
-    {
-        "SHA1" => HashAlgorithmName.SHA1,
-        "SHA256" => HashAlgorithmName.SHA256,
-        "SHA384" => HashAlgorithmName.SHA384,
-        "SHA512" => HashAlgorithmName.SHA512,
-        _ => throw new ArgumentException($"Unmapped hash algorithm '{algName}'.", nameof(algName))
-    };
-
-    private static byte[] Concat(byte[] first, byte[] second)
-    {
-        byte[] result = new byte[first.Length + second.Length];
-        first.CopyTo(result, 0);
-        second.CopyTo(result, first.Length);
-
-        return result;
     }
 }
