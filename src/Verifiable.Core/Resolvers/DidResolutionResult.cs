@@ -57,7 +57,8 @@ public sealed class DidResolutionResult
     /// <summary>
     /// Whether the resolution was successful.
     /// </summary>
-    public bool IsSuccessful => ResolutionMetadata.Error is null && (Document is not null || DocumentUrl is not null);
+    public bool IsSuccessful => ResolutionMetadata.Error is null
+        && (Document is not null || DocumentUrl is not null || DocumentMetadata.Deactivated);
 
     /// <summary>
     /// Creates a successful resolution result containing a fully resolved DID document.
@@ -75,6 +76,31 @@ public sealed class DidResolutionResult
             Kind = DidResolutionKind.Document,
             ResolutionMetadata = new DidResolutionMetadata { ContentType = contentType },
             Document = document,
+            DocumentMetadata = documentMetadata
+        };
+    }
+
+    /// <summary>
+    /// Creates a successful resolution result for a deactivated DID: the DIDDoc is intentionally absent
+    /// (<see cref="Document"/> is <see langword="null"/>) and the document metadata carries
+    /// <see cref="DidDocumentMetadata.Deactivated"/> set to <see langword="true"/>.
+    /// </summary>
+    /// <param name="documentMetadata">The document metadata, which MUST have <c>Deactivated == true</c>.</param>
+    /// <param name="contentType">The media type the representation would have carried.</param>
+    /// <remarks>
+    /// A resolver MUST NOT return the DIDDoc for a deactivated DID and MUST include <c>deactivated: true</c>
+    /// in the resolution metadata. This factory produces that shape: a successful document-kind result with a
+    /// null document and deactivated metadata.
+    /// </remarks>
+    public static DidResolutionResult SuccessDeactivated(
+        DidDocumentMetadata documentMetadata,
+        string? contentType = null)
+    {
+        return new DidResolutionResult
+        {
+            Kind = DidResolutionKind.Document,
+            ResolutionMetadata = new DidResolutionMetadata { ContentType = contentType },
+            Document = null,
             DocumentMetadata = documentMetadata
         };
     }

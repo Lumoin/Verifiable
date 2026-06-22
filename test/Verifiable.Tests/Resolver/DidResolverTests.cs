@@ -1,6 +1,6 @@
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Tests.Resolver;

@@ -77,4 +77,59 @@ public static class DidErrorTypes
     /// SHOULD describe which feature is unsupported.
     /// </summary>
     public static readonly Uri FeatureNotSupported = new(Namespace + "FEATURE_NOT_SUPPORTED");
+
+    /// <summary>
+    /// Maps a standard DID error type URI to the lowerCamelCase string code the W3C DID Resolution and the
+    /// did:webvh specification require in the metadata <c>error</c> field (for example
+    /// <c>#NOT_FOUND</c> -&gt; <c>notFound</c>, <c>#INVALID_DID</c> -&gt; <c>invalidDid</c>,
+    /// <c>#METHOD_NOT_SUPPORTED</c> -&gt; <c>methodNotSupported</c>). An unrecognized type URI maps to
+    /// <c>internalError</c>.
+    /// </summary>
+    /// <param name="type">The error type URI, one of the values defined in this class.</param>
+    /// <returns>The lowerCamelCase error code string for the metadata <c>error</c> field.</returns>
+    public static string ToErrorCode(Uri type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        return type.AbsoluteUri switch
+        {
+            var uri when uri == InvalidDid.AbsoluteUri => "invalidDid",
+            var uri when uri == InvalidDidDocument.AbsoluteUri => "invalidDidDocument",
+            var uri when uri == NotFound.AbsoluteUri => "notFound",
+            var uri when uri == RepresentationNotSupported.AbsoluteUri => "representationNotSupported",
+            var uri when uri == InvalidDidUrl.AbsoluteUri => "invalidDidUrl",
+            var uri when uri == MethodNotSupported.AbsoluteUri => "methodNotSupported",
+            var uri when uri == InvalidOptions.AbsoluteUri => "invalidOptions",
+            var uri when uri == InternalError.AbsoluteUri => "internalError",
+            var uri when uri == FeatureNotSupported.AbsoluteUri => "featureNotSupported",
+            _ => "internalError"
+        };
+    }
+
+
+    /// <summary>
+    /// Maps a lowerCamelCase error code string (as written in the metadata <c>error</c> field) back to its
+    /// standard DID error type URI. The inverse of <see cref="ToErrorCode"/>; an unrecognized code maps to
+    /// <see cref="InternalError"/>.
+    /// </summary>
+    /// <param name="code">The lowerCamelCase error code string.</param>
+    /// <returns>The standard error type URI for the code.</returns>
+    public static Uri FromErrorCode(string code)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+
+        return code switch
+        {
+            "invalidDid" => InvalidDid,
+            "invalidDidDocument" => InvalidDidDocument,
+            "notFound" => NotFound,
+            "representationNotSupported" => RepresentationNotSupported,
+            "invalidDidUrl" => InvalidDidUrl,
+            "methodNotSupported" => MethodNotSupported,
+            "invalidOptions" => InvalidOptions,
+            "internalError" => InternalError,
+            "featureNotSupported" => FeatureNotSupported,
+            _ => InternalError
+        };
+    }
 }

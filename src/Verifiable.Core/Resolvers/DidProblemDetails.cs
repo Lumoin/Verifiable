@@ -47,4 +47,36 @@ public sealed record DidProblemDetails(
     string? Title = null,
     int? Status = null,
     string? Detail = null,
-    Uri? Instance = null);
+    Uri? Instance = null)
+{
+    /// <summary>
+    /// The lowerCamelCase error code derived from <see cref="Type"/> for the metadata <c>error</c> field (for
+    /// example <c>invalidDid</c>, <c>notFound</c>, <c>methodNotSupported</c>). The RFC 9457 object itself is
+    /// carried separately in the metadata <c>problemDetails</c> field (did:webvh v1.0, error envelope: L872).
+    /// </summary>
+    public string Code => DidErrorTypes.ToErrorCode(Type);
+
+
+    /// <summary>
+    /// Equality is on <see cref="Type"/> alone, so a pre-built <see cref="DidResolutionErrors"/> instance
+    /// compares equal to any instance carrying the same problem-type URI regardless of the optional
+    /// human-readable fields (an occurrence-specific <see cref="Detail"/> does not change the error identity).
+    /// </summary>
+    /// <param name="other">The instance to compare against.</param>
+    /// <returns><see langword="true"/> when both carry the same problem-type URI.</returns>
+    public bool Equals(DidProblemDetails? other)
+    {
+        //Compare the full URI string, NOT Uri.Equals: Uri value-equality ignores the fragment, but the DID
+        //Resolution error types differ ONLY by fragment (https://www.w3.org/ns/did#NOT_FOUND vs #INVALID_DID),
+        //so Uri.Equals would collapse every error type to one identity. Equality stays on the type alone — an
+        //occurrence-specific Detail/Title/Status/Instance does not change the error identity.
+        return other is not null && string.Equals(Type.AbsoluteUri, other.Type.AbsoluteUri, StringComparison.Ordinal);
+    }
+
+
+    /// <inheritdoc />
+    public override int GetHashCode()
+    {
+        return StringComparer.Ordinal.GetHashCode(Type.AbsoluteUri);
+    }
+}

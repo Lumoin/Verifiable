@@ -7,6 +7,8 @@ using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
+using Verifiable.DidComm;
+using Verifiable.JCose;
 using Verifiable.Microsoft;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -74,6 +76,18 @@ internal static class TestSetup
 
         return buffer;
     };
+
+
+    /// <summary>
+    /// A <see cref="HashFunctionSelector"/> for the DIDComm attachment resolver: it returns
+    /// <c>SHA256.HashData</c> for the self-describing sha2-256 multihash code and <see langword="null"/> for
+    /// every other code (the resolver then fails the hashed path closed). This is the application-side hash
+    /// policy the resolver takes as a parameter — the library bakes in no default hash.
+    /// </summary>
+    public static HashFunctionSelector MultihashSha256Selector { get; } = static multihashCode =>
+        multihashCode == MultihashHeaders.Sha2Bits256[0]
+            ? (HashFunctionDelegate)System.Security.Cryptography.SHA256.HashData
+            : null;
 
 
     /// <summary>Base64url decoder using built-in .NET APIs.</summary>
@@ -299,22 +313,135 @@ internal static class TestSetup
                     _ => throw new ArgumentException(
                         $"No key derivation function for algorithm '{algorithm}' purpose '{purpose}'.")
                 },
+            //The content AEAD is curve-independent, so it is selected by the content algorithm carried in
+            //the resolution qualifier: a null/GCM qualifier keeps the anoncrypt default (AES-GCM); XC20P
+            //resolves to XChaCha20-Poly1305 (the anoncrypt-only content cipher of C.3 example 1); and
+            //authcrypt passes its `enc` so the AES_CBC_HMAC_SHA2 family it mandates (1PU §2.1) — which the
+            //curve-keyed registry cannot tell apart from AES-GCM by curve alone — resolves to CBC-HMAC.
             encryptMatcher: static (algorithm, purpose, qualifier) =>
-                (algorithm, purpose) switch
+                (purpose, qualifier) switch
                 {
-                    (CryptoAlgorithm, Purpose p) when p.Equals(Purpose.Exchange) =>
+                    (Purpose p, string q) when p.Equals(Purpose.Exchange) && WellKnownJweEncryptionAlgorithms.IsA256CbcHs512(q) =>
+                            MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
+                    (Purpose p, string q) when p.Equals(Purpose.Exchange) && WellKnownJweEncryptionAlgorithms.IsXC20P(q) =>
+                            BouncyCastleKeyAgreementFunctions.XChaCha20Poly1305EncryptAsync,
+                    (Purpose p, _) when p.Equals(Purpose.Exchange) =>
                             BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
                     _ => throw new ArgumentException(
-                        $"No AEAD encrypt function for algorithm '{algorithm}' purpose '{purpose}'.")
+                        $"No AEAD encrypt function for algorithm '{algorithm}' purpose '{purpose}' (enc '{qualifier}').")
                 },
             decryptMatcher: static (algorithm, purpose, qualifier) =>
+                (purpose, qualifier) switch
+                {
+                    (Purpose p, string q) when p.Equals(Purpose.Exchange) && WellKnownJweEncryptionAlgorithms.IsA256CbcHs512(q) =>
+                            MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
+                    (Purpose p, string q) when p.Equals(Purpose.Exchange) && WellKnownJweEncryptionAlgorithms.IsXC20P(q) =>
+                            BouncyCastleKeyAgreementFunctions.XChaCha20Poly1305DecryptAsync,
+                    (Purpose p, _) when p.Equals(Purpose.Exchange) =>
+                            BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
+                    _ => throw new ArgumentException(
+                        $"No AEAD decrypt function for algorithm '{algorithm}' purpose '{purpose}' (enc '{qualifier}').")
+                },
+            kemDecapsulationMatcher: null,
+            authenticatedKeyAgreementEncryptMatcher: static (algorithm, purpose, qualifier) =>
+                (algorithm, purpose) switch
+                {
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) =>
+                            BouncyCastleKeyAgreementFunctions.Ecdh1PuKeyAgreementEncryptX25519Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.Ecdh1PuKeyAgreementEncryptP256Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.Ecdh1PuKeyAgreementEncryptP384Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.Ecdh1PuKeyAgreementEncryptP521Async,
+                    _ => throw new ArgumentException(
+                        $"No authenticated key agreement encrypt function for algorithm '{algorithm}' purpose '{purpose}'.")
+                },
+            authenticatedKeyAgreementDecryptMatcher: static (algorithm, purpose, qualifier) =>
+                (algorithm, purpose) switch
+                {
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) =>
+                            BouncyCastleKeyAgreementFunctions.Ecdh1PuKeyAgreementDecryptX25519Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.Ecdh1PuKeyAgreementDecryptP256Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.Ecdh1PuKeyAgreementDecryptP384Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.Ecdh1PuKeyAgreementDecryptP521Async,
+                    _ => throw new ArgumentException(
+                        $"No authenticated key agreement decrypt function for algorithm '{algorithm}' purpose '{purpose}'.")
+                },
+            //The 1PU Concat KDF is curve-independent for the same reason as the ECDH-ES one:
+            //the agreement delegates already produce the fixed-width Z = Ze || Zs.
+            authenticatedKeyDerivationMatcher: static (algorithm, purpose, qualifier) =>
                 (algorithm, purpose) switch
                 {
                     (CryptoAlgorithm, Purpose p) when p.Equals(Purpose.Exchange) =>
-                            BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
+                            ConcatKdf.DefaultAuthenticatedKeyDerivationDelegate,
                     _ => throw new ArgumentException(
-                        $"No AEAD decrypt function for algorithm '{algorithm}' purpose '{purpose}'.")
+                        $"No authenticated key derivation function for algorithm '{algorithm}' purpose '{purpose}'.")
                 },
-            kemDecapsulationMatcher: null);
+            wrapMatcher: static (algorithm, purpose, qualifier) =>
+                (algorithm, purpose) switch
+                {
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.Aes256) && p.Equals(Purpose.Encryption) =>
+                            MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
+                    _ => throw new ArgumentException(
+                        $"No key wrap function for algorithm '{algorithm}' purpose '{purpose}'.")
+                },
+            unwrapMatcher: static (algorithm, purpose, qualifier) =>
+                (algorithm, purpose) switch
+                {
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.Aes256) && p.Equals(Purpose.Encryption) =>
+                            MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
+                    _ => throw new ArgumentException(
+                        $"No key unwrap function for algorithm '{algorithm}' purpose '{purpose}'.")
+                },
+            multiRecipientKeyAgreementEncryptMatcher: static (algorithm, purpose, qualifier) =>
+                (algorithm, purpose) switch
+                {
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) =>
+                            BouncyCastleKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptX25519Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptP256Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptP384Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.EcdhEsMultiRecipientAgreementEncryptP521Async,
+                    _ => throw new ArgumentException(
+                        $"No multi-recipient key agreement encrypt function for algorithm '{algorithm}' purpose '{purpose}'.")
+                },
+            multiRecipientAuthenticatedKeyAgreementEncryptMatcher: static (algorithm, purpose, qualifier) =>
+                (algorithm, purpose) switch
+                {
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) =>
+                            BouncyCastleKeyAgreementFunctions.Ecdh1PuMultiRecipientAgreementEncryptX25519Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.Ecdh1PuMultiRecipientAgreementEncryptP256Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.Ecdh1PuMultiRecipientAgreementEncryptP384Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Exchange) =>
+                            MicrosoftKeyAgreementFunctions.Ecdh1PuMultiRecipientAgreementEncryptP521Async,
+                    _ => throw new ArgumentException(
+                        $"No multi-recipient authenticated key agreement encrypt function for algorithm '{algorithm}' purpose '{purpose}'.")
+                });
     }
 }

@@ -364,6 +364,167 @@ public static class CryptoTags
         (typeof(EncodingScheme), EncodingScheme.Raw));
 
 
+    //XChaCha20-Poly1305 (the JOSE "XC20P" content encryption algorithm, draft-amringer-jose-chacha-02 /
+    //draft-irtf-cfrg-xchacha-03) content-encryption buffers. DIDComm v2.1 pairs XC20P only with the
+    //X25519 ECDH-ES anoncrypt path (Appendix C.3 example 1), so the algorithm discriminator is X25519 —
+    //the agreement curve the content key is derived under — exactly as the AES-GCM content tags above use
+    //the agreement curve (P-256) as their discriminator. The buffer role is carried by the Purpose; the
+    //byte content (a 192-bit nonce, the ciphertext, the 128-bit Poly1305 tag) is what each tag labels.
+
+    /// <summary>
+    /// Tag for the 192-bit (24-byte) XChaCha20-Poly1305 extended nonce used with an X25519
+    /// ECDH-ES content encryption operation. The nonce is unique per encryption operation.
+    /// </summary>
+    public static Tag Xc20pIv { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.X25519),
+        (typeof(Purpose), Purpose.Nonce),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for XChaCha20-Poly1305 ciphertext produced by an X25519 ECDH-ES content encryption operation.
+    /// </summary>
+    public static Tag Xc20pCiphertext { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.X25519),
+        (typeof(Purpose), Purpose.Encryption),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for the 128-bit (16-byte) XChaCha20-Poly1305 authentication tag (Poly1305 output)
+    /// produced by an X25519 ECDH-ES content encryption operation. This is a MAC, not an HMAC.
+    /// </summary>
+    public static Tag Xc20pAuthTag { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.X25519),
+        (typeof(Purpose), Purpose.Mac),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for additional authenticated data fed into an XChaCha20-Poly1305 operation whose content
+    /// encryption key was derived via X25519 ECDH-ES.
+    /// </summary>
+    public static Tag Xc20pAad { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.X25519),
+        (typeof(Purpose), Purpose.Data),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for plaintext produced by an XChaCha20-Poly1305 decryption operation whose content
+    /// encryption key was derived via X25519 ECDH-ES.
+    /// </summary>
+    public static Tag Xc20pDecryptedContent { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.X25519),
+        (typeof(Purpose), Purpose.Decrypted),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for a 256-bit content encryption key derived via X25519 ECDH-ES and Concat KDF for use
+    /// in an XChaCha20-Poly1305 operation.
+    /// </summary>
+    public static Tag Xc20pCek { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.X25519),
+        (typeof(Purpose), Purpose.Encryption),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+
+    //AES Key Wrap (RFC 3394) tags. The wrap operation protects a content encryption
+    //key under a key encryption key derived via ECDH-ES or ECDH-1PU Concat KDF, as in
+    //the JWE "ECDH-ES+A256KW" and "ECDH-1PU+A256KW" key management algorithms.
+
+    /// <summary>
+    /// Tag for a 256-bit AES key encryption key derived via Concat KDF for wrapping
+    /// a content encryption key per <see href="https://www.rfc-editor.org/rfc/rfc3394">RFC 3394</see>.
+    /// </summary>
+    public static Tag AesKwKeyEncryptionKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes256),
+        (typeof(Purpose), Purpose.Encryption),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for a content encryption key wrapped per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3394">RFC 3394</see>. The wrapped
+    /// bytes are public ciphertext carried in the JWE encrypted key slot.
+    /// </summary>
+    public static Tag AesKwWrappedKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes256),
+        (typeof(Purpose), Purpose.Wrapped),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for a content encryption key recovered by
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3394">RFC 3394</see> unwrapping.
+    /// </summary>
+    public static Tag AesKwUnwrappedKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes256),
+        (typeof(Purpose), Purpose.Encryption),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+
+    //AES-CBC with HMAC composition tags per RFC 7518 §5.2 (AES_CBC_HMAC_SHA2 family,
+    //e.g. A256CBC-HS512). The composite key splits into a MAC half and an encryption
+    //half; the authentication tag is a truncated HMAC over AAD || IV || ciphertext || AL.
+
+    /// <summary>
+    /// Tag for the 128-bit (16-byte) initialization vector of an AES-CBC operation in
+    /// the <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.2">RFC 7518 §5.2</see>
+    /// AES_CBC_HMAC_SHA2 composition.
+    /// </summary>
+    public static Tag AesCbcHmacIv { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes256),
+        (typeof(Purpose), Purpose.Nonce),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ciphertext produced by an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.2">RFC 7518 §5.2</see>
+    /// AES_CBC_HMAC_SHA2 content encryption operation.
+    /// </summary>
+    public static Tag AesCbcHmacCiphertext { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes256),
+        (typeof(Purpose), Purpose.Encryption),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for the truncated HMAC authentication tag of an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.2">RFC 7518 §5.2</see>
+    /// AES_CBC_HMAC_SHA2 operation. For A256CBC-HS512 this is the first 32 bytes of
+    /// HMAC-SHA-512 output.
+    /// </summary>
+    public static Tag AesCbcHmacAuthTag { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes256),
+        (typeof(Purpose), Purpose.Hmac),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for additional authenticated data fed into an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.2">RFC 7518 §5.2</see>
+    /// AES_CBC_HMAC_SHA2 operation.
+    /// </summary>
+    public static Tag AesCbcHmacAad { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes256),
+        (typeof(Purpose), Purpose.Data),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for plaintext produced by an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.2">RFC 7518 §5.2</see>
+    /// AES_CBC_HMAC_SHA2 decryption operation.
+    /// </summary>
+    public static Tag AesCbcHmacDecryptedContent { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes256),
+        (typeof(Purpose), Purpose.Decrypted),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for the composite content encryption key of an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.2">RFC 7518 §5.2</see>
+    /// AES_CBC_HMAC_SHA2 operation. For A256CBC-HS512 this is 64 bytes: the initial
+    /// 32 bytes are the HMAC key and the final 32 bytes are the AES-CBC key.
+    /// </summary>
+    public static Tag AesCbcHmacCek { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes256),
+        (typeof(Purpose), Purpose.Encryption),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+
     //Brainpool ECDSA curve tags per RFC 5639 / RFC 9784. The four r1 curves
     //(P-256r1, P-320r1, P-384r1, P-512r1) carry compressed public keys and
     //raw private-key scalars. They share the EC compression encoding with

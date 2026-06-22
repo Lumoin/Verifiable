@@ -29,7 +29,7 @@ internal static class AdditionalDataJson
     /// the writer is currently building. No-op when <paramref name="additionalData"/> is
     /// <see langword="null"/>.
     /// </summary>
-    internal static void WriteEntries(Utf8JsonWriter writer, IDictionary<string, object>? additionalData)
+    internal static void WriteEntries(Utf8JsonWriter writer, IDictionary<string, object>? additionalData, string? excludedKey = null)
     {
         if(additionalData is null)
         {
@@ -38,6 +38,13 @@ internal static class AdditionalDataJson
 
         foreach(var kvp in additionalData)
         {
+            //A converter that has already emitted a bucket key through a typed property (for example the DID
+            //Resolution metadata's "deactivated") excludes it here so it is not written twice.
+            if(excludedKey is not null && string.Equals(kvp.Key, excludedKey, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             writer.WritePropertyName(kvp.Key);
             ManualJsonWriter.WriteValue(writer, kvp.Value);
         }

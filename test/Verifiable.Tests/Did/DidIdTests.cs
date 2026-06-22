@@ -1,7 +1,11 @@
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Did;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Ebsi;
+using Verifiable.Core.Did.Methods.Keri;
+using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Json.Converters;
 
 namespace Verifiable.Tests.Did

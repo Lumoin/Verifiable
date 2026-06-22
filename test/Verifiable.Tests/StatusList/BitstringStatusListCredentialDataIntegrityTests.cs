@@ -7,6 +7,7 @@ using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
+using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.Json;

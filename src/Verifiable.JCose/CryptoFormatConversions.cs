@@ -514,6 +514,8 @@ namespace Verifiable.JCose
                     EncodeKey(keyMaterial, MulticodecHeaders.RsaPublicKey, base58Encoder),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Bls12381G1) && p.Equals(Purpose.Verification) =>
                     EncodeKey(keyMaterial, MulticodecHeaders.Bls12381G1PublicKey, base58Encoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Bls12381G2) && p.Equals(Purpose.Verification) =>
+                    EncodeKey(keyMaterial, MulticodecHeaders.Bls12381G2PublicKey, base58Encoder),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) =>
                     EncodeKey(keyMaterial, MulticodecHeaders.Ed25519PublicKey, base58Encoder),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) =>
@@ -575,7 +577,15 @@ namespace Verifiable.JCose
             IMemoryOwner<byte> keyMaterialOwner = memoryPool.Rent(keyMaterial.Length);
             keyMaterial.CopyTo(keyMaterialOwner.Memory.Span);
 
-            return (cryptoAlgorithm, purpose, EncodingScheme.Raw, keyMaterialOwner);
+            //EC keys are decoded to a compressed SEC1 point (see DecodeEcKey -> EllipticCurveUtilities.Compress),
+            //so the tag MUST say EcCompressed — consumers that build a JWK or run point-on-curve / key agreement
+            //rely on the EncodingScheme reflecting the actual bytes. OKP (Ed25519/X25519) and other key types
+            //carry raw single-coordinate / opaque material.
+            EncodingScheme encodingScheme = WellKnownKeyTypeValues.IsEc(keyType)
+                ? EncodingScheme.EcCompressed
+                : EncodingScheme.Raw;
+
+            return (cryptoAlgorithm, purpose, encodingScheme, keyMaterialOwner);
 
 
             static void ValidateRequiredFields(Dictionary<string, object> jwk, string keyType)
@@ -747,44 +757,129 @@ namespace Verifiable.JCose
 
 
         /// <summary>
-        /// Default converter from Base58 key to algorithm representation.
+        /// Default converter from a multibase-encoded <c>did:key</c> suffix to its algorithm
+        /// representation. Accepts the two multibase forms the <c>did:key</c> ABNF
+        /// <c>mb-value := z(base58btc) | u(base64url)</c> permits: the base58btc <c>z</c> form
+        /// (the canonical form, decoded with the supplied <paramref name="multibaseDecoder"/>)
+        /// and the base64url <c>u</c> form (decoded inline, since the supplied decoder is the
+        /// base58 one). Both forms decode to the same <c>multicodec-varint || raw-key</c> bytes,
+        /// which a single classifier maps to the algorithm and validates the raw-key length
+        /// against (the <c>did:key</c> <c>invalidPublicKeyLength</c> check).
         /// </summary>
-        public static Base58ToAlgorithmDelegate DefaultBase58ToAlgorithmConverter => (base58Key, memoryPool, base58Decoder) =>
+        public static Base58ToAlgorithmDelegate DefaultBase58ToAlgorithmConverter => (multibaseKey, memoryPool, multibaseDecoder) =>
         {
-            if(string.IsNullOrWhiteSpace(base58Key))
+            if(string.IsNullOrWhiteSpace(multibaseKey))
             {
-                throw new ArgumentNullException(nameof(base58Key), "Base58 key cannot be null or empty.");
+                throw new ArgumentNullException(nameof(multibaseKey), "Multibase key cannot be null or empty.");
             }
 
-            if(!base58Key[0].Equals(MultibaseAlgorithms.Base58Btc))
+            char multibasePrefix = multibaseKey[0];
+
+            //Decode the multibase payload (everything after the prefix character) into the raw
+            //multicodec-prefixed bytes. The base58btc form goes through the supplied decoder; the
+            //base64url form is decoded inline because the did:key ABNF allows it and the supplied
+            //decoder is base58-only.
+            IMemoryOwner<byte> prefixedBytes = multibasePrefix switch
+            {
+                var p when p.Equals(MultibaseAlgorithms.Base58Btc) => multibaseDecoder(multibaseKey.AsSpan(1), memoryPool),
+                var p when p.Equals(MultibaseAlgorithms.Base64Url) => DecodeBase64UrlPayload(multibaseKey.AsSpan(1), memoryPool),
+                _ => throw new ArgumentException(
+                    $"Multibase key must start with '{MultibaseAlgorithms.Base58Btc}' (base58btc) or '{MultibaseAlgorithms.Base64Url}' (base64url).",
+                    nameof(multibaseKey))
+            };
+
+            using(prefixedBytes)
+            {
+                return ClassifyMulticodecPublicKey(prefixedBytes.Memory.Span, memoryPool);
+            }
+        };
+
+
+        //Decodes a base64url-encoded multibase payload into pooled memory, mirroring the shape the
+        //base58 DecodeDelegate produces (the full multicodec-prefixed key bytes).
+        private static IMemoryOwner<byte> DecodeBase64UrlPayload(ReadOnlySpan<char> payload, MemoryPool<byte> memoryPool)
+        {
+            int maxLength = System.Buffers.Text.Base64Url.GetMaxDecodedLength(payload.Length);
+            IMemoryOwner<byte> buffer = memoryPool.Rent(maxLength);
+            try
+            {
+                if(System.Buffers.Text.Base64Url.DecodeFromChars(payload, buffer.Memory.Span, out _, out int bytesWritten) != System.Buffers.OperationStatus.Done)
+                {
+                    throw new FormatException("The base64url 'u' multibase payload is not valid base64url.");
+                }
+
+                IMemoryOwner<byte> exact = memoryPool.Rent(bytesWritten);
+                buffer.Memory.Span[..bytesWritten].CopyTo(exact.Memory.Span);
+
+                return exact;
+            }
+            finally
+            {
+                buffer.Dispose();
+            }
+        }
+
+
+        //Maps the leading multicodec varint of a decoded did:key payload to its algorithm, strips the
+        //header, validates the remaining raw-key length against the spec's expected length for the key
+        //type (the did:key invalidPublicKeyLength check), and copies the raw key into its own pooled buffer.
+        private static (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte> KeyMaterial) ClassifyMulticodecPublicKey(
+            ReadOnlySpan<byte> prefixedBytes,
+            MemoryPool<byte> memoryPool)
+        {
+            //All registered did:key multicodec headers are two bytes. A payload shorter than that cannot
+            //carry a header plus a key body, so it is malformed input rather than an unknown algorithm.
+            const int MulticodecHeaderLength = 2;
+            if(prefixedBytes.Length < MulticodecHeaderLength)
+            {
+                throw new ArgumentException("Decoded did:key payload is too short to carry a multicodec header.");
+            }
+
+            ReadOnlySpan<byte> header = prefixedBytes[..MulticodecHeaderLength];
+            int rawLength = prefixedBytes.Length - MulticodecHeaderLength;
+
+            //EC multicodec public keys are compressed SEC1 points (e.g. p256-pub is 33 bytes), so the
+            //tag carries EcCompressed; the OKP keys (Ed25519/X25519) and RSA/BLS stay Raw.
+            (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, int ExpectedRawLength) classified = header switch
+            {
+                var h when MulticodecHeaders.IsSecp256k1PublicKey(h) => (CryptoAlgorithm.Secp256k1, Purpose.Verification, EncodingScheme.EcCompressed, 33),
+                var h when MulticodecHeaders.IsEd25519PublicKey(h) => (CryptoAlgorithm.Ed25519, Purpose.Verification, EncodingScheme.Raw, 32),
+                var h when MulticodecHeaders.IsX25519PublicKey(h) => (CryptoAlgorithm.X25519, Purpose.Exchange, EncodingScheme.Raw, 32),
+                var h when MulticodecHeaders.IsP256PublicKey(h) => (CryptoAlgorithm.P256, Purpose.Verification, EncodingScheme.EcCompressed, 33),
+                var h when MulticodecHeaders.IsP384PublicKey(h) => (CryptoAlgorithm.P384, Purpose.Verification, EncodingScheme.EcCompressed, 49),
+                var h when MulticodecHeaders.IsP521PublicKey(h) => (CryptoAlgorithm.P521, Purpose.Verification, EncodingScheme.EcCompressed, 67),
+                var h when MulticodecHeaders.IsBls12381G2PublicKey(h) => (CryptoAlgorithm.Bls12381G2, Purpose.Verification, EncodingScheme.Raw, 96),
+
+                //RSA public keys are DER-encoded RSAPublicKey structures whose length is the modulus length
+                //plus DER framing rather than a fixed coordinate width, so the two registered sizes are matched
+                //against the actual modulus-derived encoding length (270 bytes for 2048-bit, 526 for 4096-bit).
+                var h when MulticodecHeaders.IsRsaPublicKey(h) => ClassifyRsa(rawLength),
+                _ => throw new ArgumentException("Unknown or unsupported multicodec header.")
+            };
+
+            //invalidPublicKeyLength per did:key §Decode/§Signature Method: a recognized header with a
+            //wrong-length body MUST be rejected rather than surfaced as a malformed verification method.
+            if(rawLength != classified.ExpectedRawLength)
             {
                 throw new ArgumentException(
-                    $"Base58 key must start with '{MultibaseAlgorithms.Base58Btc}' for multibase format.",
-                    nameof(base58Key));
+                    $"Decoded public key length '{rawLength}' does not match the expected length '{classified.ExpectedRawLength}' for '{classified.Algorithm}'.");
             }
 
-            ReadOnlySpan<char> header = Base58BtcEncodedMulticodecHeaders.GetCanonicalizedHeader(base58Key.AsSpan(0, 4));
-            if(header.SequenceEqual(base58Key))
-            {
-                throw new ArgumentException("Unknown or unsupported multicodec header.", nameof(base58Key));
-            }
+            IMemoryOwner<byte> rawKey = memoryPool.Rent(rawLength);
+            prefixedBytes[MulticodecHeaderLength..].CopyTo(rawKey.Memory.Span);
 
-            int codecHeaderLength = Base58BtcEncodedMulticodecHeaders.GetMulticodecHeaderLength(header);
-            IMemoryOwner<byte> decodedKeyMaterial =
-                MultibaseSerializer.Decode(base58Key, codecHeaderLength, base58Decoder, memoryPool);
+            return (classified.Algorithm, classified.Purpose, classified.Scheme, rawKey);
+        }
 
-            return header switch
-            {
-                var h when Base58BtcEncodedMulticodecHeaders.IsSecp256k1PublicKey(h) => (CryptoAlgorithm.Secp256k1, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
-                var h when Base58BtcEncodedMulticodecHeaders.IsEd25519PublicKey(h) => (CryptoAlgorithm.Ed25519, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
-                var h when Base58BtcEncodedMulticodecHeaders.IsX25519PublicKey(h) => (CryptoAlgorithm.X25519, Purpose.Exchange, EncodingScheme.Raw, decodedKeyMaterial),
-                var h when Base58BtcEncodedMulticodecHeaders.IsP256PublicKey(h) => (CryptoAlgorithm.P256, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
-                var h when Base58BtcEncodedMulticodecHeaders.IsP384PublicKey(h) => (CryptoAlgorithm.P384, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
-                var h when Base58BtcEncodedMulticodecHeaders.IsP521PublicKey(h) => (CryptoAlgorithm.P521, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
-                var h when Base58BtcEncodedMulticodecHeaders.IsRsaPublicKey2048(h) => (CryptoAlgorithm.Rsa2048, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
-                var h when Base58BtcEncodedMulticodecHeaders.IsRsaPublicKey4096(h) => (CryptoAlgorithm.Rsa4096, Purpose.Verification, EncodingScheme.Raw, decodedKeyMaterial),
-                _ => throw new ArgumentException($"Unsupported header: {header}", nameof(base58Key))
-            };
+
+        //RSA did:key payloads share one multicodec header (rsa-pub) across modulus sizes; the registered
+        //sizes are distinguished by the DER-encoded RSAPublicKey length (270 bytes for a 2048-bit modulus,
+        //526 for a 4096-bit modulus). An unrecognized length is rejected as invalidPublicKeyLength.
+        private static (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, int ExpectedRawLength) ClassifyRsa(int rawLength) => rawLength switch
+        {
+            270 => (CryptoAlgorithm.Rsa2048, Purpose.Verification, EncodingScheme.Raw, 270),
+            526 => (CryptoAlgorithm.Rsa4096, Purpose.Verification, EncodingScheme.Raw, 526),
+            _ => throw new ArgumentException($"Unsupported RSA public key encoding length: '{rawLength}' bytes.")
         };
 
 

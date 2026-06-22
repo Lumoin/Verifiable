@@ -1,0 +1,211 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "Lumoin.Base": {
+        "type": "Direct",
+        "requested": "[0.0.2, )",
+        "resolved": "0.0.2",
+        "contentHash": "mFsXJq9SVg0poCevJ13u40iETZ6/fhNgsY/jFV+47PCqyTLz1KAQcjaM12dwUFba4GVcBqAOeNw2QseqOU6X2g=="
+      },
+      "Microsoft.CodeAnalysis.BannedApiAnalyzers": {
+        "type": "Direct",
+        "requested": "[4.14.0, )",
+        "resolved": "4.14.0",
+        "contentHash": "gSWJlDWwmDhtbrEJGiHqvEjz9KthIiFD0qYB8zZ6a7z+xpMSPEtM9yTYELSa58iFWYlzSRqP9FXO6KoT3+ZMtg=="
+      },
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[10.0.9, )",
+        "resolved": "10.0.9",
+        "contentHash": "4Iw41e2h7I4t70SJcX2GCmbyKJIlA273Cfm9RJMM050/3VBejGAG1KcthP5Z2L6SQcbfbf6BhNWO26+ZG+GzMg=="
+      },
+      "Microsoft.Sbom.Targets": {
+        "type": "Direct",
+        "requested": "[4.1.5, )",
+        "resolved": "4.1.5",
+        "contentHash": "i5z+cNu/cOcdO0AgFB8aXk8w6In2H+haaDfSgd9ImvQIK+rSHavHZIogVoAZLL8jLwYx4bAcs5b7EyuMMG4mQQ=="
+      },
+      "SIL.ReleaseTasks": {
+        "type": "Direct",
+        "requested": "[3.2.0, )",
+        "resolved": "3.2.0",
+        "contentHash": "HvkX+pve8yGdG79ar1hHf+9Q9WirwFXMZSQqNSHulqd0Ev1CQwEcF0DQLM+UlExXZJkL7MyI+7wM6wicnWBBuw==",
+        "dependencies": {
+          "Markdig.Signed": "0.41.1",
+          "Microsoft.Build.Tasks.Core": "17.14.28"
+        }
+      },
+      "Markdig.Signed": {
+        "type": "Transitive",
+        "resolved": "0.41.1",
+        "contentHash": "vRSlilV2gcm769RDMe158oftaQN7FZpGe2roEEMGOXLcNUlmSbNUVppZIKaAFIQ/E575divDfoAV3yz6GL6R9Q=="
+      },
+      "Microsoft.Build.Framework": {
+        "type": "Transitive",
+        "resolved": "17.14.28",
+        "contentHash": "wRcyTzGV0LRAtFdrddtioh59Ky4/zbvyraP0cQkDzRSRkhgAQb0K88D/JNC6VHLIXanRi3mtV1jU0uQkBwmiVg=="
+      },
+      "Microsoft.Build.Tasks.Core": {
+        "type": "Transitive",
+        "resolved": "17.14.28",
+        "contentHash": "jk3O0tXp9QWPXhLJ7Pl8wm/eGtGgA1++vwHGWEmnwMU6eP//ghtcCUpQh9CQMwEKGDnH0aJf285V1s8yiSlKfQ==",
+        "dependencies": {
+          "Microsoft.Build.Framework": "17.14.28",
+          "Microsoft.Build.Utilities.Core": "17.14.28",
+          "Microsoft.NET.StringTools": "17.14.28",
+          "System.CodeDom": "9.0.0",
+          "System.Configuration.ConfigurationManager": "9.0.0",
+          "System.Diagnostics.EventLog": "9.0.0",
+          "System.Formats.Nrbf": "9.0.0",
+          "System.Resources.Extensions": "9.0.0",
+          "System.Security.Cryptography.Pkcs": "9.0.0",
+          "System.Security.Cryptography.ProtectedData": "9.0.0",
+          "System.Security.Cryptography.Xml": "9.0.0"
+        }
+      },
+      "Microsoft.Build.Utilities.Core": {
+        "type": "Transitive",
+        "resolved": "17.14.28",
+        "contentHash": "rhSdPo8QfLXXWM+rY0x0z1G4KK4ZhMoIbHROyDj8MUBFab9nvHR0NaMnjzOgXldhmD2zi2ir8d6xCatNzlhF5g==",
+        "dependencies": {
+          "Microsoft.Build.Framework": "17.14.28",
+          "Microsoft.NET.StringTools": "17.14.28",
+          "System.Configuration.ConfigurationManager": "9.0.0",
+          "System.Diagnostics.EventLog": "9.0.0",
+          "System.Security.Cryptography.ProtectedData": "9.0.0"
+        }
+      },
+      "Microsoft.NET.StringTools": {
+        "type": "Transitive",
+        "resolved": "17.14.28",
+        "contentHash": "DMIeWDlxe0Wz0DIhJZ2FMoGQAN2yrGZOi5jjFhRYHWR5ONd0CS6IpAHlRnA7uA/5BF+BADvgsETxW2XrPiFc1A=="
+      },
+      "System.CodeDom": {
+        "type": "Transitive",
+        "resolved": "9.0.0",
+        "contentHash": "oTE5IfuMoET8yaZP/vdvy9xO47guAv/rOhe4DODuFBN3ySprcQOlXqO3j+e/H/YpKKR5sglrxRaZ2HYOhNJrqA=="
+      },
+      "System.Configuration.ConfigurationManager": {
+        "type": "Transitive",
+        "resolved": "9.0.0",
+        "contentHash": "PdkuMrwDhXoKFo/JxISIi9E8L+QGn9Iquj2OKDWHB6Y/HnUOuBouF7uS3R4Hw3FoNmwwMo6hWgazQdyHIIs27A==",
+        "dependencies": {
+          "System.Diagnostics.EventLog": "9.0.0",
+          "System.Security.Cryptography.ProtectedData": "9.0.0"
+        }
+      },
+      "System.Diagnostics.EventLog": {
+        "type": "Transitive",
+        "resolved": "9.0.0",
+        "contentHash": "qd01+AqPhbAG14KtdtIqFk+cxHQFZ/oqRSCoxU1F+Q6Kv0cl726sl7RzU9yLFGd4BUOKdN4XojXF0pQf/R6YeA=="
+      },
+      "System.Formats.Nrbf": {
+        "type": "Transitive",
+        "resolved": "9.0.0",
+        "contentHash": "F/6tNE+ckmdFeSQAyQo26bQOqfPFKEfZcuqnp4kBE6/7jP26diP+QTHCJJ6vpEfaY6bLy+hBLiIQUSxSmNwLkA=="
+      },
+      "System.Resources.Extensions": {
+        "type": "Transitive",
+        "resolved": "9.0.0",
+        "contentHash": "tvhuT1D2OwPROdL1kRWtaTJliQo0WdyhvwDpd8RM997G7m3Hya5nhbYhNTS75x6Vu+ypSOgL5qxDCn8IROtCxw==",
+        "dependencies": {
+          "System.Formats.Nrbf": "9.0.0"
+        }
+      },
+      "System.Security.Cryptography.Pkcs": {
+        "type": "Transitive",
+        "resolved": "10.0.9",
+        "contentHash": "aud6Ox9eSPayMBNu6qL+Zk7yDB6ShrRxg1aMJ1uPqFTGAFVisrjFeKj6RE9SimjNKcbl+chwmiYIK4b3hvc61A=="
+      },
+      "verifiable.core": {
+        "type": "Project",
+        "dependencies": {
+          "Lumoin.Veridical.Backends.Managed": "[0.0.3, )",
+          "Lumoin.Veridical.Bbs": "[0.0.3, )",
+          "Verifiable.Foundation": "[0.0.0, )",
+          "Verifiable.JCose": "[0.0.0, )",
+          "Verifiable.JsonPointer": "[0.0.0, )"
+        }
+      },
+      "verifiable.cryptography": {
+        "type": "Project",
+        "dependencies": {
+          "Lumoin.Base": "[0.0.2, )",
+          "Verifiable.Foundation": "[0.0.0, )"
+        }
+      },
+      "verifiable.foundation": {
+        "type": "Project",
+        "dependencies": {
+          "Lumoin.Base": "[0.0.2, )"
+        }
+      },
+      "verifiable.jcose": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )"
+        }
+      },
+      "verifiable.jsonpointer": {
+        "type": "Project"
+      },
+      "Lumoin.Veridical.Backends.Managed": {
+        "type": "CentralTransitive",
+        "requested": "[0.0.3, )",
+        "resolved": "0.0.3",
+        "contentHash": "khM7Igh2Tm0aHMcSkjRg5Z9MrtpTt+uYqA3LOXIETHZoA2EUCY7Jwa+pWkqLBgy3gK3+2zG6ZF+qogM84Mp/uw==",
+        "dependencies": {
+          "Lumoin.Base": "0.0.2",
+          "Lumoin.Veridical.Core": "0.0.3",
+          "Lumoin.Veridical.Hashing": "0.0.3"
+        }
+      },
+      "Lumoin.Veridical.Bbs": {
+        "type": "CentralTransitive",
+        "requested": "[0.0.3, )",
+        "resolved": "0.0.3",
+        "contentHash": "0mRxrLVsu4gBkBDiFOtRSRAlrVS0C/3MfXMw9RatI7im4z7xkZ5TcTvXGpYZ3OfYAvEGpx7PVWHHbxF0g9CAGA==",
+        "dependencies": {
+          "Lumoin.Base": "0.0.2",
+          "Lumoin.Veridical.Core": "0.0.3"
+        }
+      },
+      "Lumoin.Veridical.Core": {
+        "type": "CentralTransitive",
+        "requested": "[0.0.3, )",
+        "resolved": "0.0.3",
+        "contentHash": "UMl8sBSfPFahXEQr48ZwV34xZnCks0i+euF36JCKKOJHgxDGB10vmtjXzrMQ7hluWkasHjzasLcr9gC3gos5xA==",
+        "dependencies": {
+          "Lumoin.Base": "0.0.2"
+        }
+      },
+      "Lumoin.Veridical.Hashing": {
+        "type": "CentralTransitive",
+        "requested": "[0.0.3, )",
+        "resolved": "0.0.3",
+        "contentHash": "wwguTKeYvUw3xE6bgyS543lG5EVYOdiuWWjxafVLZ4ID7Ae7Kwg+0EAFTGyK/8Bh11EEGGjVv37c1lL+n53fIg==",
+        "dependencies": {
+          "Lumoin.Base": "0.0.2",
+          "Lumoin.Veridical.Core": "0.0.3"
+        }
+      },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.9, )",
+        "resolved": "10.0.9",
+        "contentHash": "vXp+vBQbTkMrDzUiPCxo1KvzfaAvZWuSRS2P7e5orhtV7ZuePKAB3Cqc9dH2YHUavRJyA2uWd2yrL6hl2VoJ5g=="
+      },
+      "System.Security.Cryptography.Xml": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.9, )",
+        "resolved": "10.0.9",
+        "contentHash": "RxJRvzbS1rZpGF8389e+TEwTMHIhkNHEUQuAyN2oQkCGsZZ/EKhUUViwteKrs3IeHRzoJPqzB3Z1lJsQg3+Nxg==",
+        "dependencies": {
+          "System.Security.Cryptography.Pkcs": "10.0.9"
+        }
+      }
+    }
+  }
+}

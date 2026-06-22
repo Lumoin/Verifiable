@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Did.Methods;
 
 namespace Verifiable.Json.Converters
 {

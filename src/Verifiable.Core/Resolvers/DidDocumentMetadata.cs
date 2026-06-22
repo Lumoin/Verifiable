@@ -12,9 +12,17 @@ namespace Verifiable.Core.Resolvers;
 /// <para>
 /// See <see href="https://w3c.github.io/did-resolution/#document-metadata">W3C DID Resolution section 7.1 Document Metadata</see>.
 /// </para>
+/// <para>
+/// The DID Resolution document metadata is an open structure. Method-specific and registered properties are
+/// carried in the <see cref="AdditionalData"/> open-world bucket (flattened to the metadata root on the wire),
+/// so they serialize as plain top-level properties without a type discriminator and any property a peer or
+/// future resolver emits round-trips rather than being dropped. The type stays inheritable for callers who
+/// prefer a strongly-typed subtype; its equality is type-aware (a base instance and a derived instance are
+/// never equal) so a derived type only adds its own fields to equality.
+/// </para>
 /// </remarks>
 [DebuggerDisplay("Deactivated={Deactivated} VersionId={VersionId,nq} Created={Created} Updated={Updated}")]
-public sealed class DidDocumentMetadata: IEquatable<DidDocumentMetadata>
+public class DidDocumentMetadata: IEquatable<DidDocumentMetadata>
 {
     /// <summary>
     /// Empty metadata instance for convenience.
@@ -61,8 +69,23 @@ public sealed class DidDocumentMetadata: IEquatable<DidDocumentMetadata>
     /// </summary>
     public string? CanonicalId { get; init; }
 
+    /// <summary>
+    /// The open-world bucket for DID Resolution document-metadata properties the typed model does not name —
+    /// registered or method-specific properties (for example did:webvh's <c>witness</c>, <c>watchers</c>,
+    /// <c>scid</c>, <c>portable</c>, <c>ttl</c>).
+    /// </summary>
+    /// <remarks>
+    /// The DID Resolution document metadata is an open structure, so a method's properties are carried here
+    /// rather than via a polymorphic subtype: they are flattened to the metadata object's root on the wire
+    /// (each key is a top-level property, never a nested <c>additionalData</c> object), and any property a
+    /// future or peer resolver emits round-trips through this bucket instead of being dropped. Consistent with
+    /// <see cref="Verifiable.Core.Model.Credentials.CredentialSubject.AdditionalData"/> and the other open-world
+    /// POCOs, this is not part of equality.
+    /// </remarks>
+    public IDictionary<string, object>? AdditionalData { get; init; }
+
     /// <inheritdoc />
-    public bool Equals(DidDocumentMetadata? other)
+    public virtual bool Equals(DidDocumentMetadata? other)
     {
         if(other is null)
         {
@@ -72,6 +95,13 @@ public sealed class DidDocumentMetadata: IEquatable<DidDocumentMetadata>
         if(ReferenceEquals(this, other))
         {
             return true;
+        }
+
+        //A base instance is never equal to a derived (method-specific) one, so a derived type's equality only
+        //has to add its own fields on top of this comparison.
+        if(GetType() != other.GetType())
+        {
+            return false;
         }
 
         return Created == other.Created

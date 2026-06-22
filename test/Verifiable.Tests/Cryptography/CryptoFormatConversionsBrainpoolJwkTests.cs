@@ -113,7 +113,7 @@ internal sealed class CryptoFormatConversionsBrainpoolJwkTests
                 Assert.AreEqual(expectedAlgorithm, roundTrippedAlgorithm,
                     "JWK crv resolution must return the Brainpool algorithm we started with.");
                 Assert.AreEqual(Purpose.Verification, roundTrippedPurpose);
-                Assert.AreEqual(EncodingScheme.Raw, scheme);
+                Assert.AreEqual(EncodingScheme.EcCompressed, scheme);
 
                 //The compressed form produced by the round-trip must match the
                 //original — proving the JWK {x, y} → compressed SEC1 path round-trips

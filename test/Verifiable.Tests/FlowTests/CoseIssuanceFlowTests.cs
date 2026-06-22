@@ -4,6 +4,8 @@ using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
+using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;

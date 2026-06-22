@@ -176,7 +176,7 @@ internal sealed class OutboundFetchTests
 
 
     [TestMethod]
-    public async Task PostMethodAndBodyArePreservedOn308ButDowngradedOn303()
+    public async Task PostBodyPreservedOn308ButBodyDropRejectedOn303()
     {
         ExchangeContext context = Context(OutboundFetchPolicy.SecureDefault with
         {
@@ -195,16 +195,20 @@ internal sealed class OutboundFetchTests
         Assert.AreEqual("POST", preserve.Calls[1].Method, "308 preserves the method.");
         Assert.IsNotNull(preserve.Calls[1].Body, "308 preserves the body.");
 
-        FakeTransport downgrade = new(new()
+        //A 303 (like 301/302) would rewrite a body-bearing POST to a bodyless GET, silently dropping the body
+        //while still reporting success — a one-way POST would deliver nothing. That is now REJECTED rather than
+        //body-dropped: only a body-preserving redirect (307/308) may follow a request that carries a body, so
+        //the redirect is not taken (only the original call is made) and the caller must re-resolve explicitly.
+        FakeTransport rejectBodyDrop = new(new()
         {
             ["https://a.example/"] = (303, "https://b.example/"),
             ["https://b.example/"] = (200, null),
         });
-        _ = await OutboundFetch.FetchAsync(
-            Post("https://a.example/"), context, downgrade.Delegate, TestContext.CancellationToken)
+        OutboundFetchResult result = await OutboundFetch.FetchAsync(
+            Post("https://a.example/"), context, rejectBodyDrop.Delegate, TestContext.CancellationToken)
             .ConfigureAwait(false);
-        Assert.AreEqual("GET", downgrade.Calls[1].Method, "303 downgrades to GET.");
-        Assert.IsNull(downgrade.Calls[1].Body, "303 drops the body.");
+        Assert.AreEqual(OutboundFetchOutcome.DeniedByPolicy, result.Outcome, "A 303 of a body-bearing POST is rejected, not body-dropped.");
+        Assert.HasCount(1, rejectBodyDrop.Calls);
     }
 
 

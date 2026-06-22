@@ -35,8 +35,12 @@ public delegate VerifiablePresentation PresentationDeserializeDelegate(string se
 /// <para>
 /// Presentation proofs use the <c>authentication</c> verification relationship, binding the
 /// proof to the holder's DID document. Unlike credential proofs that use <c>assertionMethod</c>,
-/// presentation proofs require a <c>challenge</c> and a <c>domain</c> to prevent replay attacks
-/// and bind the proof to a specific verifier interaction.
+/// an <em>interactive</em> presentation proof carries a <c>challenge</c> and a <c>domain</c> to
+/// prevent replay attacks and bind the proof to a specific verifier interaction — verified with
+/// <c>VerifyAsync</c>. A <em>static linked</em> presentation (one published once and resolved by
+/// anyone, such as a did:webvh <c>whois.vp</c>) has no interactive verifier and therefore no such
+/// binding — verified with <c>VerifyLinkedPresentationAsync</c>, which is fail-closed against
+/// being handed a binding-bearing presentation.
 /// </para>
 /// <para>
 /// The proof creation and verification algorithms are specified in
@@ -262,134 +266,290 @@ public static class PresentationDataIntegrityExtensions
             ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(holderDidDocument);
             ArgumentException.ThrowIfNullOrWhiteSpace(expectedChallenge);
             ArgumentException.ThrowIfNullOrWhiteSpace(expectedDomain);
-            ArgumentNullException.ThrowIfNull(canonicalize);
-            ArgumentNullException.ThrowIfNull(decodeProofValue);
-            ArgumentNullException.ThrowIfNull(serialize);
-            ArgumentNullException.ThrowIfNull(serializeProofOptions);
-            ArgumentNullException.ThrowIfNull(decoder);
-            ArgumentNullException.ThrowIfNull(computeDigest);
-            ArgumentNullException.ThrowIfNull(memoryPool);
 
-            var proof = presentation.Proof?.FirstOrDefault();
-            if(proof is null)
+            //The challenge and domain are this path's only addition over the shared verification
+            //core: the proof's binding fields MUST equal the verifier's expectation. Everything
+            //else — proof purpose, verification-method resolution through authentication, and the
+            //cryptographic verify — is shared with VerifyLinkedPresentationAsync.
+            VerificationFailureReason? ValidateBinding(DataIntegrityProof proof)
             {
-                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.NoProof);
+                if(!string.Equals(proof.Challenge, expectedChallenge, StringComparison.Ordinal))
+                {
+                    return VerificationFailureReason.ChallengeMismatch;
+                }
+
+                //§4.2: the given domain "does not contain the same strings as proof.domain
+                //(treating a single string as a set containing just that string)" is an
+                //error — set equality against the verifier's singleton expectation.
+                if(!DataIntegrityProof.DomainSetEquals(proof.Domain, [expectedDomain]))
+                {
+                    return VerificationFailureReason.DomainMismatch;
+                }
+
+                return null;
             }
 
-            if(proof.Cryptosuite is null)
-            {
-                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.MissingCryptosuite);
-            }
-
-            //Data Integrity 1.0 §4.2: when an expected proof purpose is given and does not
-            //match proof.proofPurpose, an error MUST be raised. A presentation proof's
-            //purpose is authentication (VC-DM 2.0 §4.13); a proof minted for another
-            //purpose (e.g. assertionMethod) must not authenticate a presentation even when
-            //its key also appears in the holder's authentication relationship.
-            if(!string.Equals(proof.ProofPurpose, AuthenticationMethod.Purpose, StringComparison.Ordinal))
-            {
-                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.ProofPurposeMismatch);
-            }
-
-            var verificationMethodId = proof.VerificationMethod?.Id;
-            if(string.IsNullOrEmpty(verificationMethodId))
-            {
-                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.MissingVerificationMethod);
-            }
-
-            //Validate challenge and domain before performing expensive cryptographic operations.
-            if(!string.Equals(proof.Challenge, expectedChallenge, StringComparison.Ordinal))
-            {
-                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.ChallengeMismatch);
-            }
-
-            //§4.2: the given domain "does not contain the same strings as proof.domain
-            //(treating a single string as a set containing just that string)" is an
-            //error — set equality against the verifier's singleton expectation.
-            if(!DataIntegrityProof.DomainSetEquals(proof.Domain, [expectedDomain]))
-            {
-                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.DomainMismatch);
-            }
-
-            //Resolve through authentication to enforce the correct verification relationship.
-            //A key that exists in verificationMethod but is not referenced from authentication fails here.
-            var verificationMethod = holderDidDocument.GetLocalAuthenticationMethodById(verificationMethodId);
-            if(verificationMethod is null)
-            {
-                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.VerificationMethodNotFound);
-            }
-
-            //The signed document is the presentation WITHOUT its proof member — a
-            //proofless view over this secured instance's members.
-            var presentationWithoutProofSerialized = serialize(CloneWithProofs(presentation, proofs: null));
-
-            var requiresContext = proof.Cryptosuite.Canonicalization.Equals(CanonicalizationAlgorithm.Rdfc10);
-            var proofOptions = ProofOptionsDocument.FromProof(proof, requiresContext ? presentation.Context : null);
-            var proofOptionsSerialized = serializeProofOptions(proofOptions);
-
-            var presentationCanonicalization = await canonicalize(presentationWithoutProofSerialized, contextResolver, context, cancellationToken)
-                .ConfigureAwait(false);
-            var proofOptionsCanonicalization = await canonicalize(proofOptionsSerialized, contextResolver, context, cancellationToken)
-                .ConfigureAwait(false);
-
-            var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
-            int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
-            var digestTag = new Tag(new Dictionary<Type, object>
-            {
-                [typeof(HashAlgorithmName)] = hashAlgorithm,
-                [typeof(Purpose)] = Purpose.Digest
-            });
-
-            var presentationByteCount = Encoding.UTF8.GetByteCount(presentationCanonicalization.CanonicalForm);
-            var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
-
-            using var presentationBytesOwner = memoryPool.Rent(presentationByteCount);
-            using var proofOptionsBytesOwner = memoryPool.Rent(proofOptionsByteCount);
-
-            var presentationBytesWritten = Encoding.UTF8.GetBytes(presentationCanonicalization.CanonicalForm, presentationBytesOwner.Memory.Span);
-            var proofOptionsBytesWritten = Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm, proofOptionsBytesOwner.Memory.Span);
-
-            System.Diagnostics.Debug.Assert(presentationBytesWritten == presentationByteCount, "Encoded byte count must match the pre-computed count.");
-            System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
-
-            (DigestValue presentationDigestValue, _) = await computeDigest(
-                new ReadOnlySequence<byte>(presentationBytesOwner.Memory[..presentationBytesWritten]),
-                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
-            using DigestValue presentationDigest = presentationDigestValue;
-
-            (DigestValue proofOptionsDigestValue, _) = await computeDigest(
-                new ReadOnlySequence<byte>(proofOptionsBytesOwner.Memory[..proofOptionsBytesWritten]),
-                digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
-            using DigestValue proofOptionsDigest = proofOptionsDigestValue;
-
-            var combinedLength = proofOptionsDigest.Length + presentationDigest.Length;
-            using var hashDataOwner = memoryPool.Rent(combinedLength);
-            var hashData = hashDataOwner.Memory.Span;
-            proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData);
-            presentationDigest.AsReadOnlySpan().CopyTo(hashData[proofOptionsDigest.Length..]);
-
-            using var signatureBytes = decodeProofValue(proof.ProofValue!, decoder, memoryPool);
-
-            var signatureTag = new Tag(new Dictionary<Type, object>
-            {
-                [typeof(CryptoAlgorithm)] = proof.Cryptosuite.SignatureAlgorithm,
-                [typeof(Purpose)] = Purpose.Verification
-            });
-            using var signature = new Signature(signatureBytes, signatureTag);
-            var isValid = await verificationMethod.VerifySignatureAsync(hashDataOwner.Memory, signature, memoryPool)
-                .ConfigureAwait(false);
-
-            if(!isValid)
-            {
-                return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.SignatureInvalid);
-            }
-
-            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Success(
-                new Verified<DataIntegritySecuredPresentation>(presentation, VerificationContextTag.Create(verificationMethodId)));
+            return await VerifyCoreAsync(
+                presentation,
+                holderDidDocument,
+                ValidateBinding,
+                canonicalize,
+                contextResolver,
+                decodeProofValue,
+                serialize,
+                serializeProofOptions,
+                decoder,
+                computeDigest,
+                memoryPool,
+                context,
+                cancellationToken).ConfigureAwait(false);
         }
+
+
+        /// <summary>
+        /// Verifies a <strong>static linked</strong> presentation's Data Integrity proof — a
+        /// presentation that is published once and resolved by anyone, such as a did:webvh
+        /// <c>whois.vp</c> — where there is no interactive verifier and therefore no
+        /// <c>challenge</c>/<c>domain</c> to bind.
+        /// </summary>
+        /// <param name="holderDidDocument">
+        /// The holder's DID document. The verification method referenced by the proof must
+        /// appear in the document's <c>authentication</c> relationship.
+        /// </param>
+        /// <param name="canonicalize">The canonicalization function for the cryptosuite's algorithm.</param>
+        /// <param name="contextResolver">
+        /// Optional delegate for resolving JSON-LD contexts. Required for RDFC-based cryptosuites.
+        /// </param>
+        /// <param name="decodeProofValue">Delegate for decoding the proof value string to signature bytes.</param>
+        /// <param name="serialize">Delegate for serializing presentations.</param>
+        /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
+        /// <param name="decoder">The decoding delegate (e.g., Base58 decoder).</param>
+        /// <param name="computeDigest">The digest function for the cryptosuite's hash algorithm.</param>
+        /// <param name="memoryPool">Memory pool for signature allocation.</param>
+        /// <param name="context">The per-operation exchange context.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The verification result indicating cryptographic validity.</returns>
+        /// <remarks>
+        /// <para>
+        /// This path performs the SAME cryptographic verification as the challenge/domain-checked
+        /// <c>VerifyAsync</c> — the proof purpose must be <c>authentication</c>, the verification method is resolved
+        /// through the holder's <c>authentication</c> relationship, and the signature is verified —
+        /// but it does NOT bind the proof to a verifier challenge or domain.
+        /// </para>
+        /// <para>
+        /// To keep that absence safe it is <strong>fail-closed against misuse</strong>: if the
+        /// proof carries a <c>challenge</c> or a <c>domain</c>, verification fails with
+        /// <see cref="VerificationFailureReason.UnexpectedPresentationBinding"/>. A presentation
+        /// minted with a replay binding (for example for an OID4VP exchange) therefore cannot be
+        /// verified through this path while its binding goes unchecked — use the
+        /// challenge/domain-checked <c>VerifyAsync</c> for those. The binding fields are also
+        /// covered by the signature, so stripping them from a bound presentation to route it here
+        /// breaks the signature and fails with <see cref="VerificationFailureReason.SignatureInvalid"/>.
+        /// </para>
+        /// </remarks>
+        public async ValueTask<CredentialVerificationResult<DataIntegritySecuredPresentation>> VerifyLinkedPresentationAsync(
+            DidDocument holderDidDocument,
+            CanonicalizationDelegate canonicalize,
+            ContextResolverDelegate? contextResolver,
+            ProofValueDecoderDelegate decodeProofValue,
+            PresentationSerializeDelegate serialize,
+            ProofOptionsSerializeDelegate serializeProofOptions,
+            DecodeDelegate decoder,
+            ComputeDigestDelegate computeDigest,
+            MemoryPool<byte> memoryPool,
+            ExchangeContext context,
+            CancellationToken cancellationToken = default)
+        {
+            return await VerifyCoreAsync(
+                presentation,
+                holderDidDocument,
+                RejectBoundPresentation,
+                canonicalize,
+                contextResolver,
+                decodeProofValue,
+                serialize,
+                serializeProofOptions,
+                decoder,
+                computeDigest,
+                memoryPool,
+                context,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+
+    /// <summary>
+    /// Validates a presentation proof's replay-binding fields (<c>challenge</c>/<c>domain</c>)
+    /// against a verify path's policy. Returns the <see cref="VerificationFailureReason"/> that
+    /// describes a policy violation, or <see langword="null"/> when the binding is acceptable.
+    /// This is the single point at which the interactive (challenge/domain-checked) and the static
+    /// linked-presentation verify paths differ; the rest of the verification is shared.
+    /// </summary>
+    /// <param name="proof">The presentation proof whose binding fields are evaluated.</param>
+    private delegate VerificationFailureReason? PresentationBindingValidator(DataIntegrityProof proof);
+
+
+    /// <summary>
+    /// The binding policy for a static linked presentation: it carries no replay binding, so a
+    /// proof that DOES carry a <c>challenge</c> or <c>domain</c> is refused (fail closed). See
+    /// <see cref="VerificationFailureReason.UnexpectedPresentationBinding"/>.
+    /// </summary>
+    private static VerificationFailureReason? RejectBoundPresentation(DataIntegrityProof proof)
+    {
+        bool hasChallenge = !string.IsNullOrEmpty(proof.Challenge);
+        bool hasDomain = proof.Domain is { Count: > 0 };
+        if(hasChallenge || hasDomain)
+        {
+            return VerificationFailureReason.UnexpectedPresentationBinding;
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// The shared presentation verification core. Checks the proof purpose, resolves the
+    /// verification method through the holder's <c>authentication</c> relationship, and verifies
+    /// the signature over <c>proofOptionsHash || presentationHash</c>. The supplied
+    /// <paramref name="validateBinding"/> decides whether the proof's <c>challenge</c>/<c>domain</c>
+    /// are acceptable for the calling path — the only behavioural difference between the
+    /// interactive and the static linked-presentation verify.
+    /// </summary>
+    private static async ValueTask<CredentialVerificationResult<DataIntegritySecuredPresentation>> VerifyCoreAsync(
+        DataIntegritySecuredPresentation presentation,
+        DidDocument holderDidDocument,
+        PresentationBindingValidator validateBinding,
+        CanonicalizationDelegate canonicalize,
+        ContextResolverDelegate? contextResolver,
+        ProofValueDecoderDelegate decodeProofValue,
+        PresentationSerializeDelegate serialize,
+        ProofOptionsSerializeDelegate serializeProofOptions,
+        DecodeDelegate decoder,
+        ComputeDigestDelegate computeDigest,
+        MemoryPool<byte> memoryPool,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(holderDidDocument);
+        ArgumentNullException.ThrowIfNull(canonicalize);
+        ArgumentNullException.ThrowIfNull(decodeProofValue);
+        ArgumentNullException.ThrowIfNull(serialize);
+        ArgumentNullException.ThrowIfNull(serializeProofOptions);
+        ArgumentNullException.ThrowIfNull(decoder);
+        ArgumentNullException.ThrowIfNull(computeDigest);
+        ArgumentNullException.ThrowIfNull(memoryPool);
+
+        var proof = presentation.Proof?.FirstOrDefault();
+        if(proof is null)
+        {
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.NoProof);
+        }
+
+        if(proof.Cryptosuite is null)
+        {
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.MissingCryptosuite);
+        }
+
+        //Data Integrity 1.0 §4.2: when an expected proof purpose is given and does not
+        //match proof.proofPurpose, an error MUST be raised. A presentation proof's
+        //purpose is authentication (VC-DM 2.0 §4.13); a proof minted for another
+        //purpose (e.g. assertionMethod) must not authenticate a presentation even when
+        //its key also appears in the holder's authentication relationship.
+        if(!string.Equals(proof.ProofPurpose, AuthenticationMethod.Purpose, StringComparison.Ordinal))
+        {
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.ProofPurposeMismatch);
+        }
+
+        var verificationMethodId = proof.VerificationMethod?.Id;
+        if(string.IsNullOrEmpty(verificationMethodId))
+        {
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.MissingVerificationMethod);
+        }
+
+        //The calling path's binding policy is the only behavioural difference between the
+        //interactive and static verifies. Evaluated before the expensive cryptographic work.
+        if(validateBinding(proof) is { } bindingFailure)
+        {
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(bindingFailure);
+        }
+
+        //Resolve through authentication to enforce the correct verification relationship.
+        //A key that exists in verificationMethod but is not referenced from authentication fails here.
+        var verificationMethod = holderDidDocument.GetLocalAuthenticationMethodById(verificationMethodId);
+        if(verificationMethod is null)
+        {
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.VerificationMethodNotFound);
+        }
+
+        //The signed document is the presentation WITHOUT its proof member — a
+        //proofless view over this secured instance's members.
+        var presentationWithoutProofSerialized = serialize(CloneWithProofs(presentation, proofs: null));
+
+        var requiresContext = proof.Cryptosuite.Canonicalization.Equals(CanonicalizationAlgorithm.Rdfc10);
+        var proofOptions = ProofOptionsDocument.FromProof(proof, requiresContext ? presentation.Context : null);
+        var proofOptionsSerialized = serializeProofOptions(proofOptions);
+
+        var presentationCanonicalization = await canonicalize(presentationWithoutProofSerialized, contextResolver, context, cancellationToken)
+            .ConfigureAwait(false);
+        var proofOptionsCanonicalization = await canonicalize(proofOptionsSerialized, contextResolver, context, cancellationToken)
+            .ConfigureAwait(false);
+
+        var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
+        int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
+        var digestTag = new Tag(new Dictionary<Type, object>
+        {
+            [typeof(HashAlgorithmName)] = hashAlgorithm,
+            [typeof(Purpose)] = Purpose.Digest
+        });
+
+        var presentationByteCount = Encoding.UTF8.GetByteCount(presentationCanonicalization.CanonicalForm);
+        var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
+
+        using var presentationBytesOwner = memoryPool.Rent(presentationByteCount);
+        using var proofOptionsBytesOwner = memoryPool.Rent(proofOptionsByteCount);
+
+        var presentationBytesWritten = Encoding.UTF8.GetBytes(presentationCanonicalization.CanonicalForm, presentationBytesOwner.Memory.Span);
+        var proofOptionsBytesWritten = Encoding.UTF8.GetBytes(proofOptionsCanonicalization.CanonicalForm, proofOptionsBytesOwner.Memory.Span);
+
+        System.Diagnostics.Debug.Assert(presentationBytesWritten == presentationByteCount, "Encoded byte count must match the pre-computed count.");
+        System.Diagnostics.Debug.Assert(proofOptionsBytesWritten == proofOptionsByteCount, "Encoded byte count must match the pre-computed count.");
+
+        (DigestValue presentationDigestValue, _) = await computeDigest(
+            new ReadOnlySequence<byte>(presentationBytesOwner.Memory[..presentationBytesWritten]),
+            digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
+        using DigestValue presentationDigest = presentationDigestValue;
+
+        (DigestValue proofOptionsDigestValue, _) = await computeDigest(
+            new ReadOnlySequence<byte>(proofOptionsBytesOwner.Memory[..proofOptionsBytesWritten]),
+            digestByteLength, digestTag, memoryPool, null, cancellationToken).ConfigureAwait(false);
+        using DigestValue proofOptionsDigest = proofOptionsDigestValue;
+
+        var combinedLength = proofOptionsDigest.Length + presentationDigest.Length;
+        using var hashDataOwner = memoryPool.Rent(combinedLength);
+        var hashData = hashDataOwner.Memory.Span;
+        proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData);
+        presentationDigest.AsReadOnlySpan().CopyTo(hashData[proofOptionsDigest.Length..]);
+
+        using var signatureBytes = decodeProofValue(proof.ProofValue!, decoder, memoryPool);
+
+        var signatureTag = new Tag(new Dictionary<Type, object>
+        {
+            [typeof(CryptoAlgorithm)] = proof.Cryptosuite.SignatureAlgorithm,
+            [typeof(Purpose)] = Purpose.Verification
+        });
+        using var signature = new Signature(signatureBytes, signatureTag);
+        var isValid = await verificationMethod.VerifySignatureAsync(hashDataOwner.Memory, signature, memoryPool)
+            .ConfigureAwait(false);
+
+        if(!isValid)
+        {
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.SignatureInvalid);
+        }
+
+        return CredentialVerificationResult<DataIntegritySecuredPresentation>.Success(
+            new Verified<DataIntegritySecuredPresentation>(presentation, VerificationContextTag.Create(verificationMethodId)));
     }
 
 

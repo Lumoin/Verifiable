@@ -133,7 +133,7 @@ internal static class Oid4VpSchemeFixtures
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
 
         Verifiable.Core.Model.Did.DidDocument didDocument =
-            await new Verifiable.Core.Model.Did.KeyDidBuilder().BuildAsync(
+            await new Verifiable.Core.Did.Methods.Key.KeyDidBuilder().BuildAsync(
                 vmKeys.PublicKey,
                 Verifiable.Core.Model.Did.CryptographicSuites.MultikeyVerificationMethodTypeInfo.Instance,
                 includeDefaultContext: false,
@@ -145,8 +145,8 @@ internal static class Oid4VpSchemeFixtures
 
         Verifiable.Core.Resolvers.DidResolver didResolver = new(
             Verifiable.Core.Resolvers.DidMethodSelectors.FromResolvers(
-                (Verifiable.Core.Model.Did.Methods.WellKnownDidMethodPrefixes.KeyDidMethodPrefix,
-                 Verifiable.Core.Resolvers.KeyDidResolver.Build(Pool))));
+                (Verifiable.Core.Did.Methods.WellKnownDidMethodPrefixes.KeyDidMethodPrefix,
+                 Verifiable.Core.Did.Methods.Key.KeyDidResolver.Build(Pool))));
 
         //The kid carries the absolute verification-method DID URL the JAR was
         //signed under; the handler dereferences it and checks it shares the

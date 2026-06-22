@@ -5,7 +5,7 @@ namespace Verifiable.JCose;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A closed hierarchy with four sealed-record subtypes:
+/// A closed hierarchy of sealed-record subtypes:
 /// </para>
 /// <list type="bullet">
 /// <item><description>
@@ -19,13 +19,25 @@ namespace Verifiable.JCose;
 /// <see cref="UnverifiedCompactJwe"/> wrapper.
 /// </description></item>
 /// <item><description>
+/// <see cref="GeneralJweShape"/> / <see cref="FlattenedJweShape"/> — the JWE
+/// JSON serializations of RFC 7516 §7.2.1/§7.2.2, distinguished by a
+/// <c>recipients</c> array versus a top-level <c>encrypted_key</c>. Each
+/// carries the raw wire string for the consumer to decode under policy.
+/// </description></item>
+/// <item><description>
+/// <see cref="GeneralJwsShape"/> / <see cref="FlattenedJwsShape"/> — the JWS
+/// JSON serializations of RFC 7515 §7.2.1/§7.2.2, distinguished by a
+/// <c>signatures</c> array versus a top-level <c>signature</c>.
+/// </description></item>
+/// <item><description>
 /// <see cref="OpaqueShape"/> — anything that does not fit a recognized JOSE
-/// compact shape. The application's storage interprets the value.
+/// shape. The application's storage interprets the value.
 /// </description></item>
 /// <item><description>
 /// <see cref="MalformedShape"/> — classification failed (structurally
-/// inconsistent input, malformed Base64Url, header parses to a non-object).
-/// Carries a stable failure reason for logging and metrics.
+/// inconsistent input, malformed Base64Url, header parses to a non-object,
+/// or a JSON object carrying both JWS and JWE members). Carries a stable
+/// failure reason for logging and metrics.
 /// </description></item>
 /// </list>
 /// <para>
@@ -52,14 +64,16 @@ namespace Verifiable.JCose;
 /// </para>
 /// <para>
 /// <strong>Format scope.</strong>
-/// The classifier currently produces only the compact serialization forms
-/// (3-segment JWS, 5-segment JWE). The flattened-JSON and general-JSON
-/// forms defined by RFC 7515 §7.2 and RFC 7516 §7.2 are not produced today;
-/// when classifier extensions for those formats land, they may either add
-/// sibling subtypes (<c>FlattenedJwsShape</c>) or expand the existing
-/// subtypes to carry a serialization-format discriminator. The current
-/// hierarchy does not pre-commit to either; consumers pattern-match on the
-/// concrete subtypes that exist now.
+/// The classifier produces both the compact serialization forms (3-segment
+/// JWS, 5-segment JWE) and the JSON serialization forms (general and
+/// flattened, for both JWS and JWE) of RFC 7515 §7.2 and RFC 7516 §7.2. The
+/// JSON-form subtypes carry the raw wire string rather than a parsed inner
+/// message, because the JWE JSON forms decode under a caller-supplied
+/// <c>alg</c>/<c>enc</c> policy (see
+/// <see cref="GeneralJweParsing.ParseGeneralJson"/> and
+/// <see cref="GeneralJweParsing.ParseFlattenedJson"/>) and the JWS JSON forms
+/// parse with <see cref="JwsParsing"/>; the classifier supplies the wire
+/// string and the structural verdict, the consumer supplies the policy.
 /// </para>
 /// </remarks>
 public abstract record JoseTokenShape;

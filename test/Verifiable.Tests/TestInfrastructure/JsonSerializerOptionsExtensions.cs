@@ -1,6 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Ebsi;
+using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Json.Converters;
@@ -42,6 +45,16 @@ internal static class JsonSerializerOptionsExtensions
         options.Converters.Add(new DataIntegrityProofConverter());
         options.Converters.Add(new DidUrlConverter());
         options.Converters.Add(new DidIdConverter(DefaultDidIdFactory));
+        options.Converters.Add(new DidDocumentMetadataConverter());
+
+        //DID Resolution / DID URL Dereferencing result-envelope converters (W3C DID Resolution
+        //HTTP(S) binding). The problem-details and metadata converters are registered first so the
+        //envelope converters resolve them through GetTypeInfo.
+        options.Converters.Add(new DidProblemDetailsConverter());
+        options.Converters.Add(new DidResolutionMetadataConverter());
+        options.Converters.Add(new DidDereferencingMetadataConverter());
+        options.Converters.Add(new DidResolutionResultConverter());
+        options.Converters.Add(new DidDereferencingResultConverter());
 
         //Verifiable Credential converters.
         options.Converters.Add(new IssuerConverter());
@@ -69,6 +82,9 @@ internal static class JsonSerializerOptionsExtensions
         options.Converters.Add(new StatusListReferenceJsonConverter());
         options.Converters.Add(new StatusClaimJsonConverter());
         options.Converters.Add(new StatusListAggregationJsonConverter());
+
+        //DIDComm plaintext message converter — snake_case wire member names handled manually.
+        options.Converters.Add(new DidCommMessageConverter());
 
         return options;
     }

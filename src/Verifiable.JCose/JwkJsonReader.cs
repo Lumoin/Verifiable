@@ -938,6 +938,74 @@ public static class JwkJsonReader
     }
 
 
+    /// <summary>
+    /// Returns the names of every top-level (depth-0) member of a JSON object, in document order
+    /// and including repeats. Mirrors the <see cref="HasDuplicateTopLevelKeys"/> scan but collects
+    /// the names rather than detecting the first repeat; nested-object keys are not included.
+    /// </summary>
+    /// <param name="json">UTF-8 JSON bytes to scan (an object, optionally with its braces).</param>
+    /// <returns>The top-level member names; an empty list when the span is not an object or is empty.</returns>
+    public static List<string> GetTopLevelKeyNames(ReadOnlySpan<byte> json)
+    {
+        var names = new List<string>();
+
+        int pos = 0;
+        while(pos < json.Length && IsJsonWhitespace(json[pos]))
+        {
+            pos++;
+        }
+
+        if(pos < json.Length && json[pos] == (byte)'{')
+        {
+            pos++;
+        }
+
+        int depth = 0;
+
+        while(pos < json.Length)
+        {
+            byte b = json[pos];
+
+            if(b == (byte)'"')
+            {
+                int nameStart = pos + 1;
+                int afterString = SkipString(json, pos);
+                if(depth == 0 && afterString >= 1 && IsKeyPosition(json, afterString))
+                {
+                    names.Add(Encoding.UTF8.GetString(json[nameStart..(afterString - 1)]));
+                }
+
+                pos = afterString;
+                continue;
+            }
+
+            if(b == (byte)'{' || b == (byte)'[')
+            {
+                depth++;
+            }
+            else if(b == (byte)'}' || b == (byte)']')
+            {
+                depth--;
+            }
+
+            pos++;
+        }
+
+        return names;
+    }
+
+
+    /// <summary>
+    /// Returns the top-level member names of an object-valued property, or an empty list when the
+    /// property is absent or its value is not an object.
+    /// </summary>
+    /// <param name="json">UTF-8 JSON bytes to search.</param>
+    /// <param name="key">The property key as a UTF-8 literal.</param>
+    /// <returns>The member names of the named object; empty when absent or non-object.</returns>
+    public static List<string> GetObjectMemberNames(ReadOnlySpan<byte> json, ReadOnlySpan<byte> key) =>
+        GetTopLevelKeyNames(FindObjectContent(json, key));
+
+
     /// <summary>Whether <paramref name="b"/> closes a JSON number — a structural byte or whitespace.</summary>
     private static bool IsNumberTerminator(byte b) =>
         b == (byte)',' || b == (byte)'}' || b == (byte)']' || IsJsonWhitespace(b);

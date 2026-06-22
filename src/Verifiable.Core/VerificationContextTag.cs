@@ -10,16 +10,18 @@ namespace Verifiable.Core;
 /// The verification context records the provenance visible at the decision point — that this
 /// value was produced by a verification (<see cref="Purpose.Verification"/>) and, when known, the
 /// verification method / key identifier the signature was checked against. It reuses the
-/// library's <see cref="Tag"/> mechanism rather than a bespoke provenance type.
+/// library's <see cref="Tag"/> mechanism rather than a bespoke provenance type. It is
+/// <see langword="public"/> so every first-party verification library that mints a
+/// <see cref="Verified{T}"/> builds the same shape of context, rather than each replicating the recipe.
 /// </remarks>
-internal static class VerificationContextTag
+public static class VerificationContextTag
 {
     /// <summary>
     /// Creates a verification context tagged with <see cref="Purpose.Verification"/>, adding the
     /// verification method / key identifier as a <see cref="KeyId"/> when one is available.
     /// </summary>
     /// <param name="verificationMethod">The verification method / key id, or <see langword="null"/>.</param>
-    internal static Tag Create(string? verificationMethod)
+    public static Tag Create(string? verificationMethod)
     {
         var tag = Tag.Create((typeof(Purpose), Purpose.Verification));
         if(!string.IsNullOrWhiteSpace(verificationMethod))

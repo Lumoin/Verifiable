@@ -57,6 +57,69 @@ public delegate KemDecapsulationDelegate KemDecapsulationPatternMatcher<TDiscrim
 
 
 /// <summary>
+/// Delegate that selects an <see cref="AuthenticatedKeyAgreementEncryptDelegate"/> based on algorithm and purpose.
+/// </summary>
+public delegate AuthenticatedKeyAgreementEncryptDelegate AuthenticatedKeyAgreementEncryptPatternMatcher<TDiscriminator1, TDiscriminator2>(
+    TDiscriminator1 algorithm,
+    TDiscriminator2 purpose,
+    string? qualifier = null);
+
+
+/// <summary>
+/// Delegate that selects an <see cref="AuthenticatedKeyAgreementDecryptDelegate"/> based on algorithm and purpose.
+/// </summary>
+public delegate AuthenticatedKeyAgreementDecryptDelegate AuthenticatedKeyAgreementDecryptPatternMatcher<TDiscriminator1, TDiscriminator2>(
+    TDiscriminator1 algorithm,
+    TDiscriminator2 purpose,
+    string? qualifier = null);
+
+
+/// <summary>
+/// Delegate that selects an <see cref="AuthenticatedKeyDerivationDelegate"/> based on algorithm and purpose.
+/// </summary>
+public delegate AuthenticatedKeyDerivationDelegate AuthenticatedKeyDerivationPatternMatcher<TDiscriminator1, TDiscriminator2>(
+    TDiscriminator1 algorithm,
+    TDiscriminator2 purpose,
+    string? qualifier = null);
+
+
+/// <summary>
+/// Delegate that selects a <see cref="KeyWrapDelegate"/> based on algorithm and purpose.
+/// </summary>
+public delegate KeyWrapDelegate KeyWrapPatternMatcher<TDiscriminator1, TDiscriminator2>(
+    TDiscriminator1 algorithm,
+    TDiscriminator2 purpose,
+    string? qualifier = null);
+
+
+/// <summary>
+/// Delegate that selects a <see cref="KeyUnwrapDelegate"/> based on algorithm and purpose.
+/// </summary>
+public delegate KeyUnwrapDelegate KeyUnwrapPatternMatcher<TDiscriminator1, TDiscriminator2>(
+    TDiscriminator1 algorithm,
+    TDiscriminator2 purpose,
+    string? qualifier = null);
+
+
+/// <summary>
+/// Delegate that selects a <see cref="MultiRecipientKeyAgreementEncryptDelegate"/> based on algorithm and purpose.
+/// </summary>
+public delegate MultiRecipientKeyAgreementEncryptDelegate MultiRecipientKeyAgreementEncryptPatternMatcher<TDiscriminator1, TDiscriminator2>(
+    TDiscriminator1 algorithm,
+    TDiscriminator2 purpose,
+    string? qualifier = null);
+
+
+/// <summary>
+/// Delegate that selects a <see cref="MultiRecipientAuthenticatedKeyAgreementEncryptDelegate"/> based on algorithm and purpose.
+/// </summary>
+public delegate MultiRecipientAuthenticatedKeyAgreementEncryptDelegate MultiRecipientAuthenticatedKeyAgreementEncryptPatternMatcher<TDiscriminator1, TDiscriminator2>(
+    TDiscriminator1 algorithm,
+    TDiscriminator2 purpose,
+    string? qualifier = null);
+
+
+/// <summary>
 /// Central dispatch mechanism for routing key agreement, key derivation, symmetric
 /// encryption and decryption, and KEM decapsulation operations to backend implementations.
 /// </summary>
@@ -101,6 +164,13 @@ public static class KeyAgreementFunctionRegistry<TDiscriminator1, TDiscriminator
     private static AeadEncryptPatternMatcher<TDiscriminator1, TDiscriminator2>? aeadEncryptMatcher;
     private static AeadDecryptPatternMatcher<TDiscriminator1, TDiscriminator2>? aeadDecryptMatcher;
     private static KemDecapsulationPatternMatcher<TDiscriminator1, TDiscriminator2>? kemMatcher;
+    private static AuthenticatedKeyAgreementEncryptPatternMatcher<TDiscriminator1, TDiscriminator2>? authenticatedAgreementEncryptMatcher;
+    private static AuthenticatedKeyAgreementDecryptPatternMatcher<TDiscriminator1, TDiscriminator2>? authenticatedAgreementDecryptMatcher;
+    private static AuthenticatedKeyDerivationPatternMatcher<TDiscriminator1, TDiscriminator2>? authenticatedDerivationMatcher;
+    private static KeyWrapPatternMatcher<TDiscriminator1, TDiscriminator2>? keyWrapMatcher;
+    private static KeyUnwrapPatternMatcher<TDiscriminator1, TDiscriminator2>? keyUnwrapMatcher;
+    private static MultiRecipientKeyAgreementEncryptPatternMatcher<TDiscriminator1, TDiscriminator2>? multiRecipientAgreementEncryptMatcher;
+    private static MultiRecipientAuthenticatedKeyAgreementEncryptPatternMatcher<TDiscriminator1, TDiscriminator2>? multiRecipientAuthenticatedAgreementEncryptMatcher;
 
 
     /// <summary>
@@ -113,7 +183,14 @@ public static class KeyAgreementFunctionRegistry<TDiscriminator1, TDiscriminator
         KeyDerivationPatternMatcher<TDiscriminator1, TDiscriminator2>? derivationMatcher,
         AeadEncryptPatternMatcher<TDiscriminator1, TDiscriminator2>? encryptMatcher,
         AeadDecryptPatternMatcher<TDiscriminator1, TDiscriminator2>? decryptMatcher,
-        KemDecapsulationPatternMatcher<TDiscriminator1, TDiscriminator2>? kemDecapsulationMatcher)
+        KemDecapsulationPatternMatcher<TDiscriminator1, TDiscriminator2>? kemDecapsulationMatcher,
+        AuthenticatedKeyAgreementEncryptPatternMatcher<TDiscriminator1, TDiscriminator2>? authenticatedKeyAgreementEncryptMatcher = null,
+        AuthenticatedKeyAgreementDecryptPatternMatcher<TDiscriminator1, TDiscriminator2>? authenticatedKeyAgreementDecryptMatcher = null,
+        AuthenticatedKeyDerivationPatternMatcher<TDiscriminator1, TDiscriminator2>? authenticatedKeyDerivationMatcher = null,
+        KeyWrapPatternMatcher<TDiscriminator1, TDiscriminator2>? wrapMatcher = null,
+        KeyUnwrapPatternMatcher<TDiscriminator1, TDiscriminator2>? unwrapMatcher = null,
+        MultiRecipientKeyAgreementEncryptPatternMatcher<TDiscriminator1, TDiscriminator2>? multiRecipientKeyAgreementEncryptMatcher = null,
+        MultiRecipientAuthenticatedKeyAgreementEncryptPatternMatcher<TDiscriminator1, TDiscriminator2>? multiRecipientAuthenticatedKeyAgreementEncryptMatcher = null)
     {
         agreementEncryptMatcher = keyAgreementEncryptMatcher;
         agreementDecryptMatcher = keyAgreementDecryptMatcher;
@@ -121,6 +198,13 @@ public static class KeyAgreementFunctionRegistry<TDiscriminator1, TDiscriminator
         aeadEncryptMatcher = encryptMatcher;
         aeadDecryptMatcher = decryptMatcher;
         kemMatcher = kemDecapsulationMatcher;
+        authenticatedAgreementEncryptMatcher = authenticatedKeyAgreementEncryptMatcher;
+        authenticatedAgreementDecryptMatcher = authenticatedKeyAgreementDecryptMatcher;
+        authenticatedDerivationMatcher = authenticatedKeyDerivationMatcher;
+        keyWrapMatcher = wrapMatcher;
+        keyUnwrapMatcher = unwrapMatcher;
+        multiRecipientAgreementEncryptMatcher = multiRecipientKeyAgreementEncryptMatcher;
+        multiRecipientAuthenticatedAgreementEncryptMatcher = multiRecipientAuthenticatedKeyAgreementEncryptMatcher;
     }
 
 
@@ -211,5 +295,110 @@ public static class KeyAgreementFunctionRegistry<TDiscriminator1, TDiscriminator
         }
 
         return kemMatcher(algorithm, purpose, qualifier);
+    }
+
+
+    /// <summary>Resolves the encrypt-side ECDH-1PU authenticated key agreement delegate.</summary>
+    public static AuthenticatedKeyAgreementEncryptDelegate ResolveAuthenticatedAgreementEncrypt(
+        TDiscriminator1 algorithm, TDiscriminator2 purpose, string? qualifier = null)
+    {
+        if(authenticatedAgreementEncryptMatcher is null)
+        {
+            throw new InvalidOperationException(
+                "Authenticated key agreement encrypt matcher has not been initialized. " +
+                "Call KeyAgreementFunctionRegistry.Initialize during application startup.");
+        }
+
+        return authenticatedAgreementEncryptMatcher(algorithm, purpose, qualifier);
+    }
+
+
+    /// <summary>Resolves the decrypt-side ECDH-1PU authenticated key agreement delegate.</summary>
+    public static AuthenticatedKeyAgreementDecryptDelegate ResolveAuthenticatedAgreementDecrypt(
+        TDiscriminator1 algorithm, TDiscriminator2 purpose, string? qualifier = null)
+    {
+        if(authenticatedAgreementDecryptMatcher is null)
+        {
+            throw new InvalidOperationException(
+                "Authenticated key agreement decrypt matcher has not been initialized. " +
+                "Call KeyAgreementFunctionRegistry.Initialize during application startup.");
+        }
+
+        return authenticatedAgreementDecryptMatcher(algorithm, purpose, qualifier);
+    }
+
+
+    /// <summary>Resolves the ECDH-1PU key derivation delegate with tag commitment.</summary>
+    public static AuthenticatedKeyDerivationDelegate ResolveAuthenticatedKeyDerivation(
+        TDiscriminator1 algorithm, TDiscriminator2 purpose, string? qualifier = null)
+    {
+        if(authenticatedDerivationMatcher is null)
+        {
+            throw new InvalidOperationException(
+                "Authenticated key derivation matcher has not been initialized. " +
+                "Call KeyAgreementFunctionRegistry.Initialize during application startup.");
+        }
+
+        return authenticatedDerivationMatcher(algorithm, purpose, qualifier);
+    }
+
+
+    /// <summary>Resolves the key wrap delegate.</summary>
+    public static KeyWrapDelegate ResolveKeyWrap(
+        TDiscriminator1 algorithm, TDiscriminator2 purpose, string? qualifier = null)
+    {
+        if(keyWrapMatcher is null)
+        {
+            throw new InvalidOperationException(
+                "Key wrap matcher has not been initialized. " +
+                "Call KeyAgreementFunctionRegistry.Initialize during application startup.");
+        }
+
+        return keyWrapMatcher(algorithm, purpose, qualifier);
+    }
+
+
+    /// <summary>Resolves the key unwrap delegate.</summary>
+    public static KeyUnwrapDelegate ResolveKeyUnwrap(
+        TDiscriminator1 algorithm, TDiscriminator2 purpose, string? qualifier = null)
+    {
+        if(keyUnwrapMatcher is null)
+        {
+            throw new InvalidOperationException(
+                "Key unwrap matcher has not been initialized. " +
+                "Call KeyAgreementFunctionRegistry.Initialize during application startup.");
+        }
+
+        return keyUnwrapMatcher(algorithm, purpose, qualifier);
+    }
+
+
+    /// <summary>Resolves the multi-recipient ECDH-ES encrypt-side agreement delegate (shared ephemeral key).</summary>
+    public static MultiRecipientKeyAgreementEncryptDelegate ResolveMultiRecipientAgreementEncrypt(
+        TDiscriminator1 algorithm, TDiscriminator2 purpose, string? qualifier = null)
+    {
+        if(multiRecipientAgreementEncryptMatcher is null)
+        {
+            throw new InvalidOperationException(
+                "Multi-recipient key agreement encrypt matcher has not been initialized. " +
+                "Call KeyAgreementFunctionRegistry.Initialize during application startup.");
+        }
+
+        return multiRecipientAgreementEncryptMatcher(algorithm, purpose, qualifier);
+    }
+
+
+    /// <summary>Resolves the multi-recipient ECDH-1PU encrypt-side agreement delegate (shared ephemeral key).</summary>
+    public static MultiRecipientAuthenticatedKeyAgreementEncryptDelegate ResolveMultiRecipientAuthenticatedAgreementEncrypt(
+        TDiscriminator1 algorithm, TDiscriminator2 purpose, string? qualifier = null)
+    {
+        if(multiRecipientAuthenticatedAgreementEncryptMatcher is null)
+        {
+            throw new InvalidOperationException(
+                "Multi-recipient authenticated key agreement encrypt matcher has not been initialized. " +
+                "Call KeyAgreementFunctionRegistry.Initialize during application startup.");
+        }
+
+        return multiRecipientAuthenticatedAgreementEncryptMatcher(algorithm, purpose, qualifier);
     }
 }

@@ -707,7 +707,7 @@ internal sealed class JarClientIdentifierTests
         //did:key identifier and the verification-method DID URL. The same
         //KeyDidBuilder runs inside KeyDidResolver at resolution time.
         Verifiable.Core.Model.Did.DidDocument verifierDocument =
-            await new Verifiable.Core.Model.Did.KeyDidBuilder().BuildAsync(
+            await new Verifiable.Core.Did.Methods.Key.KeyDidBuilder().BuildAsync(
                 verifierPublicKey,
                 Verifiable.Core.Model.Did.CryptographicSuites.MultikeyVerificationMethodTypeInfo.Instance,
                 includeDefaultContext: false,
@@ -761,8 +761,8 @@ internal sealed class JarClientIdentifierTests
         //CheqdDidResolver, etc. for the methods the wallet supports.
         Verifiable.Core.Resolvers.DidResolver didResolver = new(
             Verifiable.Core.Resolvers.DidMethodSelectors.FromResolvers(
-                (Verifiable.Core.Model.Did.Methods.WellKnownDidMethodPrefixes.KeyDidMethodPrefix,
-                 Verifiable.Core.Resolvers.KeyDidResolver.Build(Pool))));
+                (Verifiable.Core.Did.Methods.WellKnownDidMethodPrefixes.KeyDidMethodPrefix,
+                 Verifiable.Core.Did.Methods.Key.KeyDidResolver.Build(Pool))));
 
         //Step 2: Compose the wallet's signing-key resolver slot with handlers
         //for every prefix the deployment supports. Here only the

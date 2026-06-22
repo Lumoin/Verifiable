@@ -28,6 +28,21 @@ public delegate ReadOnlySpan<byte> JwtPayloadSerializer(JwtPayload payload);
 
 
 /// <summary>
+/// Deserializes the UTF-8 JSON bytes of a JWT payload (claims set) into a <see cref="JwtPayload"/>.
+/// </summary>
+/// <param name="payloadJson">The UTF-8 JSON bytes of the JWT payload.</param>
+/// <returns>The parsed payload claims.</returns>
+/// <remarks>
+/// The concrete implementation lives in the leaf serialization package. This delegate has the same
+/// input shape as the header/payload deserializers <see cref="JwsParsing"/> already takes, kept as its
+/// own named type so a payload deserializer cannot be passed where a header deserializer is expected.
+/// It is the typed counterpart of <see cref="JwtPayloadSerializer"/>, returning the verified
+/// <see cref="JwtPayload"/> leaf rather than a bare dictionary.
+/// </remarks>
+public delegate JwtPayload JwtClaimsDeserializer(ReadOnlySpan<byte> payloadJson);
+
+
+/// <summary>
 /// Extension methods for signing <see cref="UnsignedJwt"/> instances as JWS.
 /// </summary>
 /// <remarks>

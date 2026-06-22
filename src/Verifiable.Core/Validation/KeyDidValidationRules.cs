@@ -5,7 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Cryptography;
 
 

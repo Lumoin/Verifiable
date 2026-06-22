@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.DataIntegrity;
 

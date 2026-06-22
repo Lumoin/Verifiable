@@ -11,7 +11,9 @@ using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
@@ -461,8 +463,12 @@ internal sealed class CredentialDiVpProofTests
             (request, ct) => Task.FromResult(ServeDidJson(request, didJsonHolder)),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        string loopbackAuthority = didWebHost.BaseAddress.Authority;
-        string holderWebDomain = loopbackAuthority.Replace(":", "%3A", StringComparison.Ordinal);
+        //did:web forbids an IP-address host, so the holder's did:web authority is the loopback host's
+        //DNS name 'localhost' (which resolves to the loopback address) rather than the 127.0.0.1 literal.
+        //The SSRF block under SecureDefault then fires at connection-time address pinning (localhost resolves
+        //to loopback) rather than the URL gate, which is the production mechanism for a DNS-named host.
+        string loopbackHostName = $"localhost:{didWebHost.BaseAddress.Port}";
+        string holderWebDomain = loopbackHostName.Replace(":", "%3A", StringComparison.Ordinal);
 
         DidDocument holderDidDocument = await WebDidBuilder.BuildAsync(
             holderPublic,
@@ -652,9 +658,19 @@ internal sealed class CredentialDiVpProofTests
                 Method = "GET"
             };
 
-            OutboundFetchResult fetch = await OutboundFetch
-                .FetchAsync(request, context, transport, ct)
-                .ConfigureAwait(false);
+            OutboundFetchResult fetch;
+            try
+            {
+                fetch = await OutboundFetch
+                    .FetchAsync(request, context, transport, ct)
+                    .ConfigureAwait(false);
+            }
+            catch(SsrfBlockedException)
+            {
+                //The connection-time pin refused the host under the policy: a not-found from the resolver's
+                //perspective, which surfaces as HolderUnresolved through the di_vp binding.
+                return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
+            }
 
             if(!fetch.IsFetched || fetch.Response is not { StatusCode: 200 } response)
             {
@@ -673,6 +689,19 @@ internal sealed class CredentialDiVpProofTests
 
         return new DidResolver(DidMethodSelectors.FromResolvers(
             (WellKnownDidMethodPrefixes.WebDidMethodPrefix, ResolveWebDidAsync)));
+    }
+
+
+    //Resolves a host name to its IP addresses for the connection-time SSRF pin. 'localhost' resolves to the
+    //loopback address, which SecureDefault classifies as blocked and the explicit permit allows.
+    private static async ValueTask<IReadOnlyList<System.Net.IPAddress>> ResolveHostAsync(
+        string host, CancellationToken cancellationToken)
+    {
+        System.Net.IPAddress[] addresses = await System.Net.Dns
+            .GetHostAddressesAsync(host, cancellationToken)
+            .ConfigureAwait(false);
+
+        return addresses;
     }
 
 
@@ -706,11 +735,17 @@ internal sealed class CredentialDiVpProofTests
     {
         OutboundTransportDelegate singleHop = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
 
-        //The resolved did:web URL is https://<loopback-authority>/...; the loopback Kestrel listens on
-        //plain http. Rebind the scheme (and only the scheme) to the listener's so the real socket dial
-        //reaches the in-process host. The chokepoint has already evaluated the genuine https URL.
+        //The resolved did:web URL is https://localhost:<port>/...; the loopback Kestrel listens on plain
+        //http. Because the host is a DNS name (localhost), the SecureDefault SSRF block is the connection-time
+        //half: resolve the host and reject if any resolved address is loopback/private. Pinning runs first, so
+        //a SecureDefault policy refuses the loopback fetch before the socket dial; under the explicit permit it
+        //passes. After pinning, rebind the scheme (and only the scheme) to the listener's so the real socket
+        //dial reaches the in-process host. The chokepoint has already evaluated the genuine https URL.
         OutboundTransportDelegate transport = async (request, context, ct) =>
         {
+            _ = await SsrfHardenedTransport.ResolveAndPinAsync(
+                request.Target.Host, context.OutboundFetchPolicy, ResolveHostAsync, ct).ConfigureAwait(false);
+
             UriBuilder rebased = new(request.Target) { Scheme = loopbackBase.Scheme };
             OutboundRequest rebasedRequest = request with { Target = rebased.Uri };
 
@@ -727,9 +762,19 @@ internal sealed class CredentialDiVpProofTests
                 Method = "GET"
             };
 
-            OutboundFetchResult fetch = await OutboundFetch
-                .FetchAsync(request, context, transport, ct)
-                .ConfigureAwait(false);
+            OutboundFetchResult fetch;
+            try
+            {
+                fetch = await OutboundFetch
+                    .FetchAsync(request, context, transport, ct)
+                    .ConfigureAwait(false);
+            }
+            catch(SsrfBlockedException)
+            {
+                //The connection-time pin refused the host under the policy: a not-found from the resolver's
+                //perspective, which surfaces as HolderUnresolved through the di_vp binding.
+                return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
+            }
 
             if(!fetch.IsFetched || fetch.Response is not { StatusCode: 200 } response)
             {

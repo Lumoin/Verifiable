@@ -1,4 +1,5 @@
 using System.Numerics;
+using Verifiable.Cryptography.Context;
 using static Verifiable.Cryptography.EllipticCurveConstants;
 
 namespace Verifiable.Cryptography
@@ -209,6 +210,75 @@ namespace Verifiable.Cryptography
             return isPositive ?
                 WriteYPointBytes(oneYPointCandidate, returnYPointBytes, startIndexAfterPadding) :
                 WriteYPointBytes(anotherYPointCandidate, returnYPointBytes, startIndexAfterPadding);
+        }
+
+
+        /// <summary>
+        /// Maps a <see cref="CryptoAlgorithm"/> to its <see cref="EllipticCurveTypes"/> flag. Only the
+        /// elliptic curves carrying SEC1 point material are mapped; a non-EC algorithm throws, since the
+        /// mapping exists to interpret EC point bytes (compressed-point lengths are shared across curves,
+        /// so the curve — not the byte length — disambiguates decompression).
+        /// </summary>
+        /// <param name="algorithm">The key's algorithm, as carried by its <c>Tag</c>.</param>
+        /// <returns>The matching <see cref="EllipticCurveTypes"/> flag.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="algorithm"/> is not an EC curve.</exception>
+        public static EllipticCurveTypes CurveTypeFor(CryptoAlgorithm algorithm)
+        {
+            return algorithm switch
+            {
+                var a when a.Equals(CryptoAlgorithm.P256) => EllipticCurveTypes.P256,
+                var a when a.Equals(CryptoAlgorithm.P384) => EllipticCurveTypes.P384,
+                var a when a.Equals(CryptoAlgorithm.P521) => EllipticCurveTypes.P521,
+                var a when a.Equals(CryptoAlgorithm.Secp256k1) => EllipticCurveTypes.Secp256k1,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP256r1) => EllipticCurveTypes.BrainpoolP256r1,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP320r1) => EllipticCurveTypes.BrainpoolP320r1,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP384r1) => EllipticCurveTypes.BrainpoolP384r1,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP512r1) => EllipticCurveTypes.BrainpoolP512r1,
+                _ => throw new NotSupportedException(
+                    $"CryptoAlgorithm '{algorithm}' is not an elliptic curve with SEC1 point encoding.")
+            };
+        }
+
+
+        /// <summary>
+        /// Normalizes a SEC1 elliptic-curve public point to uncompressed form (<c>0x04 || X || Y</c>). An
+        /// already-uncompressed point is returned as a copy; a compressed point (<c>0x02/0x03 || X</c>) is
+        /// decompressed using <paramref name="curveType"/> to recover Y. The curve is required because
+        /// compressed-point lengths are shared (33 bytes: P-256/secp256k1/BP-256r1; 49 bytes:
+        /// P-384/BP-384r1), so the curve — not the byte length — disambiguates the decompression.
+        /// </summary>
+        /// <param name="point">The SEC1 public point, compressed or uncompressed.</param>
+        /// <param name="curveType">The curve the point lies on (from the key's <c>Tag</c>).</param>
+        /// <returns>The uncompressed point <c>0x04 || X || Y</c>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="point"/> is empty or lacks a valid SEC1 prefix (0x02/0x03/0x04).</exception>
+        public static byte[] NormalizeToUncompressed(ReadOnlySpan<byte> point, EllipticCurveTypes curveType)
+        {
+            if(point.Length == 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(point), "An elliptic-curve point must not be empty.");
+            }
+
+            if(point[0] == UncompressedCoordinateFormat)
+            {
+                return point.ToArray();
+            }
+
+            if(point[0] != EvenYCoordinate && point[0] != OddYCoordinate)
+            {
+                throw new ArgumentOutOfRangeException(nameof(point), $"Value must start with 0x02, 0x03 or 0x04. Now 0x{point[0]:x2}.");
+            }
+
+            //Compressed: X is the payload after the sign byte; Y is recovered from the curve equation. The
+            //recovered Y is the same coordinate length as X, so the assembled point is 0x04 || X || Y.
+            ReadOnlySpan<byte> x = point[1..];
+            byte[] y = Decompress(point, curveType);
+
+            byte[] uncompressed = new byte[1 + x.Length + y.Length];
+            uncompressed[0] = UncompressedCoordinateFormat;
+            x.CopyTo(uncompressed.AsSpan(1));
+            y.CopyTo(uncompressed.AsSpan(1 + x.Length));
+
+            return uncompressed;
         }
 
 
