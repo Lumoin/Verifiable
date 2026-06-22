@@ -643,6 +643,13 @@
           "dotNetRdf": "[3.5.1, )"
         }
       },
+      "verifiable.apdu": {
+        "type": "Project",
+        "dependencies": {
+          "Lumoin.Base": "[0.0.2, )",
+          "Verifiable.Foundation": "[0.0.0, )"
+        }
+      },
       "verifiable.bouncycastle": {
         "type": "Project",
         "dependencies": {
