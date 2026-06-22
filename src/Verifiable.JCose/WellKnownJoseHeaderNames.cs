@@ -67,6 +67,28 @@ public static class WellKnownJoseHeaderNames
     /// </summary>
     public static readonly string Apu = Utf8Constants.ToInternedString(ApuUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="Apv"/>.</summary>
+    public static ReadOnlySpan<byte> ApvUtf8 => "apv"u8;
+
+    /// <summary>
+    /// The <c>apv</c> (Agreement PartyVInfo) header parameter per RFC 7518 §4.6.1.3.
+    /// In DIDComm v2 this is the base64url encoding of the SHA-256 hash of the
+    /// alphanumerically-sorted recipient <c>kid</c> list joined with <c>.</c>.
+    /// </summary>
+    public static readonly string Apv = Utf8Constants.ToInternedString(ApvUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Skid"/>.</summary>
+    public static ReadOnlySpan<byte> SkidUtf8 => "skid"u8;
+
+    /// <summary>
+    /// The <c>skid</c> (Sender Key ID) header parameter per
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-madden-jose-ecdh-1pu-04#section-2.2.1">draft-madden-jose-ecdh-1pu-04 §2.2.1</see>.
+    /// A hint identifying which of the sender's keys authenticated the JWE. In DIDComm v2
+    /// this is a DID URL to the sender's <c>keyAgreement</c> verification method; its value
+    /// is resolvable from <c>apu</c> when <c>skid</c> is absent.
+    /// </summary>
+    public static readonly string Skid = Utf8Constants.ToInternedString(SkidUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="Jwk"/>.</summary>
     public static ReadOnlySpan<byte> JwkUtf8 => "jwk"u8;
 
@@ -103,6 +125,12 @@ public static class WellKnownJoseHeaderNames
     /// <summary>Whether <paramref name="name"/> is <see cref="Apu"/>.</summary>
     public static bool IsApu(string name) => Equals(name, Apu);
 
+    /// <summary>Whether <paramref name="name"/> is <see cref="Apv"/>.</summary>
+    public static bool IsApv(string name) => Equals(name, Apv);
+
+    /// <summary>Whether <paramref name="name"/> is <see cref="Skid"/>.</summary>
+    public static bool IsSkid(string name) => Equals(name, Skid);
+
     /// <summary>Whether <paramref name="name"/> is <see cref="Jwk"/>.</summary>
     public static bool IsJwk(string name) => Equals(name, Jwk);
 
@@ -121,6 +149,8 @@ public static class WellKnownJoseHeaderNames
         _ when IsEnc(name) => Enc,
         _ when IsEpk(name) => Epk,
         _ when IsApu(name) => Apu,
+        _ when IsApv(name) => Apv,
+        _ when IsSkid(name) => Skid,
         _ when IsJwk(name) => Jwk,
         _ when IsJwt(name) => Jwt,
         _ => name

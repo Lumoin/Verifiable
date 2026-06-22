@@ -129,6 +129,16 @@
           "Verifiable.Foundation": "[0.0.0, )"
         }
       },
+      "verifiable.didcomm": {
+        "type": "Project",
+        "dependencies": {
+          "Lumoin.Base": "[0.0.2, )",
+          "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )",
+          "Verifiable.JCose": "[0.0.0, )"
+        }
+      },
       "verifiable.foundation": {
         "type": "Project",
         "dependencies": {

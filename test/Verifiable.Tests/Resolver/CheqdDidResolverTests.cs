@@ -1,5 +1,6 @@
 using Verifiable.Core;
 using Verifiable.Core.Resolvers;
+using Verifiable.Core.Did.Methods.Cheqd;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -82,7 +83,7 @@ internal sealed class CheqdDidResolverTests
     {
         //Verify the method group signature matches DidMethodResolverDelegate exactly.
         var resolver = new DidResolver(DidMethodSelectors.FromResolvers(
-            (Verifiable.Core.Model.Did.Methods.WellKnownDidMethodPrefixes.CheqdDidMethodPrefix,
+            (Verifiable.Core.Did.Methods.WellKnownDidMethodPrefixes.CheqdDidMethodPrefix,
              CheqdDidResolver.ResolveAsync)));
 
         const string did = "did:cheqd:mainnet:zF7rhDBfUt9d1gJPjx7s1JXfUY7oVWkY";

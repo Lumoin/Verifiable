@@ -31,6 +31,12 @@ namespace Verifiable.Cryptography
         public static ReadOnlySpan<byte> Cidv1 => [0x01];
 
         /// <summary>
+        /// Json (0x0200). Raw JSON bytes. See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv">json (GitHub)</see>.
+        /// </summary>
+        /// <remarks>Status: permanent. Used as the embedded-document codec of <c>did:peer:4</c>.</remarks>
+        public static ReadOnlySpan<byte> Json => [0x80, 0x04];
+
+        /// <summary>
         /// Secp256k1-pub (0xe7). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L89">Secp256k1 public key (compressed) (GitHub)</see>.
         /// </summary>
         /// <remarks>Status: draft.</remarks>

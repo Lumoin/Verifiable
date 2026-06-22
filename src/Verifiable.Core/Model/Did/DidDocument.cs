@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Verifiable.Core.Model.Common;
-using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Did.Methods;
 
 namespace Verifiable.Core.Model.Did
 {

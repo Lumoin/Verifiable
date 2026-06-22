@@ -117,6 +117,16 @@ public static class OutboundFetch
                     "Redirect crosses origin (RedirectMode.SameOrigin).", requested, next, hops);
             }
 
+            //A 301/302/303 rewrites to GET and DROPS the body; silently turning a body-bearing request (e.g. a
+            //one-way DIDComm POST) into a bodyless GET would deliver nothing while still reporting a 2xx success.
+            //Only a body-preserving redirect (307/308) may follow a request that carries a body — otherwise the
+            //caller must re-resolve and retry the new location explicitly rather than have the body vanish.
+            if(current.Body is not null && response.StatusCode is not (307 or 308))
+            {
+                return Stopped(OutboundFetchOutcome.DeniedByPolicy,
+                    "Redirect would drop the request body (only 307/308 may redirect a body-bearing request).", requested, next, hops);
+            }
+
             current = RewriteForRedirect(current, next, response.StatusCode);
             hops++;
             //The next hop's URL is re-validated by Evaluate at the top of the loop.

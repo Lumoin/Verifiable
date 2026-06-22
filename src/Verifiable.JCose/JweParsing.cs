@@ -182,7 +182,6 @@ public static class JweParsing
     {
         string? alg = JwkJsonReader.ExtractStringValue(headerJson, "alg"u8);
         string? enc = JwkJsonReader.ExtractStringValue(headerJson, "enc"u8);
-        bool hasZip = JwkJsonReader.ContainsKey(headerJson, "zip"u8);
 
         if(alg is null)
         {
@@ -210,10 +209,11 @@ public static class JweParsing
                 $"encryption '{expectedEncryption}'.");
         }
 
-        if(hasZip)
-        {
-            throw new FormatException("JWE tokens with 'zip' compression are not permitted.");
-        }
+        //RFC 7516 §5.2 step 5 precedes any cryptographic work: reject a "crit" the consumer
+        //does not understand, a registered-name or empty "crit" (RFC 7515 §4.1.11), the
+        //rejected-by-design "zip" (RFC 8725 §3.6), and RSA1_5 (RFC 8725 §3.2) here, before the
+        //epk is decoded or key agreement runs.
+        JweHeaderProcessing.Validate(headerJson, alg);
 
         string? kty = JwkJsonReader.ExtractNestedStringValue(headerJson, "epk"u8, "kty"u8);
         string? crv = JwkJsonReader.ExtractNestedStringValue(headerJson, "epk"u8, "crv"u8);

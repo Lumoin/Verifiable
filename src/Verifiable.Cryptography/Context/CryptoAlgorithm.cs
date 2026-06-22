@@ -413,6 +413,22 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     public static CryptoAlgorithm BrainpoolP512r1 { get; } = new CryptoAlgorithm(27);
 
 
+    /// <summary>
+    /// AES with a 256-bit key as defined in
+    /// <see href="https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197-upd1.pdf">FIPS 197</see>.
+    /// </summary>
+    /// <remarks>
+    /// Identifies symmetric key material and the values produced under it regardless of
+    /// the mode of operation — key wrapping per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3394">RFC 3394</see>, AES-GCM, or
+    /// AES-CBC with HMAC composition per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.2">RFC 7518 §5.2</see>.
+    /// The <see cref="Purpose"/> component of a <see cref="Tag"/> distinguishes the role
+    /// of the bytes within the operation.
+    /// </remarks>
+    public static CryptoAlgorithm Aes256 { get; } = new CryptoAlgorithm(28);
+
+
     private static readonly List<CryptoAlgorithm> algorithms = new([Rsa2048]);
 
 
@@ -592,6 +608,7 @@ public static class CryptoAlgorithmNames
         var a when a == CryptoAlgorithm.BrainpoolP320r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP320r1),
         var a when a == CryptoAlgorithm.BrainpoolP384r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP384r1),
         var a when a == CryptoAlgorithm.BrainpoolP512r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP512r1),
+        var a when a == CryptoAlgorithm.Aes256.Algorithm => nameof(CryptoAlgorithm.Aes256),
         _ => $"Custom: ('{algorithm}')."
     };
 }

@@ -1,7 +1,9 @@
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Resolvers;
+using Verifiable.Core.Did.Methods.Web;
 
 namespace Verifiable.Tests.Resolver;
 

@@ -67,7 +67,19 @@ public enum VerificationFailureReason
     /// §4.2 Verify Proof</see>: when an expected proof purpose is given and does not match,
     /// an error MUST be raised.
     /// </summary>
-    ProofPurposeMismatch
+    ProofPurposeMismatch,
+
+    /// <summary>
+    /// A static linked presentation verify (for example a did:webvh <c>whois.vp</c>) was
+    /// asked to verify a presentation whose proof carries a <c>challenge</c> or <c>domain</c>.
+    /// A static linked presentation has no interactive verifier and therefore no replay
+    /// binding; refusing a binding-bearing presentation here (rather than verifying it while
+    /// ignoring a binding the caller never checked) prevents a replay-bound presentation —
+    /// such as one minted for an OID4VP exchange — from being verified through a path that
+    /// does not enforce its <c>challenge</c>/<c>domain</c>. The interactive
+    /// challenge/domain-checked verify is the only path that may verify such a presentation.
+    /// </summary>
+    UnexpectedPresentationBinding
 }
 
 

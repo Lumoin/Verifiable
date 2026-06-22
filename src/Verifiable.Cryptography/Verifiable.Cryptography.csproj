@@ -15,4 +15,16 @@
     <PackageReference Include="Lumoin.Base" />
   </ItemGroup>
 
+  <!--
+    Verified<T> lives here so the whole family shares one proof-of-verification type, but its
+    constructor is internal so only first-party verification libraries can mint one. Each such
+    library is granted access explicitly here — the credential/presentation verify paths in
+    Verifiable.Core, and the DIDComm signed/authcrypt verify paths in Verifiable.DidComm; the global
+    test/benchmark grants come from the root Directory.Build.props.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Verifiable.Core" />
+    <InternalsVisibleTo Include="Verifiable.DidComm" />
+  </ItemGroup>
+
 </Project>

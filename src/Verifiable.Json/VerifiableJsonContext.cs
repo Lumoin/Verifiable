@@ -5,7 +5,9 @@ using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.Did;
+using Verifiable.Core.Resolvers;
 using Verifiable.Core.StatusList;
+using Verifiable.DidComm;
 using Verifiable.JCose;
 using Verifiable.OAuth.Oid4Vp;
 
@@ -19,6 +21,16 @@ namespace Verifiable.Json;
 /// </summary>
 //DID and VC root document types.
 [JsonSerializable(typeof(DidDocument))]
+[JsonSerializable(typeof(DidDocumentMetadata))]
+//DID Resolution / DID URL Dereferencing result envelopes (W3C DID Resolution HTTP(S) binding) and
+//their metadata / error sub-objects. Service is registered so the dereferencing-result converter can
+//serialize a fragment-dereferenced service resource via GetTypeInfo.
+[JsonSerializable(typeof(DidResolutionResult))]
+[JsonSerializable(typeof(DidDereferencingResult))]
+[JsonSerializable(typeof(DidResolutionMetadata))]
+[JsonSerializable(typeof(DidDereferencingMetadata))]
+[JsonSerializable(typeof(DidProblemDetails))]
+[JsonSerializable(typeof(Service))]
 [JsonSerializable(typeof(VerifiableCredential))]
 [JsonSerializable(typeof(DataIntegritySecuredCredential))]
 [JsonSerializable(typeof(VerifiablePresentation))]
@@ -69,6 +81,12 @@ namespace Verifiable.Json;
 [JsonSerializable(typeof(DirectPostBody))]
 [JsonSerializable(typeof(DirectPostJwtBody))]
 [JsonSerializable(typeof(DirectPostResult))]
+//DIDComm plaintext message types. The root DidCommMessage is resolved via GetTypeInfo by the
+//pack/unpack delegates; the DidCommMessageConverter handles all three manually, with Attachment
+//and AttachmentData read/written inline rather than through source-gen.
+[JsonSerializable(typeof(DidCommMessage))]
+[JsonSerializable(typeof(Attachment))]
+[JsonSerializable(typeof(AttachmentData))]
 public partial class VerifiableJsonContext: JsonSerializerContext
 {
 }

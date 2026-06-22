@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -186,8 +187,11 @@ public sealed class DidResolver
         string baseDid = parsed.BaseDid!;
         string methodName = parsed.Method!;
 
-        //If path or query is present and a method-specific dereferencer is registered, use it.
-        if((parsed.Path is not null || parsed.Query is not null)
+        //If a path is present and a method-specific dereferencer is registered, use it. Path resolution is the
+        //method-specific concern (a method maps a DID URL path to its own web resource); query-only DID URLs
+        //(for example ?service= or ?versionId=) stay on the generic algorithm below, which resolves the base
+        //DID and applies the DID-Core service/fragment rules against the resolved document.
+        if(parsed.Path is not null
             && DereferencerSelector(methodName) is { } methodDereferencer)
         {
             try
@@ -195,7 +199,9 @@ public sealed class DidResolver
                 var methodResult = await methodDereferencer(
                     baseDid, parsed.Path, parsed.Query, options, context, cancellationToken).ConfigureAwait(false);
 
-                //Apply fragment processing when the method returned a document and a fragment is present.
+                //Apply fragment processing only when the method returned a document and a fragment is present.
+                //A non-document method result (for example a did:webvh /whois presentation or a /files resource)
+                //is a leaf resource with no fragment semantics, so a trailing fragment is intentionally ignored.
                 if(methodResult.IsSuccessful && parsed.Fragment is not null && methodResult.ContentStream is DidDocument doc)
                 {
                     return DereferenceFragment(doc, parsed.Fragment, methodResult.ContentMetadata, options.VerificationRelationship);
@@ -214,11 +220,10 @@ public sealed class DidResolver
         }
 
         //Step 2: Resolve the base DID. All DID parameters and dereferencing options are
-        //passed as resolution options per the spec.
-        var resolution = await ResolveAsync(baseDid, context, new DidResolutionOptions
-        {
-            Accept = options.Accept
-        }, cancellationToken).ConfigureAwait(false);
+        //passed as resolution options per the spec. A query-only DID URL (no path) carries the version
+        //parameters (versionId/versionTime/versionNumber), which MUST be threaded into base resolution so a
+        //versioned query dereferences the requested version, not the latest (did:webvh v1.0, Reading DID URLs).
+        var resolution = await ResolveAsync(baseDid, context, BuildResolutionOptions(parsed.Query, options.Accept), cancellationToken).ConfigureAwait(false);
 
         //Step 3: If the DID does not exist, return NOT_FOUND.
         if(!resolution.IsSuccessful)
@@ -369,6 +374,45 @@ public sealed class DidResolver
             CapabilityInvocation = document.CapabilityInvocation,
             CapabilityDelegation = document.CapabilityDelegation,
             Service = expandedServices ?? document.Service
+        };
+    }
+
+    /// <summary>
+    /// Builds the base-DID resolution options from a DID URL query, lifting the version selection parameters
+    /// (<c>versionId</c>, <c>versionTime</c>, <c>versionNumber</c>) into <see cref="DidResolutionOptions"/> so a
+    /// query-only DID URL resolves the requested version rather than the latest. An unparseable
+    /// <c>versionTime</c> or <c>versionNumber</c> is dropped (the value is ignored) rather than failing here, so
+    /// the version selection is enforced by the method resolver.
+    /// </summary>
+    private static DidResolutionOptions BuildResolutionOptions(string? query, string? accept)
+    {
+        if(query is null)
+        {
+            return new DidResolutionOptions { Accept = accept };
+        }
+
+        string? versionId = GetQueryParameter(query, "versionId");
+
+        DateTimeOffset? versionTime = null;
+        if(GetQueryParameter(query, "versionTime") is { } versionTimeRaw
+            && DateTimeOffset.TryParse(versionTimeRaw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTimeOffset parsedTime))
+        {
+            versionTime = parsedTime;
+        }
+
+        int? versionNumber = null;
+        if(GetQueryParameter(query, "versionNumber") is { } versionNumberRaw
+            && int.TryParse(versionNumberRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedNumber))
+        {
+            versionNumber = parsedNumber;
+        }
+
+        return new DidResolutionOptions
+        {
+            Accept = accept,
+            VersionId = versionId,
+            VersionTime = versionTime,
+            VersionNumber = versionNumber
         };
     }
 

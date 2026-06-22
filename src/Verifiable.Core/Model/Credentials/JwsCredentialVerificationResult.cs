@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.Credentials;
 

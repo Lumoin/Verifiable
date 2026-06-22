@@ -1,6 +1,7 @@
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Validation;
 
 namespace Verifiable.Tests.ValidationRules

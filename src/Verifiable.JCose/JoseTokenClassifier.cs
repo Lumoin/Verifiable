@@ -72,6 +72,10 @@ public static class JoseTokenClassifier
     private const string ReasonHeaderJsonParseFailed = "Header segment is not a valid JSON object.";
     private const string ReasonJwsHasEnc = "Three segments but header carries an enc claim; a JWS must not have enc.";
     private const string ReasonJweMissingEnc = "Five segments but header carries no enc claim; a JWE must have enc.";
+    private const string ReasonJsonNeitherJwsNorJwe = "JSON object is neither a JWS (no 'payload'/'signatures'/'signature') nor a JWE (no 'ciphertext').";
+    private const string ReasonJsonBothJwsAndJwe = "JSON object carries both JWS members and a 'ciphertext'; RFC 7516 §9 makes the forms mutually exclusive.";
+    private const string ReasonJweJsonNoRecipientKey = "JSON JWE has neither a 'recipients' array (general) nor a top-level 'encrypted_key' (flattened).";
+    private const string ReasonJwsJsonNoSignature = "JSON JWS has neither a 'signatures' array (general) nor a top-level 'signature' (flattened).";
 
 
     /// <summary>
@@ -126,6 +130,13 @@ public static class JoseTokenClassifier
             return ValueTask.FromResult<JoseTokenShape>(new MalformedShape(ReasonEmpty));
         }
 
+        //RFC 7516 §9: a JSON-serialized JOSE object begins with '{'. Classify it by its members
+        //rather than by segment count, which only applies to the compact serializations.
+        if(StartsWithJsonObject(token))
+        {
+            return ValueTask.FromResult(ClassifyJson(token));
+        }
+
         int segmentCount = CountSegments(token);
 
         return segmentCount switch
@@ -137,6 +148,101 @@ public static class JoseTokenClassifier
             _ =>
                 ValueTask.FromResult<JoseTokenShape>(new OpaqueShape(token))
         };
+    }
+
+
+    /// <summary>
+    /// Classifies a JSON-serialized JOSE object by its top-level members per RFC 7516 §9.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// RFC 7516 §9 distinguishes the JSON serializations by member presence: "JWSs have a
+    /// 'payload' member and JWEs do not. JWEs have a 'ciphertext' member and JWSs do not." A JWE
+    /// is general when it carries a <c>recipients</c> array and flattened when it carries a
+    /// top-level <c>encrypted_key</c> (RFC 7516 §7.2.1/§7.2.2). A JWS is general when it carries
+    /// a <c>signatures</c> array and flattened when it carries a top-level <c>signature</c>
+    /// (RFC 7515 §7.2.1/§7.2.2).
+    /// </para>
+    /// <para>
+    /// Members are read directly from the raw UTF-8 token bytes with the library's span reader,
+    /// so JSON classification needs no header deserializer. An object that carries both JWS and
+    /// JWE members, or neither, is <see cref="MalformedShape"/> — it is structurally ambiguous,
+    /// not best-effort classified into one form.
+    /// </para>
+    /// </remarks>
+    private static JoseTokenShape ClassifyJson(string token)
+    {
+        ReadOnlySpan<byte> bytes = System.Text.Encoding.UTF8.GetBytes(token);
+
+        bool hasCiphertext = JwkJsonReader.ContainsKey(bytes, "ciphertext"u8);
+        bool hasPayload = JwkJsonReader.ContainsKey(bytes, "payload"u8);
+        bool hasSignatures = JwkJsonReader.ContainsKey(bytes, "signatures"u8);
+        bool hasSignature = JwkJsonReader.ContainsKey(bytes, "signature"u8);
+        bool looksLikeJws = hasPayload || hasSignatures || hasSignature;
+
+        if(hasCiphertext && looksLikeJws)
+        {
+            return new MalformedShape(ReasonJsonBothJwsAndJwe);
+        }
+
+        if(hasCiphertext)
+        {
+            //JWE: general when a recipients array is present, flattened when the recipient's
+            //encrypted_key is hoisted to the top level. A JWE with neither is malformed.
+            if(JwkJsonReader.ContainsKey(bytes, "recipients"u8))
+            {
+                return new GeneralJweShape(token);
+            }
+
+            if(JwkJsonReader.ContainsKey(bytes, "encrypted_key"u8))
+            {
+                return new FlattenedJweShape(token);
+            }
+
+            return new MalformedShape(ReasonJweJsonNoRecipientKey);
+        }
+
+        if(looksLikeJws)
+        {
+            //JWS: general when a signatures array is present, flattened when a single signature
+            //sits at the top level. "signatures" wins so a general form is not misread when both
+            //appear (a malformed producer object), and the top-level "signature" check is the
+            //flattened discriminator (RFC 7515 §7.2.2).
+            if(hasSignatures)
+            {
+                return new GeneralJwsShape(token);
+            }
+
+            if(hasSignature)
+            {
+                return new FlattenedJwsShape(token);
+            }
+
+            return new MalformedShape(ReasonJwsJsonNoSignature);
+        }
+
+        return new MalformedShape(ReasonJsonNeitherJwsNorJwe);
+    }
+
+
+    //Whether the first non-whitespace byte/char of the token is a JSON object's '{'. The token
+    //is inspected as a char span; a leading byte-order mark or other non-'{' opener routes to
+    //the compact path, which then classifies it Opaque or Malformed.
+    private static bool StartsWithJsonObject(string token)
+    {
+        ReadOnlySpan<char> span = token.AsSpan();
+        for(int i = 0; i < span.Length; i++)
+        {
+            char c = span[i];
+            if(c is ' ' or '\t' or '\r' or '\n')
+            {
+                continue;
+            }
+
+            return c == '{';
+        }
+
+        return false;
     }
 
 

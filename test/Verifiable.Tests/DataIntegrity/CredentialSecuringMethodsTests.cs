@@ -11,7 +11,7 @@ using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Model.Did.Methods;
+using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;

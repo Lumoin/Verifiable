@@ -52,4 +52,12 @@ public sealed record OutboundRequest
     /// dereference. A tracked carrier, not a naked buffer.
     /// </summary>
     public TaggedMemory<byte>? Body { get; init; }
+
+    /// <summary>
+    /// An optional upper bound, in bytes, on the response body the caller will accept. A transport SHOULD stop
+    /// reading and abort once the response exceeds this, so a hostile or misconfigured host cannot drive
+    /// unbounded buffering before the caller's post-read size check rejects it. <see langword="null"/> imposes
+    /// no transport-level bound; the caller's post-read cap remains the backstop either way.
+    /// </summary>
+    public long? MaxResponseBytes { get; init; }
 }
