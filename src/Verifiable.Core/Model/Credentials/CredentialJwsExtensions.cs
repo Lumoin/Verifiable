@@ -266,43 +266,59 @@ public static class CredentialJwsExtensions
             throw new ArgumentException("JWS compact serialization must have exactly three parts.", nameof(jws));
         }
 
-        using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(parts[0], memoryPool);
-        Dictionary<string, object>? header = headerDeserializer(headerBytesOwner.Memory.Span);
+        //A malformed segment the injected decoder/deserializer rejects is untrusted input that cannot
+        //verify; fail closed to an invalid result rather than letting the exception escape. The payload
+        //is still decoded only once the signature holds (the firewall below), so this guard does not
+        //relax that ordering. Cancellation propagates.
+        Dictionary<string, object>? header = null;
+        try
+        {
+            using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(parts[0], memoryPool);
+            header = headerDeserializer(headerBytesOwner.Memory.Span);
 
-        using IMemoryOwner<byte> signatureBytesOwner = base64UrlDecoder(parts[2], memoryPool);
+            using IMemoryOwner<byte> signatureBytesOwner = base64UrlDecoder(parts[2], memoryPool);
 
-        //Per RFC 7515 Section 5.2, verification uses the same ASCII signing input.
-        int verifyInputLength = parts[0].Length + 1 + parts[1].Length;
-        using IMemoryOwner<byte> verifyInputOwner = memoryPool.Rent(verifyInputLength);
-        Memory<byte> verifyInputMemory = verifyInputOwner.Memory[..verifyInputLength];
+            //Per RFC 7515 Section 5.2, verification uses the same ASCII signing input.
+            int verifyInputLength = parts[0].Length + 1 + parts[1].Length;
+            using IMemoryOwner<byte> verifyInputOwner = memoryPool.Rent(verifyInputLength);
+            Memory<byte> verifyInputMemory = verifyInputOwner.Memory[..verifyInputLength];
 
-        int written = Encoding.ASCII.GetBytes(parts[0], verifyInputMemory.Span);
-        verifyInputMemory.Span[written] = (byte)'.';
-        written += 1;
-        written += Encoding.ASCII.GetBytes(parts[1], verifyInputMemory.Span[written..]);
+            int written = Encoding.ASCII.GetBytes(parts[0], verifyInputMemory.Span);
+            verifyInputMemory.Span[written] = (byte)'.';
+            written += 1;
+            written += Encoding.ASCII.GetBytes(parts[1], verifyInputMemory.Span[written..]);
 
-        Debug.Assert(written == verifyInputLength, "Verification input length must match the expected size.");
+            Debug.Assert(written == verifyInputLength, "Verification input length must match the expected size.");
 
-        bool isValid = await verificationDelegate(
-            verifyInputMemory,
-            signatureBytesOwner.Memory,
-            publicKey.AsReadOnlyMemory(),
-            context: null,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            bool isValid = await verificationDelegate(
+                verifyInputMemory,
+                signatureBytesOwner.Memory,
+                publicKey.AsReadOnlyMemory(),
+                context: null,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        //Verify before interpreting the payload: a firewalled verifier must not transcode or
-        //parse bytes whose authenticity has not been established. A tampered payload may not be
-        //well-formed UTF-8/JSON, so the credential is decoded only once the signature holds.
-        if(!isValid)
+            //Verify before interpreting the payload: a firewalled verifier must not transcode or
+            //parse bytes whose authenticity has not been established. A tampered payload may not be
+            //well-formed UTF-8/JSON, so the credential is decoded only once the signature holds.
+            if(!isValid)
+            {
+                return new JwsCredentialVerificationResult(false, header, null);
+            }
+
+            using IMemoryOwner<byte> payloadBytesOwner = base64UrlDecoder(parts[1], memoryPool);
+            VerifiableCredential credential = credentialDeserializer(payloadBytesOwner.Memory.Span);
+            var verifiedCredential = new Verified<VerifiableCredential>(credential, VerificationContextTag.Create(ExtractKeyId(header)));
+
+            return new JwsCredentialVerificationResult(true, header, verifiedCredential);
+        }
+        catch(OperationCanceledException)
+        {
+            throw;
+        }
+        catch
         {
             return new JwsCredentialVerificationResult(false, header, null);
         }
-
-        using IMemoryOwner<byte> payloadBytesOwner = base64UrlDecoder(parts[1], memoryPool);
-        VerifiableCredential credential = credentialDeserializer(payloadBytesOwner.Memory.Span);
-        var verifiedCredential = new Verified<VerifiableCredential>(credential, VerificationContextTag.Create(ExtractKeyId(header)));
-
-        return new JwsCredentialVerificationResult(true, header, verifiedCredential);
     }
 
 

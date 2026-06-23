@@ -317,7 +317,7 @@ internal sealed class VcalmConformanceBridgeTests
         Uri tokenUrl = new(baseAddress, VcalmConformanceHttpApplication.TokenPath);
         using FormUrlEncodedContent content = new(new Dictionary<string, string>
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeClientCredentials,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = ClientSecret,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId

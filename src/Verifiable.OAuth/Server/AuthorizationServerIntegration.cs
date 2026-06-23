@@ -392,6 +392,48 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     public ValidateClientCredentialsDelegate? ValidateClientCredentialsAsync { get; set; }
 
     /// <summary>
+    /// Validates a Token Exchange <c>subject_token</c> (RFC 8693 §2.1) and returns its accepted
+    /// claims, or rejects it. The grant activates only when the
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthTokenExchange"/> capability is allowed and
+    /// BOTH this seam and <see cref="AuthorizeTokenExchangeAsync"/> are wired — an advertised
+    /// token-exchange grant with no validation seam would mint tokens for any subject-token string
+    /// (fail-closed, the §3.2.1-style materialization the other grants use). The application is the
+    /// trust authority: it owns which issuers and keys it accepts, and any remote key fetch is its
+    /// concern (the library takes no <c>System.Net.*</c> dependency).
+    /// </summary>
+    public ValidateTokenExchangeTokenDelegate? ValidateTokenExchangeTokenAsync { get; set; }
+
+    /// <summary>
+    /// Decides whether a validated Token Exchange <c>subject_token</c> may be exchanged for the
+    /// requested target and shapes the issued token (RFC 8693 §2.1). The grant activates only when
+    /// the <see cref="WellKnownCapabilityIdentifiers.OAuthTokenExchange"/> capability is allowed and
+    /// BOTH this seam and <see cref="ValidateTokenExchangeTokenAsync"/> are wired — an advertised
+    /// grant that cannot make the impersonation policy decision would be a fail-open authorization
+    /// boundary (fail-closed, the §3.2.1-style materialization). The application owns the policy
+    /// "which entities are permitted to impersonate other entities" (§2.1); a <see langword="null"/>
+    /// return denies the exchange and the endpoint answers <c>invalid_target</c> (§2.2.2).
+    /// </summary>
+    public AuthorizeTokenExchangeDelegate? AuthorizeTokenExchangeAsync { get; set; }
+
+    /// <summary>
+    /// Validates a JWT Bearer authorization-grant <c>assertion</c> (RFC 7523 §2.1/§3.1) and returns
+    /// the token shape to issue, or rejects it. The grant activates only when the
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthJwtBearer"/> capability is allowed and this seam
+    /// is wired — an advertised jwt-bearer grant with no validation seam would mint tokens for any
+    /// assertion string (fail-closed, the §3.2.1-style materialization the other grants use). The
+    /// application is the trust authority: it owns which issuers and keys it accepts, performs the full
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 §3</see> processing —
+    /// signature (rule 9), trusted <c>iss</c> (rule 1), the <c>aud</c>-names-this-AS check (rule 3,
+    /// which only the application can make), and the <c>exp</c>/<c>nbf</c> window (rules 4–5) — and any
+    /// remote JWKS fetch is its concern (the library takes no <c>System.Net.*</c> dependency). A
+    /// <see langword="null"/> return refuses the grant; the endpoint answers <c>invalid_grant</c> (§3.1).
+    /// Client authentication is OPTIONAL for this grant (§3.1): when the request carries client
+    /// credentials the endpoint validates them through <see cref="ValidateClientCredentialsAsync"/>, but
+    /// the grant does not require that seam — the assertion is the grant.
+    /// </summary>
+    public ValidateJwtBearerAssertionDelegate? ValidateJwtBearerAssertionAsync { get; set; }
+
+    /// <summary>
     /// Revokes a token at the RFC 7009 revocation endpoint on behalf of an
     /// authenticated client. The endpoint activates only when the
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthTokenRevocation"/> capability

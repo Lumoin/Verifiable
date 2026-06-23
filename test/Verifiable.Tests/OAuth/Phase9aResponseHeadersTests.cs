@@ -65,7 +65,7 @@ internal sealed class Phase9aResponseHeadersTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = UnregisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -102,7 +102,7 @@ internal sealed class Phase9aResponseHeadersTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -135,7 +135,7 @@ internal sealed class Phase9aResponseHeadersTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -175,7 +175,7 @@ internal sealed class Phase9aResponseHeadersTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = challenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -206,7 +206,7 @@ internal sealed class Phase9aResponseHeadersTests
         //Token exchange.
         RequestFields tokenFields = new()
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
             [OAuthRequestParameterNames.Code] = code,
             [OAuthRequestParameterNames.CodeVerifier] = verifier,
             [OAuthRequestParameterNames.ClientId] = ClientId,

@@ -112,6 +112,48 @@ internal sealed class JwsMessageTests
 
 
     [TestMethod]
+    public async ValueTask MalformedHeaderSegmentVerifiesAsFalseWithoutThrowing()
+    {
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
+        using PrivateKeyMemory privateKeyMemory = CreateEd25519PrivateKey();
+
+        using JwsMessage jwsMessage = await credential.SignJwsAsync(
+            privateKeyMemory,
+            Ed25519VerificationMethodId,
+            CredentialSerializer,
+            HeaderSerializer,
+            TestSetup.Base64UrlEncoder,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        string compact = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
+        string[] parts = compact.Split('.');
+        Assert.HasCount(3, parts);
+
+        //An out-of-alphabet character in the header segment — the decoder rejects it. The credential
+        //verifier decodes the header before the signature check, so it must fail closed (IsValid=false)
+        //rather than let the decoder's exception escape on untrusted input.
+        string malformedHeaderJws = string.Join('.',
+            string.Concat(parts[0].AsSpan(0, parts[0].Length - 1), "!"),
+            parts[1],
+            parts[2]);
+
+        using PublicKeyMemory publicKeyMemory = CreateEd25519PublicKey();
+        var result = await CredentialJwsExtensions.VerifyJwsAsync(
+            malformedHeaderJws,
+            publicKeyMemory,
+            TestSetup.Base64UrlDecoder,
+            HeaderDeserializer,
+            CredentialDeserializer,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A malformed header segment must verify as false, not throw.");
+        Assert.IsNull(result.Credential);
+    }
+
+
+    [TestMethod]
     public async ValueTask JwsMessageVerifiesDirectlyWithoutSerialization()
     {
         var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;

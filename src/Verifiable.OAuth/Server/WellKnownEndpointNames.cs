@@ -70,6 +70,21 @@ public static class WellKnownEndpointNames
 
     public static readonly string ClientCredentialsToken = Utf8Constants.ToInternedString(ClientCredentialsTokenUtf8);
 
+    //The token-exchange grant (RFC 8693) shares the token endpoint URL; the grant_type
+    //field disambiguates, as it does for the refresh and client_credentials grants.
+    /// <summary>The UTF-8 source literal of <see cref="TokenExchangeToken"/>.</summary>
+    public static ReadOnlySpan<byte> TokenExchangeTokenUtf8 => "TokenExchange.Token"u8;
+
+    public static readonly string TokenExchangeToken = Utf8Constants.ToInternedString(TokenExchangeTokenUtf8);
+
+    //The JWT Bearer authorization grant (RFC 7523 §2.1/§3.1) shares the token endpoint URL;
+    //the grant_type field disambiguates, as it does for the refresh, client_credentials, and
+    //token-exchange grants.
+    /// <summary>The UTF-8 source literal of <see cref="JwtBearerToken"/>.</summary>
+    public static ReadOnlySpan<byte> JwtBearerTokenUtf8 => "JwtBearer.Token"u8;
+
+    public static readonly string JwtBearerToken = Utf8Constants.ToInternedString(JwtBearerTokenUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="AuthCodeRevoke"/>.</summary>
     public static ReadOnlySpan<byte> AuthCodeRevokeUtf8 => "AuthCode.Revoke"u8;
 

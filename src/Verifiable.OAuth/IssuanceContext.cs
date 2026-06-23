@@ -142,4 +142,24 @@ public sealed record IssuanceContext
     /// <see langword="null"/> for tokens not bound to a session-scoped identifier.
     /// </summary>
     public string? SessionId { get; init; }
+
+    /// <summary>
+    /// The RFC 8693 §4.1 <c>act</c> (actor) claim to emit on the issued token — the nested JSON
+    /// object identifying the current actor (its <c>sub</c>) and, when a delegation chain is being
+    /// extended, the prior actor(s) under a nested <c>act</c> member per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>. Populated
+    /// only by a Token Exchange DELEGATION exchange (an <c>actor_token</c> was presented); the access
+    /// token producer emits it verbatim as the top-level <c>act</c> claim. <see langword="null"/> for
+    /// every non-delegation issuance — impersonation token exchange, and every other grant and
+    /// producer — so no other path emits an <c>act</c> claim.
+    /// </summary>
+    public IReadOnlyDictionary<string, object>? Act { get; init; }
+
+    /// <summary>
+    /// An explicit audience override; when populated it is the issued token's <c>aud</c> claim
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1.1">RFC 8693 §2.1.1</see> target
+    /// binding), bypassing the scope→audience resolver. <see langword="null"/> for every
+    /// non-token-exchange issuance.
+    /// </summary>
+    public IReadOnlyList<string>? Audience { get; init; }
 }

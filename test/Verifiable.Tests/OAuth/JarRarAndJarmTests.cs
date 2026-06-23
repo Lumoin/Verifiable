@@ -351,13 +351,13 @@ internal sealed class JarRarAndJarmTests
             [WellKnownJwtClaimNames.Iss] = ClientId,
             [WellKnownJwtClaimNames.Aud] = material.Registration.IssuerUri!.ToString(),
             [WellKnownJwtClaimNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ResponseType] = OAuthRequestParameterValues.ResponseTypeCode,
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
             [OAuthRequestParameterNames.State] = RequestState,
             [WellKnownJwtClaimNames.Nonce] = "nonce-jar-rar-01",
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Nbf] = now.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Exp] = (now + TimeSpan.FromSeconds(30)).ToUnixTimeSeconds()
@@ -431,7 +431,7 @@ internal sealed class JarRarAndJarmTests
             material.Registration.TenantId.Value, WellKnownEndpointNames.AuthCodeToken, "POST",
             new RequestFields
             {
-                [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
                 [OAuthRequestParameterNames.Code] = code,
                 [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
                 [OAuthRequestParameterNames.ClientId] = ClientId,

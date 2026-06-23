@@ -138,14 +138,14 @@ internal sealed class MultiHostHttpLifecycleTests
         using JsonDocument offerDoc = JsonDocument.Parse(offerJson);
         string scannedCode = offerDoc.RootElement
             .GetProperty("grants")
-            .GetProperty(OAuthRequestParameterValues.GrantTypePreAuthorizedCode)
+            .GetProperty(WellKnownGrantTypes.PreAuthorizedCode)
             .GetProperty("pre-authorized_code").GetString()!;
 
         //§6: the Pre-Authorized Code grant over an HTTP form POST.
         Uri tokenUrl = new(issuerHost.HttpBaseAddress!, $"/connect/{issuerTenant}/token");
         using FormUrlEncodedContent tokenRequestContent = new(new Dictionary<string, string>
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypePreAuthorizedCode,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
             [OAuthRequestParameterNames.PreAuthorizedCode] = scannedCode
         });
         using HttpResponseMessage tokenResponse = await issuerHttp.PostAsync(
@@ -275,8 +275,7 @@ internal sealed class MultiHostHttpLifecycleTests
             using(proofKey)
             {
                 bool isProofSignatureValid = await Jws.VerifyAsync(
-                    proof, TestSetup.Base64UrlDecoder,
-                    static (ReadOnlySpan<byte> _) => (object?)null, Pool,
+                    proof, TestSetup.Base64UrlDecoder, Pool,
                     proofKey, ct).ConfigureAwait(false);
 
                 if(!isProofSignatureValid

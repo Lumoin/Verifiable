@@ -304,6 +304,41 @@ public static class WellKnownJwtClaimNames
     /// </summary>
     public static readonly string Tenant = Utf8Constants.ToInternedString(TenantUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="AudienceTenant"/>.</summary>
+    public static ReadOnlySpan<byte> AudienceTenantUtf8 => "aud_tenant"u8;
+
+    /// <summary>
+    /// The <c>aud_tenant</c> claim — a Resource Authorization Server tenant identifier, included when
+    /// that server is multi-tenant and the issuer knows the tenant. When present, the combination of
+    /// <c>aud</c> + <c>aud_tenant</c> + <see cref="AudienceSubject"/> identifies the account within that
+    /// tenant. Defined by OpenID Enterprise and used by
+    /// draft-ietf-oauth-identity-assertion-authz-grant §3.1.
+    /// </summary>
+    public static readonly string AudienceTenant = Utf8Constants.ToInternedString(AudienceTenantUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="AudienceSubject"/>.</summary>
+    public static ReadOnlySpan<byte> AudienceSubjectUtf8 => "aud_sub"u8;
+
+    /// <summary>
+    /// The <c>aud_sub</c> claim — the Resource Authorization Server's own identifier for the End-User,
+    /// scoped to <see cref="AudienceTenant"/> when present. Defined by OpenID Enterprise and used by
+    /// draft-ietf-oauth-identity-assertion-authz-grant §3.1 for subject resolution at the Resource
+    /// Authorization Server.
+    /// </summary>
+    public static readonly string AudienceSubject = Utf8Constants.ToInternedString(AudienceSubjectUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubId"/>.</summary>
+    public static ReadOnlySpan<byte> SubIdUtf8 => "sub_id"u8;
+
+    /// <summary>
+    /// The <c>sub_id</c> claim — a Subject Identifier object per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493">RFC 9493</see> that identifies the subject in
+    /// an identifier namespace distinct from <c>iss</c> + <c>sub</c>. Used by
+    /// draft-ietf-oauth-identity-assertion-authz-grant §3.2 (the <c>saml-nameid</c> format) so a Resource
+    /// Authorization Server can resolve the End-User by its SAML SSO subject identifier.
+    /// </summary>
+    public static readonly string SubId = Utf8Constants.ToInternedString(SubIdUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="Vct"/>.</summary>
     public static ReadOnlySpan<byte> VctUtf8 => "vct"u8;
 
@@ -312,6 +347,30 @@ public static class WellKnownJwtClaimNames
     /// See <see href="https://www.rfc-editor.org/rfc/rfc9901#section-3.2.2.1.1">RFC 9901 §3.2.2.1.1</see>.
     /// </summary>
     public static readonly string Vct = Utf8Constants.ToInternedString(VctUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Act"/>.</summary>
+    public static ReadOnlySpan<byte> ActUtf8 => "act"u8;
+
+    /// <summary>
+    /// The <c>act</c> (Actor) claim expresses that delegation has occurred and identifies the
+    /// acting party to whom authority has been delegated. The value is a JSON object whose members
+    /// are claims identifying the actor; a chain of delegation is expressed by nesting one
+    /// <c>act</c> claim within another, the outermost being the current actor.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>.
+    /// </summary>
+    public static readonly string Act = Utf8Constants.ToInternedString(ActUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="MayAct"/>.</summary>
+    public static ReadOnlySpan<byte> MayActUtf8 => "may_act"u8;
+
+    /// <summary>
+    /// The <c>may_act</c> (Authorized Actor) claim asserts that one party is authorized to become
+    /// the actor and act on behalf of the party identified by the containing JWT. The value is a
+    /// JSON object whose members are claims identifying the eligible actor; the authorization server
+    /// uses it to decide whether the requesting party may engage in the requested delegation.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>.
+    /// </summary>
+    public static readonly string MayAct = Utf8Constants.ToInternedString(MayActUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Cnf"/>.</summary>
     public static ReadOnlySpan<byte> CnfUtf8 => "cnf"u8;
@@ -429,8 +488,23 @@ public static class WellKnownJwtClaimNames
     /// <summary>Whether <paramref name="claim"/> is <see cref="Tenant"/>.</summary>
     public static bool IsTenant(string claim) => Equals(claim, Tenant);
 
+    /// <summary>Whether <paramref name="claim"/> is <see cref="AudienceTenant"/>.</summary>
+    public static bool IsAudienceTenant(string claim) => Equals(claim, AudienceTenant);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="AudienceSubject"/>.</summary>
+    public static bool IsAudienceSubject(string claim) => Equals(claim, AudienceSubject);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="SubId"/>.</summary>
+    public static bool IsSubId(string claim) => Equals(claim, SubId);
+
     /// <summary>Whether <paramref name="claim"/> is <see cref="Vct"/>.</summary>
     public static bool IsVct(string claim) => Equals(claim, Vct);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Act"/>.</summary>
+    public static bool IsAct(string claim) => Equals(claim, Act);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="MayAct"/>.</summary>
+    public static bool IsMayAct(string claim) => Equals(claim, MayAct);
 
     /// <summary>Whether <paramref name="claim"/> is <see cref="Cnf"/>.</summary>
     public static bool IsCnf(string claim) => Equals(claim, Cnf);
@@ -473,7 +547,12 @@ public static class WellKnownJwtClaimNames
         _ when IsName(claim) => Name,
         _ when IsRoles(claim) => Roles,
         _ when IsTenant(claim) => Tenant,
+        _ when IsAudienceTenant(claim) => AudienceTenant,
+        _ when IsAudienceSubject(claim) => AudienceSubject,
+        _ when IsSubId(claim) => SubId,
         _ when IsVct(claim) => Vct,
+        _ when IsAct(claim) => Act,
+        _ when IsMayAct(claim) => MayAct,
         _ when IsCnf(claim) => Cnf,
         _ when IsHtm(claim) => Htm,
         _ when IsHtu(claim) => Htu,

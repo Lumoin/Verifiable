@@ -419,9 +419,9 @@ public static class CredentialProofValidator
         bool hasIat;
         long iatSeconds;
         string? nonce;
-        using IMemoryOwner<byte> headerOwner = base64UrlDecoder(parts[0], memoryPool);
         try
         {
+            using IMemoryOwner<byte> headerOwner = base64UrlDecoder(parts[0], memoryPool);
             ReadOnlySpan<byte> header = headerOwner.Memory.Span;
             typ = JwkJsonReader.ExtractStringValue(header, WellKnownJoseHeaderNames.TypUtf8);
             alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
@@ -552,14 +552,12 @@ public static class CredentialProofValidator
                 ? await Jws.VerifyAsync(
                     request.Proof,
                     base64UrlDecoder,
-                    UnusedPartDecoder,
                     memoryPool,
                     publicKey,
                     cancellationToken).ConfigureAwait(false)
                 : await Jws.VerifyAsync(
                     request.Proof,
                     base64UrlDecoder,
-                    UnusedPartDecoder,
                     memoryPool,
                     publicKey,
                     verificationDelegate,
@@ -629,11 +627,6 @@ public static class CredentialProofValidator
 
         return CredentialProofValidationResult.Success(thumbprint ?? string.Empty, audience, issuedAt, nonce);
     }
-
-
-    //Jws.VerifyAsync requires a partDecoder the explicit-key overloads never call; a static no-op
-    //avoids capture and the null-checked-parameter contract.
-    private static object? UnusedPartDecoder(ReadOnlySpan<byte> _) => null;
 
 
     //Reconstructs the holder PublicKeyMemory from the proof header's jwk members, composing the

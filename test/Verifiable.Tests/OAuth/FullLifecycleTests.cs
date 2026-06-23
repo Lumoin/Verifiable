@@ -145,7 +145,7 @@ internal sealed class FullLifecycleTests
         using JsonDocument offerDoc = JsonDocument.Parse(offerJson);
         string scannedCode = offerDoc.RootElement
             .GetProperty("grants")
-            .GetProperty(OAuthRequestParameterValues.GrantTypePreAuthorizedCode)
+            .GetProperty(WellKnownGrantTypes.PreAuthorizedCode)
             .GetProperty("pre-authorized_code").GetString()!;
         Assert.AreEqual(PreAuthorizedCode, scannedCode);
 
@@ -154,7 +154,7 @@ internal sealed class FullLifecycleTests
             tenant, WellKnownEndpointNames.Oid4VciPreAuthorizedToken, "POST",
             new RequestFields
             {
-                [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypePreAuthorizedCode,
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = scannedCode
             },
             new ExchangeContext(),
@@ -302,7 +302,7 @@ internal sealed class FullLifecycleTests
 
         bool isIntrospectionSignatureValid = await Jws.VerifyAsync(
             introspection.Body, TestSetup.Base64UrlDecoder,
-            static (ReadOnlySpan<byte> _) => (object?)null, Pool,
+            Pool,
             material.SigningPublicKey,
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(isIntrospectionSignatureValid);
@@ -362,7 +362,7 @@ internal sealed class FullLifecycleTests
             {
                 bool isProofSignatureValid = await Jws.VerifyAsync(
                     proof, TestSetup.Base64UrlDecoder,
-                    static (ReadOnlySpan<byte> _) => (object?)null, Pool,
+                    Pool,
                     proofKey, ct).ConfigureAwait(false);
 
                 if(!isProofSignatureValid

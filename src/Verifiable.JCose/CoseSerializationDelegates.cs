@@ -89,7 +89,7 @@ public delegate IReadOnlyDictionary<int, object> ParseProtectedHeaderDelegate(Re
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is the COSE equivalent of <see cref="JoseKeyContext{TJwtPart}"/>.
+/// This is the COSE equivalent of <see cref="JoseKeyContext"/>.
 /// Resolvers can examine header parameters (alg, kid) and payload claims
 /// to determine which key to load and from where.
 /// </para>

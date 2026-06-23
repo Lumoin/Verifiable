@@ -285,7 +285,7 @@ public static class CredentialOfferSerializer
     {
         ReadOnlySpan<byte> grants = Encoding.UTF8.GetBytes(grantsJson);
         string? grantJson = JwkJsonReader.ExtractObjectAsString(
-            grants, OAuthRequestParameterValues.GrantTypePreAuthorizedCodeUtf8);
+            grants, WellKnownGrantTypes.PreAuthorizedCodeUtf8);
         if(grantJson is null)
         {
             return null;
@@ -349,7 +349,7 @@ public static class CredentialOfferSerializer
     {
         ReadOnlySpan<byte> grants = Encoding.UTF8.GetBytes(grantsJson);
         string? grantJson = JwkJsonReader.ExtractObjectAsString(
-            grants, OAuthRequestParameterValues.GrantTypeAuthorizationCodeUtf8);
+            grants, WellKnownGrantTypes.AuthorizationCodeUtf8);
         if(grantJson is null)
         {
             return null;
@@ -467,14 +467,14 @@ public static class CredentialOfferSerializer
             if(offer.PreAuthorizedCodeGrant is PreAuthorizedCodeOfferGrant preAuthorized)
             {
                 JsonAppender.AppendRawField(
-                    sb, OAuthRequestParameterValues.GrantTypePreAuthorizedCode,
+                    sb, WellKnownGrantTypes.PreAuthorizedCode,
                     BuildPreAuthorizedCodeGrantJson(preAuthorized), ref first);
             }
 
             if(offer.AuthorizationCodeGrant is AuthorizationCodeOfferGrant authorizationCode)
             {
                 JsonAppender.AppendRawField(
-                    sb, OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+                    sb, WellKnownGrantTypes.AuthorizationCode,
                     BuildAuthorizationCodeGrantJson(authorizationCode), ref first);
             }
 

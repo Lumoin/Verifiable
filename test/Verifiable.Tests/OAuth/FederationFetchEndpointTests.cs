@@ -90,9 +90,6 @@ internal sealed class FederationFetchEndpointTests
         bool verified = await Jws.VerifyAsync(
             compact,
             TestSetup.Base64UrlDecoder,
-            static bytes => JsonSerializer.Deserialize<Dictionary<string, object>>(
-                bytes, TestSetup.DefaultSerializationOptions)
-                ?? throw new FormatException("Header parsed to null."),
             Pool,
             anchorKeys.PublicKey,
             TestContext.CancellationToken).ConfigureAwait(false);

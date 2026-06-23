@@ -3826,6 +3826,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         if(endpointName == WellKnownEndpointNames.AuthCodeToken) { return "token"; }
         if(endpointName == WellKnownEndpointNames.AuthCodeRefreshToken) { return "token"; }
         if(endpointName == WellKnownEndpointNames.ClientCredentialsToken) { return "token"; }
+        if(endpointName == WellKnownEndpointNames.TokenExchangeToken) { return "token"; }
+        if(endpointName == WellKnownEndpointNames.JwtBearerToken) { return "token"; }
         if(endpointName == WellKnownEndpointNames.AuthCodeRevoke) { return "revoke"; }
         if(endpointName == WellKnownEndpointNames.AuthCodeIntrospect) { return "introspect"; }
         if(endpointName == WellKnownEndpointNames.GlobalTokenRevocation) { return "global_token_revocation"; }

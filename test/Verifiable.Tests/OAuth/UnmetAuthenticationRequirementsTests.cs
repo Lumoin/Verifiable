@@ -189,7 +189,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
             [OAuthRequestParameterNames.MaxAge] = "-5"
@@ -396,7 +396,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -451,7 +451,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };

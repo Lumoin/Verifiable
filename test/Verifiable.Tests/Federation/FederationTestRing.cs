@@ -281,7 +281,6 @@ internal static class FederationTestRing
         return await Jws.VerifyAsync(
             compactJws,
             TestSetup.Base64UrlDecoder,
-            DecodeJwtPart,
             BaseMemoryPool.Shared,
             publicKey,
             verificationDelegate,

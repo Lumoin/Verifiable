@@ -136,7 +136,7 @@ internal sealed class TenantIdThreadingTests
         {
             [OAuthRequestParameterNames.ClientId] = clientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = redirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -163,7 +163,7 @@ internal sealed class TenantIdThreadingTests
 
         RequestFields tokenFields = new()
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
             [OAuthRequestParameterNames.Code] = code,
             [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
             [OAuthRequestParameterNames.ClientId] = clientId,

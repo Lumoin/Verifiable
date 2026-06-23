@@ -52,7 +52,7 @@ internal sealed class Oid4VciCredentialOfferTests
         Assert.AreEqual(ConfigurationId, ids[0].GetString());
 
         JsonElement grant = root.GetProperty("grants")
-            .GetProperty(OAuthRequestParameterValues.GrantTypePreAuthorizedCode);
+            .GetProperty(WellKnownGrantTypes.PreAuthorizedCode);
         Assert.AreEqual(PreAuthorizedCode, grant.GetProperty("pre-authorized_code").GetString());
 
         JsonElement txCode = grant.GetProperty("tx_code");
@@ -83,7 +83,7 @@ internal sealed class Oid4VciCredentialOfferTests
 
         using JsonDocument doc = JsonDocument.Parse(CredentialOfferSerializer.ToJson(offer));
         JsonElement txCode = doc.RootElement.GetProperty("grants")
-            .GetProperty(OAuthRequestParameterValues.GrantTypePreAuthorizedCode)
+            .GetProperty(WellKnownGrantTypes.PreAuthorizedCode)
             .GetProperty("tx_code");
 
         Assert.AreEqual(JsonValueKind.Object, txCode.ValueKind);
@@ -107,7 +107,7 @@ internal sealed class Oid4VciCredentialOfferTests
 
         using JsonDocument doc = JsonDocument.Parse(CredentialOfferSerializer.ToJson(offer));
         JsonElement grant = doc.RootElement.GetProperty("grants")
-            .GetProperty(OAuthRequestParameterValues.GrantTypePreAuthorizedCode);
+            .GetProperty(WellKnownGrantTypes.PreAuthorizedCode);
 
         Assert.IsFalse(grant.TryGetProperty("tx_code", out _),
             "tx_code must be absent when no Transaction Code is expected.");
@@ -130,7 +130,7 @@ internal sealed class Oid4VciCredentialOfferTests
 
         using JsonDocument doc = JsonDocument.Parse(CredentialOfferSerializer.ToJson(offer));
         JsonElement grant = doc.RootElement.GetProperty("grants")
-            .GetProperty(OAuthRequestParameterValues.GrantTypeAuthorizationCode);
+            .GetProperty(WellKnownGrantTypes.AuthorizationCode);
 
         Assert.AreEqual("eyJhbGciOiJSU0Et...FYUaBy", grant.GetProperty("issuer_state").GetString());
     }
@@ -177,7 +177,7 @@ internal sealed class Oid4VciCredentialOfferTests
         string atLimit = new('x', 300);
         using JsonDocument doc = JsonDocument.Parse(CredentialOfferSerializer.ToJson(Offer(atLimit)));
         string serialized = doc.RootElement.GetProperty("grants")
-            .GetProperty(OAuthRequestParameterValues.GrantTypePreAuthorizedCode)
+            .GetProperty(WellKnownGrantTypes.PreAuthorizedCode)
             .GetProperty("tx_code").GetProperty("description").GetString()!;
         Assert.AreEqual(300, serialized.Length, "A 300-character description is at the limit and is accepted.");
 

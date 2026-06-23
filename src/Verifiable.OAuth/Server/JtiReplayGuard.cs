@@ -32,7 +32,10 @@ public enum JtiReplayOutcome
 /// <summary>
 /// The single <c>jti</c> replay defense shared by every authorization-server path that
 /// presents a <c>jti</c> — the JWT-Secured Authorization Request object (RFC 9101 §10.2,
-/// RFC 9700 §4) and the DPoP proof at the token endpoint (RFC 9449 §11.1). Both consult the
+/// RFC 9700 §4), the DPoP proof at the token endpoint (RFC 9449 §11.1), and the JWT Bearer
+/// authorization-grant assertion redeemed at the token endpoint (RFC 7523 §3 rule 7), which an
+/// Identity Assertion JWT Authorization Grant (ID-JAG) redemption always exercises since §3.1
+/// makes its <c>jti</c> REQUIRED. They all consult the
 /// one <c>(issuer, jti)</c>-keyed correlation store
 /// (<see cref="AuthorizationServerIntegration.ResolveCorrelationKeyAsync"/> /
 /// <see cref="AuthorizationServerIntegration.SaveFlowStateAsync"/> under

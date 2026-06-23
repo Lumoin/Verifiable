@@ -354,7 +354,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
             "POST",
             new RequestFields
             {
-                [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypePreAuthorizedCode,
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
             new ExchangeContext(),

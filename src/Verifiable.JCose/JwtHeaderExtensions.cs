@@ -111,6 +111,28 @@ public static class JwtHeaderExtensions
 
 
         /// <summary>
+        /// Creates a header for an Identity Assertion JWT Authorization Grant (ID-JAG) per
+        /// draft-ietf-oauth-identity-assertion-authz-grant §3.1, populated with <c>alg</c>,
+        /// <c>typ</c> set to <see cref="WellKnownMediaTypes.Jwt.OauthIdJagJwt"/>, and <c>kid</c>.
+        /// </summary>
+        /// <remarks>
+        /// §3.1 mandates the explicit <c>oauth-id-jag+jwt</c> type so the authorization-grant
+        /// JWT cannot be confused with an access token or ID Token, per the typed-JWT guidance
+        /// in <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.11">RFC 8725 §3.11</see>.
+        /// </remarks>
+        /// <param name="algorithm">The JWA algorithm identifier.</param>
+        /// <param name="keyId">The <c>kid</c> value identifying the signing key.</param>
+        /// <returns>A <see cref="JwtHeader"/> for an ID-JAG.</returns>
+        public static JwtHeader ForIdJag(string algorithm, string keyId) =>
+            new(capacity: 3)
+            {
+                [WellKnownJwkMemberNames.Alg] = algorithm,
+                [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.OauthIdJagJwt,
+                [WellKnownJwkMemberNames.Kid] = keyId
+            };
+
+
+        /// <summary>
         /// Creates a header for a JWT Authorization Request (JAR) per
         /// <see href="https://www.rfc-editor.org/rfc/rfc9101">RFC 9101</see>, populated with
         /// <c>alg</c>, <c>typ</c> set to <see cref="WellKnownMediaTypes.Jwt.OauthAuthzReqJwt"/>,

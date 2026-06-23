@@ -84,7 +84,7 @@ internal sealed class JarmAuthorizeFlowTests
         //The code inside the signed response is a working authorization code.
         RequestFields tokenFields = new()
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
             [OAuthRequestParameterNames.Code] = result.Code!,
             [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -253,7 +253,7 @@ internal sealed class JarmAuthorizeFlowTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
             [OAuthRequestParameterNames.State] = RequestState

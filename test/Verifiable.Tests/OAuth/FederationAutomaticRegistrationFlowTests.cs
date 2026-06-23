@@ -74,7 +74,7 @@ internal sealed class FederationAutomaticRegistrationFlowTests
         {
             [OAuthRequestParameterNames.ClientId] = RpEntityId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = FederationRedirectUri,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
         };
@@ -110,7 +110,7 @@ internal sealed class FederationAutomaticRegistrationFlowTests
         {
             [OAuthRequestParameterNames.ClientId] = RpEntityId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = "https://attacker.example.com/cb",
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
         };

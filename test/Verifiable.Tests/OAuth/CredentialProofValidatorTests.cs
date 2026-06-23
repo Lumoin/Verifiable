@@ -209,6 +209,33 @@ internal sealed class CredentialProofValidatorTests
 
 
     /// <summary>
+    /// A proof whose header segment is not decodable base64url is rejected as <c>Malformed</c>, not
+    /// surfaced as an escaping exception — the header decode fails closed on untrusted input.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsMalformedHeaderSegment()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = keys.PublicKey;
+        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+
+        string proof = await MintAsync(holderPrivate, holderPublic).ConfigureAwait(false);
+
+        //Put an out-of-alphabet character in the header segment — every base64url decoder rejects it.
+        //The validator must map this to Malformed rather than let the decoder's exception escape.
+        string[] parts = proof.Split('.');
+        Assert.HasCount(3, parts);
+        string malformedProof = string.Join('.',
+            string.Concat(parts[0].AsSpan(0, parts[0].Length - 1), "!"),
+            parts[1],
+            parts[2]);
+
+        CredentialProofValidationResult result = await ValidateAsync(malformedProof).ConfigureAwait(false);
+        Assert.AreEqual(CredentialProofValidationFailureReason.Malformed, result.FailureReason);
+    }
+
+
+    /// <summary>
     /// §F.1: "aud: REQUIRED (string). The value of this claim MUST be the Credential Issuer
     /// Identifier" — a proof whose <c>aud</c> is a different issuer is rejected.
     /// </summary>

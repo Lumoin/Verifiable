@@ -14,11 +14,10 @@ namespace Verifiable.OAuth;
 /// These are the NAMES of request parameters (e.g., <c>"code_challenge"</c>,
 /// <c>"response_type"</c>, <c>"client_id"</c>), not their VALUES. Most
 /// parameter values are flow-specific (codes, identifiers, URIs, scope
-/// strings); the small enumerated-set values
-/// (<c>grant_type</c> = <c>authorization_code</c> | <c>refresh_token</c>,
-/// <c>code_challenge_method</c> = <c>S256</c>,
-/// <c>response_type</c> = <c>code</c>) live in
-/// <see cref="OAuthRequestParameterValues"/>.
+/// strings); the small enumerated-set values live in the focused well-known
+/// value classes — <see cref="WellKnownGrantTypes"/> (<c>grant_type</c>),
+/// <see cref="WellKnownCodeChallengeMethods"/> (<c>code_challenge_method</c>),
+/// and <see cref="WellKnownResponseTypes"/> (<c>response_type</c>).
 /// </para>
 /// <para>
 /// All names are defined in the following specifications:
@@ -378,7 +377,7 @@ public static class OAuthRequestParameterNames
     /// The <c>pre-authorized_code</c> parameter.
     /// The code representing the authorization to obtain Credentials of a certain
     /// type, presented at the token endpoint when <c>grant_type</c> is
-    /// <see cref="OAuthRequestParameterValues.GrantTypePreAuthorizedCode"/> per
+    /// <see cref="WellKnownGrantTypes.PreAuthorizedCode"/> per
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html">OID4VCI 1.0 §6.1</see>.
     /// MUST be present when that grant type is used.
     /// </summary>
@@ -441,4 +440,138 @@ public static class OAuthRequestParameterNames
     /// the value(s); honoring them is the application's decision.
     /// </summary>
     public static readonly string Resource = Utf8Constants.ToInternedString(ResourceUtf8);
+
+    //Token Exchange parameters — RFC 8693 §2.1 (request) / §2.2.1 (response).
+
+    /// <summary>The UTF-8 source literal of <see cref="Audience"/>.</summary>
+    public static ReadOnlySpan<byte> AudienceUtf8 => "audience"u8;
+
+    /// <summary>
+    /// The <c>audience</c> Token Exchange request parameter — the logical name of the target
+    /// service where the client intends to use the requested token, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>. MAY
+    /// appear more than once. Complements <see cref="Resource"/> (the RFC 8707 URI form); either
+    /// or both indicate the target of the requested token.
+    /// </summary>
+    public static readonly string Audience = Utf8Constants.ToInternedString(AudienceUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RequestedTokenType"/>.</summary>
+    public static ReadOnlySpan<byte> RequestedTokenTypeUtf8 => "requested_token_type"u8;
+
+    /// <summary>
+    /// The <c>requested_token_type</c> Token Exchange request parameter — an identifier for the
+    /// type of token the client wants, one of the token-type URIs in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-3">RFC 8693 §3</see>. OPTIONAL;
+    /// when omitted the authorization server chooses the issued type.
+    /// </summary>
+    public static readonly string RequestedTokenType = Utf8Constants.ToInternedString(RequestedTokenTypeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubjectToken"/>.</summary>
+    public static ReadOnlySpan<byte> SubjectTokenUtf8 => "subject_token"u8;
+
+    /// <summary>
+    /// The <c>subject_token</c> Token Exchange request parameter — the security token that
+    /// represents the identity of the party on behalf of whom the request is being made, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>. REQUIRED.
+    /// </summary>
+    public static readonly string SubjectToken = Utf8Constants.ToInternedString(SubjectTokenUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubjectTokenType"/>.</summary>
+    public static ReadOnlySpan<byte> SubjectTokenTypeUtf8 => "subject_token_type"u8;
+
+    /// <summary>
+    /// The <c>subject_token_type</c> Token Exchange request parameter — an identifier for the
+    /// type of <see cref="SubjectToken"/>, one of the token-type URIs in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-3">RFC 8693 §3</see>. REQUIRED.
+    /// </summary>
+    public static readonly string SubjectTokenType = Utf8Constants.ToInternedString(SubjectTokenTypeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ActorToken"/>.</summary>
+    public static ReadOnlySpan<byte> ActorTokenUtf8 => "actor_token"u8;
+
+    /// <summary>
+    /// The <c>actor_token</c> Token Exchange request parameter — a security token that represents
+    /// the identity of the acting party, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>. OPTIONAL;
+    /// its presence selects delegation over impersonation. When present,
+    /// <see cref="ActorTokenType"/> is REQUIRED.
+    /// </summary>
+    public static readonly string ActorToken = Utf8Constants.ToInternedString(ActorTokenUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ActorTokenType"/>.</summary>
+    public static ReadOnlySpan<byte> ActorTokenTypeUtf8 => "actor_token_type"u8;
+
+    /// <summary>
+    /// The <c>actor_token_type</c> Token Exchange request parameter — an identifier for the type
+    /// of <see cref="ActorToken"/>, one of the token-type URIs in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-3">RFC 8693 §3</see>. REQUIRED when
+    /// <see cref="ActorToken"/> is present, and MUST be absent otherwise.
+    /// </summary>
+    public static readonly string ActorTokenType = Utf8Constants.ToInternedString(ActorTokenTypeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="IssuedTokenType"/>.</summary>
+    public static ReadOnlySpan<byte> IssuedTokenTypeUtf8 => "issued_token_type"u8;
+
+    /// <summary>
+    /// The <c>issued_token_type</c> Token Exchange response parameter — an identifier for the type
+    /// of the issued security token, one of the token-type URIs in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-3">RFC 8693 §3</see>. REQUIRED in a
+    /// successful response per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.1">RFC 8693 §2.2.1</see>.
+    /// </summary>
+    public static readonly string IssuedTokenType = Utf8Constants.ToInternedString(IssuedTokenTypeUtf8);
+
+    //JWT Bearer authorization grant parameter — RFC 7523 §2.1.
+
+    /// <summary>The UTF-8 source literal of <see cref="Assertion"/>.</summary>
+    public static ReadOnlySpan<byte> AssertionUtf8 => "assertion"u8;
+
+    /// <summary>
+    /// The <c>assertion</c> parameter of the JWT Bearer authorization grant
+    /// (<c>urn:ietf:params:oauth:grant-type:jwt-bearer</c>). Per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-2.1">RFC 7523 §2.1</see> its value
+    /// "MUST contain a single JWT" that the authorization server validates per the §3 processing
+    /// rules and exchanges for an access token. Confidential.
+    /// </summary>
+    public static readonly string Assertion = Utf8Constants.ToInternedString(AssertionUtf8);
+
+    //Client-authentication request parameters — RFC 6749 §2.3.1 / RFC 7521 §4.2.
+
+    /// <summary>The UTF-8 source literal of <see cref="ClientSecret"/>.</summary>
+    public static ReadOnlySpan<byte> ClientSecretUtf8 => "client_secret"u8;
+
+    /// <summary>
+    /// The <c>client_secret</c> parameter — the confidential client's secret presented in the request
+    /// body under the <c>client_secret_post</c> method per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3.1">RFC 6749 §2.3.1</see>. The
+    /// library never compares it — client authentication is the application's
+    /// <see cref="Server.ValidateClientCredentialsDelegate"/> seam; the name lets a grant detect
+    /// whether client credentials are present (RFC 7523 §3.1). Confidential.
+    /// </summary>
+    public static readonly string ClientSecret = Utf8Constants.ToInternedString(ClientSecretUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ClientAssertion"/>.</summary>
+    public static ReadOnlySpan<byte> ClientAssertionUtf8 => "client_assertion"u8;
+
+    /// <summary>
+    /// The <c>client_assertion</c> parameter — a single JWT used to authenticate the client under the
+    /// <c>private_key_jwt</c> / <c>client_secret_jwt</c> assertion-framework method per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7521#section-4.2">RFC 7521 §4.2</see> (the JWT
+    /// profile is RFC 7523 §2.2). Distinct from the <see cref="Assertion"/> authorization-grant
+    /// parameter (§2.1). The library never validates it — client authentication is the application's
+    /// <see cref="Server.ValidateClientCredentialsDelegate"/> seam; the name lets a grant detect
+    /// whether client credentials are present (RFC 7523 §3.1). Confidential.
+    /// </summary>
+    public static readonly string ClientAssertion = Utf8Constants.ToInternedString(ClientAssertionUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ClientAssertionType"/>.</summary>
+    public static ReadOnlySpan<byte> ClientAssertionTypeUtf8 => "client_assertion_type"u8;
+
+    /// <summary>
+    /// The <c>client_assertion_type</c> parameter — names the format of the <see cref="ClientAssertion"/>
+    /// per <see href="https://www.rfc-editor.org/rfc/rfc7521#section-4.2">RFC 7521 §4.2</see>; the value
+    /// <see cref="WellKnownClientAssertionTypes.JwtBearer"/> selects the RFC 7523 §2.2
+    /// JWT profile (<c>private_key_jwt</c> / <c>client_secret_jwt</c>).
+    /// </summary>
+    public static readonly string ClientAssertionType = Utf8Constants.ToInternedString(ClientAssertionTypeUtf8);
 }

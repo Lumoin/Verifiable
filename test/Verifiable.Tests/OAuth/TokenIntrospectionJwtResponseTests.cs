@@ -64,7 +64,7 @@ internal sealed class TokenIntrospectionJwtResponseTests
         //The signature verifies against the AS's published key.
         bool isSignatureValid = await Jws.VerifyAsync(
             response.Body, TestSetup.Base64UrlDecoder,
-            static (ReadOnlySpan<byte> _) => (object?)null, Pool,
+            Pool,
             material.SigningPublicKey,
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(isSignatureValid);

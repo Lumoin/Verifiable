@@ -141,7 +141,7 @@ public static class JarmResponseValidation
                     {
                         isSignatureValid = await Jws.VerifyAsync(
                             responseJwt, base64UrlDecoder,
-                            static (ReadOnlySpan<byte> _) => (object?)null, memoryPool,
+                            memoryPool,
                             verificationKey, cancellationToken).ConfigureAwait(false);
                     }
                     catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException)

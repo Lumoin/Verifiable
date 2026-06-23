@@ -669,7 +669,7 @@ internal sealed class JarParTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -712,7 +712,7 @@ internal sealed class JarParTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             //Outer PKCE fields the JAR matcher must ignore.
             [OAuthRequestParameterNames.CodeChallenge] = "outer-challenge-should-be-ignored",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256
         };
 
         ExchangeContext context = new();
@@ -788,13 +788,13 @@ internal sealed class JarParTests
             [WellKnownJwtClaimNames.Iss] = ClientId,
             [WellKnownJwtClaimNames.Aud] = expectedAud,
             [WellKnownJwtClaimNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ResponseType] = OAuthRequestParameterValues.ResponseTypeCode,
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
             [OAuthRequestParameterNames.State] = "state-jar-par-01",
             [WellKnownJwtClaimNames.Nonce] = "nonce-jar-par-01",
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Nbf] = now.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Exp] = (now + TimeSpan.FromSeconds(30)).ToUnixTimeSeconds()

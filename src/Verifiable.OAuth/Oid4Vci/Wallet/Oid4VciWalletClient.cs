@@ -262,7 +262,7 @@ public sealed class Oid4VciWalletClient
     {
         Dictionary<string, string> formFields = new(StringComparer.Ordinal)
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypePreAuthorizedCode,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
             [OAuthRequestParameterNames.PreAuthorizedCode] = preAuthorizedCode
         };
 

@@ -718,7 +718,6 @@ public static class JarExtensions
         bool signatureValid = await Jws.VerifyAsync(
             compactJar,
             base64UrlDecoder,
-            static (ReadOnlySpan<byte> _) => (object?)null,
             memoryPool,
             signingPublicKey,
             cancellationToken).ConfigureAwait(false);

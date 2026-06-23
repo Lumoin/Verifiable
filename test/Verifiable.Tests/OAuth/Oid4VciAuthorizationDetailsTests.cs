@@ -162,7 +162,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -189,7 +189,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
             segment, WellKnownEndpointNames.AuthCodeToken, "POST",
             new RequestFields
             {
-                [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
                 [OAuthRequestParameterNames.Code] = code,
                 [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
                 [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -447,7 +447,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
             "POST",
             new RequestFields
             {
-                [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypePreAuthorizedCode,
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA",
                 [OAuthRequestParameterNames.AuthorizationDetails] = SingleDetail(DegreeConfigurationId)
             },
@@ -740,7 +740,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -767,7 +767,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
             segment, WellKnownEndpointNames.AuthCodeToken, "POST",
             new RequestFields
             {
-                [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
                 [OAuthRequestParameterNames.Code] = code,
                 [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
                 [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -920,7 +920,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
             "POST",
             new RequestFields
             {
-                [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypePreAuthorizedCode,
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA",
                 [OAuthRequestParameterNames.AuthorizationDetails] =
                     """[{"type":"payment_initiation","instructedAmount":{"amount":"1.00"},"currency":"EUR"}]"""
@@ -1039,7 +1039,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
             [OAuthRequestParameterNames.AuthorizationDetails] = parDetails
@@ -1072,7 +1072,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
 
         RequestFields tokenFields = new()
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
             [OAuthRequestParameterNames.Code] = code,
             [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -1120,7 +1120,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         RequestFields refreshFields = new()
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeRefreshToken,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
             [OAuthRequestParameterNames.RefreshToken] = refreshToken,
             [OAuthRequestParameterNames.ClientId] = ClientId
         };
@@ -1149,7 +1149,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
             [OAuthRequestParameterNames.AuthorizationDetails] = authorizationDetails
@@ -1178,7 +1178,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
             [OAuthRequestParameterNames.AuthorizationDetails] = authorizationDetails
