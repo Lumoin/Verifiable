@@ -1,0 +1,56 @@
+using System;
+using System.Collections.Generic;
+using Verifiable.Foundation;
+
+namespace Verifiable.DidComm.DiscoverFeatures;
+
+/// <summary>
+/// A single query descriptor in a Discover Features query: a request to disclose features of a given type whose
+/// identifier matches a pattern (DIDComm v2.1 §query Message Type).
+/// </summary>
+public sealed record FeatureQuery
+{
+    /// <summary>REQUIRED. The feature type queried — <see cref="WellKnownDiscoverFeaturesNames.Protocol"/>, <c>goal-code</c>, <c>header</c>, or another value.</summary>
+    public required string FeatureType { get; init; }
+
+    /// <summary>
+    /// REQUIRED. The identifier to match — an exact value, or a prefix ending in a <c>*</c> wildcard (a bare
+    /// <c>*</c> matches anything), e.g. <c>https://didcomm.org/tictactoe/1.*</c> (DIDComm v2.1 §query Message Type).
+    /// </summary>
+    public required string Match { get; init; }
+}
+
+
+/// <summary>
+/// A Discover Features <c>query</c> message body — one or more <see cref="FeatureQuery"/> descriptors asking a
+/// responder which features it supports (DIDComm v2.1 §Discover Features Protocol 2.0). Build and interpret via
+/// <see cref="DiscoverFeaturesExtensions"/>.
+/// </summary>
+public sealed record DiscoverFeaturesQuery
+{
+    /// <summary>REQUIRED. The query descriptors — at least one (DIDComm v2.1 §query Message Type).</summary>
+    public required IReadOnlyList<FeatureQuery> Queries { get; init; }
+
+
+    /// <summary>Determines whether this query equals <paramref name="other"/> by its <see cref="Queries"/> element-wise in order.</summary>
+    /// <param name="other">The query to compare with, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the two queries are value-equal.</returns>
+    public bool Equals(DiscoverFeaturesQuery? other)
+    {
+        if(other is null)
+        {
+            return false;
+        }
+
+        if(ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return StructuralEquality.SequenceEqual(Queries, other.Queries);
+    }
+
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => StructuralEquality.SequenceHashCode(Queries);
+}

@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Generic;
 using Verifiable.DidComm;
+using Verifiable.DidComm.OutOfBand;
 using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;

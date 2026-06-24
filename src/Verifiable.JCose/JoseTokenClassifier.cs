@@ -174,10 +174,10 @@ public static class JoseTokenClassifier
     {
         ReadOnlySpan<byte> bytes = System.Text.Encoding.UTF8.GetBytes(token);
 
-        bool hasCiphertext = JwkJsonReader.ContainsKey(bytes, "ciphertext"u8);
-        bool hasPayload = JwkJsonReader.ContainsKey(bytes, "payload"u8);
-        bool hasSignatures = JwkJsonReader.ContainsKey(bytes, "signatures"u8);
-        bool hasSignature = JwkJsonReader.ContainsKey(bytes, "signature"u8);
+        bool hasCiphertext = JwkJsonReader.ContainsKey(bytes, WellKnownJoseSerializationNames.CiphertextUtf8);
+        bool hasPayload = JwkJsonReader.ContainsKey(bytes, WellKnownJoseSerializationNames.PayloadUtf8);
+        bool hasSignatures = JwkJsonReader.ContainsKey(bytes, WellKnownJoseSerializationNames.SignaturesUtf8);
+        bool hasSignature = JwkJsonReader.ContainsKey(bytes, WellKnownJoseSerializationNames.SignatureUtf8);
         bool looksLikeJws = hasPayload || hasSignatures || hasSignature;
 
         if(hasCiphertext && looksLikeJws)
@@ -189,12 +189,12 @@ public static class JoseTokenClassifier
         {
             //JWE: general when a recipients array is present, flattened when the recipient's
             //encrypted_key is hoisted to the top level. A JWE with neither is malformed.
-            if(JwkJsonReader.ContainsKey(bytes, "recipients"u8))
+            if(JwkJsonReader.ContainsKey(bytes, WellKnownJoseSerializationNames.RecipientsUtf8))
             {
                 return new GeneralJweShape(token);
             }
 
-            if(JwkJsonReader.ContainsKey(bytes, "encrypted_key"u8))
+            if(JwkJsonReader.ContainsKey(bytes, WellKnownJoseSerializationNames.EncryptedKeyUtf8))
             {
                 return new FlattenedJweShape(token);
             }

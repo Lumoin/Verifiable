@@ -7,6 +7,7 @@ using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.DidComm;
+using Verifiable.DidComm.Routing;
 
 namespace Verifiable.Tests.DidComm;
 

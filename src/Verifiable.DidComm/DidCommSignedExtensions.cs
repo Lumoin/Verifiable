@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
@@ -182,28 +181,24 @@ public static class DidCommSignedExtensions
             [WellKnownJwkMemberNames.Alg] = algorithm
         };
 
-        TaggedMemory<byte> protectedBytes = protectedHeaderEncoder(protectedHeader);
-        string protectedEncoded = base64UrlEncoder(protectedBytes.Span);
-        string payloadEncoded = base64UrlEncoder(plaintext.AsReadOnlySpan());
-
-        using IMemoryOwner<byte> signingInputOwner = RentSigningInput(
-            protectedEncoded, payloadEncoded, memoryPool, out int signingInputLength);
-
-        Signature signature = await signingDelegate(
-            signingKey.AsReadOnlyMemory(),
-            signingInputOwner.Memory[..signingInputLength],
-            memoryPool,
-            context: null,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
         var unprotectedHeader = new Dictionary<string, object>
         {
             [WellKnownJwkMemberNames.Kid] = keyId
         };
 
-        using var jwsMessage = new JwsMessage(
+        //Compose the JCose JWS facade rather than hand-assembling the signing input: Jws.SignAsync signs the raw
+        //plaintext bytes verbatim and rides the signer kid in the per-signature unprotected header — the two
+        //capabilities the typed-payload Jws.SignAsync overload cannot express (DIDComm v2.1 Appendix C.2).
+        using JwsMessage jwsMessage = await Jws.SignAsync(
+            protectedHeader,
             plaintext.AsReadOnlyMemory(),
-            new JwsSignatureComponent(protectedEncoded, protectedHeader, signature, unprotectedHeader));
+            protectedHeaderEncoder,
+            base64UrlEncoder,
+            signingKey,
+            signingDelegate,
+            memoryPool,
+            unprotectedHeader,
+            cancellationToken).ConfigureAwait(false);
 
         //The leaf serializer copies the wire bytes into the returned pooled artifact, so it is
         //independent of the JwsMessage and plaintext disposed when this method returns.
@@ -376,15 +371,13 @@ public static class DidCommSignedExtensions
             //via the registry, never from the claimed `alg`, defeating algorithm-substitution. This
             //mirrors VerificationMethodExtensions.VerifySignatureAsync, passing the parsed signature
             //bytes (already exact-sized by the decoder) directly rather than re-wrapping them.
-            using IMemoryOwner<byte> signingInputOwner = RentSigningInput(
-                jwsSignature.Protected, base64UrlEncoder(parsed.Payload.Span), memoryPool, out int signingInputLength);
-
             //The verifying key comes from the resolved verification method, which is reached via the
             //attacker-influenced signer kid; a structurally malformed or unsupported method makes the
             //converter (or the registry/verify) throw. Map that to a fail-closed result rather than letting
             //it escape, honouring the contract that every verification failure returns a result — this also
             //keeps the nested encrypted-unpack path that calls this method fail-closed. A cryptographically
             //wrong (but well-formed) signature is reported as not valid below, not as a thrown exception.
+            //The signing-input reconstruction (RFC 7515 §5.1) drops out to the JCose facade Jws.VerifySignatureAsync.
             bool isValid;
             try
             {
@@ -396,12 +389,15 @@ public static class DidCommSignedExtensions
                     VerificationDelegate verificationDelegate =
                         CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(keyMaterial.Algorithm, keyMaterial.Purpose);
 
-                    isValid = await verificationDelegate(
-                        signingInputOwner.Memory[..signingInputLength],
+                    isValid = await Jws.VerifySignatureAsync(
+                        jwsSignature.Protected,
+                        parsed.Payload,
                         jwsSignature.SignatureBytes.Memory,
+                        base64UrlEncoder,
+                        verificationDelegate,
                         keyMaterial.KeyMaterial.Memory,
-                        context: null,
-                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                        memoryPool,
+                        cancellationToken).ConfigureAwait(false);
                 }
             }
             catch(Exception ex) when(ex is ArgumentException or FormatException or NotSupportedException or CryptographicException or IndexOutOfRangeException)
@@ -555,24 +551,4 @@ public static class DidCommSignedExtensions
     }
 
 
-    //Rents a pooled buffer and writes the JWS signing input ("<segment1>.<segment2>" as ASCII octets
-    //per RFC 7515 §5.1) directly into it. Both segments are base64url-encoded (already ASCII), so byte
-    //length equals char length. The returned owner must be disposed by the caller; the slice
-    //[..signingInputLength] holds the content (pool rentals may be oversized). The `checked` block
-    //makes the int-overflow assumption explicit.
-    private static IMemoryOwner<byte> RentSigningInput(
-        string segment1,
-        string segment2,
-        MemoryPool<byte> pool,
-        out int signingInputLength)
-    {
-        signingInputLength = checked(segment1.Length + 1 + segment2.Length);
-        IMemoryOwner<byte> owner = pool.Rent(signingInputLength);
-        Span<byte> span = owner.Memory.Span[..signingInputLength];
-        Encoding.ASCII.GetBytes(segment1, span);
-        span[segment1.Length] = (byte)'.';
-        Encoding.ASCII.GetBytes(segment2, span[(segment1.Length + 1)..]);
-
-        return owner;
-    }
 }

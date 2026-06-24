@@ -291,6 +291,68 @@ public static class Jws
 
 
     /// <summary>
+    /// Creates a JWS over a caller-supplied RAW payload — the exact <paramref name="payload"/> bytes are signed and
+    /// carried verbatim, never re-encoded through a part encoder — with an optional per-signature
+    /// <paramref name="unprotectedHeader"/>. This is the building block for serializations that must sign opaque
+    /// bytes (for example a media-typed message body) and place a <c>kid</c> in the unprotected header — the two
+    /// capabilities the typed-payload
+    /// <see cref="SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, MemoryPool{byte}, CancellationToken)"/>
+    /// overload cannot express. The returned <see cref="JwsMessage"/> is serialized by the caller (compact or JSON).
+    /// </summary>
+    /// <typeparam name="TJwtPart">The protected-header type.</typeparam>
+    /// <param name="protectedHeader">The protected header, which carries <c>alg</c>.</param>
+    /// <param name="payload">The raw payload bytes, signed verbatim and carried as the JWS payload.</param>
+    /// <param name="protectedHeaderEncoder">Encodes the protected header to its UTF-8 JSON bytes.</param>
+    /// <param name="base64UrlEncoder">Encodes bytes to Base64Url strings.</param>
+    /// <param name="privateKey">The private key for signing.</param>
+    /// <param name="signingDelegate">The signing function to use.</param>
+    /// <param name="signaturePool">Memory pool for the signing-input buffer and the signature.</param>
+    /// <param name="unprotectedHeader">Optional per-signature unprotected header (for example <c>{ kid }</c>), or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The unserialized JWS message owning the signature. The caller disposes it.</returns>
+    public static async ValueTask<JwsMessage> SignAsync<TJwtPart>(
+        TJwtPart protectedHeader,
+        ReadOnlyMemory<byte> payload,
+        JwtPartEncoder<TJwtPart> protectedHeaderEncoder,
+        EncodeDelegate base64UrlEncoder,
+        PrivateKeyMemory privateKey,
+        SigningDelegate signingDelegate,
+        MemoryPool<byte> signaturePool,
+        IReadOnlyDictionary<string, object>? unprotectedHeader,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(protectedHeaderEncoder);
+        ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+        ArgumentNullException.ThrowIfNull(privateKey);
+        ArgumentNullException.ThrowIfNull(signingDelegate);
+        ArgumentNullException.ThrowIfNull(signaturePool);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        TaggedMemory<byte> headerBytes = protectedHeaderEncoder(protectedHeader);
+        string headerSegment = base64UrlEncoder(headerBytes.Span);
+        string payloadSegment = base64UrlEncoder(payload.Span);
+
+        using IMemoryOwner<byte> dataToSignOwner = RentSigningInput(
+            headerSegment, payloadSegment, signaturePool, out int signingInputLength);
+
+        Signature signature = await signingDelegate(
+            privateKey.AsReadOnlyMemory(),
+            dataToSignOwner.Memory[..signingInputLength],
+            signaturePool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return new JwsMessage(
+            payload,
+            new JwsSignatureComponent(
+                headerSegment,
+                BuildProtectedHeaderDictionary(protectedHeader),
+                signature,
+                unprotectedHeader));
+    }
+
+
+    /// <summary>
     /// Verifies a JWS message using registry-resolved verification function.
     /// Allocates the signing-input buffer from
     /// <see cref="MemoryPool{T}.Shared"/>; the overload taking an explicit
@@ -397,6 +459,52 @@ public static class Jws
             dataToVerifyOwner.Memory[..signingInputLength],
             signature.SignatureBytes,
             publicKey.AsReadOnlyMemory(),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Verifies a single JWS signature over an already-parsed (protected-segment, payload) pair using an explicit
+    /// <see cref="VerificationDelegate"/> — the building block for verifying a JSON-serialized JWS whose components
+    /// have been parsed out (so there is no <see cref="JwsMessage"/> to pass). Reconstructs the RFC 7515 §5.1 signing
+    /// input (<c>ASCII(b64url(protected) "." b64url(payload))</c>) and checks <paramref name="signature"/> against it
+    /// with <paramref name="publicKey"/>; the algorithm is the caller's resolved key, never the wire <c>alg</c>.
+    /// </summary>
+    /// <param name="protectedSegment">The Base64Url-encoded protected header exactly as it appeared on the wire.</param>
+    /// <param name="payload">The raw payload bytes the signature covers.</param>
+    /// <param name="signature">The signature bytes.</param>
+    /// <param name="base64UrlEncoder">Encodes bytes to Base64Url strings; used to re-encode the payload segment.</param>
+    /// <param name="verificationDelegate">The verification function to use.</param>
+    /// <param name="publicKey">The verifying public key material.</param>
+    /// <param name="pool">Memory pool for the signing-input buffer.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
+    public static async ValueTask<bool> VerifySignatureAsync(
+        string protectedSegment,
+        ReadOnlyMemory<byte> payload,
+        ReadOnlyMemory<byte> signature,
+        EncodeDelegate base64UrlEncoder,
+        VerificationDelegate verificationDelegate,
+        ReadOnlyMemory<byte> publicKey,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(protectedSegment);
+        ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+        ArgumentNullException.ThrowIfNull(verificationDelegate);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string payloadSegment = base64UrlEncoder(payload.Span);
+
+        using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
+            protectedSegment, payloadSegment, pool, out int signingInputLength);
+
+        return await verificationDelegate(
+            dataToVerifyOwner.Memory[..signingInputLength],
+            signature,
+            publicKey,
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 

@@ -1,4 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+using Verifiable.Foundation;
 
 namespace Verifiable.DidComm;
 
@@ -22,7 +26,7 @@ namespace Verifiable.DidComm;
 /// serializer and parser delegates.
 /// </para>
 /// </remarks>
-public sealed class DidCommMessage
+public sealed class DidCommMessage: IEquatable<DidCommMessage>
 {
     /// <summary>
     /// REQUIRED. The message id, which MUST be unique to the sender across all messages they send.
@@ -122,4 +126,82 @@ public sealed class DidCommMessage
     /// dropped as a legal "ignore" (DIDComm v2.1 §Message Headers).
     /// </summary>
     public IDictionary<string, object>? AdditionalHeaders { get; set; }
+
+
+    /// <summary>
+    /// Determines whether this message equals <paramref name="other"/> by value over every wire-bearing member: the
+    /// scalar headers and times by ordinal/value comparison, the <see cref="To"/>/<see cref="PleaseAck"/>/
+    /// <see cref="Ack"/> id lists and the <see cref="Attachments"/> element-wise in order, and the arbitrary-JSON
+    /// <see cref="Body"/> and <see cref="AdditionalHeaders"/> by deep structural comparison
+    /// (<see cref="StructuralEquality.JsonEqual"/>). The computed <see cref="EffectiveThreadId"/> is derived from
+    /// <see cref="ThreadId"/>/<see cref="Id"/>, so it is not compared independently.
+    /// </summary>
+    /// <param name="other">The message to compare with, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the two messages are value-equal.</returns>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool Equals(DidCommMessage? other)
+    {
+        if(other is null)
+        {
+            return false;
+        }
+
+        if(ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return string.Equals(Id, other.Id, StringComparison.Ordinal)
+            && string.Equals(Type, other.Type, StringComparison.Ordinal)
+            && string.Equals(From, other.From, StringComparison.Ordinal)
+            && string.Equals(ThreadId, other.ThreadId, StringComparison.Ordinal)
+            && string.Equals(ParentThreadId, other.ParentThreadId, StringComparison.Ordinal)
+            && string.Equals(FromPrior, other.FromPrior, StringComparison.Ordinal)
+            && CreatedTime == other.CreatedTime
+            && ExpiresTime == other.ExpiresTime
+            && StructuralEquality.SequenceEqual(To, other.To)
+            && StructuralEquality.SequenceEqual(PleaseAck, other.PleaseAck)
+            && StructuralEquality.SequenceEqual(Ack, other.Ack)
+            && StructuralEquality.SequenceEqual(Attachments, other.Attachments)
+            && StructuralEquality.JsonEqual(Body, other.Body)
+            && StructuralEquality.JsonEqual(AdditionalHeaders, other.AdditionalHeaders);
+    }
+
+
+    /// <inheritdoc/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is DidCommMessage other && Equals(other);
+
+
+    /// <inheritdoc/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Id, StringComparer.Ordinal);
+        hash.Add(Type, StringComparer.Ordinal);
+        hash.Add(From, StringComparer.Ordinal);
+        hash.Add(ThreadId, StringComparer.Ordinal);
+        hash.Add(ParentThreadId, StringComparer.Ordinal);
+        hash.Add(FromPrior, StringComparer.Ordinal);
+        hash.Add(CreatedTime);
+        hash.Add(ExpiresTime);
+        hash.Add(StructuralEquality.SequenceHashCode(To));
+        hash.Add(StructuralEquality.SequenceHashCode(PleaseAck));
+        hash.Add(StructuralEquality.SequenceHashCode(Ack));
+        hash.Add(StructuralEquality.SequenceHashCode(Attachments));
+        hash.Add(StructuralEquality.JsonHashCode(Body));
+        hash.Add(StructuralEquality.JsonHashCode(AdditionalHeaders));
+
+        return hash.ToHashCode();
+    }
+
+
+    /// <summary>Determines whether two <see cref="DidCommMessage"/> instances are value-equal.</summary>
+    public static bool operator ==(DidCommMessage? left, DidCommMessage? right) =>
+        left is null ? right is null : left.Equals(right);
+
+
+    /// <summary>Determines whether two <see cref="DidCommMessage"/> instances differ.</summary>
+    public static bool operator !=(DidCommMessage? left, DidCommMessage? right) => !(left == right);
 }
