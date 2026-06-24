@@ -326,6 +326,14 @@ public static class DidCommSignedExtensions
                 return DidCommSignedVerificationResult.Failed(DidCommSignatureVerificationError.UnexpectedMediaType);
             }
 
+            //RFC 7515 §4.1.11: this consumer understands no JWS critical extensions, so a signed message
+            //whose protected header names any critical extension is unprocessable and MUST be rejected —
+            //the underlying Jws.VerifySignatureAsync verifies the signing input but does not police crit.
+            if(jwsSignature.ProtectedHeader.TryGetValue("crit", out _))
+            {
+                return DidCommSignedVerificationResult.Failed(DidCommSignatureVerificationError.UnsupportedCriticalHeader);
+            }
+
             //The signer kid rides in the per-signature unprotected header (DIDComm v2.1 Appendix C.2).
             if(jwsSignature.UnprotectedHeader is null
                 || !jwsSignature.UnprotectedHeader.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidValue)

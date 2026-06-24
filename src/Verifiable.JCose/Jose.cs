@@ -636,6 +636,15 @@ public static class Jws
             return false;
         }
 
+        //RFC 7515 §4.1.11: a JWS whose protected header names an unrecognized critical extension (or
+        //otherwise violates the crit producer rules) is invalid. Decode the header and fail closed to
+        //false — like a malformed segment — rather than verifying a message we cannot fully process.
+        using DecodedSegment protectedHeader = TryDecodeSegment(base64UrlDecoder, parts[0], pool);
+        if(!protectedHeader.IsDecoded || !JoseCriticalHeaderValidation.IsSatisfied(protectedHeader.Memory.Span))
+        {
+            return false;
+        }
+
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             parts[0], parts[1], pool, out int signingInputLength);
 
@@ -762,7 +771,11 @@ public static class Jws
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             parts[0], parts[1], pool, out int signingInputLength);
 
-        bool isValid = await verificationDelegate(
+        //RFC 7515 §4.1.11: a JWS naming an unrecognized critical extension is invalid; the decoded
+        //header/payload are still returned so the caller can inspect them, but with isValid false.
+        bool critSatisfied = JoseCriticalHeaderValidation.IsSatisfied(headerOwner.Memory.Span);
+
+        bool isValid = critSatisfied && await verificationDelegate(
             dataToVerifyOwner.Memory[..signingInputLength],
             signatureOwner.Memory,
             publicKey.AsReadOnlyMemory(),
@@ -907,6 +920,12 @@ public static class Jws
         //A malformed segment the decoder rejects cannot verify; fail closed to false rather than letting
         //the decoder's exception escape on untrusted input.
         if(!headerSegment.IsDecoded || !payloadSegment.IsDecoded || !signatureSegment.IsDecoded)
+        {
+            return false;
+        }
+
+        //RFC 7515 §4.1.11: fail closed to false on an unrecognized critical extension.
+        if(!JoseCriticalHeaderValidation.IsSatisfied(headerSegment.Memory.Span))
         {
             return false;
         }
