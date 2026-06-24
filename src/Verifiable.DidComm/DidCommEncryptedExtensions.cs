@@ -784,7 +784,8 @@ public static class DidCommEncryptedExtensions
         MemoryPool<byte> memoryPool,
         CancellationToken cancellationToken = default,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null)
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
+        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict)
     {
         ArgumentNullException.ThrowIfNull(encryptedMessage);
         ArgumentException.ThrowIfNullOrWhiteSpace(recipientKeyId);
@@ -858,7 +859,7 @@ public static class DidCommEncryptedExtensions
             //AEAD-protected header, so without this a tampered recipient set decrypts fine — the key derivation
             //binds the protected-header apv, not the actual recipients[]. A mismatch is a tampered or
             //non-conforming envelope, so fail closed. (Generic JWE allows any apv; this is the DIDComm profile.)
-            if(!IsApvRecipientBindingValid(parsed, base64UrlEncoder, memoryPool))
+            if(!IsApvRecipientBindingValid(parsed, headerPolicy, base64UrlEncoder, memoryPool))
             {
                 return DidCommEncryptedUnpackResult.Failed(DidCommEncryptionMode.Anoncrypt, DidCommDecryptionError.MalformedEnvelope);
             }
@@ -978,7 +979,8 @@ public static class DidCommEncryptedExtensions
         MemoryPool<byte> memoryPool,
         CancellationToken cancellationToken = default,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null)
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
+        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict)
     {
         ArgumentNullException.ThrowIfNull(encryptedMessage);
         ArgumentNullException.ThrowIfNull(recipientPrivateKey);
@@ -1024,7 +1026,8 @@ public static class DidCommEncryptedExtensions
             memoryPool,
             cancellationToken,
             fromPriorPayloadDeserializer,
-            fromPriorHeaderDeserializer);
+            fromPriorHeaderDeserializer,
+            headerPolicy);
     }
 
 
@@ -1089,7 +1092,8 @@ public static class DidCommEncryptedExtensions
         MemoryPool<byte> memoryPool,
         CancellationToken cancellationToken = default,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null)
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
+        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict)
     {
         ArgumentNullException.ThrowIfNull(encryptedMessage);
         ArgumentException.ThrowIfNullOrWhiteSpace(recipientKeyId);
@@ -1144,6 +1148,18 @@ public static class DidCommEncryptedExtensions
             return DidCommEncryptedUnpackResult.Failed(DidCommEncryptionMode.Authcrypt, DidCommDecryptionError.UnsupportedAlgorithm);
         }
 
+        //apu is a MUST-present common protected header for authcrypt — it carries base64url(skid) (DIDComm
+        //v2.1 §ECDH-1PU key wrapping and common protected headers). The strict (spec-compliant, default)
+        //policy rejects an envelope that omits apu while still carrying skid — the sender is identifiable, but
+        //the MUST header is absent — whereas the lenient interop policy falls back to that skid (below). An
+        //envelope omitting BOTH skid and apu is the more fundamental "no sender identifier" case, rejected
+        //under either policy as MissingSenderKeyId by TryDetermineSenderKeyId below. The KDF binds apu as
+        //PartyUInfo, so a genuinely missing apu fails decryption anyway.
+        if(headerPolicy == DidCommEncryptedHeaderPolicy.Strict && string.IsNullOrEmpty(apu) && !string.IsNullOrEmpty(skid))
+        {
+            return DidCommEncryptedUnpackResult.Failed(DidCommEncryptionMode.Authcrypt, DidCommDecryptionError.MalformedEnvelope);
+        }
+
         //Determine the sender kid: prefer the explicit skid, otherwise recover it from apu. The 1PU draft
         //does not require skid, so authcrypt implementations MUST be able to resolve the sender kid from
         //apu when skid is absent (DIDComm v2.1 §ECDH-1PU key wrapping). apu carries base64url(skid).
@@ -1189,7 +1205,7 @@ public static class DidCommEncryptedExtensions
             //the AEAD-protected header, so without this a tampered recipient set decrypts fine — the key
             //derivation binds the protected-header apv, not the actual recipients[]. A mismatch is a tampered
             //or non-conforming envelope, so fail closed. (Generic JWE allows any apv; this is the DIDComm profile.)
-            if(!IsApvRecipientBindingValid(parsed, base64UrlEncoder, memoryPool))
+            if(!IsApvRecipientBindingValid(parsed, headerPolicy, base64UrlEncoder, memoryPool))
             {
                 return DidCommEncryptedUnpackResult.Failed(DidCommEncryptionMode.Authcrypt, DidCommDecryptionError.MalformedEnvelope);
             }
@@ -1289,7 +1305,8 @@ public static class DidCommEncryptedExtensions
         MemoryPool<byte> memoryPool,
         CancellationToken cancellationToken = default,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null)
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
+        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict)
     {
         ArgumentNullException.ThrowIfNull(encryptedMessage);
         ArgumentNullException.ThrowIfNull(recipientPrivateKey);
@@ -1334,7 +1351,8 @@ public static class DidCommEncryptedExtensions
             memoryPool,
             cancellationToken,
             fromPriorPayloadDeserializer,
-            fromPriorHeaderDeserializer);
+            fromPriorHeaderDeserializer,
+            headerPolicy);
     }
 
 
@@ -1566,13 +1584,17 @@ public static class DidCommEncryptedExtensions
     //Returns true when apv is absent (nothing to bind) or matches; false on a mismatch (DIDComm v2.1
     //§ECDH-ES / §ECDH-1PU key wrapping — the recipient binding). This is the DIDComm profile, so it lives at
     //this layer, not in the generic JWE decrypt where apv is an opaque octet string.
-    private static bool IsApvRecipientBindingValid(AeadGeneralMessage parsed, EncodeDelegate base64UrlEncoder, MemoryPool<byte> memoryPool)
+    private static bool IsApvRecipientBindingValid(AeadGeneralMessage parsed, DidCommEncryptedHeaderPolicy headerPolicy, EncodeDelegate base64UrlEncoder, MemoryPool<byte> memoryPool)
     {
         if(!parsed.Header.TryGetValue(WellKnownJoseHeaderNames.Apv, out object? apvValue)
             || apvValue is not string apv
             || apv.Length == 0)
         {
-            return true;
+            //apv is a MUST-present common protected header for both ECDH-ES and ECDH-1PU (DIDComm v2.1
+            //§ECDH-ES / §ECDH-1PU key wrapping). The strict (spec-compliant, default) policy rejects its
+            //absence; the lenient interop policy validates apv only when present — the Concat KDF still binds
+            //apv as PartyVInfo, so a genuinely tampered recipient set fails decryption regardless.
+            return headerPolicy != DidCommEncryptedHeaderPolicy.Strict;
         }
 
         if(parsed.Recipients.Count == 0)
@@ -1714,11 +1736,11 @@ public static class DidCommEncryptedExtensions
         using(headerOwner)
         {
             ReadOnlySpan<byte> headerJson = headerOwner.Memory.Span;
-            algorithm = JwkJsonReader.ExtractStringValue(headerJson, "alg"u8);
-            encryption = JwkJsonReader.ExtractStringValue(headerJson, "enc"u8);
-            typ = JwkJsonReader.ExtractStringValue(headerJson, "typ"u8);
-            senderKeyId = JwkJsonReader.ExtractStringValue(headerJson, "skid"u8);
-            agreementPartyUInfo = JwkJsonReader.ExtractStringValue(headerJson, "apu"u8);
+            algorithm = JwkJsonReader.ExtractStringValue(headerJson, WellKnownJwkMemberNames.AlgUtf8);
+            encryption = JwkJsonReader.ExtractStringValue(headerJson, WellKnownJoseHeaderNames.EncUtf8);
+            typ = JwkJsonReader.ExtractStringValue(headerJson, WellKnownJoseHeaderNames.TypUtf8);
+            senderKeyId = JwkJsonReader.ExtractStringValue(headerJson, WellKnownJoseHeaderNames.SkidUtf8);
+            agreementPartyUInfo = JwkJsonReader.ExtractStringValue(headerJson, WellKnownJoseHeaderNames.ApuUtf8);
         }
 
         return true;

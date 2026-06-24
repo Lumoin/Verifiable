@@ -9,6 +9,7 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
 using Verifiable.DidComm;
+using Verifiable.DidComm.Transport;
 using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;

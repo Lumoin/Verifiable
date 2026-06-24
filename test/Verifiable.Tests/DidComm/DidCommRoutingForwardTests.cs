@@ -15,6 +15,8 @@ using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
+using Verifiable.DidComm.Routing;
+using Verifiable.DidComm.Transport;
 using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;

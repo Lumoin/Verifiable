@@ -80,7 +80,7 @@ public static class GeneralJweParsing
         byte[] jsonBytes = Encoding.UTF8.GetBytes(generalJson);
         ReadOnlySpan<byte> json = jsonBytes;
 
-        string? protectedEncoded = JwkJsonReader.ExtractStringValue(json, "protected"u8);
+        string? protectedEncoded = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.ProtectedUtf8);
         if(protectedEncoded is null)
         {
             throw new FormatException(
@@ -96,9 +96,9 @@ public static class GeneralJweParsing
         //feed the key derivation (a wrong-key vector).
         RejectCryptographicParametersInUnprotectedHeader(json);
 
-        string? ivEncoded = JwkJsonReader.ExtractStringValue(json, "iv"u8);
-        string? ciphertextEncoded = JwkJsonReader.ExtractStringValue(json, "ciphertext"u8);
-        string? tagEncoded = JwkJsonReader.ExtractStringValue(json, "tag"u8);
+        string? ivEncoded = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.IvUtf8);
+        string? ciphertextEncoded = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.CiphertextUtf8);
+        string? tagEncoded = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.TagUtf8);
 
         if(ivEncoded is null || ciphertextEncoded is null || tagEncoded is null)
         {
@@ -108,7 +108,7 @@ public static class GeneralJweParsing
 
         //Optional top-level 'aad' (RFC 7516 §7.2.1): when present, the AAD computed for content
         //decryption is ASCII(BASE64URL(protected) || '.' || aad) per §5.1 step 14 / §5.2 step 15.
-        string? aadEncoded = JwkJsonReader.ExtractStringValue(json, "aad"u8);
+        string? aadEncoded = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.AadUtf8);
 
         List<(string KeyId, string EncryptedKey, List<string> HeaderNames)> recipientPairs = ParseRecipients(json);
         if(recipientPairs.Count == 0)
@@ -226,7 +226,7 @@ public static class GeneralJweParsing
         ReadOnlySpan<byte> json = jsonBytes;
 
         //RFC 7516 §7.2.2: "The 'recipients' member MUST NOT be present when using this syntax."
-        if(JwkJsonReader.ContainsKey(json, "recipients"u8))
+        if(JwkJsonReader.ContainsKey(json, WellKnownJoseSerializationNames.RecipientsUtf8))
         {
             throw new FormatException(
                 "Flattened JSON JWE MUST NOT contain a 'recipients' member (RFC 7516 §7.2.2).");
@@ -234,16 +234,16 @@ public static class GeneralJweParsing
 
         RejectCryptographicParametersInUnprotectedHeader(json);
 
-        string? protectedEncoded = JwkJsonReader.ExtractStringValue(json, "protected"u8);
+        string? protectedEncoded = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.ProtectedUtf8);
         if(protectedEncoded is null)
         {
             throw new FormatException(
                 "Flattened JSON JWE must contain a 'protected' member per RFC 7516 §7.2.2.");
         }
 
-        string? ivEncoded = JwkJsonReader.ExtractStringValue(json, "iv"u8);
-        string? ciphertextEncoded = JwkJsonReader.ExtractStringValue(json, "ciphertext"u8);
-        string? tagEncoded = JwkJsonReader.ExtractStringValue(json, "tag"u8);
+        string? ivEncoded = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.IvUtf8);
+        string? ciphertextEncoded = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.CiphertextUtf8);
+        string? tagEncoded = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.TagUtf8);
 
         if(ivEncoded is null || ciphertextEncoded is null || tagEncoded is null)
         {
@@ -253,12 +253,12 @@ public static class GeneralJweParsing
 
         //Optional top-level 'aad' (RFC 7516 §7.2.1, shared with §7.2.2): the AAD becomes
         //ASCII(BASE64URL(protected) || '.' || aad) per §5.1 step 14 / §5.2 step 15.
-        string? aadEncoded = JwkJsonReader.ExtractStringValue(json, "aad"u8);
+        string? aadEncoded = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.AadUtf8);
 
         //The top-level "header.kid" and "encrypted_key" are the single recipient's members,
         //hoisted out of the "recipients" array element per RFC 7516 §7.2.2.
-        string? kid = JwkJsonReader.ExtractNestedStringValue(json, "header"u8, "kid"u8);
-        string? encryptedKey = JwkJsonReader.ExtractStringValue(json, "encrypted_key"u8);
+        string? kid = JwkJsonReader.ExtractNestedStringValue(json, WellKnownJoseSerializationNames.HeaderUtf8, "kid"u8);
+        string? encryptedKey = JwkJsonReader.ExtractStringValue(json, WellKnownJoseSerializationNames.EncryptedKeyUtf8);
 
         if(kid is null)
         {
@@ -297,7 +297,7 @@ public static class GeneralJweParsing
             ValidateHeaderUniqueness(
                 json,
                 headerOwner.Memory.Span,
-                [JwkJsonReader.GetObjectMemberNames(json, "header"u8)]);
+                [JwkJsonReader.GetObjectMemberNames(json, WellKnownJoseSerializationNames.HeaderUtf8)]);
 
             aad = BuildAdditionalData(protectedEncoded, aadEncoded, contentEncryption.Family, pool);
 
@@ -340,14 +340,14 @@ public static class GeneralJweParsing
     //slice — a string-aware brace scan keeps nested objects from biasing the depth counter.
     private static List<(string KeyId, string EncryptedKey, List<string> HeaderNames)> ParseRecipients(ReadOnlySpan<byte> json)
     {
-        int recipientsKey = JwkJsonReader.IndexOfKey(json, "recipients"u8);
+        int recipientsKey = JwkJsonReader.IndexOfKey(json, WellKnownJoseSerializationNames.RecipientsUtf8);
         if(recipientsKey < 0)
         {
             throw new FormatException(
                 "General JSON JWE must contain a 'recipients' member per RFC 7516 §7.2.1.");
         }
 
-        int afterKey = recipientsKey + "recipients"u8.Length + 1;
+        int afterKey = recipientsKey + WellKnownJoseSerializationNames.RecipientsUtf8.Length + 1;
         afterKey = JwkJsonReader.SkipWhitespaceAndColon(json, afterKey);
         if(afterKey < 0 || afterKey >= json.Length || json[afterKey] != (byte)'[')
         {
@@ -418,8 +418,8 @@ public static class GeneralJweParsing
             }
 
             ReadOnlySpan<byte> element = json[objectStart..pos];
-            string? kid = JwkJsonReader.ExtractNestedStringValue(element, "header"u8, "kid"u8);
-            string? encryptedKey = JwkJsonReader.ExtractStringValue(element, "encrypted_key"u8);
+            string? kid = JwkJsonReader.ExtractNestedStringValue(element, WellKnownJoseSerializationNames.HeaderUtf8, "kid"u8);
+            string? encryptedKey = JwkJsonReader.ExtractStringValue(element, WellKnownJoseSerializationNames.EncryptedKeyUtf8);
 
             if(kid is null)
             {
@@ -433,7 +433,7 @@ public static class GeneralJweParsing
                     "General JSON JWE 'recipients' element must carry an 'encrypted_key'.");
             }
 
-            List<string> headerNames = JwkJsonReader.GetObjectMemberNames(element, "header"u8);
+            List<string> headerNames = JwkJsonReader.GetObjectMemberNames(element, WellKnownJoseSerializationNames.HeaderUtf8);
             result.Add((kid, encryptedKey, headerNames));
         }
 

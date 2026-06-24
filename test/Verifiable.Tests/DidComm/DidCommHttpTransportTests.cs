@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.DidComm;
+using Verifiable.DidComm.Transport;
 using Verifiable.Foundation;
 using Verifiable.Tests.TestInfrastructure;
 

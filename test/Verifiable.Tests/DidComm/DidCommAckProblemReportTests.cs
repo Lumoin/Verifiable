@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Verifiable.DidComm;
+using Verifiable.DidComm.ProblemReports;
 using Verifiable.Foundation;
 using Verifiable.Json;
 

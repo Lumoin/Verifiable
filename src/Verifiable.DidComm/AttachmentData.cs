@@ -1,4 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+using Verifiable.Foundation;
 
 namespace Verifiable.DidComm;
 
@@ -12,7 +16,7 @@ namespace Verifiable.DidComm;
 /// them to allow access to the content. When the content is referenced via <see cref="Links"/>,
 /// <see cref="Hash"/> MUST be present as an integrity check.
 /// </remarks>
-public sealed class AttachmentData
+public sealed class AttachmentData: IEquatable<AttachmentData>
 {
     /// <summary>
     /// A JWS in detached content mode signing the attachment. The signature need not come from the
@@ -37,4 +41,61 @@ public sealed class AttachmentData
     /// arbitrary JSON.
     /// </summary>
     public object? Json { get; set; }
+
+
+    /// <summary>
+    /// Determines whether this attachment data equals <paramref name="other"/> by value: <see cref="Hash"/> and
+    /// <see cref="Base64"/> by ordinal comparison, <see cref="Links"/> element-wise in order, and the arbitrary-JSON
+    /// <see cref="Jws"/> and <see cref="Json"/> by deep structural comparison (<see cref="StructuralEquality.JsonEqual"/>).
+    /// </summary>
+    /// <param name="other">The attachment data to compare with, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the two are value-equal.</returns>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool Equals(AttachmentData? other)
+    {
+        if(other is null)
+        {
+            return false;
+        }
+
+        if(ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return string.Equals(Hash, other.Hash, StringComparison.Ordinal)
+            && string.Equals(Base64, other.Base64, StringComparison.Ordinal)
+            && StructuralEquality.SequenceEqual(Links, other.Links)
+            && StructuralEquality.JsonEqual(Jws, other.Jws)
+            && StructuralEquality.JsonEqual(Json, other.Json);
+    }
+
+
+    /// <inheritdoc/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is AttachmentData other && Equals(other);
+
+
+    /// <inheritdoc/>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Hash, StringComparer.Ordinal);
+        hash.Add(Base64, StringComparer.Ordinal);
+        hash.Add(StructuralEquality.SequenceHashCode(Links));
+        hash.Add(StructuralEquality.JsonHashCode(Jws));
+        hash.Add(StructuralEquality.JsonHashCode(Json));
+
+        return hash.ToHashCode();
+    }
+
+
+    /// <summary>Determines whether two <see cref="AttachmentData"/> instances are value-equal.</summary>
+    public static bool operator ==(AttachmentData? left, AttachmentData? right) =>
+        left is null ? right is null : left.Equals(right);
+
+
+    /// <summary>Determines whether two <see cref="AttachmentData"/> instances differ.</summary>
+    public static bool operator !=(AttachmentData? left, AttachmentData? right) => !(left == right);
 }
