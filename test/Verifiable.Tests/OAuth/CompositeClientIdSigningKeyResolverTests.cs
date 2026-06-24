@@ -101,7 +101,6 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
         //The resolved key must verify the JAR.
         bool isVerified = await Jws.VerifyAsync(
             compactJar, Decoder,
-            static (ReadOnlySpan<byte> _) => (object?)null,
             Pool, key, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isVerified, "Resolved Federation-bound key must verify the JAR.");
@@ -177,7 +176,6 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
 
             bool isVerified = await Jws.VerifyAsync(
                 compactJar, Decoder,
-                static (ReadOnlySpan<byte> _) => (object?)null,
                 Pool, key, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(isVerified, "Resolved X.509-bound key must verify the JAR.");
@@ -285,7 +283,6 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
 
         bool isVerified = await Jws.VerifyAsync(
             compactJar, Decoder,
-            static (ReadOnlySpan<byte> _) => (object?)null,
             Pool, key, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isVerified, "Resolved verifier-attestation key must verify the JAR.");

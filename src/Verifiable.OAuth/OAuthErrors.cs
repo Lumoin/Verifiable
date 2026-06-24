@@ -49,6 +49,16 @@ public static class OAuthErrors
     /// <summary>The requested scope is invalid, unknown, or malformed.</summary>
     public static readonly string InvalidScope = Utf8Constants.ToInternedString(InvalidScopeUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="InvalidTarget"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidTargetUtf8 => "invalid_target"u8;
+
+    /// <summary>
+    /// The requested <c>resource</c> or <c>audience</c> target is unknown, or the named target is
+    /// unacceptable for issuing the requested token, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 §2.2.2</see>.
+    /// </summary>
+    public static readonly string InvalidTarget = Utf8Constants.ToInternedString(InvalidTargetUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="AccessDenied"/>.</summary>
     public static ReadOnlySpan<byte> AccessDeniedUtf8 => "access_denied"u8;
 

@@ -87,7 +87,6 @@ public static class VerifierAttestationKeyResolver
         bool attestationValid = await Jws.VerifyAsync(
             attestation.CompactJwt,
             base64UrlDecoder,
-            static (ReadOnlySpan<byte> _) => (object?)null,
             pool,
             trustAnchorPublicKey,
             cancellationToken).ConfigureAwait(false);

@@ -118,15 +118,13 @@ public static class DpopProofValidator
         //Signature verification via JCose's Jws.VerifyAsync — composes the
         //library's existing JWS verification primitive (including the pooled
         //signing-input construction and RFC 8725 §3.11 length bound) instead
-        //of duplicating those mechanics here. partDecoder is required by the
-        //API but unused on this overload; a static no-op avoids capture.
+        //of duplicating those mechanics here.
         bool signatureValid;
         try
         {
             signatureValid = await Jws.VerifyAsync(
                 request.Proof,
                 base64UrlDecoder,
-                UnusedPartDecoder,
                 memoryPool,
                 publicKey,
                 verificationDelegate,
@@ -199,12 +197,6 @@ public static class DpopProofValidator
 
         return DpopProofValidationResult.Success(claims, thumbprint);
     }
-
-
-    //Jws.VerifyAsync requires a partDecoder but the explicit-delegate overload
-    //does not call it. A static no-op avoids capture and silences the
-    //null-checked-required-parameter contract.
-    private static DpopProofHeader UnusedPartDecoder(ReadOnlySpan<byte> _) => default!;
 
 
     /// <summary>

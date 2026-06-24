@@ -92,7 +92,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             "POST",
             new RequestFields
             {
-                [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypePreAuthorizedCode,
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA",
                 [OAuthRequestParameterNames.TxCode] = "493536"
             },
@@ -193,7 +193,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             "POST",
             new RequestFields
             {
-                [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypePreAuthorizedCode
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode
             },
             new ExchangeContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -222,7 +222,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             "POST",
             new RequestFields
             {
-                [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypePreAuthorizedCode,
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
             new ExchangeContext(),
@@ -258,7 +258,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
-        Assert.Contains(OAuthRequestParameterValues.GrantTypePreAuthorizedCode, response.Body,
+        Assert.Contains(WellKnownGrantTypes.PreAuthorizedCode, response.Body,
             "grant_types_supported must advertise the pre-authorized_code grant when it is active.");
     }
 
@@ -336,7 +336,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
         //The pre-authorized_code grant is still advertised (it is active); only the anonymous-access
         //flag is absent because the deployment did not opt in (the §12.3 default is false).
-        Assert.Contains(OAuthRequestParameterValues.GrantTypePreAuthorizedCode, response.Body);
+        Assert.Contains(WellKnownGrantTypes.PreAuthorizedCode, response.Body);
 
         using JsonDocument doc = JsonDocument.Parse(response.Body);
         Assert.IsFalse(
@@ -366,7 +366,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             "POST",
             new RequestFields
             {
-                [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypePreAuthorizedCode,
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA",
                 [OAuthRequestParameterNames.TxCode] = "493536"
             },

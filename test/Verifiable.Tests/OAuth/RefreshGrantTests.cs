@@ -132,7 +132,7 @@ internal sealed class RefreshGrantTests
 
         RequestFields refreshFields = new()
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeRefreshToken,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
             [OAuthRequestParameterNames.RefreshToken] = refreshToken,
             [OAuthRequestParameterNames.ClientId] = "https://attacker.example.com"
         };
@@ -191,7 +191,7 @@ internal sealed class RefreshGrantTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -222,7 +222,7 @@ internal sealed class RefreshGrantTests
         //Token exchange.
         RequestFields tokenFields = new()
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
             [OAuthRequestParameterNames.Code] = code,
             [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -248,7 +248,7 @@ internal sealed class RefreshGrantTests
     {
         RequestFields refreshFields = new()
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeRefreshToken,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
             [OAuthRequestParameterNames.RefreshToken] = refreshToken,
             [OAuthRequestParameterNames.ClientId] = ClientId
         };

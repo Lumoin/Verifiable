@@ -513,9 +513,6 @@ internal sealed class FederationEntityConfigurationEndpointTests
         return await Jws.VerifyAsync(
             compactJws,
             TestSetup.Base64UrlDecoder,
-            static bytes => JsonSerializer.Deserialize<Dictionary<string, object>>(
-                bytes, TestSetup.DefaultSerializationOptions)
-                ?? throw new FormatException("Header parsed to null."),
             Pool,
             publicKey,
             cancellationToken).ConfigureAwait(false);

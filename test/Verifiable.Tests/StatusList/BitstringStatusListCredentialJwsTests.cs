@@ -126,9 +126,13 @@ internal sealed class BitstringStatusListCredentialJwsTests
 
         string published = JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
 
-        //An attacker flips a byte in the payload segment (the encoded credential) to clear the revocation.
+        //An attacker flips a middle character of the payload segment (the encoded credential) to clear
+        //the revocation. A middle character stays base64url-valid, so the tampered payload alters the
+        //signing input and the signature deterministically fails to verify.
         string[] parts = published.Split('.');
-        parts[1] = FlipLastChar(parts[1]);
+        int tamperIndex = parts[1].Length / 2;
+        char flipped = parts[1][tamperIndex] == 'A' ? 'B' : 'A';
+        parts[1] = string.Concat(parts[1].AsSpan(0, tamperIndex), flipped.ToString(), parts[1].AsSpan(tamperIndex + 1));
         string tampered = string.Join('.', parts);
 
         JwsCredentialVerificationResult result = await CredentialJwsExtensions.VerifyJwsAsync(
@@ -171,15 +175,6 @@ internal sealed class BitstringStatusListCredentialJwsTests
             JsonElement element => element.GetString()!,
             _ => value.ToString()!
         };
-    }
-
-
-    private static string FlipLastChar(string segment)
-    {
-        char last = segment[^1];
-        char replacement = last == 'A' ? 'B' : 'A';
-
-        return string.Concat(segment.AsSpan(0, segment.Length - 1), replacement.ToString());
     }
 
 

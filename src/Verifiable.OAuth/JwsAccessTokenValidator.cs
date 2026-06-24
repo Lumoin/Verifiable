@@ -157,13 +157,15 @@ public static class JwsAccessTokenValidator
 
         //4. Verify signature via JCose's Jws.VerifyAsync — composes the
         //library's existing JWS verification primitive instead of duplicating
-        //the signing-input construction and signature dispatch here. The
-        //partDecoder parameter is required by the API but unused on this
-        //overload; pass a no-op.
+        //the signing-input construction and signature dispatch here.
+        //
+        //A malformed signature segment (for example a non-canonical base64url
+        //value the decoder rejects) cannot verify: Jws.VerifyAsync returns
+        //false rather than throwing on untrusted input, so the caller maps the
+        //resulting SignatureFailed to invalid_request instead of surfacing a 500.
         bool signatureValid = await Jws.VerifyAsync(
             accessToken,
             base64UrlDecoder,
-            UnusedPartDecoder,
             memoryPool,
             publicKey,
             verifySignature,
@@ -332,12 +334,6 @@ public static class JwsAccessTokenValidator
 
         return JwsAccessTokenValidationResult.Success(claims);
     }
-
-
-    //Jws.VerifyAsync requires a partDecoder but the explicit-delegate overload
-    //does not call it. A static no-op avoids capture and silences the
-    //null-checked-required-parameter contract.
-    private static JwtHeader UnusedPartDecoder(ReadOnlySpan<byte> _) => default!;
 
 
     private static bool TryReadString(JwtPayload payload, string claimName, out string? value)

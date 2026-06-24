@@ -173,7 +173,7 @@ internal sealed class DcqlPresentationFlowTests
 
         //Verifier validates the presented issuer JWT signature.
         bool isPresentationValid = await Jws.VerifyAsync(
-            presentationToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
+            presentationToken.IssuerSigned, Decoder, Pool,
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(isPresentationValid, "Presented issuer JWT signature must be cryptographically valid.");
 
@@ -253,7 +253,7 @@ internal sealed class DcqlPresentationFlowTests
 
         //Issuer JWT signature is still valid even with reduced disclosures.
         bool signatureValid = await Jws.VerifyAsync(
-            issuedToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
+            issuedToken.IssuerSigned, Decoder, Pool,
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Issuer JWT signature must remain valid regardless of disclosure decisions.");
     }
@@ -361,7 +361,7 @@ internal sealed class DcqlPresentationFlowTests
         //Verify the PID issuer signature is still valid from the serialized form.
         SdToken<string> parsedPid = SdJwtSerializer.ParseToken(vpToken[EudiPid.DefaultCredentialQueryId], Decoder, Pool, TestSalts.TestSaltTag);
         bool pidSignatureValid = await Jws.VerifyAsync(
-            parsedPid.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
+            parsedPid.IssuerSigned, Decoder, Pool,
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(pidSignatureValid, "PID issuer JWT signature must be valid in the VP Token.");
 
@@ -470,7 +470,7 @@ internal sealed class DcqlPresentationFlowTests
 
         //Issuer JWT signature is still valid after policy narrowing.
         bool signatureValid = await Jws.VerifyAsync(
-            issuedToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
+            issuedToken.IssuerSigned, Decoder, Pool,
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Issuer JWT signature must remain valid after policy narrowing.");
     }
@@ -506,7 +506,7 @@ internal sealed class DcqlPresentationFlowTests
         }
 
         bool signatureValid = await Jws.VerifyAsync(
-            parsed.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
+            parsed.IssuerSigned, Decoder, Pool,
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Signature must remain valid after serialization round-trip.");
     }
@@ -530,7 +530,7 @@ internal sealed class DcqlPresentationFlowTests
 
         //Verifier receives the token, verifies signature first.
         bool signatureValid = await Jws.VerifyAsync(
-            issuedToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
+            issuedToken.IssuerSigned, Decoder, Pool,
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Issuer JWT signature must be valid before checking digests.");
 
@@ -578,7 +578,7 @@ internal sealed class DcqlPresentationFlowTests
             .ConfigureAwait(false);
 
         bool signatureValid = await Jws.VerifyAsync(
-            issuedToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
+            issuedToken.IssuerSigned, Decoder, Pool,
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Ed25519 issuer JWT signature must be valid.");
 
@@ -621,7 +621,7 @@ internal sealed class DcqlPresentationFlowTests
         SdToken<string> presentationToken = issuedToken.SelectDisclosures(d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName), Pool);
 
         bool isPresentationValid = await Jws.VerifyAsync(
-            presentationToken.IssuerSigned, Decoder, (ReadOnlySpan<byte> _) => (object?)null, Pool,
+            presentationToken.IssuerSigned, Decoder, Pool,
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(isPresentationValid, "Ed25519 signature must be valid on the presented token.");
     }

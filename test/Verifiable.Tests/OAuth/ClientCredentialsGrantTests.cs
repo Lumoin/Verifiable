@@ -46,7 +46,7 @@ internal sealed class ClientCredentialsGrantTests
 
         using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeClientCredentials,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = ClientSecret,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
@@ -86,7 +86,7 @@ internal sealed class ClientCredentialsGrantTests
         //A wrong secret fails client authentication — 401 invalid_client.
         using HttpResponseMessage badSecret = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeClientCredentials,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = "guessed-wrong"
         }).ConfigureAwait(false);
@@ -95,7 +95,7 @@ internal sealed class ClientCredentialsGrantTests
         //A scope outside the registration's allowed set — 400 invalid_scope.
         using HttpResponseMessage badScope = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeClientCredentials,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = ClientSecret,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.SsfManage
@@ -121,7 +121,7 @@ internal sealed class ClientCredentialsGrantTests
             .GetAsync(discoveryUrl, TestContext.CancellationToken).ConfigureAwait(false);
         string discoveryBody = await discovery.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)discovery.StatusCode, discoveryBody);
-        Assert.Contains(OAuthRequestParameterValues.GrantTypeClientCredentials, discoveryBody,
+        Assert.Contains(WellKnownGrantTypes.ClientCredentials, discoveryBody,
             "grant_types_supported must advertise client_credentials when the grant is active.");
 
         //Without the seam, the grant endpoint does not exist — fail-closed: an
@@ -139,7 +139,7 @@ internal sealed class ClientCredentialsGrantTests
 
         using HttpResponseMessage unmatched = await PostFormAsync(bareHost.SharedHttpClient!, bareTokenUrl, new Dictionary<string, string>
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeClientCredentials,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = ClientSecret
         }).ConfigureAwait(false);
@@ -173,7 +173,7 @@ internal sealed class ClientCredentialsGrantTests
         //(a) Malformed JSON — §5 "not conforming to the respective type definition".
         using HttpResponseMessage malformed = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeClientCredentials,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = ClientSecret,
             [OAuthRequestParameterNames.AuthorizationDetails] = "{ not json"
@@ -185,7 +185,7 @@ internal sealed class ClientCredentialsGrantTests
         //(b) Unknown type — §5 "contains an unknown authorization details type value".
         using HttpResponseMessage unknownType = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeClientCredentials,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = ClientSecret,
             [OAuthRequestParameterNames.AuthorizationDetails] =
@@ -199,7 +199,7 @@ internal sealed class ClientCredentialsGrantTests
         //the request is refused, not silently dropped.
         using HttpResponseMessage shapeValid = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeClientCredentials,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = ClientSecret,
             [OAuthRequestParameterNames.AuthorizationDetails] =
@@ -214,7 +214,7 @@ internal sealed class ClientCredentialsGrantTests
         //(d) No authorization_details — the grant is issued exactly as before.
         using HttpResponseMessage plain = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeClientCredentials,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = ClientSecret,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId

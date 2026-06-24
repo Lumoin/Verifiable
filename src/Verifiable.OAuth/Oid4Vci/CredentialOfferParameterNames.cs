@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// <summary>
 /// Well-known JSON member NAMES for the OID4VCI 1.0 §4.1.1 Credential Offer object and the
 /// transport query parameters that carry it (§4.1.2/§4.1.3). The grant-block keys reuse the
-/// grant-type identifiers in <see cref="OAuthRequestParameterValues"/>; <c>credential_issuer</c>
+/// grant-type identifiers in <see cref="WellKnownGrantTypes"/>; <c>credential_issuer</c>
 /// reuses <see cref="CredentialIssuerMetadataParameterNames.CredentialIssuer"/>; the
 /// <c>pre-authorized_code</c> / <c>tx_code</c> names reuse
 /// <see cref="OAuthRequestParameterNames"/>.

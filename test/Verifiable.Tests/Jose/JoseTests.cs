@@ -28,7 +28,7 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task SignAndVerifyWithExplicitFunctionSucceeds()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = "JWT" };
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt };
         var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "1234567890", ["name"] = "Test User" };
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -54,7 +54,6 @@ internal sealed class JoseTests
         bool isValid = await Jws.VerifyAsync(
             jws,
             TestSetup.Base64UrlDecoder,
-            DecodeJwtPart,
             BaseMemoryPool.Shared,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP256Async,
@@ -67,8 +66,8 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task SignAndVerifyWithResolverBinderSucceeds()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = "JWT" };
-        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "resolver-test", ["name"] = "Resolver Test" };
+        JwtHeader header = new() { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt };
+        JwtPayload payload = new() { [WellKnownJwtClaimNames.Sub] = "resolver-test", ["name"] = "Resolver Test" };
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using var publicKey = keyPair.PublicKey;
@@ -114,7 +113,7 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task SignAndVerifyWithP384ExplicitFunctionSucceeds()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es384, [WellKnownJoseHeaderNames.Typ] = "JWT" };
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es384, [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt };
         var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "user-384", [WellKnownJwtClaimNames.Iat] = 1234567890 };
 
         var keyPair = TestKeyMaterialProvider.CreateP384KeyMaterial();
@@ -136,7 +135,6 @@ internal sealed class JoseTests
         bool isValid = await Jws.VerifyAsync(
             jws,
             TestSetup.Base64UrlDecoder,
-            DecodeJwtPart,
             BaseMemoryPool.Shared,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP384Async,
@@ -149,7 +147,7 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task SignAndVerifyWithP521ExplicitFunctionSucceeds()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es512, [WellKnownJoseHeaderNames.Typ] = "JWT" };
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es512, [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt };
         var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "user-521", [WellKnownJwtClaimNames.Exp] = 9999999999 };
 
         var keyPair = TestKeyMaterialProvider.CreateP521KeyMaterial();
@@ -171,7 +169,6 @@ internal sealed class JoseTests
         bool isValid = await Jws.VerifyAsync(
             jws,
             TestSetup.Base64UrlDecoder,
-            DecodeJwtPart,
             BaseMemoryPool.Shared,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP521Async,
@@ -184,7 +181,7 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task VerifyWithWrongKeyFails()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = "JWT" };
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt };
         var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "test" };
 
         //Use one key pair for signing.
@@ -212,7 +209,6 @@ internal sealed class JoseTests
         bool isValid = await Jws.VerifyAsync(
             jws,
             TestSetup.Base64UrlDecoder,
-            DecodeJwtPart,
             BaseMemoryPool.Shared,
             wrongPublicKey,
             MicrosoftCryptographicFunctions.VerifyP256Async,
@@ -225,7 +221,7 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task VerifyAndDecodeWithResolverBinderReturnsHeaderAndPayload()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = "JWT" };
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt };
         var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "decode-test", ["custom"] = "value" };
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -248,7 +244,7 @@ internal sealed class JoseTests
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
-        JwsVerificationResult<Dictionary<string, object>> result = await Jws.VerifyAndDecodeAsync(
+        JwsVerificationResult result = await Jws.VerifyAndDecodeAsync(
             jws,
             TestSetup.Base64UrlDecoder,
             DecodeJwtPart,
@@ -269,8 +265,8 @@ internal sealed class JoseTests
     [TestMethod]
     public async Task ResolverReturningNullThrowsInvalidOperationException()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = "JWT" };
-        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "null-test" };
+        JwtHeader header = new() { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt };
+        JwtPayload payload = new() { [WellKnownJwtClaimNames.Sub] = "null-test" };
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -323,7 +319,7 @@ internal sealed class JoseTests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership transfers to the caller (Jws.SignAsync) which disposes via PrivateKey.")]
     private static ValueTask<PrivateKeyMemory?> ResolvePrivateKeyMaterial(
-        JoseKeyContext<Dictionary<string, object>> context,
+        JoseKeyContext context,
         MemoryPool<byte> pool,
         TestResolverState state,
         CancellationToken cancellationToken)
@@ -341,7 +337,7 @@ internal sealed class JoseTests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership transfers to the caller (Jws.VerifyAsync) which disposes via PublicKey.")]
     private static ValueTask<PublicKeyMemory?> ResolvePublicKeyMaterial(
-        JoseKeyContext<Dictionary<string, object>> context,
+        JoseKeyContext context,
         MemoryPool<byte> pool,
         TestResolverState state,
         CancellationToken cancellationToken)

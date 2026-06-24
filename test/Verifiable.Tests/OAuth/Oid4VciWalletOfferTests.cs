@@ -146,7 +146,7 @@ internal sealed class Oid4VciWalletOfferTests
             + "\"vendor_extension\":{\"ignored\":true,\"nested\":[1,2,3]},"
             + "\"credential_configuration_ids\":[\"" + ConfigurationId + "\"],"
             + "\"grants\":{"
-            + "\"" + OAuthRequestParameterValues.GrantTypePreAuthorizedCode + "\":{"
+            + "\"" + WellKnownGrantTypes.PreAuthorizedCode + "\":{"
             + "\"pre-authorized_code\":\"" + PreAuthorizedCode + "\","
             + "\"vendor_grant_hint\":\"ignore-me\","
             + "\"tx_code\":{\"length\":6,\"input_mode\":\"numeric\"}"

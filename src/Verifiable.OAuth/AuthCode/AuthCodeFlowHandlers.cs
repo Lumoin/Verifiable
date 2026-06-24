@@ -588,7 +588,7 @@ public static class AuthCodeFlowHandlers
 
         var fields = new Dictionary<string, string>
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeRefreshToken,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
             [OAuthRequestParameterNames.ClientId] = registration.ClientId.Value,
             [OAuthRequestParameterNames.RefreshToken] = request.RefreshToken
         };
@@ -787,7 +787,7 @@ public static class AuthCodeFlowHandlers
         AuthCodeRequestObject requestObject = new()
         {
             ClientId = registration.ClientId.Value,
-            ResponseType = OAuthRequestParameterValues.ResponseTypeCode,
+            ResponseType = WellKnownResponseTypes.Code,
             RedirectUri = jarOptions.RedirectUri,
             Scope = jarOptions.Scope,
             State = state,
@@ -850,7 +850,7 @@ public static class AuthCodeFlowHandlers
         DateTimeOffset now) => new()
     {
         ClientId = registration.ClientId.Value,
-        ResponseType = OAuthRequestParameterValues.ResponseTypeCode,
+        ResponseType = WellKnownResponseTypes.Code,
         RedirectUri = jarOptions.RedirectUri,
         Scope = jarOptions.Scope,
         State = state,
@@ -921,7 +921,7 @@ public static class AuthCodeFlowHandlers
     {
         return new OutgoingFormFields
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
             [OAuthRequestParameterNames.ClientId] = clientId,
             [OAuthRequestParameterNames.Code] = code,
             [OAuthRequestParameterNames.RedirectUri] = redirectUri.ToString(),

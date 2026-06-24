@@ -82,7 +82,7 @@ internal static class TestBrowser
         {
             fields[OAuthRequestParameterNames.CodeChallenge] = codeChallenge;
             fields[OAuthRequestParameterNames.CodeChallengeMethod] =
-                OAuthRequestParameterValues.CodeChallengeMethodS256;
+                WellKnownCodeChallengeMethods.S256;
             fields[OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId;
             fields[OAuthRequestParameterNames.RedirectUri] = "https://client.example.com/callback";
             fields[WellKnownJwtClaimNames.Nonce] = $"nonce-{Guid.NewGuid():N}";

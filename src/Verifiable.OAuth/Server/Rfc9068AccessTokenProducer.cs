@@ -162,8 +162,14 @@ internal static class Rfc9068AccessTokenProducer
             oauth.ResolveAccessTokenAudienceAsync
             ?? DefaultResolveAccessTokenAudienceAsync;
 
-        IReadOnlyList<string>? audiences = await resolver(
-            context.Registration, context, cancellationToken).ConfigureAwait(false);
+        //RFC 8693 §2.1.1 target binding: an explicit audience override on the issuance context — the
+        //target(s) a Token Exchange authorization seam shaped the issued token for — is the issued
+        //token's aud verbatim, bypassing the scope→audience resolver. Every non-token-exchange
+        //issuance leaves Audience null, so this falls through to the resolver as before.
+        IReadOnlyList<string>? audiences = context.Audience is { Count: > 0 }
+            ? context.Audience
+            : await resolver(
+                context.Registration, context, cancellationToken).ConfigureAwait(false);
 
         AccessTokenAudPolicy policy = context.Context.AccessTokenAudPolicy;
 
@@ -202,6 +208,15 @@ internal static class Rfc9068AccessTokenProducer
         if(grantedDetails is not null)
         {
             payload[OAuthRequestParameterNames.AuthorizationDetails] = grantedDetails;
+        }
+
+        //RFC 8693 §4.1: a Token Exchange DELEGATION exchange supplies the composite token's
+        //"act" (actor) claim — the nested JSON object identifying the current actor (and any
+        //prior actors). It is null for every non-delegation issuance, so this is a no-op for
+        //impersonation token exchange and every other grant.
+        if(context.Act is not null)
+        {
+            payload[WellKnownJwtClaimNames.Act] = context.Act;
         }
 
         return new TokenProducerOutput(header, payload);

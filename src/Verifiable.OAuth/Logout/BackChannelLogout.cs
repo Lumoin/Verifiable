@@ -202,10 +202,10 @@ public static class BackChannelLogout
         ArgumentNullException.ThrowIfNull(payloadDeserializer);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
-        JwsVerificationResult<IReadOnlyDictionary<string, object>> verification;
+        JwsVerificationResult verification;
         try
         {
-            verification = await Jws.VerifyAndDecodeAsync<IReadOnlyDictionary<string, object>>(
+            verification = await Jws.VerifyAndDecodeAsync(
                 logoutToken,
                 base64UrlDecoder,
                 bytes => payloadDeserializer(bytes) ?? EmptyPayload,
@@ -223,7 +223,7 @@ public static class BackChannelLogout
             return BackChannelLogoutVerificationResult.Failed(BackChannelLogoutValidationError.SignatureInvalid);
         }
 
-        IReadOnlyDictionary<string, object> payload = verification.Payload;
+        JwtPayload payload = verification.Payload;
 
         //§2.6: validate iss/aud/iat as for an ID Token.
         if(!TryGetString(payload, WellKnownJwtClaimNames.Iss, out string? iss)
@@ -267,7 +267,7 @@ public static class BackChannelLogout
 
 
     /// <summary>Reads a string-valued claim, or <see langword="null"/> when absent or not a string.</summary>
-    private static bool TryGetString(IReadOnlyDictionary<string, object> payload, string name, out string? value)
+    private static bool TryGetString(JwtPayload payload, string name, out string? value)
     {
         if(payload.TryGetValue(name, out object? raw) && raw is string s)
         {
@@ -281,7 +281,7 @@ public static class BackChannelLogout
 
 
     /// <summary>Whether the <c>aud</c> claim (a string or an array of strings) includes <paramref name="expected"/>.</summary>
-    private static bool AudienceContains(IReadOnlyDictionary<string, object> payload, string expected)
+    private static bool AudienceContains(JwtPayload payload, string expected)
     {
         if(!payload.TryGetValue(WellKnownJwtClaimNames.Aud, out object? value))
         {
@@ -309,7 +309,7 @@ public static class BackChannelLogout
 
 
     /// <summary>Whether the <c>events</c> claim is an object carrying the back-channel logout member.</summary>
-    private static bool ContainsLogoutEvent(IReadOnlyDictionary<string, object> payload) =>
+    private static bool ContainsLogoutEvent(JwtPayload payload) =>
         payload.TryGetValue(SecurityEventTokenClaimNames.Events, out object? events)
         && events is IReadOnlyDictionary<string, object> map
         && map.ContainsKey(BackChannelLogoutEventType);

@@ -145,11 +145,9 @@ internal sealed class KbJwtIssuanceTests
             memoryPool: Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        bool valid = await Jws.VerifyAsync<Dictionary<string, object>>(
+        bool valid = await Jws.VerifyAsync(
             compactKbJwt,
             TestSetup.Base64UrlDecoder,
-            static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
-                bytes, TestSetup.DefaultSerializationOptions)!,
             Pool,
             holderPublic,
             TestContext.CancellationToken).ConfigureAwait(false);

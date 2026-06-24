@@ -79,7 +79,6 @@ internal sealed class JwsTestsWithPredefinedData
         bool isValid = await Jws.VerifyAsync(
             signedJwt,
             TestSetup.Base64UrlDecoder,
-            DecodeJwtPart,
             BaseMemoryPool.Shared,
             publicKey,
             verificationDelegate,
@@ -180,13 +179,78 @@ internal sealed class JwsTestsWithPredefinedData
         bool isValid = await Jws.VerifyAsync(
             signedJwt,
             TestSetup.Base64UrlDecoder,
-            DecodeJwtPart,
             BaseMemoryPool.Shared,
             publicKey,
             verificationDelegate,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "RSA-PSS signature verification should succeed.");
+    }
+
+
+    /// <summary>
+    /// A malformed signature segment — base64url the decoder rejects, such as an out-of-alphabet
+    /// character or a non-canonical final character — must make <see cref="Jws.VerifyAsync"/> return
+    /// <see langword="false"/>, never throw. Verification of untrusted input fails closed: a signature
+    /// that cannot be decoded cannot verify. Regression for an unguarded signature decode that
+    /// surfaced malformed tokens as an escaping exception (a 500) instead of a clean rejection.
+    /// </summary>
+    [TestMethod]
+    public async Task MalformedSignatureSegmentVerifiesAsFalseWithoutThrowing()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using PublicKeyMemory publicKey = keys.PublicKey;
+        using PrivateKeyMemory privateKey = keys.PrivateKey;
+
+        var header = new Dictionary<string, object>
+        {
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256,
+            [WellKnownJoseHeaderNames.Typ] = "JWT"
+        };
+        var payload = new Dictionary<string, object> { ["sub"] = "malformed-signature-regression" };
+
+        //Sign and verify through the registry-resolved primitives — the key's Tag selects the P-256
+        //functions — so the test carries no raw cryptography and no naked key bytes.
+        JwsMessage jwsMessage = await Jws.SignAsync(
+            header,
+            payload,
+            EncodeJwtPart,
+            TestSetup.Base64UrlEncoder,
+            privateKey,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
+        string[] segments = signedJwt.Split('.');
+        Assert.HasCount(3, segments);
+
+        //(a) An out-of-alphabet character in the signature segment — every compliant base64url decoder
+        //rejects it. Before the leaf guard the decoder's exception escaped Jws.VerifyAsync.
+        string invalidCharJwt = string.Join('.', segments[0], segments[1],
+            string.Concat(segments[2].AsSpan(0, segments[2].Length - 1), "!"));
+
+        bool invalidCharIsValid = await Jws.VerifyAsync(
+            invalidCharJwt,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared,
+            publicKey,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(invalidCharIsValid, "An out-of-alphabet base64url signature must verify as false, not throw.");
+
+        //(b) A non-canonical final character (the exact shape that intermittently crashed before the
+        //guard): for a 64-byte ES256 signature 'B' sets the unused padding bits non-zero.
+        string nonCanonicalJwt = string.Join('.', segments[0], segments[1],
+            string.Concat(segments[2].AsSpan(0, segments[2].Length - 1), "B"));
+
+        bool nonCanonicalIsValid = await Jws.VerifyAsync(
+            nonCanonicalJwt,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared,
+            publicKey,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(nonCanonicalIsValid, "A non-canonical base64url signature must verify as false, not throw.");
     }
 
 
@@ -380,15 +444,5 @@ internal sealed class JwsTestsWithPredefinedData
     {
         byte[] bytes = Encoding.UTF8.GetBytes(JsonSerializerExtensions.Serialize(part, TestSetup.DefaultSerializationOptions));
         return new TaggedMemory<byte>(bytes, BufferTags.Json);
-    }
-
-
-    /// <summary>
-    /// Decodes UTF-8 JSON bytes to a dictionary.
-    /// </summary>
-    private static Dictionary<string, object> DecodeJwtPart(ReadOnlySpan<byte> bytes)
-    {
-        string json = Encoding.UTF8.GetString(bytes);
-        return JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, TestSetup.DefaultSerializationOptions)!;
     }
 }

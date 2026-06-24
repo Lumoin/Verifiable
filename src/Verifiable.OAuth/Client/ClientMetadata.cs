@@ -95,6 +95,20 @@ public sealed record ClientMetadata
     public IReadOnlyList<string>? AuthorizationDetailsTypes { get; init; }
 
     /// <summary>
+    /// The authorization grant profiles this client implements — the client metadata parameter
+    /// <c>authorization_grant_profiles_supported</c> per draft-ietf-oauth-identity-assertion-authz-grant
+    /// §8 (a JSON array of profile identifier strings). A client that includes
+    /// <c>urn:ietf:params:oauth:grant-profile:id-jag</c> MUST also include both
+    /// <c>urn:ietf:params:oauth:grant-type:token-exchange</c> and
+    /// <c>urn:ietf:params:oauth:grant-type:jwt-bearer</c> in <see cref="GrantTypes"/>, since the client
+    /// uses Token Exchange to obtain the ID-JAG from the IdP Authorization Server and the JWT Bearer grant
+    /// to redeem it at the Resource Authorization Server. <see langword="null"/> when the client declares
+    /// no grant profiles. Mirrors the Resource Authorization Server's <c>authorization_grant_profiles_supported</c>
+    /// AS-metadata parameter (§7.2).
+    /// </summary>
+    public IReadOnlyList<string>? AuthorizationGrantProfilesSupported { get; init; }
+
+    /// <summary>
     /// URL of the client's JWKS document. RFC 7591 §2 <c>jwks_uri</c>.
     /// </summary>
     public Uri? JwksUri { get; init; }

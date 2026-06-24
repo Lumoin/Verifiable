@@ -410,5 +410,82 @@ public static class JwtPayloadExtensions
 
             return payload;
         }
+
+
+        /// <summary>
+        /// Creates a payload for an Identity Assertion JWT Authorization Grant (ID-JAG) per
+        /// draft-ietf-oauth-identity-assertion-authz-grant §3.1, populated with the REQUIRED
+        /// <c>iss</c>, <c>sub</c>, <c>aud</c>, <c>client_id</c>, <c>jti</c>, <c>iat</c>, and
+        /// <c>exp</c> claims, plus the optional <c>scope</c> and any additional claims.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// §3.1: <c>iss</c> is the IdP Authorization Server issuer identifier; <c>aud</c> is the
+        /// issuer identifier of the Resource Authorization Server the grant is intended for;
+        /// <c>client_id</c> is the client identifier at the Resource Authorization Server that
+        /// will act on behalf of the subject (it MAY differ from the client that requested the
+        /// ID-JAG from the IdP). The grant is consumed by the Resource Authorization Server as a
+        /// JWT bearer assertion (§4.4).
+        /// </para>
+        /// <para>
+        /// Optional authorization (<c>resource</c>, <c>authorization_details</c>) and tenancy
+        /// (<c>tenant</c>, <c>aud_tenant</c>, <c>aud_sub</c>), DPoP (<c>cnf</c>), and identity
+        /// (<c>sub_id</c>, <c>auth_time</c>, <c>acr</c>, <c>amr</c>, <c>email</c>) claims are
+        /// carried through <paramref name="claims"/>.
+        /// </para>
+        /// </remarks>
+        /// <param name="issuer">The <c>iss</c> claim — the IdP Authorization Server issuer identifier.</param>
+        /// <param name="subject">The <c>sub</c> claim — the End-User in the issuer's subject namespace.</param>
+        /// <param name="audience">The <c>aud</c> claim — the Resource Authorization Server issuer identifier.</param>
+        /// <param name="clientId">The <c>client_id</c> claim — the client at the Resource Authorization Server.</param>
+        /// <param name="jti">The <c>jti</c> claim — a unique identifier for this grant.</param>
+        /// <param name="issuedAt">The <c>iat</c> claim. Converted to Unix epoch seconds.</param>
+        /// <param name="expiresAt">The <c>exp</c> claim. Converted to Unix epoch seconds.</param>
+        /// <param name="scope">The optional <c>scope</c> claim — a space-separated scope list. Omitted when null or empty.</param>
+        /// <param name="claims">Additional ID-JAG claims (e.g. <c>resource</c>, <c>authorization_details</c>, <c>tenant</c>, <c>cnf</c>).</param>
+        /// <returns>A <see cref="JwtPayload"/> populated with the ID-JAG claims.</returns>
+        public static JwtPayload ForIdJag(
+            string issuer,
+            string subject,
+            string audience,
+            string clientId,
+            string jti,
+            DateTimeOffset issuedAt,
+            DateTimeOffset expiresAt,
+            string? scope = null,
+            IEnumerable<KeyValuePair<string, object>>? claims = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(issuer);
+            ArgumentException.ThrowIfNullOrWhiteSpace(subject);
+            ArgumentException.ThrowIfNullOrWhiteSpace(audience);
+            ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
+            ArgumentException.ThrowIfNullOrWhiteSpace(jti);
+
+            var payload = new JwtPayload(capacity: 8)
+            {
+                [WellKnownJwtClaimNames.Iss] = issuer,
+                [WellKnownJwtClaimNames.Sub] = subject,
+                [WellKnownJwtClaimNames.Aud] = audience,
+                [WellKnownJwtClaimNames.ClientId] = clientId,
+                [WellKnownJwtClaimNames.Jti] = jti,
+                [WellKnownJwtClaimNames.Iat] = issuedAt.ToUnixTimeSeconds(),
+                [WellKnownJwtClaimNames.Exp] = expiresAt.ToUnixTimeSeconds()
+            };
+
+            if(!string.IsNullOrEmpty(scope))
+            {
+                payload[WellKnownJwtClaimNames.Scope] = scope;
+            }
+
+            if(claims is not null)
+            {
+                foreach(KeyValuePair<string, object> claim in claims)
+                {
+                    payload[claim.Key] = claim.Value;
+                }
+            }
+
+            return payload;
+        }
     }
 }

@@ -174,8 +174,13 @@ internal sealed class EndSessionLogoutTests
 
         string idToken = await IssueIdTokenAsync(host, material, "session-A").ConfigureAwait(false);
 
-        //Flip the last character of the signature segment.
-        string tampered = idToken[..^1] + (idToken[^1] == 'A' ? 'B' : 'A');
+        //Flip a middle character of the signature segment — it stays base64url-valid, so the id_token
+        //decodes cleanly and the signature simply fails to verify (a deterministic rejection, not an
+        //incidental decode failure on a non-canonical final character).
+        int signatureStart = idToken.LastIndexOf('.') + 1;
+        int tamperIndex = signatureStart + (idToken.Length - signatureStart) / 2;
+        char flipped = idToken[tamperIndex] == 'A' ? 'B' : 'A';
+        string tampered = string.Concat(idToken.AsSpan(0, tamperIndex), flipped.ToString(), idToken.AsSpan(tamperIndex + 1));
 
         ServerHttpResponse response = await EndSessionAsync(host, material, new RequestFields
         {
@@ -500,7 +505,7 @@ internal sealed class EndSessionLogoutTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -531,7 +536,7 @@ internal sealed class EndSessionLogoutTests
 
         RequestFields tokenFields = new()
         {
-            [OAuthRequestParameterNames.GrantType] = OAuthRequestParameterValues.GrantTypeAuthorizationCode,
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
             [OAuthRequestParameterNames.Code] = code,
             [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
             [OAuthRequestParameterNames.ClientId] = ClientId,

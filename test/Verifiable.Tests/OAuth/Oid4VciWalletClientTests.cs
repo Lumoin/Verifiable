@@ -425,7 +425,7 @@ internal sealed class Oid4VciWalletClientTests
             {
                 bool isProofSignatureValid = await Jws.VerifyAsync(
                     proof, TestSetup.Base64UrlDecoder,
-                    static (ReadOnlySpan<byte> _) => (object?)null, Pool,
+                    Pool,
                     proofKey, ct).ConfigureAwait(false);
 
                 if(!isProofSignatureValid

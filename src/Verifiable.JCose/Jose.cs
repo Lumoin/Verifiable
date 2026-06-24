@@ -23,9 +23,20 @@ public delegate TaggedMemory<byte> JwtPartEncoder<in TJwtPart>(TJwtPart part);
 
 
 /// <summary>
+/// Decodes a JWT part's bytes (typically UTF-8 JSON) into its claim set. The
+/// counterpart to <see cref="JwtPartEncoder{TJwtPart}"/> on the verification
+/// side: the verifier applies the result positionally, wrapping the first
+/// segment in a <see cref="JwtHeader"/> and the second in a
+/// <see cref="JwtPayload"/>.
+/// </summary>
+/// <param name="partBytes">The decoded bytes of a single JWT part.</param>
+/// <returns>The claim set carried by the part.</returns>
+public delegate IReadOnlyDictionary<string, object> JwtPartDecoder(ReadOnlySpan<byte> partBytes);
+
+
+/// <summary>
 /// Context for JOSE key resolution containing header and payload information.
 /// </summary>
-/// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
 /// <param name="Header">The JWT header containing algorithm and key identification (kid, jku, alg, x5c).</param>
 /// <param name="Payload">The JWT payload containing claims (iss, sub, aud).</param>
 /// <remarks>
@@ -35,7 +46,7 @@ public delegate TaggedMemory<byte> JwtPartEncoder<in TJwtPart>(TJwtPart part);
 /// which key to load and from where.
 /// </para>
 /// </remarks>
-public readonly record struct JoseKeyContext<TJwtPart>(TJwtPart Header, TJwtPart Payload);
+public readonly record struct JoseKeyContext(JwtHeader Header, JwtPayload Payload);
 
 
 /// <summary>
@@ -57,10 +68,9 @@ public readonly record struct JoseKeyContext<TJwtPart>(TJwtPart Header, TJwtPart
 /// mint-controlled result type.
 /// </para>
 /// </remarks>
-/// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
-public readonly record struct JwsVerificationResult<TJwtPart>
+public readonly record struct JwsVerificationResult
 {
-    internal JwsVerificationResult(bool isValid, TJwtPart header, TJwtPart payload)
+    internal JwsVerificationResult(bool isValid, JwtHeader header, JwtPayload payload)
     {
         IsValid = isValid;
         Header = header;
@@ -71,10 +81,10 @@ public readonly record struct JwsVerificationResult<TJwtPart>
     public bool IsValid { get; }
 
     /// <summary>The decoded header.</summary>
-    public TJwtPart Header { get; }
+    public JwtHeader Header { get; }
 
     /// <summary>The decoded payload.</summary>
-    public TJwtPart Payload { get; }
+    public JwtPayload Payload { get; }
 }
 
 
@@ -396,23 +406,20 @@ public static class Jws
     /// verification function, applying <see cref="DefaultMaxJwsLength"/>
     /// as the upper bound on the input.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
-    /// <param name="partDecoder">Decodes JWT part bytes to the part type.</param>
     /// <param name="pool">Memory pool for decoding allocation.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <see cref="DefaultMaxJwsLength"/> or does not have exactly three parts.</exception>
-    public static ValueTask<bool> VerifyAsync<TJwtPart>(
+    public static ValueTask<bool> VerifyAsync(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey,
         CancellationToken cancellationToken)
-        => VerifyAsync(jws, base64UrlDecoder, partDecoder, pool, publicKey, DefaultMaxJwsLength, cancellationToken);
+        => VerifyAsync(jws, base64UrlDecoder, pool, publicKey, DefaultMaxJwsLength, cancellationToken);
 
 
     /// <summary>
@@ -420,20 +427,17 @@ public static class Jws
     /// verification function, with a caller-supplied
     /// <paramref name="maxJwsLength"/> upper bound per RFC 8725 §3.11.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
-    /// <param name="partDecoder">Decodes JWT part bytes to the part type.</param>
     /// <param name="pool">Memory pool for decoding allocation.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="maxJwsLength">Maximum accepted JWS length per RFC 8725 §3.11.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <paramref name="maxJwsLength"/> or does not have exactly three parts.</exception>
-    public static ValueTask<bool> VerifyAsync<TJwtPart>(
+    public static ValueTask<bool> VerifyAsync(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey,
         int maxJwsLength,
@@ -447,7 +451,7 @@ public static class Jws
             CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose);
 
         return VerifyAsync(
-            jws, base64UrlDecoder, partDecoder, pool,
+            jws, base64UrlDecoder, pool,
             publicKey, verificationDelegate, maxJwsLength, cancellationToken);
     }
 
@@ -457,25 +461,22 @@ public static class Jws
     /// function, applying <see cref="DefaultMaxJwsLength"/> as the upper
     /// bound on the input.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
-    /// <param name="partDecoder">Decodes JWT part bytes to the part type.</param>
     /// <param name="pool">Memory pool for decoding allocation.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="verificationDelegate">The verification function to use.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <see cref="DefaultMaxJwsLength"/> or does not have exactly three parts.</exception>
-    public static ValueTask<bool> VerifyAsync<TJwtPart>(
+    public static ValueTask<bool> VerifyAsync(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
         CancellationToken cancellationToken)
-        => VerifyAsync(jws, base64UrlDecoder, partDecoder, pool, publicKey, verificationDelegate, DefaultMaxJwsLength, cancellationToken);
+        => VerifyAsync(jws, base64UrlDecoder, pool, publicKey, verificationDelegate, DefaultMaxJwsLength, cancellationToken);
 
 
     /// <summary>
@@ -483,10 +484,8 @@ public static class Jws
     /// function, with a caller-supplied <paramref name="maxJwsLength"/>
     /// upper bound per RFC 8725 §3.11.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
-    /// <param name="partDecoder">Decodes JWT part bytes to the part type.</param>
     /// <param name="pool">Memory pool for decoding allocation.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="verificationDelegate">The verification function to use.</param>
@@ -494,10 +493,9 @@ public static class Jws
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <paramref name="maxJwsLength"/> or does not have exactly three parts.</exception>
-    public static async ValueTask<bool> VerifyAsync<TJwtPart>(
+    public static async ValueTask<bool> VerifyAsync(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
@@ -506,7 +504,6 @@ public static class Jws
     {
         ArgumentNullException.ThrowIfNull(jws);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
-        ArgumentNullException.ThrowIfNull(partDecoder);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
@@ -522,13 +519,21 @@ public static class Jws
             throw new ArgumentException("JWS compact serialization must have exactly three parts.", nameof(jws));
         }
 
-        using IMemoryOwner<byte> signatureOwner = base64UrlDecoder(parts[2], pool);
+        //A malformed signature segment (base64url the injected decoder rejects) cannot verify; treat it
+        //as a clean "does not verify" rather than letting the decoder's exception escape. Callers depend
+        //on VerifyAsync returning false, never throwing, on untrusted input.
+        using DecodedSegment signature = TryDecodeSegment(base64UrlDecoder, parts[2], pool);
+        if(!signature.IsDecoded)
+        {
+            return false;
+        }
+
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             parts[0], parts[1], pool, out int signingInputLength);
 
         return await verificationDelegate(
             dataToVerifyOwner.Memory[..signingInputLength],
-            signatureOwner.Memory,
+            signature.Memory,
             publicKey.AsReadOnlyMemory(),
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
@@ -538,19 +543,18 @@ public static class Jws
     /// Verifies a JWS and returns the decoded header and payload, applying
     /// <see cref="DefaultMaxJwsLength"/> as the upper bound on the input.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
-    /// <param name="partDecoder">Decodes JWT part bytes to the part type.</param>
+    /// <param name="partDecoder">Decodes JWT part bytes to a claims dictionary.</param>
     /// <param name="pool">Memory pool for decoding allocation.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result containing validity and decoded parts.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <see cref="DefaultMaxJwsLength"/> or does not have exactly three parts.</exception>
-    public static ValueTask<JwsVerificationResult<TJwtPart>> VerifyAndDecodeAsync<TJwtPart>(
+    public static ValueTask<JwsVerificationResult> VerifyAndDecodeAsync(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
+        JwtPartDecoder partDecoder,
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey,
         CancellationToken cancellationToken)
@@ -562,20 +566,19 @@ public static class Jws
     /// caller-supplied <paramref name="maxJwsLength"/> upper bound per
     /// RFC 8725 §3.11.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
-    /// <param name="partDecoder">Decodes JWT part bytes to the part type.</param>
+    /// <param name="partDecoder">Decodes JWT part bytes to a claims dictionary.</param>
     /// <param name="pool">Memory pool for decoding allocation.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="maxJwsLength">Maximum accepted JWS length per RFC 8725 §3.11.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result containing validity and decoded parts.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <paramref name="maxJwsLength"/> or does not have exactly three parts.</exception>
-    public static ValueTask<JwsVerificationResult<TJwtPart>> VerifyAndDecodeAsync<TJwtPart>(
+    public static ValueTask<JwsVerificationResult> VerifyAndDecodeAsync(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
+        JwtPartDecoder partDecoder,
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey,
         int maxJwsLength,
@@ -603,10 +606,9 @@ public static class Jws
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
     /// from <paramref name="publicKey"/>'s <see cref="SensitiveMemory.Tag"/>.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
-    /// <param name="partDecoder">Decodes JWT part bytes to the part type.</param>
+    /// <param name="partDecoder">Decodes JWT part bytes to a claims dictionary.</param>
     /// <param name="pool">Memory pool for decoding allocation.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="verificationDelegate">The verification delegate to use.</param>
@@ -614,10 +616,10 @@ public static class Jws
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result containing validity and decoded parts.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <paramref name="maxJwsLength"/> or does not have exactly three parts.</exception>
-    public static async ValueTask<JwsVerificationResult<TJwtPart>> VerifyAndDecodeAsync<TJwtPart>(
+    public static async ValueTask<JwsVerificationResult> VerifyAndDecodeAsync(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
+        JwtPartDecoder partDecoder,
         MemoryPool<byte> pool,
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
@@ -646,8 +648,8 @@ public static class Jws
         using IMemoryOwner<byte> payloadOwner = base64UrlDecoder(parts[1], pool);
         using IMemoryOwner<byte> signatureOwner = base64UrlDecoder(parts[2], pool);
 
-        TJwtPart header = partDecoder(headerOwner.Memory.Span);
-        TJwtPart payload = partDecoder(payloadOwner.Memory.Span);
+        JwtHeader header = new(partDecoder(headerOwner.Memory.Span));
+        JwtPayload payload = new(partDecoder(payloadOwner.Memory.Span));
 
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             parts[0], parts[1], pool, out int signingInputLength);
@@ -658,14 +660,13 @@ public static class Jws
             publicKey.AsReadOnlyMemory(),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        return new JwsVerificationResult<TJwtPart>(isValid, header, payload);
+        return new JwsVerificationResult(isValid, header, payload);
     }
 
 
     /// <summary>
     /// Creates a JWS using resolver/binder pattern for key resolution.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
     /// <typeparam name="TBinderState">The state type for key material binding.</typeparam>
     /// <param name="header">The JWT header containing algorithm information.</param>
@@ -680,14 +681,14 @@ public static class Jws
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The JWS message containing the signature.</returns>
     /// <exception cref="InvalidOperationException">Thrown when key resolution fails.</exception>
-    public static async ValueTask<JwsMessage> SignAsync<TJwtPart, TResolverState, TBinderState>(
-        TJwtPart header,
-        TJwtPart payload,
-        JwtPartEncoder<TJwtPart> partEncoder,
+    public static async ValueTask<JwsMessage> SignAsync<TResolverState, TBinderState>(
+        JwtHeader header,
+        JwtPayload payload,
+        JwtPartEncoder<JoseDictionary> partEncoder,
         EncodeDelegate base64UrlEncoder,
         MemoryPool<byte> pool,
         TResolverState resolverState,
-        KeyMaterialResolver<PrivateKeyMemory, JoseKeyContext<TJwtPart>, TResolverState> resolver,
+        KeyMaterialResolver<PrivateKeyMemory, JoseKeyContext, TResolverState> resolver,
         TBinderState binderState,
         KeyMaterialBinder<PrivateKeyMemory, PrivateKey, TBinderState> binder,
         CancellationToken cancellationToken = default)
@@ -707,7 +708,7 @@ public static class Jws
         using IMemoryOwner<byte> dataToSignOwner = RentSigningInput(
             headerSegment, payloadSegment, pool, out int signingInputLength);
 
-        var context = new JoseKeyContext<TJwtPart>(header, payload);
+        var context = new JoseKeyContext(header, payload);
 
         PrivateKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken).ConfigureAwait(false);
 
@@ -735,19 +736,18 @@ public static class Jws
     /// Verifies a JWS using resolver/binder pattern for key resolution,
     /// applying <see cref="DefaultMaxJwsLength"/> as the upper bound on the input.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
     /// <typeparam name="TBinderState">The state type for key material binding.</typeparam>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <see cref="DefaultMaxJwsLength"/> or does not have exactly three parts.</exception>
     /// <exception cref="InvalidOperationException">Thrown when key resolution fails.</exception>
-    public static ValueTask<bool> VerifyAsync<TJwtPart, TResolverState, TBinderState>(
+    public static ValueTask<bool> VerifyAsync<TResolverState, TBinderState>(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
+        JwtPartDecoder partDecoder,
         MemoryPool<byte> pool,
         TResolverState resolverState,
-        KeyMaterialResolver<PublicKeyMemory, JoseKeyContext<TJwtPart>, TResolverState> resolver,
+        KeyMaterialResolver<PublicKeyMemory, JoseKeyContext, TResolverState> resolver,
         TBinderState binderState,
         KeyMaterialBinder<PublicKeyMemory, PublicKey, TBinderState> binder,
         CancellationToken cancellationToken = default)
@@ -759,19 +759,18 @@ public static class Jws
     /// with a caller-supplied <paramref name="maxJwsLength"/> upper bound
     /// per RFC 8725 §3.11.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
     /// <typeparam name="TBinderState">The state type for key material binding.</typeparam>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <paramref name="maxJwsLength"/> or does not have exactly three parts.</exception>
     /// <exception cref="InvalidOperationException">Thrown when key resolution fails.</exception>
-    public static async ValueTask<bool> VerifyAsync<TJwtPart, TResolverState, TBinderState>(
+    public static async ValueTask<bool> VerifyAsync<TResolverState, TBinderState>(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
+        JwtPartDecoder partDecoder,
         MemoryPool<byte> pool,
         TResolverState resolverState,
-        KeyMaterialResolver<PublicKeyMemory, JoseKeyContext<TJwtPart>, TResolverState> resolver,
+        KeyMaterialResolver<PublicKeyMemory, JoseKeyContext, TResolverState> resolver,
         TBinderState binderState,
         KeyMaterialBinder<PublicKeyMemory, PublicKey, TBinderState> binder,
         int maxJwsLength,
@@ -793,17 +792,24 @@ public static class Jws
             throw new ArgumentException("JWS compact serialization must have exactly three parts.", nameof(jws));
         }
 
-        using IMemoryOwner<byte> headerOwner = base64UrlDecoder(parts[0], pool);
-        using IMemoryOwner<byte> payloadOwner = base64UrlDecoder(parts[1], pool);
-        using IMemoryOwner<byte> signatureOwner = base64UrlDecoder(parts[2], pool);
+        using DecodedSegment headerSegment = TryDecodeSegment(base64UrlDecoder, parts[0], pool);
+        using DecodedSegment payloadSegment = TryDecodeSegment(base64UrlDecoder, parts[1], pool);
+        using DecodedSegment signatureSegment = TryDecodeSegment(base64UrlDecoder, parts[2], pool);
 
-        TJwtPart header = partDecoder(headerOwner.Memory.Span);
-        TJwtPart payload = partDecoder(payloadOwner.Memory.Span);
+        //A malformed segment the decoder rejects cannot verify; fail closed to false rather than letting
+        //the decoder's exception escape on untrusted input.
+        if(!headerSegment.IsDecoded || !payloadSegment.IsDecoded || !signatureSegment.IsDecoded)
+        {
+            return false;
+        }
+
+        JwtHeader header = new(partDecoder(headerSegment.Memory.Span));
+        JwtPayload payload = new(partDecoder(payloadSegment.Memory.Span));
 
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             parts[0], parts[1], pool, out int signingInputLength);
 
-        var context = new JoseKeyContext<TJwtPart>(header, payload);
+        var context = new JoseKeyContext(header, payload);
 
         PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken).ConfigureAwait(false);
 
@@ -815,8 +821,8 @@ public static class Jws
         Tag signatureTag = material.Tag;
         using PublicKey publicKey = await binder(material, binderState, cancellationToken).ConfigureAwait(false);
 
-        IMemoryOwner<byte> signatureMemory = pool.Rent(signatureOwner.Memory.Length);
-        signatureOwner.Memory.Span.CopyTo(signatureMemory.Memory.Span);
+        IMemoryOwner<byte> signatureMemory = pool.Rent(signatureSegment.Memory.Length);
+        signatureSegment.Memory.Span.CopyTo(signatureMemory.Memory.Span);
         using var signature = new Signature(signatureMemory, signatureTag);
 
         return await publicKey.VerifyAsync(
@@ -829,19 +835,18 @@ public static class Jws
     /// pattern, applying <see cref="DefaultMaxJwsLength"/> as the upper
     /// bound on the input.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
     /// <typeparam name="TBinderState">The state type for key material binding.</typeparam>
     /// <returns>The verification result containing validity and decoded parts.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <see cref="DefaultMaxJwsLength"/> or does not have exactly three parts.</exception>
     /// <exception cref="InvalidOperationException">Thrown when key resolution fails.</exception>
-    public static ValueTask<JwsVerificationResult<TJwtPart>> VerifyAndDecodeAsync<TJwtPart, TResolverState, TBinderState>(
+    public static ValueTask<JwsVerificationResult> VerifyAndDecodeAsync<TResolverState, TBinderState>(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
+        JwtPartDecoder partDecoder,
         MemoryPool<byte> pool,
         TResolverState resolverState,
-        KeyMaterialResolver<PublicKeyMemory, JoseKeyContext<TJwtPart>, TResolverState> resolver,
+        KeyMaterialResolver<PublicKeyMemory, JoseKeyContext, TResolverState> resolver,
         TBinderState binderState,
         KeyMaterialBinder<PublicKeyMemory, PublicKey, TBinderState> binder,
         CancellationToken cancellationToken = default)
@@ -853,19 +858,18 @@ public static class Jws
     /// pattern, with a caller-supplied <paramref name="maxJwsLength"/>
     /// upper bound per RFC 8725 §3.11.
     /// </summary>
-    /// <typeparam name="TJwtPart">The type of JWT header and payload.</typeparam>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
     /// <typeparam name="TBinderState">The state type for key material binding.</typeparam>
     /// <returns>The verification result containing validity and decoded parts.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <paramref name="maxJwsLength"/> or does not have exactly three parts.</exception>
     /// <exception cref="InvalidOperationException">Thrown when key resolution fails.</exception>
-    public static async ValueTask<JwsVerificationResult<TJwtPart>> VerifyAndDecodeAsync<TJwtPart, TResolverState, TBinderState>(
+    public static async ValueTask<JwsVerificationResult> VerifyAndDecodeAsync<TResolverState, TBinderState>(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, TJwtPart> partDecoder,
+        JwtPartDecoder partDecoder,
         MemoryPool<byte> pool,
         TResolverState resolverState,
-        KeyMaterialResolver<PublicKeyMemory, JoseKeyContext<TJwtPart>, TResolverState> resolver,
+        KeyMaterialResolver<PublicKeyMemory, JoseKeyContext, TResolverState> resolver,
         TBinderState binderState,
         KeyMaterialBinder<PublicKeyMemory, PublicKey, TBinderState> binder,
         int maxJwsLength,
@@ -891,13 +895,13 @@ public static class Jws
         using IMemoryOwner<byte> payloadOwner = base64UrlDecoder(parts[1], pool);
         using IMemoryOwner<byte> signatureOwner = base64UrlDecoder(parts[2], pool);
 
-        TJwtPart header = partDecoder(headerOwner.Memory.Span);
-        TJwtPart payload = partDecoder(payloadOwner.Memory.Span);
+        JwtHeader header = new(partDecoder(headerOwner.Memory.Span));
+        JwtPayload payload = new(partDecoder(payloadOwner.Memory.Span));
 
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             parts[0], parts[1], pool, out int signingInputLength);
 
-        var context = new JoseKeyContext<TJwtPart>(header, payload);
+        var context = new JoseKeyContext(header, payload);
 
         PublicKeyMemory? material = await resolver(context, pool, resolverState, cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException("Key material resolution failed.");
         Tag signatureTag = material.Tag;
@@ -910,7 +914,84 @@ public static class Jws
         bool isValid = await publicKey.VerifyAsync(
             dataToVerifyOwner.Memory[..signingInputLength], signature).ConfigureAwait(false);
 
-        return new JwsVerificationResult<TJwtPart>(isValid, header, payload);
+        return new JwsVerificationResult(isValid, header, payload);
+    }
+
+
+    /// <summary>
+    /// The outcome of decoding one base64url segment of an inbound (untrusted) compact JWS. A decoded
+    /// segment owns a pooled buffer; a malformed segment — one the injected decoder rejects — carries
+    /// none. Disposing releases the buffer (a no-op when malformed), so verify paths can <c>using</c>
+    /// the outcome and branch on <see cref="IsDecoded"/> instead of threading a nullable owner and
+    /// conflating "failed" with "null". A segment that cannot be decoded cannot verify, which is how
+    /// the verify overloads honour the contract that verification of untrusted input never throws on
+    /// malformed content.
+    /// </summary>
+    private readonly struct DecodedSegment : IDisposable
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DecodedSegment"/> struct.
+        /// </summary>
+        /// <param name="owner">
+        /// The pooled buffer owning the decoded bytes, or <see langword="null"/> when the segment was malformed.
+        /// </param>
+        private DecodedSegment(IMemoryOwner<byte>? owner) => Owner = owner;
+
+        /// <summary>
+        /// The pooled buffer owning the decoded bytes, or <see langword="null"/> when the segment could not be decoded.
+        /// </summary>
+        private IMemoryOwner<byte>? Owner { get; }
+
+        /// <summary>
+        /// Wraps a successfully decoded segment around the pooled buffer it owns. Ownership transfers to
+        /// the returned value, which the caller disposes.
+        /// </summary>
+        /// <param name="owner">The pooled buffer holding the decoded bytes.</param>
+        /// <returns>A decoded segment whose <see cref="IsDecoded"/> is <see langword="true"/>.</returns>
+        public static DecodedSegment Decoded(IMemoryOwner<byte> owner) => new(owner);
+
+        /// <summary>
+        /// A segment that could not be decoded. It owns no buffer and its <see cref="IsDecoded"/> is
+        /// <see langword="false"/>.
+        /// </summary>
+        public static DecodedSegment Malformed => default;
+
+        /// <summary>
+        /// <see langword="true"/> when the segment decoded to a pooled buffer; <see langword="false"/>
+        /// when the segment was malformed.
+        /// </summary>
+        public bool IsDecoded => Owner is not null;
+
+        /// <summary>
+        /// The decoded bytes when <see cref="IsDecoded"/> is <see langword="true"/>; otherwise
+        /// <see cref="ReadOnlyMemory{T}.Empty"/>.
+        /// </summary>
+        public ReadOnlyMemory<byte> Memory => Owner is null ? ReadOnlyMemory<byte>.Empty : Owner.Memory;
+
+        /// <summary>
+        /// Releases the pooled buffer. A no-op when the segment was malformed.
+        /// </summary>
+        public void Dispose() => Owner?.Dispose();
+    }
+
+
+    //Decodes a base64url segment of an untrusted compact JWS. A segment the injected decoder rejects
+    //returns DecodedSegment.Malformed rather than letting the decoder's exception escape; cancellation
+    //is propagated.
+    private static DecodedSegment TryDecodeSegment(DecodeDelegate base64UrlDecoder, string segment, MemoryPool<byte> pool)
+    {
+        try
+        {
+            return DecodedSegment.Decoded(base64UrlDecoder(segment, pool));
+        }
+        catch(OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return DecodedSegment.Malformed;
+        }
     }
 
 

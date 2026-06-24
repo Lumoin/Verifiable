@@ -259,10 +259,10 @@ public static class EndSessionEndpoints
             //Verify AND decode in one call: the payload is read from the VERIFIED
             //result, not re-deserialized from the unverified message — the trust state
             //is carried in the type (JwsVerificationResult), not asserted by convention.
-            JwsVerificationResult<IReadOnlyDictionary<string, object>> verification;
+            JwsVerificationResult verification;
             try
             {
-                verification = await Jws.VerifyAndDecodeAsync<IReadOnlyDictionary<string, object>>(
+                verification = await Jws.VerifyAndDecodeAsync(
                     idTokenHint,
                     oauth.Codecs.Decoder!,
                     bytes => oauth.Codecs.JwtPayloadDeserializer!(bytes),
@@ -282,7 +282,7 @@ public static class EndSessionEndpoints
                     OAuthErrors.InvalidRequest, "id_token_hint signature did not verify (not issued by this server)."));
             }
 
-            JwtPayload payload = new(verification.Payload);
+            JwtPayload payload = verification.Payload;
 
             Uri issuerUri = oauth.ResolveIssuerAsync is not null
                 ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken).ConfigureAwait(false))!

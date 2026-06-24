@@ -84,7 +84,6 @@ internal sealed class Oid4VpX509SanDnsResolverTests
             {
                 bool verified = await Jws.VerifyAsync(
                     compactJarA, Decoder,
-                    static (ReadOnlySpan<byte> _) => (object?)null,
                     Pool, keyForA, TestContext.CancellationToken).ConfigureAwait(false);
 
                 Assert.IsTrue(verified,

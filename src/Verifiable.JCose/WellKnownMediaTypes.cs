@@ -278,6 +278,16 @@ namespace Verifiable.JCose
             /// </summary>
             public static readonly string AtJwt = Utf8Constants.ToInternedString(AtJwtUtf8);
 
+            /// <summary>The UTF-8 source literal of <see cref="OauthIdJagJwt"/>.</summary>
+            public static ReadOnlySpan<byte> OauthIdJagJwtUtf8 => "application/oauth-id-jag+jwt"u8;
+
+            /// <summary>
+            /// Identity Assertion JWT Authorization Grant (<c>application/oauth-id-jag+jwt</c>),
+            /// the media type registered by draft-ietf-oauth-identity-assertion-authz-grant §10.1.
+            /// The <see cref="Jwt.OauthIdJagJwt"/> sibling carries the short <c>typ</c> form.
+            /// </summary>
+            public static readonly string OauthIdJagJwt = Utf8Constants.ToInternedString(OauthIdJagJwtUtf8);
+
             /// <summary>The UTF-8 source literal of <see cref="TokenIntrospectionJwt"/>.</summary>
             public static ReadOnlySpan<byte> TokenIntrospectionJwtUtf8 => "application/token-introspection+jwt"u8;
 
@@ -694,6 +704,17 @@ namespace Verifiable.JCose
             /// </summary>
             public static readonly string AtJwt = Utf8Constants.ToInternedString(AtJwtUtf8);
 
+            /// <summary>The UTF-8 source literal of <see cref="OauthIdJagJwt"/>.</summary>
+            public static ReadOnlySpan<byte> OauthIdJagJwtUtf8 => "oauth-id-jag+jwt"u8;
+
+            /// <summary>
+            /// Identity Assertion JWT Authorization Grant (<c>oauth-id-jag+jwt</c>). The
+            /// explicit <c>typ</c> header value an ID-JAG MUST carry per
+            /// draft-ietf-oauth-identity-assertion-authz-grant §3.1, distinguishing the
+            /// authorization-grant JWT from an access token or ID Token.
+            /// </summary>
+            public static readonly string OauthIdJagJwt = Utf8Constants.ToInternedString(OauthIdJagJwtUtf8);
+
             /// <summary>The UTF-8 source literal of <see cref="TokenIntrospectionJwt"/>.</summary>
             public static ReadOnlySpan<byte> TokenIntrospectionJwtUtf8 => "token-introspection+jwt"u8;
 
@@ -803,6 +824,14 @@ namespace Verifiable.JCose
 
 
             /// <summary>
+            /// Whether <paramref name="typ"/> is <see cref="OauthIdJagJwt"/>.
+            /// </summary>
+            /// <param name="typ">The JWT typ header value.</param>
+            /// <returns><see langword="true"/> if <paramref name="typ"/> is <see cref="OauthIdJagJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsOauthIdJagJwt(string typ) => Equals(typ, OauthIdJagJwt);
+
+
+            /// <summary>
             /// Whether <paramref name="typ"/> is <see cref="DpopJwt"/>.
             /// </summary>
             /// <param name="typ">The JWT typ header value.</param>
@@ -876,6 +905,7 @@ namespace Verifiable.JCose
                 _ when IsDcSdJwt(typ) => DcSdJwt,
                 _ when IsOauthAuthzReqJwt(typ) => OauthAuthzReqJwt,
                 _ when IsAtJwt(typ) => AtJwt,
+                _ when IsOauthIdJagJwt(typ) => OauthIdJagJwt,
                 _ when IsDpopJwt(typ) => DpopJwt,
                 _ when IsVerifierAttestationJwt(typ) => VerifierAttestationJwt,
                 _ when IsSecEventJwt(typ) => SecEventJwt,

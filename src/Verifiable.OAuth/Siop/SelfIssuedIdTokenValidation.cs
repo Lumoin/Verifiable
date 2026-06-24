@@ -224,8 +224,7 @@ public static class SelfIssuedIdTokenValidation
                             try
                             {
                                 isSignatureValid = await Jws.VerifyAsync(
-                                    idToken, base64UrlDecoder,
-                                    static (ReadOnlySpan<byte> _) => (object?)null, memoryPool,
+                                    idToken, base64UrlDecoder, memoryPool,
                                     didKey, cancellationToken).ConfigureAwait(false);
                             }
                             catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException)
@@ -294,8 +293,7 @@ public static class SelfIssuedIdTokenValidation
             using PublicKeyMemory subjectKey = new(keyBytesOwner, subjectTag);
 
             return await Jws.VerifyAsync(
-                idToken, base64UrlDecoder,
-                static (ReadOnlySpan<byte> _) => (object?)null, memoryPool,
+                idToken, base64UrlDecoder, memoryPool,
                 subjectKey, cancellationToken).ConfigureAwait(false);
         }
         catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException)

@@ -96,12 +96,10 @@ public static class SdJwtVerificationExtensions
             DecodeDelegate decoder = DefaultCoderSelector.SelectDecoder(WellKnownKeyFormats.PublicKeyJwk);
             EncodeDelegate encoder = DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyJwk);
 
-            //Verify the issuer JWS signature over header.payload. Jws.VerifyAsync requires a
-            //payload decoder for symmetry with VerifyAndDecodeAsync but does not invoke it for
-            //signature-only verification, so a no-op decoder suffices; the payload is decoded
+            //Verify the issuer JWS signature over header.payload; the payload is decoded
             //separately below.
             bool signatureValid = await Jws.VerifyAsync(
-                token.IssuerSigned, decoder, NoPayloadDecode, pool,
+                token.IssuerSigned, decoder, pool,
                 issuerVerificationKey, verificationDelegate, cancellationToken).ConfigureAwait(false);
             if(!signatureValid)
             {
@@ -247,12 +245,4 @@ public static class SdJwtVerificationExtensions
                 issuerVerificationKey, pool, verificationDelegate, extractPaths, hashAlgorithm, cancellationToken);
         }
     }
-
-
-    /// <summary>
-    /// A no-op JWT-part decoder. <see cref="Jws.VerifyAsync{TJwtPart}(string, DecodeDelegate, System.Func{System.ReadOnlySpan{byte}, TJwtPart}, MemoryPool{byte}, PublicKeyMemory, VerificationDelegate, System.Threading.CancellationToken)"/>
-    /// requires a part decoder for symmetry with the verify-and-decode path but does not invoke
-    /// it for signature-only verification, so the structural verifier supplies this.
-    /// </summary>
-    private static byte NoPayloadDecode(ReadOnlySpan<byte> _) => 0;
 }

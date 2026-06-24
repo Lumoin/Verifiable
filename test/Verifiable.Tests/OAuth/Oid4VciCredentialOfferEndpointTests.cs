@@ -81,7 +81,7 @@ internal sealed class Oid4VciCredentialOfferEndpointTests
         Assert.AreEqual(ConfigurationId, root.GetProperty("credential_configuration_ids")[0].GetString());
         Assert.AreEqual(PreAuthorizedCode,
             root.GetProperty("grants")
-                .GetProperty(OAuthRequestParameterValues.GrantTypePreAuthorizedCode)
+                .GetProperty(WellKnownGrantTypes.PreAuthorizedCode)
                 .GetProperty("pre-authorized_code").GetString());
     }
 

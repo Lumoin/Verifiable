@@ -142,7 +142,7 @@ public static class SdJwtVpTokenVerification
         {
             credentialSignatureValid = await Jws.VerifyAsync(
                 token.IssuerSigned, decoder,
-                static (ReadOnlySpan<byte> _) => (object?)null, pool,
+                pool,
                 issuerPublicKey, cancellationToken).ConfigureAwait(false);
         }
 
@@ -195,7 +195,7 @@ public static class SdJwtVpTokenVerification
             //Verify KB-JWT signature against the holder key from cnf.
             kbJwtSignatureValid = await Jws.VerifyAsync(
                 token.KeyBinding!, decoder,
-                static (ReadOnlySpan<byte> _) => (object?)null, pool,
+                pool,
                 holderPublicKey, cancellationToken).ConfigureAwait(false);
 
             //Verify sd_hash using the algorithm specified by _sd_alg.

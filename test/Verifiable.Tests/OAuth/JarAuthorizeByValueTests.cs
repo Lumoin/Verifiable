@@ -409,7 +409,7 @@ internal sealed class JarAuthorizeByValueTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -447,7 +447,7 @@ internal sealed class JarAuthorizeByValueTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
             [OAuthRequestParameterNames.MaxAge] = "300"
@@ -524,7 +524,7 @@ internal sealed class JarAuthorizeByValueTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
             [OAuthRequestParameterNames.State] = "direct-state-xyz"
@@ -581,7 +581,7 @@ internal sealed class JarAuthorizeByValueTests
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
@@ -735,13 +735,13 @@ internal sealed class JarAuthorizeByValueTests
             [WellKnownJwtClaimNames.Iss] = ClientId,
             [WellKnownJwtClaimNames.Aud] = expectedAud,
             [WellKnownJwtClaimNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ResponseType] = OAuthRequestParameterValues.ResponseTypeCode,
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
             [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
             [OAuthRequestParameterNames.State] = "state-jar-direct-01",
             [WellKnownJwtClaimNames.Nonce] = "nonce-jar-direct-01",
             [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = OAuthRequestParameterValues.CodeChallengeMethodS256,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
             [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Nbf] = now.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Exp] = (now + TimeSpan.FromSeconds(30)).ToUnixTimeSeconds()

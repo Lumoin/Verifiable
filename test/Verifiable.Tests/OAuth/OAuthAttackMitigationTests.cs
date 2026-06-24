@@ -246,7 +246,7 @@ internal sealed class OAuthAttackMitigationTests
             capturedFields.ContainsKey(OAuthRequestParameterNames.CodeChallenge),
             "PAR request body must always contain code_challenge.");
         Assert.AreEqual(
-            OAuthRequestParameterValues.CodeChallengeMethodS256,
+            WellKnownCodeChallengeMethods.S256,
             capturedFields[OAuthRequestParameterNames.CodeChallengeMethod],
             "code_challenge_method must be S256.");
     }
@@ -317,7 +317,7 @@ internal sealed class OAuthAttackMitigationTests
             .ConfigureAwait(false);
 
         Assert.AreEqual(
-            OAuthRequestParameterValues.CodeChallengeMethodS256,
+            WellKnownCodeChallengeMethods.S256,
             capturedFields[OAuthRequestParameterNames.CodeChallengeMethod],
             "The plain method must never be used; only S256 is permitted per RFC 9700 §2.1.1.");
     }

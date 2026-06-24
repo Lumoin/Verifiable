@@ -4,6 +4,7 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Server;
@@ -339,6 +340,8 @@ public static class MetadataEndpoints
                 bool clientCredentialsOnChain = false;
                 bool preAuthorizedCodeOnChain = false;
                 bool introspectionOnChain = false;
+                bool tokenExchangeOnChain = false;
+                bool jwtBearerOnChain = false;
                 foreach(ServerEndpoint chainEndpoint in chain)
                 {
                     if(chainEndpoint.Capability == WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)
@@ -369,6 +372,16 @@ public static class MetadataEndpoints
                         WellKnownEndpointNames.AuthCodeIntrospect, StringComparison.Ordinal))
                     {
                         introspectionOnChain = true;
+                    }
+                    if(string.Equals(chainEndpoint.Name,
+                        WellKnownEndpointNames.TokenExchangeToken, StringComparison.Ordinal))
+                    {
+                        tokenExchangeOnChain = true;
+                    }
+                    if(string.Equals(chainEndpoint.Name,
+                        WellKnownEndpointNames.JwtBearerToken, StringComparison.Ordinal))
+                    {
+                        jwtBearerOnChain = true;
                     }
 
                     if(chainEndpoint.DiscoveryMetadataKey is null) { continue; }
@@ -423,32 +436,68 @@ public static class MetadataEndpoints
                 //Defaults from RFC 6749 / OIDC Core (authorization_code +
                 //implicit) intentionally not used — implicit is out of scope
                 //per OAuth 2.1 / FAPI 2.0.
-                if(authorizationCodeOnChain || clientCredentialsOnChain || preAuthorizedCodeOnChain)
+                if(authorizationCodeOnChain || clientCredentialsOnChain || preAuthorizedCodeOnChain
+                    || tokenExchangeOnChain || jwtBearerOnChain)
                 {
-                    List<string> grantTypes = new(4);
+                    List<string> grantTypes = new(6);
                     if(authorizationCodeOnChain)
                     {
-                        grantTypes.Add(OAuthRequestParameterValues.GrantTypeAuthorizationCode);
+                        grantTypes.Add(WellKnownGrantTypes.AuthorizationCode);
                         if(refreshTokenOnChain)
                         {
-                            grantTypes.Add(OAuthRequestParameterValues.GrantTypeRefreshToken);
+                            grantTypes.Add(WellKnownGrantTypes.RefreshToken);
                         }
                     }
 
                     if(clientCredentialsOnChain)
                     {
-                        grantTypes.Add(OAuthRequestParameterValues.GrantTypeClientCredentials);
+                        grantTypes.Add(WellKnownGrantTypes.ClientCredentials);
                     }
 
                     if(preAuthorizedCodeOnChain)
                     {
-                        grantTypes.Add(OAuthRequestParameterValues.GrantTypePreAuthorizedCode);
+                        grantTypes.Add(WellKnownGrantTypes.PreAuthorizedCode);
+                    }
+
+                    if(tokenExchangeOnChain)
+                    {
+                        grantTypes.Add(WellKnownGrantTypes.TokenExchange);
+                    }
+
+                    //ID-JAG §7.2: a Resource Authorization Server advertising the id-jag grant profile
+                    //MUST also include the jwt-bearer grant type. The profile is advertised below under
+                    //the same jwtBearerOnChain condition, so adding jwt-bearer here satisfies that MUST.
+                    if(jwtBearerOnChain)
+                    {
+                        grantTypes.Add(WellKnownGrantTypes.JwtBearer);
                     }
 
                     AppendStringArrayField(
                         sb,
                         AuthorizationServerMetadataParameterNames.GrantTypesSupported,
                         grantTypes);
+                }
+
+                //ID-JAG §7.1: an IdP Authorization Server that can mint an Identity Assertion JWT
+                //Authorization Grant via Token Exchange SHOULD advertise the id-jag token type in
+                //identity_chaining_requested_token_types_supported.
+                if(tokenExchangeOnChain)
+                {
+                    AppendStringArrayField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.IdentityChainingRequestedTokenTypesSupported,
+                        [TokenTypeNames.GetName(TokenType.IdJag)]);
+                }
+
+                //ID-JAG §7.2: a Resource Authorization Server that processes the id-jag grant — it
+                //consumes an ID-JAG as a jwt-bearer assertion — SHOULD advertise the grant profile in
+                //authorization_grant_profiles_supported.
+                if(jwtBearerOnChain)
+                {
+                    AppendStringArrayField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.AuthorizationGrantProfilesSupported,
+                        [WellKnownGrantProfiles.IdJag]);
                 }
 
                 //pre-authorized_grant_anonymous_access_supported (OID4VCI 1.0 §12.3 OPTIONAL):

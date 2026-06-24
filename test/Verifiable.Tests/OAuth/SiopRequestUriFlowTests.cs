@@ -60,7 +60,7 @@ internal sealed class SiopRequestUriFlowTests
 
     //The §9 Request Object payload is read back as a generic claim dictionary so the test asserts on
     //the wire-observable values rather than a typed projection.
-    private static readonly Func<ReadOnlySpan<byte>, Dictionary<string, object>> PartDecoder =
+    private static readonly JwtPartDecoder PartDecoder =
         static bytes => JsonSerializer.Deserialize<Dictionary<string, object>>(
             bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("§9 Request Object JWT part parsed to null.");
@@ -114,7 +114,7 @@ internal sealed class SiopRequestUriFlowTests
             ? SiopAuthorizationRequestParameterValues.StaticDiscoveryRequestObjectAudience
             : rpKeys.Registration.IssuerUri!.OriginalString;
 
-        JwsVerificationResult<Dictionary<string, object>> verification =
+        JwsVerificationResult verification =
             await Jws.VerifyAndDecodeAsync(
                 requestObjectJws,
                 TestSetup.Base64UrlDecoder,
@@ -126,7 +126,7 @@ internal sealed class SiopRequestUriFlowTests
         Assert.IsTrue(verification.IsValid,
             "The served §9 Request Object must verify under the RP's signing key.");
 
-        Dictionary<string, object> payload = verification.Payload;
+        JwtPayload payload = verification.Payload;
         Assert.AreEqual(
             SiopAuthorizationRequestParameterValues.ResponseTypeIdToken,
             GetString(payload, OAuthRequestParameterNames.ResponseType));

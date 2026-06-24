@@ -78,7 +78,6 @@ internal sealed class Oid4VpX509HashResolverTests
 
             bool verified = await Jws.VerifyAsync(
                 compactJar, Decoder,
-                static (ReadOnlySpan<byte> _) => (object?)null,
                 Pool, key, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(verified,
@@ -242,7 +241,6 @@ internal sealed class Oid4VpX509HashResolverTests
 
             bool verified = await Jws.VerifyAsync(
                 compactJar, Decoder,
-                static (ReadOnlySpan<byte> _) => (object?)null,
                 Pool, key, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(verified,

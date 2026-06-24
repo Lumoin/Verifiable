@@ -12,7 +12,9 @@ using Verifiable.OAuth.AuthCode.Server;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.IdJag;
 using Verifiable.OAuth.Introspection;
+using Verifiable.OAuth.JwtBearer;
 using Verifiable.OAuth.Jar;
 using Verifiable.OAuth.Jarm;
 using Verifiable.OAuth.Oid4Vci;
@@ -135,6 +137,33 @@ public static class AuthCodeEndpoints
             && context.Server?.OAuth().ValidateClientCredentialsAsync is not null)
         {
             candidates.Add(BuildClientCredentials());
+        }
+
+        //Token Exchange grant (RFC 8693 §2.1) — impersonation only — shares the token
+        //endpoint URL, disjoint from the other grants by the grant_type filter. Activates
+        //only when the capability AND the client-authentication seam AND both token-exchange
+        //seams (subject-token validation and the impersonation policy decision) are present:
+        //an advertised grant missing either seam would mint tokens for any subject-token
+        //string or skip the authorization decision (fail-closed, like client_credentials).
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenExchange)
+            && context.Server?.OAuth().ValidateClientCredentialsAsync is not null
+            && context.Server?.OAuth().ValidateTokenExchangeTokenAsync is not null
+            && context.Server?.OAuth().AuthorizeTokenExchangeAsync is not null)
+        {
+            candidates.Add(BuildTokenExchange());
+        }
+
+        //JWT Bearer authorization grant (RFC 7523 §2.1/§3.1) — shares the token endpoint URL,
+        //disjoint from the other grants by the grant_type filter. Activates only when the capability
+        //AND the assertion-validation seam are present: an advertised grant missing the seam would
+        //mint tokens for any assertion string (fail-closed, like client_credentials). Unlike
+        //token-exchange/client_credentials, client AUTHENTICATION is OPTIONAL for this grant (§3.1),
+        //so the client-authentication seam is NOT required to materialize it — the assertion is the
+        //grant; the endpoint validates client credentials only if the request carries them.
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtBearer)
+            && context.Server?.OAuth().ValidateJwtBearerAssertionAsync is not null)
+        {
+            candidates.Add(BuildJwtBearer());
         }
 
         //OID4VCI 1.0 §6 Pre-Authorized Code grant — shares the token endpoint URL,
@@ -1615,7 +1644,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
-                    || !string.Equals(grantType, OAuthRequestParameterValues.GrantTypeAuthorizationCode, StringComparison.Ordinal))
+                    || !string.Equals(grantType, WellKnownGrantTypes.AuthorizationCode, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -2091,7 +2120,7 @@ public static class AuthCodeEndpoints
                 }
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
-                    || !string.Equals(grantType, OAuthRequestParameterValues.GrantTypeClientCredentials, StringComparison.Ordinal))
+                    || !string.Equals(grantType, WellKnownGrantTypes.ClientCredentials, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -2313,6 +2342,1282 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// Builds the OAuth 2.0 Token Exchange grant candidate
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>) on the
+    /// shared token endpoint URL — IMPERSONATION and DELEGATION. Stateless: the client authenticates
+    /// through <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>, the
+    /// application's <see cref="AuthorizationServerIntegration.ValidateTokenExchangeTokenAsync"/> seam
+    /// validates the presented <c>subject_token</c> (and, for delegation, the <c>actor_token</c>) as
+    /// the trust authority, the
+    /// <see cref="AuthorizationServerIntegration.AuthorizeTokenExchangeAsync"/> seam makes the
+    /// impersonation/delegation policy decision and shapes the issued token, and the configured token
+    /// producers mint the access token directly into the response — no flow state.
+    /// </summary>
+    /// <remarks>
+    /// A request carrying an <c>actor_token</c> selects DELEGATION (RFC 8693 §1.1): the acting party
+    /// (the actor token's subject) is recorded in the issued token's <c>act</c> claim (§4.1) while the
+    /// top-level <c>sub</c> remains the subject. Before the policy seam runs, the library enforces the
+    /// §4.4 <c>may_act</c> MUST: when the subject token names an authorized actor, the actor token must
+    /// match every <c>may_act</c> member present — its <c>sub</c> and, since §4.4 notes "the combination
+    /// of the two claims <c>iss</c> and <c>sub</c> are sometimes necessary to uniquely identify an
+    /// authorized actor," its <c>iss</c> too whenever <c>may_act</c> names one. A request with no
+    /// <c>actor_token</c> is IMPERSONATION — the issued token
+    /// carries no <c>act</c> claim and the subject becomes the issued token's subject (§1.1).
+    /// </remarks>
+    private static EndpointCandidate BuildTokenExchange() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.TokenExchangeToken,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+            StartsNewFlow = true,
+            Kind = FlowKind.Stateless,
+            //DiscoveryMetadataKey null — the grant shares the token endpoint URL.
+
+            //Disjointness vs the other grants is enforced by the grant_type filter,
+            //exactly as the client_credentials and refresh matchers do.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
+                    || !string.Equals(grantType, WellKnownGrantTypes.TokenExchange, StringComparison.Ordinal))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+
+                ClientRecord? registration = context.ClientRegistration;
+                if(registration is null)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Unknown client."));
+                }
+
+                //RFC 8693 §2.1: client authentication is done using the normal OAuth 2.0
+                //mechanisms; the seam owns the method and the comparison, and the builder
+                //guarantees it is wired. Authenticating the client is what lets the STS apply
+                //the §2.1 "which entities are permitted to impersonate" checks downstream.
+                bool clientAuthenticated = await oauth.ValidateClientCredentialsAsync!(
+                    context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                if(!clientAuthenticated)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Client authentication failed."));
+                }
+
+                //RFC 8693 §2.1: subject_token is REQUIRED.
+                if(!fields.TryGetValue(OAuthRequestParameterNames.SubjectToken, out string? subjectToken)
+                    || string.IsNullOrEmpty(subjectToken))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "The subject_token parameter is required."));
+                }
+
+                //RFC 8693 §2.1/§3: subject_token_type is REQUIRED and must be a known token-type URI.
+                if(!fields.TryGetValue(OAuthRequestParameterNames.SubjectTokenType, out string? subjectTokenTypeValue)
+                    || string.IsNullOrEmpty(subjectTokenTypeValue)
+                    || !TokenTypeNames.TryParse(subjectTokenTypeValue, out TokenType subjectTokenType))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "The subject_token_type parameter is required and must be a supported token type."));
+                }
+
+                //RFC 8693 §2.1: actor_token (OPTIONAL) selects DELEGATION over impersonation; when it
+                //is present, actor_token_type is REQUIRED and must be a known token-type URI (§3), and
+                //it MUST be absent when actor_token is absent. Parse both before reaching the validation
+                //and authorization seams so a malformed acting-party request fails closed up front.
+                bool hasActorToken = fields.TryGetValue(OAuthRequestParameterNames.ActorToken, out string? actorToken)
+                    && !string.IsNullOrEmpty(actorToken);
+                bool hasActorTokenTypeValue = fields.TryGetValue(OAuthRequestParameterNames.ActorTokenType, out string? actorTokenTypeValue)
+                    && !string.IsNullOrEmpty(actorTokenTypeValue);
+
+                TokenType? actorTokenType = null;
+                if(hasActorToken)
+                {
+                    //RFC 8693 §2.1: "actor_token_type ... REQUIRED when actor_token is present in the request."
+                    if(!hasActorTokenTypeValue
+                        || !TokenTypeNames.TryParse(actorTokenTypeValue!, out TokenType parsedActorTokenType))
+                    {
+                        return (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest,
+                            "The actor_token_type parameter is required and must be a supported token type when actor_token is present."));
+                    }
+
+                    actorTokenType = parsedActorTokenType;
+                }
+                else if(hasActorTokenTypeValue)
+                {
+                    //RFC 8693 §2.1: actor_token_type "MUST NOT be included [when] actor_token is not present."
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "The actor_token_type parameter must not be present without an actor_token."));
+                }
+
+                //RFC 8693 §2.1/§3: requested_token_type is OPTIONAL but, when present, must parse to
+                //a known token-type URI. The issued type is the authorization seam's decision.
+                TokenType? requestedTokenType = null;
+                if(fields.TryGetValue(OAuthRequestParameterNames.RequestedTokenType, out string? requestedTokenTypeValue)
+                    && !string.IsNullOrEmpty(requestedTokenTypeValue))
+                {
+                    if(!TokenTypeNames.TryParse(requestedTokenTypeValue, out TokenType parsedRequestedTokenType))
+                    {
+                        return (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest,
+                            "The requested_token_type parameter must be a supported token type."));
+                    }
+
+                    requestedTokenType = parsedRequestedTokenType;
+                }
+
+                //RFC 8693 §2.1: resource / audience / scope are OPTIONAL and indicate the target and
+                //requested scope. Repeated resource parameters indicate multiple target resources
+                //(§2.1.1). The skin collapses repeated resource query parameters into a single
+                //space-delimited field value — the same convention the authorization-code path's
+                //ParseResourceIndicators consumes for resource (and that the library uses for scope /
+                //acr_values) — split here back into the individual RFC 8707 §2 absolute-URI indicators.
+                //audience values are logical names that MAY contain spaces, so they are NOT space-split
+                //and stay single-valued at this boundary; a deployment that needs multiple audiences
+                //carries them through the authorization seam's own shaping.
+                IReadOnlyList<string> resource = [];
+                if(fields.TryGetValue(OAuthRequestParameterNames.Resource, out string? resourceValue)
+                    && !string.IsNullOrEmpty(resourceValue))
+                {
+                    string[] resourceIndicators = resourceValue.Split(
+                        ' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+                    //RFC 8707 §2 / RFC 8693 §2.1: each resource value MUST be an absolute URI (RFC 3986
+                    //§4.3) and MUST NOT include a fragment component. UriKind.Absolute alone is not enough:
+                    //on Unix a leading-slash value like "/relative" parses as an absolute file: URI (it is a
+                    //valid Unix file path), so a relative resource would slip through there while being
+                    //rejected on Windows. Restrict to https/http/urn — the same cross-platform guard the
+                    //request_uri parser uses. Validate before the validation seam runs so a malformed target
+                    //fails closed up front.
+                    foreach(string indicator in resourceIndicators)
+                    {
+                        if(!Uri.TryCreate(indicator, UriKind.Absolute, out Uri? parsed)
+                            || !(string.Equals(parsed.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+                                || string.Equals(parsed.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)
+                                || string.Equals(parsed.Scheme, "urn", StringComparison.Ordinal))
+                            || !string.IsNullOrEmpty(parsed.Fragment))
+                        {
+                            return (null, ServerHttpResponse.BadRequest(
+                                OAuthErrors.InvalidRequest,
+                                "The resource parameter must be an absolute https, http, or urn URI without a fragment."));
+                        }
+                    }
+
+                    resource = resourceIndicators;
+                }
+
+                IReadOnlyList<string> audience = [];
+                if(fields.TryGetValue(OAuthRequestParameterNames.Audience, out string? audienceValue)
+                    && !string.IsNullOrEmpty(audienceValue))
+                {
+                    audience = [audienceValue];
+                }
+
+                //ID-JAG §4.3: when an Identity Assertion JWT Authorization Grant is requested
+                //(requested_token_type=id-jag), audience is REQUIRED — it names the Resource
+                //Authorization Server the grant is minted for and becomes the JAG's aud claim. A
+                //missing audience is a malformed request (invalid_request), not a grant failure.
+                if(requestedTokenType == TokenType.IdJag && audience.Count == 0)
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "The audience parameter is required when requesting an id-jag token type."));
+                }
+
+                string? requestedScope = null;
+                if(fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scopeValue)
+                    && !string.IsNullOrWhiteSpace(scopeValue))
+                {
+                    requestedScope = scopeValue;
+                }
+
+                Verifiable.OAuth.TokenExchange.TokenExchangeRequest exchangeRequest = new()
+                {
+                    SubjectToken = subjectToken,
+                    SubjectTokenType = subjectTokenType,
+                    ActorToken = hasActorToken ? actorToken : null,
+                    ActorTokenType = actorTokenType,
+                    RequestedTokenType = requestedTokenType,
+                    Resource = resource,
+                    Audience = audience,
+                    Scope = requestedScope,
+
+                    //ID-JAG §4.3.3: authorization_details is carried verbatim for the IdP's seam to
+                    //parse and process per RFC 9396; base RFC 8693 token exchange ignores it.
+                    AuthorizationDetails = ReadAuthorizationDetails(fields)
+                };
+
+                //RFC 8693 §2.1: validate the subject_token for its indicated type. The application is
+                //the trust authority; a null result means the token is invalid, untrusted, or expired.
+                //§2.2.2: an invalid or unacceptable subject_token MUST be rejected with invalid_request.
+                Verifiable.OAuth.TokenExchange.ValidatedSecurityToken? validatedSubject =
+                    await oauth.ValidateTokenExchangeTokenAsync!(
+                        subjectToken, subjectTokenType, registration, context, ct).ConfigureAwait(false);
+                if(validatedSubject is null)
+                {
+                    //ID-JAG §4.3.3 / §4.3.4.3: an ID-JAG mint whose subject token (the Identity
+                    //Assertion) fails validation — including the §4.3.3 MUST that its audience match
+                    //the authenticating client_id — is a grant failure (invalid_grant), not the base
+                    //RFC 8693 §2.2.2 invalid_request used for a plain token exchange.
+                    return (null, ServerHttpResponse.BadRequest(
+                        requestedTokenType == TokenType.IdJag ? OAuthErrors.InvalidGrant : OAuthErrors.InvalidRequest,
+                        "The subject_token is not valid."));
+                }
+
+                //DELEGATION (RFC 8693 §1.1): an actor_token was presented. Validate it through the same
+                //trust-authority seam — the application owns which issuers and keys it accepts — and
+                //build the §4.1 "act" claim that records the acting party in the composite token. For
+                //IMPERSONATION (no actor_token) the actor and the act claim stay null: unchanged behavior.
+                Verifiable.OAuth.TokenExchange.ValidatedSecurityToken? validatedActor = null;
+                IReadOnlyDictionary<string, object>? act = null;
+                if(hasActorToken)
+                {
+                    validatedActor = await oauth.ValidateTokenExchangeTokenAsync!(
+                        actorToken!, actorTokenType!.Value, registration, context, ct).ConfigureAwait(false);
+                    if(validatedActor is null)
+                    {
+                        return (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest, "The actor_token is not valid."));
+                    }
+
+                    //RFC 8693 §4.4 MUST: when the subject token names an authorized actor via may_act,
+                    //the actor token must be that party — the subject authorized only that party to act
+                    //for it, so any other actor is unauthorized. §4.4: "the combination of the two claims
+                    //iss and sub are sometimes necessary to uniquely identify an authorized actor." When
+                    //may_act names an issuer, a matching subject under a different issuer is a different,
+                    //unauthorized party — the actor MUST match every may_act member that is present.
+                    bool subjectMatches = validatedSubject.MayActSubject is null
+                        || string.Equals(validatedSubject.MayActSubject, validatedActor.Subject, StringComparison.Ordinal);
+                    bool issuerMatches = validatedSubject.MayActIssuer is null
+                        || string.Equals(validatedSubject.MayActIssuer, validatedActor.Issuer, StringComparison.Ordinal);
+                    if((validatedSubject.MayActSubject is not null || validatedSubject.MayActIssuer is not null)
+                        && !(subjectMatches && issuerMatches))
+                    {
+                        return (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest, "The actor is not authorized to act for the subject."));
+                    }
+
+                    //RFC 8693 §4.1: the "act" claim value is a JSON object whose members identify the
+                    //current actor (its sub). A delegation chain is expressed by nesting the prior actor's
+                    //"act" object under this one — the outermost is the current actor, nested ones are
+                    //prior actors. The subject token's own "act" (if it was already a delegated token) is
+                    //that prior chain, carried through verbatim.
+                    Dictionary<string, object> actClaim = new(StringComparer.Ordinal)
+                    {
+                        [WellKnownJwtClaimNames.Sub] = validatedActor.Subject
+                    };
+                    if(validatedSubject.Act is not null)
+                    {
+                        actClaim[WellKnownJwtClaimNames.Act] = validatedSubject.Act;
+                    }
+
+                    act = actClaim;
+                }
+
+                //RFC 8693 §2.1: the impersonation/delegation policy decision — which client may exchange
+                //this subject (and, for delegation, act as this actor) for whom, at which target. A null
+                //result denies the exchange. §2.2.2: invalid_target SHOULD be used when the server is
+                //unwilling or unable to issue for a named resource/audience target; an exchange refused on
+                //policy with no named target is the general invalid_request MUST.
+                Verifiable.OAuth.TokenExchange.TokenExchangeAuthorization? authorization =
+                    await oauth.AuthorizeTokenExchangeAsync!(
+                        validatedSubject, validatedActor, exchangeRequest, registration, context, ct).ConfigureAwait(false);
+                if(authorization is null)
+                {
+                    //ID-JAG §4.3.4.3: a denied ID-JAG mint (for example audience validation failing)
+                    //is invalid_grant. The base RFC 8693 §2.2.2 mapping — invalid_target for a named
+                    //resource/audience target, else invalid_request — applies to a plain exchange.
+                    if(requestedTokenType == TokenType.IdJag)
+                    {
+                        return (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidGrant, "The id-jag token exchange was not authorized."));
+                    }
+
+                    bool hasNamedTarget = exchangeRequest.Resource.Count > 0 || exchangeRequest.Audience.Count > 0;
+
+                    return (null, ServerHttpResponse.BadRequest(
+                        hasNamedTarget ? OAuthErrors.InvalidTarget : OAuthErrors.InvalidRequest,
+                        "The token exchange was not authorized."));
+                }
+
+                //RFC 8693 §2.2.1: token_type describes how to use the issued access_token, and
+                //issued_token_type identifies its representation. This grant mints either an RFC 9068
+                //access-token JWT (token_type Bearer) or — when the authorization seam selects it — an
+                //Identity Assertion JWT Authorization Grant (ID-JAG §4.3, token_type N_A). Any other
+                //issued_token_type would be inconsistent with the token actually returned; that
+                //mismatch is the AS's own misconfiguration of the authorization seam → server_error.
+                if(authorization.IssuedTokenType != TokenType.AccessToken
+                    && authorization.IssuedTokenType != TokenType.IdJag
+                    && authorization.IssuedTokenType != TokenType.RefreshToken)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "This authorization server issues only access tokens, id-jag grants, or refresh tokens for token exchange; this issued_token_type is not supported."));
+                }
+
+                Uri issuerUri;
+                try
+                {
+                    issuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
+                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
+                }
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                //ID-JAG §4.3.4: when the authorization seam selected the id-jag issued type, mint and
+                //return the Identity Assertion JWT Authorization Grant directly — a precise §3.1 claim
+                //set signed with the IdP key, returned as the access_token with token_type N_A. It does
+                //not flow through the access-token producer walk (no OIDC/access-token claim
+                //contribution applies to a JAG), so this branch is self-contained.
+                if(authorization.IssuedTokenType == TokenType.IdJag)
+                {
+                    return await BuildIdJagMintResponseAsync(
+                        server, registration, context, exchangeRequest, authorization, issuerUri, now, ct)
+                        .ConfigureAwait(false);
+                }
+
+                //ID-JAG §4.5: the SAML-2.0-to-OAuth protocol transition — the authorization seam selected
+                //the refresh_token issued type (e.g. after validating a SAML assertion subject token and
+                //its §4.5 Audience->client_id mapping), so mint and return an opaque Refresh Token the
+                //client later uses as a §4.3.2 subject_token to obtain an ID-JAG.
+                if(authorization.IssuedTokenType == TokenType.RefreshToken)
+                {
+                    return await BuildRefreshTokenExchangeResponseAsync(
+                        server, registration, context, authorization, issuerUri, now, ct)
+                        .ConfigureAwait(false);
+                }
+
+                //RFC 8693 §1.1: the issued token's subject is the validated subject token's subject. For
+                //impersonation the client becomes indistinguishable from that party at the target; for
+                //delegation the subject stays the subject while the acting party is recorded in the §4.1
+                //"act" claim (act is null for impersonation, so no act claim is emitted then). The
+                //authorization seam returns the effective subject and scope.
+                IssuanceContext issuance = new()
+                {
+                    Registration = registration,
+                    Context = context,
+                    IssuerUri = issuerUri,
+                    Subject = authorization.Subject,
+                    Scope = authorization.Scope,
+                    ClientId = registration.ClientId,
+                    IssuedAt = now,
+                    Act = act,
+
+                    //RFC 8693 §2.1.1: when the authorization seam shaped the issued token for explicit
+                    //target(s), those become the access token's aud verbatim — the scope→audience
+                    //resolver is bypassed. An empty override leaves Audience null so the resolver runs.
+                    Audience = authorization.Audience is { Count: > 0 } ? authorization.Audience : null
+                };
+
+                IReadOnlyList<TokenProducer> producers =
+                    oauth.TokenProducers.Count > 0
+                        ? oauth.TokenProducers
+                        : DefaultTokenProducers;
+
+                OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
+                    server, issuance, ct).ConfigureAwait(false);
+
+                Dictionary<string, string> issuedTokens = new(producers.Count);
+                int expiresIn = 0;
+
+                foreach(TokenProducer producer in producers)
+                {
+                    //Per-producer capability filter — see BuildToken for the
+                    //rationale; reads the resolver's per-request output so
+                    //capability attenuation applies to this grant too.
+                    IReadOnlySet<CapabilityIdentifier>? resolved =
+                        context.ResolvedCapabilities;
+                    if(resolved is null || !resolved.Contains(producer.RequiredCapability))
+                    {
+                        continue;
+                    }
+
+                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+
+                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
+                        server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
+                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
+                        signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
+                    if(signingKey is null)
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError,
+                            $"Signing key unavailable for producer '{producer.Name}'."));
+                    }
+
+                    string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+                    TokenProducerOutput output = await producer.BuildAsync(
+                        issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
+                    JwtPayload payload = output.Payload;
+
+                    ClaimContributionTarget? contributionTarget =
+                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
+                    await MergeContributedClaimsAsync(
+                        server, contributionTarget, payload, ct).ConfigureAwait(false);
+
+                    UnsignedJwt unsigned = new(output.Header, payload);
+                    using JwsMessage jws = await unsigned.SignAsync(
+                        signingKey,
+                        oauth.Codecs.JwtHeaderSerializer!,
+                        oauth.Codecs.JwtPayloadSerializer!,
+                        oauth.Codecs.Encoder!,
+                        BaseMemoryPool.Shared,
+                        ct).ConfigureAwait(false);
+
+                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
+                    issuedTokens[producer.ResponseField] = compactJws;
+
+                    if(WellKnownTokenTypes.IsAccessToken(producer.ResponseField))
+                    {
+                        DateTimeOffset issuedAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
+                        DateTimeOffset expiresAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
+                        expiresIn = (int)(expiresAtClaim - issuedAtClaim).TotalSeconds;
+                    }
+                }
+
+                if(!issuedTokens.TryGetValue(WellKnownTokenTypes.AccessToken, out string? accessToken))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "No access token was produced for the token-exchange grant."));
+                }
+
+                //RFC 8693 §2.2.1: access_token, issued_token_type, token_type, expires_in, scope.
+                //token_type is Bearer (RFC 6750); issued_token_type is the wire URI of the type the
+                //authorization seam decided. The response is stateless and uncacheable.
+                StringBuilder sb = JsonAppender.Rent();
+                string responseJson;
+                try
+                {
+                    sb.Append('{');
+                    bool first = true;
+                    JsonAppender.AppendStringField(sb, WellKnownTokenTypes.AccessToken, accessToken, ref first);
+                    JsonAppender.AppendStringField(sb, OAuthRequestParameterNames.IssuedTokenType,
+                        TokenTypeNames.GetName(authorization.IssuedTokenType), ref first);
+                    JsonAppender.AppendStringField(sb, "token_type",
+                        WellKnownAuthenticationSchemes.Bearer, ref first);
+                    JsonAppender.AppendInt64Field(sb, "expires_in", expiresIn, ref first);
+                    JsonAppender.AppendStringField(sb, OAuthRequestParameterNames.Scope, authorization.Scope, ref first);
+                    sb.Append('}');
+                    responseJson = sb.ToString();
+                }
+                finally
+                {
+                    JsonAppender.Return(sb);
+                }
+
+                return (null, ServerHttpResponse.Ok(responseJson, WellKnownMediaTypes.Application.Json)
+                    .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore));
+            },
+
+            BuildResponse = static (state, _, _) =>
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
+        };
+
+
+    /// <summary>
+    /// Default lifetime of an Identity Assertion JWT Authorization Grant when the registration sets no
+    /// <see cref="WellKnownTokenTypes.IdJag"/> entry in <see cref="ClientRecord.TokenLifetimes"/>. A
+    /// JAG is short-lived — it is presented once at the Resource Authorization Server and not stored —
+    /// matching the 5-minute example in draft-ietf-oauth-identity-assertion-authz-grant §4.3.4.
+    /// </summary>
+    private static readonly TimeSpan DefaultIdJagLifetime = TimeSpan.FromMinutes(5);
+
+
+    /// <summary>
+    /// The ID-JAG claim names the mint controls (the §3.1 core set plus the grant-shaped claims). A
+    /// <see cref="TokenExchange.TokenExchangeAuthorization.AdditionalClaims"/> entry whose key is one of
+    /// these is ignored, so application-supplied identity claims can never override the grant semantics.
+    /// </summary>
+    private static readonly HashSet<string> ReservedIdJagClaimNames = new(StringComparer.Ordinal)
+    {
+        WellKnownJwtClaimNames.Iss,
+        WellKnownJwtClaimNames.Sub,
+        WellKnownJwtClaimNames.Aud,
+        WellKnownJwtClaimNames.ClientId,
+        WellKnownJwtClaimNames.Jti,
+        WellKnownJwtClaimNames.Iat,
+        WellKnownJwtClaimNames.Exp,
+        WellKnownJwtClaimNames.Scope,
+        WellKnownJwtClaimNames.Cnf,
+        WellKnownJwtClaimNames.Tenant,
+        WellKnownJwtClaimNames.AudienceTenant,
+        WellKnownJwtClaimNames.AudienceSubject,
+        WellKnownJwtClaimNames.SubId,
+        OAuthRequestParameterNames.Resource,
+        OAuthRequestParameterNames.AuthorizationDetails
+    };
+
+
+    /// <summary>
+    /// Mints an opaque Refresh Token and writes the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2">RFC 8693 §2.2</see> Token Exchange
+    /// response that carries it, per draft-ietf-oauth-identity-assertion-authz-grant §4.5 — the SAML 2.0
+    /// to OAuth protocol transition: a client exchanges a SAML assertion for a Refresh Token, which it
+    /// later uses as a §4.3.2 <c>subject_token</c> to mint an ID-JAG without a new SSO round trip.
+    /// Reached from the Token Exchange grant when the authorization seam set
+    /// <see cref="TokenExchange.TokenExchangeAuthorization.IssuedTokenType"/> to
+    /// <see cref="TokenType.RefreshToken"/>.
+    /// </summary>
+    /// <remarks>
+    /// The application is the trust authority for the §4.5 MUST that the SAML Audience / SPEntityID maps
+    /// to the authenticated client — it enforces that in its
+    /// <see cref="Server.ValidateTokenExchangeTokenDelegate"/> before authorizing the exchange (the
+    /// library never parses SAML). This branch mints an opaque Refresh Token through the same identifier
+    /// seam and <see cref="Server.States.ServerRefreshTokenIssuedState"/> storage the authorization-code
+    /// and refresh-rotation flows use, so a later <c>refresh_token</c> grant or §4.3.2 refresh-token
+    /// subject-token exchange can validate it, and returns it in the <c>access_token</c> field with
+    /// <c>issued_token_type</c> the refresh_token URN and <c>token_type</c> <c>N_A</c>.
+    /// </remarks>
+    private static async ValueTask<(FlowInput? Input, ServerHttpResponse? EarlyExit)> BuildRefreshTokenExchangeResponseAsync(
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        TokenExchange.TokenExchangeAuthorization authorization,
+        Uri issuerUri,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var oauth = server.OAuth();
+
+        //§4.5: a Refresh Token is an opaque random string (not a JWT), minted through the identifier seam
+        //(the application owns the entropy + provenance) and stored as ServerRefreshTokenIssuedState.
+        string refreshToken = await oauth.GenerateIdentifierAsync!(
+            WellKnownIdentifierPurposes.OAuthRefreshToken, context, cancellationToken).ConfigureAwait(false);
+        DateTimeOffset refreshExpiresAt = now + context.RefreshTokenLifetime;
+
+        if(oauth.SaveFlowStateAsync is not null)
+        {
+            string refreshFlowId = await oauth.GenerateIdentifierAsync!(
+                WellKnownIdentifierPurposes.OAuthRefreshFlowId, context, cancellationToken).ConfigureAwait(false);
+            ServerRefreshTokenIssuedState refreshState = new()
+            {
+                FlowId = refreshFlowId,
+                ExpectedIssuer = issuerUri.OriginalString,
+                EnteredAt = now,
+                ExpiresAt = refreshExpiresAt,
+                Kind = FlowKind.AuthCodeServer,
+                ClientId = registration.ClientId,
+                RefreshToken = refreshToken,
+                IssuedAt = now,
+                SubjectId = authorization.Subject,
+                Scope = authorization.Scope
+            };
+            await oauth.SaveFlowStateAsync(
+                registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, cancellationToken).ConfigureAwait(false);
+        }
+
+        int expiresIn = (int)context.RefreshTokenLifetime.TotalSeconds;
+
+        //§4.5: issued_token_type = the refresh_token URN; access_token carries the Refresh Token (Token
+        //Exchange always returns the issued token in access_token); token_type = N_A; expires_in; scope.
+        StringBuilder sb = JsonAppender.Rent();
+        string responseJson;
+        try
+        {
+            sb.Append('{');
+            bool first = true;
+            JsonAppender.AppendStringField(sb, WellKnownTokenTypes.AccessToken, refreshToken, ref first);
+            JsonAppender.AppendStringField(sb, OAuthRequestParameterNames.IssuedTokenType,
+                TokenTypeNames.GetName(TokenType.RefreshToken), ref first);
+            JsonAppender.AppendStringField(sb, "token_type",
+                WellKnownTokenTypeIdentifiers.NotApplicable, ref first);
+            JsonAppender.AppendInt64Field(sb, "expires_in", expiresIn, ref first);
+            if(!string.IsNullOrEmpty(authorization.Scope))
+            {
+                JsonAppender.AppendStringField(sb, OAuthRequestParameterNames.Scope, authorization.Scope, ref first);
+            }
+
+            sb.Append('}');
+            responseJson = sb.ToString();
+        }
+        finally
+        {
+            JsonAppender.Return(sb);
+        }
+
+        return (null, ServerHttpResponse.Ok(responseJson, WellKnownMediaTypes.Application.Json)
+            .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore));
+    }
+
+
+    /// <summary>
+    /// Mints an Identity Assertion JWT Authorization Grant (ID-JAG) and writes the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2">RFC 8693 §2.2</see> Token
+    /// Exchange response that carries it, per draft-ietf-oauth-identity-assertion-authz-grant §3.1
+    /// (claim set) and §4.3.4 (response). Reached from the Token Exchange grant when the authorization
+    /// seam set <see cref="TokenExchange.TokenExchangeAuthorization.IssuedTokenType"/> to
+    /// <see cref="TokenType.IdJag"/>.
+    /// </summary>
+    /// <remarks>
+    /// The JAG is built from the precise §3.1 claim set (no access-token / OIDC claim contribution
+    /// applies), signed with the IdP's <see cref="KeyUsageContext.IdTokenIssuance"/> key — a JAG is
+    /// "issued and signed by an IdP Authorization Server similar to an ID Token" (§3) — and returned in
+    /// the <c>access_token</c> field with <c>issued_token_type</c> the id-jag URN and <c>token_type</c>
+    /// <c>N_A</c> (§4.3.4). The crypto seams are the same the access-token producers use; only the claim
+    /// shaping and response assembly differ.
+    /// </remarks>
+    private static async ValueTask<(FlowInput? Input, ServerHttpResponse? EarlyExit)> BuildIdJagMintResponseAsync(
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        TokenExchange.TokenExchangeRequest exchangeRequest,
+        TokenExchange.TokenExchangeAuthorization authorization,
+        Uri issuerUri,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var oauth = server.OAuth();
+
+        //The id-jag mint is gated per-client by the OAuthIdJag capability. The authorization seam
+        //selecting the id-jag issued type for a client that lacks the capability is an AS
+        //misconfiguration → server_error, mirroring the producer-walk capability filter.
+        IReadOnlySet<CapabilityIdentifier>? resolved = context.ResolvedCapabilities;
+        if(resolved is null || !resolved.Contains(WellKnownCapabilityIdentifiers.OAuthIdJag))
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError,
+                "The authorization seam selected the id-jag issued type but the client lacks the id-jag capability."));
+        }
+
+        //§9.8.1.1: when the request carries a DPoP proof the IdP MUST validate it (htm=POST, htu=token
+        //endpoint) and bind the issued grant by stamping cnf.jkt with the proof's JWK thumbprint; when
+        //no proof is presented the grant is issued without a cnf claim. An invalid proof is refused by
+        //the shared validator. dpopRequired is false — id-jag binding at the mint is client-opt-in.
+        DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
+            server, context, registration, issuerUri, now,
+            expectedThumbprint: null, dpopRequired: false, cancellationToken).ConfigureAwait(false);
+        if(!dpopOutcome.IsSuccess)
+        {
+            return (null, dpopOutcome.FailureResponse!);
+        }
+
+        //§3.1 aud / §4.3: the audience is the Resource Authorization Server's issuer identifier. The
+        //authorization seam's shaped audience wins — §4.3 lets the IdP resolve an implementation-
+        //specific audience value (e.g. a URN) to the RS issuer it stamps into aud — otherwise the
+        //request's REQUIRED audience is used verbatim.
+        string? resourceAudience =
+            authorization.Audience is { Count: > 0 } shaped ? shaped[0]
+            : exchangeRequest.Audience.Count > 0 ? exchangeRequest.Audience[0]
+            : null;
+        if(string.IsNullOrEmpty(resourceAudience))
+        {
+            //§4.3.4.3: an ID-JAG mint failure (audience validation) is invalid_grant.
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidGrant,
+                "The id-jag audience could not be resolved to a Resource Authorization Server identifier."));
+        }
+
+        //§3.1 client_id: the client at the Resource Authorization Server that will act on behalf of the
+        //subject. It MAY differ from the requesting client (an independent client relationship in the
+        //resource trust domain); it defaults to the requesting client when the seam names none.
+        string resourceClientId = authorization.ResourceClientId ?? registration.ClientId;
+
+        //§3.1 jti: a unique identifier for this grant.
+        string jti = await oauth.GenerateIdentifierAsync!(
+            WellKnownIdentifierPurposes.OAuthJti, context, cancellationToken).ConfigureAwait(false);
+
+        TimeSpan lifetime = registration.GetTokenLifetime(WellKnownTokenTypes.IdJag) ?? DefaultIdJagLifetime;
+        DateTimeOffset expiresAt = now.Add(lifetime);
+
+        //§3.1 iss: the IdP Authorization Server issuer identifier. RFC 8414 §3 requires exact-string
+        //equality — preserve the resolved issuer verbatim (path component, port, tenant segment).
+        string issuerValue = issuerUri.OriginalString;
+
+        KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
+            server, registration, KeyUsageContext.IdTokenIssuance, context, cancellationToken).ConfigureAwait(false);
+        PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
+            signingKeyId, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+        if(signingKey is null)
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, "Signing key unavailable for the id-jag grant."));
+        }
+
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+
+        //§3.1 / §4.3.3: the IdP MUST include the granted resource and authorization_details (if any) in
+        //the JAG. RFC 8707 / §3.1 allow a single resource URI as a JSON string or multiple as a JSON
+        //array; authorization_details is a JSON array of authorization detail objects.
+        Dictionary<string, object>? extraClaims = null;
+        if(authorization.Resource is { Count: > 0 } grantedResources)
+        {
+            extraClaims ??= new Dictionary<string, object>(StringComparer.Ordinal);
+            extraClaims[OAuthRequestParameterNames.Resource] = grantedResources.Count == 1
+                ? grantedResources[0]
+                : grantedResources;
+        }
+
+        if(authorization.AuthorizationDetailsClaim is { Count: > 0 } grantedDetails)
+        {
+            extraClaims ??= new Dictionary<string, object>(StringComparer.Ordinal);
+            extraClaims[OAuthRequestParameterNames.AuthorizationDetails] = grantedDetails;
+        }
+
+        //§3.1 / §6: a multi-tenant IdP includes the tenant claim so the subject identifier scopes as
+        //iss + tenant + sub; the Resource Authorization Server's own tenant (aud_tenant) and subject
+        //(aud_sub) are included when the IdP knows them, for subject resolution at that server. Each is
+        //emitted only when the authorization seam supplied it (whether the issuer is multi-tenant is the
+        //application's policy decision, not the library's).
+        if(!string.IsNullOrEmpty(authorization.Tenant))
+        {
+            extraClaims ??= new Dictionary<string, object>(StringComparer.Ordinal);
+            extraClaims[WellKnownJwtClaimNames.Tenant] = authorization.Tenant;
+        }
+
+        if(!string.IsNullOrEmpty(authorization.AudienceTenant))
+        {
+            extraClaims ??= new Dictionary<string, object>(StringComparer.Ordinal);
+            extraClaims[WellKnownJwtClaimNames.AudienceTenant] = authorization.AudienceTenant;
+        }
+
+        if(!string.IsNullOrEmpty(authorization.AudienceSubject))
+        {
+            extraClaims ??= new Dictionary<string, object>(StringComparer.Ordinal);
+            extraClaims[WellKnownJwtClaimNames.AudienceSubject] = authorization.AudienceSubject;
+        }
+
+        //§3.2: the saml-nameid sub_id identifies the End-User in the Resource Authorization Server's SAML
+        //SSO subject namespace (the same subject as sub). The carrier renders the §3.2.1 object with each
+        //optional member included exactly when present; the runtime Dictionary serialises as a nested JSON
+        //object (the same shape the cnf claim uses).
+        if(authorization.SubjectIdentifier is { } subjectIdentifier)
+        {
+            extraClaims ??= new Dictionary<string, object>(StringComparer.Ordinal);
+            extraClaims[WellKnownJwtClaimNames.SubId] = subjectIdentifier.ToClaimObject();
+        }
+
+        //§3.1: the ID-JAG MAY also carry ID Token identity claims (auth_time, acr, amr, email, ...). The
+        //authorization seam supplies them; reserved grant-controlled names are skipped so an application
+        //claim can never override the claims the mint owns.
+        if(authorization.AdditionalClaims is { Count: > 0 } additionalClaims)
+        {
+            foreach(KeyValuePair<string, object> additionalClaim in additionalClaims)
+            {
+                if(ReservedIdJagClaimNames.Contains(additionalClaim.Key))
+                {
+                    continue;
+                }
+
+                extraClaims ??= new Dictionary<string, object>(StringComparer.Ordinal);
+                extraClaims[additionalClaim.Key] = additionalClaim.Value;
+            }
+        }
+
+        //§9.8.1.1: a validated DPoP proof binds the grant — cnf carries the proof's JWK SHA-256
+        //thumbprint as jkt (RFC 9449 §6.1), which the Resource Authorization Server compares by string
+        //equality against the proof presented on redemption.
+        if(dpopOutcome.Confirmation is { JwkThumbprint: { } boundThumbprint })
+        {
+            extraClaims ??= new Dictionary<string, object>(StringComparer.Ordinal);
+            extraClaims[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.JwkThumbprint] = boundThumbprint
+            };
+        }
+
+        JwtHeader header = JwtHeader.ForIdJag(algorithm, signingKeyId.Value);
+        JwtPayload payload = JwtPayload.ForIdJag(
+            issuer: issuerValue,
+            subject: authorization.Subject,
+            audience: resourceAudience,
+            clientId: resourceClientId,
+            jti: jti,
+            issuedAt: now,
+            expiresAt: expiresAt,
+            scope: authorization.Scope,
+            claims: extraClaims);
+
+        UnsignedJwt unsigned = new(header, payload);
+        using JwsMessage jws = await unsigned.SignAsync(
+            signingKey,
+            oauth.Codecs.JwtHeaderSerializer!,
+            oauth.Codecs.JwtPayloadSerializer!,
+            oauth.Codecs.Encoder!,
+            BaseMemoryPool.Shared,
+            cancellationToken).ConfigureAwait(false);
+
+        string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
+        int expiresIn = (int)lifetime.TotalSeconds;
+
+        //§4.3.4: issued_token_type = the id-jag URN; access_token = the JAG (Token Exchange requires
+        //the access_token field even though this is not an OAuth access token); token_type = N_A;
+        //expires_in (RECOMMENDED); scope (included when granted). The response is uncacheable.
+        StringBuilder sb = JsonAppender.Rent();
+        string responseJson;
+        try
+        {
+            sb.Append('{');
+            bool first = true;
+            JsonAppender.AppendStringField(sb, WellKnownTokenTypes.AccessToken, compactJws, ref first);
+            JsonAppender.AppendStringField(sb, OAuthRequestParameterNames.IssuedTokenType,
+                TokenTypeNames.GetName(TokenType.IdJag), ref first);
+            JsonAppender.AppendStringField(sb, "token_type",
+                WellKnownTokenTypeIdentifiers.NotApplicable, ref first);
+            JsonAppender.AppendInt64Field(sb, "expires_in", expiresIn, ref first);
+
+            //§4.3.4: scope is OPTIONAL when the granted scope is identical to the requested scope and
+            //REQUIRED otherwise. Including it whenever it is non-empty covers the identical case; the
+            //differs check additionally conveys a granted scope that narrowed to empty.
+            bool scopeDiffersFromRequest = !string.Equals(
+                authorization.Scope ?? string.Empty, exchangeRequest.Scope ?? string.Empty, StringComparison.Ordinal);
+            if(!string.IsNullOrEmpty(authorization.Scope) || scopeDiffersFromRequest)
+            {
+                JsonAppender.AppendStringField(sb, OAuthRequestParameterNames.Scope, authorization.Scope ?? string.Empty, ref first);
+            }
+
+            //§4.3.4: authorization_details is included only when the IdP granted details that differ
+            //from the request or modified them; the seam pre-serialises that value as a JSON array.
+            if(!string.IsNullOrEmpty(authorization.AuthorizationDetailsResponseJson))
+            {
+                JsonAppender.AppendRawField(
+                    sb, OAuthRequestParameterNames.AuthorizationDetails, authorization.AuthorizationDetailsResponseJson, ref first);
+            }
+
+            sb.Append('}');
+            responseJson = sb.ToString();
+        }
+        finally
+        {
+            JsonAppender.Return(sb);
+        }
+
+        return (null, ServerHttpResponse.Ok(responseJson, WellKnownMediaTypes.Application.Json)
+            .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore));
+    }
+
+
+    /// <summary>
+    /// Builds the JWT Bearer authorization-grant candidate
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-2.1">RFC 7523 §2.1</see> /
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">§3.1</see>) on the shared token
+    /// endpoint URL. Stateless: the client presents an <c>assertion</c> (a single JWT) the
+    /// application's <see cref="AuthorizationServerIntegration.ValidateJwtBearerAssertionAsync"/> seam
+    /// validates as the trust authority — signature (§3 rule 9), trusted <c>iss</c> (rule 1), the
+    /// <c>aud</c>-names-this-AS check (rule 3, which only the application can make), and the
+    /// <c>exp</c>/<c>nbf</c> window (rules 4–5) — and shapes the issued token from; the configured
+    /// token producers mint the access token directly into the response — no flow state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Client AUTHENTICATION is OPTIONAL for this grant (§2.1 / §3.1): the assertion itself is the
+    /// authorization grant, expressing an existing trust relationship without a user-approval step.
+    /// However §3.1 requires that "if client credentials are present in the request, the authorization
+    /// server MUST validate them," so when the request carries credentials the endpoint runs
+    /// <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/> and rejects a bad
+    /// one with <c>401 invalid_client</c>. Presented credentials are never silently ignored: if the
+    /// request carries credentials but the client-authentication seam is not configured, the request is
+    /// refused with <c>401 invalid_client</c> rather than proceeding as anonymous (proceeding would be a
+    /// §3.1 MUST bypass). An anonymous request — one carrying no credentials at all — proceeds.
+    /// </para>
+    /// <para>
+    /// Client IDENTIFICATION is nonetheless required even though authentication is optional: the
+    /// shipped RFC 9068 access-token producer needs a <c>client_id</c> (<see cref="IssuanceContext.ClientId"/>
+    /// is required), so a request whose tenant resolves no <see cref="ClientRecord"/> is refused with
+    /// <c>401 invalid_client</c>.
+    /// </para>
+    /// <para>
+    /// A <see langword="null"/> assertion-validation result is RFC 7523 §3.1's mandated
+    /// <c>invalid_grant</c> (NOT <c>invalid_request</c>): the §3 processing failed, so the grant is
+    /// invalid. The §5.1 token response is a plain RFC 6749 token response — <c>access_token</c>,
+    /// <c>token_type</c> Bearer, <c>expires_in</c>, <c>scope</c> — with no <c>issued_token_type</c>
+    /// (that is a token-exchange §2.2.1 field, not part of this grant).
+    /// </para>
+    /// </remarks>
+    private static EndpointCandidate BuildJwtBearer() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.JwtBearerToken,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = WellKnownCapabilityIdentifiers.OAuthJwtBearer,
+            StartsNewFlow = true,
+            Kind = FlowKind.Stateless,
+            //DiscoveryMetadataKey null — the grant shares the token endpoint URL.
+
+            //Disjointness vs the other grants is enforced by the grant_type filter, exactly as the
+            //client_credentials, refresh, and token-exchange matchers do.
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
+                    || !string.Equals(grantType, WellKnownGrantTypes.JwtBearer, StringComparison.Ordinal))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+
+                //RFC 9068 constraint: a JWT access token requires a client_id, and IssuanceContext.ClientId
+                //is required, so the client MUST be identified even though authentication is optional (§2.1).
+                //A request whose tenant resolves no registration cannot stamp a conformant token.
+                ClientRecord? registration = context.ClientRegistration;
+                if(registration is null)
+                {
+                    return (null, ServerHttpResponse.Unauthorized(
+                        OAuthErrors.InvalidClient, "Client identification is required for the jwt-bearer grant."));
+                }
+
+                //RFC 7523 §3.1: "if client credentials are present in the request, the authorization
+                //server MUST validate them." Client authentication is OPTIONAL for this grant (the
+                //assertion is the grant), so credentials are validated only when present — an
+                //anonymous request proceeds. Presence is an Authorization header (client_secret_basic /
+                //private_key_jwt / mTLS) OR a client_secret / client_assertion form field; the seam owns
+                //the method and the comparison. When credentials ARE present they MUST be validated:
+                //if the client-authentication seam is not configured, the request cannot proceed as
+                //anonymous (that would silently ignore presented credentials, a §3.1 MUST bypass), so it
+                //is refused with 401 invalid_client. A present-but-invalid credential is 401 invalid_client.
+                if(HasClientCredentials(context.IncomingRequest, fields))
+                {
+                    if(oauth.ValidateClientCredentialsAsync is null)
+                    {
+                        return (null, ServerHttpResponse.Unauthorized(
+                            OAuthErrors.InvalidClient,
+                            "Client credentials were presented but client authentication is not configured for this authorization server."));
+                    }
+
+                    bool clientAuthenticated = await oauth.ValidateClientCredentialsAsync(
+                        context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                    if(!clientAuthenticated)
+                    {
+                        return (null, ServerHttpResponse.Unauthorized(
+                            OAuthErrors.InvalidClient, "Client authentication failed."));
+                    }
+                }
+
+                //RFC 7523 §2.1: the assertion parameter is REQUIRED and "MUST contain a single JWT."
+                if(!fields.TryGetValue(OAuthRequestParameterNames.Assertion, out string? assertion)
+                    || string.IsNullOrEmpty(assertion))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "The assertion parameter is required and must contain a single JWT."));
+                }
+
+                //RFC 7523 §2.1 / RFC 7521 §4.1: scope is OPTIONAL and indicates the requested scope.
+                string? requestedScope = null;
+                if(fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scopeValue)
+                    && !string.IsNullOrWhiteSpace(scopeValue))
+                {
+                    requestedScope = scopeValue;
+                }
+
+                //RFC 7523 §3: validate the assertion JWT against the processing rules. The application
+                //is the trust authority; the builder guarantees the seam is wired. A null result is a
+                //§3 failure — invalid signature (rule 9), untrusted iss (rule 1), an aud that does not
+                //name this AS (rule 3), an expired/not-yet-valid window (rules 4–5), or any other JWT
+                //defect. Per §3.1 the error MUST be invalid_grant (NOT invalid_request).
+                JwtBearerGrant? grant = await oauth.ValidateJwtBearerAssertionAsync!(
+                    assertion, requestedScope, registration, context, ct).ConfigureAwait(false);
+                if(grant is null)
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidGrant, "The JWT assertion is not valid."));
+                }
+
+                Uri issuerUri;
+                try
+                {
+                    issuerUri = oauth.ResolveIssuerAsync is not null
+                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
+                            .ConfigureAwait(false))!
+                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
+                            .ConfigureAwait(false);
+                }
+                catch(InvalidOperationException ex)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, ex.Message));
+                }
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                //RFC 7523 §3 (rule 7): when the validated assertion carries a jti (an ID-JAG always does,
+                //§3.1), apply the shared (issuer, jti) replay defense — the same JtiReplayGuard the JAR and
+                //DPoP paths use, governed by JtiReplayPolicy and keyed on the assertion's own iss so
+                //independent IdPs are isolated. The read and first-use record happen as one unit; Required
+                //fails closed when no store is wired.
+                if(grant.Jti is { } assertionJti
+                    && grant.Issuer is { } assertionIssuer
+                    && grant.Expiration is { } assertionExpiry)
+                {
+                    JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
+                        server, context, registration.TenantId,
+                        assertionIssuer, assertionJti, assertionExpiry, ct).ConfigureAwait(false);
+
+                    if(jtiOutcome == JtiReplayOutcome.Replayed)
+                    {
+                        return (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidGrant, "The assertion jti has been seen previously (replay).")
+                            .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore));
+                    }
+
+                    if(jtiOutcome == JtiReplayOutcome.StoreUnavailable)
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError,
+                            "Assertion jti replay defense is required by policy but no jti store is configured."));
+                    }
+                }
+
+                //ID-JAG §4.4.1: the granted authorization_details ride the context into the producer
+                //walk so the RFC 9068 access token carries them as a top-level claim — the same seam
+                //the authorization-code grant uses. The response echo below reflects them per §4.4.2.
+                if(grant.AuthorizationDetailsClaim is not null)
+                {
+                    context.SetGrantedAuthorizationDetailsClaim(grant.AuthorizationDetailsClaim);
+                }
+
+                //ID-JAG §9.8.1.2 proof-of-possession matrix. Validate a presented DPoP proof (htm=POST,
+                //htu=token endpoint) via the shared validator — a present-but-invalid proof is refused
+                //there — then combine the proof's key thumbprint with the grant's bound thumbprint
+                //(cnf.jkt) and the Resource Server's sender-constraint requirement to decide Bearer vs
+                //DPoP-bound vs reject. A grant with neither a bound key nor a constraint requirement and
+                //no presented proof yields the Bearer flow unchanged.
+                DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
+                    server, context, registration, issuerUri, now,
+                    expectedThumbprint: null, dpopRequired: false, ct).ConfigureAwait(false);
+                if(!dpopOutcome.IsSuccess)
+                {
+                    return (null, dpopOutcome.FailureResponse!);
+                }
+
+                IdJagDpopDecision dpopDecision = IdJagDpopDecision.Evaluate(
+                    grant.RequiredKeyThumbprint,
+                    dpopOutcome.Confirmation?.JwkThumbprint,
+                    grant.RequiresSenderConstrainedToken);
+                if(dpopDecision.IsRejected)
+                {
+                    string description = dpopDecision.Kind switch
+                    {
+                        IdJagDpopDecisionKind.RejectProofRequired => "Proof of possession required for this authorization grant.",
+                        IdJagDpopDecisionKind.RejectKeyMismatch => "The DPoP proof key does not match the grant's bound key.",
+                        _ => "Sender-constrained tokens are required for this resource server."
+                    };
+
+                    return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, description)
+                        .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore));
+                }
+
+                ConfirmationMethod? tokenConfirmation = dpopDecision.BoundKeyThumbprint is { } boundThumbprint
+                    ? new ConfirmationMethod { JwkThumbprint = boundThumbprint }
+                    : null;
+
+                //RFC 7523 §2.1: the issued token's subject is the assertion's subject (§3 rule 2.A —
+                //the principal access is requested for), and the granted scope is the seam's decision.
+                //A non-empty grant audience confines the issued token (its aud) verbatim, bypassing the
+                //scope→audience resolver (RFC 8693-style target binding); an empty list leaves Audience
+                //null so the resolver runs. A non-empty Confirmation sender-constrains the token (§9.8).
+                IssuanceContext issuance = new()
+                {
+                    Registration = registration,
+                    Context = context,
+                    IssuerUri = issuerUri,
+                    Subject = grant.Subject,
+                    Scope = grant.Scope,
+                    ClientId = registration.ClientId,
+                    IssuedAt = now,
+                    Audience = grant.Audience is { Count: > 0 } ? grant.Audience : null,
+                    Confirmation = tokenConfirmation
+                };
+
+                IReadOnlyList<TokenProducer> producers =
+                    oauth.TokenProducers.Count > 0
+                        ? oauth.TokenProducers
+                        : DefaultTokenProducers;
+
+                OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
+                    server, issuance, ct).ConfigureAwait(false);
+
+                Dictionary<string, string> issuedTokens = new(producers.Count);
+                int expiresIn = 0;
+
+                foreach(TokenProducer producer in producers)
+                {
+                    //Per-producer capability filter — see BuildToken for the rationale; reads the
+                    //resolver's per-request output so capability attenuation applies to this grant too.
+                    IReadOnlySet<CapabilityIdentifier>? resolved =
+                        context.ResolvedCapabilities;
+                    if(resolved is null || !resolved.Contains(producer.RequiredCapability))
+                    {
+                        continue;
+                    }
+
+                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+
+                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
+                        server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
+                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
+                        signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
+                    if(signingKey is null)
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError,
+                            $"Signing key unavailable for producer '{producer.Name}'."));
+                    }
+
+                    string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+                    TokenProducerOutput output = await producer.BuildAsync(
+                        issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
+                    JwtPayload payload = output.Payload;
+
+                    ClaimContributionTarget? contributionTarget =
+                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
+                    await MergeContributedClaimsAsync(
+                        server, contributionTarget, payload, ct).ConfigureAwait(false);
+
+                    UnsignedJwt unsigned = new(output.Header, payload);
+                    using JwsMessage jws = await unsigned.SignAsync(
+                        signingKey,
+                        oauth.Codecs.JwtHeaderSerializer!,
+                        oauth.Codecs.JwtPayloadSerializer!,
+                        oauth.Codecs.Encoder!,
+                        BaseMemoryPool.Shared,
+                        ct).ConfigureAwait(false);
+
+                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
+                    issuedTokens[producer.ResponseField] = compactJws;
+
+                    if(WellKnownTokenTypes.IsAccessToken(producer.ResponseField))
+                    {
+                        DateTimeOffset issuedAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
+                        DateTimeOffset expiresAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
+                        expiresIn = (int)(expiresAtClaim - issuedAtClaim).TotalSeconds;
+                    }
+                }
+
+                if(!issuedTokens.TryGetValue(WellKnownTokenTypes.AccessToken, out string? accessToken))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "No access token was produced for the jwt-bearer grant."));
+                }
+
+                //RFC 6749 §5.1: a plain access-token response — access_token, token_type Bearer,
+                //expires_in, scope. No issued_token_type (that is the token-exchange §2.2.1 field).
+                //The response is stateless and uncacheable.
+                StringBuilder sb = JsonAppender.Rent();
+                string responseJson;
+                try
+                {
+                    sb.Append('{');
+                    bool first = true;
+                    JsonAppender.AppendStringField(sb, WellKnownTokenTypes.AccessToken, accessToken, ref first);
+
+                    //RFC 9449 §5 / §9.8.1.2: a sender-constrained token reports token_type DPoP so the
+                    //Resource Server dispatches the right scheme; an unconstrained token is Bearer. The
+                    //wire value mirrors the cnf binding the producer embedded in the token.
+                    JsonAppender.AppendStringField(sb, "token_type",
+                        tokenConfirmation is { IsEmpty: false }
+                            ? WellKnownAuthenticationSchemes.DPoP
+                            : WellKnownAuthenticationSchemes.Bearer,
+                        ref first);
+                    JsonAppender.AppendInt64Field(sb, "expires_in", expiresIn, ref first);
+                    JsonAppender.AppendStringField(sb, OAuthRequestParameterNames.Scope, grant.Scope, ref first);
+
+                    //ID-JAG §4.4.1/§4.4.2: a Resource Authorization Server echoes the granted
+                    //authorization_details in the token response; the seam pre-serialises the value.
+                    if(!string.IsNullOrEmpty(grant.AuthorizationDetailsResponseJson))
+                    {
+                        JsonAppender.AppendRawField(
+                            sb, OAuthRequestParameterNames.AuthorizationDetails, grant.AuthorizationDetailsResponseJson, ref first);
+                    }
+
+                    sb.Append('}');
+                    responseJson = sb.ToString();
+                }
+                finally
+                {
+                    JsonAppender.Return(sb);
+                }
+
+                return (null, ServerHttpResponse.Ok(responseJson, WellKnownMediaTypes.Application.Json)
+                    .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore));
+            },
+
+            BuildResponse = static (state, _, _) =>
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
+        };
+
+
+    /// <summary>
+    /// Reports whether the request carries client credentials — the §3.1 "if client credentials are
+    /// present" predicate for the jwt-bearer grant. A credential is present when the request bears an
+    /// <c>Authorization</c> header (<c>client_secret_basic</c> / <c>private_key_jwt</c> / mTLS surface)
+    /// OR a <c>client_secret</c> / <c>client_assertion</c> form field (<c>client_secret_post</c> /
+    /// <c>private_key_jwt</c> body form). A bare <c>client_id</c> with no secret is identification, not
+    /// a credential, so it is NOT treated as present — that keeps the §2.1 anonymous path open.
+    /// </summary>
+    private static bool HasClientCredentials(IncomingRequest? request, RequestFields fields)
+    {
+        if(request is not null
+            && request.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authHeader)
+            && !string.IsNullOrEmpty(authHeader))
+        {
+            return true;
+        }
+
+        return (fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                && !string.IsNullOrEmpty(secret))
+            || (fields.TryGetValue(OAuthRequestParameterNames.ClientAssertion, out string? assertion)
+                && !string.IsNullOrEmpty(assertion));
+    }
+
+
+    /// <summary>
     /// Builds the OID4VCI 1.0 §6 Pre-Authorized Code grant candidate on the shared token
     /// endpoint URL. Stateless: the Wallet presents a <c>pre-authorized_code</c> (and
     /// optional <c>tx_code</c>) the Credential Issuer minted in a Credential Offer, the
@@ -2360,7 +3665,7 @@ public static class AuthCodeEndpoints
                 }
 
                 if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
-                    || !string.Equals(grantType, OAuthRequestParameterValues.GrantTypePreAuthorizedCode, StringComparison.Ordinal))
+                    || !string.Equals(grantType, WellKnownGrantTypes.PreAuthorizedCode, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -3201,7 +4506,7 @@ public static class AuthCodeEndpoints
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 if(!fields.TryGetValue(OAuthRequestParameterNames.GrantType, out string? grantType)
-                    || !string.Equals(grantType, OAuthRequestParameterValues.GrantTypeRefreshToken, StringComparison.Ordinal))
+                    || !string.Equals(grantType, WellKnownGrantTypes.RefreshToken, StringComparison.Ordinal))
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
@@ -4620,7 +5925,7 @@ public static class AuthCodeEndpoints
             return false;
         }
 
-        if(string.Equals(method, OAuthRequestParameterValues.CodeChallengeMethodS256,
+        if(string.Equals(method, WellKnownCodeChallengeMethods.S256,
             StringComparison.Ordinal))
         {
             return true;

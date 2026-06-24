@@ -57,6 +57,25 @@ public static class WellKnownCapabilityIdentifiers
     public static CapabilityIdentifier OAuthTokenExchange { get; } =
         CapabilityIdentifier.Create("urn:verifiable:capability:oauth:token_exchange");
 
+    /// <summary>
+    /// JWT Bearer authorization grant per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523">RFC 7523</see>.
+    /// </summary>
+    public static CapabilityIdentifier OAuthJwtBearer { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oauth:jwt_bearer");
+
+    /// <summary>
+    /// Identity Assertion JWT Authorization Grant (ID-JAG) per
+    /// draft-ietf-oauth-identity-assertion-authz-grant. Gates the IdP-side mint
+    /// (a Token Exchange whose <c>requested_token_type</c> is
+    /// <c>urn:ietf:params:oauth:token-type:id-jag</c>) and the discovery
+    /// advertisement of the profile. The redeem leg rides the existing
+    /// <see cref="OAuthJwtBearer"/> grant, so a Resource Authorization Server
+    /// additionally needs <see cref="OAuthJwtBearer"/> to consume an ID-JAG.
+    /// </summary>
+    public static CapabilityIdentifier OAuthIdJag { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oauth:id_jag");
+
 
     //OAuth 2.0 extensions.
 

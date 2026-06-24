@@ -618,6 +618,165 @@ public delegate ValueTask<bool> ValidateClientCredentialsDelegate(
 
 
 /// <summary>
+/// Validates a Token Exchange <c>subject_token</c> for the <c>urn:ietf:params:oauth:grant-type:token-exchange</c>
+/// grant (RFC 8693 §2.1) and returns its accepted claims, or rejects it. The application is the
+/// trust authority: it owns which issuers and keys it accepts, runs "the appropriate validation
+/// procedures for the indicated token type" per
+/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>, and decides
+/// what the <see cref="TokenExchange.ValidatedSecurityToken"/> carries.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Invoked after the endpoint has authenticated the client via
+/// <see cref="ValidateClientCredentialsDelegate"/>. The <paramref name="tokenType"/> is the parsed
+/// <c>subject_token_type</c> (RFC 8693 §3) telling the application how to parse
+/// <paramref name="token"/> — a JWT, an access token, a SAML assertion. Any remote key fetch the
+/// application needs is its own concern; the <c>Verifiable.OAuth</c> library takes no
+/// <c>System.Net.*</c> dependency, so the network reach lives in the application.
+/// </para>
+/// <para>
+/// Return <see langword="null"/> when the token is invalid, untrusted, or expired — the endpoint
+/// then rejects the request with <c>invalid_grant</c> per
+/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 §2.2.2</see>, leaking
+/// nothing about why. A non-null result is the validated subject the authorization step shapes the
+/// issued token from.
+/// </para>
+/// </remarks>
+/// <param name="token">The <c>subject_token</c> value, exactly as presented on the wire. Confidential.</param>
+/// <param name="tokenType">The parsed <c>subject_token_type</c> (RFC 8693 §3) of <paramref name="token"/>.</param>
+/// <param name="registration">The authenticated client requesting the exchange.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The validated subject token's claims, or <see langword="null"/> when it is not acceptable.</returns>
+public delegate ValueTask<TokenExchange.ValidatedSecurityToken?> ValidateTokenExchangeTokenDelegate(
+    string token,
+    Client.TokenType tokenType,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Decides whether a validated Token Exchange <c>subject_token</c> may be exchanged by this client
+/// for the requested target, and shapes the issued token, per
+/// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>. The semantic
+/// permit/deny seam: which client may impersonate or act-for whom, at which <c>resource</c> /
+/// <c>audience</c>, with which scope, producing which issued-token type.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Invoked after <see cref="ValidateTokenExchangeTokenDelegate"/> has accepted the subject token
+/// (and, for delegation, the actor token). The application owns the policy "checks as to which
+/// entities are permitted to impersonate ... or receive delegations from other entities" RFC 8693
+/// §2.1 names — it reads <paramref name="subjectToken"/> (the validated subject claims),
+/// <paramref name="actorToken"/> (the validated actor claims, for delegation),
+/// <paramref name="request"/> (the requested <c>resource</c> / <c>audience</c> / <c>scope</c> /
+/// <c>requested_token_type</c>), and the authenticated <paramref name="registration"/>, and returns
+/// the effective issued-token parameters in a
+/// <see cref="TokenExchange.TokenExchangeAuthorization"/>.
+/// </para>
+/// <para>
+/// <paramref name="actorToken"/> is <see langword="null"/> for IMPERSONATION (no <c>actor_token</c>
+/// was presented) and non-null for DELEGATION (an <c>actor_token</c> was presented and validated).
+/// For delegation the library has already enforced the structural §4.4 <c>may_act</c> check — when
+/// the subject token names a <see cref="TokenExchange.ValidatedSecurityToken.MayActSubject"/>, the
+/// actor's <see cref="TokenExchange.ValidatedSecurityToken.Subject"/> must equal it or the request
+/// is rejected before this seam runs. The application MAY apply richer policy than that structural
+/// check: it may consult its own delegation grants, scope-down the issued token, or deny an actor
+/// the subject's <c>may_act</c> did not constrain. A delegated subject token's prior <c>act</c>
+/// (its <see cref="TokenExchange.ValidatedSecurityToken.Act"/> chain) is preserved by the library
+/// when it builds the new token's <c>act</c> claim; this seam shapes the top-level claims only.
+/// </para>
+/// <para>
+/// Return <see langword="null"/> when the exchange is denied — for example when the authorization
+/// server is "unwilling or unable to issue a token for any target service indicated by the
+/// <c>resource</c> or <c>audience</c> parameters": the endpoint then answers <c>invalid_target</c>
+/// per <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 §2.2.2</see>.
+/// </para>
+/// </remarks>
+/// <param name="subjectToken">The validated <c>subject_token</c> claims accepted by the validating seam.</param>
+/// <param name="actorToken">
+/// The validated <c>actor_token</c> claims for a delegation exchange, or <see langword="null"/> for
+/// an impersonation exchange (no <c>actor_token</c> presented).
+/// </param>
+/// <param name="request">The shape-validated Token Exchange request (RFC 8693 §2.1 parameters).</param>
+/// <param name="registration">The authenticated client requesting the exchange.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The issued-token parameters when permitted, or <see langword="null"/> when the exchange is denied.</returns>
+public delegate ValueTask<TokenExchange.TokenExchangeAuthorization?> AuthorizeTokenExchangeDelegate(
+    TokenExchange.ValidatedSecurityToken subjectToken,
+    TokenExchange.ValidatedSecurityToken? actorToken,
+    TokenExchange.TokenExchangeRequest request,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Validates a JWT Bearer authorization-grant <c>assertion</c> for the
+/// <c>urn:ietf:params:oauth:grant-type:jwt-bearer</c> grant (RFC 7523 §2.1/§3.1) and returns the
+/// token shape to issue, or rejects it. The application is the trust authority: it owns which
+/// issuers and keys it accepts and performs the full
+/// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 §3</see> processing of the
+/// assertion JWT before returning a <see cref="JwtBearer.JwtBearerGrant"/>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The §3 rules the application MUST enforce, in full:
+/// </para>
+/// <list type="bullet">
+///   <item><description>
+///     <strong>Rule 1 (<c>iss</c>):</strong> the JWT MUST carry an <c>iss</c> claim that is a
+///     trusted issuer, compared by Simple String Comparison (RFC 3986 §6.2.1).
+///   </description></item>
+///   <item><description>
+///     <strong>Rule 2.A (<c>sub</c>):</strong> the JWT MUST carry a <c>sub</c> claim identifying the
+///     principal access is requested for — surfaced as <see cref="JwtBearer.JwtBearerGrant.Subject"/>.
+///   </description></item>
+///   <item><description>
+///     <strong>Rule 3 (<c>aud</c>) — the audience MUST:</strong> the JWT MUST carry an <c>aud</c>
+///     claim that identifies THIS authorization server, and "the authorization server MUST reject any
+///     JWT that does not contain its own identity as the intended audience." The library cannot make
+///     this check — only the application knows the AS's own identity (its token endpoint URL or
+///     configured audience string) — so it is delegated here and is mandatory.
+///   </description></item>
+///   <item><description>
+///     <strong>Rules 4–5 (<c>exp</c>/<c>nbf</c>):</strong> the JWT MUST carry an <c>exp</c> and the
+///     AS MUST reject an expired JWT (subject to clock skew); an <c>nbf</c>, when present, bounds the
+///     earliest acceptance instant.
+///   </description></item>
+///   <item><description>
+///     <strong>Rule 9 (signature):</strong> the JWT MUST be signed or MAC'd by the issuer and the AS
+///     MUST reject an invalid signature/MAC. Any remote JWKS fetch the application needs is its own
+///     concern — the <c>Verifiable.OAuth</c> library takes no <c>System.Net.*</c> dependency, so the
+///     network reach lives in the application.
+///   </description></item>
+/// </list>
+/// <para>
+/// Return <see langword="null"/> when the assertion is not valid in any respect — invalid signature,
+/// untrusted issuer, an <c>aud</c> that does not name this AS, an expired or not-yet-valid window, or
+/// any other §3/JWT failure. The endpoint then rejects the request with <c>invalid_grant</c> per
+/// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 §3.1</see> (which mandates
+/// that exact error code), leaking nothing about why. A non-null result is the validated grant the
+/// issued access token is shaped from.
+/// </para>
+/// </remarks>
+/// <param name="assertion">The <c>assertion</c> value — a single JWT, exactly as presented on the wire. Confidential.</param>
+/// <param name="requestedScope">The <c>scope</c> request parameter (RFC 7523 §2.1), or <see langword="null"/> when omitted.</param>
+/// <param name="registration">The <see cref="ClientRecord"/> resolved for the request's tenant.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>The validated grant to issue an access token for, or <see langword="null"/> when the assertion is not acceptable.</returns>
+public delegate ValueTask<JwtBearer.JwtBearerGrant?> ValidateJwtBearerAssertionDelegate(
+    string assertion,
+    string? requestedScope,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
 /// Revokes a token at the token revocation endpoint
 /// (<see href="https://www.rfc-editor.org/rfc/rfc7009">RFC 7009</see>) on behalf
 /// of an authenticated client.

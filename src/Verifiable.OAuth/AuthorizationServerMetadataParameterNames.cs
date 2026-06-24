@@ -87,6 +87,29 @@ public static class AuthorizationServerMetadataParameterNames
     /// </summary>
     public static readonly string GrantTypesSupported = Utf8Constants.ToInternedString(GrantTypesSupportedUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="IdentityChainingRequestedTokenTypesSupported"/>.</summary>
+    public static ReadOnlySpan<byte> IdentityChainingRequestedTokenTypesSupportedUtf8 => "identity_chaining_requested_token_types_supported"u8;
+
+    /// <summary>
+    /// JSON array of the <c>requested_token_type</c> values an IdP Authorization Server can issue for
+    /// identity chaining, per draft-ietf-oauth-identity-chaining /
+    /// draft-ietf-oauth-identity-assertion-authz-grant §7.1. An IdP that can mint an Identity
+    /// Assertion JWT Authorization Grant advertises <c>urn:ietf:params:oauth:token-type:id-jag</c>.
+    /// </summary>
+    public static readonly string IdentityChainingRequestedTokenTypesSupported = Utf8Constants.ToInternedString(IdentityChainingRequestedTokenTypesSupportedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="AuthorizationGrantProfilesSupported"/>.</summary>
+    public static ReadOnlySpan<byte> AuthorizationGrantProfilesSupportedUtf8 => "authorization_grant_profiles_supported"u8;
+
+    /// <summary>
+    /// JSON array of the authorization grant profiles a Resource Authorization Server can process, per
+    /// draft-ietf-oauth-identity-assertion-authz-grant §7.2. A Resource Authorization Server that
+    /// implements the Identity Assertion JWT Authorization Grant advertises
+    /// <c>urn:ietf:params:oauth:grant-profile:id-jag</c> and MUST also include
+    /// <c>urn:ietf:params:oauth:grant-type:jwt-bearer</c> in <see cref="GrantTypesSupported"/>.
+    /// </summary>
+    public static readonly string AuthorizationGrantProfilesSupported = Utf8Constants.ToInternedString(AuthorizationGrantProfilesSupportedUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="ResponseModesSupported"/>.</summary>
     public static ReadOnlySpan<byte> ResponseModesSupportedUtf8 => "response_modes_supported"u8;
 
