@@ -27,7 +27,7 @@ public enum AttachmentResolutionError
     /// <summary>The <c>data</c> object references content via <c>links</c> but carries no <c>hash</c> — REQUIRED for a by-reference attachment (DIDComm v2.1 §Attachments: "MUST be used if the data is referenced via the links").</summary>
     HashMissingForLinks,
 
-    /// <summary>The <c>hash</c> decodes but its multihash algorithm is not the supported SHA-256 (the multihash is self-describing; a non-SHA-256 algorithm is rejected by code).</summary>
+    /// <summary>The <c>hash</c> decodes but its self-describing multihash algorithm code is one the supplied <see cref="HashFunctionSelector"/> does not map to a hash function — the algorithm choice lives in the data, never hardcoded, so an unsupported code is rejected rather than guessed (a typical selector supports sha2-256).</summary>
     UnsupportedHashAlgorithm,
 
     /// <summary>The <c>hash</c> string is not a decodable multihash of the expected length.</summary>
@@ -36,7 +36,7 @@ public enum AttachmentResolutionError
     /// <summary>An inline form (<c>base64</c> or <c>json</c>) is present but does not decode/serialize — a HARD FAIL that never falls back to fetch.</summary>
     MalformedInline,
 
-    /// <summary>The resolved content's recomputed SHA-256 does not match the multihash <c>hash</c> — an integrity failure; the bytes are NOT returned.</summary>
+    /// <summary>The resolved content's digest — recomputed with the hash function the <see cref="HashFunctionSelector"/> returned for the multihash's algorithm code — does not match the multihash <c>hash</c>; an integrity failure, so the bytes are NOT returned.</summary>
     HashMismatch,
 
     /// <summary>Every <c>links</c> location was denied by the outbound-fetch policy (the SSRF gate) — none was contacted.</summary>

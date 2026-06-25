@@ -150,11 +150,12 @@ internal sealed class FederationAutomaticRegistrationTests
     {
         DateTimeOffset now = TimeProvider.System.GetUtcNow();
 
-        //Subject declares grant_types including "implicit"; the anchor's
-        //subset_of policy excludes it → policy application fails.
+        //Subject declares grant_types=[authorization_code]; the anchor's superset_of
+        //policy requires refresh_token, which the subject lacks → policy application
+        //fails (§6.1.3.1.6).
         Dictionary<string, object> rpMetadata = new(StringComparer.Ordinal)
         {
-            ["grant_types"] = new List<object> { "authorization_code", "implicit" },
+            ["grant_types"] = new List<object> { "authorization_code" },
         };
 
         Dictionary<string, object> anchorPolicy = new(StringComparer.Ordinal)
@@ -163,7 +164,7 @@ internal sealed class FederationAutomaticRegistrationTests
             {
                 ["grant_types"] = new Dictionary<string, object>(StringComparer.Ordinal)
                 {
-                    ["subset_of"] = new List<object> { "authorization_code", "refresh_token" },
+                    ["superset_of"] = new List<object> { "authorization_code", "refresh_token" },
                 },
             },
         };
@@ -318,6 +319,7 @@ internal sealed class FederationAutomaticRegistrationTests
         using LongChainFixture fixture = await BuildLongChainAsync(
             now,
             rpMetadata,
+            WellKnownMetadataPolicyOperators.SubsetOf.Value,
             intermediatePolicyGrantTypes: ["authorization_code", "refresh_token", "implicit"],
             anchorPolicyGrantTypes: ["authorization_code", "refresh_token"]).ConfigureAwait(false);
 
@@ -343,24 +345,26 @@ internal sealed class FederationAutomaticRegistrationTests
 
 
     [TestMethod]
-    public async Task RefusesWhenAnchorPolicyDeeperInChainExcludesGrant()
+    public async Task RefusesWhenAnchorPolicyDeeperInChainRequiresMissingGrant()
     {
         DateTimeOffset now = TimeProvider.System.GetUtcNow();
 
-        //Leaf declares grant_types including "implicit". The INTERMEDIATE
-        //policy would admit implicit, but the ANCHOR policy (the outer link
-        //of the longer chain) excludes it — so the merged policy rejects.
-        //This is the case the direct (no-intermediate) chain cannot express:
-        //it proves the full chain's stacked policy binds through §12.1.
+        //Leaf declares grant_types=[authorization_code]. The INTERMEDIATE superset_of
+        //requires only authorization_code (satisfiable), but the ANCHOR superset_of (the
+        //outer link of the longer chain) additionally requires refresh_token, which the
+        //leaf lacks — so the merged policy fails application. This is the case the direct
+        //(no-intermediate) chain cannot express: it proves the full chain's stacked policy
+        //binds through §12.1.
         Dictionary<string, object> rpMetadata = new(StringComparer.Ordinal)
         {
-            ["grant_types"] = new List<object> { "authorization_code", "implicit" },
+            ["grant_types"] = new List<object> { "authorization_code" },
         };
 
         using LongChainFixture fixture = await BuildLongChainAsync(
             now,
             rpMetadata,
-            intermediatePolicyGrantTypes: ["authorization_code", "refresh_token", "implicit"],
+            WellKnownMetadataPolicyOperators.SupersetOf.Value,
+            intermediatePolicyGrantTypes: ["authorization_code"],
             anchorPolicyGrantTypes: ["authorization_code", "refresh_token"]).ConfigureAwait(false);
 
         FederationAutomaticRegistrationResult result = await FederationAutomaticRegistration.ResolveAsync(
@@ -384,14 +388,15 @@ internal sealed class FederationAutomaticRegistrationTests
 
     /// <summary>
     /// Builds a subject → intermediate → anchor (5-element) chain with the
-    /// subject's <c>openid_relying_party</c> metadata and a
-    /// <c>grant_types subset_of</c> policy on BOTH the intermediate's and the
-    /// anchor's Subordinate Statements, and wires a real
+    /// subject's <c>openid_relying_party</c> metadata and a <c>grant_types</c>
+    /// policy using <paramref name="policyOperator"/> on BOTH the intermediate's
+    /// and the anchor's Subordinate Statements, and wires a real
     /// <see cref="ValidateTrustChainAsyncDelegate"/> over it.
     /// </summary>
     private static async ValueTask<LongChainFixture> BuildLongChainAsync(
         DateTimeOffset now,
         IReadOnlyDictionary<string, object> subjectMetadata,
+        string policyOperator,
         IReadOnlyList<string> intermediatePolicyGrantTypes,
         IReadOnlyList<string> anchorPolicyGrantTypes)
     {
@@ -417,8 +422,8 @@ internal sealed class FederationAutomaticRegistrationTests
             now,
             now.AddHours(1),
             subjectExtraClaims: subjectExtras,
-            intermediateAboutSubjectExtraClaims: GrantTypesSubsetOfPolicy(intermediatePolicyGrantTypes),
-            anchorAboutIntermediateExtraClaims: GrantTypesSubsetOfPolicy(anchorPolicyGrantTypes)).ConfigureAwait(false);
+            intermediateAboutSubjectExtraClaims: GrantTypesPolicy(policyOperator, intermediatePolicyGrantTypes),
+            anchorAboutIntermediateExtraClaims: GrantTypesPolicy(policyOperator, anchorPolicyGrantTypes)).ConfigureAwait(false);
 
         ValidateTrustChainAsyncDelegate validateChain = InlineTrustChainValidationDriver.Build(
             async (position, jws, ct) => position switch
@@ -435,7 +440,7 @@ internal sealed class FederationAutomaticRegistrationTests
     }
 
 
-    private static Dictionary<string, object> GrantTypesSubsetOfPolicy(IReadOnlyList<string> allowed) =>
+    private static Dictionary<string, object> GrantTypesPolicy(string policyOperator, IReadOnlyList<string> values) =>
         new(StringComparer.Ordinal)
         {
             [WellKnownFederationClaimNames.MetadataPolicy] = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -444,7 +449,7 @@ internal sealed class FederationAutomaticRegistrationTests
                 {
                     ["grant_types"] = new Dictionary<string, object>(StringComparer.Ordinal)
                     {
-                        ["subset_of"] = new List<object>(allowed),
+                        [policyOperator] = new List<object>(values),
                     },
                 },
             },

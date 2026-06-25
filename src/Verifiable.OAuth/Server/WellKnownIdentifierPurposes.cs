@@ -10,8 +10,7 @@ namespace Verifiable.OAuth.Server;
 /// </summary>
 /// <remarks>
 /// <para>
-/// One static property per identifier-generation site that survives the
-/// OI-003 chunk B migration. Property names carry the namespace prefix
+/// One static property per identifier-generation site. Property names carry the namespace prefix
 /// (<c>OAuth*</c>, <c>Oid4Vp*</c>, …) so call-site references
 /// disambiguate without requiring a fully-qualified URN.
 /// </para>
@@ -90,8 +89,7 @@ public static class WellKnownIdentifierPurposes
     /// Dynamic-client-registration <c>client_id</c> per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.1">RFC 7591 §3.2.1</see> —
     /// the identifier the AS assigns to a newly-registered client.
-    /// Replaces the standalone <c>GenerateClientIdDelegate</c> under
-    /// chunk B.
+    /// Replaces the standalone <c>GenerateClientIdDelegate</c>.
     /// </summary>
     public static IdentifierPurpose OAuthClientId { get; } =
         IdentifierPurpose.Create("urn:verifiable:identifier-purpose:oauth:client_id");
@@ -101,7 +99,7 @@ public static class WellKnownIdentifierPurposes
     /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.1">RFC 7591 §3.2.1</see> —
     /// the bearer token the registering client uses for subsequent
     /// configuration-endpoint operations. Replaces the standalone
-    /// <c>GenerateRegistrationAccessTokenDelegate</c> under chunk B.
+    /// <c>GenerateRegistrationAccessTokenDelegate</c>.
     /// </summary>
     public static IdentifierPurpose OAuthRegistrationAccessToken { get; } =
         IdentifierPurpose.Create("urn:verifiable:identifier-purpose:oauth:registration_access_token");

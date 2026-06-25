@@ -85,6 +85,12 @@ public static class TrustMarkDelegationEvaluator
             return BuildFailure(mark, "DelegationExpired");
         }
 
+        //(6) §7.2.2: the current time MUST be after the delegation's iat (with skew tolerance).
+        if(delegation.IssuedAt > now + clockSkew)
+        {
+            return BuildFailure(mark, "DelegationIssuedInFuture");
+        }
+
         return new Claim(WellKnownFederationClaimIds.TrustMarkDelegationValid, ClaimOutcome.Success);
     }
 

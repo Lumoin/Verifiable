@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Federation;
 /// <para>
 /// Validation of the <c>jwks</c>-presence invariant happens via the
 /// <see cref="WellKnownFederationClaimIds.JwksPresentWhenSelfSigned"/>
-/// check in chunk 3; chunk 2 records the structural classification only.
+/// check; this record holds the structural classification only.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EntityConfiguration Iss=Sub={Issuer,nq}")]

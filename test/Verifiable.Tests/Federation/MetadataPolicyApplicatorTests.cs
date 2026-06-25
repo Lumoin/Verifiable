@@ -15,6 +15,7 @@ internal sealed class MetadataPolicyApplicatorTests
 
     private static readonly string[] ExpectedAddedScope = ["openid", "profile", "email"];
     private static readonly string[] ExpectedDefaultScope = ["openid", "profile"];
+    private static readonly string[] ExpectedTrimmedGrantTypes = ["authorization_code"];
 
 
     [TestMethod]
@@ -119,8 +120,11 @@ internal sealed class MetadataPolicyApplicatorTests
 
 
     [TestMethod]
-    public void SubsetOfConstraintFailsForArrayContainingOutsideValue()
+    public void SubsetOfTrimsArrayToIntersection()
     {
+        //§6.1.3.1.5 / Table 1: subset_of drops values outside the operator set rather
+        //than failing. Input [authorization_code, implicit] ∩ [authorization_code,
+        //refresh_token] = [authorization_code].
         IReadOnlyDictionary<string, object> declared = new Dictionary<string, object>
         {
             ["grant_types"] = new List<object> { "authorization_code", "implicit" },
@@ -131,8 +135,29 @@ internal sealed class MetadataPolicyApplicatorTests
 
         MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
 
-        Assert.IsFalse(result.IsSuccess);
-        Assert.Contains("subset_of", result.FailureReason!);
+        Assert.IsTrue(result.IsSuccess);
+        List<object> grantTypes = (List<object>)result.EffectiveMetadata!["grant_types"];
+        CollectionAssert.AreEqual(ExpectedTrimmedGrantTypes, grantTypes);
+    }
+
+
+    [TestMethod]
+    public void SubsetOfTrimsToEmptyArrayWhenDisjoint()
+    {
+        //§6.1.3.1.5 / Table 1: a disjoint intersection yields the empty array, not a failure.
+        IReadOnlyDictionary<string, object> declared = new Dictionary<string, object>
+        {
+            ["grant_types"] = new List<object> { "implicit" },
+        };
+        EntityTypeMetadataPolicy policy = MakePolicy(
+            ("grant_types",
+                (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "authorization_code", "refresh_token" })));
+
+        MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
+
+        Assert.IsTrue(result.IsSuccess);
+        List<object> grantTypes = (List<object>)result.EffectiveMetadata!["grant_types"];
+        Assert.IsEmpty(grantTypes);
     }
 
 
@@ -165,6 +190,22 @@ internal sealed class MetadataPolicyApplicatorTests
 
         Assert.IsFalse(result.IsSuccess);
         Assert.Contains("Essential parameter", result.FailureReason!);
+    }
+
+
+    [TestMethod]
+    public void EssentialWithNonBooleanValueFails()
+    {
+        //§6.1.3.1.7: essential's only mandatory operator value type is boolean. A string
+        //"true" must be a policy error, not a silently-ignored (non-essential) parameter.
+        IReadOnlyDictionary<string, object> declared = new Dictionary<string, object>();
+        EntityTypeMetadataPolicy policy = MakePolicy(
+            ("scope", (WellKnownMetadataPolicyOperators.Essential, (object)"true")));
+
+        MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.Contains("essential", result.FailureReason!);
     }
 
 

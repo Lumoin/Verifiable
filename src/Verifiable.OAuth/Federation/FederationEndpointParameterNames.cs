@@ -84,6 +84,16 @@ public static class FederationEndpointParameterNames
     /// </summary>
     public static readonly string TrustMarkType = Utf8Constants.ToInternedString(TrustMarkTypeUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="TrustMark"/>.</summary>
+    public static ReadOnlySpan<byte> TrustMarkUtf8 => "trust_mark"u8;
+
+    /// <summary>
+    /// <c>trust_mark</c> — the Trust Mark JWT whose status a requester checks at
+    /// the <c>federation_trust_mark_status_endpoint</c> per Federation §8.4. The
+    /// REQUIRED form parameter of that endpoint's POST request.
+    /// </summary>
+    public static readonly string TrustMark = Utf8Constants.ToInternedString(TrustMarkUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="Intermediate"/>.</summary>
     public static ReadOnlySpan<byte> IntermediateUtf8 => "intermediate"u8;
 

@@ -39,19 +39,48 @@ public readonly struct EntityIdentifier: IEquatable<EntityIdentifier>
 
 
     /// <summary>
-    /// Constructs an Entity Identifier from an absolute-URL string.
+    /// Constructs an Entity Identifier from an absolute-URL string. Per the
+    /// Entity Identifier definition in OpenID Federation 1.0 §1.2, the value
+    /// MUST be an https URL with a host component and MUST NOT contain query
+    /// or fragment components (port and path components are permitted).
     /// </summary>
-    /// <param name="value">The absolute URL. Required to be non-null, non-whitespace, and a valid absolute URL per <see cref="Uri.TryCreate(string, UriKind, out Uri)"/>.</param>
-    /// <exception cref="ArgumentException">When <paramref name="value"/> is null, whitespace, or not an absolute URL.</exception>
+    /// <param name="value">The Entity Identifier. Required to be non-null, non-whitespace, an absolute https URL with a host, and free of query and fragment components.</param>
+    /// <exception cref="ArgumentException">When <paramref name="value"/> is null, whitespace, not an absolute URL, not https, lacks a host, or carries a query or fragment.</exception>
     [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
         Justification = "Entity Identifiers flow opaquely into Federation metadata documents and telemetry; routing through System.Uri adds no value and incurs normalisation cost.")]
     public EntityIdentifier(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
-        if(!Uri.TryCreate(value, UriKind.Absolute, out _))
+        if(!Uri.TryCreate(value, UriKind.Absolute, out Uri? uri))
         {
             throw new ArgumentException(
                 $"Entity Identifier must be an absolute URL; got '{value}'.",
+                nameof(value));
+        }
+
+        //§1.2: Entity Identifiers use the https scheme. Restricting the scheme also
+        //closes the cross-platform Uri.TryCreate trap whereby a scheme-relative or
+        //path-only value is accepted as a non-http(s) absolute URL on some platforms.
+        if(!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"Entity Identifier must use the https scheme; got '{value}'.",
+                nameof(value));
+        }
+
+        //§1.2: Entity Identifiers have a host component.
+        if(string.IsNullOrEmpty(uri.Host))
+        {
+            throw new ArgumentException(
+                $"Entity Identifier must contain a host component; got '{value}'.",
+                nameof(value));
+        }
+
+        //§1.2: Entity Identifiers MUST NOT contain query or fragment components.
+        if(!string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+        {
+            throw new ArgumentException(
+                $"Entity Identifier must not contain query or fragment components; got '{value}'.",
                 nameof(value));
         }
 

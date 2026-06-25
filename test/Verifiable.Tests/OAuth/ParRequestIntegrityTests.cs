@@ -258,9 +258,12 @@ internal sealed class ParRequestIntegrityTests
         };
         if(pushedFields is not null)
         {
-            foreach(KeyValuePair<string, string> field in pushedFields)
+            foreach(string key in pushedFields.Keys)
             {
-                parFields[field.Key] = field.Value;
+                foreach(string value in pushedFields.GetValues(key))
+                {
+                    parFields.Add(key, value);
+                }
             }
         }
 

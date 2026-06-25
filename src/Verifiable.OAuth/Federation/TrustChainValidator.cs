@@ -14,12 +14,12 @@ namespace Verifiable.OAuth.Federation;
 /// <para>
 /// Inline path only — assumes the caller has the parsed
 /// <see cref="TrustChain"/> in hand (via the <c>trust_chain</c> JWS header
-/// parameter per §4.3 or via the FederationTestRing in chunk 8). HTTP
-/// fetch (<c>federation_fetch_endpoint</c> walking) is chunk 5's concern.
+/// parameter per §4.3 or via the FederationTestRing). HTTP
+/// fetch (<c>federation_fetch_endpoint</c> walking) is a separate concern.
 /// </para>
 /// <para>
 /// Thin orchestrator. Per-link JWS signature verification happens
-/// <em>before</em> this validator runs; the caller (or chunk 6's
+/// <em>before</em> this validator runs; the caller (or the
 /// <c>ResolveEntityKeyDelegate</c> + <c>Jws.VerifyAsync</c> composition)
 /// populates the positional outcomes in
 /// <see cref="TrustChainValidationContext.LinkSignaturesVerified"/>. The

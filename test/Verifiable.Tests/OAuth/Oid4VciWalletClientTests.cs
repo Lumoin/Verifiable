@@ -53,7 +53,9 @@ internal sealed class Oid4VciWalletClientTests
             WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,
             WellKnownCapabilityIdentifiers.Oid4VciNonceEndpoint,
             WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint,
-            WellKnownCapabilityIdentifiers.Oid4VciCredentialOfferEndpoint);
+            WellKnownCapabilityIdentifiers.Oid4VciCredentialOfferEndpoint,
+            WellKnownCapabilityIdentifiers.Oid4VciDeferredCredentialEndpoint,
+            WellKnownCapabilityIdentifiers.Oid4VciNotificationEndpoint);
 
     private static readonly JwtHeaderSerializer HeaderSerializer =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
@@ -243,6 +245,173 @@ internal sealed class Oid4VciWalletClientTests
     }
 
 
+    /// <summary>
+    /// The detailed result surfaces every Credential of a §8.2 batch response and the §8.3
+    /// <c>notification_id</c> — both of which the single-string overload drops.
+    /// </summary>
+    [TestMethod]
+    public async Task DetailedResultSurfacesBatchCredentialsAndNotificationId()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities);
+        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
+        WireIssuerSeams(host);
+
+        const string NotificationId = "notif-batch-7Qm2";
+        const string FirstCredential = "issued-credential-1";
+        const string SecondCredential = "issued-credential-2";
+        host.Server.OAuth().IssueCredentialAsync = (_, _, _, _, _) =>
+            ValueTask.FromResult(CredentialIssuanceDecision.Issue(
+                [FirstCredential, SecondCredential], NotificationId));
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(host);
+
+        CredentialIssuanceResult result = await walletClient.IssuePreAuthorizedDetailedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsDeferred, "A direct issuance is not deferred.");
+        Assert.HasCount(2, result.Credentials, "Both batch Credentials must be surfaced.");
+        Assert.AreEqual(FirstCredential, result.Credentials[0]);
+        Assert.AreEqual(SecondCredential, result.Credentials[1]);
+        Assert.AreEqual(NotificationId, result.NotificationId, "The §8.3 notification_id must be surfaced.");
+        Assert.IsFalse(string.IsNullOrEmpty(result.AccessToken), "The access token for follow-up legs must be carried.");
+    }
+
+
+    /// <summary>
+    /// A §8.3 deferral (HTTP 202) surfaces as a deferred result carrying the <c>transaction_id</c> and
+    /// <c>interval</c>; polling the §9 Deferred Credential Endpoint with that <c>transaction_id</c> then
+    /// returns the issued Credential.
+    /// </summary>
+    [TestMethod]
+    public async Task DeferredIssuanceThenPollReturnsCredential()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities);
+        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
+        WireIssuerSeams(host);
+
+        const string TransactionId = "txn-deferred-7Qm2";
+        const string NotificationId = "notif-deferred-7Qm2";
+        host.Server.OAuth().IssueCredentialAsync = (_, _, _, _, _) =>
+            ValueTask.FromResult(CredentialIssuanceDecision.Defer(TransactionId, intervalSeconds: 5));
+        host.Server.OAuth().ResolveDeferredCredentialAsync = (_, _, _, _, _) =>
+            ValueTask.FromResult(DeferredCredentialDecision.Issue([IssuedCredential], NotificationId));
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(host);
+
+        CredentialIssuanceResult deferred = await walletClient.IssuePreAuthorizedDetailedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(deferred.IsDeferred, "An HTTP 202 deferral must surface as deferred.");
+        Assert.AreEqual(TransactionId, deferred.TransactionId);
+        Assert.AreEqual(5, deferred.DeferredIntervalSeconds, "The §8.3 interval must be surfaced.");
+        Assert.IsEmpty(deferred.Credentials, "A deferral carries no Credentials yet.");
+
+        CredentialIssuanceResult polled = await walletClient.PollDeferredCredentialAsync(
+            deferred.TransactionId!,
+            deferred.AccessToken,
+            deferred.TokenType,
+            ResolveDeferredEndpoint(host, material),
+            responseEncryption: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(polled.IsDeferred, "The poll returned the ready Credential.");
+        Assert.HasCount(1, polled.Credentials);
+        Assert.AreEqual(IssuedCredential, polled.Credentials[0]);
+        Assert.AreEqual(NotificationId, polled.NotificationId);
+    }
+
+
+    /// <summary>
+    /// After issuance, the Wallet reports a §11 <c>credential_accepted</c> Notification with the
+    /// <c>notification_id</c> the response carried; the Issuer's notification seam receives the matching
+    /// id and event.
+    /// </summary>
+    [TestMethod]
+    public async Task NotificationReportsCredentialAccepted()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities);
+        host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
+        WireIssuerSeams(host);
+
+        const string NotificationId = "notif-accept-7Qm2";
+        host.Server.OAuth().IssueCredentialAsync = (_, _, _, _, _) =>
+            ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential], NotificationId));
+
+        CredentialNotification? observed = null;
+        host.Server.OAuth().ProcessCredentialNotificationAsync = (notification, _, _, _, _) =>
+        {
+            observed = notification;
+
+            return ValueTask.FromResult(CredentialNotificationDecision.Accept);
+        };
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(host);
+
+        CredentialIssuanceResult result = await walletClient.IssuePreAuthorizedDetailedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(NotificationId, result.NotificationId);
+
+        await walletClient.SendCredentialNotificationAsync(
+            result.NotificationId!,
+            Oid4VciNotificationEvents.CredentialAccepted,
+            result.AccessToken,
+            result.TokenType,
+            ResolveNotificationEndpoint(host, material),
+            eventDescription: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(observed, "The Issuer's notification seam must have received the report.");
+        Assert.AreEqual(NotificationId, observed!.NotificationId);
+        Assert.AreEqual(Oid4VciNotificationEvents.CredentialAccepted, observed.Event);
+    }
+
+
     /// <summary>Cross-step observations the issuer seams record for assertions.</summary>
     private sealed class IssuerSeamObservations
     {
@@ -279,6 +448,23 @@ internal sealed class Oid4VciWalletClientTests
             CredentialEndpoint = TestHostShell.ComposeEndpointUri(baseUri, segment, WellKnownEndpointNames.Oid4VciCredential)
         };
     }
+
+
+    //Resolves the §9 Deferred Credential Endpoint URL against the started host's real Kestrel base
+    //address using the fixture's /connect/{segment}/<suffix> URL shape.
+    private static Uri ResolveDeferredEndpoint(TestHostShell host, VerifierKeyMaterial material) =>
+        TestHostShell.ComposeEndpointUri(
+            host.Host("default").HttpBaseAddress!,
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.Oid4VciDeferredCredential);
+
+
+    //Resolves the §11 Notification Endpoint URL against the started host's real Kestrel base address.
+    private static Uri ResolveNotificationEndpoint(TestHostShell host, VerifierKeyMaterial material) =>
+        TestHostShell.ComposeEndpointUri(
+            host.Host("default").HttpBaseAddress!,
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.Oid4VciNotification);
 
 
     //Builds the wallet client over HttpClient-backed transport delegates that close over the

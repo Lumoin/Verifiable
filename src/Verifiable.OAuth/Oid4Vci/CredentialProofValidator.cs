@@ -458,89 +458,39 @@ public static class CredentialProofValidator
         //acceptable per local policy".
         if(string.IsNullOrEmpty(alg)
             || WellKnownJwaValues.IsNone(alg)
-            || !IsAsymmetricSignatureAlg(alg)
+            || !Oid4VciHeaderKeyResolution.IsAsymmetricSignatureAlg(alg)
             || !isProofSigningAlgAcceptable(alg))
         {
             return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.InvalidAlg);
         }
 
-        //§F.1: kid/jwk/x5c are mutually exclusive — "It MUST NOT be present if [the other two are]
-        //present". Exactly one MUST identify the key (§F.4: "all required claims for that proof
-        //type are contained").
-        int referenceCount = (hasJwk ? 1 : 0) + (hasKid ? 1 : 0) + (hasX5c ? 1 : 0);
-        if(referenceCount != 1)
-        {
-            return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.InvalidKeyReference);
-        }
-
-        //§F.4: "the header parameter does not contain a private key". Reject any private/symmetric
-        //jwk member BEFORE reconstructing or verifying the key.
-        if(hasJwk
-            && jwkMembers is not null
-            && WellKnownJwkMemberNames.ContainsPrivateOrSymmetricMember(jwkMembers.Keys))
-        {
-            return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.JwkContainsPrivateKey);
-        }
-
         //Reconstruct the holder public key. §F.4: "The Credential Issuer MUST validate that the JWT
         //used as a proof is actually signed by a key identified in the JOSE Header through either
-        //kid, jwk or x5c element." The jwk mode is self-contained; x5c is resolved by the library
-        //(it composes the existing X.509 surface against the context's trust anchors); kid is
-        //dereferenced by the deployment's resolver (its DID/key-store trust). The validator owns the
-        //reconstructed key and disposes it after the verify call.
-        PublicKeyMemory? publicKey;
-        if(hasJwk)
-        {
-            if(jwkMembers is null)
-            {
-                return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.InvalidKeyReference);
-            }
+        //kid, jwk or x5c element." The shared resolver enforces the §F.1 mutual exclusivity, rejects a
+        //private/symmetric jwk, and dispatches to the matching reference mode (jwk self-contained, x5c
+        //via the X.509 surface, kid via the deployment delegate); the validator owns the reconstructed
+        //key and disposes it after the verify call.
+        Oid4VciHeaderKeyResolution.Outcome resolution = await Oid4VciHeaderKeyResolution.ResolveAsync(
+            hasJwk,
+            hasKid,
+            hasX5c,
+            jwkMembers,
+            kid,
+            x5cValues,
+            alg,
+            resolveProofKey is null ? null : new Oid4VciHeaderKeyResolution.ResolveKidKeyDelegate(resolveProofKey.Invoke),
+            x509Verification,
+            context,
+            base64UrlDecoder,
+            memoryPool,
+            cancellationToken).ConfigureAwait(false);
 
-            try
-            {
-                publicKey = ReconstructKeyFromJwk(jwkMembers, base64UrlDecoder, memoryPool);
-            }
-            catch
-            {
-                return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.InvalidKeyReference);
-            }
-        }
-        else if(hasX5c)
+        if(resolution.Status != HeaderKeyResolutionStatus.Resolved)
         {
-            //§F.1: "x5c: ... at least one certificate where the first certificate contains the key
-            //that the Credential is to be bound to". Resolve the leaf key through the existing X.509
-            //surface — the same ParseX5c + chain-validate platform functions the OID4VP x509 JAR-key
-            //resolvers compose — validated to the issuer-supplied trust anchors on the context.
-            if(x509Verification is null || x5cValues is null || x5cValues.Count == 0)
-            {
-                return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.KeyReferenceUnresolved);
-            }
+            return CredentialProofValidationResult.Failure(MapResolutionFailure(resolution.Status));
+        }
 
-            publicKey = await ResolveKeyFromX5cAsync(x5cValues, x509Verification, context, cancellationToken)
-                .ConfigureAwait(false);
-            if(publicKey is null)
-            {
-                return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.KeyReferenceUnresolved);
-            }
-        }
-        else if(resolveProofKey is not null && !string.IsNullOrEmpty(kid))
-        {
-            //§F.1: "kid: ... the key ID. If the Credential is to be bound to a DID, the kid refers
-            //to a DID URL which identifies a particular key in the DID Document". The deployment
-            //dereferences it; context is threaded so a network-resolving kid (a did:web DID URL) is
-            //fetched under the context's SSRF OutboundFetch policy, mirroring the di_vp path.
-            publicKey = await resolveProofKey(kid, alg, context, cancellationToken).ConfigureAwait(false);
-            if(publicKey is null)
-            {
-                return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.KeyReferenceUnresolved);
-            }
-        }
-        else
-        {
-            //A kid/x5c proof whose corresponding seam is unwired (or a kid with no value) cannot be
-            //resolved — fail closed as KeyReferenceUnresolved rather than throw.
-            return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.KeyReferenceUnresolved);
-        }
+        PublicKeyMemory publicKey = resolution.Key!;
 
         //§F.4: "the signature on the key proof verifies with the public key contained in the
         //header parameter". Composes Jws.VerifyAsync — the registry overload resolves the verifier
@@ -629,80 +579,14 @@ public static class CredentialProofValidator
     }
 
 
-    //Reconstructs the holder PublicKeyMemory from the proof header's jwk members, composing the
-    //library's single JWK→algorithm converter (the same path Oid4VciProofIssuance projects FROM).
-    private static PublicKeyMemory ReconstructKeyFromJwk(
-        Dictionary<string, object> jwkMembers,
-        DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
-    {
-        (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
-            CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwkMembers, memoryPool, base64UrlDecoder);
-
-        Tag tag = new(new Dictionary<Type, object>
+    //Maps the shared header-key resolver's neutral status to the §F.4 proof-validation failure reason.
+    private static CredentialProofValidationFailureReason MapResolutionFailure(HeaderKeyResolutionStatus status) =>
+        status switch
         {
-            [typeof(CryptoAlgorithm)] = algorithm,
-            [typeof(Purpose)] = purpose,
-            [typeof(EncodingScheme)] = scheme
-        });
-
-        return new PublicKeyMemory(keyMaterial, tag);
-    }
-
-
-    //Resolves the holder PublicKeyMemory from the proof header's x5c chain, composing the existing
-    //X.509 surface: the same ParseX5c + chain-validate platform delegates the OID4VP x509 JAR-key
-    //resolvers (X509SanDnsKeyResolver / X509HashKeyResolver) compose. Unlike the OID4VP JAR case a
-    //key proof carries no client-id DNS/hash binding, so only the parse + chain-validate + leaf-key
-    //extraction apply; the chain is validated to the issuer-supplied trust anchors and validity
-    //instant read off the threaded context, exactly as the OID4VP x509 handlers read them. Returns
-    //null (KeyReferenceUnresolved → invalid_proof) when the trust material is absent or the chain
-    //does not validate, rather than throwing.
-    private static async ValueTask<PublicKeyMemory?> ResolveKeyFromX5cAsync(
-        List<string> x5cValues,
-        Oid4VciProofX509Verification x509Verification,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
-    {
-        //Fail closed when the issuer policy material is missing: an x5c proof cannot be anchored
-        //without trust anchors and a validity instant on the context.
-        IReadOnlyList<PkiCertificateMemory>? trustAnchors = context.X509TrustAnchors;
-        DateTimeOffset? validationTime = context.ValidationTime;
-        if(trustAnchors is null || validationTime is null)
-        {
-            return null;
-        }
-
-        IReadOnlyList<PkiCertificateMemory> chain;
-        try
-        {
-            chain = x509Verification.ParseX5c(x5cValues, x509Verification.MemoryPool);
-        }
-        catch
-        {
-            return null;
-        }
-
-        try
-        {
-            return await x509Verification.ValidateChain(
-                chain, trustAnchors, validationTime.Value, x509Verification.MemoryPool, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch
-        {
-            //A chain that does not validate to the supplied anchors is an unresolved key reference;
-            //§F.4 rejects the proof as invalid_proof.
-            return null;
-        }
-        finally
-        {
-            foreach(PkiCertificateMemory cert in chain)
-            {
-                cert.Dispose();
-            }
-        }
-    }
+            HeaderKeyResolutionStatus.JwkContainsPrivateKey => CredentialProofValidationFailureReason.JwkContainsPrivateKey,
+            HeaderKeyResolutionStatus.KeyReferenceUnresolved => CredentialProofValidationFailureReason.KeyReferenceUnresolved,
+            _ => CredentialProofValidationFailureReason.InvalidKeyReference
+        };
 
 
     //Projects the jwk members (string-valued in a proof header) into the string dictionary the
@@ -720,18 +604,4 @@ public static class CredentialProofValidator
 
         return stringValued;
     }
-
-
-    //§F.4: a registered asymmetric digital signature algorithm. The accepted families mirror the
-    //IANA JOSE signature registry minus none and the symmetric MACs: ECDSA, RSA PKCS#1, RSA-PSS,
-    //and EdDSA. Whether a given alg is ALSO acceptable per issuer policy is the caller's predicate.
-    private static bool IsAsymmetricSignatureAlg(string alg) =>
-        WellKnownJwaValues.IsEcdsa(alg)
-        || WellKnownJwaValues.IsRs256(alg)
-        || WellKnownJwaValues.IsRs384(alg)
-        || WellKnownJwaValues.IsRs512(alg)
-        || WellKnownJwaValues.IsPs256(alg)
-        || WellKnownJwaValues.IsPs384(alg)
-        || WellKnownJwaValues.IsPs512(alg)
-        || WellKnownJwaValues.IsEdDsa(alg);
 }

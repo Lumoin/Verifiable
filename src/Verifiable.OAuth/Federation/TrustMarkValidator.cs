@@ -9,8 +9,7 @@ namespace Verifiable.OAuth.Federation;
 /// trust mark can be validated against the OpenID Federation 1.0 §7.3
 /// shape-level checks (signature outcome + exp). Chain-aware checks
 /// (1171 issuer authorization, 1173 delegation validity) live on
-/// separate evaluator types and are orchestrated alongside this validator
-/// via the B.7.5 orchestrator.
+/// separate evaluator types and are orchestrated alongside this validator.
 /// </summary>
 /// <remarks>
 /// Thin orchestrator. Signature verification happens before this

@@ -43,7 +43,7 @@ namespace Verifiable.OAuth;
 /// <strong>Why the slot is optional.</strong>
 /// Endpoints whose matchers do not consume tokens — PAR, JAR, direct_post,
 /// JWKS, discovery — run without this delegate set. Token-aware matchers
-/// (Phase 5+ userinfo, introspection, revocation, OID4VCI proof) require
+/// (userinfo, introspection, revocation, OID4VCI proof) require
 /// it; their builders fail validation when the slot is null.
 /// </para>
 /// <para>

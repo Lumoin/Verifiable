@@ -201,6 +201,33 @@ internal sealed class JarParTests
 
 
     [TestMethod]
+    public async Task RejectsJarCarryingSubClaim()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterClient(
+            ClientId, ClientBaseUri, JarParCapabilities);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        //OpenID Federation 1.0 §12.1.1.1 — a Request Object MUST NOT carry a sub
+        //claim. Here sub equals iss/client_id, the exact private_key_jwt
+        //client-assertion shape the prohibition guards against; the matcher must
+        //reject it rather than let the object double as client authentication.
+        claims[WellKnownJwtClaimNames.Sub] = ClientId;
+
+        string compactJar = await BuildSignedJarAsync(
+            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DispatchJarParAsync(
+            host, material, compactJar, ClientId, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode);
+        AssertErrorCode(response, OAuthErrors.InvalidRequestObject);
+    }
+
+
+    [TestMethod]
     public async Task RejectsJarWithMissingIssuer()
     {
         await using TestHostShell host = new(TimeProvider);

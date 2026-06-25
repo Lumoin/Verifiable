@@ -195,6 +195,11 @@ internal sealed class FederationHistoricalKeysEndpointTests
 
         Assert.AreEqual(404, (int)response.StatusCode,
             "An entity with no historical keys yields HTTP 404 per the null-contribution contract.");
+        Assert.AreEqual(WellKnownMediaTypes.Application.Json, response.Content.Headers.ContentType?.MediaType,
+            "Federation §8.9: the error response must be an application/json object.");
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.Contains($"\"error\":\"{OAuthErrors.NotFound}\"", body, StringComparison.Ordinal,
+            $"Federation §8.9: a missing historical-keys document must carry the not_found error code. Got: {body}");
     }
 
 

@@ -20,8 +20,8 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// <para>
 /// A snapshot reflects exactly one statement's policy. Combining policies
-/// across a trust chain is the responsibility of the merge algorithm
-/// (chunk 3), which produces a new snapshot from two inputs.
+/// across a trust chain is the responsibility of the merge algorithm,
+/// which produces a new snapshot from two inputs.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("MetadataPolicySnapshot ({EntityTypes.Count} entity types)")]

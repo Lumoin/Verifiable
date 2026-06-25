@@ -65,10 +65,10 @@ public readonly struct OAuthDynamicRegistrationClient
     /// <see cref="ClientMetadata"/>.
     /// </summary>
     /// <remarks>
-    /// Phase 4 stub — the underlying
+    /// Stub — the underlying
     /// <see cref="DynamicRegistrationHandlers.HandleReadAsync"/> throws
     /// <see cref="NotImplementedException"/> pending the
-    /// <c>SendJsonGetDelegate</c> transport delegate phase 5 ships.
+    /// <c>SendJsonGetDelegate</c> transport delegate.
     /// </remarks>
     public ValueTask<ClientMetadata> ReadAsync(
         ClientRegistration registration,
@@ -97,10 +97,10 @@ public readonly struct OAuthDynamicRegistrationClient
     /// <see cref="ClientMetadata"/> after the update.
     /// </summary>
     /// <remarks>
-    /// Phase 4 stub — the underlying
+    /// Stub — the underlying
     /// <see cref="DynamicRegistrationHandlers.HandleUpdateAsync"/> throws
     /// <see cref="NotImplementedException"/> pending the
-    /// <c>SendJsonPutDelegate</c> transport delegate phase 5 ships.
+    /// <c>SendJsonPutDelegate</c> transport delegate.
     /// </remarks>
     public ValueTask<ClientMetadata> UpdateAsync(
         ClientRegistration registration,
@@ -133,10 +133,10 @@ public readonly struct OAuthDynamicRegistrationClient
     /// <see cref="ClientRegistration"/>.
     /// </summary>
     /// <remarks>
-    /// Phase 4 stub — the underlying
+    /// Stub — the underlying
     /// <see cref="DynamicRegistrationHandlers.HandleDeregisterAsync"/>
     /// throws <see cref="NotImplementedException"/> pending the
-    /// <c>SendJsonDeleteDelegate</c> transport delegate phase 5 ships.
+    /// <c>SendJsonDeleteDelegate</c> transport delegate.
     /// </remarks>
     public ValueTask DeregisterAsync(
         ClientRegistration registration,

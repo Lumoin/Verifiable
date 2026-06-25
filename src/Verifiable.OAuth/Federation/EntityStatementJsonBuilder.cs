@@ -467,6 +467,8 @@ public static class EntityStatementJsonBuilder
         ArgumentNullException.ThrowIfNull(rpEntityIdentifier);
         ArgumentNullException.ThrowIfNull(contribution);
         ArgumentNullException.ThrowIfNull(contribution.Metadata);
+        ArgumentNullException.ThrowIfNull(contribution.TrustAnchor);
+        ArgumentNullException.ThrowIfNull(contribution.AuthorityHint);
 
         Dictionary<string, object> payload = new(StringComparer.Ordinal)
         {
@@ -475,13 +477,14 @@ public static class EntityStatementJsonBuilder
             [WellKnownJwtClaimNames.Aud] = rpEntityIdentifier.ToString(),
             [WellKnownJwtClaimNames.Iat] = issuedAt.ToUnixTimeSeconds(),
             [WellKnownJwtClaimNames.Exp] = expiresAt.ToUnixTimeSeconds(),
-            [WellKnownFederationClaimNames.Metadata] = contribution.Metadata
-        };
+            [WellKnownFederationClaimNames.Metadata] = contribution.Metadata,
 
-        if(contribution.TrustAnchor is not null)
-        {
-            payload[WellKnownFederationClaimNames.TrustAnchor] = contribution.TrustAnchor.ToString();
-        }
+            //§12.2.3: trust_anchor and authority_hints are REQUIRED in a successful
+            //response. authority_hints MUST be a single-element array referencing the
+            //RP's Immediate Superior in the Trust Chain the OP selected.
+            [WellKnownFederationClaimNames.TrustAnchor] = contribution.TrustAnchor.ToString(),
+            [WellKnownFederationClaimNames.AuthorityHints] = new List<object> { contribution.AuthorityHint.ToString() }
+        };
 
         if(contribution.Jwks is { Count: > 0 } jwks)
         {

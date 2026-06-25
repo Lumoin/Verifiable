@@ -13,8 +13,8 @@ namespace Verifiable.OAuth.Client;
 /// <para>
 /// Used by RFC 7591 §3 dynamic client registration. The initial registration
 /// POST is unauthenticated per the spec — bearer-token-protected variants
-/// for RFC 7592 §2 management calls (read / update / delete) ship in phase 5
-/// as separate delegates that include the bearer in the request.
+/// for RFC 7592 §2 management calls (read / update / delete) are
+/// separate delegates that include the bearer in the request.
 /// </para>
 /// <para>
 /// In the in-process development configuration the implementation dispatches

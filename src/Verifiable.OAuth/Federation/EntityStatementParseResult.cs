@@ -10,7 +10,7 @@ namespace Verifiable.OAuth.Federation;
 /// <remarks>
 /// Structural-only outcome. <see cref="IsSuccess"/> does not imply
 /// signature validity, expiry validity, or any deeper check — those
-/// belong to <see cref="EntityStatementValidator"/> in chunk 4.
+/// belong to <see cref="EntityStatementValidator"/>.
 /// Mirrors the
 /// <see cref="Verifiable.OAuth.Dpop.DpopProofValidationResult"/>
 /// single-record-with-nullable-fields precedent.

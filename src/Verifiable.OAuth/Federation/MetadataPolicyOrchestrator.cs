@@ -20,8 +20,8 @@ namespace Verifiable.OAuth.Federation;
 /// <remarks>
 /// <para>
 /// Operates on the inline trust chain only — the same scope as
-/// <see cref="TrustChainValidator"/>. HTTP-fetch chain construction
-/// lives in the B.5 track.
+/// <see cref="TrustChainValidator"/>. HTTP-fetch chain construction is
+/// a separate concern.
 /// </para>
 /// <para>
 /// The orchestrator reads the subject's declared metadata from
@@ -90,10 +90,15 @@ public static class MetadataPolicyOrchestrator
             }
 
             EntityTypeIdentifier entityType = entry.Key;
-            IReadOnlyDictionary<string, object> declaredMetadata = entry.Value;
+
+            //§6.1.4.2 / §3.1.1: a metadata claim in the immediate superior's Subordinate
+            //Statement overrides the subject's identically named parameters and MUST be
+            //applied before the resolved metadata policy.
+            IReadOnlyDictionary<string, object> declaredMetadata =
+                OverlayImmediateSuperiorMetadata(chain, entityType, entry.Value);
 
             //Accumulate metadata_policy entries from positions 1..N-1, walking from
-            //the Trust Anchor down toward the subject. The chunk-2 merger's
+            //the Trust Anchor down toward the subject. The merger's
             //asymmetry is upstream/downstream; we pass the prior accumulator as
             //upstream and each newly-walked statement's policy as downstream.
             (EntityTypeMetadataPolicy? mergedBlock, string? mergeFailure) =
@@ -297,6 +302,54 @@ public static class MetadataPolicyOrchestrator
         }
 
         return (accumulator, null);
+    }
+
+
+    /// <summary>
+    /// Overlays the immediate superior's <c>metadata</c> claim onto the subject's
+    /// declared metadata for one entity type per OpenID Federation 1.0 §3.1.1 and
+    /// §6.1.4.2. The Subordinate Statement about the subject (chain position 1) MAY
+    /// carry a <c>metadata</c> claim whose parameters take precedence over the
+    /// identically named parameters in the subject's Entity Configuration and MUST be
+    /// applied before the resolved metadata policy. Returns the subject's declared
+    /// metadata unchanged when the immediate superior supplies no metadata for the type.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, object> OverlayImmediateSuperiorMetadata(
+        TrustChain chain,
+        EntityTypeIdentifier entityType,
+        IReadOnlyDictionary<string, object> subjectDeclaredMetadata)
+    {
+        //Position 0 is the subject's Entity Configuration; position 1 is the immediate
+        //superior's Subordinate Statement about the subject. A shorter chain has no
+        //immediate superior to contribute metadata.
+        if(chain.Statements.Count < 2)
+        {
+            return subjectDeclaredMetadata;
+        }
+
+        if(!chain.Statements[1].Payload.TryGetValue(WellKnownFederationClaimNames.Metadata, out object? metaObj)
+            || metaObj is not IReadOnlyDictionary<string, object> metaDict
+            || !metaDict.TryGetValue(entityType.Value, out object? blockObj)
+            || blockObj is not IReadOnlyDictionary<string, object> superiorBlock
+            || superiorBlock.Count == 0)
+        {
+            return subjectDeclaredMetadata;
+        }
+
+        Dictionary<string, object> overlaid = new(StringComparer.Ordinal);
+        foreach(KeyValuePair<string, object> kvp in subjectDeclaredMetadata)
+        {
+            overlaid[kvp.Key] = kvp.Value;
+        }
+
+        //§3.1.1: parameters in the Subordinate Statement override identically named
+        //parameters under the same Entity Type in the subject's Entity Configuration.
+        foreach(KeyValuePair<string, object> kvp in superiorBlock)
+        {
+            overlaid[kvp.Key] = kvp.Value;
+        }
+
+        return overlaid;
     }
 
 

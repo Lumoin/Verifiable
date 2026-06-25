@@ -12,7 +12,7 @@ namespace Verifiable.Vcalm;
 /// The VCALM 1.0 §C.1 status-list composition: it builds a NEW W3C Bitstring Status List verifiable
 /// credential — a <c>BitstringStatusListCredential</c> whose <c>credentialSubject</c> is a
 /// <c>BitstringStatusList</c> carrying the GZIP+base64url <c>encodedList</c> of an all-zero
-/// <see cref="StatusList"/> — and secures it through the V-2 issuance seam
+/// <see cref="StatusList"/> — and secures it through the issuance seam
 /// (<see cref="VcalmCredentialIssuanceService.IssueAsync"/>, composing the library's tested Data
 /// Integrity signer). It does not re-roll cryptography or the bitstring codec.
 /// </summary>
@@ -64,7 +64,7 @@ public static class VcalmStatusListService
         VerifiableCredential statusListCredential = BuildStatusListCredential(
             statusListId, statusPurpose, encodedList, issuance.ConfiguredIssuer);
 
-        //§C.1: secure the list with the same V-2 issuance seam the credential issuer uses. A
+        //§C.1: secure the list with the same issuance seam the credential issuer uses. A
         //status-list credential carries no caller proof, so the existing-proof case never applies.
         VcalmIssuanceResult result = await VcalmCredentialIssuanceService.IssueAsync(
             statusListCredential,

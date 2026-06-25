@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.Federation;
 /// <remarks>
 /// <para>
 /// The chain validator orchestrates per-link signature verification using
-/// the registered key resolver (chunk 6's
+/// the registered key resolver (the
 /// <c>ResolveEntityKeyDelegate</c>) before the claim chain runs and
 /// records the outcome positionally in
 /// <see cref="LinkSignaturesVerified"/> — aligned 1:1 with
@@ -39,7 +39,7 @@ public sealed record TrustChainValidationContext
     /// Per-link signature verification outcomes from the validator's
     /// pre-flight, aligned 1:1 with <see cref="TrustChain.Statements"/>.
     /// Index <c>i</c> records the result of verifying
-    /// <c>Statements[i]</c>'s signature against the key resolved per chunk 6's
+    /// <c>Statements[i]</c>'s signature against the key resolved per the
     /// <c>ResolveEntityKeyDelegate</c>.
     /// </summary>
     public required IReadOnlyList<bool> LinkSignaturesVerified { get; init; }

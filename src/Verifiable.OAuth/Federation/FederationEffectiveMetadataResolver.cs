@@ -106,8 +106,13 @@ public static class FederationEffectiveMetadataResolver
                 $"Operator combination is illegal for entity type '{entityType.Value}' (§6.1.3.1.8).");
         }
 
+        //§6.1.4.2 / §3.1.1: the immediate superior's metadata claim overrides the
+        //subject's identically named parameters and MUST be applied before the policy.
+        IReadOnlyDictionary<string, object> effectiveDeclaredMetadata =
+            MetadataPolicyOrchestrator.OverlayImmediateSuperiorMetadata(chain, entityType, declaredMetadata);
+
         //§6.1.4.2 apply.
-        return await applicator(declaredMetadata, rawMergedBlock, entityType, cancellationToken)
+        return await applicator(effectiveDeclaredMetadata, rawMergedBlock, entityType, cancellationToken)
             .ConfigureAwait(false);
     }
 

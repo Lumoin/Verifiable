@@ -274,9 +274,11 @@ public delegate ValueTask<Federation.SubordinateStatementContribution?> ResolveS
 /// federation entity with no subordinates, or a filter that matches none).
 /// </para>
 /// </remarks>
-/// <param name="entityTypeFilter">
-/// The <c>entity_type</c> filter from the request, or <see langword="null"/>
-/// when the requester asked for the full membership.
+/// <param name="entityTypeFilters">
+/// The <c>entity_type</c> filters from the request — §8.2.1 permits the
+/// parameter to repeat, and the result must include subordinates declaring
+/// <em>any</em> of the listed Entity Types. Empty when the requester asked for
+/// the full membership.
 /// </param>
 /// <param name="registration">The issuing entity's <see cref="ClientRecord"/>.</param>
 /// <param name="context">The per-request context bag.</param>
@@ -286,7 +288,7 @@ public delegate ValueTask<Federation.SubordinateStatementContribution?> ResolveS
 /// appear in the §8.2 response array.
 /// </returns>
 public delegate ValueTask<IReadOnlyList<Federation.EntityIdentifier>> ResolveSubordinateListDelegate(
-    Federation.EntityTypeIdentifier? entityTypeFilter,
+    IReadOnlyList<Federation.EntityTypeIdentifier> entityTypeFilters,
     ClientRecord registration,
     ExchangeContext context,
     CancellationToken cancellationToken);

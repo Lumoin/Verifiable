@@ -175,7 +175,7 @@ public static class CredentialCoseExtensions
         EncodedCoseProtectedHeader protectedHeaderCarrier = new(protectedHeaderOwner, CryptoTags.CoseEncodedProtectedHeader);
 
         //Payload bytes are borrowed by the message; the caller controls
-        //lifetime. A future chunk lifts the payload to a semantic carrier
+        //lifetime. The payload is not yet lifted to a semantic carrier
         //per the same pool-routing rule.
         byte[] payloadBytes = credentialSerializer(credential).ToArray();
 

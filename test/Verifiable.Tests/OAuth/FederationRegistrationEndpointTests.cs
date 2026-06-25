@@ -81,6 +81,7 @@ internal sealed class FederationRegistrationEndpointTests
                     Subject = new Uri(RpEntityId),
                     Metadata = metadata,
                     TrustAnchor = new Uri(AnchorEntityId),
+                    AuthorityHint = new Uri(OpEntityId),
                 });
         };
 
@@ -109,6 +110,14 @@ internal sealed class FederationRegistrationEndpointTests
             "aud MUST be the RP's Entity Identifier per §3.1.5.");
         Assert.AreEqual(new Uri(AnchorEntityId).ToString(), (string)payload["trust_anchor"],
             "trust_anchor must be the OP-selected Trust Anchor.");
+
+        //§12.2.3: authority_hints is REQUIRED and MUST be a single-element array
+        //referencing the RP's Immediate Superior (the OP here).
+        IReadOnlyList<object> authorityHints = (IReadOnlyList<object>)payload["authority_hints"];
+        Assert.HasCount(1, authorityHints,
+            "authority_hints MUST be a single-element array per §12.2.3.");
+        Assert.AreEqual(new Uri(OpEntityId).ToString(), (string)authorityHints[0],
+            "authority_hints[0] must reference the RP's Immediate Superior.");
 
         IReadOnlyDictionary<string, object> metadata =
             (IReadOnlyDictionary<string, object>)payload["metadata"];
@@ -152,6 +161,52 @@ internal sealed class FederationRegistrationEndpointTests
 
         Assert.AreEqual(400, (int)response.StatusCode,
             "A refused registration (null contribution) yields HTTP 400.");
+    }
+
+
+    [TestMethod]
+    public async Task RegistrationEndpointRejectsWrongContentType()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> opFederationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        using VerifierKeyMaterial opKeys = RegisterOp(app, opFederationKeys);
+
+        //The delegate would accept; the request must be refused earlier on the
+        //Content-Type alone, so a reachable delegate proves the gate runs first.
+        bool delegateInvoked = false;
+        app.Server.OAuth().ResolveExplicitRegistrationAsync = (_, _, _, _) =>
+        {
+            delegateInvoked = true;
+            return ValueTask.FromResult<ExplicitRegistrationContribution?>(
+                new ExplicitRegistrationContribution
+                {
+                    Subject = new Uri(RpEntityId),
+                    Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
+                    TrustAnchor = new Uri(AnchorEntityId),
+                    AuthorityHint = new Uri(OpEntityId),
+                });
+        };
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = opKeys.Registration.TenantId.Value;
+
+        //Federation §12.2.1 requires application/entity-statement+jwt (or
+        //application/trust-chain+json). application/json is neither.
+        Uri url = new(host.HttpBaseAddress!, $"/connect/{segment}/federation_registration");
+        using System.Net.Http.StringContent content = new(
+            "eyJrp.entity.configuration", Encoding.UTF8, WellKnownMediaTypes.Application.Json);
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .PostAsync(url, content, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode,
+            "A Registration Request with a Content-Type other than entity-statement+jwt "
+            + "or trust-chain+json must be rejected per §12.2.1.");
+        Assert.IsFalse(delegateInvoked,
+            "The Content-Type gate must run before the registration delegate is consulted.");
     }
 
 

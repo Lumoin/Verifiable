@@ -174,13 +174,19 @@ internal sealed class FederationResolveEndpointTests
 
         string segment = resolverKeys.Registration.TenantId.Value;
         Uri url = new(host.HttpBaseAddress!,
-            $"/connect/{segment}/federation_resolve?sub={Uri.EscapeDataString("https://unknown.example.com")}");
+            $"/connect/{segment}/federation_resolve?sub={Uri.EscapeDataString("https://unknown.example.com")}"
+            + $"&anchor={Uri.EscapeDataString("https://anchor.example.com")}");
 
         using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
             .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, (int)response.StatusCode,
             "A subject the resolver cannot resolve yields HTTP 404 per the null-contribution contract.");
+        Assert.AreEqual(WellKnownMediaTypes.Application.Json, response.Content.Headers.ContentType?.MediaType,
+            "Federation §8.9: the error response must be an application/json object.");
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidSubject}\"", body, StringComparison.Ordinal,
+            $"Federation §8.9: an unresolvable subject must carry the invalid_subject error code. Got: {body}");
     }
 
 
@@ -216,6 +222,45 @@ internal sealed class FederationResolveEndpointTests
             "A resolve request with no sub is malformed (400), not a 404.");
         Assert.IsFalse(delegateInvoked,
             "The application delegate must not run for a request rejected at parameter validation.");
+    }
+
+
+    [TestMethod]
+    public async Task ResolveEndpointRejectsMissingAnchor()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        Uri resolverEntityId = new("https://resolver.example.com");
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        using VerifierKeyMaterial resolverKeys = RegisterResolver(app, resolverEntityId, federationKeys);
+
+        bool delegateInvoked = false;
+        app.Server.OAuth().ResolveSubjectTrustChainAsync =
+            (_, _, _, _, _, _) =>
+            {
+                delegateInvoked = true;
+                return ValueTask.FromResult<ResolveResponseContribution?>(null);
+            };
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+
+        string segment = resolverKeys.Registration.TenantId.Value;
+
+        //§8.3.1: anchor is REQUIRED. A resolve request that names a subject but no Trust
+        //Anchor is malformed (400), and the resolution delegate must not run.
+        Uri url = new(host.HttpBaseAddress!,
+            $"/connect/{segment}/federation_resolve?sub={Uri.EscapeDataString("https://leaf.example.com")}");
+
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode,
+            "A resolve request without the REQUIRED anchor parameter is malformed (Federation §8.3.1).");
+        Assert.IsFalse(delegateInvoked,
+            "The resolution delegate must not run for a request rejected at parameter validation.");
     }
 
 

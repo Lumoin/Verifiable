@@ -101,7 +101,7 @@ public readonly struct HttpResponseData: IEquatable<HttpResponseData>
     /// Populated by the production HttpClient-based transport from
     /// <c>HttpResponseMessage.Headers</c>. Consumed by future library work
     /// (RFC 9449 DPoP nonce flow, OID4VCI deferred credential
-    /// <c>Retry-After</c>); phase 5 ships the slot without active consumers.
+    /// <c>Retry-After</c>); the slot currently has no active consumers.
     /// </summary>
     public ResponseHeaders Headers { get; init; } = ResponseHeaders.Empty;
 

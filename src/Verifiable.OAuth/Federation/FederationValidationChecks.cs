@@ -274,10 +274,11 @@ public static class FederationValidationChecks
 
 
     /// <summary>
-    /// When the payload's <c>jwks</c> is present, asserts the <c>kid</c>
-    /// values across its keys are distinct — a duplicate <c>kid</c> makes key
-    /// selection during signature verification ambiguous. Keys without a
-    /// <c>kid</c> are permitted and ignored.
+    /// When the payload's <c>jwks</c> is present, asserts that every key
+    /// carries a unique, non-empty <c>kid</c> (Key ID) per OpenID Federation
+    /// 1.0 §3.1 ("Every JWK in the JWK Set MUST have a unique kid value"). A
+    /// missing or blank <c>kid</c> is a violation — key selection during
+    /// signature verification relies on it — as is a duplicate.
     /// <see cref="ClaimOutcome.NotApplicable"/> when <c>jwks</c> is absent.
     /// </summary>
     public static ValueTask<List<Claim>> CheckJwksKeyIdsDistinct(
@@ -294,19 +295,24 @@ public static class FederationValidationChecks
         }
 
         HashSet<string> seen = new(StringComparer.Ordinal);
-        bool duplicate = false;
+        bool invalid = false;
         foreach(IReadOnlyDictionary<string, object> key in keys)
         {
-            if(key.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj) && kidObj is string kid && !seen.Add(kid))
+            //§3.1: a kid is REQUIRED for every key (presence), and MUST be unique.
+            //A missing/non-string/blank kid, or a duplicate, fails the check.
+            if(!key.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj)
+                || kidObj is not string kid
+                || string.IsNullOrEmpty(kid)
+                || !seen.Add(kid))
             {
-                duplicate = true;
+                invalid = true;
                 break;
             }
         }
 
         return ValueTask.FromResult<List<Claim>>(
             [new Claim(WellKnownFederationClaimIds.JwksKeyIdsDistinct,
-                duplicate ? ClaimOutcome.Failure : ClaimOutcome.Success)]);
+                invalid ? ClaimOutcome.Failure : ClaimOutcome.Success)]);
     }
 
 
@@ -415,9 +421,15 @@ public static class FederationValidationChecks
 
     /// <summary>
     /// When the payload's <c>metadata</c> claim is present, asserts it is a
-    /// well-formed object keyed by entity-type strings. Absent
-    /// <c>metadata</c> is <see cref="ClaimOutcome.NotApplicable"/> — pure
-    /// intermediates need not declare any metadata.
+    /// well-formed object keyed by entity-type strings and that no
+    /// metadata value is <see langword="null"/> — Federation §5 prohibits
+    /// <c>null</c> as a metadata value ("to prevent likely implementation
+    /// errors caused by confusing members having null values with omitted
+    /// members"), and §3.2 folds that into the metadata syntactic check. Both
+    /// a <see langword="null"/> per-entity-type block and a <see langword="null"/>
+    /// top-level member inside such a block fail. Absent <c>metadata</c> is
+    /// <see cref="ClaimOutcome.NotApplicable"/> — pure intermediates need not
+    /// declare any metadata.
     /// </summary>
     public static ValueTask<List<Claim>> CheckMetadataWellFormed(
         EntityStatementValidationContext context,
@@ -432,12 +444,359 @@ public static class FederationValidationChecks
                 [new Claim(WellKnownFederationClaimIds.MetadataWellFormed, ClaimOutcome.NotApplicable)]);
         }
 
-        ClaimOutcome outcome = metaObj is IReadOnlyDictionary<string, object> dict && AllNonEmptyKeys(dict)
-            ? ClaimOutcome.Success
-            : ClaimOutcome.Failure;
+        ClaimOutcome outcome =
+            metaObj is IReadOnlyDictionary<string, object> dict
+            && AllNonEmptyKeys(dict)
+            && NoNullMetadataValues(dict)
+                ? ClaimOutcome.Success
+                : ClaimOutcome.Failure;
 
         return ValueTask.FromResult<List<Claim>>(
             [new Claim(WellKnownFederationClaimIds.MetadataWellFormed, outcome)]);
+    }
+
+
+    /// <summary>
+    /// Asserts conditional claim placement per Federation §3.2 (steps deriving
+    /// from §3.1.2 / §3.1.3). The Entity-Configuration-only claims
+    /// (<c>authority_hints</c>, <c>trust_anchor_hints</c>, <c>trust_marks</c>,
+    /// <c>trust_mark_issuers</c>, <c>trust_mark_owners</c>) MUST NOT appear in a
+    /// <see cref="SubordinateStatement"/>, and the Subordinate-Statement-only
+    /// claims (<c>metadata_policy</c>, <c>metadata_policy_crit</c>,
+    /// <c>constraints</c>, <c>source_endpoint</c>) MUST NOT appear in an
+    /// <see cref="EntityConfiguration"/>. A misplaced claim is a structurally
+    /// invalid statement and a policy-injection vector — an
+    /// <c>EntityConfiguration</c> carrying <c>metadata_policy</c> would be a
+    /// self-asserted policy that the spec confines to superior-issued
+    /// Subordinate Statements.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckClaimPlacement(
+        EntityStatementValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        UnverifiedJwtPayload payload = context.Statement.Payload;
+        bool misplaced;
+        if(context.Statement is EntityConfiguration)
+        {
+            //Subordinate-Statement-only claims must not appear in a self-issued
+            //Entity Configuration (§3.1.3).
+            misplaced =
+                payload.TryGetValue(WellKnownFederationClaimNames.MetadataPolicy, out _)
+                || payload.TryGetValue(WellKnownFederationClaimNames.MetadataPolicyCrit, out _)
+                || payload.TryGetValue(WellKnownFederationClaimNames.Constraints, out _)
+                || payload.TryGetValue(WellKnownFederationClaimNames.SourceEndpoint, out _);
+        }
+        else
+        {
+            //Entity-Configuration-only claims must not appear in a
+            //superior-issued Subordinate Statement (§3.1.2).
+            misplaced =
+                payload.TryGetValue(WellKnownFederationClaimNames.AuthorityHints, out _)
+                || payload.TryGetValue(WellKnownFederationClaimNames.TrustAnchorHints, out _)
+                || payload.TryGetValue(WellKnownFederationClaimNames.TrustMarks, out _)
+                || payload.TryGetValue(WellKnownFederationClaimNames.TrustMarkIssuers, out _)
+                || payload.TryGetValue(WellKnownFederationClaimNames.TrustMarkOwners, out _);
+        }
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(WellKnownFederationClaimIds.ClaimPlacementValid,
+                misplaced ? ClaimOutcome.Failure : ClaimOutcome.Success)]);
+    }
+
+
+    /// <summary>
+    /// Asserts the <c>crit</c> (critical) payload claim, when present, is
+    /// well-formed and every extension Claim Name it lists is present in the
+    /// payload and declared understood via
+    /// <see cref="EntityStatementValidationContext.UnderstoodCriticalClaims"/>,
+    /// per Federation §13.4 (§3.1.1 usage). A <c>crit</c> that is not a
+    /// non-empty array of strings, repeats a name, names a claim the
+    /// specification already defines for this JWT type (crit is for extensions
+    /// only), lists a name absent from the payload, or names an extension the
+    /// consumer does not understand invalidates the statement.
+    /// <see cref="ClaimOutcome.NotApplicable"/> when <c>crit</c> is absent.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckCritClaimsUnderstood(
+        EntityStatementValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        UnverifiedJwtPayload payload = context.Statement.Payload;
+        if(!payload.TryGetValue(WellKnownFederationClaimNames.Crit, out object? critObj))
+        {
+            return ValueTask.FromResult<List<Claim>>(
+                [new Claim(WellKnownFederationClaimIds.CritClaimsUnderstood, ClaimOutcome.NotApplicable)]);
+        }
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(WellKnownFederationClaimIds.CritClaimsUnderstood,
+                CritSatisfied(critObj, payload, context.UnderstoodCriticalClaims)
+                    ? ClaimOutcome.Success
+                    : ClaimOutcome.Failure)]);
+    }
+
+
+    //The claim names Federation 1.0 (with RFC 7519) specifies for use in an
+    //Entity Statement. §13.4 / §3.1.1 reserve crit for EXTENSION claims NOT
+    //defined by the spec, so a crit entry naming one of these is a producer
+    //MUST NOT. The standard JWT claims plus the top-level federation claims;
+    //sub-structure names (keys, the constraints sub-claims), metadata-block
+    //parameters, and the trust_chain / peer_trust_chain JOSE header parameters
+    //are intentionally excluded — they are not top-level Entity Statement
+    //claims, and omitting one only ever under-rejects (never a false positive,
+    //since every listed name is genuinely spec-defined). Local to the check.
+    private static readonly HashSet<string> SpecifiedEntityStatementClaimNames =
+        new(StringComparer.Ordinal)
+        {
+            WellKnownJwtClaimNames.Iss, WellKnownJwtClaimNames.Sub, WellKnownJwtClaimNames.Aud,
+            WellKnownJwtClaimNames.Exp, WellKnownJwtClaimNames.Nbf, WellKnownJwtClaimNames.Iat,
+            WellKnownJwtClaimNames.Jti,
+            WellKnownFederationClaimNames.Jwks, WellKnownFederationClaimNames.AuthorityHints,
+            WellKnownFederationClaimNames.TrustAnchorHints, WellKnownFederationClaimNames.Metadata,
+            WellKnownFederationClaimNames.MetadataPolicy, WellKnownFederationClaimNames.MetadataPolicyCrit,
+            WellKnownFederationClaimNames.Constraints, WellKnownFederationClaimNames.TrustMarks,
+            WellKnownFederationClaimNames.TrustMarkIssuers, WellKnownFederationClaimNames.TrustMarkOwners,
+            WellKnownFederationClaimNames.SourceEndpoint, WellKnownFederationClaimNames.Crit,
+            WellKnownFederationClaimNames.TrustAnchor
+        };
+
+
+    /// <summary>
+    /// The §13.4 rule set over the <c>crit</c> claim value: a non-empty array of
+    /// distinct strings, each an EXTENSION claim that is present in the payload,
+    /// is not a claim name the specification already defines for this JWT type
+    /// (§3.1.1 — crit is for extensions only), and that the consumer declares
+    /// understood.
+    /// </summary>
+    private static bool CritSatisfied(
+        object critValue, UnverifiedJwtPayload payload, IReadOnlySet<string> understood)
+    {
+        if(critValue is not IEnumerable<object> items)
+        {
+            return false;
+        }
+
+        HashSet<string> seen = new(StringComparer.Ordinal);
+        foreach(object item in items)
+        {
+            if(item is not string name || string.IsNullOrWhiteSpace(name))
+            {
+                return false;
+            }
+
+            if(!seen.Add(name))
+            {
+                //Duplicate name — a producer MUST NOT per §13.4.
+                return false;
+            }
+
+            if(SpecifiedEntityStatementClaimNames.Contains(name))
+            {
+                //crit is for EXTENSION claims only (§3.1.1); naming a claim the
+                //specification already defines for this JWT type is a producer
+                //MUST NOT per §13.4.
+                return false;
+            }
+
+            if(!payload.TryGetValue(name, out _))
+            {
+                //A crit entry MUST occur as a claim in the JWT (§13.4).
+                return false;
+            }
+
+            if(!understood.Contains(name))
+            {
+                //A critical extension the recipient does not understand makes
+                //the JWT invalid (§13.4).
+                return false;
+            }
+        }
+
+        //The empty array is forbidden (§13.4); seen is empty only when items was empty.
+        return seen.Count > 0;
+    }
+
+
+    /// <summary>
+    /// Asserts the statement's JWS protected header carries neither
+    /// <c>trust_chain</c> nor <c>peer_trust_chain</c>, per Federation §4.3 /
+    /// §4.4. An Entity Configuration or Subordinate Statement is an integral
+    /// component of a Trust Chain and MUST NOT embed one in its own header —
+    /// a statement that does is malformed and a potential chain-confusion
+    /// vector.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckNoChainHeaderInStatement(
+        EntityStatementValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        bool present =
+            context.Header.TryGetValue(WellKnownFederationClaimNames.TrustChain, out _)
+            || context.Header.TryGetValue(WellKnownFederationClaimNames.PeerTrustChain, out _);
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(WellKnownFederationClaimIds.NoChainHeaderInStatement,
+                present ? ClaimOutcome.Failure : ClaimOutcome.Success)]);
+    }
+
+
+    //The federation_entity endpoint metadata keys whose URL values §5.1.1 constrains to
+    //https-with-no-fragment. Local to this check.
+    private static readonly string[] FederationEntityEndpointKeys =
+    [
+        FederationMetadataParameterNames.FetchEndpoint,
+        FederationMetadataParameterNames.ListEndpoint,
+        FederationMetadataParameterNames.ResolveEndpoint,
+        FederationMetadataParameterNames.TrustMarkStatusEndpoint,
+        FederationMetadataParameterNames.TrustMarkListEndpoint,
+        FederationMetadataParameterNames.TrustMarkEndpoint,
+        FederationMetadataParameterNames.HistoricalKeysEndpoint
+    ];
+
+
+    /// <summary>
+    /// When the statement's <c>metadata</c> carries a <c>federation_entity</c>
+    /// block, asserts every federation endpoint URL it declares uses the
+    /// <c>https</c> scheme and contains no fragment component, per Federation
+    /// §5.1.1. A present endpoint value that is not such a URL fails.
+    /// <see cref="ClaimOutcome.NotApplicable"/> when there is no
+    /// <c>federation_entity</c> metadata block.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckFederationEntityEndpointsWellFormed(
+        EntityStatementValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if(!TryReadFederationEntityMetadata(context.Statement.Payload, out IReadOnlyDictionary<string, object> federationEntity))
+        {
+            return ValueTask.FromResult<List<Claim>>(
+                [new Claim(WellKnownFederationClaimIds.FederationEntityEndpointsWellFormed, ClaimOutcome.NotApplicable)]);
+        }
+
+        bool malformed = false;
+        foreach(string endpointKey in FederationEntityEndpointKeys)
+        {
+            if(federationEntity.TryGetValue(endpointKey, out object? value) && !IsHttpsUrlWithoutFragment(value))
+            {
+                malformed = true;
+                break;
+            }
+        }
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(WellKnownFederationClaimIds.FederationEntityEndpointsWellFormed,
+                malformed ? ClaimOutcome.Failure : ClaimOutcome.Success)]);
+    }
+
+
+    /// <summary>
+    /// When the statement's <c>metadata</c> carries a <c>federation_entity</c>
+    /// block whose <c>endpoint_auth_signing_alg_values_supported</c> array is
+    /// present, asserts none of its listed algorithms is <c>none</c>, per
+    /// Federation §5.1.1 (the value <c>none</c> MUST NOT be used for the
+    /// <c>private_key_jwt</c> JWT authenticating to federation endpoints).
+    /// <see cref="ClaimOutcome.NotApplicable"/> when there is no
+    /// <c>federation_entity</c> metadata block.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckFederationEntityEndpointAuthAlgsNotNone(
+        EntityStatementValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if(!TryReadFederationEntityMetadata(context.Statement.Payload, out IReadOnlyDictionary<string, object> federationEntity))
+        {
+            return ValueTask.FromResult<List<Claim>>(
+                [new Claim(WellKnownFederationClaimIds.FederationEntityEndpointAuthAlgsNotNone, ClaimOutcome.NotApplicable)]);
+        }
+
+        bool listsNone =
+            federationEntity.TryGetValue(FederationMetadataParameterNames.EndpointAuthSigningAlgValuesSupported, out object? value)
+            && value is IEnumerable<object> algs
+            && AnyAlgIsNone(algs);
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(WellKnownFederationClaimIds.FederationEntityEndpointAuthAlgsNotNone,
+                listsNone ? ClaimOutcome.Failure : ClaimOutcome.Success)]);
+    }
+
+
+    /// <summary>
+    /// Whether any element of <paramref name="algs"/> is the JWS <c>none</c>
+    /// algorithm, which Federation §5.1.1 forbids in
+    /// <c>endpoint_auth_signing_alg_values_supported</c>. Non-string elements
+    /// are not this check's concern and are skipped.
+    /// </summary>
+    private static bool AnyAlgIsNone(IEnumerable<object> algs)
+    {
+        foreach(object alg in algs)
+        {
+            if(alg is string s && WellKnownJwaValues.IsNone(s))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    //The §5.2.1 JWK-set metadata parameters that MUST NOT appear under
+    //federation_entity metadata (the Federation Entity Keys live in the Entity
+    //Statement's top-level jwks Claim, not in the metadata block). Local to the
+    //check below.
+    private static readonly string[] FederationEntityForbiddenJwkSetParams =
+    [
+        FederationMetadataParameterNames.Jwks,
+        FederationMetadataParameterNames.JwksUri,
+        FederationMetadataParameterNames.SignedJwksUri
+    ];
+
+
+    /// <summary>
+    /// When the statement's <c>metadata</c> carries a <c>federation_entity</c>
+    /// block, asserts none of the §5.2.1 JWK-set parameters (<c>jwks</c>,
+    /// <c>jwks_uri</c>, <c>signed_jwks_uri</c>) appears in it, per Federation
+    /// §5.2.1 (those parameters MUST NOT be used in <c>federation_entity</c>
+    /// metadata). <see cref="ClaimOutcome.NotApplicable"/> when there is no
+    /// <c>federation_entity</c> metadata block.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckFederationEntityHasNoJwkSetParams(
+        EntityStatementValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if(!TryReadFederationEntityMetadata(context.Statement.Payload, out IReadOnlyDictionary<string, object> federationEntity))
+        {
+            return ValueTask.FromResult<List<Claim>>(
+                [new Claim(WellKnownFederationClaimIds.FederationEntityHasNoJwkSetParams, ClaimOutcome.NotApplicable)]);
+        }
+
+        bool present = false;
+        foreach(string forbidden in FederationEntityForbiddenJwkSetParams)
+        {
+            if(federationEntity.ContainsKey(forbidden))
+            {
+                present = true;
+                break;
+            }
+        }
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(WellKnownFederationClaimIds.FederationEntityHasNoJwkSetParams,
+                present ? ClaimOutcome.Failure : ClaimOutcome.Success)]);
     }
 
 
@@ -535,6 +894,40 @@ public static class FederationValidationChecks
 
         return ValueTask.FromResult<List<Claim>>(
             [new Claim(WellKnownFederationClaimIds.ChainNoCycles, cycle ? ClaimOutcome.Failure : ClaimOutcome.Success)]);
+    }
+
+
+    /// <summary>
+    /// Asserts every adjacent pair in the chain is properly linked per
+    /// Federation §10.2: for each position <c>j</c> from 0 to <c>i-1</c>,
+    /// <c>Statements[j].iss</c> equals <c>Statements[j+1].sub</c> — the
+    /// statement at <c>j</c> is issued by the entity the statement at
+    /// <c>j+1</c> is about. A break means the supplied statements do not form a
+    /// single path from the subject to the Trust Anchor, even if every
+    /// individual signature verified.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckChainProperlyLinked(
+        TrustChainValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IReadOnlyList<EntityStatement> statements = context.Chain.Statements;
+        ClaimOutcome outcome = ClaimOutcome.Success;
+        for(int j = 0; j + 1 < statements.Count; j++)
+        {
+            if(!string.Equals(statements[j].Issuer.Value, statements[j + 1].Subject.Value, StringComparison.Ordinal))
+            {
+                outcome = ClaimOutcome.Failure;
+                break;
+            }
+        }
+
+        //A zero- or single-statement chain has no adjacency to break; the
+        //start/terminate checks govern whether it is a usable chain at all.
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(WellKnownFederationClaimIds.ChainProperlyLinked, outcome)]);
     }
 
 
@@ -802,6 +1195,55 @@ public static class FederationValidationChecks
     }
 
 
+    /// <summary>
+    /// Asserts the trust mark's JWS protected header carries an <c>alg</c>
+    /// that is present and not <c>none</c>, per Federation §7.3 — an unsigned
+    /// trust mark is rejected just as an entity statement is.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckTrustMarkAlgPresent(
+        TrustMarkValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        ClaimOutcome outcome =
+            context.Header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? algObj)
+            && algObj is string alg
+            && !string.IsNullOrWhiteSpace(alg)
+            && !string.Equals(alg, WellKnownJwaValues.None, StringComparison.Ordinal)
+                ? ClaimOutcome.Success
+                : ClaimOutcome.Failure;
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(WellKnownFederationClaimIds.TrustMarkAlgPresent, outcome)]);
+    }
+
+
+    /// <summary>
+    /// Asserts the trust mark's <c>iat</c> is within the
+    /// <see cref="TrustMarkValidationContext.ClockSkew"/> window either side of
+    /// <see cref="TrustMarkValidationContext.Now"/> — its issuance time is in
+    /// the past, per Federation §7.3.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckTrustMarkIatInRange(
+        TrustMarkValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        DateTimeOffset iat = context.Mark.IssuedAt;
+        ClaimOutcome outcome =
+            iat >= context.Now - context.ClockSkew && iat <= context.Now + context.ClockSkew
+                ? ClaimOutcome.Success
+                : ClaimOutcome.Failure;
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(WellKnownFederationClaimIds.TrustMarkIatInRange, outcome)]);
+    }
+
+
     //Helpers.
 
     private static bool TryReadKeyCount(UnverifiedJwtPayload payload, out int count)
@@ -903,6 +1345,78 @@ public static class FederationValidationChecks
             if(string.IsNullOrWhiteSpace(key))
             {
                 return false;
+            }
+        }
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Reads the <c>federation_entity</c> metadata block from the payload's <c>metadata</c> claim.
+    /// Returns <see langword="false"/> when there is no <c>metadata</c> object or no
+    /// <c>federation_entity</c> member that is itself an object.
+    /// </summary>
+    private static bool TryReadFederationEntityMetadata(
+        UnverifiedJwtPayload payload, out IReadOnlyDictionary<string, object> federationEntity)
+    {
+        federationEntity = EmptyMetadataBlock;
+        if(payload.TryGetValue(WellKnownFederationClaimNames.Metadata, out object? metaObj)
+            && metaObj is IReadOnlyDictionary<string, object> metadata
+            && metadata.TryGetValue(WellKnownEntityTypeIdentifiers.FederationEntity.Value, out object? feObj)
+            && feObj is IReadOnlyDictionary<string, object> fe)
+        {
+            federationEntity = fe;
+            return true;
+        }
+
+        return false;
+    }
+
+
+    /// <summary>The shared empty block returned when no federation_entity metadata is present.</summary>
+    private static readonly IReadOnlyDictionary<string, object> EmptyMetadataBlock =
+        new Dictionary<string, object>(0);
+
+
+    /// <summary>
+    /// Whether <paramref name="value"/> is a string holding an absolute URL that uses the <c>https</c>
+    /// scheme and carries no fragment component, per Federation §5.1.1. A non-string, relative, non-https,
+    /// or fragment-bearing value is rejected.
+    /// </summary>
+    private static bool IsHttpsUrlWithoutFragment(object? value)
+    {
+        return value is string s
+            && Uri.TryCreate(s, UriKind.Absolute, out Uri? uri)
+            && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+            && string.IsNullOrEmpty(uri.Fragment);
+    }
+
+
+    /// <summary>
+    /// Whether the <c>metadata</c> object carries no <see langword="null"/> value: neither a
+    /// <see langword="null"/> per-entity-type block nor a <see langword="null"/> top-level member
+    /// inside such a block, per Federation §5 (a JSON <c>null</c> deserializes to a
+    /// <see langword="null"/> entry).
+    /// </summary>
+    private static bool NoNullMetadataValues(IReadOnlyDictionary<string, object> metadata)
+    {
+        foreach(KeyValuePair<string, object> entityType in metadata)
+        {
+            if(entityType.Value is null)
+            {
+                return false;
+            }
+
+            if(entityType.Value is IReadOnlyDictionary<string, object> typeMetadata)
+            {
+                foreach(KeyValuePair<string, object> member in typeMetadata)
+                {
+                    if(member.Value is null)
+                    {
+                        return false;
+                    }
+                }
             }
         }
 

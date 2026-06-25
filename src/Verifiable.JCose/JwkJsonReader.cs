@@ -160,6 +160,96 @@ public static class JwkJsonReader
 
 
     /// <summary>
+    /// Extracts the <paramref name="innerKey"/> string value from EVERY object element of an
+    /// array-valued outer property — the plural form of
+    /// <see cref="ExtractNestedStringValueFromArray"/>. Handles the OID4VCI 1.0 §8.3 batch
+    /// <c>credentials</c> structure <c>{"credentials":[{"credential":"a"},{"credential":"b"}]}</c>
+    /// where a batch carries more than one Credential.
+    /// </summary>
+    /// <param name="json">UTF-8 JSON bytes to search.</param>
+    /// <param name="outerKey">The array property key as a UTF-8 literal, e.g. <c>"credentials"</c>.</param>
+    /// <param name="innerKey">The inner property key as a UTF-8 literal, e.g. <c>"credential"</c>.</param>
+    /// <returns>
+    /// The inner string of each object element in array order; an empty list for an empty array;
+    /// or <see langword="null"/> when the outer key is absent, its value is not an array, or an
+    /// element is not an object. An object element lacking the inner key is skipped.
+    /// </returns>
+    public static List<string>? ExtractNestedStringValuesFromArray(
+        ReadOnlySpan<byte> json,
+        ReadOnlySpan<byte> outerKey,
+        ReadOnlySpan<byte> innerKey)
+    {
+        int outerStart = IndexOfKey(json, outerKey);
+        if(outerStart < 0)
+        {
+            return null;
+        }
+
+        int afterOuter = outerStart + outerKey.Length + 1;
+        afterOuter = SkipWhitespaceAndColon(json, afterOuter);
+        if(afterOuter < 0 || afterOuter >= json.Length || json[afterOuter] != (byte)'[')
+        {
+            return null;
+        }
+
+        List<string> result = [];
+        int cursor = afterOuter + 1;
+
+        while(cursor < json.Length)
+        {
+            while(cursor < json.Length
+                && (json[cursor] == (byte)' ' || json[cursor] == (byte)'\t'
+                    || json[cursor] == (byte)'\r' || json[cursor] == (byte)'\n'
+                    || json[cursor] == (byte)','))
+            {
+                cursor++;
+            }
+
+            if(cursor >= json.Length)
+            {
+                return null;
+            }
+
+            if(json[cursor] == (byte)']')
+            {
+                return result;
+            }
+
+            if(json[cursor] != (byte)'{')
+            {
+                //A non-object array element is a structural mismatch for an array-of-objects.
+                return null;
+            }
+
+            int objectStart = cursor;
+            int depth = 1;
+            int objectEnd = objectStart + 1;
+            while(objectEnd < json.Length && depth > 0)
+            {
+                if(json[objectEnd] == (byte)'{') { depth++; }
+                else if(json[objectEnd] == (byte)'}') { depth--; }
+                objectEnd++;
+            }
+
+            if(depth != 0)
+            {
+                return null;
+            }
+
+            string? value = ExtractStringValue(json[(objectStart + 1)..(objectEnd - 1)], innerKey);
+            if(value is not null)
+            {
+                result.Add(value);
+            }
+
+            cursor = objectEnd;
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
     /// Extracts the first string element of an array-valued property. Handles the
     /// OID4VP 1.0 §8.1 <c>vp_token</c> structure where each credential-query-id
     /// key maps to an array of one or more compact presentation strings:

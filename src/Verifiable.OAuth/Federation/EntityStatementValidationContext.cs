@@ -35,7 +35,7 @@ public sealed record EntityStatementValidationContext
     /// <summary>The JWS protected header. Carries <c>typ</c>, <c>alg</c>, <c>kid</c>.</summary>
     public required UnverifiedJwtHeader Header { get; init; }
 
-    /// <summary>The structurally classified statement (chunk 2 output).</summary>
+    /// <summary>The structurally classified statement.</summary>
     public required EntityStatement Statement { get; init; }
 
     /// <summary>
@@ -58,4 +58,17 @@ public sealed record EntityStatementValidationContext
     /// for a single deployment-wide source of truth.
     /// </summary>
     public required TimeSpan ClockSkew { get; init; }
+
+    /// <summary>
+    /// The extension Claim Names this consumer understands and can process,
+    /// for the <c>crit</c> (critical) claim check per Federation §3.1.1 /
+    /// §13.4. A <c>crit</c> entry naming a claim absent from this set
+    /// invalidates the statement. Defaults to the empty set — no extension
+    /// claims understood — so any <c>crit</c> entry is rejected unless the
+    /// deployment declares it understood, mirroring the fail-closed default of
+    /// <see cref="JoseCriticalHeaderValidation.NoUnderstoodExtensions"/> for
+    /// the JOSE header <c>crit</c>.
+    /// </summary>
+    public IReadOnlySet<string> UnderstoodCriticalClaims { get; init; } =
+        JoseCriticalHeaderValidation.NoUnderstoodExtensions;
 }

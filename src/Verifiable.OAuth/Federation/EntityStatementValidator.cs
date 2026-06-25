@@ -14,7 +14,7 @@ namespace Verifiable.OAuth.Federation;
 /// <para>
 /// Thin orchestrator. JWS signature verification and per-statement key
 /// resolution happen <em>before</em> this validator runs; the caller (or
-/// chunk 6's <c>ResolveEntityKeyDelegate</c> + <c>Jws.VerifyAsync</c>
+/// the <c>ResolveEntityKeyDelegate</c> + <c>Jws.VerifyAsync</c>
 /// composition) populates
 /// <see cref="EntityStatementValidationContext.SignatureVerified"/>. The
 /// validator then issues one <see cref="Claim"/> per rule in the configured

@@ -229,6 +229,19 @@ namespace Verifiable.JCose
             /// </summary>
             public static readonly string EntityStatementJwt = Utf8Constants.ToInternedString(EntityStatementJwtUtf8);
 
+            /// <summary>The UTF-8 source literal of <see cref="TrustChainJson"/>.</summary>
+            public static ReadOnlySpan<byte> TrustChainJsonUtf8 => "application/trust-chain+json"u8;
+
+            /// <summary>
+            /// OpenID Federation 1.0 Trust Chain (<c>application/trust-chain+json</c>).
+            /// Used as the HTTP Content-Type of an Explicit Registration request
+            /// whose body is the RP's Trust Chain — a JSON array of Entity
+            /// Statements — rather than a single Entity Configuration
+            /// (<see cref="EntityStatementJwt"/>).
+            /// See <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2.1">OpenID Federation 1.0 §12.2.1</see>.
+            /// </summary>
+            public static readonly string TrustChainJson = Utf8Constants.ToInternedString(TrustChainJsonUtf8);
+
             /// <summary>The UTF-8 source literal of <see cref="ResolveResponseJwt"/>.</summary>
             public static ReadOnlySpan<byte> ResolveResponseJwtUtf8 => "application/resolve-response+jwt"u8;
 
@@ -268,6 +281,30 @@ namespace Verifiable.JCose
             /// See <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.7.2">OpenID Federation 1.0 §8.7.2</see>.
             /// </summary>
             public static readonly string HistoricalKeysJwt = Utf8Constants.ToInternedString(HistoricalKeysJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="TrustMarkJwt"/>.</summary>
+            public static ReadOnlySpan<byte> TrustMarkJwtUtf8 => "application/trust-mark+jwt"u8;
+
+            /// <summary>
+            /// OpenID Federation 1.0 Trust Mark (<c>application/trust-mark+jwt</c>).
+            /// Used as the HTTP Content-Type for the signed Trust Mark JWT a
+            /// <c>federation_trust_mark_endpoint</c> returns per
+            /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.6">OpenID Federation 1.0 §8.6</see>.
+            /// </summary>
+            public static readonly string TrustMarkJwt = Utf8Constants.ToInternedString(TrustMarkJwtUtf8);
+
+            /// <summary>The UTF-8 source literal of <see cref="TrustMarkStatusResponseJwt"/>.</summary>
+            public static ReadOnlySpan<byte> TrustMarkStatusResponseJwtUtf8 => "application/trust-mark-status-response+jwt"u8;
+
+            /// <summary>
+            /// OpenID Federation 1.0 Trust Mark Status Response
+            /// (<c>application/trust-mark-status-response+jwt</c>). Used as the HTTP
+            /// Content-Type for the signed status JWT a
+            /// <c>federation_trust_mark_status_endpoint</c> returns per
+            /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.4">OpenID Federation 1.0 §8.4</see>,
+            /// carrying the queried <c>trust_mark</c> and its <c>status</c>.
+            /// </summary>
+            public static readonly string TrustMarkStatusResponseJwt = Utf8Constants.ToInternedString(TrustMarkStatusResponseJwtUtf8);
 
             /// <summary>The UTF-8 source literal of <see cref="AtJwt"/>.</summary>
             public static ReadOnlySpan<byte> AtJwtUtf8 => "application/at+jwt"u8;
@@ -483,6 +520,22 @@ namespace Verifiable.JCose
 
 
             /// <summary>
+            /// Whether <paramref name="mediaType"/> is <see cref="EntityStatementJwt"/>.
+            /// </summary>
+            /// <param name="mediaType">The media type.</param>
+            /// <returns><see langword="true"/> if <paramref name="mediaType"/> is <see cref="EntityStatementJwt"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsEntityStatementJwt(string mediaType) => Equals(mediaType, EntityStatementJwt);
+
+
+            /// <summary>
+            /// Whether <paramref name="mediaType"/> is <see cref="TrustChainJson"/>.
+            /// </summary>
+            /// <param name="mediaType">The media type.</param>
+            /// <returns><see langword="true"/> if <paramref name="mediaType"/> is <see cref="TrustChainJson"/>; otherwise, <see langword="false"/>.</returns>
+            public static bool IsTrustChainJson(string mediaType) => Equals(mediaType, TrustChainJson);
+
+
+            /// <summary>
             /// Whether <paramref name="mediaType"/> is <see cref="AtJwt"/>.
             /// </summary>
             /// <param name="mediaType">The media type.</param>
@@ -563,10 +616,39 @@ namespace Verifiable.JCose
             /// <param name="mediaTypeA">The first media type to compare.</param>
             /// <param name="mediaTypeB">The second media type to compare.</param>
             /// <returns><see langword="true"/> if the media types are the same; otherwise, <see langword="false"/>.</returns>
-            /// <remarks>Media type comparison is case-insensitive per RFC 2045.</remarks>
+            /// <remarks>
+            /// Comparison is on the <c>type/subtype</c> only, case-insensitively
+            /// per <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.3.1">RFC 9110 §8.3.1</see>.
+            /// Any media-type parameters (for example a <c>; charset=utf-8</c>
+            /// that a sender such as <c>System.Net.Http.StringContent</c> appends)
+            /// are ignored: a wire <c>Content-Type</c> still matches its
+            /// parameterless constant form, which the federation media types
+            /// require since their IANA registrations define no parameters.
+            /// </remarks>
             public static bool Equals(string mediaTypeA, string mediaTypeB)
             {
-                return ReferenceEquals(mediaTypeA, mediaTypeB) || StringComparer.OrdinalIgnoreCase.Equals(mediaTypeA, mediaTypeB);
+                return ReferenceEquals(mediaTypeA, mediaTypeB)
+                    || StringComparer.OrdinalIgnoreCase.Equals(TypeAndSubtype(mediaTypeA), TypeAndSubtype(mediaTypeB));
+            }
+
+
+            /// <summary>
+            /// Returns the <c>type/subtype</c> portion of an HTTP media type,
+            /// dropping any parameters (RFC 9110 §5.6.6) such as
+            /// <c>; charset=utf-8</c> so a parameterised wire <c>Content-Type</c>
+            /// matches its parameterless constant form.
+            /// </summary>
+            /// <param name="mediaType">The media type, possibly carrying parameters.</param>
+            /// <returns>The trimmed <c>type/subtype</c>, or the empty string when <paramref name="mediaType"/> is <see langword="null"/>.</returns>
+            private static string TypeAndSubtype(string mediaType)
+            {
+                if(mediaType is null)
+                {
+                    return string.Empty;
+                }
+
+                int separator = mediaType.IndexOf(';', StringComparison.Ordinal);
+                return (separator < 0 ? mediaType : mediaType[..separator]).Trim();
             }
         }
 

@@ -15,12 +15,11 @@ namespace Verifiable.OAuth.Federation;
 /// <remarks>
 /// <para>
 /// The "in-chain" qualifier matters. This resolver assumes the chain
-/// already carries every statement that contributes a verification key —
-/// the inline-trust-chain path established in B.1 chunk 4. Resolvers that
-/// fetch keys over HTTP from <c>federation_fetch_endpoint</c> live on
-/// chunk B.5.2's HttpClient-backed defaults; deployments that want both
-/// behaviours wire a composite resolver that tries in-chain first and
-/// falls back to fetch.
+/// already carries every statement that contributes a verification key.
+/// Resolvers that fetch keys over HTTP from a
+/// <c>federation_fetch_endpoint</c> are a separate concern; deployments
+/// that want both behaviours wire a composite resolver that tries
+/// in-chain first and falls back to fetch.
 /// </para>
 /// <para>
 /// Closes the no-default state of

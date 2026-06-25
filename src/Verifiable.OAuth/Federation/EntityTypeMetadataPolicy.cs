@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.Federation;
 /// <see cref="EntityTypeIdentifier"/> (e.g. <c>openid_relying_party</c>,
 /// <c>openid_provider</c>); each per-type block carries a dictionary of
 /// parameter-name to <see cref="ParameterPolicy"/>. This record holds one
-/// such block in typed form so chunks 2-4 walk
+/// such block in typed form so consumers walk
 /// <see cref="ParameterPolicies"/> rather than re-parsing the loose
 /// payload.
 /// </para>

@@ -1,5 +1,6 @@
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
+using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 
 namespace Verifiable.Tests.Federation;
@@ -45,8 +46,8 @@ internal sealed class EntityStatementValidatorTests
 
         Assert.IsTrue(signatureVerified, "Fixture signature should verify against the signing node's public key.");
         Assert.AreEqual(ClaimIssueCompletionStatus.Complete, result.CompletionStatus, "All rules should run to completion.");
-        Assert.HasCount(14, result.Claims,
-            "Profile emits 14 claims (codes 1100-1113: incl. ExpAfterIat (1110) and the three JWKS checks (1111-1113)).");
+        Assert.HasCount(20, result.Claims,
+            "Profile emits 20 claims (codes 1100-1119: incl. ExpAfterIat (1110), the three JWKS checks (1111-1113), ClaimPlacementValid (1114), CritClaimsUnderstood (1115), NoChainHeaderInStatement (1116), FederationEntityEndpointsWellFormed (1117), FederationEntityEndpointAuthAlgsNotNone (1118), and FederationEntityHasNoJwkSetParams (1119)).");
         foreach(Claim claim in result.Claims)
         {
             Assert.IsTrue(
@@ -291,6 +292,61 @@ internal sealed class EntityStatementValidatorTests
             c => c.Id.Code == WellKnownFederationClaimIds.JwksKeyIdsDistinct.Code);
         Assert.AreEqual(ClaimOutcome.Failure, distinctKids.Outcome,
             "A jwks with two keys sharing a kid must fail the distinct-kid check.");
+    }
+
+
+    [TestMethod]
+    public async Task EntityConfigurationWithKidlessJwksKeyFailsDistinctKidCheck()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/kidless-key"));
+
+        //A key with no kid — §3.1 requires EVERY JWK in the set to carry a unique kid,
+        //so a kidless key must fail the check (key selection by kid is impossible).
+        Dictionary<string, object> jwksWithKidlessKey = new()
+        {
+            [WellKnownJwkMemberNames.Keys] = new List<object>
+            {
+                new Dictionary<string, object>
+                {
+                    [WellKnownJwkMemberNames.Kty] = "EC",
+                    [WellKnownJwkMemberNames.Crv] = "P-256",
+                    [WellKnownJwkMemberNames.X] = "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+                    [WellKnownJwkMemberNames.Y] = "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+                }
+            }
+        };
+
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node,
+            issuedAt: now,
+            expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.Jwks] = jwksWithKidlessKey
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        bool signatureVerified = await FederationTestRing.VerifyAsync(
+            node, minted.CompactJws, TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = signatureVerified,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim distinctKids = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.JwksKeyIdsDistinct.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, distinctKids.Outcome,
+            "A jwks key without a kid must fail the §3.1 unique-kid check.");
     }
 
 
@@ -652,5 +708,541 @@ internal sealed class EntityStatementValidatorTests
             c => c.Id.Code == WellKnownFederationClaimIds.MetadataWellFormed.Code);
         Assert.AreEqual(ClaimOutcome.Failure, metadata.Outcome,
             "A non-object metadata claim must fail MetadataWellFormed.");
+    }
+
+
+    [TestMethod]
+    public async Task NullMetadataValueFailsMetadataWellFormed()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/null-metadata-value"));
+
+        //Federation §5 prohibits null as a metadata value (omitted-vs-null confusion). A
+        //top-level member set to null inside an entity-type block must fail MetadataWellFormed.
+        Dictionary<string, object> metadataWithNull = new()
+        {
+            [WellKnownEntityTypeIdentifiers.OpenIdRelyingParty.Value] = new Dictionary<string, object>
+            {
+                ["client_name"] = null!
+            }
+        };
+
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.Metadata] = metadataWithNull
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim metadata = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.MetadataWellFormed.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, metadata.Outcome,
+            "A null metadata member value must fail MetadataWellFormed.");
+    }
+
+
+    [TestMethod]
+    public async Task NonHttpsFederationEndpointFailsEndpointsWellFormed()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/http-fetch-endpoint"));
+
+        //Federation §5.1.1: every federation endpoint URL MUST use the https scheme. An
+        //http fetch endpoint in the federation_entity block must fail.
+        Dictionary<string, object> metadata = new()
+        {
+            [WellKnownEntityTypeIdentifiers.FederationEntity.Value] = new Dictionary<string, object>
+            {
+                [FederationMetadataParameterNames.FetchEndpoint] = "http://intermediate.example.test/fetch"
+            }
+        };
+
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.Metadata] = metadata
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim endpoints = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.FederationEntityEndpointsWellFormed.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, endpoints.Outcome,
+            "A non-https federation endpoint URL must fail FederationEntityEndpointsWellFormed.");
+    }
+
+
+    [TestMethod]
+    public async Task FragmentInFederationEndpointFailsEndpointsWellFormed()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/fragment-endpoint"));
+
+        //Federation §5.1.1: a federation endpoint URL MUST NOT contain a fragment component.
+        Dictionary<string, object> metadata = new()
+        {
+            [WellKnownEntityTypeIdentifiers.FederationEntity.Value] = new Dictionary<string, object>
+            {
+                [FederationMetadataParameterNames.ListEndpoint] = "https://anchor.example.test/list#frag"
+            }
+        };
+
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.Metadata] = metadata
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim endpoints = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.FederationEntityEndpointsWellFormed.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, endpoints.Outcome,
+            "A fragment-bearing federation endpoint URL must fail FederationEntityEndpointsWellFormed.");
+    }
+
+
+    [TestMethod]
+    public async Task NoneInEndpointAuthSigningAlgsFailsEndpointAuthAlgsNotNone()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/alg-none-endpoint-auth"));
+
+        //Federation §5.1.1: the value none MUST NOT appear in
+        //endpoint_auth_signing_alg_values_supported.
+        Dictionary<string, object> metadata = new()
+        {
+            [WellKnownEntityTypeIdentifiers.FederationEntity.Value] = new Dictionary<string, object>
+            {
+                [FederationMetadataParameterNames.EndpointAuthSigningAlgValuesSupported] =
+                    new List<object> { WellKnownJwaValues.Rs256, WellKnownJwaValues.None }
+            }
+        };
+
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.Metadata] = metadata
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim algs = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.FederationEntityEndpointAuthAlgsNotNone.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, algs.Outcome,
+            "endpoint_auth_signing_alg_values_supported listing none must fail per §5.1.1.");
+    }
+
+
+    [TestMethod]
+    public async Task Rs256OnlyEndpointAuthSigningAlgsPassesEndpointAuthAlgsNotNone()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/alg-rs256-endpoint-auth"));
+
+        //A RS256-only list (the spec's SHOULD-supported value) must pass.
+        Dictionary<string, object> metadata = new()
+        {
+            [WellKnownEntityTypeIdentifiers.FederationEntity.Value] = new Dictionary<string, object>
+            {
+                [FederationMetadataParameterNames.EndpointAuthSigningAlgValuesSupported] =
+                    new List<object> { WellKnownJwaValues.Rs256 }
+            }
+        };
+
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.Metadata] = metadata
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim algs = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.FederationEntityEndpointAuthAlgsNotNone.Code);
+        Assert.AreEqual(ClaimOutcome.Success, algs.Outcome,
+            "A none-free endpoint_auth_signing_alg_values_supported must pass §5.1.1.");
+    }
+
+
+    [TestMethod]
+    public async Task JwkSetParamUnderFederationEntityFailsHasNoJwkSetParams()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/jwks-under-federation-entity"));
+
+        //Federation §5.2.1: the JWK-set params (jwks/jwks_uri/signed_jwks_uri)
+        //MUST NOT appear under federation_entity metadata.
+        Dictionary<string, object> metadata = new()
+        {
+            [WellKnownEntityTypeIdentifiers.FederationEntity.Value] = new Dictionary<string, object>
+            {
+                [FederationMetadataParameterNames.SignedJwksUri] = "https://example.test/signed-jwks"
+            }
+        };
+
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.Metadata] = metadata
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim jwkSet = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.FederationEntityHasNoJwkSetParams.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, jwkSet.Outcome,
+            "A JWK-set parameter under federation_entity must fail §5.2.1.");
+    }
+
+
+    [TestMethod]
+    public async Task EntityConfigurationWithSubordinateOnlyClaimFailsPlacement()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/ec-with-policy"));
+
+        //metadata_policy is a Subordinate-Statement-only claim (Federation §3.1.3); a
+        //self-issued Entity Configuration carrying it would be a self-asserted policy the
+        //spec confines to superior-issued Subordinate Statements, so §3.2 rejects it.
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.MetadataPolicy] = new Dictionary<string, object>
+                {
+                    [WellKnownEntityTypeIdentifiers.OpenIdRelyingParty.Value] = new Dictionary<string, object>()
+                }
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim placement = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.ClaimPlacementValid.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, placement.Outcome,
+            "An Entity Configuration carrying metadata_policy must fail ClaimPlacementValid.");
+    }
+
+
+    [TestMethod]
+    public async Task SubordinateStatementWithConfigurationOnlyClaimFailsPlacement()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode issuer = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/superior"));
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/subordinate"));
+
+        //authority_hints is an Entity-Configuration-only claim (Federation §3.1.2); a
+        //superior-issued Subordinate Statement must not carry it, so §3.2 rejects it.
+        MintedStatement minted = await FederationTestRing.MintSubordinateStatementAsync(
+            issuer, subject, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.AuthorityHints] = new List<object> { "https://example.test/superior" }
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim placement = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.ClaimPlacementValid.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, placement.Outcome,
+            "A Subordinate Statement carrying authority_hints must fail ClaimPlacementValid.");
+    }
+
+
+    [TestMethod]
+    public async Task CritNamingUnunderstoodExtensionClaimFailsCritUnderstood()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/crit-unknown"));
+
+        //A crit claim listing an extension claim the consumer has not declared understood
+        //invalidates the statement per Federation §13.4 (default UnderstoodCriticalClaims is empty).
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.Crit] = new List<object> { "ext_feature" },
+                ["ext_feature"] = "present-but-not-understood"
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim crit = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.CritClaimsUnderstood.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, crit.Outcome,
+            "A crit entry naming an extension the consumer does not understand must fail CritClaimsUnderstood.");
+    }
+
+
+    [TestMethod]
+    public async Task EmptyCritArrayFailsCritUnderstood()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/crit-empty"));
+
+        //§13.4: producers MUST NOT use the empty array as the crit value.
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.Crit] = new List<object>()
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim crit = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.CritClaimsUnderstood.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, crit.Outcome,
+            "An empty crit array must fail CritClaimsUnderstood.");
+    }
+
+
+    [TestMethod]
+    public async Task CritNamingUnderstoodExtensionClaimPassesCritUnderstood()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/crit-understood"));
+
+        //When the deployment declares the extension claim understood, a crit entry naming it
+        //(and present in the payload) satisfies §13.4.
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.Crit] = new List<object> { "ext_feature" },
+                ["ext_feature"] = "understood-value"
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+            UnderstoodCriticalClaims = new HashSet<string>(StringComparer.Ordinal) { "ext_feature" },
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim crit = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.CritClaimsUnderstood.Code);
+        Assert.AreEqual(ClaimOutcome.Success, crit.Outcome,
+            "A crit entry the deployment declares understood and that is present in the payload must pass.");
+    }
+
+
+    [TestMethod]
+    public async Task CritNamingSpecifiedClaimFailsCritUnderstood()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/crit-specified-claim"));
+
+        //Federation §13.4 / §3.1.1: crit is for EXTENSION claims only, so a crit
+        //entry naming a spec-defined Entity Statement claim (here metadata) is a
+        //producer MUST NOT. The name is present in the payload AND declared
+        //understood, isolating the spec-defined rule from the other crit rules.
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            extraClaims: new Dictionary<string, object>
+            {
+                [WellKnownFederationClaimNames.Crit] =
+                    new List<object> { WellKnownFederationClaimNames.Metadata },
+                [WellKnownFederationClaimNames.Metadata] = new Dictionary<string, object>
+                {
+                    [WellKnownEntityTypeIdentifiers.OpenIdProvider.Value] = new Dictionary<string, object>()
+                }
+            },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = minted.Header,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+            UnderstoodCriticalClaims =
+                new HashSet<string>(StringComparer.Ordinal) { WellKnownFederationClaimNames.Metadata },
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim crit = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.CritClaimsUnderstood.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, crit.Outcome,
+            "A crit entry naming a spec-defined claim must fail per §13.4, even when present and understood.");
+    }
+
+
+    [TestMethod]
+    public async Task EntityConfigurationCarryingTrustChainHeaderFailsNoChainHeader()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/embedded-chain-header"));
+
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        //An Entity Configuration is itself a component of a Trust Chain and MUST NOT embed a
+        //trust_chain header per Federation §4.3. Build a header that carries one to exercise the guard.
+        UnverifiedJwtHeader headerWithChain = new(new Dictionary<string, object>
+        {
+            [WellKnownJwkMemberNames.Alg] = "ES256",
+            [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt,
+            [WellKnownFederationClaimNames.TrustChain] = new List<object> { "eyJ...", "eyJ..." }
+        });
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = headerWithChain,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim noChainHeader = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.NoChainHeaderInStatement.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, noChainHeader.Outcome,
+            "An entity statement carrying a trust_chain header must fail NoChainHeaderInStatement.");
     }
 }

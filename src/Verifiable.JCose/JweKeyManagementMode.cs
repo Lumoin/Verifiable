@@ -51,7 +51,7 @@ public enum JweKeyManagementMode
     /// <summary>
     /// Key Encryption (RFC 7516 §2): an asymmetric encryption algorithm encrypts the CEK to the
     /// recipient. The JWE Encrypted Key carries the encrypted CEK. Used by <c>RSA-OAEP</c> and
-    /// <c>RSA-OAEP-256</c>, implemented in a later chunk.
+    /// <c>RSA-OAEP-256</c>, which are not yet implemented.
     /// </summary>
     KeyEncryption
 }

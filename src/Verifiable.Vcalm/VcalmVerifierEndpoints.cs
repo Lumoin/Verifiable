@@ -104,7 +104,7 @@ public static class VcalmVerifierEndpoints
                 }
 
                 //§3.3.1 accepts an embedded Data Integrity credential or an
-                //EnvelopedVerifiableCredential. V-1 verifies the Data Integrity path; an enveloped
+                //EnvelopedVerifiableCredential. The Data Integrity path is verified; an enveloped
                 //credential without a wired envelope handler is reported as an unverifiable (200,
                 //verified:false) rather than rejected, since the verification process did run.
                 if(request.DataIntegrityCredential is DataIntegritySecuredCredential credential)
@@ -125,7 +125,7 @@ public static class VcalmVerifierEndpoints
                 }
 
                 //Enveloped (data: URL) credential: the JOSE/COSE/SD-JWT envelope verification is a
-                //registered-handler seam later chunks wire. V-1 has no envelope handler, so the
+                //registered-handler seam. With no envelope handler wired, the
                 //process ran but could not assert the proof — a 200 with verified:false and a
                 //cryptographic ERROR ProblemDetail (§3.8.1).
                 VcalmVerificationOutcome envelopedOutcome = BuildUnverifiableEnvelopeOutcome();
@@ -351,7 +351,7 @@ public static class VcalmVerifierEndpoints
         }
         else
         {
-            //Enveloped presentation: envelope verification is a later-chunk handler seam. The process
+            //Enveloped presentation: envelope verification is a registered-handler seam. The process
             //ran but could not assert the proof — verified:false with a cryptographic ERROR.
             presentationResult = new VcalmPresentationProofResult
             {
@@ -558,7 +558,7 @@ public static class VcalmVerifierEndpoints
     }
 
 
-    //The §3.8.1 outcome for a credential the verifier cannot cryptographically check in V-1 (an
+    //The §3.8.1 outcome for a credential the verifier cannot cryptographically check (an
     //enveloped credential with no wired envelope handler, or a contained credential with no embedded
     //proof): verified:false with a single cryptographic ERROR ProblemDetail.
     private static VcalmVerificationOutcome BuildUnverifiableEnvelopeOutcome() =>

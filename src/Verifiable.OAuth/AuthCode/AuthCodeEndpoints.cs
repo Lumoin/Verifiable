@@ -1337,6 +1337,21 @@ public static class AuthCodeEndpoints
                 "JAR iss must be present and equal to client_id per RFC 9101 §10.2."));
         }
 
+        //OpenID Federation 1.0 §12.1.1.1 — a Request Object MUST NOT carry a sub
+        //claim. A request object whose sub equalled its iss/client_id would be
+        //shaped exactly like a private_key_jwt client assertion (OIDC Core §9),
+        //so accepting one would let a captured Request Object be replayed as
+        //client authentication. There is no authorization-request parameter
+        //named sub (RFC 9101 §4, OIDC Core §6.1), so its presence is always a
+        //defect — the check is applied to every JAR, not only the federation
+        //automatic-registration path, because the reuse vector is general.
+        if(verified.Claims.ContainsKey(WellKnownJwtClaimNames.Sub))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidRequestObject,
+                "JAR must not carry a sub claim per OpenID Federation 1.0 §12.1.1.1."));
+        }
+
         //RFC 9700 §4.6 — the JAR's client_id MUST match the registered client.
         if(!string.Equals(requestObject.ClientId, registration.ClientId, StringComparison.Ordinal))
         {
@@ -1367,7 +1382,7 @@ public static class AuthCodeEndpoints
                 $"redirect_uri '{requestObject.RedirectUri}' is not among the registered redirect URIs."));
         }
 
-        //Scope-required-on-request is a policy axis (Finding 4). Aligns the
+        //Scope-required-on-request is a policy axis. Aligns the
         //JAR-bearing matcher with the PKCE PAR matcher — either both require
         //scope (the strict default) or both treat it as optional.
         if(context.ScopeRequiredOnRequest && string.IsNullOrEmpty(requestObject.Scope))
@@ -3971,10 +3986,18 @@ public static class AuthCodeEndpoints
     /// </summary>
     private static string? ReadResource(RequestFields fields)
     {
-        return fields.TryGetValue(OAuthRequestParameterNames.Resource, out string? value)
-            && !string.IsNullOrWhiteSpace(value)
-            ? value
-            : null;
+        //RFC 8707 §2 permits the resource indicator to repeat AND each value to be
+        //space-delimited. Read every value and join them with a space so the
+        //space-splitting ParseResourceIndicators recovers the full indicator set
+        //whether the client repeated the parameter or space-joined it.
+        IReadOnlyList<string> values = fields.GetValues(OAuthRequestParameterNames.Resource);
+        if(values.Count == 0)
+        {
+            return null;
+        }
+
+        string joined = string.Join(' ', values);
+        return string.IsNullOrWhiteSpace(joined) ? null : joined;
     }
 
 

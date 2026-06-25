@@ -180,6 +180,20 @@ public sealed record ServerHttpResponse
 
 
     /// <summary>
+    /// Returns a 404 Not Found with an OAuth-style error JSON body — for
+    /// example an OpenID Federation 1.0 §8.9 <c>not_found</c> response when a
+    /// federation endpoint cannot find the requested Entity Identifier.
+    /// </summary>
+    public static ServerHttpResponse NotFound(string error, string description) =>
+        new()
+        {
+            StatusCode = (int)HttpStatusCode.NotFound,
+            Body = BuildErrorBody(error, description),
+            ContentType = WellKnownMediaTypes.Application.Json
+        };
+
+
+    /// <summary>
     /// Returns a 409 Conflict with an OAuth error JSON body — for example a
     /// Shared Signals stream-creation request when the Transmitter does not
     /// support multiple streams per Receiver (SSF 1.0 §8.1.1.1).

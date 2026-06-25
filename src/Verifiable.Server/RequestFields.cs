@@ -5,52 +5,175 @@ using System.Diagnostics.CodeAnalysis;
 namespace Verifiable.Server;
 
 /// <summary>
-/// The parsed HTTP request fields from a form body or query string, carrying type
-/// identity so that API boundaries distinguish fields from other string dictionaries.
+/// The parsed HTTP request parameters from a form body and/or query string, carrying type
+/// identity so API boundaries distinguish request fields from other string collections.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The ASP.NET skin populates a <see cref="RequestFields"/> instance from the HTTP
-/// request before calling <see cref="EndpointServer.DispatchAsync"/>.
-/// For POST endpoints the entries come from the form body; for GET endpoints from
-/// the query string. The skin populates both the same way — the library never sees
-/// <c>HttpContext</c> or any framework type.
+/// HTTP request parameters are inherently <em>multi-valued</em>: a key can appear more than once in a
+/// query string or form body. This type models that faithfully — each key maps to the ordered list of
+/// values it carried — and exposes two deliberately distinct read paths so a consumer states its
+/// expectation:
 /// </para>
+/// <list type="bullet">
+///   <item><description>
+///     <see cref="TryGetValue"/> is the <strong>single-valued</strong> read with <em>exactly-one</em>
+///     semantics — it succeeds only when the key carried a single value, and fails closed when the key is
+///     absent <em>or repeated</em>. A parameter that a caller expects once can therefore never silently
+///     resolve to the first (or a space-joined) value of several. This is the
+///     <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 §3.1</see> "parameters MUST
+///     NOT be included more than once" rule made structural: a duplicated single-valued parameter flows
+///     into the endpoint's missing/invalid path.
+///   </description></item>
+///   <item><description>
+///     <see cref="GetValues"/> / <see cref="TryGetValues"/> is the <strong>multi-valued</strong> read used
+///     only by the parameters a specification permits to repeat (for example OpenID Federation §8.2.1
+///     <c>entity_type</c> and RFC 8707 <c>resource</c>).
+///   </description></item>
+/// </list>
 /// <para>
-/// Inheriting from <see cref="Dictionary{TKey, TValue}"/> follows the same pattern
-/// as <see cref="Verifiable.JCose.JwtHeader"/> and <see cref="Verifiable.JCose.JwtPayload"/>:
-/// full dictionary API with type identity that prevents accidental argument swapping
-/// at compile time.
-/// </para>
-/// <para>
-/// Keys are the OAuth parameter names from the request.
-/// Values are the raw string values from the HTTP request. No decoding, validation,
-/// or transformation is applied by this type — that is the responsibility of the
-/// <see cref="BuildInputDelegate"/> on each <see cref="ServerEndpoint"/>.
+/// The application skin populates a <see cref="RequestFields"/> from the HTTP request before calling the
+/// dispatcher — for POST endpoints from the form body, for GET endpoints from the query string, preserving
+/// every value per key. The library never sees <c>HttpContext</c> or any framework type. Keys are the
+/// OAuth/protocol parameter names; values are the raw strings, with no decoding or validation applied here.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("RequestFields({Count} entries)")]
-public sealed class RequestFields: Dictionary<string, string>, IEquatable<RequestFields>
+[DebuggerDisplay("RequestFields({Count} keys)")]
+public sealed class RequestFields: IEquatable<RequestFields>
 {
-    /// <summary>
-    /// Creates an empty <see cref="RequestFields"/> instance.
-    /// </summary>
-    public RequestFields() : base(StringComparer.Ordinal) { }
+    /// <summary>The backing store: each key maps to the ordered list of values it carried.</summary>
+    private readonly Dictionary<string, List<string>> values;
+
+
+    /// <summary>Creates an empty <see cref="RequestFields"/> instance.</summary>
+    public RequestFields()
+    {
+        values = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+    }
+
+
+    /// <summary>Creates a <see cref="RequestFields"/> instance with the specified initial key capacity.</summary>
+    /// <param name="capacity">The initial number of distinct keys the collection can contain.</param>
+    public RequestFields(int capacity)
+    {
+        values = new Dictionary<string, List<string>>(capacity, StringComparer.Ordinal);
+    }
+
 
     /// <summary>
-    /// Creates a <see cref="RequestFields"/> instance with the specified initial capacity.
-    /// </summary>
-    /// <param name="capacity">The initial number of entries the collection can contain.</param>
-    public RequestFields(int capacity) : base(capacity, StringComparer.Ordinal) { }
-
-    /// <summary>
-    /// Creates a <see cref="RequestFields"/> instance populated from any key-value
-    /// enumerable, including <see cref="Dictionary{TKey, TValue}"/> and
-    /// <see cref="IReadOnlyDictionary{TKey, TValue}"/>.
+    /// Creates a <see cref="RequestFields"/> populated from a single-valued key-value source — each pair
+    /// appends a value, so a source with a repeated key carries every value.
     /// </summary>
     /// <param name="fields">The key-value pairs to copy.</param>
-    public RequestFields(IEnumerable<KeyValuePair<string, string>> fields)
-        : base(fields, StringComparer.Ordinal) { }
+    public RequestFields(IEnumerable<KeyValuePair<string, string>> fields) : this()
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        foreach(KeyValuePair<string, string> field in fields)
+        {
+            Add(field.Key, field.Value);
+        }
+    }
+
+
+    /// <summary>The number of distinct parameter keys present.</summary>
+    public int Count => values.Count;
+
+
+    /// <summary>The distinct parameter keys present, in no particular order.</summary>
+    public IReadOnlyCollection<string> Keys => values.Keys;
+
+
+    /// <summary>
+    /// Gets the single value of <paramref name="key"/> (fail-closed: throws when the key is absent or was
+    /// repeated, mirroring <see cref="TryGetValue"/>'s exactly-one semantics), or sets it to a single value
+    /// replacing any values already present. The setter is used by the skins and test fixtures that build a
+    /// request with one value per key.
+    /// </summary>
+    /// <param name="key">The parameter name.</param>
+    /// <exception cref="KeyNotFoundException">The key is absent or does not carry exactly one value.</exception>
+    public string this[string key]
+    {
+        get => values.TryGetValue(key, out List<string>? list) && list.Count == 1
+            ? list[0]
+            : throw new KeyNotFoundException(
+                $"Request parameter '{key}' is not present with exactly one value.");
+        set => values[key] = [value];
+    }
+
+
+    /// <summary>
+    /// Appends <paramref name="value"/> to <paramref name="key"/>, preserving any values already present —
+    /// the skin uses this to carry a repeated parameter's every value.
+    /// </summary>
+    /// <param name="key">The parameter name.</param>
+    /// <param name="value">A value to append.</param>
+    public void Add(string key, string value)
+    {
+        if(values.TryGetValue(key, out List<string>? list))
+        {
+            list.Add(value);
+        }
+        else
+        {
+            values[key] = [value];
+        }
+    }
+
+
+    /// <summary>
+    /// Reads <paramref name="key"/> as a single value with <em>exactly-one</em> semantics: returns
+    /// <see langword="true"/> and the value only when the key carried exactly one value; returns
+    /// <see langword="false"/> when the key is absent or was repeated.
+    /// </summary>
+    /// <param name="key">The parameter name.</param>
+    /// <param name="value">The single value, or <see langword="null"/> when not exactly one is present.</param>
+    /// <returns><see langword="true"/> when exactly one value is present; otherwise <see langword="false"/>.</returns>
+    public bool TryGetValue(string key, [NotNullWhen(true)] out string? value)
+    {
+        if(values.TryGetValue(key, out List<string>? list) && list.Count == 1)
+        {
+            value = list[0];
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
+
+
+    /// <summary>Whether <paramref name="key"/> is present with at least one value.</summary>
+    /// <param name="key">The parameter name.</param>
+    /// <returns><see langword="true"/> when the key carried at least one value.</returns>
+    public bool ContainsKey(string key) => values.ContainsKey(key);
+
+
+    /// <summary>
+    /// Reads every value carried for <paramref name="key"/>, in order. Returns an empty list when the key
+    /// is absent. Used by the parameters a specification permits to repeat.
+    /// </summary>
+    /// <param name="key">The parameter name.</param>
+    /// <returns>The ordered values, or an empty list when the key is absent.</returns>
+    public IReadOnlyList<string> GetValues(string key) =>
+        values.TryGetValue(key, out List<string>? list) ? list : [];
+
+
+    /// <summary>
+    /// Reads every value carried for <paramref name="key"/>, in order, when the key is present.
+    /// </summary>
+    /// <param name="key">The parameter name.</param>
+    /// <param name="values">The ordered values when present; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the key carried at least one value.</returns>
+    public bool TryGetValues(string key, [NotNullWhen(true)] out IReadOnlyList<string>? values)
+    {
+        if(this.values.TryGetValue(key, out List<string>? list))
+        {
+            values = list;
+            return true;
+        }
+
+        values = null;
+        return false;
+    }
 
 
     /// <inheritdoc/>
@@ -67,15 +190,15 @@ public sealed class RequestFields: Dictionary<string, string>, IEquatable<Reques
             return true;
         }
 
-        if(Count != other.Count)
+        if(values.Count != other.values.Count)
         {
             return false;
         }
 
-        foreach(KeyValuePair<string, string> kvp in this)
+        foreach(KeyValuePair<string, List<string>> entry in values)
         {
-            if(!other.TryGetValue(kvp.Key, out string? value)
-                || !string.Equals(kvp.Value, value, StringComparison.Ordinal))
+            if(!other.values.TryGetValue(entry.Key, out List<string>? otherList)
+                || !entry.Value.SequenceEqual(otherList, StringComparer.Ordinal))
             {
                 return false;
             }
@@ -95,12 +218,15 @@ public sealed class RequestFields: Dictionary<string, string>, IEquatable<Reques
     [EditorBrowsable(EditorBrowsableState.Never)]
     public override int GetHashCode()
     {
-        var hash = new HashCode();
-        foreach(KeyValuePair<string, string> kvp in this.OrderBy(
+        HashCode hash = new();
+        foreach(KeyValuePair<string, List<string>> entry in values.OrderBy(
             static x => x.Key, StringComparer.Ordinal))
         {
-            hash.Add(kvp.Key, StringComparer.Ordinal);
-            hash.Add(kvp.Value, StringComparer.Ordinal);
+            hash.Add(entry.Key, StringComparer.Ordinal);
+            foreach(string value in entry.Value)
+            {
+                hash.Add(value, StringComparer.Ordinal);
+            }
         }
 
         return hash.ToHashCode();

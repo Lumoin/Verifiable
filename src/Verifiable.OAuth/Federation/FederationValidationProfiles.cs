@@ -67,6 +67,24 @@ public static class FederationValidationProfiles
 
             new(FederationValidationChecks.CheckMetadataWellFormed,
                 [WellKnownFederationClaimIds.MetadataWellFormed]),
+
+            new(FederationValidationChecks.CheckClaimPlacement,
+                [WellKnownFederationClaimIds.ClaimPlacementValid]),
+
+            new(FederationValidationChecks.CheckCritClaimsUnderstood,
+                [WellKnownFederationClaimIds.CritClaimsUnderstood]),
+
+            new(FederationValidationChecks.CheckNoChainHeaderInStatement,
+                [WellKnownFederationClaimIds.NoChainHeaderInStatement]),
+
+            new(FederationValidationChecks.CheckFederationEntityEndpointsWellFormed,
+                [WellKnownFederationClaimIds.FederationEntityEndpointsWellFormed]),
+
+            new(FederationValidationChecks.CheckFederationEntityEndpointAuthAlgsNotNone,
+                [WellKnownFederationClaimIds.FederationEntityEndpointAuthAlgsNotNone]),
+
+            new(FederationValidationChecks.CheckFederationEntityHasNoJwkSetParams,
+                [WellKnownFederationClaimIds.FederationEntityHasNoJwkSetParams]),
         };
 
 
@@ -88,6 +106,12 @@ public static class FederationValidationProfiles
 
             new(FederationValidationChecks.CheckTrustMarkExpAfterIat,
                 [WellKnownFederationClaimIds.TrustMarkExpAfterIat]),
+
+            new(FederationValidationChecks.CheckTrustMarkAlgPresent,
+                [WellKnownFederationClaimIds.TrustMarkAlgPresent]),
+
+            new(FederationValidationChecks.CheckTrustMarkIatInRange,
+                [WellKnownFederationClaimIds.TrustMarkIatInRange]),
         };
 
 
@@ -108,6 +132,9 @@ public static class FederationValidationProfiles
 
             new(FederationValidationChecks.CheckChainNoCycles,
                 [WellKnownFederationClaimIds.ChainNoCycles]),
+
+            new(FederationValidationChecks.CheckChainProperlyLinked,
+                [WellKnownFederationClaimIds.ChainProperlyLinked]),
 
             new(FederationValidationChecks.CheckChainWithinMaxPathLength,
                 [WellKnownFederationClaimIds.ChainWithinMaxPathLength]),

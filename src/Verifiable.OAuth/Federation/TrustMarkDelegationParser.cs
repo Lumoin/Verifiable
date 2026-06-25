@@ -30,6 +30,17 @@ public static class TrustMarkDelegationParser
                 $"Delegation 'typ' header must equal '{WellKnownFederationMediaTypes.TrustMarkDelegationJwt}' per RFC 8725 §3.11.");
         }
 
+        //§7.2.2: the delegation MUST have an alg header that is an acceptable JWS signing
+        //algorithm; it MUST NOT be none.
+        if(!header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? algObj)
+            || algObj is not string alg
+            || string.IsNullOrWhiteSpace(alg)
+            || string.Equals(alg, WellKnownJwaValues.None, StringComparison.Ordinal))
+        {
+            return TrustMarkDelegationParseResult.Invalid(
+                "Delegation 'alg' header must be an acceptable JWS signing algorithm and MUST NOT be none per §7.2.2.");
+        }
+
         if(!payload.TryGetValue(WellKnownJwtClaimNames.Iss, out object? issObj)
             || issObj is not string issValue
             || string.IsNullOrWhiteSpace(issValue))

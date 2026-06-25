@@ -12,5 +12,13 @@
     <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
     <ProjectReference Include="..\Verifiable.Server\Verifiable.Server.csproj" />
   </ItemGroup>
- 
+
+  <!-- System.Net.Http is banned in this library (see BannedSymbols.OAuth.txt):
+       Verifiable.OAuth is transport-agnostic, so HTTP delegates take an
+       OutboundTransportDelegate the application wires to its HttpClient. Drop
+       the SDK's implicit global using so the namespace is not even in scope. -->
+  <ItemGroup>
+    <Using Remove="System.Net.Http" />
+  </ItemGroup>
+
 </Project>

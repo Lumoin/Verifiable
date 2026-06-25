@@ -23,8 +23,8 @@ namespace Verifiable.OAuth.Federation;
 /// Capability identifiers flow into the
 /// <see cref="EndpointServer"/> capability set and propagate to
 /// metadata documents. Adding an entry here implies the library ships an
-/// implementation; chunks that introduce only a delegate slot (without a
-/// default) defer their capability identifier to later chunks.
+/// implementation; a delegate slot that ships without a
+/// default defers its capability identifier until the implementation lands.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("WellKnownFederationCapabilityIdentifiers")]
@@ -49,10 +49,10 @@ public static class WellKnownFederationCapabilityIdentifiers
 
     /// <summary>
     /// Fetches an Entity Statement from a superior's
-    /// <c>federation_fetch_endpoint</c> per Federation §8.1. Deferred to
-    /// chunk 5's HTTP path; the identifier reserves the URN so the
-    /// capability set's shape is fixed when chunks 6–10 wire surrounding
-    /// concerns.
+    /// <c>federation_fetch_endpoint</c> per Federation §8.1. The HTTP path
+    /// is not yet implemented; the identifier reserves the URN so the
+    /// capability set's shape is fixed when the surrounding concerns are
+    /// wired.
     /// </summary>
     public static CapabilityIdentifier FetchEntityStatement { get; } =
         CapabilityIdentifier.Create("urn:verifiable:capability:federation:fetch_entity_statement");
@@ -174,4 +174,60 @@ public static class WellKnownFederationCapabilityIdentifiers
     /// </summary>
     public static CapabilityIdentifier PublishHistoricalKeys { get; } =
         CapabilityIdentifier.Create("urn:verifiable:capability:federation:publish_historical_keys");
+
+    /// <summary>
+    /// Serves the Trust Mark endpoint (<c>federation_trust_mark_endpoint</c>)
+    /// per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.6">Federation §8.6</see>.
+    /// A registration carrying this capability answers
+    /// <c>GET ?trust_mark_type=&lt;type&gt;&amp;sub=&lt;subject&gt;</c> by serving the
+    /// Trust Mark JWT (<c>application/trust-mark+jwt</c>) the entity issued for
+    /// that (trust_mark_type, subject) pair. The library serves the
+    /// application-provided JWT verbatim — it signs nothing here — so this
+    /// publisher capability needs only a non-null
+    /// <see cref="ClientRecord.FederationEntityId"/>, not a federation signing
+    /// key. The Trust Mark JWT itself comes from the application's
+    /// <see cref="AuthorizationServerIntegration.ResolveTrustMarkAsync"/>
+    /// delegate. Distinct from the consumer-side <see cref="ValidateTrustMark"/>.
+    /// </summary>
+    public static CapabilityIdentifier PublishTrustMark { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:federation:publish_trust_mark");
+
+    /// <summary>
+    /// Serves the Trust Marked Entities Listing endpoint
+    /// (<c>federation_trust_mark_list_endpoint</c>) per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.5">Federation §8.5</see>.
+    /// A registration carrying this capability answers
+    /// <c>GET ?trust_mark_type=&lt;type&gt;[&amp;sub=&lt;subject&gt;]</c> with the §8.5
+    /// unsigned JSON array of the Entity Identifiers holding that Trust Mark
+    /// type (filtered to a single subject when <c>sub</c> is present). Like the
+    /// §8.2 subordinate listing the response is unsigned, so this publisher
+    /// capability needs only a non-null
+    /// <see cref="ClientRecord.FederationEntityId"/>, not a federation signing
+    /// key. The membership comes from the application's
+    /// <see cref="AuthorizationServerIntegration.ResolveTrustMarkedListAsync"/>
+    /// delegate. Distinct from the consumer-side <see cref="ListTrustMarkSubjects"/>.
+    /// </summary>
+    public static CapabilityIdentifier PublishTrustMarkedList { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:federation:publish_trust_marked_list");
+
+    /// <summary>
+    /// Serves the Trust Mark Status endpoint
+    /// (<c>federation_trust_mark_status_endpoint</c>) per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.4">Federation §8.4</see>.
+    /// A registration carrying this capability answers a
+    /// <c>POST</c> of a <c>trust_mark</c> form parameter with a SIGNED status
+    /// JWT (<c>typ = trust-mark-status-response+jwt</c>) whose payload carries
+    /// <c>iss</c>, <c>iat</c>, the queried <c>trust_mark</c>, and the
+    /// app-returned <c>status</c>. The library signs the status response with
+    /// the entity's federation signing key (like the resolve and historical-keys
+    /// endpoints), so this publisher capability requires a federation signing
+    /// key under
+    /// <see cref="Cryptography.Context.KeyUsageContext.FederationEntitySignature"/>;
+    /// the status string comes from the application's
+    /// <see cref="AuthorizationServerIntegration.ResolveTrustMarkStatusAsync"/>
+    /// delegate. Distinct from the consumer-side <see cref="TrustMarkStatus"/>.
+    /// </summary>
+    public static CapabilityIdentifier PublishTrustMarkStatus { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:federation:publish_trust_mark_status");
 }

@@ -12,13 +12,13 @@ namespace Verifiable.OAuth;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Phase A reserves code range 1000–1099 for OAuth contributor rule
+/// Code range 1000–1099 is reserved for OAuth contributor rule
 /// IDs. Broader registry reservations:
 /// </para>
 /// <list type="bullet">
 ///   <item><description>1–602: cryptography / DID</description></item>
 ///   <item><description>700–999: <see cref="Validation.ValidationClaimIds"/></description></item>
-///   <item><description>1000–1099: Phase A (this class)</description></item>
+///   <item><description>1000–1099: OAuth contributor rule IDs (this class)</description></item>
 ///   <item><description>1100+: reserved for future tracks (Federation,
 ///     OID4VP completion, OID4VCI, SIOPv2, logout, Identity Assurance)</description></item>
 /// </list>
@@ -45,6 +45,6 @@ public static class WellKnownClaimIds
     //pairwise-hash for deployments that wire one.
     public static readonly ClaimId SubjectIdentifier = ClaimId.Create(1040, "SubjectIdentifier");
 
-    //Future Phase A IDs land in 1050–1099. Downstream tracks reserve
-    //1100+ in their own WellKnown* classes.
+    //Future OAuth contributor rule IDs land in 1050–1099. Downstream tracks
+    //reserve 1100+ in their own WellKnown* classes.
 }

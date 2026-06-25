@@ -46,8 +46,11 @@ internal sealed class MetadataPolicyEvaluatorTests
 
 
     [TestMethod]
-    public void ValuePlusAddIsIllegal()
+    public void ValuePlusAddWhereAddNotSubsetOfValueIsRejected()
     {
+        //§6.1.3.1.1: value MAY be combined with add, but only when add's values are a
+        //subset of value's. Here add=[profile] is not within value="openid", so the
+        //conditional relationship is violated even though the pair is structurally legal.
         EntityTypeMetadataPolicy block = MakeBlock(
             "scope",
             (WellKnownMetadataPolicyOperators.Value, "openid"),
@@ -58,6 +61,112 @@ internal sealed class MetadataPolicyEvaluatorTests
         Assert.AreEqual(ClaimOutcome.Failure, claim.Outcome);
         MetadataPolicyEvaluationContext ctx = (MetadataPolicyEvaluationContext)claim.Context;
         Assert.AreEqual("scope", ctx.ParameterName);
+    }
+
+
+    [TestMethod]
+    public void ValuePlusAddWhereAddSubsetOfValueIsLegal()
+    {
+        //value=[openid, profile] and add=[profile]: add ⊆ value, so the §6.1.3.1.1
+        //combination is permitted. The earlier design wrongly rejected value+add outright.
+        EntityTypeMetadataPolicy block = MakeBlock(
+            "scope",
+            (WellKnownMetadataPolicyOperators.Value, new List<object> { "openid", "profile" }),
+            (WellKnownMetadataPolicyOperators.Add, new List<object> { "profile" }));
+
+        Claim claim = MetadataPolicyEvaluator.EvaluateOperatorCombinations(block);
+
+        Assert.AreEqual(ClaimOutcome.Success, claim.Outcome);
+    }
+
+
+    [TestMethod]
+    public void ValueCombinesWithDefaultOneOfSubsetOfSupersetOf()
+    {
+        //§6.1.3.1.1 lists default, one_of, subset_of and superset_of among value's legal
+        //combinations (each with a satisfied value relationship here). None is structurally
+        //incompatible with value.
+        (MetadataPolicyOperator Operator, object Value)[] companions =
+        [
+            (WellKnownMetadataPolicyOperators.Default, "ES256"),
+            (WellKnownMetadataPolicyOperators.OneOf, new List<object> { "ES256", "ES384" }),
+            (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "ES256", "ES384" }),
+            (WellKnownMetadataPolicyOperators.SupersetOf, new List<object> { "ES256" }),
+        ];
+
+        foreach((MetadataPolicyOperator companion, object companionValue) in companions)
+        {
+            EntityTypeMetadataPolicy block = MakeBlock(
+                "id_token_signed_response_alg",
+                (WellKnownMetadataPolicyOperators.Value, new List<object> { "ES256" }),
+                (companion, companionValue));
+
+            Claim claim = MetadataPolicyEvaluator.EvaluateOperatorCombinations(block);
+
+            Assert.AreEqual(ClaimOutcome.Success, claim.Outcome,
+                $"value+{companion.Value} should be legal when the value relationship holds.");
+        }
+    }
+
+
+    [TestMethod]
+    public void AddCombinesWithSubsetOfWhenAddIsSubset()
+    {
+        //§6.1.3.1.2: add MAY combine with subset_of when add ⊆ subset_of.
+        EntityTypeMetadataPolicy block = MakeBlock(
+            "grant_types",
+            (WellKnownMetadataPolicyOperators.Add, new List<object> { "refresh_token" }),
+            (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "authorization_code", "refresh_token" }));
+
+        Claim claim = MetadataPolicyEvaluator.EvaluateOperatorCombinations(block);
+
+        Assert.AreEqual(ClaimOutcome.Success, claim.Outcome);
+    }
+
+
+    [TestMethod]
+    public void AddPlusOneOfIsStructurallyIllegal()
+    {
+        //§6.1.3.1.4: one_of's combination list omits add, so add+one_of is not allowed.
+        EntityTypeMetadataPolicy block = MakeBlock(
+            "grant_types",
+            (WellKnownMetadataPolicyOperators.Add, new List<object> { "refresh_token" }),
+            (WellKnownMetadataPolicyOperators.OneOf, new List<object> { "authorization_code" }));
+
+        Claim claim = MetadataPolicyEvaluator.EvaluateOperatorCombinations(block);
+
+        Assert.AreEqual(ClaimOutcome.Failure, claim.Outcome);
+    }
+
+
+    [TestMethod]
+    public void ValueNotAmongOneOfIsRejected()
+    {
+        //§6.1.3.1.1/§6.1.3.1.4: value MUST be among the one_of values.
+        EntityTypeMetadataPolicy block = MakeBlock(
+            "id_token_signed_response_alg",
+            (WellKnownMetadataPolicyOperators.Value, "HS256"),
+            (WellKnownMetadataPolicyOperators.OneOf, new List<object> { "ES256", "PS256" }));
+
+        Claim claim = MetadataPolicyEvaluator.EvaluateOperatorCombinations(block);
+
+        Assert.AreEqual(ClaimOutcome.Failure, claim.Outcome);
+    }
+
+
+    [TestMethod]
+    public void SubsetOfNotSupersetOfSupersetOfIsRejected()
+    {
+        //§6.1.3.1.5/§6.1.3.1.6: subset_of MUST be a superset of superset_of. Here
+        //subset_of=[openid] does not contain superset_of's required "profile".
+        EntityTypeMetadataPolicy block = MakeBlock(
+            "scope",
+            (WellKnownMetadataPolicyOperators.SubsetOf, new List<object> { "openid" }),
+            (WellKnownMetadataPolicyOperators.SupersetOf, new List<object> { "openid", "profile" }));
+
+        Claim claim = MetadataPolicyEvaluator.EvaluateOperatorCombinations(block);
+
+        Assert.AreEqual(ClaimOutcome.Failure, claim.Outcome);
     }
 
 

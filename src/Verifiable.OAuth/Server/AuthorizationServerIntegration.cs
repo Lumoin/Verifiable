@@ -91,10 +91,8 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// identity default.
     /// </summary>
     /// <remarks>
-    /// Added in Phase 9h chunk 4 structurally so Phase A's UserInfo wiring
-    /// does not have to revisit this surface. Becomes required at
-    /// <see cref="Validate"/> time in Phase 9h chunk 12; no library
-    /// producer reads it in 9h.
+    /// A structural slot the UserInfo wiring resolves the subject identifier
+    /// through.
     /// </remarks>
     public ResolveSubjectIdentifierDelegate? ResolveSubjectIdentifierAsync { get; set; }
 
@@ -228,6 +226,76 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// has no historical keys to publish — the endpoint then responds 404.
     /// </remarks>
     public ResolveHistoricalKeysDelegate? ResolveHistoricalKeysAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the Trust Mark JWT the issuing entity serves at its
+    /// <c>federation_trust_mark_endpoint</c>. Optional.
+    /// </summary>
+    /// <remarks>
+    /// Required only for registrations carrying
+    /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishTrustMark"/>.
+    /// The library matches the request, parses the <c>trust_mark_type</c> and
+    /// <c>sub</c> parameters, and serves the returned compact JWS verbatim as
+    /// OpenID Federation 1.0 §8.6 mandates (<c>application/trust-mark+jwt</c>);
+    /// the library signs nothing — the Trust Mark was signed when it was issued.
+    /// This delegate supplies the Trust Mark JWT itself. Return
+    /// <see langword="null"/> when the entity has no Trust Mark of the queried
+    /// type for the queried subject — the endpoint then responds 404.
+    /// </remarks>
+    public Federation.ResolveTrustMarkDelegate? ResolveTrustMarkAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the entities holding a given Trust Mark type the issuing entity
+    /// lists at its <c>federation_trust_mark_list_endpoint</c>. Optional.
+    /// </summary>
+    /// <remarks>
+    /// Required only for registrations carrying
+    /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishTrustMarkedList"/>.
+    /// The library matches the request, parses the REQUIRED <c>trust_mark_type</c>
+    /// and the OPTIONAL <c>sub</c> filter, and serialises the returned identifiers
+    /// as the unsigned JSON array OpenID Federation 1.0 §8.5 mandates; this
+    /// delegate supplies the membership list itself. Returning an empty list is
+    /// valid — the endpoint then responds with an empty JSON array. Return
+    /// <see langword="null"/> when the issuer does not know the queried Trust Mark
+    /// type — the endpoint then responds 404.
+    /// </remarks>
+    public Federation.ResolveTrustMarkedListDelegate? ResolveTrustMarkedListAsync { get; set; }
+
+    /// <summary>
+    /// Resolves the status of a Trust Mark the issuing entity reports at its
+    /// <c>federation_trust_mark_status_endpoint</c>. Optional.
+    /// </summary>
+    /// <remarks>
+    /// Required only for registrations carrying
+    /// <see cref="Federation.WellKnownFederationCapabilityIdentifiers.PublishTrustMarkStatus"/>.
+    /// The library matches the POST request, reads the <c>trust_mark</c> form
+    /// parameter, assembles the OpenID Federation 1.0 §8.4 status payload
+    /// (<c>iss</c>, <c>iat</c>, <c>trust_mark</c>, <c>status</c>) from the
+    /// returned status string, and signs it with the entity's federation signing
+    /// key; this delegate supplies the status string itself. Return
+    /// <see langword="null"/> when the issuer does not know the queried Trust
+    /// Mark — the endpoint then responds 404.
+    /// </remarks>
+    public Federation.ResolveTrustMarkStatusDelegate? ResolveTrustMarkStatusAsync { get; set; }
+
+    /// <summary>
+    /// Gates the federation endpoints on OpenID Federation 1.0 §8.8 client
+    /// authentication. Optional.
+    /// </summary>
+    /// <remarks>
+    /// When set, the library invokes this at the start of each federation
+    /// endpoint it serves (fetch, list, resolve, trust mark, trust marked
+    /// listing, trust mark status, historical keys), before producing the
+    /// response. Client authentication is not used by default; a deployment that
+    /// declares <c>*_auth_methods</c> on an endpoint (§8.8.1) wires this delegate
+    /// to require it. The delegate resolves the requester's Federation Entity
+    /// Key, verifies the client authentication JWT, and validates its claims via
+    /// <see cref="Federation.FederationClientAuthentication.Validate"/>; returning
+    /// a failed result rejects the request with HTTP 401 <c>invalid_client</c>,
+    /// and <see langword="null"/> means client authentication is not required at
+    /// that endpoint so the request proceeds.
+    /// </remarks>
+    public Federation.AuthenticateFederationClientDelegate? AuthenticateFederationClientAsync { get; set; }
 
     /// <summary>
     /// Parses an OpenID AuthZEN Authorization API 1.0 Access Evaluation
@@ -707,7 +775,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Closes audit Finding 2. The producer consults the active
+    /// The producer consults the active
     /// <see cref="AccessTokenAudPolicy"/> from the resolved policy and uses
     /// the audience(s) this delegate returns to populate the <c>aud</c> claim
     /// per <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 §2.2</see>.

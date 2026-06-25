@@ -8,7 +8,7 @@ namespace Verifiable.OAuth.Federation;
 /// shape OpenID Federation 1.0 §6.1.2 mandates and rejects anything else
 /// with <see cref="MetadataPolicyParseResult.Invalid"/>; operator-
 /// combination legality (§6.1.3.1.8) is a separate concern handled by the
-/// chunk-2 evaluator.
+/// metadata-policy evaluator.
 /// </summary>
 [DebuggerDisplay("MetadataPolicyParser")]
 public static class MetadataPolicyParser
@@ -97,7 +97,7 @@ public static class MetadataPolicyParser
     /// Parses a single entity-type block (parameter-name to operator-dict
     /// mapping) into a typed <see cref="EntityTypeMetadataPolicy"/>. Used
     /// by callers that already know the target entity type — typically
-    /// the chunk-6 federation hook delegates whose signatures pass the
+    /// the federation hook delegates whose signatures pass the
     /// block and entity type separately.
     /// </summary>
     public static MetadataPolicyParseResult ParseEntityTypeBlock(

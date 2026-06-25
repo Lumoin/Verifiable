@@ -21,7 +21,7 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// <para>
 /// Signature verification is the responsibility of
-/// <see cref="EntityStatementValidator"/> (chunk 4); this parser
+/// <see cref="EntityStatementValidator"/>; this parser
 /// produces a structural classification only, and the
 /// <see cref="EntityStatement.Payload"/> on a successful
 /// <see cref="EntityStatementParseResult.Parsed"/> result is the

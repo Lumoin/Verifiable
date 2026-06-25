@@ -81,4 +81,17 @@ public static class WellKnownFederationMediaTypes
     /// Statement.
     /// </summary>
     public static readonly string HistoricalKeysJwt = Utf8Constants.ToInternedString(HistoricalKeysJwtUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="TrustMarkStatusResponseJwt"/>.</summary>
+    public static ReadOnlySpan<byte> TrustMarkStatusResponseJwtUtf8 => "trust-mark-status-response+jwt"u8;
+
+    /// <summary>
+    /// <c>trust-mark-status-response+jwt</c> — the signed status JWT a
+    /// <c>federation_trust_mark_status_endpoint</c> returns per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.4">Federation §8.4</see>,
+    /// carrying the queried Trust Mark and its status. A distinct <c>typ</c>
+    /// from <see cref="TrustMarkJwt"/> so the issuer's signed status answer
+    /// cannot be mistaken for a Trust Mark itself.
+    /// </summary>
+    public static readonly string TrustMarkStatusResponseJwt = Utf8Constants.ToInternedString(TrustMarkStatusResponseJwtUtf8);
 }
