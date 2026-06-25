@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Verifiable.Core.StatusList;
 using Verifiable.OAuth;
 
 namespace Verifiable.OAuth.Oid4Vp;
@@ -24,6 +25,32 @@ public sealed record VerificationSucceeded(
     DateTimeOffset VerifiedAt,
     Uri? RedirectUri = null): FlowInput
 {
+    /// <summary>
+    /// The IETF Token Status List outcomes for the presented credentials, keyed by DCQL credential
+    /// query identifier, or <see langword="null"/> when none of the presented credentials carried a
+    /// <c>status.status_list</c> reference (so there was nothing to check). A credential that
+    /// <em>does</em> reference a status list is either checked — and recorded here — or, when the
+    /// verifier executor was constructed without a <see cref="ResolveVerifiedStatusListTokenDelegate"/>,
+    /// fails the presentation closed before this result is produced.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A valid issuer signature only proves a credential was genuinely issued; this carries the
+    /// "is it still valid <em>now</em>?" answer the verifier-agnostic
+    /// <see cref="CredentialStatusGate"/> read after signature and holder-binding verification, so a
+    /// relying party can act on revocation/suspension without re-parsing the verified vp_token. An
+    /// entry's <see cref="CredentialStatusOutcome.IsValid"/> is <see langword="false"/> for a revoked
+    /// (<c>0x01</c>) or suspended (<c>0x02</c>) credential; the raw
+    /// <see cref="CredentialStatusOutcome.Status"/> distinguishes those and application-specific values.
+    /// </para>
+    /// <para>
+    /// An <em>undeterminable</em> status (a status list whose subject does not match the reference URI,
+    /// an expired list, or an out-of-range index) fails the presentation closed at the executor — it
+    /// never reaches this surface as a "valid" outcome.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyDictionary<string, CredentialStatusOutcome>? CredentialStatuses { get; init; }
+
     /// <inheritdoc/>
     public bool Equals(VerificationSucceeded? other)
     {
@@ -39,9 +66,10 @@ public sealed record VerificationSucceeded(
 
         return VerifiedAt == other.VerifiedAt
             && ReferenceEquals(Claims, other.Claims)
+            && ReferenceEquals(CredentialStatuses, other.CredentialStatuses)
             && RedirectUri == other.RedirectUri;
     }
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Claims, VerifiedAt, RedirectUri);
+    public override int GetHashCode() => HashCode.Combine(Claims, VerifiedAt, RedirectUri, CredentialStatuses);
 }

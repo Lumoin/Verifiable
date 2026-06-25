@@ -1474,6 +1474,175 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
+    //The status check is wired into the HAIP verifier executor itself: when the host is built with a
+    //ResolveVerifiedStatusListTokenDelegate, the executor reads each presented credential's status_list
+    //entry through CredentialStatusGate and surfaces the outcome on VerificationSucceeded, which the
+    //verifier PDA carries onto PresentationVerifiedState.CredentialStatuses. This proves the relying
+    //party can act on revocation straight off the terminal state — no re-parse of the verified vp_token.
+    //A determinable revoked status is surfaced, NOT failed, so the RP applies its own policy; the full
+    //cross-device flow still reaches PresentationVerified.
+    [TestMethod]
+    public async Task ExecutorSurfacesCredentialStatusOnPresentationVerified()
+    {
+        const string statusListUri = "https://issuer.example/statuslists/1";
+        const int credentialIndex = 42;
+        const string pidCredentialQueryId = "pid";
+
+        //The mutable list the resolver hands back, standing in for whatever fetched and verified it.
+        //Flipping the bit between the two presentations drives valid -> revoked through the executor.
+        using StatusListType statusList = StatusListType.Create(
+            64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+
+        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate resolveStatusList =
+            (uri, ct) => ValueTask.FromResult(
+                new StatusListToken(statusListUri, TimeProvider.GetUtcNow(), statusList));
+
+        await using TestHostShell app = new(TimeProvider, resolveVerifiedStatusListToken: resolveStatusList);
+        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await IssuePidCredentialWithClaimsAsync(
+                "Alice", "Smith", TestContext.CancellationToken,
+                status: new StatusListReference(credentialIndex, statusListUri)).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey = holderPrivateKey;
+        using PublicKeyMemory issuerKey = issuerPublicKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey);
+
+        Oid4VpWalletClient walletClient =
+            await app.CreateHttpBackedOid4VpWalletClientAsync(
+                verifierKeys,
+                serializedSdJwt,
+                holderKey,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        //Drives one full cross-device presentation and returns the verifier's terminal state.
+        async Task<PresentationVerifiedState> PresentAsync(string nonce)
+        {
+            (Uri requestUri, string parHandle) = await app.HandleParAsync(
+                verifierKeys,
+                new TransactionNonce(nonce),
+                CreatePreparedQuery(),
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
+                .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
+            jarResponse.EnsureSuccessStatusCode();
+            string compactJar = await jarResponse.Content
+                .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            PresentationResult result = await walletClient.PresentJarAsync(
+                new PresentJarOptions
+                {
+                    CompactJar = compactJar,
+                    RequestUri = requestUri,
+                    ExpectedVerifierClientId = VerifierClientId,
+                    FlowId = $"wallet-status-{Guid.NewGuid():N}"
+                },
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+                "Wallet PDA must reach ResponseSent after the HTTP response POST.");
+
+            return (PresentationVerifiedState)app.GetFlowState(parHandle).State;
+        }
+
+        //First presentation — the credential's status bit is unset, so the executor surfaces a valid
+        //status alongside the verified claims.
+        PresentationVerifiedState whenValid = await PresentAsync("nonce-status-valid").ConfigureAwait(false);
+
+        Assert.IsNotNull(whenValid.CredentialStatuses,
+            "The executor must surface CredentialStatuses when a status resolver is wired.");
+        Assert.IsTrue(whenValid.CredentialStatuses!.TryGetValue(pidCredentialQueryId, out CredentialStatusOutcome? validOutcome),
+            "The surfaced statuses must be keyed by the DCQL credential query id.");
+        Assert.IsNotNull(validOutcome);
+        Assert.IsTrue(validOutcome.IsValid, "An unset status bit must surface as valid.");
+        Assert.AreEqual(StatusTypes.Valid, validOutcome.Status);
+
+        //Revoke the credential by flipping its bit, then present again. The executor surfaces the revoked
+        //status WITHOUT failing the presentation — the relying party reads it and applies its own policy.
+        statusList[credentialIndex] = StatusTypes.Invalid;
+
+        PresentationVerifiedState whenRevoked = await PresentAsync("nonce-status-revoked").ConfigureAwait(false);
+
+        Assert.IsNotNull(whenRevoked.CredentialStatuses,
+            "The executor must still surface CredentialStatuses after revocation.");
+        Assert.IsTrue(whenRevoked.CredentialStatuses!.TryGetValue(pidCredentialQueryId, out CredentialStatusOutcome? revokedOutcome),
+            "The surfaced statuses must be keyed by the DCQL credential query id.");
+        Assert.IsNotNull(revokedOutcome);
+        Assert.IsFalse(revokedOutcome.IsValid, "After flipping the bit the executor must surface a revoked status.");
+        Assert.AreEqual(StatusTypes.Invalid, revokedOutcome.Status);
+    }
+
+
+    //Fail-closed configuration guard: a credential whose issuer gated its validity on a status list is
+    //NOT accepted when the verifier executor was constructed without a status resolver to read it. The
+    //executor throws server-side (mirroring the mdoc / SD-CWT / disclosure seams), so the verifier's
+    //flow never reaches PresentationVerified — silently treating an unreadable status as valid would be
+    //a security gap.
+    [TestMethod]
+    public async Task ExecutorFailsClosedWhenCredentialReferencesStatusListButNoResolverWired()
+    {
+        const string statusListUri = "https://issuer.example/statuslists/1";
+        const int credentialIndex = 42;
+
+        //No status resolver wired — yet the issued credential references a status list.
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = app.RegisterClient(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
+
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await IssuePidCredentialWithClaimsAsync(
+                "Alice", "Smith", TestContext.CancellationToken,
+                status: new StatusListReference(credentialIndex, statusListUri)).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey = holderPrivateKey;
+        using PublicKeyMemory issuerKey = issuerPublicKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey);
+
+        Oid4VpWalletClient walletClient =
+            await app.CreateHttpBackedOid4VpWalletClientAsync(
+                verifierKeys, serializedSdJwt, holderKey, TestContext.CancellationToken).ConfigureAwait(false);
+
+        (Uri requestUri, string parHandle) = await app.HandleParAsync(
+            verifierKeys,
+            new TransactionNonce("nonce-status-noresolver"),
+            CreatePreparedQuery(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
+            .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
+        jarResponse.EnsureSuccessStatusCode();
+        string compactJar = await jarResponse.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The wallet POSTs an otherwise-valid presentation. The verifier fails closed on the unreadable
+        //status server-side; whether that surfaces to the wallet as a thrown error or a non-success
+        //response is the transport's concern — the security-relevant assertion is on the verifier's own
+        //flow state, which must not be PresentationVerified.
+        try
+        {
+            await walletClient.PresentJarAsync(
+                new PresentJarOptions
+                {
+                    CompactJar = compactJar,
+                    RequestUri = requestUri,
+                    ExpectedVerifierClientId = VerifierClientId,
+                    FlowId = $"wallet-status-noresolver-{Guid.NewGuid():N}"
+                },
+                TestContext.CancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception exception) when(exception is not OperationCanceledException)
+        {
+            //Tolerated: the verifier's fail-closed guard surfaced to the wallet as an error response.
+        }
+
+        Assert.IsFalse(
+            app.GetFlowState(parHandle).State is PresentationVerifiedState,
+            "A credential that references a status list must not be accepted when the verifier was " +
+            "constructed without a status resolver to read it.");
+    }
+
+
     //Same-device flow — OID4VP 1.0 §8.2, §8.3, §8.3.1, HAIP 1.0 §5.1.
     //
     //NOTE: OID4VP §3.1 describes a different same-device pattern using

@@ -5,6 +5,7 @@ using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
@@ -121,7 +122,8 @@ public static class HaipOid4VpVerifierExecutor
         MdocVpVerificationSeams? mdocSeams = null,
         SdCwtVpVerificationSeams? sdCwtSeams = null,
         CommitmentReuseDetectionSeam? saltReuseSeam = null,
-        AssessVpDisclosureDelegate? assessDisclosure = null)
+        AssessVpDisclosureDelegate? assessDisclosure = null,
+        ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null)
     {
         ArgumentNullException.ThrowIfNull(headerSerializer);
         ArgumentNullException.ThrowIfNull(payloadSerializer);
@@ -162,7 +164,8 @@ public static class HaipOid4VpVerifierExecutor
             mdocSeams: mdocSeams,
             sdCwtSeams: sdCwtSeams,
             saltReuseSeam: saltReuseSeam,
-            assessDisclosure: assessDisclosure);
+            assessDisclosure: assessDisclosure,
+            resolveVerifiedStatusListToken: resolveVerifiedStatusListToken);
     }
 
 
@@ -200,7 +203,8 @@ public static class HaipOid4VpVerifierExecutor
         MdocVpVerificationSeams? mdocSeams = null,
         SdCwtVpVerificationSeams? sdCwtSeams = null,
         CommitmentReuseDetectionSeam? saltReuseSeam = null,
-        AssessVpDisclosureDelegate? assessDisclosure = null)
+        AssessVpDisclosureDelegate? assessDisclosure = null,
+        ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null)
     {
         ArgumentNullException.ThrowIfNull(headerSerializer);
         ArgumentNullException.ThrowIfNull(payloadSerializer);
@@ -238,7 +242,8 @@ public static class HaipOid4VpVerifierExecutor
             mdocSeams: mdocSeams,
             sdCwtSeams: sdCwtSeams,
             saltReuseSeam: saltReuseSeam,
-            assessDisclosure: assessDisclosure);
+            assessDisclosure: assessDisclosure,
+            resolveVerifiedStatusListToken: resolveVerifiedStatusListToken);
     }
 
 
@@ -265,7 +270,8 @@ public static class HaipOid4VpVerifierExecutor
         MdocVpVerificationSeams? mdocSeams,
         SdCwtVpVerificationSeams? sdCwtSeams,
         CommitmentReuseDetectionSeam? saltReuseSeam,
-        AssessVpDisclosureDelegate? assessDisclosure)
+        AssessVpDisclosureDelegate? assessDisclosure,
+        ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken)
     {
         var executor = new OAuthActionExecutor();
 
@@ -586,6 +592,13 @@ public static class HaipOid4VpVerifierExecutor
             Dictionary<string, IReadOnlyDictionary<string, string>> aggregatedClaims =
                 new(StringComparer.Ordinal);
 
+            //IETF Token Status List outcomes per credential, keyed by DCQL credential query id.
+            //Populated only when a status resolver was wired AND the credential carried a
+            //status.status_list reference; surfaced on VerificationSucceeded so the relying party
+            //can act on revocation/suspension without re-parsing the verified vp_token.
+            Dictionary<string, CredentialStatusOutcome> credentialStatuses =
+                new(StringComparer.Ordinal);
+
             //OID4VP 1.0 Appendix B.2.6.1: an mso_mdoc presentation's SessionTranscript
             //binds the wallet's fresh mdoc_generated_nonce, which the wallet carries in
             //the response JWE's 'apu' protected-header parameter (ISO/IEC 18013-7 §B.4.4).
@@ -730,6 +743,18 @@ public static class HaipOid4VpVerifierExecutor
                         failedAt);
                 }
 
+                //The credential's signature and holder binding verified above; now read its
+                //IETF Token Status List entry (the "is it still valid now?" step) when a resolver
+                //was wired and the credential references a status list. CheckCredentialStatusAsync
+                //either records the determinable outcome or returns a fail-closed Fail when the
+                //status is undeterminable.
+                if(await CheckCredentialStatusAsync(
+                    resolveVerifiedStatusListToken, parsed, credentialQueryId, now, credentialStatuses, context, ct)
+                    .ConfigureAwait(false) is { } statusFailure)
+                {
+                    return statusFailure;
+                }
+
                 //Multi-credential vp_token: merge this credential's extracted
                 //claims into the aggregated dictionary under its own query id.
                 //parsed.ExtractedClaims is keyed by credential query id already
@@ -748,7 +773,10 @@ public static class HaipOid4VpVerifierExecutor
             return new VerificationSucceeded(
                 aggregatedClaims,
                 VerifiedAt: verifiedAt,
-                RedirectUri: context.Oid4VpRedirectUri);
+                RedirectUri: context.Oid4VpRedirectUri)
+            {
+                CredentialStatuses = credentialStatuses.Count > 0 ? credentialStatuses : null
+            };
         });
 
         //Sibling handler for the unencrypted direct_post path per OID4VP 1.0
@@ -793,6 +821,10 @@ public static class HaipOid4VpVerifierExecutor
             byte[] vpTokenBytes = Encoding.UTF8.GetBytes(action.VpTokenJson);
 
             Dictionary<string, IReadOnlyDictionary<string, string>> aggregatedClaims =
+                new(StringComparer.Ordinal);
+
+            //IETF Token Status List outcomes per credential (see the encrypted-path handler above).
+            Dictionary<string, CredentialStatusOutcome> credentialStatuses =
                 new(StringComparer.Ordinal);
 
             foreach(CredentialQuery credentialQuery in action.CredentialQueries)
@@ -897,6 +929,15 @@ public static class HaipOid4VpVerifierExecutor
                         failedAt);
                 }
 
+                //IETF Token Status List check (see the encrypted-path handler) — read the
+                //credential's status when a resolver is wired; fail closed on an undeterminable one.
+                if(await CheckCredentialStatusAsync(
+                    resolveVerifiedStatusListToken, parsed, credentialQueryId, now, credentialStatuses, context, ct)
+                    .ConfigureAwait(false) is { } statusFailure)
+                {
+                    return statusFailure;
+                }
+
                 foreach(KeyValuePair<string, IReadOnlyDictionary<string, string>> claim in parsed.ExtractedClaims)
                 {
                     aggregatedClaims[claim.Key] = claim.Value;
@@ -910,7 +951,10 @@ public static class HaipOid4VpVerifierExecutor
             return new VerificationSucceeded(
                 aggregatedClaims,
                 VerifiedAt: verifiedAt,
-                RedirectUri: context.Oid4VpRedirectUri);
+                RedirectUri: context.Oid4VpRedirectUri)
+            {
+                CredentialStatuses = credentialStatuses.Count > 0 ? credentialStatuses : null
+            };
         });
 
         return executor;
@@ -977,6 +1021,83 @@ public static class HaipOid4VpVerifierExecutor
 
     private static readonly IReadOnlyDictionary<CredentialPath, object?> EmptyDisclosedClaims =
         new Dictionary<CredentialPath, object?>();
+
+
+    /// <summary>
+    /// Reads a presented credential's IETF Token Status List entry through the verifier-agnostic
+    /// <see cref="CredentialStatusGate"/> when the credential carries a <c>status.status_list</c>
+    /// reference, recording the outcome under <paramref name="credentialQueryId"/> for surfacing on
+    /// <see cref="VerificationSucceeded.CredentialStatuses"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns <see langword="null"/> (continue) when the credential carries no status reference — there
+    /// is nothing to check, with or without a resolver wired — or when the status was read successfully;
+    /// a determinable revoked/suspended outcome is recorded, not failed here, so the relying party can
+    /// apply its own policy to it.
+    /// </para>
+    /// <para>
+    /// Returns a fail-closed <see cref="Fail"/> when the status is undeterminable — the status list's
+    /// subject does not match the reference URI, the list has expired, or the index is out of range —
+    /// because an undeterminable status is not a pass.
+    /// </para>
+    /// <para>
+    /// Throws when the credential <em>references</em> a status list but no
+    /// <see cref="ResolveVerifiedStatusListTokenDelegate"/> was wired: the credential's issuer gated its
+    /// validity on a list the verifier cannot read, so silently treating it as valid would be a security
+    /// gap. This mirrors the mdoc / SD-CWT / disclosure seams, which likewise throw when a presented
+    /// credential needs a seam the executor was not constructed with.
+    /// </para>
+    /// </remarks>
+    private static async ValueTask<Fail?> CheckCredentialStatusAsync(
+        ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken,
+        VpTokenParsed parsed,
+        string credentialQueryId,
+        DateTimeOffset now,
+        Dictionary<string, CredentialStatusOutcome> credentialStatuses,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        //No status reference on the credential -> nothing to check, regardless of whether a resolver
+        //was wired.
+        if(parsed.CredentialStatus is not { } statusReference)
+        {
+            return null;
+        }
+
+        //The credential's issuer gated its validity on a status list, but the executor was constructed
+        //without a resolver to read it. Fail closed as a configuration error -- the same disposition the
+        //mdoc / SD-CWT / disclosure seams take when a presented credential needs a seam that was not
+        //wired -- rather than silently passing an unreadable status.
+        if(resolveVerifiedStatusListToken is null)
+        {
+            throw new InvalidOperationException(
+                $"The presented credential for credential query '{credentialQueryId}' references an IETF " +
+                $"Token Status List ({statusReference}) but the verifier executor was constructed without a " +
+                $"status resolver. Pass resolveVerifiedStatusListToken to HaipOid4VpVerifierExecutor.Create / " +
+                $"CreateWithRegistry (wiring the status-list fetch and verification behind it) to enable " +
+                $"revocation checking.");
+        }
+
+        try
+        {
+            CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+                statusReference, resolveVerifiedStatusListToken, now, cancellationToken).ConfigureAwait(false);
+
+            credentialStatuses[credentialQueryId] = outcome;
+
+            return null;
+        }
+        catch(StatusListValidationException exception)
+        {
+            DateTimeOffset failedAt = context.VerifiedAt
+                ?? throw new InvalidOperationException("Request timestamp not found in context.");
+
+            return new Fail(
+                $"Credential status could not be determined for credential query '{credentialQueryId}': {exception.Message}",
+                failedAt);
+        }
+    }
 
 
     private static IMemoryOwner<byte> ExtractMdocGeneratedNonce(

@@ -342,7 +342,8 @@ internal sealed class TestHostShell: IAsyncDisposable
         ClaimIssuer<ValidationContext>? vpValidator = null,
         MdocVpVerificationSeams? mdocSeams = null,
         SdCwtVpVerificationSeams? sdCwtSeams = null,
-        CommitmentReuseDetectionSeam? saltReuseSeam = null)
+        CommitmentReuseDetectionSeam? saltReuseSeam = null,
+        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
 
@@ -359,6 +360,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         MdocSeamsShared = mdocSeams;
         SdCwtSeamsShared = sdCwtSeams;
         SaltReuseSeamShared = saltReuseSeam;
+        StatusListResolverShared = resolveVerifiedStatusListToken;
 
         Default = HostedAuthorizationServer.Build(
             name: "default",
@@ -369,7 +371,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             mdocSeams: MdocSeamsShared,
             sdCwtSeams: SdCwtSeamsShared,
             saltReuseSeam: SaltReuseSeamShared,
-            resolveDidVerificationKey: ResolveSiopDidKey);
+            resolveDidVerificationKey: ResolveSiopDidKey,
+            resolveVerifiedStatusListToken: StatusListResolverShared);
         HostsByName["default"] = Default;
     }
 
@@ -381,6 +384,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     private MdocVpVerificationSeams? MdocSeamsShared { get; }
     private SdCwtVpVerificationSeams? SdCwtSeamsShared { get; }
     private CommitmentReuseDetectionSeam? SaltReuseSeamShared { get; }
+    private Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? StatusListResolverShared { get; }
 
     //Multi-host orchestration. The Default entry is added in the constructor;
     //AddHost creates further independent hosts (different roles in a multi-
@@ -436,7 +440,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             vpValidator: VpValidatorShared,
             mdocSeams: MdocSeamsShared,
             sdCwtSeams: SdCwtSeamsShared,
-            resolveDidVerificationKey: ResolveSiopDidKey);
+            resolveDidVerificationKey: ResolveSiopDidKey,
+            resolveVerifiedStatusListToken: StatusListResolverShared);
         HostsByName[name] = host;
 
         return host;
