@@ -235,6 +235,59 @@ internal sealed class VcalmStatusEndpointTests
 
 
     /// <summary>
+    /// §C.1 / §C.3 re-secure: <see cref="VcalmStatusListService.UpdateAsync"/> sets a status bit on the
+    /// decoded list, rebuilds the status-list credential, and re-signs it — the re-secured credential
+    /// carries the set bit (and only that bit) and verifies TRUE at the V-1 verifier. This is the
+    /// issuer's revoke / republish primitive: the §C.3 update seam mutates the live list, this turns
+    /// the mutated list back into a signed, publishable status-list credential.
+    /// </summary>
+    [TestMethod]
+    public async Task UpdateAsyncReSecuresStatusListWithSetBit()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+        await CreateStatusListAsync(app, ctx.Segment).ConfigureAwait(false);
+
+        const int Index = 94;
+        VcalmCredentialIssuance issuance = app.Server.Vcalm().VcalmStatusListIssuance!;
+
+        //Decode the freshly-created (all-zero) published list, then re-secure it with the
+        //revocation bit set at the target index.
+        using CoreStatusList list = DecodeStatusList(StatusListStore[StatusListId]);
+        Assert.AreEqual<byte>(0, list.Get(Index), "The freshly created list starts all-zero.");
+
+        DataIntegritySecuredCredential updated = await VcalmStatusListService.UpdateAsync(
+            StatusListId,
+            RevocationPurpose,
+            list,
+            new Dictionary<int, byte> { [Index] = 1 },
+            issuance,
+            TimeProvider.GetUtcNow().UtcDateTime,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        string updatedJson = issuance.SigningDescriptors[0].SerializeCredential(updated);
+
+        //The re-secured credential carries the set bit, and only that bit.
+        using CoreStatusList reDecoded = DecodeStatusList(updatedJson);
+        Assert.AreEqual<byte>(1, reDecoded.Get(Index),
+            "UpdateAsync set the revocation bit in the re-secured list.");
+        Assert.AreEqual<byte>(0, reDecoded.Get(0), "Entries other than the updated one stay clear.");
+
+        //The re-secured credential verifies TRUE — the re-signature is valid, not merely the bit set.
+        string verifyBody = "{\"verifiableCredential\":" + updatedJson + "}";
+        ServerHttpResponse verifyResponse = await app.DispatchAtEndpointAsync(
+            ctx.Segment, WellKnownVcalmEndpointNames.VcalmCredentialsVerify, "POST",
+            new RequestFields(), verifyBody, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, verifyResponse.StatusCode, verifyResponse.Body);
+        using JsonDocument verifyDoc = JsonDocument.Parse(verifyResponse.Body);
+        Assert.IsTrue(verifyDoc.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
+            "The re-secured §C.1 status-list credential must verify TRUE.");
+    }
+
+
+    /// <summary>
     /// §2.4 unknown-option MUST: a §C.3 <c>credentialStatus</c> member the status service does not
     /// understand is rejected with HTTP 400 and the §3.8 <c>UNKNOWN_OPTION_PROVIDED</c> type.
     /// </summary>

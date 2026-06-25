@@ -80,6 +80,72 @@ public static class VcalmStatusListService
     }
 
 
+    /// <summary>
+    /// Applies status changes to an existing §C.1 status list and re-secures it: sets the given
+    /// entries to their new status values, re-encodes the bitstring, rebuilds the status-list
+    /// credential, and signs it again with the issuer's configuration. This is the issuer's
+    /// revoke / suspend / restore operation — a credential is revoked by setting its
+    /// <see cref="BitstringStatusListEntry.StatusListIndex"/> to a non-zero status and re-publishing
+    /// the returned credential.
+    /// </summary>
+    /// <param name="statusListId">The status-list credential id (unchanged across updates).</param>
+    /// <param name="statusPurpose">The §C.1 <c>statusPurpose</c> the list tracks (unchanged across updates).</param>
+    /// <param name="statusList">
+    /// The current, decoded status list — typically obtained via
+    /// <see cref="BitstringStatusListCodec.DecodeList"/> from the published credential's
+    /// <c>encodedList</c>. It is mutated in place by the requested updates; the caller owns its pooled
+    /// memory and disposes it after this call.
+    /// </param>
+    /// <param name="statusUpdates">
+    /// The entries to change, keyed by <c>statusListIndex</c> with the new status value (for a one-bit
+    /// list, <c>1</c> sets and <c>0</c> clears the status). An empty set re-secures the list unchanged.
+    /// </param>
+    /// <param name="issuance">The §C.1 signing configuration (the same as the list was created with).</param>
+    /// <param name="proofCreated">The timestamp written into the new proof's <c>created</c> member.</param>
+    /// <param name="context">The per-request context threaded to the canonicalizer.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The re-secured status-list credential carrying the updated bitstring.</returns>
+    public static async ValueTask<DataIntegritySecuredCredential> UpdateAsync(
+        string statusListId,
+        string statusPurpose,
+        StatusList statusList,
+        IReadOnlyDictionary<int, byte> statusUpdates,
+        VcalmCredentialIssuance issuance,
+        DateTime proofCreated,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(statusListId);
+        ArgumentException.ThrowIfNullOrEmpty(statusPurpose);
+        ArgumentNullException.ThrowIfNull(statusList);
+        ArgumentNullException.ThrowIfNull(statusUpdates);
+        ArgumentNullException.ThrowIfNull(issuance);
+        ArgumentNullException.ThrowIfNull(context);
+
+        foreach(KeyValuePair<int, byte> update in statusUpdates)
+        {
+            statusList.Set(update.Key, update.Value);
+        }
+
+        string encodedList = BitstringStatusListCodec.EncodeList(statusList);
+
+        VerifiableCredential statusListCredential = BuildStatusListCredential(
+            statusListId, statusPurpose, encodedList, issuance.ConfiguredIssuer);
+
+        //§C.1: re-secure with the same issuance seam create uses. A status-list credential carries no
+        //caller proof, so the existing-proof case never applies.
+        VcalmIssuanceResult result = await VcalmCredentialIssuanceService.IssueAsync(
+            statusListCredential,
+            hasExistingProof: false,
+            issuance,
+            proofCreated,
+            context,
+            cancellationToken).ConfigureAwait(false);
+
+        return result.SecuredCredential!;
+    }
+
+
     //Builds the unsecured BitstringStatusListCredential: a VC-DM 2.0 credential typed
     //BitstringStatusListCredential whose credentialSubject is a BitstringStatusList carrying the
     //statusPurpose and the encodedList (W3C Bitstring Status List §2.2).
