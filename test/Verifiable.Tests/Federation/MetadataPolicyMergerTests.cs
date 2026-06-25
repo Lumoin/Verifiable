@@ -66,8 +66,10 @@ internal sealed class MetadataPolicyMergerTests
 
 
     [TestMethod]
-    public void SubsetOfEmptyIntersectionIsConflict()
+    public void SubsetOfEmptyIntersectionIsAllowed()
     {
+        //§6.1.3.1.5: merging two subset_of operators yields their intersection, which
+        //"may thus be an empty array []" — an empty result is not a conflict.
         EntityTypeMetadataPolicy upstream = MakeBlock(
             ("scope",
                 (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "openid" })));
@@ -77,8 +79,10 @@ internal sealed class MetadataPolicyMergerTests
 
         MetadataPolicyMergeResult result = MetadataPolicyMerger.Merge(upstream, downstream);
 
-        Assert.IsFalse(result.IsSuccess);
-        Assert.Contains("Intersection", result.FailureReason!);
+        Assert.IsTrue(result.IsSuccess);
+        ParameterPolicy merged = result.MergedBlock!.ParameterPolicies["scope"];
+        List<object> subsetOf = (List<object>)merged.Operators[WellKnownMetadataPolicyOperators.SubsetOf];
+        Assert.IsEmpty(subsetOf);
     }
 
 
@@ -150,14 +154,15 @@ internal sealed class MetadataPolicyMergerTests
     [TestMethod]
     public void IncompatibleResultingOperatorCombinationRejects()
     {
-        //Upstream has subset_of, downstream has value: merged would have both,
-        //which the §6.1.3.1.8 table forbids. Merge rejects with the
-        //post-merge combination check.
+        //Upstream has subset_of, downstream has one_of: merged would have both, which
+        //§6.1.3.1.4 forbids (one_of combines only with value, default and essential).
+        //Merge rejects with the post-merge combination check.
         EntityTypeMetadataPolicy upstream = MakeBlock(
             ("scope",
                 (WellKnownMetadataPolicyOperators.SubsetOf, (object)new List<object> { "openid", "profile" })));
         EntityTypeMetadataPolicy downstream = MakeBlock(
-            ("scope", (WellKnownMetadataPolicyOperators.Value, (object)"openid")));
+            ("scope",
+                (WellKnownMetadataPolicyOperators.OneOf, (object)new List<object> { "openid" })));
 
         MetadataPolicyMergeResult result = MetadataPolicyMerger.Merge(upstream, downstream);
 

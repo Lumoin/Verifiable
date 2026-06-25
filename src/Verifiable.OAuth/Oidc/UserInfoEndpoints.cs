@@ -51,10 +51,9 @@ namespace Verifiable.OAuth.Oidc;
 /// that condition is not met.
 /// </para>
 /// <para>
-/// <strong>Phase A scaffolding state.</strong> Chunk 10 ships bearer
-/// validation, the <c>iss</c> / <c>exp</c> / scope checks, and a minimal
-/// response body carrying the validated <c>sub</c>. Chunk 11 adds the
-/// per-subject claim emission via the
+/// The endpoint performs bearer validation, the <c>iss</c> / <c>exp</c> /
+/// scope checks, and emits a response body carrying the validated <c>sub</c>
+/// together with the per-subject claim emission via the
 /// <see cref="AuthorizationServerIntegration.ClaimIssuer"/> contributor walk against
 /// <see cref="UserInfoTarget"/>.
 /// </para>

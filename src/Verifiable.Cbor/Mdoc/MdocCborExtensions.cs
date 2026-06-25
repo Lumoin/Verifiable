@@ -26,7 +26,7 @@ namespace Verifiable.Cbor.Mdoc;
 /// <see cref="Verifiable.Core.Model.Mdoc.MdocVerificationExtensions"/> in Verifiable.Core
 /// (it crosses ParseCoseSign1/BuildSigStructure seams rather than calling the CBOR helpers
 /// directly). The remaining static helpers remain available for callers that prefer them; the
-/// extension surface is additive at this stage. The follow-on chunks add <see cref="DeviceSignAsync"/>,
+/// extension surface is additive. It includes <see cref="DeviceSignAsync"/>,
 /// <c>VerifyDeviceSignedAsync</c>, <see cref="VerifyDigestBinding"/>,
 /// <c>Derive</c>, and the corresponding <c>*Verbose</c> siblings that mirror
 /// <see cref="Verifiable.Core.Model.DataIntegrity.CredentialEcdsaSd2023Extensions"/>'s
@@ -147,8 +147,8 @@ public static class MdocCborExtensions
         /// A presentation document carrying the trimmed view and the
         /// document's <see cref="MdocDocument.DocType"/>;
         /// <see cref="MdocPresentationDocument.DeviceSigned"/> is null and
-        /// the wallet attaches it at presentation time (Chunk 3 lands the
-        /// device-sign extension method).
+        /// the wallet attaches it at presentation time via the
+        /// device-sign extension method.
         /// </returns>
         /// <remarks>
         /// The trimmed view borrows item references from

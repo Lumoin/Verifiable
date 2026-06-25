@@ -982,13 +982,13 @@ public static class AuthCodeFlowHandlers
     /// is wired for DPoP.
     /// </summary>
     /// <remarks>
-    /// Phase 6 client-side ships single-shot proof attachment only — there
+    /// The client side performs single-shot proof attachment only — there
     /// is no <c>use_dpop_nonce</c> retry loop and no nonce cache. A
     /// nonce-required AS that challenges the first attempt with a 401 +
     /// <c>DPoP-Nonce</c> response header surfaces the failure to the
     /// caller; the application can read the response and retry at a
     /// higher level. Cross-call nonce caching belongs with the AS-side
-    /// validation work in phase 6b, where the storage shape can match
+    /// validation work, where the storage shape can match
     /// the existing flow-state delegate pattern.
     /// </remarks>
     /// <summary>

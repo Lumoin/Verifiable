@@ -25,10 +25,11 @@ namespace Verifiable.OAuth.Federation;
 /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
 /// <remarks>
 /// <para>
-/// Library defaults wire to <c>HttpClient</c>-backed implementations
-/// shipped in B.5.2. Deployments override to inject retry, caching,
-/// observability, and authentication policies appropriate to their
-/// HTTP infrastructure.
+/// Deployments implement this over their HTTP infrastructure — typically an
+/// <c>HttpClient</c>-backed fetch carrying whatever retry, caching,
+/// observability, and authentication policies their environment requires —
+/// subject to the outbound-fetch (SSRF) policy the <see cref="ExchangeContext"/>
+/// carries.
 /// </para>
 /// </remarks>
 public delegate ValueTask<FetchedEntityStatement?> FetchEntityStatementDelegate(

@@ -195,6 +195,21 @@ public static class WellKnownEndpointNames
 
     public static readonly string FederationHistoricalKeys = Utf8Constants.ToInternedString(FederationHistoricalKeysUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="FederationTrustMark"/>.</summary>
+    public static ReadOnlySpan<byte> FederationTrustMarkUtf8 => "Federation.TrustMark"u8;
+
+    public static readonly string FederationTrustMark = Utf8Constants.ToInternedString(FederationTrustMarkUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="FederationTrustMarkList"/>.</summary>
+    public static ReadOnlySpan<byte> FederationTrustMarkListUtf8 => "Federation.TrustMarkList"u8;
+
+    public static readonly string FederationTrustMarkList = Utf8Constants.ToInternedString(FederationTrustMarkListUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="FederationTrustMarkStatus"/>.</summary>
+    public static ReadOnlySpan<byte> FederationTrustMarkStatusUtf8 => "Federation.TrustMarkStatus"u8;
+
+    public static readonly string FederationTrustMarkStatus = Utf8Constants.ToInternedString(FederationTrustMarkStatusUtf8);
+
     //Registration family
     /// <summary>The UTF-8 source literal of <see cref="RegistrationRegister"/>.</summary>
     public static ReadOnlySpan<byte> RegistrationRegisterUtf8 => "Registration.Register"u8;

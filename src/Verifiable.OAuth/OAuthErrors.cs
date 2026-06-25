@@ -185,4 +185,75 @@ public static class OAuthErrors
     /// (redirect) and the token endpoint (400 JSON body).
     /// </summary>
     public static readonly string InvalidAuthorizationDetails = Utf8Constants.ToInternedString(InvalidAuthorizationDetailsUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="UnsupportedParameter"/>.</summary>
+    public static ReadOnlySpan<byte> UnsupportedParameterUtf8 => "unsupported_parameter"u8;
+
+    /// <summary>
+    /// OpenID Federation 1.0 §8.2.1: a request carried a query parameter the endpoint
+    /// does not support (for example a subordinate-listing <c>trust_marked</c>,
+    /// <c>trust_mark_type</c>, or <c>intermediate</c> filter the responder cannot honor).
+    /// The endpoint MUST reject such a request with HTTP 400 and content type
+    /// <c>application/json</c> rather than silently ignoring the unsupported filter and
+    /// returning an under-filtered result.
+    /// </summary>
+    public static readonly string UnsupportedParameter = Utf8Constants.ToInternedString(UnsupportedParameterUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidIssuer"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidIssuerUtf8 => "invalid_issuer"u8;
+
+    /// <summary>
+    /// OpenID Federation 1.0 §8.9: a federation endpoint cannot serve the requested
+    /// issuer. The HTTP response status code SHOULD be 404 (Not Found).
+    /// </summary>
+    public static readonly string InvalidIssuer = Utf8Constants.ToInternedString(InvalidIssuerUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidSubject"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidSubjectUtf8 => "invalid_subject"u8;
+
+    /// <summary>
+    /// OpenID Federation 1.0 §8.9: a federation endpoint cannot serve the requested
+    /// subject. The HTTP response status code SHOULD be 404 (Not Found).
+    /// </summary>
+    public static readonly string InvalidSubject = Utf8Constants.ToInternedString(InvalidSubjectUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidTrustAnchor"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidTrustAnchorUtf8 => "invalid_trust_anchor"u8;
+
+    /// <summary>
+    /// OpenID Federation 1.0 §8.9: the requested Trust Anchor cannot be found or used.
+    /// The HTTP response status code SHOULD be 404 (Not Found). Also returned in §12.1.3
+    /// Pushed Authorization Request error responses when trust could not be established.
+    /// </summary>
+    public static readonly string InvalidTrustAnchor = Utf8Constants.ToInternedString(InvalidTrustAnchorUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidTrustChain"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidTrustChainUtf8 => "invalid_trust_chain"u8;
+
+    /// <summary>
+    /// OpenID Federation 1.0 §8.9: the Trust Chain cannot be validated. The HTTP response
+    /// status code SHOULD be 400 (Bad Request). Also returned in §12.1.3 Pushed
+    /// Authorization Request error responses when trust could not be established.
+    /// </summary>
+    public static readonly string InvalidTrustChain = Utf8Constants.ToInternedString(InvalidTrustChainUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="InvalidMetadata"/>.</summary>
+    public static ReadOnlySpan<byte> InvalidMetadataUtf8 => "invalid_metadata"u8;
+
+    /// <summary>
+    /// OpenID Federation 1.0 §8.9: Metadata or Metadata Policy values are invalid or
+    /// conflict. The HTTP response status code SHOULD be 400 (Bad Request). Also returned
+    /// in §12.1.3 Pushed Authorization Request error responses when the RP metadata was
+    /// invalid or in conflict with policy.
+    /// </summary>
+    public static readonly string InvalidMetadata = Utf8Constants.ToInternedString(InvalidMetadataUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="NotFound"/>.</summary>
+    public static ReadOnlySpan<byte> NotFoundUtf8 => "not_found"u8;
+
+    /// <summary>
+    /// OpenID Federation 1.0 §8.9: the requested Entity Identifier cannot be found.
+    /// The HTTP response status code SHOULD be 404 (Not Found).
+    /// </summary>
+    public static readonly string NotFound = Utf8Constants.ToInternedString(NotFoundUtf8);
 }

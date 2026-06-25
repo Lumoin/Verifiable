@@ -15,13 +15,15 @@ namespace Verifiable.OAuth.Federation;
 ///   <item><description><c>value</c> — replaces the parameter outright.</description></item>
 ///   <item><description><c>add</c> — appends to the parameter (or initializes it).</description></item>
 ///   <item><description><c>default</c> — supplies the parameter when not present after the previous steps.</description></item>
-///   <item><description><c>one_of</c> / <c>subset_of</c> / <c>superset_of</c> — validate the resulting value against the constraint.</description></item>
+///   <item><description><c>one_of</c> — checks the resulting value is one of the operator's values.</description></item>
+///   <item><description><c>subset_of</c> — trims the resulting array to its intersection with the operator's value set (a modifier, never a rejection; §6.1.3.1.5, Table 1).</description></item>
+///   <item><description><c>superset_of</c> — checks the resulting array contains every operator value.</description></item>
 ///   <item><description><c>essential</c> — final presence check (the parameter MUST be present when <see langword="true"/>).</description></item>
 /// </list>
 /// <para>
-/// Constraint violations (declared scope not in one_of's set, declared
-/// array not a subset of subset_of's set, essential=true with the
-/// parameter missing, etc.) surface as
+/// Constraint violations (declared value not in one_of's set, declared
+/// array missing a superset_of value, essential=true with the parameter
+/// missing, etc.) surface as
 /// <see cref="MetadataPolicyApplyResult.Failed"/>.
 /// </para>
 /// </remarks>
@@ -119,7 +121,9 @@ public static class MetadataPolicyApplicator
                 }
             }
 
-            //Step 4: subset_of constraint.
+            //Step 4: subset_of — a value modifier, not a rejection (§6.1.3.1.5, Table 1).
+            //The effective array is replaced by its intersection with the operator's value
+            //set; values outside the set are dropped and the result MAY be the empty array.
             if(policy.Operators.TryGetValue(WellKnownMetadataPolicyOperators.SubsetOf, out object? subsetOfValue))
             {
                 if(subsetOfValue is not IEnumerable<object> subsetOfList)
@@ -137,14 +141,15 @@ public static class MetadataPolicyApplicator
                     }
 
                     HashSet<object> subsetOfSet = new(subsetOfList);
+                    List<object> intersection = [];
                     foreach(object item in currentList)
                     {
-                        if(!subsetOfSet.Contains(item))
+                        if(subsetOfSet.Contains(item))
                         {
-                            return MetadataPolicyApplyResult.Failed(
-                                $"Effective array of '{locator}' contains a value outside 'subset_of'.");
+                            intersection.Add(item);
                         }
                     }
+                    effective[parameterName] = intersection;
                 }
             }
 
@@ -177,13 +182,22 @@ public static class MetadataPolicyApplicator
                 }
             }
 
-            //Step 5: essential presence check.
-            if(policy.Operators.TryGetValue(WellKnownMetadataPolicyOperators.Essential, out object? essentialValue)
-                && essentialValue is bool essentialBool && essentialBool
-                && !effective.ContainsKey(parameterName))
+            //Step 5: essential presence check. The operator value's only mandatory-to-support
+            //JSON type is boolean (§6.1.3.1.7); a non-boolean value is a policy error rather
+            //than a silently-ignored requirement (§6.1.3 operator value-type rule).
+            if(policy.Operators.TryGetValue(WellKnownMetadataPolicyOperators.Essential, out object? essentialValue))
             {
-                return MetadataPolicyApplyResult.Failed(
-                    $"Essential parameter '{locator}' is not present in effective metadata.");
+                if(essentialValue is not bool essentialBool)
+                {
+                    return MetadataPolicyApplyResult.Failed(
+                        $"Operator 'essential' for '{locator}' expects a boolean value.");
+                }
+
+                if(essentialBool && !effective.ContainsKey(parameterName))
+                {
+                    return MetadataPolicyApplyResult.Failed(
+                        $"Essential parameter '{locator}' is not present in effective metadata.");
+                }
             }
         }
 

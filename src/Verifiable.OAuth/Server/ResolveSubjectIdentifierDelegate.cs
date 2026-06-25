@@ -19,9 +19,10 @@ namespace Verifiable.OAuth.Server;
 /// sector hash (typically <c>SHA-256(sector_identifier_uri ‖ sub ‖ salt)</c>).
 /// </para>
 /// <para>
-/// Phase 9h adds the slot structurally so Phase A's UserInfo wiring does
-/// not have to revisit <see cref="AuthorizationServerIntegration"/>. The
-/// slot is not yet read by any token producer in 9h.
+/// A structural slot the UserInfo wiring resolves the subject identifier
+/// through, without requiring changes to
+/// <see cref="AuthorizationServerIntegration"/>. The slot is not read by
+/// any token producer.
 /// </para>
 /// </remarks>
 /// <param name="endUserId">The authenticated end-user identifier (typically <see cref="ExchangeContextServerExtensions.SubjectId"/>).</param>

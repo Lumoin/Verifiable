@@ -10,9 +10,9 @@ namespace Verifiable.OAuth.Client;
 /// deferred credential polling.
 /// </summary>
 /// <remarks>
-/// Phase 5 doesn't consume this slot — it ships with an empty default
-/// and the test transport populates it as zero entries. The slot is
-/// added now so the committed-future work (DPoP, OID4VCI) doesn't
+/// No current consumer reads this slot — it ships with an empty default
+/// and the test transport populates it as zero entries. The slot
+/// exists so the committed-future work (DPoP, OID4VCI) doesn't
 /// require a transport-shape refactor.
 /// </remarks>
 [DebuggerDisplay("ResponseHeaders ({Values.Count} headers)")]

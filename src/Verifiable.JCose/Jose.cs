@@ -636,6 +636,15 @@ public static class Jws
             return false;
         }
 
+        //RFC 7515 §4 / §4.1.11: a JWS whose protected header repeats a parameter name or names an
+        //unrecognized critical extension is invalid. Decode the header and fail closed to false — like a
+        //malformed segment — rather than verifying a message we cannot fully process.
+        using DecodedSegment protectedHeader = TryDecodeSegment(base64UrlDecoder, parts[0], pool);
+        if(!protectedHeader.IsDecoded || !IsProtectedHeaderAcceptable(protectedHeader.Memory.Span))
+        {
+            return false;
+        }
+
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             parts[0], parts[1], pool, out int signingInputLength);
 
@@ -762,7 +771,12 @@ public static class Jws
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             parts[0], parts[1], pool, out int signingInputLength);
 
-        bool isValid = await verificationDelegate(
+        //RFC 7515 §4 / §4.1.11: a JWS that repeats a header parameter or names an unrecognized critical
+        //extension is invalid; the decoded header/payload are still returned for inspection, but with
+        //isValid false.
+        bool headerAcceptable = IsProtectedHeaderAcceptable(headerOwner.Memory.Span);
+
+        bool isValid = headerAcceptable && await verificationDelegate(
             dataToVerifyOwner.Memory[..signingInputLength],
             signatureOwner.Memory,
             publicKey.AsReadOnlyMemory(),
@@ -911,6 +925,13 @@ public static class Jws
             return false;
         }
 
+        //RFC 7515 §4 / §4.1.11: fail closed to false on a repeated header parameter or an unrecognized
+        //critical extension.
+        if(!IsProtectedHeaderAcceptable(headerSegment.Memory.Span))
+        {
+            return false;
+        }
+
         JwtHeader header = new(partDecoder(headerSegment.Memory.Span));
         JwtPayload payload = new(partDecoder(payloadSegment.Memory.Span));
 
@@ -1006,6 +1027,14 @@ public static class Jws
         JwtHeader header = new(partDecoder(headerOwner.Memory.Span));
         JwtPayload payload = new(partDecoder(payloadOwner.Memory.Span));
 
+        //RFC 7515 §4 / §4.1.11: a repeated header parameter or an unrecognized critical extension makes
+        //the JWS invalid; return the decoded header/payload for inspection but do not resolve keys or
+        //verify a message we cannot fully process.
+        if(!IsProtectedHeaderAcceptable(headerOwner.Memory.Span))
+        {
+            return new JwsVerificationResult(false, header, payload);
+        }
+
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             parts[0], parts[1], pool, out int signingInputLength);
 
@@ -1024,6 +1053,14 @@ public static class Jws
 
         return new JwsVerificationResult(isValid, header, payload);
     }
+
+
+    //RFC 7515 §4 / §4.1.11: a JWS protected header MUST carry unique parameter names and MUST NOT name a
+    //critical extension this consumer does not understand. Either makes the JWS invalid. Both checks read
+    //the decoded protected-header bytes and never throw, so every verify path can fail closed to false.
+    private static bool IsProtectedHeaderAcceptable(ReadOnlySpan<byte> protectedHeaderJson) =>
+        !JwkJsonReader.HasDuplicateTopLevelKeys(protectedHeaderJson)
+        && JoseCriticalHeaderValidation.IsSatisfied(protectedHeaderJson);
 
 
     /// <summary>

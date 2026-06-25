@@ -15,10 +15,10 @@ namespace Verifiable.OAuth.Federation;
 /// <para>
 /// Direct authorization only. Delegation-based authorization (an issuer
 /// holding the mark under delegation from a Trust Mark Owner per §7.2.2)
-/// is the responsibility of <see cref="TrustMarkDelegationEvaluator"/> in
-/// chunk B.7.4 and surfaces on the separate
+/// is the responsibility of <see cref="TrustMarkDelegationEvaluator"/>
+/// and surfaces on the separate
 /// <see cref="WellKnownFederationClaimIds.TrustMarkDelegationValid"/>
-/// claim. The orchestrator (B.7.5) treats either successful check as
+/// claim. The orchestrator treats either successful check as
 /// sufficient to admit the mark.
 /// </para>
 /// <para>

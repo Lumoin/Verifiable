@@ -11,13 +11,13 @@ namespace Verifiable.Server.Routing;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Phase 4 introduces <see cref="IncomingRequest"/> as the typed envelope
+/// <see cref="IncomingRequest"/> is the typed envelope
 /// the skin produces. The dispatcher reads it once and threads it through
 /// the pipeline by setting it on the context; matchers and handlers read
 /// it through the accessor on this class.
 /// </para>
 /// <para>
-/// During the Phase 4 transition, the existing <c>Path</c>,
+/// The existing <c>Path</c>,
 /// <c>HttpMethod</c>, <c>RouteValues</c>, and <c>Capability</c> accessors
 /// on <see cref="ExchangeContextServerExtensions"/> remain in use by the current
 /// dispatcher and matchers. They are scheduled for removal once matchers

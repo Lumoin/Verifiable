@@ -30,8 +30,8 @@ namespace Verifiable.OAuth.Federation;
 ///   </description></item>
 /// </list>
 /// <para>
-/// Structural classification only — chunk 2 ships the record shape;
-/// chunk 4's <see cref="TrustChainValidator"/> enforces the position
+/// Structural classification only — this record holds the chain shape;
+/// the <see cref="TrustChainValidator"/> enforces the position
 /// invariants and walks the chain for signature verification, expiry
 /// minimisation, cycle detection, and trust-anchor matching.
 /// </para>

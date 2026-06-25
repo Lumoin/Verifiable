@@ -22,7 +22,7 @@ namespace Verifiable.Vcalm;
 /// supporting MAYs. The §C.3 endpoint dispatches to the application's status-update seam
 /// (<see cref="VcalmIntegration.UpdateVcalmCredentialStatusAsync"/>): load the named status-list
 /// credential, set / clear the bit, re-secure and persist. §C.1 composes
-/// <see cref="VcalmStatusListService"/> over the V-2 issuance seam to build a NEW status-list
+/// <see cref="VcalmStatusListService"/> over the issuance seam to build a NEW status-list
 /// credential; §C.2 returns a stored one for verification.
 /// </para>
 /// <para>
@@ -245,7 +245,7 @@ public static class VcalmStatusEndpoints
 
 
     //§C.1 creation: mint the status-list id when absent, compose and secure a new status-list
-    //credential through the V-2 issuance seam, persist it under its id, and return the 201
+    //credential through the issuance seam, persist it under its id, and return the 201
     //{verifiableCredential, id} body.
     private static async ValueTask<ServerHttpResponse> CreateStatusListAsync(
         EndpointServer server,

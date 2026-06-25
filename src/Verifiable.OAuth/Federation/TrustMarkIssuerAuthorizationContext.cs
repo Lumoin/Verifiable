@@ -23,7 +23,7 @@ public sealed record TrustMarkIssuerAuthorizationContext: ClaimContext
     /// <c>"MarkIdNotListed"</c> (the TA declares <c>trust_mark_issuers</c>
     /// but not for this mark id), or <c>"IssuerNotInList"</c> (the mark id
     /// is listed but the issuer is not in its authorized list).
-    /// Direct delegation paths route through chunk B.7.4's 1173 check
+    /// Direct delegation paths route through the delegation evaluator's 1173 check
     /// rather than this one.
     /// </remarks>
     public required string Reason { get; init; }

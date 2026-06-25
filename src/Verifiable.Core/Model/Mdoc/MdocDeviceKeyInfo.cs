@@ -30,7 +30,7 @@ public sealed class MdocDeviceKeyInfo
     /// <param name="deviceKey">The wallet's bound public COSE_Key.</param>
     /// <param name="encodedKeyAuthorizations">
     /// Optional opaque-encoded <c>keyAuthorizations</c> bytes. Structured
-    /// parsing is deferred to the validator chunk.
+    /// parsing is deferred to the validator.
     /// </param>
     /// <param name="encodedKeyInfo">
     /// Optional opaque-encoded <c>keyInfo</c> bytes (integer-keyed map of

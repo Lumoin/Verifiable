@@ -118,6 +118,31 @@ public static class FederationEndpoints
             candidates.Add(BuildFederationHistoricalKeys());
         }
 
+        //The §8.6 trust mark endpoint serves an app-provided Trust Mark JWT
+        //verbatim — the library signs nothing — so like the §8.2 list it needs
+        //only a federation Entity Identifier, not a federation signing key.
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.PublishTrustMark)
+            && ((ClientRecord)registration).FederationEntityId is not null)
+        {
+            candidates.Add(BuildFederationTrustMark());
+        }
+
+        //The §8.5 trust marked entities listing returns an unsigned JSON array,
+        //so it needs only a federation Entity Identifier (mirrors the §8.2 list).
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.PublishTrustMarkedList)
+            && ((ClientRecord)registration).FederationEntityId is not null)
+        {
+            candidates.Add(BuildFederationTrustMarkList());
+        }
+
+        //The §8.4 trust mark status endpoint returns a SIGNED status JWT, so it
+        //needs the federation signing key (like resolve and historical keys).
+        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.PublishTrustMarkStatus)
+            && hasFederationSigning)
+        {
+            candidates.Add(BuildFederationTrustMarkStatus());
+        }
+
         return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>(candidates);
     };
 
@@ -154,6 +179,9 @@ public static class FederationEndpoints
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
                 if(!WellKnownHttpMethods.IsGet(req.Method))
                 {
+                    //§9.1: the Entity Configuration MUST be queried using GET;
+                    //unlike the §8 federation endpoints this public well-known
+                    //document takes no client authentication, so it is GET-only.
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
@@ -331,8 +359,12 @@ public static class FederationEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsGet(req.Method))
+                if(!WellKnownHttpMethods.IsGet(req.Method)
+                    && !WellKnownHttpMethods.IsPost(req.Method))
                 {
+                    //§8.8: a client-authenticated federation request MUST be POST,
+                    //so these endpoints accept GET or POST; the §8.8 gate above
+                    //and BuildInputAsync read their parameters from either source.
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
@@ -369,6 +401,13 @@ public static class FederationEndpoints
                         OAuthErrors.ServerError,
                         "federation_fetch_endpoint requires "
                         + "ClientRecord.FederationEntityId to be set."));
+                }
+
+                ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
+                    WellKnownEndpointNames.FederationFetch, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                if(clientAuthFailure is not null)
+                {
+                    return (null, clientAuthFailure);
                 }
 
                 if(oauth.ResolveSubordinateStatementAsync is null)
@@ -450,11 +489,13 @@ public static class FederationEndpoints
 
                 if(contribution is null)
                 {
-                    //Federation §8.1 does not pin the not-found body shape;
-                    //the library's standard 404 with an empty body is the
-                    //conservative wire choice and matches the rest of the
-                    //AS's not-found path.
-                    return (null, ServerHttpResponse.NotFound());
+                    //Federation §8.9: a 404 carrying the not_found error code in an
+                    //application/json body — the entity does not vouch for the
+                    //requested subject, so the requested Entity Identifier cannot
+                    //be found.
+                    return (null, ServerHttpResponse.NotFound(
+                        OAuthErrors.NotFound,
+                        $"No subordinate statement is available for subject '{subject.Value}'."));
                 }
 
                 KeyId signingKeyId = federationKeys.Current[0];
@@ -503,6 +544,21 @@ public static class FederationEndpoints
 
 
     /// <summary>
+    /// The §8.2.1 subordinate-listing filter parameters this endpoint does not support.
+    /// Their presence MUST be rejected with <c>unsupported_parameter</c> rather than
+    /// silently ignored, which would return an under-filtered membership. The library
+    /// supports only the <c>entity_type</c> filter (parsed below and passed to the
+    /// application delegate).
+    /// </summary>
+    private static readonly string[] UnsupportedSubordinateListingFilters =
+    [
+        FederationEndpointParameterNames.TrustMarked,
+        FederationEndpointParameterNames.TrustMarkType,
+        FederationEndpointParameterNames.Intermediate,
+    ];
+
+
+    /// <summary>
     /// Builds the <c>federation_list_endpoint</c> per
     /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.2">Federation §8.2</see>.
     /// Stateless: a bare <c>GET</c> (optionally carrying an
@@ -535,8 +591,12 @@ public static class FederationEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsGet(req.Method))
+                if(!WellKnownHttpMethods.IsGet(req.Method)
+                    && !WellKnownHttpMethods.IsPost(req.Method))
                 {
+                    //§8.8: a client-authenticated federation request MUST be POST,
+                    //so these endpoints accept GET or POST; the §8.8 gate above
+                    //and BuildInputAsync read their parameters from either source.
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
@@ -572,6 +632,13 @@ public static class FederationEndpoints
                         + "ClientRecord.FederationEntityId to be set."));
                 }
 
+                ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
+                    WellKnownEndpointNames.FederationList, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                if(clientAuthFailure is not null)
+                {
+                    return (null, clientAuthFailure);
+                }
+
                 if(oauth.ResolveSubordinateListAsync is null)
                 {
                     return (null, ServerHttpResponse.ServerError(
@@ -581,18 +648,38 @@ public static class FederationEndpoints
                         + "to be configured."));
                 }
 
-                //Optional §8.2 entity_type filter. A blank value is treated
-                //as absent rather than as a filter that matches nothing.
-                EntityTypeIdentifier? entityTypeFilter = null;
-                if(fields.TryGetValue(FederationEndpointParameterNames.EntityType, out string? entityTypeValue)
-                    && !string.IsNullOrWhiteSpace(entityTypeValue))
+                //§8.2.1: a subordinate-listing filter this endpoint does not support MUST
+                //be rejected with unsupported_parameter (HTTP 400, application/json), not
+                //silently ignored — ignoring it would return a wrongly-unfiltered list.
+                //Checked across every value so a repeated unsupported filter is caught too.
+                foreach(string unsupportedFilter in UnsupportedSubordinateListingFilters)
                 {
-                    entityTypeFilter = new EntityTypeIdentifier(entityTypeValue);
+                    foreach(string filterValue in fields.GetValues(unsupportedFilter))
+                    {
+                        if(!string.IsNullOrWhiteSpace(filterValue))
+                        {
+                            return (null, ServerHttpResponse.BadRequest(
+                                OAuthErrors.UnsupportedParameter,
+                                $"The '{unsupportedFilter}' subordinate-listing filter is not supported by this endpoint."));
+                        }
+                    }
+                }
+
+                //§8.2.1: the entity_type filter MAY repeat; the result must include
+                //subordinates declaring ANY of the listed types. Read every value;
+                //blank ones are treated as absent.
+                List<EntityTypeIdentifier> entityTypeFilters = [];
+                foreach(string entityTypeValue in fields.GetValues(FederationEndpointParameterNames.EntityType))
+                {
+                    if(!string.IsNullOrWhiteSpace(entityTypeValue))
+                    {
+                        entityTypeFilters.Add(new EntityTypeIdentifier(entityTypeValue));
+                    }
                 }
 
                 IReadOnlyList<EntityIdentifier> subordinates =
                     await oauth.ResolveSubordinateListAsync(
-                        entityTypeFilter, registration, context, ct).ConfigureAwait(false)
+                        entityTypeFilters, registration, context, ct).ConfigureAwait(false)
                     ?? [];
 
                 string json = BuildSubordinateListJson(subordinates);
@@ -644,6 +731,42 @@ public static class FederationEndpoints
 
 
     /// <summary>
+    /// Applies the OpenID Federation 1.0 §8.8 client-authentication gate when the
+    /// deployment wired
+    /// <see cref="Server.AuthorizationServerIntegration.AuthenticateFederationClientAsync"/>:
+    /// returns an HTTP 401 <c>invalid_client</c> response when the requester
+    /// fails authentication at this endpoint, or <see langword="null"/> to let the
+    /// request proceed (no delegate, or client authentication not required here).
+    /// </summary>
+    private static async ValueTask<ServerHttpResponse?> EnforceFederationClientAuthenticationAsync(
+        string endpointName,
+        RequestFields fields,
+        ClientRecord registration,
+        ExchangeContext context,
+        EndpointServer server,
+        CancellationToken cancellationToken)
+    {
+        AuthenticateFederationClientDelegate? authenticate = server.OAuth().AuthenticateFederationClientAsync;
+        if(authenticate is null)
+        {
+            return null;
+        }
+
+        FederationClientAuthenticationResult? result = await authenticate(
+            endpointName, fields, registration, context, cancellationToken).ConfigureAwait(false);
+
+        if(result is not null && !result.IsValid)
+        {
+            return ServerHttpResponse.Unauthorized(
+                OAuthErrors.InvalidClient,
+                result.FailureReason ?? "Federation endpoint client authentication failed.");
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
     /// Builds the <c>federation_resolve_endpoint</c> per
     /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3">Federation §8.3</see>.
     /// Stateless: <c>GET ?sub=&lt;subject&gt;[&amp;anchor=&lt;anchor&gt;][&amp;type=&lt;entity-type&gt;]</c>
@@ -675,8 +798,12 @@ public static class FederationEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsGet(req.Method))
+                if(!WellKnownHttpMethods.IsGet(req.Method)
+                    && !WellKnownHttpMethods.IsPost(req.Method))
                 {
+                    //§8.8: a client-authenticated federation request MUST be POST,
+                    //so these endpoints accept GET or POST; the §8.8 gate above
+                    //and BuildInputAsync read their parameters from either source.
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
@@ -710,6 +837,13 @@ public static class FederationEndpoints
                         OAuthErrors.ServerError,
                         "federation_resolve_endpoint requires "
                         + "ClientRecord.FederationEntityId to be set."));
+                }
+
+                ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
+                    WellKnownEndpointNames.FederationResolve, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                if(clientAuthFailure is not null)
+                {
+                    return (null, clientAuthFailure);
                 }
 
                 if(oauth.ResolveSubjectTrustChainAsync is null)
@@ -769,21 +903,25 @@ public static class FederationEndpoints
                         $"sub parameter is not a valid Entity Identifier: {ex.Message}"));
                 }
 
-                //anchor is §8.3-optional — pass it through when present.
-                EntityIdentifier? trustAnchor = null;
-                if(fields.TryGetValue(FederationEndpointParameterNames.Anchor, out string? anchorValue)
-                    && !string.IsNullOrWhiteSpace(anchorValue))
+                //§8.3.1: anchor (the Trust Anchor the resolve endpoint MUST use) is REQUIRED.
+                if(!fields.TryGetValue(FederationEndpointParameterNames.Anchor, out string? anchorValue)
+                    || string.IsNullOrWhiteSpace(anchorValue))
                 {
-                    try
-                    {
-                        trustAnchor = new EntityIdentifier(anchorValue);
-                    }
-                    catch(ArgumentException ex)
-                    {
-                        return (null, ServerHttpResponse.BadRequest(
-                            OAuthErrors.InvalidRequest,
-                            $"anchor parameter is not a valid Entity Identifier: {ex.Message}"));
-                    }
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "Missing anchor query parameter."));
+                }
+
+                EntityIdentifier trustAnchor;
+                try
+                {
+                    trustAnchor = new EntityIdentifier(anchorValue);
+                }
+                catch(ArgumentException ex)
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        $"anchor parameter is not a valid Entity Identifier: {ex.Message}"));
                 }
 
                 //Optional §8.3 type filter (the resolve endpoint's
@@ -802,7 +940,12 @@ public static class FederationEndpoints
 
                 if(contribution is null)
                 {
-                    return (null, ServerHttpResponse.NotFound());
+                    //Federation §8.9: the resolver cannot serve the requested
+                    //subject, returned as a 404 with the invalid_subject error
+                    //code in an application/json body.
+                    return (null, ServerHttpResponse.NotFound(
+                        OAuthErrors.InvalidSubject,
+                        $"The trust chain for subject '{subject.Value}' could not be resolved."));
                 }
 
                 KeyId signingKeyId = federationKeys.Current[0];
@@ -816,7 +959,19 @@ public static class FederationEndpoints
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                //§8.3.2: the Resolve Response exp MUST be the minimum of the source
+                //Trust Chain's exp and any included Trust Mark's exp. The chain and
+                //marks are opaque app-supplied strings, so the application reports
+                //that minimum via ResolveResponseContribution.ExpiresAt; the library
+                //clamps the response to it so a Resolve Response never outlives what
+                //it was derived from. A resolver that omits it falls back to the
+                //configured lifetime ceiling.
                 DateTimeOffset expiresAt = now + oauth.Timings.FederationEntityConfigurationLifetime;
+                if(contribution.ExpiresAt is { } contributionExpiry && contributionExpiry < expiresAt)
+                {
+                    expiresAt = contributionExpiry;
+                }
 
                 string alg = CryptoFormatConversions.DefaultTagToJwaConverter(privateKey.Tag);
 
@@ -884,8 +1039,12 @@ public static class FederationEndpoints
             {
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
-                if(!WellKnownHttpMethods.IsGet(req.Method))
+                if(!WellKnownHttpMethods.IsGet(req.Method)
+                    && !WellKnownHttpMethods.IsPost(req.Method))
                 {
+                    //§8.8: a client-authenticated federation request MUST be POST,
+                    //so these endpoints accept GET or POST; the §8.8 gate above
+                    //and BuildInputAsync read their parameters from either source.
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
                 if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
@@ -915,6 +1074,13 @@ public static class FederationEndpoints
                         OAuthErrors.ServerError,
                         "federation_historical_keys_endpoint requires "
                         + "ClientRecord.FederationEntityId to be set."));
+                }
+
+                ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
+                    WellKnownEndpointNames.FederationHistoricalKeys, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                if(clientAuthFailure is not null)
+                {
+                    return (null, clientAuthFailure);
                 }
 
                 if(oauth.ResolveHistoricalKeysAsync is null)
@@ -960,7 +1126,12 @@ public static class FederationEndpoints
 
                 if(contribution is null)
                 {
-                    return (null, ServerHttpResponse.NotFound());
+                    //Federation §8.9: no historical keys are published for this
+                    //entity, returned as a 404 with the not_found error code in
+                    //an application/json body.
+                    return (null, ServerHttpResponse.NotFound(
+                        OAuthErrors.NotFound,
+                        "No historical keys are available for this entity."));
                 }
 
                 KeyId signingKeyId = federationKeys.Current[0];
@@ -1116,6 +1287,25 @@ public static class FederationEndpoints
                         + "signed Entity Configuration as the request body."));
                 }
 
+                //Federation §12.2.1 — the Registration Request Content-Type MUST be
+                //application/entity-statement+jwt when the body is the RP's Entity
+                //Configuration, or application/trust-chain+json when the body is a
+                //Trust Chain. The endpoint accepts either and hands the body to the
+                //application delegate, which parses the matching shape; any other
+                //Content-Type is a malformed request and is refused before the body
+                //is interpreted.
+                string requestContentType = req.Body.ContentType;
+                if(!WellKnownMediaTypes.Application.IsEntityStatementJwt(requestContentType)
+                    && !WellKnownMediaTypes.Application.IsTrustChainJson(requestContentType))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "Explicit registration request Content-Type must be "
+                        + $"'{WellKnownMediaTypes.Application.EntityStatementJwt}' or "
+                        + $"'{WellKnownMediaTypes.Application.TrustChainJson}' per OpenID Federation 1.0 §12.2.1; "
+                        + $"got '{requestContentType}'."));
+                }
+
                 //The body is the RP's compact JWS Entity Configuration —
                 //ASCII/UTF-8 text. Decode to a string and hand it to the
                 //application, which parses, verifies, and chain-validates it
@@ -1172,6 +1362,469 @@ public static class FederationEndpoints
 
                 return (null, ServerHttpResponse.Ok(
                     compactJws, WellKnownMediaTypes.Application.ExplicitRegistrationResponseJwt));
+            },
+
+            BuildResponse = static (state, _, _) =>
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
+        };
+
+
+    /// <summary>
+    /// Builds the <c>federation_trust_mark_endpoint</c> per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.6">Federation §8.6</see>.
+    /// Stateless: <c>GET ?trust_mark_type=&lt;type&gt;&amp;sub=&lt;subject&gt;</c> arrives,
+    /// the application supplies the Trust Mark JWT it issued for that
+    /// (trust_mark_type, subject) pair via
+    /// <see cref="AuthorizationServerIntegration.ResolveTrustMarkAsync"/>, and the
+    /// dispatcher short-circuits with the JWT served as
+    /// <c>application/trust-mark+jwt</c>.
+    /// </summary>
+    /// <remarks>
+    /// The library serves the application-provided compact JWS verbatim — it
+    /// signs nothing here (the Trust Mark was signed when it was issued),
+    /// preserving the <c>Verifiable.OAuth</c> serialization firewall. When the
+    /// application returns <see langword="null"/> the endpoint responds HTTP 404 —
+    /// the entity has no Trust Mark of the queried type for the queried subject.
+    /// The URL the matcher binds to is whatever
+    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// returned for <see cref="WellKnownEndpointNames.FederationTrustMark"/>; the
+    /// application advertises this URL in its EC metadata
+    /// (<c>federation_entity.federation_trust_mark_endpoint</c>).
+    /// </remarks>
+    private static EndpointCandidate BuildFederationTrustMark() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.FederationTrustMark,
+            HttpMethod = WellKnownHttpMethods.Get,
+            Capability = WellKnownFederationCapabilityIdentifiers.PublishTrustMark,
+            StartsNewFlow = true,
+            Kind = FlowKind.Stateless,
+
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsGet(req.Method)
+                    && !WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    //§8.8: a client-authenticated federation request MUST be POST,
+                    //so these endpoints accept GET or POST; the §8.8 gate above
+                    //and BuildInputAsync read their parameters from either source.
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                //trust_mark_type and sub are §8.6-required, but a missing one is
+                //a malformed request (400), not a non-match — matching on
+                //method + path and validating the parameters in BuildInputAsync
+                //gives the conformant 400 rather than a misleading 404.
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+
+                ClientRecord? registration = context.ClientRegistration;
+                if(registration is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "Client registration not found in context."));
+                }
+
+                if(((ClientRecord)registration).FederationEntityId is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "federation_trust_mark_endpoint requires "
+                        + "ClientRecord.FederationEntityId to be set."));
+                }
+
+                ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
+                    WellKnownEndpointNames.FederationTrustMark, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                if(clientAuthFailure is not null)
+                {
+                    return (null, clientAuthFailure);
+                }
+
+                if(oauth.ResolveTrustMarkAsync is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "federation_trust_mark_endpoint requires "
+                        + "AuthorizationServerIntegration.ResolveTrustMarkAsync "
+                        + "to be configured."));
+                }
+
+                if(!fields.TryGetValue(FederationEndpointParameterNames.TrustMarkType, out string? trustMarkTypeValue)
+                    || string.IsNullOrWhiteSpace(trustMarkTypeValue))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "Missing trust_mark_type query parameter."));
+                }
+
+                if(!fields.TryGetValue(FederationEndpointParameterNames.Sub, out string? subjectValue)
+                    || string.IsNullOrWhiteSpace(subjectValue))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "Missing sub query parameter."));
+                }
+
+                EntityTypeIdentifier trustMarkType = new(trustMarkTypeValue);
+
+                EntityIdentifier subject;
+                try
+                {
+                    subject = new EntityIdentifier(subjectValue);
+                }
+                catch(ArgumentException ex)
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        $"sub parameter is not a valid Entity Identifier: {ex.Message}"));
+                }
+
+                string? trustMark = await oauth.ResolveTrustMarkAsync(
+                    trustMarkType, subject, registration, context, ct).ConfigureAwait(false);
+
+                if(trustMark is null)
+                {
+                    //Federation §8.9: the entity has no Trust Mark of the queried
+                    //type for the queried subject, returned as a 404 with the
+                    //not_found error code in an application/json body.
+                    return (null, ServerHttpResponse.NotFound(
+                        OAuthErrors.NotFound,
+                        $"No trust mark of type '{trustMarkType.Value}' is available for subject '{subject.Value}'."));
+                }
+
+                return (null, ServerHttpResponse.Ok(
+                    trustMark, WellKnownMediaTypes.Application.TrustMarkJwt));
+            },
+
+            BuildResponse = static (state, _, _) =>
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
+        };
+
+
+    /// <summary>
+    /// Builds the <c>federation_trust_mark_list_endpoint</c> per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.5">Federation §8.5</see>.
+    /// Stateless: <c>GET ?trust_mark_type=&lt;type&gt;[&amp;sub=&lt;subject&gt;]</c> arrives,
+    /// the application supplies the entities holding that Trust Mark type via
+    /// <see cref="AuthorizationServerIntegration.ResolveTrustMarkedListAsync"/>,
+    /// and the dispatcher short-circuits with the §8.5 unsigned JSON array of
+    /// Entity Identifier strings.
+    /// </summary>
+    /// <remarks>
+    /// Like the §8.2 <c>federation_list_endpoint</c>, the §8.5 response is
+    /// <em>unsigned</em> — it states only which entities hold the Trust Mark, not
+    /// any assertion about a subject — so the endpoint takes no federation
+    /// signing key, and reuses the same hand-rolled JSON array serialiser. The
+    /// optional <c>sub</c> parameter narrows the answer to a single subject. The
+    /// URL the matcher binds to is whatever
+    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// returned for <see cref="WellKnownEndpointNames.FederationTrustMarkList"/>;
+    /// the application advertises this URL in its EC metadata
+    /// (<c>federation_entity.federation_trust_mark_list_endpoint</c>).
+    /// </remarks>
+    private static EndpointCandidate BuildFederationTrustMarkList() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.FederationTrustMarkList,
+            HttpMethod = WellKnownHttpMethods.Get,
+            Capability = WellKnownFederationCapabilityIdentifiers.PublishTrustMarkedList,
+            StartsNewFlow = true,
+            Kind = FlowKind.Stateless,
+
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsGet(req.Method)
+                    && !WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    //§8.8: a client-authenticated federation request MUST be POST,
+                    //so these endpoints accept GET or POST; the §8.8 gate above
+                    //and BuildInputAsync read their parameters from either source.
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                //trust_mark_type is §8.5-required, but a missing one is a
+                //malformed request (400), not a non-match — matching on
+                //method + path and validating it in BuildInputAsync gives the
+                //conformant 400 rather than a misleading 404.
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+
+                ClientRecord? registration = context.ClientRegistration;
+                if(registration is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "Client registration not found in context."));
+                }
+
+                if(((ClientRecord)registration).FederationEntityId is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "federation_trust_mark_list_endpoint requires "
+                        + "ClientRecord.FederationEntityId to be set."));
+                }
+
+                ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
+                    WellKnownEndpointNames.FederationTrustMarkList, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                if(clientAuthFailure is not null)
+                {
+                    return (null, clientAuthFailure);
+                }
+
+                if(oauth.ResolveTrustMarkedListAsync is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "federation_trust_mark_list_endpoint requires "
+                        + "AuthorizationServerIntegration.ResolveTrustMarkedListAsync "
+                        + "to be configured."));
+                }
+
+                if(!fields.TryGetValue(FederationEndpointParameterNames.TrustMarkType, out string? trustMarkTypeValue)
+                    || string.IsNullOrWhiteSpace(trustMarkTypeValue))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "Missing trust_mark_type query parameter."));
+                }
+
+                EntityTypeIdentifier trustMarkType = new(trustMarkTypeValue);
+
+                //Optional §8.5 sub filter. A blank value is treated as absent
+                //rather than as a filter that matches nothing.
+                EntityIdentifier? subjectFilter = null;
+                if(fields.TryGetValue(FederationEndpointParameterNames.Sub, out string? subjectValue)
+                    && !string.IsNullOrWhiteSpace(subjectValue))
+                {
+                    try
+                    {
+                        subjectFilter = new EntityIdentifier(subjectValue);
+                    }
+                    catch(ArgumentException ex)
+                    {
+                        return (null, ServerHttpResponse.BadRequest(
+                            OAuthErrors.InvalidRequest,
+                            $"sub parameter is not a valid Entity Identifier: {ex.Message}"));
+                    }
+                }
+
+                IReadOnlyList<EntityIdentifier> subjects =
+                    await oauth.ResolveTrustMarkedListAsync(
+                        trustMarkType, subjectFilter, registration, context, ct).ConfigureAwait(false)
+                    ?? [];
+
+                string json = BuildSubordinateListJson(subjects);
+
+                return (null, ServerHttpResponse.Ok(
+                    json, WellKnownMediaTypes.Application.Json));
+            },
+
+            BuildResponse = static (state, _, _) =>
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
+        };
+
+
+    /// <summary>
+    /// Builds the <c>federation_trust_mark_status_endpoint</c> per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.4">Federation §8.4</see>.
+    /// Stateless: the requester <c>POST</c>s an <c>application/x-www-form-urlencoded</c>
+    /// body carrying a <c>trust_mark</c> parameter (the Trust Mark JWT to check),
+    /// the application supplies the status via
+    /// <see cref="AuthorizationServerIntegration.ResolveTrustMarkStatusAsync"/>,
+    /// the library assembles and signs the §8.4 status JWT
+    /// (<c>typ = trust-mark-status-response+jwt</c>) with the entity's federation
+    /// signing key, and the dispatcher short-circuits with it.
+    /// </summary>
+    /// <remarks>
+    /// When the application returns <see langword="null"/> the endpoint responds
+    /// HTTP 404 — the issuer does not know the queried Trust Mark, mirroring the
+    /// <c>federation_resolve_endpoint</c> null-contribution contract. The URL the
+    /// matcher binds to is whatever
+    /// <see cref="AuthorizationServerIntegration.ResolveEndpointUriAsync"/>
+    /// returned for <see cref="WellKnownEndpointNames.FederationTrustMarkStatus"/>;
+    /// the application advertises this URL in its EC metadata
+    /// (<c>federation_entity.federation_trust_mark_status_endpoint</c>).
+    /// </remarks>
+    private static EndpointCandidate BuildFederationTrustMarkStatus() =>
+        new()
+        {
+            Name = WellKnownEndpointNames.FederationTrustMarkStatus,
+            HttpMethod = WellKnownHttpMethods.Post,
+            Capability = WellKnownFederationCapabilityIdentifiers.PublishTrustMarkStatus,
+            StartsNewFlow = true,
+            Kind = FlowKind.Stateless,
+
+            MatchesRequest = static (fields, context, endpoint, ct) =>
+            {
+                IncomingRequest? req = context.IncomingRequest;
+                if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }
+                if(!WellKnownHttpMethods.IsPost(req.Method))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+                if(!PathEquals.Equals(req.Path, endpoint.ResolvedUri.AbsolutePath))
+                {
+                    return ValueTask.FromResult<MatchPayload?>(null);
+                }
+
+                //trust_mark is §8.4-required, but a missing one is a malformed
+                //request (400), not a non-match — matching on method + path and
+                //validating it in BuildInputAsync gives the conformant 400.
+                return ValueTask.FromResult<MatchPayload?>(MatchPayload.Empty);
+            },
+
+            BuildInputAsync = static async (fields, context, currentState, ct) =>
+            {
+                EndpointServer server = context.Server!;
+                var oauth = server.OAuth();
+
+                ClientRecord? registration = context.ClientRegistration;
+                if(registration is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "Client registration not found in context."));
+                }
+
+                if(((ClientRecord)registration).FederationEntityId is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "federation_trust_mark_status_endpoint requires "
+                        + "ClientRecord.FederationEntityId to be set."));
+                }
+
+                ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
+                    WellKnownEndpointNames.FederationTrustMarkStatus, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                if(clientAuthFailure is not null)
+                {
+                    return (null, clientAuthFailure);
+                }
+
+                if(oauth.ResolveTrustMarkStatusAsync is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "federation_trust_mark_status_endpoint requires "
+                        + "AuthorizationServerIntegration.ResolveTrustMarkStatusAsync "
+                        + "to be configured."));
+                }
+
+                if(!((ClientRecord)registration).SigningKeys.TryGetValue(
+                        KeyUsageContext.FederationEntitySignature, out SigningKeySet? federationKeys)
+                    || federationKeys.Current.IsEmpty)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "federation_trust_mark_status_endpoint requires "
+                        + "a SigningKeySet under KeyUsageContext.FederationEntitySignature "
+                        + "with a non-empty Current list."));
+                }
+
+                if(oauth.Cryptography.SigningKeyResolver is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "federation_trust_mark_status_endpoint requires "
+                        + "AuthorizationServerCryptography.SigningKeyResolver to be configured."));
+                }
+
+                EncodeDelegate? base64UrlEncoder = oauth.Codecs.Encoder;
+                if(base64UrlEncoder is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        "federation_trust_mark_status_endpoint requires "
+                        + "AuthorizationServerCodecs.Encoder to be configured."));
+                }
+
+                if(!fields.TryGetValue(FederationEndpointParameterNames.TrustMark, out string? trustMarkValue)
+                    || string.IsNullOrWhiteSpace(trustMarkValue))
+                {
+                    return (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "Missing trust_mark form parameter."));
+                }
+
+                string? status = await oauth.ResolveTrustMarkStatusAsync(
+                    trustMarkValue, registration, context, ct).ConfigureAwait(false);
+
+                if(status is null)
+                {
+                    //Federation §8.9: the issuer does not know the queried Trust
+                    //Mark, returned as a 404 with the not_found error code in an
+                    //application/json body.
+                    return (null, ServerHttpResponse.NotFound(
+                        OAuthErrors.NotFound,
+                        "The issuer does not know the queried trust mark."));
+                }
+
+                KeyId signingKeyId = federationKeys.Current[0];
+                PrivateKeyMemory? privateKey = await oauth.Cryptography.SigningKeyResolver(
+                    signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
+                if(privateKey is null)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError,
+                        $"Federation signing key '{signingKeyId.Value}' could not be resolved."));
+                }
+
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                string alg = CryptoFormatConversions.DefaultTagToJwaConverter(privateKey.Tag);
+
+                Dictionary<string, object> headerDict =
+                    EntityStatementJsonBuilder.BuildHeader(
+                        signingKeyId.Value, alg, WellKnownFederationMediaTypes.TrustMarkStatusResponseJwt);
+
+                //§8.4: iss = this entity, iat = now, trust_mark = the queried JWT,
+                //status = the issuer's answer. Built by hand to honour the
+                //Verifiable.OAuth serialization firewall — no System.Text.Json.
+                Dictionary<string, object> payloadDict = new(StringComparer.Ordinal)
+                {
+                    [WellKnownJwtClaimNames.Iss] = ((ClientRecord)registration).FederationEntityId!.ToString(),
+                    [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
+                    [WellKnownFederationClaimNames.TrustMark] = trustMarkValue,
+                    [WellKnownFederationClaimNames.Status] = status
+                };
+
+                JwsMessage jwsMessage = await Jws.SignAsync(
+                    headerDict,
+                    payloadDict,
+                    EntityStatementJsonBuilder.EncodeJwtPart,
+                    base64UrlEncoder,
+                    privateKey,
+                    System.Buffers.MemoryPool<byte>.Shared,
+                    ct).ConfigureAwait(false);
+
+                string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
+
+                return (null, ServerHttpResponse.Ok(
+                    compactJws, WellKnownMediaTypes.Application.TrustMarkStatusResponseJwt));
             },
 
             BuildResponse = static (state, _, _) =>

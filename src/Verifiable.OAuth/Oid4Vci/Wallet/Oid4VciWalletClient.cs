@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Server;
 
 namespace Verifiable.OAuth.Oid4Vci.Wallet;
 
@@ -183,6 +184,52 @@ public sealed class Oid4VciWalletClient
 
 
     /// <summary>
+    /// Drives the Pre-Authorized Code issuance flow from a §4 <see cref="CredentialOffer"/> and returns
+    /// the full §8.3 outcome (every batch Credential, the §11 <c>notification_id</c>, or a §9 deferral).
+    /// The offer MUST carry a <see cref="CredentialOffer.PreAuthorizedCodeGrant"/>.
+    /// </summary>
+    /// <param name="offer">The Credential Offer the Wallet "scanned".</param>
+    /// <param name="credentialConfigurationId">The Credential Configuration to request (one of the offer's ids).</param>
+    /// <param name="holderPrivate">The holder's signing private key for the §7.2.1 proof.</param>
+    /// <param name="holderPublic">The holder's public key projected into the proof header.</param>
+    /// <param name="endpoints">The resolved Token / Nonce / Credential endpoint URLs.</param>
+    /// <param name="transactionCode">The §6.1 <c>tx_code</c>, or <see langword="null"/> when none is required.</param>
+    /// <param name="responseEncryption">The §8.2 <c>credential_response_encryption</c> ask, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The full Credential Response outcome.</returns>
+    public async ValueTask<CredentialIssuanceResult> IssuePreAuthorizedDetailedAsync(
+        CredentialOffer offer,
+        string credentialConfigurationId,
+        PrivateKeyMemory holderPrivate,
+        PublicKeyMemory holderPublic,
+        Oid4VciIssuanceEndpoints endpoints,
+        string? transactionCode,
+        CredentialResponseEncryption? responseEncryption,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(offer);
+
+        if(offer.PreAuthorizedCodeGrant is not PreAuthorizedCodeOfferGrant grant)
+        {
+            throw new InvalidOperationException(
+                "The Credential Offer carries no urn:ietf:params:oauth:grant-type:pre-authorized_code "
+                + "grant; IssuePreAuthorizedDetailedAsync requires the Pre-Authorized Code Flow.");
+        }
+
+        return await IssuePreAuthorizedDetailedAsync(
+            grant,
+            offer.CredentialIssuer,
+            credentialConfigurationId,
+            holderPrivate,
+            holderPublic,
+            endpoints,
+            transactionCode,
+            responseEncryption,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// Drives the Pre-Authorized Code issuance flow from an already-parsed grant
     /// and the Credential Issuer identifier (the proof <c>aud</c>), returning the
     /// issued Credential string.
@@ -196,8 +243,69 @@ public sealed class Oid4VciWalletClient
     /// <param name="transactionCode">The §6.1 <c>tx_code</c>, or <see langword="null"/>.</param>
     /// <param name="responseEncryption">The §8.2 response-encryption ask, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The issued Credential string.</returns>
+    /// <returns>The issued Credential string (the §8.3 <c>credentials[0].credential</c>).</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the issuance was deferred or produced no Credential — use
+    /// <see cref="IssuePreAuthorizedDetailedAsync(PreAuthorizedCodeOfferGrant, Uri, string, PrivateKeyMemory, PublicKeyMemory, Oid4VciIssuanceEndpoints, string?, CredentialResponseEncryption?, CancellationToken)"/>
+    /// to handle a §9 deferral, a §8.2 batch, or the §11 <c>notification_id</c>.
+    /// </exception>
     public async ValueTask<string> IssuePreAuthorizedAsync(
+        PreAuthorizedCodeOfferGrant grant,
+        Uri credentialIssuer,
+        string credentialConfigurationId,
+        PrivateKeyMemory holderPrivate,
+        PublicKeyMemory holderPublic,
+        Oid4VciIssuanceEndpoints endpoints,
+        string? transactionCode,
+        CredentialResponseEncryption? responseEncryption,
+        CancellationToken cancellationToken)
+    {
+        CredentialIssuanceResult result = await IssuePreAuthorizedDetailedAsync(
+            grant,
+            credentialIssuer,
+            credentialConfigurationId,
+            holderPrivate,
+            holderPublic,
+            endpoints,
+            transactionCode,
+            responseEncryption,
+            cancellationToken).ConfigureAwait(false);
+
+        if(result.IsDeferred)
+        {
+            throw new InvalidOperationException(
+                "§9 the issuance was deferred (transaction_id "
+                + $"'{result.TransactionId}'); IssuePreAuthorizedAsync returns a single Credential. "
+                + "Use IssuePreAuthorizedDetailedAsync and poll with PollDeferredCredentialAsync.");
+        }
+
+        if(!result.IsIssued)
+        {
+            throw new InvalidOperationException(
+                "§8.3 the Credential Response carried no credentials[0].credential.");
+        }
+
+        return result.Credentials[0];
+    }
+
+
+    /// <summary>
+    /// Drives the Pre-Authorized Code issuance flow from an already-parsed grant and the Credential
+    /// Issuer identifier (the proof <c>aud</c>), returning the full §8.3 outcome: every issued
+    /// Credential of a §8.2 batch, the §11 <c>notification_id</c>, or a §9 deferral's
+    /// <c>transaction_id</c>.
+    /// </summary>
+    /// <param name="grant">The offer's Pre-Authorized Code grant carrying the <c>pre-authorized_code</c>.</param>
+    /// <param name="credentialIssuer">The Credential Issuer identifier — the holder proof's <c>aud</c>.</param>
+    /// <param name="credentialConfigurationId">The Credential Configuration to request.</param>
+    /// <param name="holderPrivate">The holder's signing private key for the §7.2.1 proof.</param>
+    /// <param name="holderPublic">The holder's public key projected into the proof header.</param>
+    /// <param name="endpoints">The resolved Token / Nonce / Credential endpoint URLs.</param>
+    /// <param name="transactionCode">The §6.1 <c>tx_code</c>, or <see langword="null"/>.</param>
+    /// <param name="responseEncryption">The §8.2 response-encryption ask, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The full Credential Response outcome.</returns>
+    public async ValueTask<CredentialIssuanceResult> IssuePreAuthorizedDetailedAsync(
         PreAuthorizedCodeOfferGrant grant,
         Uri credentialIssuer,
         string credentialConfigurationId,
@@ -251,9 +359,12 @@ public sealed class Oid4VciWalletClient
     }
 
 
-    //§6.1.1 Pre-Authorized Code Token Request: grant_type=...pre-authorized_code,
-    //the code, and (when required) tx_code, as form fields. Parses access_token
-    //and token_type off the JSON Token Response.
+    /// <summary>
+    /// Sends the <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1.1">§6.1.1</see>
+    /// Pre-Authorized Code Token Request — <c>grant_type=...pre-authorized_code</c>, the code, and
+    /// (when required) <c>tx_code</c> as form fields — and parses <c>access_token</c> and
+    /// <c>token_type</c> off the JSON Token Response.
+    /// </summary>
     private async ValueTask<(string AccessToken, string TokenType)> RequestAccessTokenAsync(
         string preAuthorizedCode,
         string? transactionCode,
@@ -293,8 +404,11 @@ public sealed class Oid4VciWalletClient
     }
 
 
-    //§7.1 Nonce Request: an authorized POST with no body; reads c_nonce off the
-    //JSON Nonce Response.
+    /// <summary>
+    /// Sends the <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-7.1">§7.1</see>
+    /// Nonce Request — an authorized POST with no body — and reads <c>c_nonce</c> off the JSON Nonce
+    /// Response.
+    /// </summary>
     private async ValueTask<string> RequestNonceAsync(
         string accessToken,
         string tokenType,
@@ -319,10 +433,16 @@ public sealed class Oid4VciWalletClient
     }
 
 
-    //§8.2 Credential Request: JSON body { credential_configuration_id,
-    //proofs:{jwt:[proof]}, credential_response_encryption? }. Reads
-    //credentials[0].credential off the (optionally decrypted) response.
-    private async ValueTask<string> RequestCredentialAsync(
+    /// <summary>
+    /// Sends the <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">§8.2</see>
+    /// Credential Request — JSON body <c>{ credential_configuration_id, proofs:{jwt:[proof]},
+    /// credential_response_encryption? }</c> — and parses the full
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3">§8.3</see>
+    /// response (every batch credential and the <c>notification_id</c>), or the
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-9.2">§9.2</see>
+    /// HTTP 202 deferral carrying <c>transaction_id</c> + <c>interval</c>.
+    /// </summary>
+    private async ValueTask<CredentialIssuanceResult> RequestCredentialAsync(
         string accessToken,
         string tokenType,
         string credentialConfigurationId,
@@ -331,27 +451,10 @@ public sealed class Oid4VciWalletClient
         Uri credentialEndpoint,
         CancellationToken cancellationToken)
     {
-        string requestBody = BuildCredentialRequestBody(
-            credentialConfigurationId, proofJwt, responseEncryption);
-
-        //§8.2: "Credential Request encryption MUST be used if the
-        //credential_response_encryption parameter is included, to prevent it being
-        //substituted by an attacker." So when the Wallet asks for an encrypted
-        //response it MUST send the request itself encrypted — the EncryptRequest
-        //seam wraps the body as a JWE to the Issuer's request-encryption key.
-        if(responseEncryption is not null)
-        {
-            if(configuration.EncryptRequest is null)
-            {
-                throw new InvalidOperationException(
-                    "The Credential Request asks for §10 response encryption, so §8.2 requires the "
-                    + "request itself to be encrypted, but the wallet configuration has no "
-                    + "EncryptRequest delegate. Wire Oid4VciWalletConfiguration.EncryptRequest to "
-                    + "encrypt the request to the Issuer's credential_request_encryption key.");
-            }
-
-            requestBody = await configuration.EncryptRequest(requestBody, cancellationToken).ConfigureAwait(false);
-        }
+        string requestBody = await EncryptRequestIfAskedAsync(
+            BuildCredentialRequestBody(credentialConfigurationId, proofJwt, responseEncryption),
+            responseEncryption,
+            cancellationToken).ConfigureAwait(false);
 
         IReadOnlyDictionary<string, string> headers = await ComposeAuthorizationHeadersAsync(
             accessToken, tokenType, credentialEndpoint, cancellationToken).ConfigureAwait(false);
@@ -359,59 +462,322 @@ public sealed class Oid4VciWalletClient
         (int statusCode, string body, string? contentType) = await configuration.SendJsonPost(
             credentialEndpoint, requestBody, headers, cancellationToken).ConfigureAwait(false);
 
+        //§8.3: a deferral answers HTTP 202 with transaction_id + interval (plaintext metadata, not the
+        //encrypted credential payload); the Wallet later polls the Deferred Credential Endpoint.
+        if(statusCode == HttpAcceptedStatusCode)
+        {
+            return ParseDeferredPending(body, accessToken, tokenType, credentialEndpoint);
+        }
+
         if(statusCode is < 200 or >= 300)
         {
             throw new InvalidOperationException(
                 $"§8 Credential Request to {credentialEndpoint} returned HTTP {statusCode}: {body}");
         }
 
-        //§10: when the Wallet asked for encryption the response is a JWE with
-        //media type application/jwt — decrypt it to the plaintext JSON before
-        //reading the credential. The application owns the decryption composition.
-        string responseJson = body;
-        if(responseEncryption is not null)
-        {
-            if(configuration.DecryptResponse is null)
-            {
-                throw new InvalidOperationException(
-                    "The Credential Request asked for §10 response encryption but the wallet "
-                    + "configuration has no DecryptResponse delegate. Wire "
-                    + "Oid4VciWalletConfiguration.DecryptResponse to read an encrypted response.");
-            }
+        string responseJson = await DecryptResponseIfAskedAsync(
+            body, contentType, responseEncryption, cancellationToken).ConfigureAwait(false);
 
-            //§8.3 / §9.2: an encrypted response is application/jwt regardless of
-            //content; refuse a clear answer to an encryption ask rather than
-            //misreading it.
-            if(contentType is not null
-                && !contentType.Contains(WellKnownMediaTypes.Application.Jwt, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"§10 encryption was requested but the response Content-Type was '{contentType}', "
-                    + $"not '{WellKnownMediaTypes.Application.Jwt}'. The Issuer did not encrypt the response.");
-            }
-
-            responseJson = await configuration.DecryptResponse(body, cancellationToken).ConfigureAwait(false);
-        }
-
-        //§8.3 credentials is an array of objects, each carrying a credential
-        //member; read the first object's credential string. JwkJsonReader's
-        //array-of-objects scanner matches the {"credentials":[{"credential":...}]}
-        //shape exactly, keeping the wallet free of System.Text.Json.
-        return JwkJsonReader.ExtractNestedStringValueFromArray(
-            Encoding.UTF8.GetBytes(responseJson),
-            Oid4VciCredentialParameterNames.CredentialsUtf8,
-            Oid4VciCredentialParameterNames.CredentialUtf8)
-            ?? throw new InvalidOperationException(
-                $"§8 Credential Response from {credentialEndpoint} carried no credentials[0].credential. "
-                + $"Body: {responseJson}");
+        return ParseIssuedCredentials(responseJson, accessToken, tokenType, credentialEndpoint);
     }
 
 
-    //Composes the request headers carrying the access-token authorization.
-    //RFC 6750: a Bearer token rides Authorization: Bearer <token>. RFC 9449
-    //§7.1: a DPoP-bound token rides Authorization: DPoP <token> alongside a
-    //fresh DPoP proof in the DPoP header — wired only when the token is
-    //DPoP-bound and a proof producer is configured.
+    /// <summary>
+    /// Polls the OID4VCI 1.0 §9 Deferred Credential Endpoint for a previously-deferred issuance,
+    /// presenting the <c>transaction_id</c> a prior <see cref="CredentialIssuanceResult"/> carried.
+    /// Returns the issued Credentials when ready (§9.2 HTTP 200), or a still-deferred result echoing the
+    /// <c>transaction_id</c> and <c>interval</c> when the Issuer answers §9.2 HTTP 202.
+    /// </summary>
+    /// <param name="transactionId">The §9.1 <c>transaction_id</c> from the deferred issuance.</param>
+    /// <param name="accessToken">The issuance access token (from <see cref="CredentialIssuanceResult.AccessToken"/>).</param>
+    /// <param name="tokenType">The access token's type (<c>Bearer</c> or <c>DPoP</c>).</param>
+    /// <param name="deferredCredentialEndpoint">The §9 Deferred Credential Endpoint URL.</param>
+    /// <param name="responseEncryption">The §8.2 response-encryption ask carried over from issuance, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The issued Credentials, or a still-deferred result to poll again after the interval.</returns>
+    public async ValueTask<CredentialIssuanceResult> PollDeferredCredentialAsync(
+        string transactionId,
+        string accessToken,
+        string tokenType,
+        Uri deferredCredentialEndpoint,
+        CredentialResponseEncryption? responseEncryption,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(transactionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tokenType);
+        ArgumentNullException.ThrowIfNull(deferredCredentialEndpoint);
+
+        string requestBody = await EncryptRequestIfAskedAsync(
+            BuildDeferredRequestBody(transactionId), responseEncryption, cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyDictionary<string, string> headers = await ComposeAuthorizationHeadersAsync(
+            accessToken, tokenType, deferredCredentialEndpoint, cancellationToken).ConfigureAwait(false);
+
+        (int statusCode, string body, string? contentType) = await configuration.SendJsonPost(
+            deferredCredentialEndpoint, requestBody, headers, cancellationToken).ConfigureAwait(false);
+
+        //§9.2: still pending answers HTTP 202 echoing the transaction_id with a fresh interval.
+        if(statusCode == HttpAcceptedStatusCode)
+        {
+            return ParseDeferredPending(body, accessToken, tokenType, deferredCredentialEndpoint);
+        }
+
+        if(statusCode is < 200 or >= 300)
+        {
+            throw new InvalidOperationException(
+                $"§9 Deferred Credential Request to {deferredCredentialEndpoint} returned HTTP {statusCode}: {body}");
+        }
+
+        string responseJson = await DecryptResponseIfAskedAsync(
+            body, contentType, responseEncryption, cancellationToken).ConfigureAwait(false);
+
+        return ParseIssuedCredentials(responseJson, accessToken, tokenType, deferredCredentialEndpoint);
+    }
+
+
+    /// <summary>
+    /// Sends an OID4VCI 1.0 §11 Notification Request reporting what became of the issued Credentials,
+    /// identified by the <c>notification_id</c> a <see cref="CredentialIssuanceResult"/> carried.
+    /// </summary>
+    /// <param name="notificationId">The §8.3 <c>notification_id</c> from the issuance.</param>
+    /// <param name="notificationEvent">The §11.1 <c>event</c> — one of <see cref="Oid4VciNotificationEvents"/>.</param>
+    /// <param name="accessToken">The issuance access token (from <see cref="CredentialIssuanceResult.AccessToken"/>).</param>
+    /// <param name="tokenType">The access token's type (<c>Bearer</c> or <c>DPoP</c>).</param>
+    /// <param name="notificationEndpoint">The §11 Notification Endpoint URL.</param>
+    /// <param name="eventDescription">The §11.1 <c>event_description</c> (OPTIONAL human-readable text), or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the Notification Endpoint returns a non-success status (§11.3).</exception>
+    public async ValueTask SendCredentialNotificationAsync(
+        string notificationId,
+        string notificationEvent,
+        string accessToken,
+        string tokenType,
+        Uri notificationEndpoint,
+        string? eventDescription,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(notificationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(notificationEvent);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tokenType);
+        ArgumentNullException.ThrowIfNull(notificationEndpoint);
+
+        string requestBody = BuildNotificationRequestBody(notificationId, notificationEvent, eventDescription);
+
+        IReadOnlyDictionary<string, string> headers = await ComposeAuthorizationHeadersAsync(
+            accessToken, tokenType, notificationEndpoint, cancellationToken).ConfigureAwait(false);
+
+        (int statusCode, string body, _) = await configuration.SendJsonPost(
+            notificationEndpoint, requestBody, headers, cancellationToken).ConfigureAwait(false);
+
+        //§11.2: success is HTTP 204 No Content; §11.3 maps failures to error bodies.
+        if(statusCode is < 200 or >= 300)
+        {
+            throw new InvalidOperationException(
+                $"§11 Notification Request to {notificationEndpoint} returned HTTP {statusCode}: {body}");
+        }
+    }
+
+
+    /// <summary>
+    /// Encrypts the request body when response encryption was asked for.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">§8.2</see>:
+    /// "Credential Request encryption MUST be used if the credential_response_encryption parameter is
+    /// included, to prevent it being substituted by an attacker." The <c>EncryptRequest</c> seam wraps
+    /// the body as a JWE to the Issuer's request-encryption key.
+    /// </summary>
+    private async ValueTask<string> EncryptRequestIfAskedAsync(
+        string requestBody,
+        CredentialResponseEncryption? responseEncryption,
+        CancellationToken cancellationToken)
+    {
+        if(responseEncryption is null)
+        {
+            return requestBody;
+        }
+
+        if(configuration.EncryptRequest is null)
+        {
+            throw new InvalidOperationException(
+                "The request asks for §10 response encryption, so §8.2 requires the request itself to "
+                + "be encrypted, but the wallet configuration has no EncryptRequest delegate. Wire "
+                + "Oid4VciWalletConfiguration.EncryptRequest to encrypt the request to the Issuer's "
+                + "credential_request_encryption key.");
+        }
+
+        return await configuration.EncryptRequest(requestBody, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Decrypts the response when encryption was asked for. Per
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-10">§10</see>
+    /// an encrypted response is a JWE with media type <c>application/jwt</c>; this decrypts it to the
+    /// plaintext JSON before the credentials are read. The application owns the decryption composition.
+    /// </summary>
+    private async ValueTask<string> DecryptResponseIfAskedAsync(
+        string body,
+        string? contentType,
+        CredentialResponseEncryption? responseEncryption,
+        CancellationToken cancellationToken)
+    {
+        if(responseEncryption is null)
+        {
+            return body;
+        }
+
+        if(configuration.DecryptResponse is null)
+        {
+            throw new InvalidOperationException(
+                "The request asked for §10 response encryption but the wallet configuration has no "
+                + "DecryptResponse delegate. Wire Oid4VciWalletConfiguration.DecryptResponse to read an "
+                + "encrypted response.");
+        }
+
+        //§8.3 / §9.2: an encrypted response is application/jwt regardless of content; refuse a clear
+        //answer to an encryption ask rather than misreading it.
+        if(contentType is not null
+            && !contentType.Contains(WellKnownMediaTypes.Application.Jwt, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"§10 encryption was requested but the response Content-Type was '{contentType}', "
+                + $"not '{WellKnownMediaTypes.Application.Jwt}'. The Issuer did not encrypt the response.");
+        }
+
+        return await configuration.DecryptResponse(body, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Parses an issued-credentials response.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3">§8.3</see>:
+    /// <c>credentials</c> is an array of objects each carrying a <c>credential</c> member; this reads
+    /// EVERY object's credential string (a §8.2 batch carries more than one) plus the optional
+    /// <c>notification_id</c>. The <see cref="JwkJsonReader"/> array-of-objects scanner keeps the wallet
+    /// free of <c>System.Text.Json</c>.
+    /// </summary>
+    private static CredentialIssuanceResult ParseIssuedCredentials(
+        string responseJson,
+        string accessToken,
+        string tokenType,
+        Uri endpoint)
+    {
+        ReadOnlySpan<byte> json = Encoding.UTF8.GetBytes(responseJson);
+
+        List<string>? credentials = JwkJsonReader.ExtractNestedStringValuesFromArray(
+            json,
+            Oid4VciCredentialParameterNames.CredentialsUtf8,
+            Oid4VciCredentialParameterNames.CredentialUtf8);
+
+        if(credentials is null || credentials.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"§8 Credential Response from {endpoint} carried no credentials[].credential. "
+                + $"Body: {responseJson}");
+        }
+
+        string? notificationId = JwkJsonReader.ExtractStringValue(
+            json, Oid4VciCredentialParameterNames.NotificationIdUtf8);
+
+        return new CredentialIssuanceResult
+        {
+            Credentials = credentials,
+            NotificationId = notificationId,
+            AccessToken = accessToken,
+            TokenType = tokenType
+        };
+    }
+
+
+    /// <summary>
+    /// Parses a deferral response.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3">§8.3</see>
+    /// / <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-9.2">§9.2</see>:
+    /// a deferral carries <c>transaction_id</c> (REQUIRED) and <c>interval</c> (REQUIRED alongside it).
+    /// </summary>
+    private static CredentialIssuanceResult ParseDeferredPending(
+        string body,
+        string accessToken,
+        string tokenType,
+        Uri endpoint)
+    {
+        ReadOnlySpan<byte> json = Encoding.UTF8.GetBytes(body);
+
+        string transactionId = JwkJsonReader.ExtractStringValue(
+            json, Oid4VciCredentialParameterNames.TransactionIdUtf8)
+            ?? throw new InvalidOperationException(
+                $"§9 deferral from {endpoint} carried no transaction_id. Body: {body}");
+
+        int? interval = JwkJsonReader.TryExtractLongValue(
+            json, Oid4VciCredentialParameterNames.IntervalUtf8, out long intervalSeconds)
+            ? (int)intervalSeconds
+            : null;
+
+        return new CredentialIssuanceResult
+        {
+            TransactionId = transactionId,
+            DeferredIntervalSeconds = interval,
+            AccessToken = accessToken,
+            TokenType = tokenType
+        };
+    }
+
+
+    /// <summary>
+    /// Builds the <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-9.1">§9.1</see>
+    /// Deferred Credential Request body — <c>{ transaction_id }</c>.
+    /// </summary>
+    private static string BuildDeferredRequestBody(string transactionId)
+    {
+        StringBuilder builder = new();
+        builder.Append('{');
+        builder.Append('"').Append(Oid4VciCredentialParameterNames.TransactionId).Append("\":\"");
+        builder.Append(transactionId).Append("\"}");
+
+        return builder.ToString();
+    }
+
+
+    /// <summary>
+    /// Builds the <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-11.1">§11.1</see>
+    /// Notification Request body — <c>{ notification_id, event, event_description? }</c>. The id and
+    /// event are JSON-safe wire values; an <c>event_description</c> is escaped as it may carry arbitrary
+    /// ASCII text.
+    /// </summary>
+    private static string BuildNotificationRequestBody(
+        string notificationId,
+        string notificationEvent,
+        string? eventDescription)
+    {
+        StringBuilder builder = new();
+        builder.Append('{');
+        builder.Append('"').Append(Oid4VciCredentialParameterNames.NotificationId).Append("\":\"");
+        builder.Append(notificationId).Append("\",\"");
+        builder.Append(Oid4VciCredentialParameterNames.Event).Append("\":\"");
+        builder.Append(notificationEvent).Append('"');
+
+        if(!string.IsNullOrEmpty(eventDescription))
+        {
+            builder.Append(",\"").Append(Oid4VciCredentialParameterNames.EventDescription).Append("\":\"");
+            JsonAppender.AppendEscapedString(builder, eventDescription);
+            builder.Append('"');
+        }
+
+        builder.Append('}');
+
+        return builder.ToString();
+    }
+
+
+    /// <summary>
+    /// Composes the request headers carrying the access-token authorization.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750">RFC 6750</see>: a Bearer token rides
+    /// <c>Authorization: Bearer &lt;token&gt;</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 §7.1</see>: a DPoP-bound
+    /// token rides <c>Authorization: DPoP &lt;token&gt;</c> alongside a fresh DPoP proof in the
+    /// <c>DPoP</c> header — wired only when the token is DPoP-bound and a proof producer is configured.
+    /// </summary>
     private async ValueTask<IReadOnlyDictionary<string, string>> ComposeAuthorizationHeadersAsync(
         string accessToken,
         string tokenType,
@@ -439,10 +805,13 @@ public sealed class Oid4VciWalletClient
     }
 
 
-    //Builds the §8.2 Credential Request JSON body without System.Text.Json — the
-    //Verifiable.OAuth serialization firewall. The proof and config id are
-    //JSON-safe wire values (a compact JWS and a metadata key); the optional
-    //credential_response_encryption object is appended verbatim from its members.
+    /// <summary>
+    /// Builds the <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">§8.2</see>
+    /// Credential Request JSON body without <c>System.Text.Json</c> — the <c>Verifiable.OAuth</c>
+    /// serialization firewall. The proof and config id are JSON-safe wire values (a compact JWS and a
+    /// metadata key); the optional <c>credential_response_encryption</c> object is appended verbatim
+    /// from its members.
+    /// </summary>
     private static string BuildCredentialRequestBody(
         string credentialConfigurationId,
         string proofJwt,
@@ -482,13 +851,17 @@ public sealed class Oid4VciWalletClient
     }
 
 
-    //The HTTP method the DPoP proof binds to for the authorized POST endpoints.
+    /// <summary>The HTTP method the DPoP proof binds to for the authorized POST endpoints.</summary>
     private const string HttpPostMethod = "POST";
 
+    /// <summary>The HTTP 202 Accepted status code an Issuer answers with to defer issuance (§8.3 / §9.2).</summary>
+    private const int HttpAcceptedStatusCode = 202;
 
-    //c_nonce is the §7 Nonce Response member carrying the proof challenge. The
-    //Nonce Endpoint emits it as a bare literal; no shared constant exists to
-    //reuse, so the Wallet names the same wire key here.
+    /// <summary>
+    /// The <c>c_nonce</c> §7 Nonce Response member carrying the proof challenge. The Nonce Endpoint
+    /// emits it as a bare literal; no shared constant exists to reuse, so the Wallet names the same wire
+    /// key here.
+    /// </summary>
     private static ReadOnlySpan<byte> CNonceUtf8 => "c_nonce"u8;
 }
 

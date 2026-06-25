@@ -183,13 +183,14 @@ internal sealed class MetadataPolicyOrchestratorTests
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/anchor"));
 
-        //Subject declares grant_types including "implicit"; anchor's policy
-        //requires subset_of [authorization_code, refresh_token]. Apply fails.
+        //Subject declares grant_types=[authorization_code]; anchor's policy requires
+        //superset_of [authorization_code, refresh_token], which the subject does not
+        //satisfy. Apply fails (§6.1.3.1.6).
         Dictionary<string, object> subjectMetadata = new()
         {
             [RpType.Value] = new Dictionary<string, object>
             {
-                ["grant_types"] = new List<object> { "authorization_code", "implicit" },
+                ["grant_types"] = new List<object> { "authorization_code" },
             },
         };
         Dictionary<string, object> anchorPolicy = new()
@@ -198,7 +199,7 @@ internal sealed class MetadataPolicyOrchestratorTests
             {
                 ["grant_types"] = new Dictionary<string, object>
                 {
-                    ["subset_of"] = new List<object> { "authorization_code", "refresh_token" },
+                    ["superset_of"] = new List<object> { "authorization_code", "refresh_token" },
                 },
             },
         };
@@ -237,7 +238,7 @@ internal sealed class MetadataPolicyOrchestratorTests
         Claim applyClaim = result.Claims.Single(c =>
             c.Id.Code == WellKnownFederationClaimIds.MetadataPolicyAppliedCleanly.Code);
         Assert.AreEqual(ClaimOutcome.Failure, applyClaim.Outcome,
-            "Subject's array containing 'implicit' violates the anchor's subset_of.");
+            "Subject's grant_types is missing a value the anchor's superset_of requires.");
     }
 
 

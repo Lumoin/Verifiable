@@ -8,7 +8,7 @@ namespace Verifiable.OAuth.Federation;
 /// subject, accumulating policies via repeated calls to
 /// <see cref="Merge(MetadataPolicySnapshot, MetadataPolicySnapshot)"/>; the
 /// resulting snapshot is then handed to
-/// <see cref="ApplyMetadataPolicyDelegate"/> (chunk 4).
+/// <see cref="ApplyMetadataPolicyDelegate"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Federation;
 ///   <item><description><see cref="WellKnownMetadataPolicyOperators.Add"/>: union of the two arrays.</description></item>
 ///   <item><description><see cref="WellKnownMetadataPolicyOperators.Default"/>: must be equal across sides; otherwise conflict.</description></item>
 ///   <item><description><see cref="WellKnownMetadataPolicyOperators.OneOf"/>: intersection of the two value sets (empty result → conflict).</description></item>
-///   <item><description><see cref="WellKnownMetadataPolicyOperators.SubsetOf"/>: intersection (empty → conflict).</description></item>
+///   <item><description><see cref="WellKnownMetadataPolicyOperators.SubsetOf"/>: intersection (an empty result is allowed, §6.1.3.1.5).</description></item>
 ///   <item><description><see cref="WellKnownMetadataPolicyOperators.SupersetOf"/>: union.</description></item>
 ///   <item><description><see cref="WellKnownMetadataPolicyOperators.Essential"/>: logical OR.</description></item>
 /// </list>
@@ -258,10 +258,9 @@ public static class MetadataPolicyMerger
             return (UnionPreservingOrder(upList, downList), null);
         }
 
-        if(op.Equals(WellKnownMetadataPolicyOperators.OneOf)
-            || op.Equals(WellKnownMetadataPolicyOperators.SubsetOf))
+        if(op.Equals(WellKnownMetadataPolicyOperators.OneOf))
         {
-            //Intersection of arrays. Empty result is a conflict.
+            //Intersection of arrays. An empty result is a policy error (§6.1.3.1.4).
             if(upstream is not IEnumerable<object> upList || downstream is not IEnumerable<object> downList)
             {
                 return (null, $"Operator '{op.Value}' for '{locator}' expects array values on both sides.");
@@ -272,6 +271,17 @@ public static class MetadataPolicyMerger
                 return (null, $"Intersection of '{op.Value}' value sets for '{locator}' is empty.");
             }
             return (intersection, null);
+        }
+
+        if(op.Equals(WellKnownMetadataPolicyOperators.SubsetOf))
+        {
+            //Intersection of arrays. An empty result is allowed (§6.1.3.1.5 notes the
+            //intersection "may thus be an empty array []").
+            if(upstream is not IEnumerable<object> upList || downstream is not IEnumerable<object> downList)
+            {
+                return (null, $"Operator '{op.Value}' for '{locator}' expects array values on both sides.");
+            }
+            return (IntersectPreservingOrder(upList, downList), null);
         }
 
         if(op.Equals(WellKnownMetadataPolicyOperators.Essential))

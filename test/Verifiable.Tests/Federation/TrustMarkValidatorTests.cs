@@ -1,4 +1,5 @@
 using Verifiable.Core.Assessment;
+using Verifiable.JCose;
 using Verifiable.OAuth.Federation;
 
 namespace Verifiable.Tests.Federation;
@@ -42,12 +43,83 @@ internal sealed class TrustMarkValidatorTests
         ClaimIssueResult result = await TrustMarkValidator.Default()
             .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.HasCount(3, result.Claims);
+        Assert.HasCount(5, result.Claims);
         foreach(Claim claim in result.Claims)
         {
             Assert.AreEqual(ClaimOutcome.Success, claim.Outcome,
                 $"Happy-path mark should succeed for {claim.Id}.");
         }
+    }
+
+
+    [TestMethod]
+    public async Task AlgNoneTrustMarkFailsAlgPresent()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode issuer = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/tm-issuer"));
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/subject"));
+
+        MintedTrustMark minted = await FederationTestRing.MintTrustMarkAsync(
+            issuer, subject, MarkId, now, now.AddHours(1),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        //§7.3: an unsigned (alg=none) trust mark must be rejected. Only the header is adversarial.
+        UnverifiedJwtHeader noneHeader = new(new Dictionary<string, object>
+        {
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.None,
+            [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.TrustMarkJwt
+        });
+
+        TrustMarkValidationContext context = new()
+        {
+            Header = noneHeader,
+            Mark = minted.Mark,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await TrustMarkValidator.Default()
+            .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim algClaim = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.TrustMarkAlgPresent.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, algClaim.Outcome,
+            "alg=none must fail TrustMarkAlgPresent.");
+    }
+
+
+    [TestMethod]
+    public async Task FutureIssuedTrustMarkFailsIatInRange()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode issuer = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/tm-issuer"));
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/subject"));
+
+        //iat two hours in the future, well beyond the five-minute skew window — §7.3 requires
+        //the current time to be after iat.
+        MintedTrustMark minted = await FederationTestRing.MintTrustMarkAsync(
+            issuer, subject, MarkId, now.AddHours(2), now.AddHours(3),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        TrustMarkValidationContext context = new()
+        {
+            Header = minted.Header,
+            Mark = minted.Mark,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await TrustMarkValidator.Default()
+            .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim iatClaim = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.TrustMarkIatInRange.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, iatClaim.Outcome,
+            "A trust mark issued two hours in the future must fail TrustMarkIatInRange.");
     }
 
 

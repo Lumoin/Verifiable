@@ -60,6 +60,18 @@ public sealed record ResolveResponseContribution
     public IReadOnlyList<object>? TrustMarks { get; init; }
 
     /// <summary>
+    /// The instant the Resolve Response should expire, which Federation §8.3.2
+    /// requires to be the minimum of the source Trust Chain's <c>exp</c> and the
+    /// <c>exp</c> of any included Trust Mark — values the application knows from
+    /// the chain and marks it assembled (the library treats both as opaque). When
+    /// supplied the library clamps the response <c>exp</c> to it (never emitting a
+    /// response that outlives what it was derived from); when <see langword="null"/>
+    /// the library falls back to its configured Resolve Response lifetime, which a
+    /// §8.3.2-conformant resolver overrides by setting this.
+    /// </summary>
+    public DateTimeOffset? ExpiresAt { get; init; }
+
+    /// <summary>
     /// Additional top-level claims to merge into the Resolve Response payload
     /// after the library's structural claims and the dedicated slots above.
     /// Keys that collide with library-emitted structural claims (<c>iss</c>,

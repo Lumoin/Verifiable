@@ -20,7 +20,7 @@ namespace Verifiable.OAuth.Federation;
 /// <para>
 /// Signature verification, issuer-authorisation against the chain's
 /// <c>trust_mark_issuers</c> claim, and delegation-chain validation are
-/// the <see cref="TrustMarkValidator"/>'s responsibilities (chunks B.7.2-B.7.4).
+/// the <see cref="TrustMarkValidator"/>'s responsibilities.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TrustMarkParser")]

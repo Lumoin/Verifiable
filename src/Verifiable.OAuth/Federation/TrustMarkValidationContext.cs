@@ -22,7 +22,7 @@ public sealed record TrustMarkValidationContext
     /// <summary>The JWS protected header of the trust mark.</summary>
     public required UnverifiedJwtHeader Header { get; init; }
 
-    /// <summary>The structurally classified trust mark (B.7.1 output).</summary>
+    /// <summary>The structurally classified trust mark from the parser.</summary>
     public required TrustMark Mark { get; init; }
 
     /// <summary>

@@ -308,7 +308,7 @@ public static class MetadataEndpoints
                 bool issuerFirst = true;
                 JsonAppender.AppendStringField(sb, "issuer", issuerValue, ref issuerFirst);
 
-                //Phase 9h chunk 9 — endpoint emission walks the per-request
+                //Endpoint emission walks the per-request
                 //EndpointChain. The dispatcher places it on the context after
                 //ResolveCapabilitiesAsync attenuation and per-candidate URL
                 //resolution, so this loop emits exactly the endpoints active
@@ -320,7 +320,7 @@ public static class MetadataEndpoints
                 //Endpoints share a DiscoveryMetadataKey when they share a URL
                 //(JAR variants of PAR/Authorize advertise under their non-JAR
                 //sibling's key; refresh-token shares the token endpoint URL).
-                //Per chunk 6 the JAR variants and refresh-token carry
+                //The JAR variants and refresh-token carry
                 //DiscoveryMetadataKey=null specifically to avoid double-
                 //emission, so the skip-null guard below is the only
                 //deduplication this loop needs.
@@ -394,8 +394,7 @@ public static class MetadataEndpoints
                 //OIDC Discovery 1.0 §3 REQUIRED fields. The library's subject
                 //identifier story is "public" by default (the application
                 //installs a custom ResolveSubjectIdentifierAsync to add the
-                //pairwise option); chunks 12-16 will iterate on the
-                //tenant-specific subject-type set in a follow-up.
+                //pairwise option).
                 AppendStringArrayField(
                     sb,
                     OpenIdProviderMetadataParameterNames.SubjectTypesSupported,
@@ -787,7 +786,7 @@ public static class MetadataEndpoints
     /// <see cref="ContributionProfiles.StandardClaimIssuer"/> rules can emit,
     /// plus the spec-required <c>sub</c>. Sorted ordinally for deterministic
     /// wire output. Synchronisation invariant: every name added to or removed
-    /// from the standard contributors (chunks 4a / 4b / 5) must update this
+    /// from the standard contributors must update this
     /// list. The <see cref="ContributorChainRegressionTests"/> baseline pins
     /// the contributor output; this list pins the wire advertisement.
     /// </summary>

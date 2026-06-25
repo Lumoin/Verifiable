@@ -241,9 +241,12 @@ internal sealed class VcalmConformanceHttpApplication: IHttpApplication<HttpCont
 
         foreach(KeyValuePair<string, StringValues> query in request.Query)
         {
-            if(!fields.ContainsKey(query.Key))
+            foreach(string? value in query.Value)
             {
-                fields[query.Key] = query.Value.ToString();
+                if(value is not null)
+                {
+                    fields.Add(query.Key, value);
+                }
             }
         }
 
@@ -327,7 +330,7 @@ internal sealed class VcalmConformanceHttpApplication: IHttpApplication<HttpCont
 
             string name = Uri.UnescapeDataString(pair[..eq].Replace('+', ' '));
             string value = Uri.UnescapeDataString(pair[(eq + 1)..].Replace('+', ' '));
-            fields[name] = value;
+            fields.Add(name, value);
         }
     }
 

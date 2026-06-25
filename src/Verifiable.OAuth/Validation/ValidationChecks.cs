@@ -253,8 +253,8 @@ public static class ValidationChecks
     /// Reads the freshness window from the per-request policy
     /// (<see cref="Verifiable.OAuth.Server.PolicyExchangeContextExtensions.KbJwtMaxAgeWindow"/>)
     /// when populated; otherwise falls back to the legacy
-    /// <see cref="ValidationContext.KbJwtMaxAge"/> field. Closes audit Finding 7
-    /// (KB-JWT <c>iat</c>-too-old window has no library default).
+    /// <see cref="ValidationContext.KbJwtMaxAge"/> field. Enforces a library
+    /// default for the KB-JWT <c>iat</c>-too-old window.
     /// </remarks>
     public static ValueTask<List<Claim>> CheckKbJwtIatNotTooOld(
         ValidationContext context,

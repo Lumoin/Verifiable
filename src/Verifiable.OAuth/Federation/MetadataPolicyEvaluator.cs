@@ -75,25 +75,29 @@ public static class MetadataPolicyEvaluator
             ParameterPolicy policy = parameterEntry.Value;
             MetadataPolicyOperator[] operators = [.. policy.Operators.Keys];
 
+            //Structural legality — the §6.1.3.1.8 combination table.
             for(int i = 0; i < operators.Length; i++)
             {
                 for(int j = i + 1; j < operators.Length; j++)
                 {
                     if(!IsOperatorPairLegal(operators[i], operators[j]))
                     {
-                        return new Claim(
-                            WellKnownFederationClaimIds.MetadataPolicyOperatorCombinationLegal,
-                            ClaimOutcome.Failure,
-                            new MetadataPolicyEvaluationContext
-                            {
-                                EntityType = block.EntityType,
-                                ParameterName = parameterEntry.Key,
-                                FirstOperator = operators[i],
-                                SecondOperator = operators[j],
-                            },
-                            Claim.NoSubClaims);
+                        return CombinationFailure(
+                            block.EntityType, parameterEntry.Key, operators[i], operators[j]);
                     }
                 }
+            }
+
+            //Conditional value relationships — the "in which case ... MUST be a subset
+            //of ..." clauses in each operator's §6.1.3.1.x combination list. A pair that
+            //is structurally legal still fails when its configured values violate the
+            //declared relationship.
+            (MetadataPolicyOperator First, MetadataPolicyOperator Second)? violation =
+                FindConditionalRelationshipViolation(policy);
+            if(violation is not null)
+            {
+                return CombinationFailure(
+                    block.EntityType, parameterEntry.Key, violation.Value.First, violation.Value.Second);
             }
         }
 
@@ -101,6 +105,28 @@ public static class MetadataPolicyEvaluator
             WellKnownFederationClaimIds.MetadataPolicyOperatorCombinationLegal,
             ClaimOutcome.Success);
     }
+
+
+    /// <summary>
+    /// Builds the §6.1.3.1.8 combination-failure claim for a single offending
+    /// operator pair on one parameter.
+    /// </summary>
+    private static Claim CombinationFailure(
+        EntityTypeIdentifier entityType,
+        string parameterName,
+        MetadataPolicyOperator first,
+        MetadataPolicyOperator second) =>
+        new(
+            WellKnownFederationClaimIds.MetadataPolicyOperatorCombinationLegal,
+            ClaimOutcome.Failure,
+            new MetadataPolicyEvaluationContext
+            {
+                EntityType = entityType,
+                ParameterName = parameterName,
+                FirstOperator = first,
+                SecondOperator = second,
+            },
+            Claim.NoSubClaims);
 
 
     /// <summary>
@@ -118,70 +144,129 @@ public static class MetadataPolicyEvaluator
             return true;
         }
 
-        //Essential composes with every well-known operator.
-        if(left.Equals(WellKnownMetadataPolicyOperators.Essential)
-            || right.Equals(WellKnownMetadataPolicyOperators.Essential))
-        {
-            return true;
-        }
-
-        //Value and Add are exclusive with every other operator except essential.
-        if(left.Equals(WellKnownMetadataPolicyOperators.Value)
-            || right.Equals(WellKnownMetadataPolicyOperators.Value)
-            || left.Equals(WellKnownMetadataPolicyOperators.Add)
-            || right.Equals(WellKnownMetadataPolicyOperators.Add))
-        {
-            return false;
-        }
-
-        //Default combines with one_of, subset_of, superset_of, essential.
-        if(left.Equals(WellKnownMetadataPolicyOperators.Default)
-            || right.Equals(WellKnownMetadataPolicyOperators.Default))
-        {
-            MetadataPolicyOperator other = left.Equals(WellKnownMetadataPolicyOperators.Default) ? right : left;
-            return other.Equals(WellKnownMetadataPolicyOperators.OneOf)
-                || other.Equals(WellKnownMetadataPolicyOperators.SubsetOf)
-                || other.Equals(WellKnownMetadataPolicyOperators.SupersetOf)
-                || IsExtensionOperator(other);
-        }
-
-        //subset_of and superset_of combine with each other (and with default+essential
-        //handled above).
-        if(left.Equals(WellKnownMetadataPolicyOperators.SubsetOf)
-            && right.Equals(WellKnownMetadataPolicyOperators.SupersetOf))
-        {
-            return true;
-        }
-        if(left.Equals(WellKnownMetadataPolicyOperators.SupersetOf)
-            && right.Equals(WellKnownMetadataPolicyOperators.SubsetOf))
-        {
-            return true;
-        }
-
-        //one_of with subset_of / superset_of / itself is illegal.
-        if((left.Equals(WellKnownMetadataPolicyOperators.OneOf) && IsRestrictionOperator(right))
-            || (right.Equals(WellKnownMetadataPolicyOperators.OneOf) && IsRestrictionOperator(left)))
-        {
-            return false;
-        }
-
-        //Two extension operators: combinable (the library has no semantic knowledge).
-        if(IsExtensionOperator(left) && IsExtensionOperator(right))
-        {
-            return true;
-        }
-
-        //One well-known + one extension: combinable (extension semantics deployment-defined).
+        //Extension operators carry no library-known combination constraints (§6.1.3.2);
+        //the library treats them as combinable with anything. Bespoke restrictions are
+        //a deployment-supplied evaluator's concern.
         if(IsExtensionOperator(left) || IsExtensionOperator(right))
         {
             return true;
         }
 
-        //Fallthrough: any standard-operator pair not explicitly cleared above is rejected.
-        //Should not reach here for the seven standard operators — exhaustive analysis
-        //of the table is encoded by the branches above.
-        return false;
+        //Among the seven standard operators the only disallowed pairings are one_of with
+        //add, subset_of, or superset_of. one_of's §6.1.3.1.4 combination list names only
+        //value, default and essential; every other standard operator (value, add, default,
+        //subset_of, superset_of) lists each of its non-one_of peers as combinable (some
+        //conditionally — see FindConditionalRelationshipViolation). So a standard pair is
+        //legal unless exactly one side is one_of and the other is not value/default/essential.
+        bool leftIsOneOf = left.Equals(WellKnownMetadataPolicyOperators.OneOf);
+        bool rightIsOneOf = right.Equals(WellKnownMetadataPolicyOperators.OneOf);
+        if(leftIsOneOf || rightIsOneOf)
+        {
+            MetadataPolicyOperator other = leftIsOneOf ? right : left;
+            return other.Equals(WellKnownMetadataPolicyOperators.Value)
+                || other.Equals(WellKnownMetadataPolicyOperators.Default)
+                || other.Equals(WellKnownMetadataPolicyOperators.Essential);
+        }
+
+        return true;
     }
+
+
+    /// <summary>
+    /// Checks the conditional value relationships the §6.1.3.1.x combination
+    /// lists attach to otherwise-legal operator pairs (e.g. "MAY be combined
+    /// with add, in which case the values of add MUST be a subset of the
+    /// values of value"). Returns the first violated pair, or <see langword="null"/>
+    /// when every co-declared pair satisfies its relationship. Pairs whose
+    /// combination carries no value condition (e.g. add+superset_of) are not
+    /// checked here.
+    /// </summary>
+    private static (MetadataPolicyOperator First, MetadataPolicyOperator Second)? FindConditionalRelationshipViolation(
+        ParameterPolicy policy)
+    {
+        IReadOnlyDictionary<MetadataPolicyOperator, object> ops = policy.Operators;
+
+        bool hasValue = ops.TryGetValue(WellKnownMetadataPolicyOperators.Value, out object? valueVal);
+        bool hasAdd = ops.TryGetValue(WellKnownMetadataPolicyOperators.Add, out object? addVal);
+        bool hasDefault = ops.ContainsKey(WellKnownMetadataPolicyOperators.Default);
+        bool hasOneOf = ops.TryGetValue(WellKnownMetadataPolicyOperators.OneOf, out object? oneOfVal);
+        bool hasSubsetOf = ops.TryGetValue(WellKnownMetadataPolicyOperators.SubsetOf, out object? subsetOfVal);
+        bool hasSupersetOf = ops.TryGetValue(WellKnownMetadataPolicyOperators.SupersetOf, out object? supersetOfVal);
+        bool hasEssential = ops.TryGetValue(WellKnownMetadataPolicyOperators.Essential, out object? essentialVal);
+
+        //§6.1.3.1.1 / §6.1.3.1.3: value combines with default only when value is not null.
+        if(hasValue && hasDefault && valueVal is null)
+        {
+            return (WellKnownMetadataPolicyOperators.Value, WellKnownMetadataPolicyOperators.Default);
+        }
+
+        //§6.1.3.1.1: value combines with essential except when value is null and essential is true.
+        if(hasValue && hasEssential && valueVal is null && essentialVal is bool essentialTrue && essentialTrue)
+        {
+            return (WellKnownMetadataPolicyOperators.Value, WellKnownMetadataPolicyOperators.Essential);
+        }
+
+        //§6.1.3.1.1 / §6.1.3.1.2: the values of add MUST be a subset of the values of value.
+        if(hasValue && hasAdd && !IsSubset(ValueSet(addVal), ValueSet(valueVal)))
+        {
+            return (WellKnownMetadataPolicyOperators.Value, WellKnownMetadataPolicyOperators.Add);
+        }
+
+        //§6.1.3.1.1 / §6.1.3.1.4: the value of value MUST be among the one_of values.
+        if(hasValue && hasOneOf && !IsSubset(ValueSet(valueVal), ValueSet(oneOfVal)))
+        {
+            return (WellKnownMetadataPolicyOperators.Value, WellKnownMetadataPolicyOperators.OneOf);
+        }
+
+        //§6.1.3.1.1 / §6.1.3.1.5: the values of value MUST be a subset of the values of subset_of.
+        if(hasValue && hasSubsetOf && !IsSubset(ValueSet(valueVal), ValueSet(subsetOfVal)))
+        {
+            return (WellKnownMetadataPolicyOperators.Value, WellKnownMetadataPolicyOperators.SubsetOf);
+        }
+
+        //§6.1.3.1.1 / §6.1.3.1.6: the values of value MUST be a superset of the values of superset_of.
+        if(hasValue && hasSupersetOf && !IsSubset(ValueSet(supersetOfVal), ValueSet(valueVal)))
+        {
+            return (WellKnownMetadataPolicyOperators.Value, WellKnownMetadataPolicyOperators.SupersetOf);
+        }
+
+        //§6.1.3.1.2 / §6.1.3.1.5: the values of add MUST be a subset of the values of subset_of.
+        if(hasAdd && hasSubsetOf && !IsSubset(ValueSet(addVal), ValueSet(subsetOfVal)))
+        {
+            return (WellKnownMetadataPolicyOperators.Add, WellKnownMetadataPolicyOperators.SubsetOf);
+        }
+
+        //§6.1.3.1.5 / §6.1.3.1.6: the values of subset_of MUST be a superset of the values of superset_of.
+        if(hasSubsetOf && hasSupersetOf && !IsSubset(ValueSet(supersetOfVal), ValueSet(subsetOfVal)))
+        {
+            return (WellKnownMetadataPolicyOperators.SubsetOf, WellKnownMetadataPolicyOperators.SupersetOf);
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Normalises an operator value to a set for the §6.1.3.1.x subset/superset
+    /// relationship checks. An array value becomes the set of its elements; a
+    /// scalar becomes a one-element set; a null value becomes the empty set.
+    /// </summary>
+    private static HashSet<object> ValueSet(object? value)
+    {
+        if(value is null)
+        {
+            return [];
+        }
+        if(value is IEnumerable<object> list)
+        {
+            return [.. list];
+        }
+        return [value];
+    }
+
+
+    private static bool IsSubset(HashSet<object> candidate, HashSet<object> universe) =>
+        candidate.IsSubsetOf(universe);
 
 
     private static bool IsExtensionOperator(MetadataPolicyOperator op) =>
@@ -192,9 +277,4 @@ public static class MetadataPolicyEvaluator
         && !op.Equals(WellKnownMetadataPolicyOperators.SubsetOf)
         && !op.Equals(WellKnownMetadataPolicyOperators.SupersetOf)
         && !op.Equals(WellKnownMetadataPolicyOperators.Essential);
-
-
-    private static bool IsRestrictionOperator(MetadataPolicyOperator op) =>
-        op.Equals(WellKnownMetadataPolicyOperators.SubsetOf)
-        || op.Equals(WellKnownMetadataPolicyOperators.SupersetOf);
 }

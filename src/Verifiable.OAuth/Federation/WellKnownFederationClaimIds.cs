@@ -32,9 +32,9 @@ namespace Verifiable.OAuth.Federation;
 ///     (Wallet 1.0, Extended Subordinate Listing 1.0).</description></item>
 /// </list>
 /// <para>
-/// The list below is the planning shape for B.1 chunk 1; the precise
+/// The precise
 /// decomposition of Federation §3.2's 27 validation steps into named
-/// <see cref="ClaimId"/> entries is finalised when chunk 3 wires the
+/// <see cref="ClaimId"/> entries is realised by the
 /// <c>FederationValidationProfiles.EntityStatementRules()</c> list against
 /// these IDs and the spec text. Spec analysis may add IDs in the
 /// 1110–1119 sub-range or split aggregated checks (e.g.
@@ -107,7 +107,8 @@ public static class WellKnownFederationClaimIds
 
     /// <summary>
     /// The <c>metadata</c> claim (when present) is a well-formed object
-    /// keyed by <see cref="EntityTypeIdentifier"/>.
+    /// keyed by <see cref="EntityTypeIdentifier"/> with no <see langword="null"/>
+    /// value — Federation §5 prohibits <c>null</c> metadata values.
     /// </summary>
     public static ClaimId MetadataWellFormed { get; } = ClaimId.Create(1109, "MetadataWellFormed");
 
@@ -139,6 +140,75 @@ public static class WellKnownFederationClaimIds
     /// Non-RSA keys are governed by their curve and do not constrain this check.
     /// </summary>
     public static ClaimId JwksKeysMeetMinimumKeyLength { get; } = ClaimId.Create(1113, "JwksKeysMeetMinimumKeyLength");
+
+    /// <summary>
+    /// Conditional claim placement per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.2">Federation §3.2</see>
+    /// (steps deriving from §3.1.2 / §3.1.3): the Entity-Configuration-only
+    /// claims (<c>authority_hints</c>, <c>trust_anchor_hints</c>,
+    /// <c>trust_marks</c>, <c>trust_mark_issuers</c>, <c>trust_mark_owners</c>)
+    /// appear only when <c>iss</c> == <c>sub</c>, and the
+    /// Subordinate-Statement-only claims (<c>metadata_policy</c>,
+    /// <c>metadata_policy_crit</c>, <c>constraints</c>, <c>source_endpoint</c>)
+    /// appear only when <c>iss</c> != <c>sub</c>. A misplaced claim fails this
+    /// check and the statement MUST be rejected.
+    /// </summary>
+    public static ClaimId ClaimPlacementValid { get; } = ClaimId.Create(1114, "ClaimPlacementValid");
+
+    /// <summary>
+    /// The <c>crit</c> (critical) payload claim, when present, is well-formed
+    /// and every extension Claim Name it lists is present in the payload and
+    /// understood by the consumer, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-13.4">Federation §13.4</see>
+    /// (§3.1.1 usage). A <c>crit</c> that is empty, lists a duplicate, lists a
+    /// name absent from the payload, or names an extension the consumer does
+    /// not understand invalidates the statement.
+    /// <see cref="ClaimOutcome.NotApplicable"/> when <c>crit</c> is absent.
+    /// </summary>
+    public static ClaimId CritClaimsUnderstood { get; } = ClaimId.Create(1115, "CritClaimsUnderstood");
+
+    /// <summary>
+    /// The statement does not carry a <c>trust_chain</c> or
+    /// <c>peer_trust_chain</c> JWS header parameter, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-4.3">Federation §4.3</see>
+    /// and §4.4: an Entity Configuration or Subordinate Statement is itself a
+    /// component of a Trust Chain and MUST NOT embed one in its header.
+    /// </summary>
+    public static ClaimId NoChainHeaderInStatement { get; } = ClaimId.Create(1116, "NoChainHeaderInStatement");
+
+    /// <summary>
+    /// When the statement's <c>metadata</c> carries a <c>federation_entity</c>
+    /// block, each federation endpoint URL it declares
+    /// (<c>federation_fetch_endpoint</c>, <c>federation_list_endpoint</c>,
+    /// <c>federation_resolve_endpoint</c>,
+    /// <c>federation_trust_mark_status_endpoint</c>,
+    /// <c>federation_trust_mark_list_endpoint</c>,
+    /// <c>federation_trust_mark_endpoint</c>,
+    /// <c>federation_historical_keys_endpoint</c>) uses the <c>https</c> scheme
+    /// and contains no fragment component, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-5.1.1">Federation §5.1.1</see>.
+    /// </summary>
+    public static ClaimId FederationEntityEndpointsWellFormed { get; } = ClaimId.Create(1117, "FederationEntityEndpointsWellFormed");
+
+    /// <summary>
+    /// When the statement's <c>metadata</c> carries a <c>federation_entity</c>
+    /// block whose <c>endpoint_auth_signing_alg_values_supported</c> is present,
+    /// none of its listed algorithms is <c>none</c>, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-5.1.1">Federation §5.1.1</see>
+    /// (the value <c>none</c> MUST NOT be used).
+    /// </summary>
+    public static ClaimId FederationEntityEndpointAuthAlgsNotNone { get; } = ClaimId.Create(1118, "FederationEntityEndpointAuthAlgsNotNone");
+
+    /// <summary>
+    /// When the statement's <c>metadata</c> carries a <c>federation_entity</c>
+    /// block, none of the §5.2.1 JWK-set parameters (<c>jwks</c>,
+    /// <c>jwks_uri</c>, <c>signed_jwks_uri</c>) appears in it, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-5.2.1">Federation §5.2.1</see>
+    /// (those parameters MUST NOT be used in <c>federation_entity</c> metadata —
+    /// the Federation Entity Keys live in the Entity Statement's top-level
+    /// <c>jwks</c> Claim instead).
+    /// </summary>
+    public static ClaimId FederationEntityHasNoJwkSetParams { get; } = ClaimId.Create(1119, "FederationEntityHasNoJwkSetParams");
 
 
     //Trust chain validation per Federation §4.3 / §10 (codes 1120–1139).
@@ -188,6 +258,17 @@ public static class WellKnownFederationClaimIds
     /// <c>excluded</c> match invalidates the chain regardless of <c>permitted</c>.
     /// </summary>
     public static ClaimId ChainSatisfiesNamingConstraints { get; } = ClaimId.Create(1126, "ChainSatisfiesNamingConstraints");
+
+    /// <summary>
+    /// Adjacent statements in the chain are properly linked per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-10.2">Federation §10.2</see>:
+    /// for every position <c>j</c> below the Trust Anchor,
+    /// <c>Statements[j].iss</c> equals <c>Statements[j+1].sub</c> — each
+    /// statement is issued by the entity the statement above it is about. A
+    /// break in this chain means the statements do not form a single path from
+    /// subject to anchor.
+    /// </summary>
+    public static ClaimId ChainProperlyLinked { get; } = ClaimId.Create(1127, "ChainProperlyLinked");
 
 
     //Metadata policy per Federation §6.1.4 (codes 1140–1159).
@@ -267,4 +348,20 @@ public static class WellKnownFederationClaimIds
     /// <see cref="ClaimOutcome.NotApplicable"/> when the mark omits <c>exp</c>.
     /// </summary>
     public static ClaimId TrustMarkExpAfterIat { get; } = ClaimId.Create(1174, "TrustMarkExpAfterIat");
+
+    /// <summary>
+    /// The trust mark's JWS protected header carries an <c>alg</c> that is not
+    /// <c>none</c>, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-7.3">Federation §7.3</see>
+    /// — an unsigned (<c>alg=none</c>) trust mark is rejected.
+    /// </summary>
+    public static ClaimId TrustMarkAlgPresent { get; } = ClaimId.Create(1175, "TrustMarkAlgPresent");
+
+    /// <summary>
+    /// The trust mark's <c>iat</c> claim is within the clock-skew window
+    /// relative to now — its issuance time is in the past — per Federation
+    /// §7.3 ("the current time MUST be after the time represented by the
+    /// <c>iat</c> Claim").
+    /// </summary>
+    public static ClaimId TrustMarkIatInRange { get; } = ClaimId.Create(1176, "TrustMarkIatInRange");
 }

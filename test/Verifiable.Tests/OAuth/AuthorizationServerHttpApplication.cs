@@ -237,14 +237,18 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
             };
         }
 
-        //Merge query parameters onto fields. Form body takes precedence on
-        //collisions — matching ASP.NET model-binder behaviour and the
-        //comment on IncomingRequest.Fields' XML doc.
+        //Merge query parameters onto fields, preserving every value (a key may
+        //repeat). Form and query both contribute — matching ASP.NET model-binder
+        //behaviour — and a parameter that ends up with more than one value fails
+        //the single-valued RequestFields read closed (RFC 6749 §3.1).
         foreach(KeyValuePair<string, StringValues> query in request.Query)
         {
-            if(!fields.ContainsKey(query.Key))
+            foreach(string? value in query.Value)
             {
-                fields[query.Key] = query.Value.ToString();
+                if(value is not null)
+                {
+                    fields.Add(query.Key, value);
+                }
             }
         }
 
@@ -342,7 +346,7 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
             }
             string name = Uri.UnescapeDataString(pair[..eq].Replace('+', ' '));
             string value = Uri.UnescapeDataString(pair[(eq + 1)..].Replace('+', ' '));
-            fields[name] = value;
+            fields.Add(name, value);
         }
     }
 

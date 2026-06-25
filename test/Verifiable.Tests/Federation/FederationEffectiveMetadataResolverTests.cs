@@ -13,6 +13,9 @@ internal sealed class FederationEffectiveMetadataResolverTests
     private static readonly EntityTypeIdentifier RpType =
         WellKnownEntityTypeIdentifiers.OpenIdRelyingParty;
 
+    private static readonly string[] ExpectedOverriddenGrantTypes = ["authorization_code", "refresh_token"];
+    private static readonly string[] ExpectedTrimmedToAuthCode = ["authorization_code"];
+
 
     [TestMethod]
     public async Task ReturnsNullWhenSubjectDoesNotDeclareEntityType()
@@ -164,11 +167,11 @@ internal sealed class FederationEffectiveMetadataResolverTests
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
             new EntityIdentifier("https://anchor.example.com"));
 
-        //Subject declares grant_types including "implicit"; anchor's subset_of
-        //excludes it. Apply must fail.
+        //Subject declares grant_types=[authorization_code]; anchor's superset_of requires
+        //refresh_token, which the subject lacks. Apply must fail (§6.1.3.1.6).
         Dictionary<string, object> rpMetadata = new(StringComparer.Ordinal)
         {
-            ["grant_types"] = new List<object> { "authorization_code", "implicit" },
+            ["grant_types"] = new List<object> { "authorization_code" },
         };
 
         Dictionary<string, object> anchorPolicy = new(StringComparer.Ordinal)
@@ -177,7 +180,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
             {
                 ["grant_types"] = new Dictionary<string, object>(StringComparer.Ordinal)
                 {
-                    ["subset_of"] = new List<object> { "authorization_code", "refresh_token" },
+                    ["superset_of"] = new List<object> { "authorization_code", "refresh_token" },
                 },
             },
         };
@@ -288,6 +291,89 @@ internal sealed class FederationEffectiveMetadataResolverTests
 
         Assert.IsNull(result,
             "An empty allowed_entity_types array removes every entity type except federation_entity.");
+    }
+
+
+    [TestMethod]
+    public async Task ImmediateSuperiorMetadataOverridesSubjectDeclaration()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+
+        //Subject declares grant_types=[authorization_code]; the immediate superior's
+        //Subordinate Statement supplies grant_types=[authorization_code, refresh_token],
+        //which overrides the subject's value (§3.1.1). No metadata_policy in the chain.
+        Dictionary<string, object> subjectMetadata = new(StringComparer.Ordinal)
+        {
+            [RpType.Value] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["grant_types"] = new List<object> { "authorization_code" },
+            },
+        };
+        Dictionary<string, object> superiorClaims = new(StringComparer.Ordinal)
+        {
+            [WellKnownFederationClaimNames.Metadata] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [RpType.Value] = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["grant_types"] = new List<object> { "authorization_code", "refresh_token" },
+                },
+            },
+        };
+
+        TrustChain chain = await BuildChainAsync(subjectMetadata, superiorClaims, now).ConfigureAwait(false);
+        MetadataPolicyApplyResult? result = await ResolveAsync(chain, RpType).ConfigureAwait(false);
+
+        Assert.IsNotNull(result);
+        Assert.IsTrue(result.IsSuccess, result.FailureReason);
+        List<object> grantTypes = (List<object>)result.EffectiveMetadata!["grant_types"];
+        CollectionAssert.AreEquivalent(ExpectedOverriddenGrantTypes, grantTypes);
+    }
+
+
+    [TestMethod]
+    public async Task ImmediateSuperiorMetadataIsAppliedBeforePolicy()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+
+        //Subject declares grant_types=[implicit] which subset_of alone would trim to the
+        //empty array. The immediate superior overrides it with [authorization_code]; the
+        //anchor's subset_of then keeps authorization_code — proving the metadata override
+        //is applied before the policy (§6.1.4.2).
+        Dictionary<string, object> subjectMetadata = new(StringComparer.Ordinal)
+        {
+            [RpType.Value] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["grant_types"] = new List<object> { "implicit" },
+            },
+        };
+        Dictionary<string, object> superiorClaims = new(StringComparer.Ordinal)
+        {
+            [WellKnownFederationClaimNames.Metadata] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [RpType.Value] = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["grant_types"] = new List<object> { "authorization_code" },
+                },
+            },
+            [WellKnownFederationClaimNames.MetadataPolicy] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [RpType.Value] = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["grant_types"] = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["subset_of"] = new List<object> { "authorization_code", "refresh_token" },
+                    },
+                },
+            },
+        };
+
+        TrustChain chain = await BuildChainAsync(subjectMetadata, superiorClaims, now).ConfigureAwait(false);
+        MetadataPolicyApplyResult? result = await ResolveAsync(chain, RpType).ConfigureAwait(false);
+
+        Assert.IsNotNull(result);
+        Assert.IsTrue(result.IsSuccess, result.FailureReason);
+        List<object> grantTypes = (List<object>)result.EffectiveMetadata!["grant_types"];
+        CollectionAssert.AreEqual(ExpectedTrimmedToAuthCode, grantTypes);
     }
 
 

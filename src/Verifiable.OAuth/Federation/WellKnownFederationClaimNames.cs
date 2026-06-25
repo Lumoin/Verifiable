@@ -50,6 +50,17 @@ public static class WellKnownFederationClaimNames
     /// </summary>
     public static readonly string AuthorityHints = Utf8Constants.ToInternedString(AuthorityHintsUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="TrustAnchorHints"/>.</summary>
+    public static ReadOnlySpan<byte> TrustAnchorHintsUtf8 => "trust_anchor_hints"u8;
+
+    /// <summary>
+    /// <c>trust_anchor_hints</c> — array of <see cref="EntityIdentifier"/>
+    /// values naming the Trust Anchors trusted by the entity per Federation
+    /// §3.1.2. Like <see cref="AuthorityHints"/> it appears only in Entity
+    /// Configurations and MUST NOT be present in Subordinate Statements.
+    /// </summary>
+    public static readonly string TrustAnchorHints = Utf8Constants.ToInternedString(TrustAnchorHintsUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="Metadata"/>.</summary>
     public static ReadOnlySpan<byte> MetadataUtf8 => "metadata"u8;
 
@@ -164,6 +175,19 @@ public static class WellKnownFederationClaimNames
     /// </summary>
     public static readonly string SourceEndpoint = Utf8Constants.ToInternedString(SourceEndpointUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="Crit"/>.</summary>
+    public static ReadOnlySpan<byte> CritUtf8 => "crit"u8;
+
+    /// <summary>
+    /// <c>crit</c> — array of extension Claim Names present in the JWT that a
+    /// recipient MUST understand and process per Federation §3.1.1 / §13.4. A
+    /// listed claim the recipient does not understand invalidates the JWT. Used
+    /// as a JWT payload claim here, distinct from the JOSE <c>crit</c> header
+    /// parameter that <see cref="Verifiable.JCose.JoseCriticalHeaderValidation"/>
+    /// governs.
+    /// </summary>
+    public static readonly string Crit = Utf8Constants.ToInternedString(CritUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="TrustChain"/>.</summary>
     public static ReadOnlySpan<byte> TrustChainUtf8 => "trust_chain"u8;
 
@@ -202,6 +226,28 @@ public static class WellKnownFederationClaimNames
     /// final §3.1.2 / §7.1; the draft-era name for this claim was <c>id</c>.
     /// </summary>
     public static readonly string TrustMarkType = Utf8Constants.ToInternedString(TrustMarkTypeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="TrustMark"/>.</summary>
+    public static ReadOnlySpan<byte> TrustMarkUtf8 => "trust_mark"u8;
+
+    /// <summary>
+    /// <c>trust_mark</c> — the Trust Mark JWT echoed in a Trust Mark Status
+    /// Response payload per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.4">OpenID Federation 1.0 §8.4</see>,
+    /// identifying which Trust Mark the accompanying <see cref="Status"/> applies to.
+    /// </summary>
+    public static readonly string TrustMark = Utf8Constants.ToInternedString(TrustMarkUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Status"/>.</summary>
+    public static ReadOnlySpan<byte> StatusUtf8 => "status"u8;
+
+    /// <summary>
+    /// <c>status</c> — the status of a Trust Mark in a Trust Mark Status
+    /// Response payload per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.4">OpenID Federation 1.0 §8.4</see>
+    /// (for example <c>active</c>). The status value is at the issuer's discretion.
+    /// </summary>
+    public static readonly string Status = Utf8Constants.ToInternedString(StatusUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Delegation"/>.</summary>
     public static ReadOnlySpan<byte> DelegationUtf8 => "delegation"u8;

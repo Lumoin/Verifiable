@@ -14,8 +14,8 @@ namespace Verifiable.Vcalm;
 /// §3.6.1: a workflow carries an OPTIONAL <c>id</c>, the REQUIRED <c>initialStep</c> (the step an
 /// exchange starts on), the REQUIRED <c>steps</c> object (each <c>STEP_NAME</c> keying its step data),
 /// an OPTIONAL <c>credentialTemplates</c> array (the templates an <c>issueRequests</c> step evaluates),
-/// an OPTIONAL <c>controller</c> (the zcap root controller, modeled-but-deferred to V-7), and an
-/// OPTIONAL <c>authorization</c> object (OAuth2 / zcap config, modeled — enforcement deferred to V-7).
+/// an OPTIONAL <c>controller</c> (the zcap root controller, modeled but not yet enforced), and an
+/// OPTIONAL <c>authorization</c> object (OAuth2 / zcap config, modeled — enforcement not yet implemented).
 /// </para>
 /// <para>
 /// The step graph here is the LINEAR <c>nextStep</c> chain: a step has at most one <c>nextStep</c>
@@ -54,14 +54,14 @@ public sealed record VcalmWorkflowConfiguration
 
     /// <summary>
     /// The §3.6.1 OPTIONAL <c>controller</c> — the zcap root controller of the instance. Modeled and
-    /// carried verbatim; zcap authorization enforcement is deferred to V-7.
+    /// carried verbatim; zcap authorization enforcement is not yet implemented.
     /// </summary>
     public string? Controller { get; init; }
 
     /// <summary>
     /// The §3.6.1 OPTIONAL <c>authorization</c> object (verbatim JSON) — the OAuth2 / zcap
     /// authorization-scheme config. Modeled and carried verbatim; the authorization field's ENFORCEMENT
-    /// (zcap in particular) is deferred to V-7, so the value is round-tripped through §3.6.2 but not
+    /// (zcap in particular) is not yet implemented, so the value is round-tripped through §3.6.2 but not
     /// acted on by the exchange engine.
     /// </summary>
     public string? AuthorizationJson { get; init; }

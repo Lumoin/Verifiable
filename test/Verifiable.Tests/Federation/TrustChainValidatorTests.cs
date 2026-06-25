@@ -47,7 +47,7 @@ internal sealed class TrustChainValidatorTests
             Assert.IsTrue(isVerified, "All three chain signatures should verify under happy-path keys.");
         }
 
-        Assert.HasCount(7, result.Claims, "Chain profile emits 7 claims for codes 1120-1126.");
+        Assert.HasCount(8, result.Claims, "Chain profile emits 8 claims for codes 1120-1127.");
         foreach(Claim claim in result.Claims)
         {
             Assert.AreEqual(ClaimOutcome.Success, claim.Outcome,
@@ -422,6 +422,50 @@ internal sealed class TrustChainValidatorTests
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         return result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.ChainSatisfiesNamingConstraints.Code);
+    }
+
+
+    [TestMethod]
+    public async Task ChainWithBrokenAdjacencyFailsChainProperlyLinked()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/subject"));
+        using FederationTestRingNode other = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/other"));
+        using FederationTestRingNode anchor = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/anchor"));
+
+        //Position 1 is the anchor's Subordinate Statement about a DIFFERENT entity (other),
+        //so Statements[0].iss (subject) != Statements[1].sub (other) — the chain does not
+        //form a single path from subject to anchor (§10.2 step "ES[j].iss == ES[j+1].sub").
+        MintedStatement subjectEc = await FederationTestRing.MintEntityConfigurationAsync(
+            subject, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        MintedStatement anchorAboutOther = await FederationTestRing.MintSubordinateStatementAsync(
+            anchor, other, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        MintedStatement anchorEc = await FederationTestRing.MintEntityConfigurationAsync(
+            anchor, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        TrustChain chain = new()
+        {
+            Statements = [subjectEc.Statement, anchorAboutOther.Statement, anchorEc.Statement]
+        };
+
+        TrustChainValidationContext context = new()
+        {
+            Chain = chain,
+            TrustAnchors = [anchor.Identifier],
+            LinkSignaturesVerified = [true, true, true],
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await TrustChainValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim linked = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.ChainProperlyLinked.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, linked.Outcome,
+            "A chain whose adjacent iss/sub do not match must fail ChainProperlyLinked, even with all signatures verified.");
     }
 
 

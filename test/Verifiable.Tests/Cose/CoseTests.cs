@@ -239,6 +239,98 @@ internal sealed class CoseTests
 
 
     [TestMethod]
+    public async Task VerifyAndDecodeReturnsValidResultForGenuineSignature()
+    {
+        var headerMap = new Dictionary<int, object> { [CoseHeaderParameters.Alg] = WellKnownCoseAlgorithms.Es256 };
+        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), BaseMemoryPool.Shared);
+        byte[] payload = BuildTestPayload();
+
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        var message = await Verifiable.JCose.Cose.SignAsync(
+            protectedHeader,
+            unprotectedHeader: null,
+            payload,
+            CoseSerialization.BuildSigStructure,
+            privateKey,
+            MicrosoftCryptographicFunctions.SignP256Async,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
+
+        CoseVerificationResult result = await CoseVerification.VerifyAndDecodeAsync(
+            coseBytes.AsReadOnlyMemory(),
+            publicKey,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid, "A genuine COSE_Sign1 signature must verify.");
+        Assert.IsTrue(payload.AsSpan().SequenceEqual(result.Payload.Span), "The decoded payload must equal the signed payload.");
+        Assert.IsNotNull(result.Algorithm);
+        Assert.AreEqual(WellKnownCoseAlgorithms.Es256, result.Algorithm.Value, "The decoded algorithm must be ES256.");
+    }
+
+
+    [TestMethod]
+    public async Task VerifyAndDecodeReturnsInvalidForWrongKey()
+    {
+        var headerMap = new Dictionary<int, object> { [CoseHeaderParameters.Alg] = WellKnownCoseAlgorithms.Es256 };
+        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(headerMap), BaseMemoryPool.Shared);
+        byte[] payload = BuildTestPayload();
+
+        var signingKeyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var signingPublicKey = signingKeyPair.PublicKey;
+        using var signingPrivateKey = signingKeyPair.PrivateKey;
+
+        var wrongKeyPair = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using var wrongPublicKey = wrongKeyPair.PublicKey;
+        using var wrongPrivateKey = wrongKeyPair.PrivateKey;
+
+        var message = await Verifiable.JCose.Cose.SignAsync(
+            protectedHeader,
+            unprotectedHeader: null,
+            payload,
+            CoseSerialization.BuildSigStructure,
+            signingPrivateKey,
+            MicrosoftCryptographicFunctions.SignP256Async,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
+
+        CoseVerificationResult result = await CoseVerification.VerifyAndDecodeAsync(
+            coseBytes.AsReadOnlyMemory(),
+            wrongPublicKey,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A COSE_Sign1 verified against the wrong key must not be valid.");
+    }
+
+
+    [TestMethod]
+    public async Task VerifyAndDecodeFailsClosedOnMalformedBytes()
+    {
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        byte[] malformed = [0x00, 0x01, 0x02, 0x03];
+
+        CoseVerificationResult result = await CoseVerification.VerifyAndDecodeAsync(
+            malformed,
+            publicKey,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "Malformed COSE bytes must fail closed to an invalid result, not throw.");
+    }
+
+
+    [TestMethod]
     public void ProtectedHeaderSerializationRoundTripSucceeds()
     {
         var headerMap = new Dictionary<int, object>

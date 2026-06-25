@@ -29,9 +29,8 @@ namespace Verifiable.OAuth.Federation;
 /// outcome. The library default
 /// (<see cref="FederationDefaultHooks.EvaluateMetadataPolicy"/>) ships as a
 /// permissive stub returning <see cref="ClaimOutcome.Success"/>; the
-/// full §6.1.3 algorithm lands in a later chunk paired with property-test
-/// expansion. Deployments needing strict §6.1.3 enforcement before then
-/// supply their own implementation.
+/// full §6.1.3 algorithm is not yet implemented. Deployments needing strict
+/// §6.1.3 enforcement supply their own implementation.
 /// </returns>
 public delegate ValueTask<Claim> EvaluateMetadataPolicyDelegate(
     IReadOnlyDictionary<string, object> metadataPolicy,

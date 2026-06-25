@@ -3843,6 +3843,9 @@ internal sealed class TestHostShell: IAsyncDisposable
         if(endpointName == WellKnownEndpointNames.FederationResolve) { return "federation_resolve"; }
         if(endpointName == WellKnownEndpointNames.FederationRegistration) { return "federation_registration"; }
         if(endpointName == WellKnownEndpointNames.FederationHistoricalKeys) { return "federation_historical_keys"; }
+        if(endpointName == WellKnownEndpointNames.FederationTrustMark) { return "federation_trust_mark"; }
+        if(endpointName == WellKnownEndpointNames.FederationTrustMarkList) { return "federation_trust_mark_list"; }
+        if(endpointName == WellKnownEndpointNames.FederationTrustMarkStatus) { return "federation_trust_mark_status"; }
         if(endpointName == WellKnownEndpointNames.RegistrationRegister) { return "register"; }
         if(endpointName == WellKnownEndpointNames.UserInfo) { return "userinfo"; }
         if(endpointName == WellKnownEndpointNames.AuthZenAccessEvaluation) { return "access/v1/evaluation"; }

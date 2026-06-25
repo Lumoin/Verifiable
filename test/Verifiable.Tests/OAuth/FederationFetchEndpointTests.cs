@@ -122,6 +122,11 @@ internal sealed class FederationFetchEndpointTests
 
         Assert.AreEqual(404, (int)response.StatusCode,
             "Federation §8.1: a fetch for a subject the entity does not vouch for yields HTTP 404.");
+        Assert.AreEqual(WellKnownMediaTypes.Application.Json, response.Content.Headers.ContentType?.MediaType,
+            "Federation §8.9: the error response must be an application/json object.");
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.Contains($"\"error\":\"{OAuthErrors.NotFound}\"", body, StringComparison.Ordinal,
+            $"Federation §8.9: an unknown subject must carry the not_found error code. Got: {body}");
     }
 
 
@@ -157,6 +162,129 @@ internal sealed class FederationFetchEndpointTests
             "Federation §3: sub == the issuing entity is a malformed request (a Subordinate Statement is never self-issued) — 400.");
         Assert.IsFalse(delegateInvoked,
             "The self-issued guard must reject before consulting the application resolver.");
+    }
+
+
+    [TestMethod]
+    public async Task FetchEndpointRejectsWhenClientAuthenticationFails()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
+
+        //§8.8: the deployment requires client authentication at this endpoint and
+        //the requester fails it. The gate must reject with 401 invalid_client
+        //before the subordinate-statement resolver is consulted.
+        bool resolverInvoked = false;
+        app.Server.OAuth().ResolveSubordinateStatementAsync = (_, _, _, _) =>
+        {
+            resolverInvoked = true;
+            return ValueTask.FromResult<SubordinateStatementContribution?>(null);
+        };
+        app.Server.OAuth().AuthenticateFederationClientAsync = (_, _, _, _, _) =>
+            ValueTask.FromResult<FederationClientAuthenticationResult?>(
+                FederationClientAuthenticationResult.Rejected("No client authentication was presented."));
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = anchor.Registration.TenantId.Value;
+
+        Uri url = new(host.HttpBaseAddress!,
+            $"/connect/{segment}/federation_fetch?sub={Uri.EscapeDataString(SubordinateEntityId)}");
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, (int)response.StatusCode,
+            "§8.8: a failed client authentication must yield HTTP 401 invalid_client.");
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidClient}\"", body, StringComparison.Ordinal,
+            $"The 401 must carry the invalid_client error code. Got: {body}");
+        Assert.IsFalse(resolverInvoked,
+            "The client-authentication gate must run before the endpoint's own resolver.");
+    }
+
+
+    [TestMethod]
+    public async Task FetchEndpointProceedsWhenClientAuthenticationIsNotRequired()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
+
+        app.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
+            string.Equals(subject.Value, SubordinateEntityId, StringComparison.Ordinal)
+                ? ValueTask.FromResult<SubordinateStatementContribution?>(
+                    new SubordinateStatementContribution
+                    {
+                        Jwks = new Dictionary<string, object>(StringComparer.Ordinal) { ["keys"] = new List<object>() },
+                    })
+                : ValueTask.FromResult<SubordinateStatementContribution?>(null);
+
+        //A null result means client authentication is not required at this
+        //endpoint — the request proceeds and is served normally.
+        app.Server.OAuth().AuthenticateFederationClientAsync = (_, _, _, _, _) =>
+            ValueTask.FromResult<FederationClientAuthenticationResult?>(null);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = anchor.Registration.TenantId.Value;
+
+        Uri url = new(host.HttpBaseAddress!,
+            $"/connect/{segment}/federation_fetch?sub={Uri.EscapeDataString(SubordinateEntityId)}");
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, (int)response.StatusCode,
+            "A null client-authentication result means not required — the request proceeds.");
+    }
+
+
+    [TestMethod]
+    public async Task FetchEndpointMissingSubReturnsJsonError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        using VerifierKeyMaterial anchor = RegisterAnchor(app, anchorKeys);
+
+        bool delegateInvoked = false;
+        app.Server.OAuth().ResolveSubordinateStatementAsync = (_, _, _, _) =>
+        {
+            delegateInvoked = true;
+            return ValueTask.FromResult<SubordinateStatementContribution?>(null);
+        };
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = anchor.Registration.TenantId.Value;
+
+        //§8.1.1: sub is REQUIRED. A blank sub is therefore malformed. §8.1.2: an error
+        //response MUST be a JSON object with the content type application/json.
+        Uri url = new(host.HttpBaseAddress!, $"/connect/{segment}/federation_fetch?sub=");
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode,
+            "A fetch request without the REQUIRED sub parameter is malformed (Federation §8.1.1).");
+        Assert.AreEqual(WellKnownMediaTypes.Application.Json, response.Content.Headers.ContentType?.MediaType,
+            "Federation §8.1.2: a federation endpoint error response must use content type application/json.");
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Dictionary<string, object> error = JsonSerializer.Deserialize<Dictionary<string, object>>(
+            body, TestSetup.DefaultSerializationOptions)
+            ?? throw new InvalidOperationException("Error body parsed to null.");
+        Assert.IsTrue(error.ContainsKey("error"),
+            "Federation §8.1.2: the error response must be a JSON object carrying an error code.");
+        Assert.IsFalse(delegateInvoked,
+            "A request missing sub must be rejected before consulting the application resolver.");
     }
 
 

@@ -46,6 +46,12 @@ public enum DidCommSignatureVerificationError
     UnexpectedMediaType,
 
     /// <summary>
+    /// The signature's protected header carries a <c>crit</c> (critical) parameter. This consumer
+    /// understands no JWS critical extensions, so per RFC 7515 §4.1.11 the JWS is invalid and rejected.
+    /// </summary>
+    UnsupportedCriticalHeader,
+
+    /// <summary>
     /// The plaintext <c>from</c> does not match the signer's <c>kid</c> DID — the
     /// addressing-consistency MUST (DIDComm v2.1: "The from attribute in the plaintext message MUST
     /// match the signer's kid in a signed message.").

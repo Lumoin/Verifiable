@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Federation;
 /// <returns>A task that completes when recording finishes.</returns>
 /// <remarks>
 /// <para>
-/// Separate from the chunk-7 generic observation slots
+/// Separate from the generic observation slots
 /// (<c>RecordDecisionDelegate</c> / <c>ProjectDecisionDelegate</c>) — this
 /// delegate is federation-scoped and receives the validation outcome
 /// in its native shape, where the generic observers receive a serialised

@@ -55,7 +55,7 @@ public sealed record TrustMark
     /// <summary>
     /// The underlying JWT payload. Downstream consumers read nested-object
     /// claims (<see cref="WellKnownFederationClaimNames.Delegation"/>,
-    /// <c>logo_uri</c>, <c>ref</c>) via this dictionary; chunk B.7.1 doesn't
+    /// <c>logo_uri</c>, <c>ref</c>) via this dictionary; this record doesn't
     /// pre-deserialise them.
     /// </summary>
     public required UnverifiedJwtPayload Payload { get; init; }

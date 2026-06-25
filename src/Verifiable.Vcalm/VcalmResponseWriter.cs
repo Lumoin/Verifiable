@@ -286,8 +286,8 @@ public static class VcalmResponseWriter
             AppendInputResultField(sb, VcalmParameterNames.ValidUntil, outcome.ValidUntil, ref resultsFirst);
         }
 
-        //credentialSchema results are emitted as an empty array in V-1 (schema validation is a
-        //later chunk); the member is always present per the §3.3.1 results shape.
+        //credentialSchema results are emitted as an empty array (schema validation is not yet
+        //implemented); the member is always present per the §3.3.1 results shape.
         AppendEmptyArrayField(sb, VcalmParameterNames.CredentialSchema, ref resultsFirst);
         AppendStatusResultsField(sb, VcalmParameterNames.CredentialStatus, outcome.StatusResults, ref resultsFirst);
         AppendInputResultArrayField(sb, VcalmParameterNames.Proof, outcome.ProofResults, ref resultsFirst);

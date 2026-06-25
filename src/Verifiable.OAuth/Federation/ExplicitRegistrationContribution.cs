@@ -28,8 +28,8 @@ namespace Verifiable.OAuth.Federation;
 /// <see cref="Subject"/> becomes both the <c>sub</c> and the <c>aud</c>
 /// claim (§3.1.5: the <c>aud</c> MUST be the Entity Identifier of the RP),
 /// and <see cref="Metadata"/> is the registered client metadata the RP needs.
-/// <see cref="TrustAnchor"/> and <see cref="Jwks"/> are optional, matching
-/// the §3.1.5 OPTIONAL status of those claims for a registration response.
+/// <see cref="TrustAnchor"/> and <see cref="AuthorityHint"/> are required by
+/// the §12.2.3 requirements for a successful registration response; Jwks stays optional.
 /// The application returns <see langword="null"/> from the delegate when the
 /// RP cannot be registered; the endpoint then responds HTTP 400.
 /// </para>
@@ -52,9 +52,18 @@ public sealed record ExplicitRegistrationContribution
 
     /// <summary>
     /// The <c>trust_anchor</c> claim — the Entity Identifier of the Trust
-    /// Anchor the OP selected to process the registration (§3.1.5). Optional.
+    /// Anchor the OP selected to process the registration. REQUIRED in a
+    /// successful Explicit Registration Response per §12.2.3.
     /// </summary>
-    public Uri? TrustAnchor { get; init; }
+    public required Uri TrustAnchor { get; init; }
+
+    /// <summary>
+    /// The RP's Immediate Superior in the Trust Chain the OP selected to
+    /// process the request. Emitted as the <c>authority_hints</c> claim — a
+    /// single-element array — which is REQUIRED in a successful Explicit
+    /// Registration Response per §12.2.3.
+    /// </summary>
+    public required Uri AuthorityHint { get; init; }
 
     /// <summary>
     /// The optional <c>jwks</c> claim. OPTIONAL for a registration response

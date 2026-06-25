@@ -21,9 +21,9 @@ namespace Verifiable.JCose;
 /// <para>
 /// <see cref="FromWellKnownName"/> maps a wire <c>alg</c> string to its descriptor at the parse
 /// boundary; the encrypt path takes a descriptor directly. The five rejected-by-design and
-/// later-chunk algorithms (<c>RSA1_5</c>, <c>RSA-OAEP</c>, <c>A*GCMKW</c>, <c>PBES2-*</c>) are
+/// not-yet-implemented algorithms (<c>RSA1_5</c>, <c>RSA-OAEP</c>, <c>A*GCMKW</c>, <c>PBES2-*</c>) are
 /// not represented here — <see cref="FromWellKnownName"/> surfaces them through its caller's
-/// rejection path rather than as descriptors this chunk can dispatch.
+/// rejection path rather than as descriptors this library can dispatch.
 /// </para>
 /// </remarks>
 /// <param name="Name">The wire <c>alg</c> identifier, e.g. <c>ECDH-ES+A256KW</c>.</param>
@@ -93,7 +93,7 @@ public readonly record struct JweAlgorithm(string Name, JweKeyManagementMode Mod
     /// This is the single <c>alg</c>-string to descriptor mapping used at parse boundaries.
     /// The mapping is a switch expression over the <see cref="WellKnownJweAlgorithms"/>
     /// constants — there is no per-method string matching elsewhere. <c>RSA1_5</c> and the
-    /// later-chunk algorithms return <see langword="null"/>; callers reject them with the
+    /// not-yet-implemented algorithms return <see langword="null"/>; callers reject them with the
     /// specific rationale required (e.g. RFC 8725 §3.2 for <c>RSA1_5</c>).
     /// </remarks>
     /// <param name="algorithm">The wire <c>alg</c> string.</param>
