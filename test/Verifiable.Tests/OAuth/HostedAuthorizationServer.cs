@@ -150,7 +150,8 @@ internal sealed class HostedAuthorizationServer
         SdCwtVpVerificationSeams? sdCwtSeams = null,
         CommitmentReuseDetectionSeam? saltReuseSeam = null,
         TimingPolicy? timings = null,
-        Verifiable.OAuth.Siop.ResolveDidVerificationKeyDelegate? resolveDidVerificationKey = null)
+        Verifiable.OAuth.Siop.ResolveDidVerificationKeyDelegate? resolveDidVerificationKey = null,
+        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? resolveVerifiedStatusListToken = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -752,7 +753,8 @@ internal sealed class HostedAuthorizationServer
                     Satisfied = satisfied,
                     OverDisclosed = overDisclosed
                 };
-            });
+            },
+            resolveVerifiedStatusListToken: resolveVerifiedStatusListToken);
 
         //SIOPv2 RP flow's §11.1 ValidateSelfIssuedIdToken handler AND the §12 combined-response
         //ValidateCombinedSiopResponse handler, contributed onto the shared executor alongside the

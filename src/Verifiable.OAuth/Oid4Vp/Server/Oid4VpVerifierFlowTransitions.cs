@@ -270,6 +270,7 @@ public static class Oid4VpVerifierFlowTransitions
                                 ExpiresAt = received.ExpiresAt,
                                 Kind = FlowKind.Oid4VpVerifierServer,
                                 Claims = verified.Claims,
+                                CredentialStatuses = verified.CredentialStatuses,
                                 VerifiedAt = verified.VerifiedAt,
                                 RedirectUri = verified.RedirectUri
                             },
@@ -289,6 +290,7 @@ public static class Oid4VpVerifierFlowTransitions
                                 ExpiresAt = unencryptedReceived.ExpiresAt,
                                 Kind = FlowKind.Oid4VpVerifierServer,
                                 Claims = verified.Claims,
+                                CredentialStatuses = verified.CredentialStatuses,
                                 VerifiedAt = verified.VerifiedAt,
                                 RedirectUri = verified.RedirectUri
                             },

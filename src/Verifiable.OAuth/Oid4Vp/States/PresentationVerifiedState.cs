@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Verifiable.Core.StatusList;
 
 namespace Verifiable.OAuth.Oid4Vp.States;
 
@@ -44,4 +45,13 @@ public sealed record PresentationVerifiedState: FlowState
     /// and follows the redirect.
     /// </remarks>
     public Uri? RedirectUri { get; init; }
+
+    /// <summary>
+    /// The IETF Token Status List outcomes for the presented credentials, keyed by DCQL credential
+    /// query identifier, carried through from <see cref="VerificationSucceeded.CredentialStatuses"/>.
+    /// <see langword="null"/> when the verifier executor was constructed without a status resolver or
+    /// no presented credential referenced a status list. A relying party hosting the verifier flow
+    /// reads this from the terminal state to act on revocation/suspension.
+    /// </summary>
+    public IReadOnlyDictionary<string, CredentialStatusOutcome>? CredentialStatuses { get; init; }
 }
