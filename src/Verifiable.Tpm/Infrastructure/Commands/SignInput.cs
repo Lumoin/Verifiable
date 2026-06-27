@@ -12,8 +12,9 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Signs a digest with a loaded signing key using the ECDSA scheme. The signing
-/// key must have the <c>sign</c> attribute set.
+/// Signs a digest with a loaded signing key. The signing key must have the <c>sign</c> attribute set,
+/// and the supplied <see cref="SignatureScheme"/> must be compatible with the key's type: TPM_ALG_ECDSA
+/// for an ECC key, TPM_ALG_RSASSA or TPM_ALG_RSAPSS for an RSA key.
 /// </para>
 /// <para>
 /// Command structure (TPM 2.0 Part 3, Section 20.2):
@@ -46,7 +47,12 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
     public ReadOnlyMemory<byte> Digest { get; }
 
     /// <summary>
-    /// Gets the hash algorithm for the ECDSA signing scheme.
+    /// Gets the signing scheme algorithm (TPMI_ALG_SIG_SCHEME): TPM_ALG_ECDSA, TPM_ALG_RSASSA, or TPM_ALG_RSAPSS.
+    /// </summary>
+    public TpmAlgIdConstants SignatureScheme { get; }
+
+    /// <summary>
+    /// Gets the hash algorithm for the signing scheme.
     /// </summary>
     public TpmAlgIdConstants SchemeHashAlg { get; }
 
@@ -68,28 +74,96 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
         TpmAlgIdConstants schemeHashAlg,
         MemoryPool<byte> pool)
     {
+        return Create(keyHandle, digest, TpmAlgIdConstants.TPM_ALG_ECDSA, schemeHashAlg, pool);
+    }
+
+    /// <summary>
+    /// Creates a TPM2_Sign input for RSASSA (RSA PKCS#1 v1.5) signing.
+    /// </summary>
+    /// <remarks>
+    /// Configures the command with a NULL validation ticket, which is required when
+    /// the digest was computed outside the TPM (TPM 2.0 Part 2, Section 10.7.3).
+    /// </remarks>
+    /// <param name="keyHandle">The handle of the RSA signing key.</param>
+    /// <param name="digest">The pre-computed digest bytes to sign.</param>
+    /// <param name="schemeHashAlg">The hash algorithm for the RSASSA scheme.</param>
+    /// <param name="pool">The memory pool for digest buffer allocation.</param>
+    /// <returns>A new <see cref="SignInput"/>.</returns>
+    public static SignInput ForRsaSsa(
+        TpmiDhObject keyHandle,
+        ReadOnlySpan<byte> digest,
+        TpmAlgIdConstants schemeHashAlg,
+        MemoryPool<byte> pool)
+    {
+        return Create(keyHandle, digest, TpmAlgIdConstants.TPM_ALG_RSASSA, schemeHashAlg, pool);
+    }
+
+    /// <summary>
+    /// Creates a TPM2_Sign input for RSAPSS signing.
+    /// </summary>
+    /// <remarks>
+    /// Configures the command with a NULL validation ticket, which is required when
+    /// the digest was computed outside the TPM (TPM 2.0 Part 2, Section 10.7.3).
+    /// </remarks>
+    /// <param name="keyHandle">The handle of the RSA signing key.</param>
+    /// <param name="digest">The pre-computed digest bytes to sign.</param>
+    /// <param name="schemeHashAlg">The hash algorithm for the RSAPSS scheme.</param>
+    /// <param name="pool">The memory pool for digest buffer allocation.</param>
+    /// <returns>A new <see cref="SignInput"/>.</returns>
+    public static SignInput ForRsaPss(
+        TpmiDhObject keyHandle,
+        ReadOnlySpan<byte> digest,
+        TpmAlgIdConstants schemeHashAlg,
+        MemoryPool<byte> pool)
+    {
+        return Create(keyHandle, digest, TpmAlgIdConstants.TPM_ALG_RSAPSS, schemeHashAlg, pool);
+    }
+
+    /// <summary>
+    /// Creates a TPM2_Sign input for the given signing scheme.
+    /// </summary>
+    /// <remarks>
+    /// Configures the command with a NULL validation ticket, which is required when
+    /// the digest was computed outside the TPM (TPM 2.0 Part 2, Section 10.7.3).
+    /// </remarks>
+    /// <param name="keyHandle">The handle of the signing key.</param>
+    /// <param name="digest">The pre-computed digest bytes to sign.</param>
+    /// <param name="signatureScheme">The signing scheme algorithm (TPM_ALG_ECDSA, TPM_ALG_RSASSA, or TPM_ALG_RSAPSS).</param>
+    /// <param name="schemeHashAlg">The hash algorithm for the scheme.</param>
+    /// <param name="pool">The memory pool for digest buffer allocation.</param>
+    /// <returns>A new <see cref="SignInput"/>.</returns>
+    public static SignInput Create(
+        TpmiDhObject keyHandle,
+        ReadOnlySpan<byte> digest,
+        TpmAlgIdConstants signatureScheme,
+        TpmAlgIdConstants schemeHashAlg,
+        MemoryPool<byte> pool)
+    {
         ArgumentNullException.ThrowIfNull(pool);
         IMemoryOwner<byte> owner = pool.Rent(digest.Length);
         digest.CopyTo(owner.Memory.Span);
-        return new SignInput(keyHandle, owner, owner.Memory.Slice(0, digest.Length), schemeHashAlg);
+
+        return new SignInput(keyHandle, owner, owner.Memory.Slice(0, digest.Length), signatureScheme, schemeHashAlg);
     }
 
     private SignInput(
         TpmiDhObject keyHandle,
         IMemoryOwner<byte> digestOwner,
         ReadOnlyMemory<byte> digest,
+        TpmAlgIdConstants signatureScheme,
         TpmAlgIdConstants schemeHashAlg)
     {
         KeyHandle = keyHandle;
         DigestOwner = digestOwner;
         Digest = digest;
+        SignatureScheme = signatureScheme;
         SchemeHashAlg = schemeHashAlg;
     }
 
     /// <inheritdoc/>
     public int GetSerializedSize()
     {
-        //TPMT_SIG_SCHEME: sigAlg (UINT16) + hashAlg (UINT16).
+        //TPMT_SIG_SCHEME: scheme (UINT16) + hashAlg (UINT16).
         const int TpmtSigSchemeSize = sizeof(ushort) + sizeof(ushort);
 
         //TPMT_TK_HASHCHECK: tag (UINT16) + hierarchy (UINT32) + TPM2B_DIGEST size (UINT16, = 0 for NULL ticket).
@@ -112,7 +186,7 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
     {
         writer.WriteUInt16((ushort)Digest.Length);
         writer.WriteBytes(Digest.Span);
-        writer.WriteUInt16((ushort)TpmAlgIdConstants.TPM_ALG_ECDSA);
+        writer.WriteUInt16((ushort)SignatureScheme);
         writer.WriteUInt16((ushort)SchemeHashAlg);
 
         //NULL ticket: tag = TPM_ST_HASHCHECK, hierarchy = TPM_RH_NULL, digest size = 0.
@@ -131,5 +205,5 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
         }
     }
 
-    private string DebuggerDisplay => $"SignInput(Key={KeyHandle}, Digest={Digest.Length} bytes, Hash={SchemeHashAlg})";
+    private string DebuggerDisplay => $"SignInput(Key={KeyHandle}, Digest={Digest.Length} bytes, Scheme={SignatureScheme}, Hash={SchemeHashAlg})";
 }

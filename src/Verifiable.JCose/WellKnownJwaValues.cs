@@ -194,7 +194,7 @@ namespace Verifiable.JCose
         public static readonly string MlDsa87 = Utf8Constants.ToInternedString(MlDsa87Utf8);
 
 
-        //RFC 9784 introduced fully-specified ECDSA in COSE that pins both curve and
+        //RFC 9864 introduced fully-specified ECDSA in COSE that pins both curve and
         //hash in a single identifier. draft-ietf-jose-fully-specified-algorithms
         //(WG draft) defines the parallel JOSE alg strings — same spellings, used
         //in the JWS protected header. ESP* covers the NIST P-curves and is
@@ -205,7 +205,7 @@ namespace Verifiable.JCose
         public static ReadOnlySpan<byte> Esb256Utf8 => "ESB256"u8;
 
         /// <summary>
-        /// Fully-specified ECDSA with Brainpool P-256r1 and SHA-256 (RFC 9784 + JOSE draft).
+        /// Fully-specified ECDSA with Brainpool P-256r1 and SHA-256 (RFC 9864 + JOSE draft).
         /// </summary>
         public static readonly string Esb256 = Utf8Constants.ToInternedString(Esb256Utf8);
 
@@ -213,7 +213,7 @@ namespace Verifiable.JCose
         public static ReadOnlySpan<byte> Esb320Utf8 => "ESB320"u8;
 
         /// <summary>
-        /// Fully-specified ECDSA with Brainpool P-320r1 and SHA-384 (RFC 9784 + JOSE draft).
+        /// Fully-specified ECDSA with Brainpool P-320r1 and SHA-384 (RFC 9864 + JOSE draft).
         /// </summary>
         public static readonly string Esb320 = Utf8Constants.ToInternedString(Esb320Utf8);
 
@@ -221,7 +221,7 @@ namespace Verifiable.JCose
         public static ReadOnlySpan<byte> Esb384Utf8 => "ESB384"u8;
 
         /// <summary>
-        /// Fully-specified ECDSA with Brainpool P-384r1 and SHA-384 (RFC 9784 + JOSE draft).
+        /// Fully-specified ECDSA with Brainpool P-384r1 and SHA-384 (RFC 9864 + JOSE draft).
         /// </summary>
         public static readonly string Esb384 = Utf8Constants.ToInternedString(Esb384Utf8);
 
@@ -229,7 +229,7 @@ namespace Verifiable.JCose
         public static ReadOnlySpan<byte> Esb512Utf8 => "ESB512"u8;
 
         /// <summary>
-        /// Fully-specified ECDSA with Brainpool P-512r1 and SHA-512 (RFC 9784 + JOSE draft).
+        /// Fully-specified ECDSA with Brainpool P-512r1 and SHA-512 (RFC 9864 + JOSE draft).
         /// </summary>
         public static readonly string Esb512 = Utf8Constants.ToInternedString(Esb512Utf8);
 
@@ -490,7 +490,7 @@ namespace Verifiable.JCose
 
 
         /// <summary>
-        /// If <paramref name="alg"/> is any RFC 9784 Brainpool ECDSA variant.
+        /// If <paramref name="alg"/> is any RFC 9864 Brainpool ECDSA variant.
         /// </summary>
         public static bool IsEsb(string alg) =>
             IsEsb256(alg) || IsEsb320(alg) || IsEsb384(alg) || IsEsb512(alg);

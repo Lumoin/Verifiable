@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
@@ -56,6 +57,101 @@ public abstract class TpmSessionBase
     /// For password sessions, this returns <see cref="TpmAlgIdConstants.TPM_ALG_NULL"/>.
     /// </remarks>
     public abstract TpmAlgIdConstants HashAlgorithm { get; }
+
+    /// <summary>
+    /// Gets or sets the session attributes (TPMA_SESSION).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The executor reads these to discover which session carries the <c>decrypt</c> and <c>encrypt</c>
+    /// attributes for session-based parameter encryption, without downcasting to a concrete session type.
+    /// </para>
+    /// <para>
+    /// Password sessions ignore this value (they always transmit zero attributes), so setting
+    /// <see cref="TpmaSession.DECRYPT"/> or <see cref="TpmaSession.ENCRYPT"/> on a password session has no
+    /// effect and, because such a session carries no symmetric algorithm, would fail the executor's
+    /// admissibility check.
+    /// </para>
+    /// <para>
+    /// See TPM 2.0 Part 2, Section 8.4 - TPMA_SESSION.
+    /// </para>
+    /// </remarks>
+    public TpmaSession SessionAttributes { get; set; }
+
+    /// <summary>
+    /// Gets the symmetric algorithm negotiated for session-based parameter encryption (TPMT_SYM_DEF).
+    /// </summary>
+    /// <remarks>
+    /// Defaults to <see cref="TpmtSymDef.Null"/>. HMAC sessions established with a non-null symmetric
+    /// definition carry it here so the executor can gate parameter encryption on it. Password sessions are
+    /// always <see cref="TpmtSymDef.Null"/>.
+    /// </remarks>
+    public TpmtSymDef Symmetric { get; protected init; } = TpmtSymDef.Null;
+
+    /// <summary>
+    /// Generates a fresh caller nonce for the upcoming command.
+    /// </summary>
+    /// <param name="pool">The memory pool for allocating the new nonce.</param>
+    /// <remarks>
+    /// <para>
+    /// The caller provides a fresh nonceCaller for each command in a session (TPM 2.0 Part 1, Section 17.6).
+    /// The executor calls this once at the start of building each command, before computing the command
+    /// parameter encryption, cpHash, and auth HMAC, so all three observe the same caller nonce, and that same
+    /// nonce remains available to decrypt the response (which is keyed on the command's caller nonce) until the
+    /// next command rolls it.
+    /// </para>
+    /// <para>
+    /// The base implementation is a no-op; sessions without a rolling caller nonce (such as password sessions)
+    /// do not override it.
+    /// </para>
+    /// </remarks>
+    public virtual void RollNonceCaller(MemoryPool<byte> pool)
+    {
+    }
+
+    /// <summary>
+    /// Encrypts the data portion of the first command parameter in place, when this session is the command's
+    /// decrypt session.
+    /// </summary>
+    /// <param name="firstParameterData">The data portion (excluding the size field) of the first parameter.</param>
+    /// <param name="pool">The memory pool for transient key material.</param>
+    /// <param name="cancellationToken">A token observed across the key-derivation computations.</param>
+    /// <returns>A task that completes when the parameter has been encrypted.</returns>
+    /// <remarks>
+    /// Command parameter encryption uses nonceCaller as nonceNewer and nonceTPM as nonceOlder (TPM 2.0 Part 1,
+    /// Section 19.2) and runs before cpHash is computed (Section 19.1). The base implementation is a no-op for
+    /// sessions that do not perform parameter encryption.
+    /// </remarks>
+    public virtual ValueTask EncryptFirstParameterAsync(
+        Memory<byte> firstParameterData,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Decrypts the data portion of the first response parameter in place, when this session is the command's
+    /// encrypt session.
+    /// </summary>
+    /// <param name="firstParameterData">The data portion (excluding the size field) of the first parameter.</param>
+    /// <param name="pool">The memory pool for transient key material.</param>
+    /// <param name="cancellationToken">A token observed across the key-derivation computations.</param>
+    /// <returns>A task that completes when the parameter has been decrypted.</returns>
+    /// <remarks>
+    /// Response parameter decryption uses nonceTPM as nonceNewer and nonceCaller as nonceOlder (TPM 2.0 Part 1,
+    /// Section 19.2) and runs only after the response HMAC verifies (Section 19.1: rpHash is computed over the
+    /// still-encrypted parameter). The executor calls this after <see cref="VerifyAndUpdateAsync"/> has adopted
+    /// the new nonceTPM and before the next command rolls nonceCaller, so both nonces are correct. The base
+    /// implementation is a no-op for sessions that do not perform parameter encryption.
+    /// </remarks>
+    public virtual ValueTask DecryptFirstParameterAsync(
+        Memory<byte> firstParameterData,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
+    {
+        return ValueTask.CompletedTask;
+    }
 
     /// <summary>
     /// Gets the serialized size of TPMS_AUTH_COMMAND for this session.

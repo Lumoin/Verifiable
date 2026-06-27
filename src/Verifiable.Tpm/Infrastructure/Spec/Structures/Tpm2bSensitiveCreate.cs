@@ -66,6 +66,20 @@ public sealed class Tpm2bSensitiveCreate: IDisposable
     }
 
     /// <summary>
+    /// Creates a sensitive creation buffer for sealing the supplied secret: an empty authValue and the secret
+    /// as the sensitive data. The secret is copied into pooled storage that the returned instance owns and
+    /// clears on disposal.
+    /// </summary>
+    /// <param name="secret">The data to seal.</param>
+    /// <param name="pool">The memory pool for allocating storage.</param>
+    /// <returns>Sensitive creation buffer carrying the data to seal.</returns>
+    public static Tpm2bSensitiveCreate ForSealedData(ReadOnlySpan<byte> secret, MemoryPool<byte> pool)
+    {
+        return new Tpm2bSensitiveCreate(
+            new TpmsSensitiveCreate(Tpm2bAuth.CreateEmpty(pool), Tpm2bSensitiveData.Create(secret, pool)));
+    }
+
+    /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
     public int SerializedSize => sizeof(ushort) + Sensitive.SerializedSize;

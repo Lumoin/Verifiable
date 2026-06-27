@@ -111,7 +111,7 @@ internal class HwTpmCapabilityTests
 
         var input = GetCapabilityInput.ForAlgorithms();
         TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-            Tpm, input, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Tpm, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(result, "GetCapability(ALGS)");
 
@@ -144,7 +144,7 @@ internal class HwTpmCapabilityTests
         var input = GetCapabilityInput.ForEccCurves();
 
         TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-            device, input, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            device, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(result, "GetCapability(ECC_CURVES)");
 
@@ -173,7 +173,7 @@ internal class HwTpmCapabilityTests
 
         var input = GetCapabilityInput.ForPcrs();
         TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-            Tpm, input, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Tpm, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(result, "GetCapability(PCRS)");
 
@@ -247,7 +247,7 @@ internal class HwTpmCapabilityTests
         //First, get the PCR allocation to see which banks exist.
         var capInput = GetCapabilityInput.ForPcrs();
         TpmResult<GetCapabilityResponse> capResult = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-            Tpm, capInput, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Tpm, capInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertUtilities.AssertSuccess(capResult, "GetCapability(PCRS)");
 
@@ -328,7 +328,7 @@ internal class HwTpmCapabilityTests
             using var input = PcrReadInput.ForPcrs(hashAlgorithm, pcrArray, pool);
 
             TpmResult<PcrReadResponse> result = await TpmCommandExecutor.ExecuteAsync<PcrReadResponse>(
-                device, input, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                device, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             if(!result.IsSuccess)
             {
@@ -384,7 +384,7 @@ internal class HwTpmCapabilityTests
             var input = GetCapabilityInput.ForTpmProperties(property);
 
             TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-                device, input, [], pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                device, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
             AssertUtilities.AssertSuccess(result, $"GetCapability(TPM_PROPERTIES, 0x{property:X})");
 

@@ -29,6 +29,18 @@ internal sealed class BrainpoolSignVerifyTests
 
 
     [TestMethod]
+    public async Task BrainpoolP224r1SignAndVerifyRoundTrip()
+    {
+        await AssertBcRoundTrip(
+            TestKeyMaterialProvider.CreateBrainpoolP224r1KeyMaterial(),
+            BouncyCastleCryptographicFunctions.SignBrainpoolP224r1Async,
+            BouncyCastleCryptographicFunctions.VerifyBrainpoolP224r1Async,
+            expectedSignatureLength: 56,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    [TestMethod]
     public async Task BrainpoolP256r1SignAndVerifyRoundTrip()
     {
         await AssertBcRoundTrip(

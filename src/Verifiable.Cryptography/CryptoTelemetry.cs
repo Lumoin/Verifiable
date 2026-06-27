@@ -166,6 +166,48 @@ public static class CryptoTelemetry
 
 
     /// <summary>
+    /// Attribute names specific to <see cref="Verifiable.Cryptography.Aead.Ciphertext"/> /
+    /// <see cref="DecryptedContent"/> spans produced by an unauthenticated symmetric
+    /// block-cipher (CBC) operation.
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible",
+        Justification = "Intentional grouping of related constants — same pattern as WellKnownMediaTypes.")]
+    public static class SymmetricCipher
+    {
+        /// <summary>Block cipher algorithm name, e.g. <c>TripleDes</c> or <c>Aes256</c>.</summary>
+        public const string Algorithm = "crypto.cipher.algorithm";
+
+        /// <summary>Length of the input in bytes.</summary>
+        public const string InputLength = "crypto.cipher.input_length";
+
+        /// <summary>Length of the output in bytes.</summary>
+        public const string OutputLength = "crypto.cipher.output_byte_length";
+    }
+
+
+    /// <summary>
+    /// Attribute names specific to <see cref="MacValue"/> lifetime spans and block-cipher
+    /// MAC compute / verify operations (CMAC, ISO/IEC 9797-1 Algorithm 3).
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible",
+        Justification = "Intentional grouping of related constants — same pattern as WellKnownMediaTypes.")]
+    public static class BlockCipherMac
+    {
+        /// <summary>Block cipher algorithm backing the MAC, e.g. <c>TripleDes</c> or <c>Aes256</c>.</summary>
+        public const string Algorithm = "crypto.block_cipher_mac.algorithm";
+
+        /// <summary>Length of the message being authenticated in bytes.</summary>
+        public const string InputLength = "crypto.block_cipher_mac.input_length";
+
+        /// <summary>Length of the MAC output in bytes.</summary>
+        public const string OutputLength = "crypto.block_cipher_mac.output_byte_length";
+
+        /// <summary><see langword="true"/> when verification succeeded; <see langword="false"/> otherwise.</summary>
+        public const string Valid = "crypto.block_cipher_mac.valid";
+    }
+
+
+    /// <summary>
     /// Attribute names specific to signing and verification spans.
     /// </summary>
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
@@ -235,6 +277,18 @@ public static class CryptoTelemetry
 
         /// <summary>Activity name for HMAC verify operations.</summary>
         public const string HmacVerify = "crypto.hmac.verify";
+
+        /// <summary>Activity name for symmetric block-cipher (CBC) encrypt operations.</summary>
+        public const string SymmetricEncrypt = "crypto.cipher.encrypt";
+
+        /// <summary>Activity name for symmetric block-cipher (CBC) decrypt operations.</summary>
+        public const string SymmetricDecrypt = "crypto.cipher.decrypt";
+
+        /// <summary>Activity name for block-cipher MAC compute operations.</summary>
+        public const string BlockCipherMacCompute = "crypto.block_cipher_mac.compute";
+
+        /// <summary>Activity name for block-cipher MAC verify operations.</summary>
+        public const string BlockCipherMacVerify = "crypto.block_cipher_mac.verify";
 
         /// <summary>Activity name for signing operations.</summary>
         public const string Sign = "crypto.sign";

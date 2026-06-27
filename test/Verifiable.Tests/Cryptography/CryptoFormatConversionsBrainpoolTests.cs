@@ -8,11 +8,11 @@ namespace Verifiable.Tests.Cryptography;
 /// Tests for the Q.2 Brainpool wiring in
 /// <see cref="CryptoFormatConversions"/> — JWA→Tag (inbound) and Tag→JWA /
 /// Tag→COSE (outbound). The COSE→Tag direction lives in
-/// <c>WellKnownCoseAlgorithmsRfc9784Tests</c> alongside the Q.1 ESP coverage.
+/// <c>WellKnownCoseAlgorithmsRfc9864Tests</c> alongside the Q.1 ESP coverage.
 /// </summary>
 /// <remarks>
 /// <para>
-/// RFC 9784 / draft-ietf-jose-fully-specified-algorithms binds each Brainpool
+/// RFC 9864 / draft-ietf-jose-fully-specified-algorithms binds each Brainpool
 /// r1 curve to a specific hash family. The converter must produce signing
 /// keys for <see cref="Purpose.Signing"/> and verification keys for
 /// <see cref="Purpose.Verification"/>; the curve discriminator is carried by
@@ -91,7 +91,7 @@ internal sealed class CryptoFormatConversionsBrainpoolTests
     [TestMethod]
     public void EsbCoseAndJwaConvertersAgreeOnTagIdentity()
     {
-        //The JWA "ESB256" and COSE -261 carry the same algorithm semantics —
+        //The JWA "ESB256" and COSE -265 carry the same algorithm semantics —
         //the converter must produce the same tag from either path.
         Tag fromJwa = CryptoFormatConversions.DefaultJwaToTagConverter(
             WellKnownJwaValues.Esb256, Purpose.Verification);

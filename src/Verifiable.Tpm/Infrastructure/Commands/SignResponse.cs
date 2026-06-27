@@ -11,18 +11,12 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Response structure (TPM 2.0 Part 3, Section 20.2):
+/// Response structure (TPM 2.0 Part 3, Section 20.2): a single TPMT_SIGNATURE whose active member
+/// is selected by the signing algorithm.
 /// </para>
 /// <list type="bullet">
-///   <item><description>signature (TPMT_SIGNATURE): sigAlg (2 bytes) + TPMS_SIGNATURE_ECDSA.</description></item>
-/// </list>
-/// <para>
-/// TPMS_SIGNATURE_ECDSA structure (TPM 2.0 Part 2, Section 11.3.4):
-/// </para>
-/// <list type="bullet">
-///   <item><description>hash (TPMI_ALG_HASH): The hash algorithm used.</description></item>
-///   <item><description>signatureR (TPM2B_ECC_PARAMETER): The r component.</description></item>
-///   <item><description>signatureS (TPM2B_ECC_PARAMETER): The s component.</description></item>
+///   <item><description>sigAlg (TPMI_ALG_SIG_SCHEME, 2 bytes): the union selector.</description></item>
+///   <item><description>signature (TPMU_SIGNATURE): see <see cref="TpmuSignature"/> — TPMS_SIGNATURE_ECDSA (hash + r + s) or TPMS_SIGNATURE_RSA (hash + sig).</description></item>
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -31,35 +25,24 @@ public sealed class SignResponse: IDisposable, ITpmWireType
     private bool Disposed { get; set; }
 
     /// <summary>
-    /// Gets the signing algorithm reported by the TPM.
+    /// Gets the signing algorithm reported by the TPM (the TPMU_SIGNATURE selector).
     /// </summary>
     public TpmAlgIdConstants SignatureAlgorithm { get; }
 
     /// <summary>
-    /// Gets the hash algorithm reported by the TPM.
+    /// Gets the parsed signature value.
     /// </summary>
-    public TpmAlgIdConstants HashAlgorithm { get; }
+    public TpmuSignature Signature { get; }
 
     /// <summary>
-    /// Gets the r component of the ECDSA signature.
+    /// Gets the hash algorithm reported by the TPM inside the signature.
     /// </summary>
-    public Tpm2bEccParameter SignatureR { get; }
+    public TpmAlgIdConstants HashAlgorithm => Signature.HashAlgorithm;
 
-    /// <summary>
-    /// Gets the s component of the ECDSA signature.
-    /// </summary>
-    public Tpm2bEccParameter SignatureS { get; }
-
-    private SignResponse(
-        TpmAlgIdConstants signatureAlgorithm,
-        TpmAlgIdConstants hashAlgorithm,
-        Tpm2bEccParameter signatureR,
-        Tpm2bEccParameter signatureS)
+    private SignResponse(TpmAlgIdConstants signatureAlgorithm, TpmuSignature signature)
     {
         SignatureAlgorithm = signatureAlgorithm;
-        HashAlgorithm = hashAlgorithm;
-        SignatureR = signatureR;
-        SignatureS = signatureS;
+        Signature = signature;
     }
 
     /// <summary>
@@ -72,10 +55,9 @@ public sealed class SignResponse: IDisposable, ITpmWireType
     {
         ArgumentNullException.ThrowIfNull(pool);
         var sigAlg = (TpmAlgIdConstants)reader.ReadUInt16();
-        var hashAlg = (TpmAlgIdConstants)reader.ReadUInt16();
-        Tpm2bEccParameter r = Tpm2bEccParameter.Parse(ref reader, pool);
-        Tpm2bEccParameter s = Tpm2bEccParameter.Parse(ref reader, pool);
-        return new SignResponse(sigAlg, hashAlg, r, s);
+        TpmuSignature signature = TpmuSignature.Parse(sigAlg, ref reader, pool);
+
+        return new SignResponse(sigAlg, signature);
     }
 
     /// <inheritdoc/>
@@ -83,12 +65,10 @@ public sealed class SignResponse: IDisposable, ITpmWireType
     {
         if(!Disposed)
         {
-            SignatureR.Dispose();
-            SignatureS.Dispose();
+            Signature.Dispose();
             Disposed = true;
         }
     }
 
-    private string DebuggerDisplay =>
-        $"SignResponse({SignatureAlgorithm}, R={SignatureR.Length} bytes, S={SignatureS.Length} bytes)";
+    private string DebuggerDisplay => $"SignResponse({SignatureAlgorithm}, {Signature})";
 }

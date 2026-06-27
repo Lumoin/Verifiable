@@ -192,6 +192,11 @@ public static class WalletMetadataWriter
             return (WellKnownCurveValues.P521, 66);
         }
 
+        if(alg.Equals(CryptoAlgorithm.BrainpoolP224r1))
+        {
+            return (WellKnownCurveValues.BrainpoolP224r1, 28);
+        }
+
         if(alg.Equals(CryptoAlgorithm.BrainpoolP256r1))
         {
             return (WellKnownCurveValues.BrainpoolP256r1, 32);

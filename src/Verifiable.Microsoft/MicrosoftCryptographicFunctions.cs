@@ -176,26 +176,45 @@ namespace Verifiable.Microsoft
                 activity.SetTag(CryptoTelemetry.Signature.Curve, MapCurveDisplay(curve));
             }
 
-            if(EllipticCurveUtilities.IsCompressed(publicKeyMaterial))
-            {
-                var curveType = curve.Oid.FriendlyName!.Equals("secP256k1", StringComparison.Ordinal) ? EllipticCurveTypes.Secp256k1 : EllipticCurveTypes.NistCurves;
-                byte[] uncompressedY = EllipticCurveUtilities.Decompress(publicKeyMaterial, curveType);
-                byte[] uncompressedX = publicKeyMaterial.Slice(1).ToArray();
-                ECParameters parameters = new()
-                {
-                    Curve = curve,
-                    Q = new ECPoint
-                    {
-                        X = uncompressedX,
-                        Y = uncompressedY
-                    }
-                };
+            EllipticCurveTypes curveType = curve.Oid.FriendlyName!.Equals("secP256k1", StringComparison.Ordinal)
+                ? EllipticCurveTypes.Secp256k1
+                : EllipticCurveTypes.NistCurves;
 
-                var key = ECDsa.Create(parameters);
-                return ValueTask.FromResult(key.VerifyData(dataToVerify, signature, hashAlgorithmName));
+            //Accept either SEC1 public-key encoding: the compressed form the library uses for verification keys,
+            //or the uncompressed point an eMRTD SubjectPublicKeyInfo (EF.DG14 / EF.DG15) carries.
+            //NormalizeToUncompressed decompresses a compressed point and copies an uncompressed one through, so
+            //both encodings verify — mirroring the BouncyCastle verifier, which already accepts both via
+            //DecodePoint. Malformed key material or an off-curve point verifies as false rather than throwing,
+            //keeping verification fail-closed.
+            byte[] uncompressedPoint;
+            try
+            {
+                uncompressedPoint = EllipticCurveUtilities.NormalizeToUncompressed(publicKeyMaterial, curveType);
+            }
+            catch(ArgumentException)
+            {
+                return ValueTask.FromResult(false);
             }
 
-            return ValueTask.FromResult(false);
+            ECParameters parameters = new()
+            {
+                Curve = curve,
+                Q = new ECPoint
+                {
+                    X = EllipticCurveUtilities.SliceXCoordinate(uncompressedPoint).ToArray(),
+                    Y = EllipticCurveUtilities.SliceYCoordinate(uncompressedPoint).ToArray()
+                }
+            };
+
+            try
+            {
+                using ECDsa key = ECDsa.Create(parameters);
+                return ValueTask.FromResult(key.VerifyData(dataToVerify, signature, hashAlgorithmName));
+            }
+            catch(CryptographicException)
+            {
+                return ValueTask.FromResult(false);
+            }
         }
 
 

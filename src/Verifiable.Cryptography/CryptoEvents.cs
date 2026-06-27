@@ -456,6 +456,156 @@ public sealed record HmacVerifiedEvent: CryptoEvent
 
 
 /// <summary>
+/// Emitted when an unauthenticated symmetric block-cipher (CBC) encrypt or decrypt
+/// operation completes. Carries algorithm and size metadata only — never the plaintext,
+/// ciphertext, or key bytes.
+/// </summary>
+public sealed record SymmetricCipherPerformedEvent: CryptoEvent
+{
+    /// <summary>The block cipher used (e.g. Triple-DES, AES).</summary>
+    public CryptoAlgorithm Algorithm { get; init; }
+
+    /// <summary><see langword="true"/> for an encrypt operation; <see langword="false"/> for decrypt.</summary>
+    public bool Encrypting { get; init; }
+
+    /// <summary>Length in bytes of the input.</summary>
+    public int InputLength { get; init; }
+
+    /// <summary>Length in bytes of the output.</summary>
+    public int OutputLength { get; init; }
+
+    /// <summary>The backend that performed the operation.</summary>
+    public string Backend { get; init; } = string.Empty;
+
+
+    /// <summary>
+    /// Constructs a <see cref="SymmetricCipherPerformedEvent"/> capturing the current
+    /// trace context automatically.
+    /// </summary>
+    public static SymmetricCipherPerformedEvent Create(
+        CryptoAlgorithm algorithm,
+        bool encrypting,
+        int inputLength,
+        int outputLength,
+        string backend,
+        string emittedBy = "",
+        TimeProvider? timeProvider = null)
+    {
+        (string? traceParent, string? traceState) = CaptureTraceContext();
+        return new SymmetricCipherPerformedEvent
+        {
+            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            Algorithm = algorithm,
+            Encrypting = encrypting,
+            InputLength = inputLength,
+            OutputLength = outputLength,
+            Backend = backend,
+            EmittedBy = emittedBy,
+            TraceParent = traceParent,
+            TraceState = traceState
+        };
+    }
+}
+
+
+/// <summary>
+/// Emitted when a block-cipher MAC (CMAC, ISO/IEC 9797-1 Algorithm 3) is computed.
+/// </summary>
+public sealed record BlockCipherMacComputedEvent: CryptoEvent
+{
+    /// <summary>The block cipher backing the MAC (e.g. Triple-DES, AES).</summary>
+    public CryptoAlgorithm Algorithm { get; init; }
+
+    /// <summary>Length in bytes of the message that was authenticated.</summary>
+    public int InputLength { get; init; }
+
+    /// <summary>Length in bytes of the produced MAC tag.</summary>
+    public int OutputLength { get; init; }
+
+    /// <summary>The backend that performed the operation.</summary>
+    public string Backend { get; init; } = string.Empty;
+
+
+    /// <summary>
+    /// Constructs a <see cref="BlockCipherMacComputedEvent"/> capturing the current
+    /// trace context automatically.
+    /// </summary>
+    public static BlockCipherMacComputedEvent Create(
+        CryptoAlgorithm algorithm,
+        int inputLength,
+        int outputLength,
+        string backend,
+        string emittedBy = "",
+        TimeProvider? timeProvider = null)
+    {
+        (string? traceParent, string? traceState) = CaptureTraceContext();
+        return new BlockCipherMacComputedEvent
+        {
+            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            Algorithm = algorithm,
+            InputLength = inputLength,
+            OutputLength = outputLength,
+            Backend = backend,
+            EmittedBy = emittedBy,
+            TraceParent = traceParent,
+            TraceState = traceState
+        };
+    }
+}
+
+
+/// <summary>
+/// Emitted when a block-cipher MAC verification operation completes.
+/// </summary>
+/// <remarks>
+/// An <see cref="VerificationOutcome.Invalid"/> result in a regulated flow is a security
+/// event and should be treated accordingly by the subscriber. A failed Secure Messaging
+/// MAC, for instance, signals a tampered or desynchronized session.
+/// </remarks>
+public sealed record BlockCipherMacVerifiedEvent: CryptoEvent
+{
+    /// <summary>The block cipher backing the MAC.</summary>
+    public CryptoAlgorithm Algorithm { get; init; }
+
+    /// <summary>Whether verification succeeded, failed, or encountered an error.</summary>
+    public VerificationOutcome Outcome { get; init; }
+
+    /// <summary>Length in bytes of the message that was verified.</summary>
+    public int InputLength { get; init; }
+
+    /// <summary>The backend that performed the operation.</summary>
+    public string Backend { get; init; } = string.Empty;
+
+
+    /// <summary>
+    /// Constructs a <see cref="BlockCipherMacVerifiedEvent"/> capturing the current
+    /// trace context automatically.
+    /// </summary>
+    public static BlockCipherMacVerifiedEvent Create(
+        CryptoAlgorithm algorithm,
+        VerificationOutcome outcome,
+        int inputLength,
+        string backend,
+        string emittedBy = "",
+        TimeProvider? timeProvider = null)
+    {
+        (string? traceParent, string? traceState) = CaptureTraceContext();
+        return new BlockCipherMacVerifiedEvent
+        {
+            OccurredAt = (timeProvider ?? TimeProvider.System).GetUtcNow(),
+            Algorithm = algorithm,
+            Outcome = outcome,
+            InputLength = inputLength,
+            Backend = backend,
+            EmittedBy = emittedBy,
+            TraceParent = traceParent,
+            TraceState = traceState
+        };
+    }
+}
+
+
+/// <summary>
 /// The outcome of a cryptographic signature verification operation.
 /// </summary>
 public enum VerificationOutcome

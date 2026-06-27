@@ -68,15 +68,15 @@ namespace Verifiable.Tests.Cryptography
             {
                 var keyParams1 = key1.ExportParameters(includePrivateParameters: false);
 
-                //Brainpool support (Q.2.X) widened the accepted coordinate-length set to
-                //{32 (P-256 / secp256k1 / BP-256), 40 (BP-320), 48 (P-384 / BP-384), 64
-                //(BP-512), 66 (P-521)}; the error message lists them in that order.
-                string xPointExceptionMessage = $"Length must be one of {EllipticCurveConstants.P256.PointArrayLength}, {EllipticCurveConstants.BrainpoolP320r1.PointArrayLength}, {EllipticCurveConstants.P384.PointArrayLength}, {EllipticCurveConstants.BrainpoolP512r1.PointArrayLength}, {EllipticCurveConstants.P521.PointArrayLength}. (Parameter 'xPoint')";
+                //Brainpool support widened the accepted coordinate-length set to
+                //{28 (BP-224), 32 (P-256 / secp256k1 / BP-256), 40 (BP-320), 48 (P-384 / BP-384),
+                //64 (BP-512), 66 (P-521)}; the error message lists them in that order.
+                string xPointExceptionMessage = $"Length must be one of {EllipticCurveConstants.BrainpoolP224r1.PointArrayLength}, {EllipticCurveConstants.P256.PointArrayLength}, {EllipticCurveConstants.BrainpoolP320r1.PointArrayLength}, {EllipticCurveConstants.P384.PointArrayLength}, {EllipticCurveConstants.BrainpoolP512r1.PointArrayLength}, {EllipticCurveConstants.P521.PointArrayLength}. (Parameter 'xPoint')";
                 var xException = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(keyParams1.Q.X!.Concat(new byte[] { 0x00 }).ToArray(), keyParams1.Q.Y));
                 Assert.AreEqual(XParameterNameInExceptionMessage, xException.ParamName);
                 Assert.AreEqual(xPointExceptionMessage, xException.Message);
 
-                string yPointExceptionMessage = $"Length must be one of {EllipticCurveConstants.P256.PointArrayLength}, {EllipticCurveConstants.BrainpoolP320r1.PointArrayLength}, {EllipticCurveConstants.P384.PointArrayLength}, {EllipticCurveConstants.BrainpoolP512r1.PointArrayLength}, {EllipticCurveConstants.P521.PointArrayLength}. (Parameter 'yPoint')";
+                string yPointExceptionMessage = $"Length must be one of {EllipticCurveConstants.BrainpoolP224r1.PointArrayLength}, {EllipticCurveConstants.P256.PointArrayLength}, {EllipticCurveConstants.BrainpoolP320r1.PointArrayLength}, {EllipticCurveConstants.P384.PointArrayLength}, {EllipticCurveConstants.BrainpoolP512r1.PointArrayLength}, {EllipticCurveConstants.P521.PointArrayLength}. (Parameter 'yPoint')";
                 var yException = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(keyParams1.Q.X!, keyParams1.Q.Y!.Concat(new byte[] { 0x00 }).ToArray()));
                 Assert.AreEqual(YParameterNameInExceptionMessage, yException.ParamName);
                 Assert.AreEqual(yPointExceptionMessage, yException.Message);

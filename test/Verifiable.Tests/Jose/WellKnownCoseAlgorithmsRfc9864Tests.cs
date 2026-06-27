@@ -5,7 +5,7 @@ using Verifiable.JCose;
 namespace Verifiable.Tests.Jose;
 
 /// <summary>
-/// Tests for the RFC 9784 fully-specified ECDSA (ESP) and Brainpool ECDSA
+/// Tests for the RFC 9864 fully-specified ECDSA (ESP) and Brainpool ECDSA
 /// (ESB) COSE algorithm identifiers landed in P.2 of the mdoc workstream's
 /// Thread Q.
 /// </summary>
@@ -20,15 +20,15 @@ namespace Verifiable.Tests.Jose;
 /// </para>
 /// </remarks>
 [TestClass]
-internal sealed class WellKnownCoseAlgorithmsRfc9784Tests
+internal sealed class WellKnownCoseAlgorithmsRfc9864Tests
 {
     [TestMethod]
-    public void EspConstantsMatchRfc9784AssignedValues()
+    public void EspConstantsMatchRfc9864AssignedValues()
     {
-        //RFC 9784 §5: ESP256 = -9, ESP384 = -51, ESP512 = -52. Reading
-        //through int locals so MSTest's analyzer doesn't conclude the
-        //assertion is trivially true at compile time — the constants
-        //are exactly what's under test.
+        //RFC 9864 / IANA COSE Algorithms: ESP256 = -9, ESP384 = -51, ESP512 = -52.
+        //Reading through int locals so MSTest's analyzer doesn't conclude the
+        //assertion is trivially true at compile time — the constants are exactly
+        //what's under test.
         int esp256 = WellKnownCoseAlgorithms.Esp256;
         int esp384 = WellKnownCoseAlgorithms.Esp384;
         int esp512 = WellKnownCoseAlgorithms.Esp512;
@@ -40,18 +40,18 @@ internal sealed class WellKnownCoseAlgorithmsRfc9784Tests
 
 
     [TestMethod]
-    public void EsbConstantsMatchRfc9784AssignedValues()
+    public void EsbConstantsMatchRfc9864AssignedValues()
     {
-        //RFC 9784 §5: ESB256 = -261, ESB320 = -262, ESB384 = -263, ESB512 = -264.
+        //RFC 9864 / IANA COSE Algorithms: ESB256 = -265, ESB320 = -266, ESB384 = -267, ESB512 = -268.
         int esb256 = WellKnownCoseAlgorithms.Esb256;
         int esb320 = WellKnownCoseAlgorithms.Esb320;
         int esb384 = WellKnownCoseAlgorithms.Esb384;
         int esb512 = WellKnownCoseAlgorithms.Esb512;
 
-        Assert.AreEqual(-261, esb256);
-        Assert.AreEqual(-262, esb320);
-        Assert.AreEqual(-263, esb384);
-        Assert.AreEqual(-264, esb512);
+        Assert.AreEqual(-265, esb256);
+        Assert.AreEqual(-266, esb320);
+        Assert.AreEqual(-267, esb384);
+        Assert.AreEqual(-268, esb512);
     }
 
 

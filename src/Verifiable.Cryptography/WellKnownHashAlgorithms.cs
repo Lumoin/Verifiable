@@ -22,6 +22,16 @@ namespace Verifiable.Cryptography;
 public static class WellKnownHashAlgorithms
 {
     /// <summary>
+    /// SHA-1 algorithm name in .NET format.
+    /// </summary>
+    /// <remarks>
+    /// Matches <see cref="HashAlgorithmName.SHA1"/>.<see cref="HashAlgorithmName.Name"/>. SHA-1 is collision-broken
+    /// and is recognized here only to convert legacy algorithm identifiers (for example TPM 2.0 SHA-1 banks); the
+    /// decision not to select it for new signatures or digests belongs to the calling policy, not to this converter.
+    /// </remarks>
+    public const string Sha1 = "SHA1";
+
+    /// <summary>
     /// SHA-256 algorithm name in .NET format.
     /// </summary>
     /// <remarks>
@@ -46,6 +56,11 @@ public static class WellKnownHashAlgorithms
     public const string Sha512 = "SHA512";
 
     /// <summary>
+    /// SHA-1 algorithm name in IANA format.
+    /// </summary>
+    public const string Sha1Iana = "sha-1";
+
+    /// <summary>
     /// SHA-256 algorithm name in IANA format.
     /// </summary>
     /// <remarks>
@@ -68,6 +83,15 @@ public static class WellKnownHashAlgorithms
     /// Used in SD-JWT <c>_sd_alg</c> claim, COSE algorithm parameters, and IETF specifications.
     /// </remarks>
     public const string Sha512Iana = "sha-512";
+
+    /// <summary>
+    /// SHA-1 algorithm name in COSE display format (uppercase, hyphenated).
+    /// </summary>
+    /// <remarks>
+    /// Used in the IANA COSE Algorithms registry display names.
+    /// See <see href="https://www.iana.org/assignments/cose/cose.xhtml#algorithms">IANA COSE Algorithms</see>.
+    /// </remarks>
+    public const string Sha1Cose = "SHA-1";
 
     /// <summary>
     /// SHA-256 algorithm name in COSE display format (uppercase, hyphenated).
@@ -97,6 +121,11 @@ public static class WellKnownHashAlgorithms
     public const string Sha512Cose = "SHA-512";
 
     /// <summary>
+    /// SHA-1 output size in bytes.
+    /// </summary>
+    public const int Sha1SizeBytes = 20;
+
+    /// <summary>
     /// SHA-256 output size in bytes.
     /// </summary>
     public const int Sha256SizeBytes = 32;
@@ -112,6 +141,11 @@ public static class WellKnownHashAlgorithms
     public const int Sha512SizeBytes = 64;
 
     /// <summary>
+    /// SHA-1 output size in bits.
+    /// </summary>
+    public const int Sha1SizeBits = 160;
+
+    /// <summary>
     /// SHA-256 output size in bits.
     /// </summary>
     public const int Sha256SizeBits = 256;
@@ -125,6 +159,25 @@ public static class WellKnownHashAlgorithms
     /// SHA-512 output size in bits.
     /// </summary>
     public const int Sha512SizeBits = 512;
+
+
+    /// <summary>
+    /// Determines whether the specified value represents SHA-1.
+    /// </summary>
+    /// <param name="value">The algorithm name to check.</param>
+    /// <returns><see langword="true"/> if the value represents SHA-1; otherwise, <see langword="false"/>.</returns>
+    public static bool IsSha1(string? value)
+    {
+        if(string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        return string.Equals(value, Sha1, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, Sha1Iana, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, Sha1Cose, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "sha1", StringComparison.OrdinalIgnoreCase);
+    }
 
 
     /// <summary>
@@ -192,6 +245,11 @@ public static class WellKnownHashAlgorithms
     /// <exception cref="ArgumentException">Thrown for unsupported algorithm names.</exception>
     public static HashAlgorithmName ToHashAlgorithmName(string value)
     {
+        if(IsSha1(value))
+        {
+            return HashAlgorithmName.SHA1;
+        }
+
         if(IsSha256(value))
         {
             return HashAlgorithmName.SHA256;
@@ -224,6 +282,7 @@ public static class WellKnownHashAlgorithms
     {
         return algorithm.Name switch
         {
+            Sha1 => Sha1Iana,
             Sha256 => Sha256Iana,
             Sha384 => Sha384Iana,
             Sha512 => Sha512Iana,
@@ -240,6 +299,11 @@ public static class WellKnownHashAlgorithms
     /// <exception cref="ArgumentException">Thrown for unsupported algorithm names.</exception>
     public static string ToIanaName(string value)
     {
+        if(IsSha1(value))
+        {
+            return Sha1Iana;
+        }
+
         if(IsSha256(value))
         {
             return Sha256Iana;
@@ -272,6 +336,7 @@ public static class WellKnownHashAlgorithms
     {
         return algorithm.Name switch
         {
+            Sha1 => Sha1Cose,
             Sha256 => Sha256Cose,
             Sha384 => Sha384Cose,
             Sha512 => Sha512Cose,
@@ -288,6 +353,11 @@ public static class WellKnownHashAlgorithms
     /// <exception cref="ArgumentException">Thrown for unsupported algorithm names.</exception>
     public static string ToCoseName(string value)
     {
+        if(IsSha1(value))
+        {
+            return Sha1Cose;
+        }
+
         if(IsSha256(value))
         {
             return Sha256Cose;
@@ -317,6 +387,7 @@ public static class WellKnownHashAlgorithms
     {
         return algorithm.Name switch
         {
+            Sha1 => Sha1SizeBytes,
             Sha256 => Sha256SizeBytes,
             Sha384 => Sha384SizeBytes,
             Sha512 => Sha512SizeBytes,
@@ -333,6 +404,11 @@ public static class WellKnownHashAlgorithms
     /// <exception cref="ArgumentException">Thrown for unsupported algorithm names.</exception>
     public static int GetSizeBytes(string value)
     {
+        if(IsSha1(value))
+        {
+            return Sha1SizeBytes;
+        }
+
         if(IsSha256(value))
         {
             return Sha256SizeBytes;
@@ -362,6 +438,7 @@ public static class WellKnownHashAlgorithms
     {
         return algorithm.Name switch
         {
+            Sha1 => Sha1SizeBits,
             Sha256 => Sha256SizeBits,
             Sha384 => Sha384SizeBits,
             Sha512 => Sha512SizeBits,

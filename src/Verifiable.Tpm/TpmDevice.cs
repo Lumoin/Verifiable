@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -204,6 +205,8 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// <summary>
     /// Releases all resources used by this TPM device.
     /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
+        Justification = "The TBS context is closed only when windowsContext is non-zero, which is set solely by OpenWindows; a browser device is created via Create(handler) and never opens a platform context.")]
     public void Dispose()
     {
         if(disposed)
@@ -246,6 +249,8 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// <summary>
     /// Gets a value indicating whether a TPM is available on this system.
     /// </summary>
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
+        Justification = "The TBS probe runs only when DetectPlatform reports Windows; on browser DetectPlatform reports Unknown and the property returns false without touching platform APIs.")]
     public static bool IsAvailable
     {
         get
@@ -280,6 +285,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// Opens a connection to the TPM using auto-detected platform.
     /// </summary>
     /// <returns>An open TPM device.</returns>
+    [UnsupportedOSPlatform("browser")]
     public static TpmDevice Open()
     {
         TpmPlatform platform = DetectPlatform();
@@ -367,6 +373,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// </summary>
     /// <param name="platform">The platform to use.</param>
     /// <returns>An open TPM device.</returns>
+    [UnsupportedOSPlatform("browser")]
     public static TpmDevice Open(TpmPlatform platform)
     {
         var device = new TpmDevice(platform);
@@ -430,6 +437,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     }
 
 
+    [UnsupportedOSPlatform("browser")]
     private void OpenCore()
     {
         if(Platform is TpmPlatform.Windows)
@@ -464,6 +472,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     ///   This catches scenarios where the path resolves to a regular file, FIFO, or socket.</description></item>
     /// </list>
     /// </remarks>
+    [UnsupportedOSPlatform("browser")]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "SafeFileHandle ownership is transferred to FileStream which is held by the linuxStream field until TpmDevice.Dispose().")]
     private void OpenLinux()
@@ -524,6 +533,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     }
 
 
+    [UnsupportedOSPlatform("browser")]
     private void OpenWindows()
     {
         uint result = Tbsi_Context_Create(ref defaultContextParams, out windowsContext);
@@ -537,6 +547,8 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     }
 
 
+    [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
+        Justification = "The platform submit paths run only when the Platform property is Windows or Linux; a browser device is always constructed via Create(handler), so customHandler short-circuits before any platform dispatch.")]
     private ValueTask<TpmResult<TpmResponse>> SubmitCoreAsync(
         ReadOnlyMemory<byte> command,
         MemoryPool<byte> pool,
@@ -561,6 +573,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     }
 
 
+    [UnsupportedOSPlatform("browser")]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TpmResponse takes ownership of responseOwner. The caller is responsible for disposing the returned TpmResult.")]
     private async ValueTask<TpmResult<TpmResponse>> SubmitLinuxAsync(
@@ -604,6 +617,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     }
 
 
+    [UnsupportedOSPlatform("browser")]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TpmResponse takes ownership of responseOwner. The caller is responsible for disposing the returned TpmResult.")]
     private ValueTask<TpmResult<TpmResponse>> SubmitWindowsAsync(
@@ -740,16 +754,19 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     };
 
 
+    [UnsupportedOSPlatform("browser")]
     [LibraryImport("tbs", EntryPoint = "Tbsi_Context_Create")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial uint Tbsi_Context_Create(ref TbsContextParams contextParams, out IntPtr context);
 
 
+    [UnsupportedOSPlatform("browser")]
     [LibraryImport("tbs", EntryPoint = "Tbsip_Context_Close")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial uint Tbsip_Context_Close(IntPtr context);
 
 
+    [UnsupportedOSPlatform("browser")]
     [LibraryImport("tbs", EntryPoint = "Tbsip_Submit_Command")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial uint Tbsip_Submit_Command(
@@ -765,6 +782,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     //Linux POSIX interop for hardened device opening.
     //These are used only by OpenLinux to open with O_NOFOLLOW | O_CLOEXEC and validate via fstat.
 
+    [UnsupportedOSPlatform("browser")]
     [LibraryImport("libc", EntryPoint = "open", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
 
 #pragma warning disable CA5392 //Use DefaultDllImportSearchPaths attribute for P/Invokes.
@@ -772,9 +790,11 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     private static partial int LinuxOpen(string pathname, int flags, int mode);
 
 
+    [UnsupportedOSPlatform("browser")]
     [LibraryImport("libc", EntryPoint = "fstat", SetLastError = true)]
     private static partial int LinuxFstat(int fd, IntPtr statBuf);
 
+    [UnsupportedOSPlatform("browser")]
     [LibraryImport("libc", EntryPoint = "close")]
     private static partial int LinuxClose(int fd);
 

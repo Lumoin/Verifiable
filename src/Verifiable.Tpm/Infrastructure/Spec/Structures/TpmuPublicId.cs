@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 /// <b>Union members:</b>
 /// </para>
 /// <list type="bullet">
-///   <item><description>TPM_ALG_KEYEDHASH: TPM2B_DIGEST</description></item>
+///   <item><description>TPM_ALG_KEYEDHASH: TPM2B_DIGEST (unique value of a sealed data object or HMAC key)</description></item>
 ///   <item><description>TPM_ALG_SYMCIPHER: TPM2B_DIGEST</description></item>
 ///   <item><description>TPM_ALG_RSA: TPM2B_PUBLIC_KEY_RSA (public modulus)</description></item>
 ///   <item><description>TPM_ALG_ECC: TPMS_ECC_POINT (X, Y coordinates)</description></item>
@@ -52,6 +52,16 @@ public sealed class TpmuPublicId: IDisposable
     private int RsaLength { get; }
 
     /// <summary>
+    /// Gets the keyed-hash unique-value storage (when Type is TPM_ALG_KEYEDHASH).
+    /// </summary>
+    private IMemoryOwner<byte>? KeyedHashStorage { get; }
+
+    /// <summary>
+    /// Gets the keyed-hash unique-value length.
+    /// </summary>
+    private int KeyedHashLength { get; }
+
+    /// <summary>
     /// Initializes a new public ID for RSA.
     /// </summary>
     private TpmuPublicId(TpmAlgIdConstants type, IMemoryOwner<byte>? rsaStorage, int rsaLength)
@@ -60,6 +70,8 @@ public sealed class TpmuPublicId: IDisposable
         RsaStorage = rsaStorage;
         RsaLength = rsaLength;
         Ecc = null;
+        KeyedHashStorage = null;
+        KeyedHashLength = 0;
     }
 
     /// <summary>
@@ -71,6 +83,22 @@ public sealed class TpmuPublicId: IDisposable
         Ecc = ecc;
         RsaStorage = null;
         RsaLength = 0;
+        KeyedHashStorage = null;
+        KeyedHashLength = 0;
+    }
+
+    /// <summary>
+    /// Initializes a new public ID for a keyed-hash object (the distinct parameter shape avoids colliding with
+    /// the RSA constructor).
+    /// </summary>
+    private TpmuPublicId(IMemoryOwner<byte>? keyedHashStorage, int keyedHashLength)
+    {
+        Type = TpmAlgIdConstants.TPM_ALG_KEYEDHASH;
+        KeyedHashStorage = keyedHashStorage;
+        KeyedHashLength = keyedHashLength;
+        Ecc = null;
+        RsaStorage = null;
+        RsaLength = 0;
     }
 
     /// <summary>
@@ -80,6 +108,7 @@ public sealed class TpmuPublicId: IDisposable
     {
         TpmAlgIdConstants.TPM_ALG_RSA => RsaLength == 0,
         TpmAlgIdConstants.TPM_ALG_ECC => Ecc?.IsEmpty ?? true,
+        TpmAlgIdConstants.TPM_ALG_KEYEDHASH => KeyedHashLength == 0,
         _ => true
     };
 
@@ -112,6 +141,12 @@ public sealed class TpmuPublicId: IDisposable
     public static TpmuPublicId EmptyEcc() => new(TpmAlgIdConstants.TPM_ALG_ECC, TpmsEccPoint.Empty);
 
     /// <summary>
+    /// Creates an empty keyed-hash public ID (for sealed-data templates; the TPM fills in the unique value).
+    /// </summary>
+    /// <returns>An empty keyed-hash unique.</returns>
+    public static TpmuPublicId EmptyKeyedHash() => new((IMemoryOwner<byte>?)null, 0);
+
+    /// <summary>
     /// Gets the serialized size of this union.
     /// </summary>
     public int GetSerializedSize()
@@ -122,6 +157,7 @@ public sealed class TpmuPublicId: IDisposable
         {
             TpmAlgIdConstants.TPM_ALG_RSA => sizeof(ushort) + RsaLength,
             TpmAlgIdConstants.TPM_ALG_ECC => Ecc!.GetSerializedSize(),
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH => sizeof(ushort) + KeyedHashLength,
             _ => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization.")
         };
     }
@@ -139,18 +175,35 @@ public sealed class TpmuPublicId: IDisposable
 
         switch(Type)
         {
-            case TpmAlgIdConstants.TPM_ALG_RSA:
+            case(TpmAlgIdConstants.TPM_ALG_RSA):
+            {
                 writer.WriteUInt16((ushort)RsaLength);
                 if(RsaLength > 0)
                 {
                     writer.WriteBytes(GetRsaModulus());
                 }
+
                 break;
-            case TpmAlgIdConstants.TPM_ALG_ECC:
+            }
+            case(TpmAlgIdConstants.TPM_ALG_ECC):
+            {
                 Ecc!.WriteTo(ref writer);
                 break;
+            }
+            case(TpmAlgIdConstants.TPM_ALG_KEYEDHASH):
+            {
+                writer.WriteUInt16((ushort)KeyedHashLength);
+                if(KeyedHashLength > 0)
+                {
+                    writer.WriteBytes(KeyedHashStorage!.Memory.Span.Slice(0, KeyedHashLength));
+                }
+
+                break;
+            }
             default:
+            {
                 throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization.");
+            }
         }
     }
 
@@ -164,26 +217,41 @@ public sealed class TpmuPublicId: IDisposable
     public static TpmuPublicId Parse(TpmAlgIdConstants type, ref TpmReader reader, MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
-        switch(type)
+
+        return type switch
         {
-            case TpmAlgIdConstants.TPM_ALG_RSA:
-                ushort rsaSize = reader.ReadUInt16();
-                if(rsaSize == 0)
-                {
-                    return EmptyRsa();
-                }
+            TpmAlgIdConstants.TPM_ALG_RSA => ParseRsa(ref reader, pool),
+            TpmAlgIdConstants.TPM_ALG_ECC => new TpmuPublicId(type, TpmsEccPoint.Parse(ref reader, pool)),
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH => ParseKeyedHash(ref reader, pool),
+            _ => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing.")
+        };
 
-                IMemoryOwner<byte> rsaStorage = pool.Rent(rsaSize);
-                ReadOnlySpan<byte> rsaSource = reader.ReadBytes(rsaSize);
-                rsaSource.CopyTo(rsaStorage.Memory.Span.Slice(0, rsaSize));
-                return new TpmuPublicId(type, rsaStorage, rsaSize);
+        static TpmuPublicId ParseRsa(ref TpmReader reader, MemoryPool<byte> pool)
+        {
+            ushort size = reader.ReadUInt16();
+            if(size == 0)
+            {
+                return EmptyRsa();
+            }
 
-            case TpmAlgIdConstants.TPM_ALG_ECC:
-                TpmsEccPoint ecc = TpmsEccPoint.Parse(ref reader, pool);
-                return new TpmuPublicId(type, ecc);
+            IMemoryOwner<byte> storage = pool.Rent(size);
+            reader.ReadBytes(size).CopyTo(storage.Memory.Span.Slice(0, size));
 
-            default:
-                throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing.");
+            return new TpmuPublicId(TpmAlgIdConstants.TPM_ALG_RSA, storage, size);
+        }
+
+        static TpmuPublicId ParseKeyedHash(ref TpmReader reader, MemoryPool<byte> pool)
+        {
+            ushort size = reader.ReadUInt16();
+            if(size == 0)
+            {
+                return EmptyKeyedHash();
+            }
+
+            IMemoryOwner<byte> storage = pool.Rent(size);
+            reader.ReadBytes(size).CopyTo(storage.Memory.Span.Slice(0, size));
+
+            return new TpmuPublicId(storage, size);
         }
     }
 
@@ -196,6 +264,7 @@ public sealed class TpmuPublicId: IDisposable
         {
             RsaStorage?.Dispose();
             Ecc?.Dispose();
+            KeyedHashStorage?.Dispose();
             disposed = true;
         }
     }
@@ -213,6 +282,7 @@ public sealed class TpmuPublicId: IDisposable
             {
                 TpmAlgIdConstants.TPM_ALG_RSA => $"TPMU_PUBLIC_ID(RSA, {RsaLength} bytes)",
                 TpmAlgIdConstants.TPM_ALG_ECC => $"TPMU_PUBLIC_ID(ECC)",
+                TpmAlgIdConstants.TPM_ALG_KEYEDHASH => $"TPMU_PUBLIC_ID(KEYEDHASH, {KeyedHashLength} bytes)",
                 _ => $"TPMU_PUBLIC_ID({Type})"
             };
         }

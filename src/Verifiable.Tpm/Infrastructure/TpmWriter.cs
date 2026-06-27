@@ -14,8 +14,8 @@ namespace Verifiable.Tpm.Infrastructure;
 /// </remarks>
 public ref struct TpmWriter
 {
-    private Span<byte> _remaining;
-    private int _written;
+    private Span<byte> remaining;
+    private int written;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TpmWriter"/> struct.
@@ -23,19 +23,19 @@ public ref struct TpmWriter
     /// <param name="buffer">The buffer to write to.</param>
     public TpmWriter(Span<byte> buffer)
     {
-        _remaining = buffer;
-        _written = 0;
+        remaining = buffer;
+        written = 0;
     }
 
     /// <summary>
     /// Gets the number of bytes written so far.
     /// </summary>
-    public int Written => _written;
+    public int Written => written;
 
     /// <summary>
     /// Gets the number of bytes remaining in the buffer.
     /// </summary>
-    public int Remaining => _remaining.Length;
+    public int Remaining => remaining.Length;
 
     /// <summary>
     /// Writes a single byte.
@@ -43,7 +43,7 @@ public ref struct TpmWriter
     /// <param name="value">The byte value.</param>
     public void WriteByte(byte value)
     {
-        _remaining[0] = value;
+        remaining[0] = value;
         Advance(1);
     }
 
@@ -53,7 +53,7 @@ public ref struct TpmWriter
     /// <param name="value">The value to write.</param>
     public void WriteUInt16(ushort value)
     {
-        BinaryPrimitives.WriteUInt16BigEndian(_remaining, value);
+        BinaryPrimitives.WriteUInt16BigEndian(remaining, value);
         Advance(sizeof(ushort));
     }
 
@@ -63,7 +63,7 @@ public ref struct TpmWriter
     /// <param name="value">The value to write.</param>
     public void WriteUInt32(uint value)
     {
-        BinaryPrimitives.WriteUInt32BigEndian(_remaining, value);
+        BinaryPrimitives.WriteUInt32BigEndian(remaining, value);
         Advance(sizeof(uint));
     }
 
@@ -73,7 +73,7 @@ public ref struct TpmWriter
     /// <param name="value">The value to write.</param>
     public void WriteUInt64(ulong value)
     {
-        BinaryPrimitives.WriteUInt64BigEndian(_remaining, value);
+        BinaryPrimitives.WriteUInt64BigEndian(remaining, value);
         Advance(sizeof(ulong));
     }
 
@@ -86,7 +86,7 @@ public ref struct TpmWriter
     /// </remarks>
     public void WriteBytes(scoped ReadOnlySpan<byte> bytes)
     {
-        bytes.CopyTo(_remaining);
+        bytes.CopyTo(remaining);
         Advance(bytes.Length);
     }
 
@@ -105,7 +105,7 @@ public ref struct TpmWriter
 
     private void Advance(int count)
     {
-        _remaining = _remaining[count..];
-        _written += count;
+        remaining = remaining[count..];
+        written += count;
     }
 }

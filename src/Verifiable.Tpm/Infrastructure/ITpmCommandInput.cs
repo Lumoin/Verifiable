@@ -42,6 +42,24 @@ public interface ITpmCommandInput
     TpmCcConstants CommandCode { get; }
 
     /// <summary>
+    /// Gets whether the first parameter of this command is a sized buffer eligible for session-based
+    /// parameter encryption (the command's <c>decrypt</c> attribute).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Per TPM 2.0 Library Part 1, Section 19.1 only the first parameter of the parameter area can be
+    /// encrypted, and only when it has an explicit size field. A command whose first parameter is a fixed-size
+    /// scalar (for example a <c>UINT16</c>) is not encryptable and leaves this <see langword="false"/>.
+    /// </para>
+    /// <para>
+    /// The executor refuses to send a command over a session whose <c>decrypt</c> attribute is set unless this
+    /// returns <see langword="true"/>, mirroring the TPM's own <c>TPM_RC_ATTRIBUTES</c>/<c>TPM_RC_SYMMETRIC</c>
+    /// rejection rather than emitting a request the TPM would reject.
+    /// </para>
+    /// </remarks>
+    bool FirstCommandParameterIsEncryptable => false;
+
+    /// <summary>
     /// Gets the total serialized size of the handle area plus the parameter area, in bytes.
     /// </summary>
     /// <returns>Size in bytes of handles + parameters (excluding header and auth area).</returns>

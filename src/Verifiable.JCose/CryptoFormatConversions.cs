@@ -173,7 +173,7 @@ namespace Verifiable.JCose
                 (string alg, Purpose p) when WellKnownJwaValues.IsMlDsa65(alg) && p.Equals(Purpose.Verification) => CryptoTags.MlDsa65PublicKey,
                 (string alg, Purpose p) when WellKnownJwaValues.IsMlDsa87(alg) && p.Equals(Purpose.Verification) => CryptoTags.MlDsa87PublicKey,
 
-                //RFC 9784 / draft-ietf-jose-fully-specified-algorithms Brainpool ECDSA signing.
+                //RFC 9864 / draft-ietf-jose-fully-specified-algorithms Brainpool ECDSA signing.
                 (string alg, Purpose p) when WellKnownJwaValues.IsEsb256(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP256r1PrivateKey,
                 (string alg, Purpose p) when WellKnownJwaValues.IsEsb320(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP320r1PrivateKey,
                 (string alg, Purpose p) when WellKnownJwaValues.IsEsb384(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP384r1PrivateKey,
@@ -273,7 +273,7 @@ namespace Verifiable.JCose
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEs384(alg) && p.Equals(Purpose.Verification) => CryptoTags.P384PublicKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEs512(alg) && p.Equals(Purpose.Verification) => CryptoTags.P521PublicKey,
 
-                //RFC 9784 fully-specified ECDSA (signing). Maps to the same
+                //RFC 9864 fully-specified ECDSA (signing). Maps to the same
                 //P-curve key tags as the non-fully-specified ES variants —
                 //ESP pins the hash explicitly but the key material is the
                 //same EC key on the same curve.
@@ -281,19 +281,19 @@ namespace Verifiable.JCose
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsp384(alg) && p.Equals(Purpose.Signing) => CryptoTags.P384PrivateKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsp512(alg) && p.Equals(Purpose.Signing) => CryptoTags.P521PrivateKey,
 
-                //RFC 9784 fully-specified ECDSA (verification).
+                //RFC 9864 fully-specified ECDSA (verification).
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsp256(alg) && p.Equals(Purpose.Verification) => CryptoTags.P256PublicKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsp384(alg) && p.Equals(Purpose.Verification) => CryptoTags.P384PublicKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsp512(alg) && p.Equals(Purpose.Verification) => CryptoTags.P521PublicKey,
 
-                //RFC 9784 Brainpool ECDSA (signing). Hash binding per RFC 9784 §5:
+                //RFC 9864 Brainpool ECDSA (signing). Hash binding per RFC 9864 §5:
                 //ESB256 → SHA-256, ESB320 → SHA-384, ESB384 → SHA-384, ESB512 → SHA-512.
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb256(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP256r1PrivateKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb320(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP320r1PrivateKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb384(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP384r1PrivateKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb512(alg) && p.Equals(Purpose.Signing) => CryptoTags.BrainpoolP512r1PrivateKey,
 
-                //RFC 9784 Brainpool ECDSA (verification).
+                //RFC 9864 Brainpool ECDSA (verification).
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb256(alg) && p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP256r1PublicKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb320(alg) && p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP320r1PublicKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsEsb384(alg) && p.Equals(Purpose.Verification) => CryptoTags.BrainpoolP384r1PublicKey,
@@ -435,7 +435,7 @@ namespace Verifiable.JCose
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) =>
                     BuildEc(keyMaterial, EllipticCurveTypes.Secp256k1, WellKnownCurveValues.Secp256k1, WellKnownJwaValues.Es256K, base64UrlEncoder),
 
-                //Brainpool ECDSA verification keys per RFC 5639 / RFC 9784.
+                //Brainpool ECDSA verification keys per RFC 5639 / RFC 9864.
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP256r1) && p.Equals(Purpose.Verification) =>
                     BuildEc(keyMaterial, EllipticCurveTypes.BrainpoolP256r1, WellKnownCurveValues.BrainpoolP256r1, WellKnownJwaValues.Esb256, base64UrlEncoder),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP320r1) && p.Equals(Purpose.Verification) =>
@@ -704,6 +704,7 @@ namespace Verifiable.JCose
 
                     //Brainpool curves per RFC 5639. ESB JWA fallback mirrors the ES* path
                     //above — alg alone identifies the curve when crv is absent.
+                    if(WellKnownCurveValues.IsBrainpoolP224r1(crv)) { return (CryptoAlgorithm.BrainpoolP224r1, explicitPurpose); }
                     if(WellKnownCurveValues.IsBrainpoolP256r1(crv)) { return (CryptoAlgorithm.BrainpoolP256r1, explicitPurpose); }
                     if(WellKnownCurveValues.IsBrainpoolP320r1(crv)) { return (CryptoAlgorithm.BrainpoolP320r1, explicitPurpose); }
                     if(WellKnownCurveValues.IsBrainpoolP384r1(crv)) { return (CryptoAlgorithm.BrainpoolP384r1, explicitPurpose); }
@@ -904,6 +905,7 @@ namespace Verifiable.JCose
                 //Brainpool ECDH-ES exchange curves (RFC 5639). The crv name is
                 //purpose-independent, so the same mapping serves both the signing tags
                 //and the exchange tags.
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP224r1) => WellKnownCurveValues.BrainpoolP224r1,
                 var a when a.Equals(CryptoAlgorithm.BrainpoolP256r1) => WellKnownCurveValues.BrainpoolP256r1,
                 var a when a.Equals(CryptoAlgorithm.BrainpoolP320r1) => WellKnownCurveValues.BrainpoolP320r1,
                 var a when a.Equals(CryptoAlgorithm.BrainpoolP384r1) => WellKnownCurveValues.BrainpoolP384r1,
@@ -914,7 +916,7 @@ namespace Verifiable.JCose
                 var a when a.Equals(CryptoAlgorithm.X25519) => WellKnownCurveValues.X25519,
                 _ => throw new NotSupportedException(
                     $"CryptoAlgorithm '{algorithm}' does not have a JWK curve name mapping. " +
-                    $"Only EC curves P-256, P-384, P-521, Brainpool P-256r1/P-320r1/P-384r1/P-512r1 and X25519 are supported.")
+                    $"Only EC curves P-256, P-384, P-521, Brainpool P-224r1/P-256r1/P-320r1/P-384r1/P-512r1 and X25519 are supported.")
             };
         };
 
@@ -939,6 +941,7 @@ namespace Verifiable.JCose
 
                 //Brainpool ECDH-ES exchange curves (RFC 5639). The curve type drives the
                 //point-on-curve validation that guards against invalid-curve attacks.
+                var c when WellKnownCurveValues.IsBrainpoolP224r1(c) => (CryptoTags.BrainpoolP224r1ExchangePublicKey, EllipticCurveTypes.BrainpoolP224r1),
                 var c when WellKnownCurveValues.IsBrainpoolP256r1(c) => (CryptoTags.BrainpoolP256r1ExchangePublicKey, EllipticCurveTypes.BrainpoolP256r1),
                 var c when WellKnownCurveValues.IsBrainpoolP320r1(c) => (CryptoTags.BrainpoolP320r1ExchangePublicKey, EllipticCurveTypes.BrainpoolP320r1),
                 var c when WellKnownCurveValues.IsBrainpoolP384r1(c) => (CryptoTags.BrainpoolP384r1ExchangePublicKey, EllipticCurveTypes.BrainpoolP384r1),

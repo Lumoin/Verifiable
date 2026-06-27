@@ -37,6 +37,7 @@ env:
   # These are the library NuGet packages that will be packed and uploaded.
   # The Verifiable CLI tool is handled separately with native AOT per-platform packaging.
   LIBRARY_PROJECTS: >
+    Verifiable.Apdu
     Verifiable.BouncyCastle
     Verifiable.Cbor
     Verifiable.Core

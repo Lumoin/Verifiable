@@ -118,7 +118,16 @@ public sealed class Salt(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? 
         ArgumentNullException.ThrowIfNull(pool);
 
         IMemoryOwner<byte> owner = pool.Rent(byteLength);
-        fillEntropy(owner.Memory.Span);
+        try
+        {
+            fillEntropy(owner.Memory.Span);
+        }
+        catch
+        {
+            //A throwing entropy source (e.g. a TPM/HSM fill that fails) must not leak the rented buffer.
+            owner.Dispose();
+            throw;
+        }
 
         return new Salt(owner, tag, lifetime);
     }

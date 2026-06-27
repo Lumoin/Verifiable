@@ -68,9 +68,14 @@ namespace Verifiable.Cryptography
         BrainpoolP512r1 = 1 << 8,
 
         /// <summary>
-        /// All four Brainpool r1 curves combined. Mirrors the NistCurves family flag.
+        /// Brainpool P-224r1 per RFC 5639. 224-bit prime field, 28-byte coordinates.
         /// </summary>
-        BrainpoolCurves = BrainpoolP256r1 | BrainpoolP320r1 | BrainpoolP384r1 | BrainpoolP512r1
+        BrainpoolP224r1 = 1 << 9,
+
+        /// <summary>
+        /// All five Brainpool r1 curves combined. Mirrors the NistCurves family flag.
+        /// </summary>
+        BrainpoolCurves = BrainpoolP224r1 | BrainpoolP256r1 | BrainpoolP320r1 | BrainpoolP384r1 | BrainpoolP512r1
     }
 
 
@@ -87,6 +92,9 @@ namespace Verifiable.Cryptography
 
         /// <summary>The compressed P-256 / secp256k1 / Brainpool P-256r1 byte array length.</summary>
         private const int P256CompressedByteCount = 33;
+
+        /// <summary>The compressed Brainpool P-224r1 byte array length.</summary>
+        private const int BrainpoolP224r1CompressedByteCount = 29;
 
         /// <summary>The compressed Brainpool P-320r1 byte array length.</summary>
         private const int BrainpoolP320r1CompressedByteCount = 41;
@@ -148,14 +156,15 @@ namespace Verifiable.Cryptography
             //lengths to {33, 41, 49, 65, 67}. The 33-byte length is shared by P-256,
             //secp256k1, and BP-256r1; the 49-byte length is shared by P-384 and BP-384r1.
             //The curveType flag disambiguates in those cases — see ResolveCurveParameters.
-            if(!(compressedPoint.Length == P256CompressedByteCount
+            if(!(compressedPoint.Length == BrainpoolP224r1CompressedByteCount
+                || compressedPoint.Length == P256CompressedByteCount
                 || compressedPoint.Length == BrainpoolP320r1CompressedByteCount
                 || compressedPoint.Length == P384CompressedByteCount
                 || compressedPoint.Length == BrainpoolP512r1CompressedByteCount
                 || compressedPoint.Length == P521CompressedByteCount))
             {
                 throw new ArgumentOutOfRangeException(nameof(compressedPoint),
-                    $"Length must be one of {P256CompressedByteCount}, {BrainpoolP320r1CompressedByteCount}, {P384CompressedByteCount}, {BrainpoolP512r1CompressedByteCount}, {P521CompressedByteCount}.");
+                    $"Length must be one of {BrainpoolP224r1CompressedByteCount}, {P256CompressedByteCount}, {BrainpoolP320r1CompressedByteCount}, {P384CompressedByteCount}, {BrainpoolP512r1CompressedByteCount}, {P521CompressedByteCount}.");
             }
 
             //Y is recovered from x via the general short-Weierstrass form
@@ -230,6 +239,7 @@ namespace Verifiable.Cryptography
                 var a when a.Equals(CryptoAlgorithm.P384) => EllipticCurveTypes.P384,
                 var a when a.Equals(CryptoAlgorithm.P521) => EllipticCurveTypes.P521,
                 var a when a.Equals(CryptoAlgorithm.Secp256k1) => EllipticCurveTypes.Secp256k1,
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP224r1) => EllipticCurveTypes.BrainpoolP224r1,
                 var a when a.Equals(CryptoAlgorithm.BrainpoolP256r1) => EllipticCurveTypes.BrainpoolP256r1,
                 var a when a.Equals(CryptoAlgorithm.BrainpoolP320r1) => EllipticCurveTypes.BrainpoolP320r1,
                 var a when a.Equals(CryptoAlgorithm.BrainpoolP384r1) => EllipticCurveTypes.BrainpoolP384r1,
@@ -238,6 +248,82 @@ namespace Verifiable.Cryptography
                     $"CryptoAlgorithm '{algorithm}' is not an elliptic curve with SEC1 point encoding.")
             };
         }
+
+
+        /// <summary>
+        /// Recognises an elliptic curve unambiguously from its field prime p — the curve's defining
+        /// parameter, unlike point length which several same-field-size curves share (33-byte points cover
+        /// P-256, secp256k1, and brainpoolP256r1). This complements the length-plus-hint recognition used
+        /// by <see cref="NormalizeToUncompressed"/>: it identifies the curve of a SubjectPublicKeyInfo that
+        /// carries explicit domain parameters — the common encoding for eMRTD chip-authentication and PACE keys.
+        /// </summary>
+        /// <param name="prime">The field prime p as unsigned big-endian bytes (a leading DER sign byte is ignored).</param>
+        /// <returns>The matching <see cref="EllipticCurveTypes"/>, or <see cref="EllipticCurveTypes.None"/> when no supported curve matches.</returns>
+        public static EllipticCurveTypes CurveTypeFromPrime(ReadOnlySpan<byte> prime)
+        {
+            var value = new BigInteger(prime, isUnsigned: true, isBigEndian: true);
+
+            return value switch
+            {
+                _ when value == P256.Prime => EllipticCurveTypes.P256,
+                _ when value == P384.Prime => EllipticCurveTypes.P384,
+                _ when value == P521.Prime => EllipticCurveTypes.P521,
+                _ when value == Secp256k1.Prime => EllipticCurveTypes.Secp256k1,
+                _ when value == BrainpoolP224r1.Prime => EllipticCurveTypes.BrainpoolP224r1,
+                _ when value == BrainpoolP256r1.Prime => EllipticCurveTypes.BrainpoolP256r1,
+                _ when value == BrainpoolP320r1.Prime => EllipticCurveTypes.BrainpoolP320r1,
+                _ when value == BrainpoolP384r1.Prime => EllipticCurveTypes.BrainpoolP384r1,
+                _ when value == BrainpoolP512r1.Prime => EllipticCurveTypes.BrainpoolP512r1,
+                _ => EllipticCurveTypes.None
+            };
+        }
+
+
+        /// <summary>
+        /// Recognises an elliptic curve from its named-curve object identifier — the DER value bytes of the
+        /// curve OID in a SubjectPublicKeyInfo's AlgorithmIdentifier parameters. The OID is decoded with the
+        /// framework codec and matched against the <see cref="WellKnownOids"/> curve identifiers.
+        /// </summary>
+        /// <param name="curveOid">The named-curve OID value bytes (after the 0x06 tag and length).</param>
+        /// <returns>The matching <see cref="EllipticCurveTypes"/>, or <see cref="EllipticCurveTypes.None"/> when no supported curve matches.</returns>
+        public static EllipticCurveTypes CurveTypeFromCurveOid(ReadOnlySpan<byte> curveOid)
+        {
+            return WellKnownOids.OidFromDerValue(curveOid) switch
+            {
+                WellKnownOids.EcP256 => EllipticCurveTypes.P256,
+                WellKnownOids.EcP384 => EllipticCurveTypes.P384,
+                WellKnownOids.EcP521 => EllipticCurveTypes.P521,
+                WellKnownOids.EcSecp256k1 => EllipticCurveTypes.Secp256k1,
+                WellKnownOids.EcBrainpoolP224r1 => EllipticCurveTypes.BrainpoolP224r1,
+                WellKnownOids.EcBrainpoolP256r1 => EllipticCurveTypes.BrainpoolP256r1,
+                WellKnownOids.EcBrainpoolP320r1 => EllipticCurveTypes.BrainpoolP320r1,
+                WellKnownOids.EcBrainpoolP384r1 => EllipticCurveTypes.BrainpoolP384r1,
+                WellKnownOids.EcBrainpoolP512r1 => EllipticCurveTypes.BrainpoolP512r1,
+                _ => EllipticCurveTypes.None
+            };
+        }
+
+
+        /// <summary>
+        /// The named-curve object identifier (DER value bytes) of a supported curve — the inverse of
+        /// <see cref="CurveTypeFromCurveOid"/>, for encoding a curve into a SubjectPublicKeyInfo.
+        /// </summary>
+        /// <param name="curve">The curve.</param>
+        /// <returns>The named-curve OID value bytes (after the 0x06 tag and length).</returns>
+        /// <exception cref="NotSupportedException">Thrown when no named-curve OID is known for <paramref name="curve"/>.</exception>
+        public static ReadOnlySpan<byte> CurveOidDerValue(EllipticCurveTypes curve) => curve switch
+        {
+            EllipticCurveTypes.P256 => WellKnownOids.EcP256DerValue,
+            EllipticCurveTypes.P384 => WellKnownOids.EcP384DerValue,
+            EllipticCurveTypes.P521 => WellKnownOids.EcP521DerValue,
+            EllipticCurveTypes.Secp256k1 => WellKnownOids.EcSecp256k1DerValue,
+            EllipticCurveTypes.BrainpoolP224r1 => WellKnownOids.EcBrainpoolP224r1DerValue,
+            EllipticCurveTypes.BrainpoolP256r1 => WellKnownOids.EcBrainpoolP256r1DerValue,
+            EllipticCurveTypes.BrainpoolP320r1 => WellKnownOids.EcBrainpoolP320r1DerValue,
+            EllipticCurveTypes.BrainpoolP384r1 => WellKnownOids.EcBrainpoolP384r1DerValue,
+            EllipticCurveTypes.BrainpoolP512r1 => WellKnownOids.EcBrainpoolP512r1DerValue,
+            _ => throw new NotSupportedException($"No named-curve OID is known for '{curve}'.")
+        };
 
 
         /// <summary>
@@ -293,6 +379,9 @@ namespace Verifiable.Cryptography
         {
             return compressedPointLength switch
             {
+                BrainpoolP224r1CompressedByteCount =>
+                    (BrainpoolP224r1.CoefficientA, BrainpoolP224r1.CoefficientB, BrainpoolP224r1.PIdentity, BrainpoolP224r1.Prime, BrainpoolP224r1.PointArrayLength),
+
                 P256CompressedByteCount when curveType.HasFlag(EllipticCurveTypes.BrainpoolP256r1) =>
                     (BrainpoolP256r1.CoefficientA, BrainpoolP256r1.CoefficientB, BrainpoolP256r1.PIdentity, BrainpoolP256r1.Prime, BrainpoolP256r1.PointArrayLength),
                 P256CompressedByteCount when curveType.HasFlag(EllipticCurveTypes.Secp256k1) =>
@@ -336,13 +425,13 @@ namespace Verifiable.Cryptography
             if(!IsSupportedCoordinateLength(xPoint.Length))
             {
                 throw new ArgumentOutOfRangeException(nameof(xPoint),
-                    $"Length must be one of {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
+                    $"Length must be one of {BrainpoolP224r1.PointArrayLength}, {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
             }
 
             if(!IsSupportedCoordinateLength(yPoint.Length))
             {
                 throw new ArgumentOutOfRangeException(nameof(yPoint),
-                    $"Length must be one of {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
+                    $"Length must be one of {BrainpoolP224r1.PointArrayLength}, {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
             }
 
             if(xPoint.Length != yPoint.Length)
@@ -385,7 +474,7 @@ namespace Verifiable.Cryptography
             if(!IsSupportedCoordinateLength(yPoint.Length))
             {
                 throw new ArgumentOutOfRangeException(nameof(yPoint),
-                    $"Length must be one of {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
+                    $"Length must be one of {BrainpoolP224r1.PointArrayLength}, {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
             }
 
             return (byte)(2 + (yPoint![^1] & 1));
@@ -397,7 +486,8 @@ namespace Verifiable.Cryptography
         //P-521 (66) are unambiguous on length. Curve parameters disambiguate where length
         //alone cannot.
         private static bool IsSupportedCoordinateLength(int length) =>
-            length == P256.PointArrayLength
+            length == BrainpoolP224r1.PointArrayLength
+            || length == P256.PointArrayLength
             || length == BrainpoolP320r1.PointArrayLength
             || length == P384.PointArrayLength
             || length == BrainpoolP512r1.PointArrayLength
@@ -423,7 +513,7 @@ namespace Verifiable.Cryptography
             if(!IsSupportedCoordinateLength(x.Length))
             {
                 throw new ArgumentOutOfRangeException(nameof(x),
-                    $"Length must be one of {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
+                    $"Length must be one of {BrainpoolP224r1.PointArrayLength}, {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
             }
 
             byte[] result = new byte[1 + x.Length + y.Length];
@@ -445,7 +535,7 @@ namespace Verifiable.Cryptography
             if(!IsSupportedUncompressedLength(uncompressedCoordinates.Length))
             {
                 throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates),
-                    $"Length must be one of {P256.UncompressedPointByteCount}, {BrainpoolP320r1.UncompressedPointByteCount}, {P384.UncompressedPointByteCount}, {BrainpoolP512r1.UncompressedPointByteCount}, {P521.UncompressedPointByteCount}.");
+                    $"Length must be one of {BrainpoolP224r1.UncompressedPointByteCount}, {P256.UncompressedPointByteCount}, {BrainpoolP320r1.UncompressedPointByteCount}, {P384.UncompressedPointByteCount}, {BrainpoolP512r1.UncompressedPointByteCount}, {P521.UncompressedPointByteCount}.");
             }
 
             int coordinateLength = (uncompressedCoordinates.Length - 1) / 2;
@@ -463,7 +553,7 @@ namespace Verifiable.Cryptography
             if(!IsSupportedUncompressedLength(uncompressedCoordinates.Length))
             {
                 throw new ArgumentOutOfRangeException(nameof(uncompressedCoordinates),
-                    $"Length must be one of {P256.UncompressedPointByteCount}, {BrainpoolP320r1.UncompressedPointByteCount}, {P384.UncompressedPointByteCount}, {BrainpoolP512r1.UncompressedPointByteCount}, {P521.UncompressedPointByteCount}.");
+                    $"Length must be one of {BrainpoolP224r1.UncompressedPointByteCount}, {P256.UncompressedPointByteCount}, {BrainpoolP320r1.UncompressedPointByteCount}, {P384.UncompressedPointByteCount}, {BrainpoolP512r1.UncompressedPointByteCount}, {P521.UncompressedPointByteCount}.");
             }
 
             int coordinateLength = (uncompressedCoordinates.Length - 1) / 2;
@@ -475,7 +565,8 @@ namespace Verifiable.Cryptography
         //Companion to IsSupportedCoordinateLength for the 0x04-prefixed full-point form
         //(length 1 + 2 × field byte size).
         private static bool IsSupportedUncompressedLength(int length) =>
-            length == P256.UncompressedPointByteCount
+            length == BrainpoolP224r1.UncompressedPointByteCount
+            || length == P256.UncompressedPointByteCount
             || length == BrainpoolP320r1.UncompressedPointByteCount
             || length == P384.UncompressedPointByteCount
             || length == BrainpoolP512r1.UncompressedPointByteCount
@@ -598,6 +689,9 @@ namespace Verifiable.Cryptography
             //parameters even though the raw length would also match a NIST curve.
             return (publicKeyX.Length, curveType) switch
             {
+                (BrainpoolP224r1.PointArrayLength, _) when curveType.HasFlag(EllipticCurveTypes.BrainpoolP224r1) =>
+                    ValiteParametersInRange(x, y, BrainpoolP224r1.Prime) && ValidateCurve(x, y, BrainpoolP224r1.CoefficientA, BrainpoolP224r1.CoefficientB, BrainpoolP224r1.Prime),
+
                 (BrainpoolP256r1.PointArrayLength, _) when curveType.HasFlag(EllipticCurveTypes.BrainpoolP256r1) =>
                     ValiteParametersInRange(x, y, BrainpoolP256r1.Prime) && ValidateCurve(x, y, BrainpoolP256r1.CoefficientA, BrainpoolP256r1.CoefficientB, BrainpoolP256r1.Prime),
 

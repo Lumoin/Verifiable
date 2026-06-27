@@ -110,7 +110,7 @@ public static class TpmDeviceExtensions
             var input = GetCapabilityInput.ForTpmProperties(property);
 
             TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-                device, input, [], pool, registry, cancellationToken).ConfigureAwait(false);
+                device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
             if(!result.IsSuccess)
             {
@@ -186,7 +186,7 @@ public static class TpmDeviceExtensions
         var input = GetCapabilityInput.ForAlgorithms();
 
         TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-            device, input, [], pool, registry, cancellationToken).ConfigureAwait(false);
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
         if(!result.IsSuccess)
         {
@@ -217,7 +217,7 @@ public static class TpmDeviceExtensions
         var input = GetCapabilityInput.ForEccCurves();
 
         TpmResult<GetCapabilityResponse> result = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-            device, input, [], pool, registry, cancellationToken).ConfigureAwait(false);
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
         if(!result.IsSuccess)
         {

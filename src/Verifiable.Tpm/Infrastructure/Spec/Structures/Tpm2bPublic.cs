@@ -186,6 +186,40 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     }
 
     /// <summary>
+    /// Creates a sized public buffer template for an ECC restricted storage key, suitable as the parent
+    /// of <c>TPM2_Create()</c>.
+    /// </summary>
+    /// <param name="nameAlg">The hash algorithm for Name computation.</param>
+    /// <param name="curve">The ECC curve.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA so authorization failures against the key do not advance the dictionary-attack lockout counter.</param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateEccStorageParentTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmEccCurveConstants curve,
+        bool noDa = false)
+    {
+        return FromTemplate(TpmtPublic.CreateEccStorageParentTemplate(nameAlg, curve, noDa));
+    }
+
+    /// <summary>
+    /// Creates a sized public buffer template for a sealed data object (KEYEDHASH, null scheme), optionally
+    /// gated on an authorization policy (for example a <c>TPM2_PolicyPCR</c> digest).
+    /// </summary>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest (used only when one is supplied).</param>
+    /// <param name="authPolicy">The authorization policy digest to bind the object to, or empty (default) for none.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA so authorization failures against the sealed object do not advance the dictionary-attack lockout counter.</param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateSealedDataTemplate(
+        TpmAlgIdConstants nameAlg,
+        MemoryPool<byte> pool,
+        ReadOnlySpan<byte> authPolicy = default,
+        bool noDa = false)
+    {
+        return FromTemplate(TpmtPublic.CreateSealedDataTemplate(nameAlg, pool, authPolicy, noDa));
+    }
+
+    /// <summary>
     /// Releases the memory owned by this structure.
     /// </summary>
     public void Dispose()

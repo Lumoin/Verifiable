@@ -132,13 +132,18 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
     /// <param name="curve">The ECC curve.</param>
     /// <param name="scheme">The signing scheme.</param>
     /// <param name="pool">The memory pool.</param>
+    /// <param name="noDa">
+    /// When <see langword="true"/>, sets TPMA_OBJECT.noDA so that authorization failures against the key do not
+    /// advance the TPM's dictionary-attack lockout counter. Defaults to <see langword="false"/>.
+    /// </param>
     /// <returns>The command input.</returns>
     public static CreatePrimaryInput ForEccSigningKey(
         TpmRh hierarchy,
         string? password,
         TpmEccCurveConstants curve,
         TpmtEccScheme scheme,
-        MemoryPool<byte> pool)
+        MemoryPool<byte> pool,
+        bool noDa = false)
     {
         var objectAttributes =
             TpmaObject.FIXED_TPM |
@@ -146,6 +151,11 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
             TpmaObject.SENSITIVE_DATA_ORIGIN |
             TpmaObject.USER_WITH_AUTH |
             TpmaObject.SIGN_ENCRYPT;
+
+        if(noDa)
+        {
+            objectAttributes |= TpmaObject.NO_DA;
+        }
 
         var inSensitive = string.IsNullOrEmpty(password)
             ? Tpm2bSensitiveCreate.CreateEmpty(pool)
@@ -171,13 +181,18 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
     /// <param name="keyBits">Key size in bits (typically 2048).</param>
     /// <param name="scheme">The signing scheme.</param>
     /// <param name="pool">The memory pool.</param>
+    /// <param name="noDa">
+    /// When <see langword="true"/>, sets TPMA_OBJECT.noDA so that authorization failures against the key do not
+    /// advance the TPM's dictionary-attack lockout counter. Defaults to <see langword="false"/>.
+    /// </param>
     /// <returns>The command input.</returns>
     public static CreatePrimaryInput ForRsaSigningKey(
         TpmRh hierarchy,
         string? password,
         ushort keyBits,
         TpmtRsaScheme scheme,
-        MemoryPool<byte> pool)
+        MemoryPool<byte> pool,
+        bool noDa = false)
     {
         var objectAttributes =
             TpmaObject.FIXED_TPM |
@@ -185,6 +200,11 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
             TpmaObject.SENSITIVE_DATA_ORIGIN |
             TpmaObject.USER_WITH_AUTH |
             TpmaObject.SIGN_ENCRYPT;
+
+        if(noDa)
+        {
+            objectAttributes |= TpmaObject.NO_DA;
+        }
 
         var inSensitive = string.IsNullOrEmpty(password)
             ? Tpm2bSensitiveCreate.CreateEmpty(pool)
@@ -239,6 +259,43 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
         var inPublic = Tpm2bPublic.CreateEccKeyAgreementTemplate(
             TpmAlgIdConstants.TPM_ALG_SHA256,
             curve);
+
+        return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="CreatePrimaryInput"/> for an ECC restricted storage key, a key that can act as
+    /// a parent for <c>TPM2_Create()</c>.
+    /// </summary>
+    /// <remarks>
+    /// The primary derived from this template is deterministic for a given hierarchy seed, so it can be
+    /// recreated on demand rather than persisted: per-key children are minted under it with
+    /// <c>TPM2_Create()</c> and persisted as wrapped blobs, keeping the TPM's scarce storage free.
+    /// </remarks>
+    /// <param name="hierarchy">The hierarchy under which to create the parent (typically <see cref="TpmRh.TPM_RH_OWNER"/>).</param>
+    /// <param name="authPassword">Optional authValue for the parent (<see langword="null"/> for none).</param>
+    /// <param name="curve">The ECC curve.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="noDa">
+    /// When <see langword="true"/>, sets TPMA_OBJECT.noDA so that authorization failures against the parent do
+    /// not advance the TPM's dictionary-attack lockout counter. Defaults to <see langword="false"/>.
+    /// </param>
+    /// <returns>A <see cref="CreatePrimaryInput"/> configured for a storage parent.</returns>
+    public static CreatePrimaryInput ForEccStorageParent(
+        TpmRh hierarchy,
+        string? authPassword,
+        TpmEccCurveConstants curve,
+        MemoryPool<byte> pool,
+        bool noDa = false)
+    {
+        Tpm2bSensitiveCreate inSensitive = string.IsNullOrEmpty(authPassword)
+            ? Tpm2bSensitiveCreate.CreateEmpty(pool)
+            : Tpm2bSensitiveCreate.WithPassword(authPassword, pool);
+
+        Tpm2bPublic inPublic = Tpm2bPublic.CreateEccStorageParentTemplate(
+            TpmAlgIdConstants.TPM_ALG_SHA256,
+            curve,
+            noDa);
 
         return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
     }

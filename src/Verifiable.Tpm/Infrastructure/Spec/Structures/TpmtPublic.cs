@@ -233,6 +233,122 @@ public sealed class TpmtPublic: IDisposable
     }
 
     /// <summary>
+    /// Creates a public area template for an ECC restricted storage key, the kind of key that can act as
+    /// a parent for <c>TPM2_Create()</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A parent must be a restricted decryption (storage) key with a symmetric definition: it wraps the
+    /// sensitive area of its children under that symmetric key. The attributes are:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description><see cref="TpmaObject.FIXED_TPM"/> / <see cref="TpmaObject.FIXED_PARENT"/>: the key is non-duplicable.</description></item>
+    ///   <item><description><see cref="TpmaObject.SENSITIVE_DATA_ORIGIN"/>: the TPM generates the sensitive data.</description></item>
+    ///   <item><description><see cref="TpmaObject.USER_WITH_AUTH"/>: USER-role actions may be authorized with the authValue.</description></item>
+    ///   <item><description><see cref="TpmaObject.RESTRICTED"/> + <see cref="TpmaObject.DECRYPT"/>: a storage parent (TPM 2.0 Part 1, Section 25.2).</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="nameAlg">The hash algorithm for Name computation.</param>
+    /// <param name="curve">The ECC curve.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA so authorization failures against the key do not advance the dictionary-attack lockout counter.</param>
+    /// <returns>The public area template.</returns>
+    public static TpmtPublic CreateEccStorageParentTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmEccCurveConstants curve,
+        bool noDa = false)
+    {
+        TpmaObject objectAttributes =
+            TpmaObject.FIXED_TPM |
+            TpmaObject.FIXED_PARENT |
+            TpmaObject.SENSITIVE_DATA_ORIGIN |
+            TpmaObject.USER_WITH_AUTH |
+            TpmaObject.RESTRICTED |
+            TpmaObject.DECRYPT;
+
+        if(noDa)
+        {
+            objectAttributes |= TpmaObject.NO_DA;
+        }
+
+        TpmuPublicParms parameters = TpmuPublicParms.Ecc(
+            TpmsEccParms.ForStorage(curve, TpmtSymDefObject.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB)));
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_ECC,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Empty,
+            parameters,
+            TpmuPublicId.EmptyEcc());
+    }
+
+    /// <summary>
+    /// Creates a public area template for a sealed data object: a KEYEDHASH object with the null scheme whose
+    /// sensitive area is caller-supplied data rather than a TPM-generated key. Sealing binds a secret to the
+    /// TPM so only this TPM, under the named parent, can recover it with <c>TPM2_Unseal()</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The attributes are <see cref="TpmaObject.FIXED_TPM"/> | <see cref="TpmaObject.FIXED_PARENT"/> |
+    /// <see cref="TpmaObject.USER_WITH_AUTH"/>: the object is non-duplicable and bound to its parent (only this
+    /// TPM can unseal it), and a USER-role action (the unseal) may be authorized with the object's authValue.
+    /// </para>
+    /// <para>
+    /// <see cref="TpmaObject.SENSITIVE_DATA_ORIGIN"/> is deliberately absent — the caller supplies the data, the
+    /// TPM does not originate it — and neither <see cref="TpmaObject.SIGN_ENCRYPT"/> nor
+    /// <see cref="TpmaObject.DECRYPT"/> is set, because a sealed object is unsealed rather than used as a key.
+    /// </para>
+    /// <para>
+    /// Supply <paramref name="authPolicy"/> to gate the unseal on a policy — for example a <c>TPM2_PolicyPCR</c>
+    /// digest, which binds the unseal to platform state ("tie to this computer <i>and</i> this state"): a left
+    /// empty (default) the object is authorized by its authValue alone. The digest is copied into pooled storage
+    /// the returned area owns and disposes.
+    /// </para>
+    /// <para>
+    /// By default the object is dictionary-attack protected, so failed unseal authorizations against a
+    /// PIN-protected seal advance the TPM lockout counter. Set <paramref name="noDa"/> for a seal whose
+    /// authValue is empty (nothing to brute-force), which also avoids the dictionary-attack bookkeeping a
+    /// DA-protected entity incurs on its first authorization after a TPM reset.
+    /// </para>
+    /// <para>
+    /// Specification reference: TPM 2.0 Library Part 1, Section 24 (Sealed Data); Part 3, Section 12.1 / 12.7.
+    /// </para>
+    /// </remarks>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest (used only when one is supplied).</param>
+    /// <param name="authPolicy">The authorization policy digest to bind the object to, or empty (default) for none.</param>
+    /// <param name="noDa">When <see langword="true"/>, sets TPMA_OBJECT.noDA so authorization failures against the sealed object do not advance the dictionary-attack lockout counter.</param>
+    /// <returns>The public area template.</returns>
+    public static TpmtPublic CreateSealedDataTemplate(
+        TpmAlgIdConstants nameAlg,
+        MemoryPool<byte> pool,
+        ReadOnlySpan<byte> authPolicy = default,
+        bool noDa = false)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        TpmaObject objectAttributes =
+            TpmaObject.FIXED_TPM |
+            TpmaObject.FIXED_PARENT |
+            TpmaObject.USER_WITH_AUTH;
+
+        if(noDa)
+        {
+            objectAttributes |= TpmaObject.NO_DA;
+        }
+
+        TpmuPublicParms parameters = TpmuPublicParms.KeyedHash(TpmsKeyedHashParms.SealedData);
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_KEYEDHASH,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Create(authPolicy, pool),
+            parameters,
+            TpmuPublicId.EmptyKeyedHash());
+    }
+
+    /// <summary>
     /// Releases the memory owned by this structure.
     /// </summary>
     public void Dispose()
