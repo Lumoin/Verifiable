@@ -66,6 +66,9 @@ namespace Verifiable.Tests.TestDataProviders
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> MlKem1024Source = new(() =>
             BouncyCastleKeyMaterialCreator.CreateMlKem1024Keys(BaseMemoryPool.Shared));
 
+        private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP224r1Source = new(() =>
+            BouncyCastleKeyMaterialCreator.CreateBrainpoolP224r1Keys(BaseMemoryPool.Shared));
+
         private static readonly Lazy<PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> BrainpoolP256r1Source = new(() =>
             BouncyCastleKeyMaterialCreator.CreateBrainpoolP256r1Keys(BaseMemoryPool.Shared));
 
@@ -178,25 +181,31 @@ namespace Verifiable.Tests.TestDataProviders
             => CopyKeyMaterial(MlKem1024Source.Value);
 
         /// <summary>
-        /// Returns a disposable copy of Brainpool P-256r1 key material (BouncyCastle backend, RFC 5639 / RFC 9784 <c>ESB256</c>).
+        /// Returns a disposable copy of Brainpool P-224r1 key material (BouncyCastle backend, RFC 5639; an ECDH/key-agreement curve with no RFC 9864 ECDSA registration).
+        /// </summary>
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP224r1KeyMaterial()
+            => CopyKeyMaterial(BrainpoolP224r1Source.Value);
+
+        /// <summary>
+        /// Returns a disposable copy of Brainpool P-256r1 key material (BouncyCastle backend, RFC 5639 / RFC 9864 <c>ESB256</c>).
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP256r1KeyMaterial()
             => CopyKeyMaterial(BrainpoolP256r1Source.Value);
 
         /// <summary>
-        /// Returns a disposable copy of Brainpool P-320r1 key material (BouncyCastle backend, RFC 5639 / RFC 9784 <c>ESB320</c>).
+        /// Returns a disposable copy of Brainpool P-320r1 key material (BouncyCastle backend, RFC 5639 / RFC 9864 <c>ESB320</c>).
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP320r1KeyMaterial()
             => CopyKeyMaterial(BrainpoolP320r1Source.Value);
 
         /// <summary>
-        /// Returns a disposable copy of Brainpool P-384r1 key material (BouncyCastle backend, RFC 5639 / RFC 9784 <c>ESB384</c>).
+        /// Returns a disposable copy of Brainpool P-384r1 key material (BouncyCastle backend, RFC 5639 / RFC 9864 <c>ESB384</c>).
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP384r1KeyMaterial()
             => CopyKeyMaterial(BrainpoolP384r1Source.Value);
 
         /// <summary>
-        /// Returns a disposable copy of Brainpool P-512r1 key material (BouncyCastle backend, RFC 5639 / RFC 9784 <c>ESB512</c>).
+        /// Returns a disposable copy of Brainpool P-512r1 key material (BouncyCastle backend, RFC 5639 / RFC 9864 <c>ESB512</c>).
         /// </summary>
         public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP512r1KeyMaterial()
             => CopyKeyMaterial(BrainpoolP512r1Source.Value);

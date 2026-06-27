@@ -28,6 +28,13 @@ internal sealed class EllipticCurveUtilitiesBrainpoolTests
 
 
     [TestMethod]
+    public void BrainpoolP224r1CompressDecompressRoundTripRecoversY()
+    {
+        AssertCompressDecompressRoundTrip("brainpoolP224r1", EllipticCurveTypes.BrainpoolP224r1, fieldByteSize: 28);
+    }
+
+
+    [TestMethod]
     public void BrainpoolP256r1CompressDecompressRoundTripRecoversY()
     {
         AssertCompressDecompressRoundTrip("brainpoolP256r1", EllipticCurveTypes.BrainpoolP256r1, fieldByteSize: 32);
@@ -56,10 +63,11 @@ internal sealed class EllipticCurveUtilitiesBrainpoolTests
 
 
     [TestMethod]
-    public void BrainpoolCurvesFamilyFlagIncludesAllFourMembers()
+    public void BrainpoolCurvesFamilyFlagIncludesAllFiveMembers()
     {
         //BrainpoolCurves mirrors NistCurves — a union flag for callers that
         //want to accept any Brainpool variant without enumerating each.
+        Assert.IsTrue(EllipticCurveTypes.BrainpoolCurves.HasFlag(EllipticCurveTypes.BrainpoolP224r1));
         Assert.IsTrue(EllipticCurveTypes.BrainpoolCurves.HasFlag(EllipticCurveTypes.BrainpoolP256r1));
         Assert.IsTrue(EllipticCurveTypes.BrainpoolCurves.HasFlag(EllipticCurveTypes.BrainpoolP320r1));
         Assert.IsTrue(EllipticCurveTypes.BrainpoolCurves.HasFlag(EllipticCurveTypes.BrainpoolP384r1));
@@ -68,6 +76,21 @@ internal sealed class EllipticCurveUtilitiesBrainpoolTests
         //And does NOT include NIST or secp256k1 — keep the families disjoint.
         Assert.IsFalse(EllipticCurveTypes.BrainpoolCurves.HasFlag(EllipticCurveTypes.P256));
         Assert.IsFalse(EllipticCurveTypes.BrainpoolCurves.HasFlag(EllipticCurveTypes.Secp256k1));
+    }
+
+
+    [TestMethod]
+    public void CurveTypeFromPrimeAndOidRecognizeBrainpoolP224r1()
+    {
+        //The eMRTD DG14 explicit-parameter path identifies the curve by its field prime; the named-curve
+        //path by OID. Both must resolve brainpoolP224r1, and the inverse OID encoding must round-trip.
+        Assert.AreEqual(EllipticCurveTypes.BrainpoolP224r1,
+            EllipticCurveUtilities.CurveTypeFromPrime(EllipticCurveConstants.BrainpoolP224r1.PrimeBytes));
+        Assert.AreEqual(EllipticCurveTypes.BrainpoolP224r1,
+            EllipticCurveUtilities.CurveTypeFromCurveOid(WellKnownOids.EcBrainpoolP224r1DerValue));
+        Assert.IsTrue(
+            EllipticCurveUtilities.CurveOidDerValue(EllipticCurveTypes.BrainpoolP224r1).SequenceEqual(WellKnownOids.EcBrainpoolP224r1DerValue),
+            "CurveOidDerValue must round-trip the brainpoolP224r1 named-curve OID.");
     }
 
 
@@ -93,6 +116,7 @@ internal sealed class EllipticCurveUtilitiesBrainpoolTests
     [TestMethod]
     public void CheckPointOnCurveAcceptsAllBrainpoolPoints()
     {
+        AssertCheckPointAccepts("brainpoolP224r1", EllipticCurveTypes.BrainpoolP224r1, 28);
         AssertCheckPointAccepts("brainpoolP256r1", EllipticCurveTypes.BrainpoolP256r1, 32);
         AssertCheckPointAccepts("brainpoolP320r1", EllipticCurveTypes.BrainpoolP320r1, 40);
         AssertCheckPointAccepts("brainpoolP384r1", EllipticCurveTypes.BrainpoolP384r1, 48);

@@ -301,6 +301,16 @@ public static class BouncyCastleKeyMaterialCreator
     }
 
 
+    /// <summary>Creates a Brainpool P-224r1 ECDH exchange key pair (uncompressed public point).</summary>
+    /// <param name="memoryPool">The memory pool for key data allocation.</param>
+    /// <returns>The public and private key material.</returns>
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP224r1ExchangeKeys(MemoryPool<byte> memoryPool)
+    {
+        ArgumentNullException.ThrowIfNull(memoryPool);
+        return CreateBrainpoolExchangeKeys("brainpoolP224r1", CryptoTags.BrainpoolP224r1ExchangePublicKey, CryptoTags.BrainpoolP224r1ExchangePrivateKey, memoryPool);
+    }
+
+
     /// <summary>Creates a Brainpool P-256r1 ECDH exchange key pair (uncompressed public point).</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
@@ -338,6 +348,16 @@ public static class BouncyCastleKeyMaterialCreator
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateBrainpoolExchangeKeys("brainpoolP512r1", CryptoTags.BrainpoolP512r1ExchangePublicKey, CryptoTags.BrainpoolP512r1ExchangePrivateKey, memoryPool);
+    }
+
+
+    /// <summary>Creates a Brainpool P-224r1 key pair for signing and verification.</summary>
+    /// <param name="memoryPool">The memory pool for key data allocation.</param>
+    /// <returns>The public and private key material.</returns>
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP224r1Keys(MemoryPool<byte> memoryPool)
+    {
+        ArgumentNullException.ThrowIfNull(memoryPool);
+        return CreateBrainpoolEcKeys("brainpoolP224r1", CryptoTags.BrainpoolP224r1PublicKey, CryptoTags.BrainpoolP224r1PrivateKey, memoryPool);
     }
 
 

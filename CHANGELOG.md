@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- TPM feature work.
+
 ## [0.0.0.2-alpha] - 2021-08-16
 
 ### Added

@@ -122,6 +122,15 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <param name="bytes">The auth bytes.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The created auth value.</returns>
+    /// <remarks>
+    /// <para>
+    /// The bytes are copied verbatim, with no trailing-zero trimming. This is the path for
+    /// interactive PIN material and any binary authorization value: the caller marshals the secret
+    /// into a buffer it controls and clears, and the exact bytes become the authValue. Prefer this
+    /// over <see cref="CreateFromPassword"/> whenever the secret must remain zeroable, because a
+    /// <see cref="string"/> source cannot be cleared once created.
+    /// </para>
+    /// </remarks>
     public static Tpm2bAuth Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -145,6 +154,14 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <para>
     /// Per spec Part 1, Section 17.6.4.3, trailing octets of zero are removed
     /// from any string before it is used as an authValue.
+    /// </para>
+    /// <para>
+    /// This overload is intended for configuration passwords, not for interactive PINs. The
+    /// temporary UTF-8 buffer is zeroed, but the source <paramref name="password"/> is an immutable
+    /// managed string that cannot be cleared and lingers on the heap until garbage collected.
+    /// Trailing-zero trimming also means a value ending in <c>0x00</c> would not round-trip. For PIN
+    /// material, marshal the entry into a pooled buffer and use
+    /// <see cref="Create(ReadOnlySpan{byte}, MemoryPool{byte})"/> instead.
     /// </para>
     /// </remarks>
     public static Tpm2bAuth CreateFromPassword(string password, MemoryPool<byte> pool)

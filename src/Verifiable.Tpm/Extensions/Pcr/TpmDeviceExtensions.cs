@@ -50,7 +50,7 @@ public static class TpmDeviceExtensions
         //Discover available PCR banks.
         var capInput = GetCapabilityInput.ForPcrs();
         TpmResult<GetCapabilityResponse> capResult = await TpmCommandExecutor.ExecuteAsync<GetCapabilityResponse>(
-            device, capInput, [], pool, registry, cancellationToken).ConfigureAwait(false);
+            device, capInput, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
         if(!capResult.IsSuccess)
         {
@@ -145,7 +145,7 @@ public static class TpmDeviceExtensions
             using var input = PcrReadInput.ForPcrs(hashAlgorithm, pcrArray, pool);
 
             TpmResult<PcrReadResponse> result = await TpmCommandExecutor.ExecuteAsync<PcrReadResponse>(
-                device, input, [], pool, registry, cancellationToken).ConfigureAwait(false);
+                device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
 
             if(!result.IsSuccess)
             {

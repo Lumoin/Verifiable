@@ -174,7 +174,7 @@ public static class WellKnownCoseAlgorithms
     /// </remarks>
     public const int MlDsa87 = -50;
 
-    //RFC 9784 fully-specified ECDSA. These pin both curve AND hash in one
+    //RFC 9864 fully-specified ECDSA. These pin both curve AND hash in one
     //identifier — Esp256 == ECDSA + P-256 + SHA-256 (functionally same as
     //Es256), Esp384 == ECDSA + P-384 + SHA-384 (same as Es384), Esp512 ==
     //ECDSA + P-521 + SHA-512 (same as Es512). The fully-specified variants
@@ -186,22 +186,22 @@ public static class WellKnownCoseAlgorithms
     /// <summary>
     /// Fully-specified ECDSA with P-256 and SHA-256.
     /// </summary>
-    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9784">RFC 9784</see>.</remarks>
+    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9864">RFC 9864</see>.</remarks>
     public const int Esp256 = -9;
 
     /// <summary>
     /// Fully-specified ECDSA with P-384 and SHA-384.
     /// </summary>
-    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9784">RFC 9784</see>.</remarks>
+    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9864">RFC 9864</see>.</remarks>
     public const int Esp384 = -51;
 
     /// <summary>
     /// Fully-specified ECDSA with P-521 and SHA-512.
     /// </summary>
-    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9784">RFC 9784</see>.</remarks>
+    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9864">RFC 9864</see>.</remarks>
     public const int Esp512 = -52;
 
-    //Brainpool ECDSA variants per RFC 9784. Curve names are bp256r1 (and
+    //Brainpool ECDSA variants per RFC 9864. Curve names are bp256r1 (and
     //the 320/384/512 siblings); Tags for the curves themselves land in
     //Q.2 alongside the BouncyCastle backend wiring for key generation
     //and signing.
@@ -209,26 +209,26 @@ public static class WellKnownCoseAlgorithms
     /// <summary>
     /// ECDSA with brainpoolP256r1 and SHA-256.
     /// </summary>
-    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9784">RFC 9784</see>.</remarks>
-    public const int Esb256 = -261;
+    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9864">RFC 9864</see>.</remarks>
+    public const int Esb256 = -265;
 
     /// <summary>
     /// ECDSA with brainpoolP320r1 and SHA-384.
     /// </summary>
-    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9784">RFC 9784</see>.</remarks>
-    public const int Esb320 = -262;
+    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9864">RFC 9864</see>.</remarks>
+    public const int Esb320 = -266;
 
     /// <summary>
     /// ECDSA with brainpoolP384r1 and SHA-384.
     /// </summary>
-    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9784">RFC 9784</see>.</remarks>
-    public const int Esb384 = -263;
+    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9864">RFC 9864</see>.</remarks>
+    public const int Esb384 = -267;
 
     /// <summary>
     /// ECDSA with brainpoolP512r1 and SHA-512.
     /// </summary>
-    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9784">RFC 9784</see>.</remarks>
-    public const int Esb512 = -264;
+    /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc9864">RFC 9864</see>.</remarks>
+    public const int Esb512 = -268;
 
 
     /// <summary>
@@ -352,7 +352,7 @@ public static class WellKnownCoseAlgorithms
     /// <summary>Determines if the algorithm is <see cref="Esp512"/>.</summary>
     public static bool IsEsp512(int algorithm) => algorithm == Esp512;
 
-    /// <summary>Determines if the algorithm is any RFC 9784 fully-specified ECDSA variant.</summary>
+    /// <summary>Determines if the algorithm is any RFC 9864 fully-specified ECDSA variant.</summary>
     public static bool IsEsp(int algorithm) => algorithm is Esp256 or Esp384 or Esp512;
 
 
@@ -368,7 +368,7 @@ public static class WellKnownCoseAlgorithms
     /// <summary>Determines if the algorithm is <see cref="Esb512"/>.</summary>
     public static bool IsEsb512(int algorithm) => algorithm == Esb512;
 
-    /// <summary>Determines if the algorithm is any Brainpool ECDSA variant per RFC 9784.</summary>
+    /// <summary>Determines if the algorithm is any Brainpool ECDSA variant per RFC 9864.</summary>
     public static bool IsEsb(int algorithm) => algorithm is Esb256 or Esb320 or Esb384 or Esb512;
 
 
@@ -401,7 +401,7 @@ public static class WellKnownCoseAlgorithms
         MlDsa44 => WellKnownJwaValues.MlDsa44,
         MlDsa65 => WellKnownJwaValues.MlDsa65,
         MlDsa87 => WellKnownJwaValues.MlDsa87,
-        //RFC 9784 fully-specified ECDSA — both ESP* (NIST P-curves) and ESB*
+        //RFC 9864 fully-specified ECDSA — both ESP* (NIST P-curves) and ESB*
         //(Brainpool r1) carry through to their JOSE counterparts under
         //draft-ietf-jose-fully-specified-algorithms; the JWA spellings
         //match the COSE constant names character-for-character.

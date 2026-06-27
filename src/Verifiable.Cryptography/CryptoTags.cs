@@ -178,6 +178,12 @@ public static class CryptoTags
         (typeof(Purpose), Purpose.Signature),
         (typeof(EncodingScheme), EncodingScheme.Raw));
 
+    /// <summary>Tag for RSA ISO/IEC 9796-2 (Digital Signature scheme 1, message recovery) signatures, as used by eMRTD RSA Active Authentication.</summary>
+    public static Tag RsaIso9796d2Signature { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.RsaIso9796d2),
+        (typeof(Purpose), Purpose.Signature),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
     /// <summary>Tag for Ed25519 public keys. Raw encoding.</summary>
     public static Tag Ed25519PublicKey { get; } = Tag.Create(
         (typeof(CryptoAlgorithm), CryptoAlgorithm.Ed25519),
@@ -525,10 +531,30 @@ public static class CryptoTags
         (typeof(EncodingScheme), EncodingScheme.Raw));
 
 
-    //Brainpool ECDSA curve tags per RFC 5639 / RFC 9784. The four r1 curves
-    //(P-256r1, P-320r1, P-384r1, P-512r1) carry compressed public keys and
-    //raw private-key scalars. They share the EC compression encoding with
-    //the NIST P-curves; only the underlying curve parameters differ.
+    //Brainpool ECDSA curve tags per RFC 5639 / RFC 9864. The five r1 curves
+    //(P-224r1, P-256r1, P-320r1, P-384r1, P-512r1) carry compressed public keys
+    //and raw private-key scalars. They share the EC compression encoding with
+    //the NIST P-curves; only the underlying curve parameters differ. (brainpoolP224r1
+    //is an ECDH/key-agreement curve — notably eMRTD Chip Authentication — with no
+    //RFC 9864 fully-specified ECDSA registration, so it has no COSE algorithm id.)
+
+    /// <summary>Tag for Brainpool P-224r1 public keys used for signature verification. Compressed encoding.</summary>
+    public static Tag BrainpoolP224r1PublicKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.BrainpoolP224r1),
+        (typeof(Purpose), Purpose.Verification),
+        (typeof(EncodingScheme), EncodingScheme.EcCompressed));
+
+    /// <summary>Tag for Brainpool P-224r1 private keys used for signing. Raw encoding.</summary>
+    public static Tag BrainpoolP224r1PrivateKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.BrainpoolP224r1),
+        (typeof(Purpose), Purpose.Signing),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>Tag for Brainpool P-224r1 signature values (IEEE P1363 r || s).</summary>
+    public static Tag BrainpoolP224r1Signature { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.BrainpoolP224r1),
+        (typeof(Purpose), Purpose.Signature),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
 
     /// <summary>Tag for Brainpool P-256r1 public keys used for signature verification. Compressed encoding.</summary>
     public static Tag BrainpoolP256r1PublicKey { get; } = Tag.Create(
@@ -607,6 +633,18 @@ public static class CryptoTags
     //Purpose.Exchange and the uncompressed public-point encoding ECDH agreement
     //consumes (0x04 || X || Y). RFC 5639 curves resolve through BouncyCastle's
     //ECNamedCurveTable for key agreement.
+
+    /// <summary>Tag for Brainpool P-224r1 public keys used in ECDH key agreement. Uncompressed encoding.</summary>
+    public static Tag BrainpoolP224r1ExchangePublicKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.BrainpoolP224r1),
+        (typeof(Purpose), Purpose.Exchange),
+        (typeof(EncodingScheme), EncodingScheme.EcUncompressed));
+
+    /// <summary>Tag for Brainpool P-224r1 private key scalars used in ECDH key agreement. Raw encoding.</summary>
+    public static Tag BrainpoolP224r1ExchangePrivateKey { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.BrainpoolP224r1),
+        (typeof(Purpose), Purpose.Exchange),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
 
     /// <summary>Tag for Brainpool P-256r1 public keys used in ECDH key agreement. Uncompressed encoding.</summary>
     public static Tag BrainpoolP256r1ExchangePublicKey { get; } = Tag.Create(
@@ -791,6 +829,27 @@ public static class CryptoTags
 
 
     /// <summary>
+    /// Tag for the DER wire bytes of a CMS SignedData structure per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5652">RFC 5652</see> — the signature-envelope
+    /// substrate of eMRTD Passive Authentication (EF.SOD) and the CAdES family of EU advanced
+    /// signatures. The CMS analog of <see cref="CoseEncodedSign1"/>.
+    /// </summary>
+    public static Tag CmsEncodedSignedData { get; } = Tag.Create(
+        (typeof(Purpose), Purpose.Signature),
+        (typeof(EncodingScheme), EncodingScheme.Der));
+
+
+    /// <summary>
+    /// Tag for the DER-encoded value of a single CMS SignerInfo signed attribute (RFC 5652 §5.3) — for
+    /// example the CAdES signing-certificate-v2 (ESS, RFC 5035) or signing-time attribute. The signature
+    /// covers these attributes; surfacing them lets a format layer validate its own rules (CAdES).
+    /// </summary>
+    public static Tag CmsSignedAttributeValue { get; } = Tag.Create(
+        (typeof(Purpose), Purpose.Signature),
+        (typeof(EncodingScheme), EncodingScheme.Der));
+
+
+    /// <summary>
     /// Tag for P-384 public keys used in ECDH key agreement.
     /// Uncompressed encoding: <c>0x04 || X || Y</c>.
     /// </summary>
@@ -893,6 +952,61 @@ public static class CryptoTags
         (typeof(EncodingScheme), EncodingScheme.Raw));
 
 
+    //ICAO Doc 9303 Basic Access Control / 3DES Secure Messaging operation-component tags.
+    //Named after the symmetric algorithm and role, not after the eMRTD protocol. Two-key
+    //Triple-DES in CBC mode (zero IV, ISO 9797-1 method 2 padding owned by the Secure
+    //Messaging layer) provides confidentiality; the ISO 9797-1 MAC Algorithm 3 ("Retail
+    //MAC") over DES, keyed by the same kind of 16-byte key, provides integrity. The
+    //Purpose distinguishes the role.
+
+    /// <summary>Tag for two-key Triple-DES CBC keys and the ciphertext produced under them.</summary>
+    public static Tag TripleDesCbc { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.TripleDes),
+        (typeof(Purpose), Purpose.Encryption),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>Tag for plaintext recovered by a two-key Triple-DES CBC decryption.</summary>
+    public static Tag TripleDesCbcDecryptedContent { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.TripleDes),
+        (typeof(Purpose), Purpose.Decrypted),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for ISO/IEC 9797-1 MAC Algorithm 3 ("Retail MAC") keys and the 8-byte MAC values
+    /// produced under them, as used by ICAO Doc 9303 BAC and 3DES Secure Messaging.
+    /// </summary>
+    public static Tag RetailMac { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.TripleDes),
+        (typeof(Purpose), Purpose.Mac),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+
+    //AES-128 CBC and CMAC operation-component tags, the confidentiality and integrity
+    //primitives of ICAO Doc 9303 PACE and AES Secure Messaging. As with the Triple-DES
+    //tags, the cipher uses no internal padding (the Secure Messaging layer owns it) and
+    //AES-CMAC follows RFC 4493. The Purpose distinguishes the role.
+
+    /// <summary>Tag for AES-128 CBC keys and the ciphertext produced under them.</summary>
+    public static Tag Aes128Cbc { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes128),
+        (typeof(Purpose), Purpose.Encryption),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>Tag for plaintext recovered by an AES-128 CBC decryption.</summary>
+    public static Tag Aes128CbcDecryptedContent { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes128),
+        (typeof(Purpose), Purpose.Decrypted),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+    /// <summary>
+    /// Tag for AES-128 CMAC (RFC 4493) keys and the MAC values produced under them.
+    /// </summary>
+    public static Tag Aes128Cmac { get; } = Tag.Create(
+        (typeof(CryptoAlgorithm), CryptoAlgorithm.Aes128),
+        (typeof(Purpose), Purpose.Mac),
+        (typeof(EncodingScheme), EncodingScheme.Raw));
+
+
     /// <summary>
     /// The curated set of every <see cref="Tag"/> declared on <see cref="CryptoTags"/>,
     /// in declaration order. This is the declarative source for a Cryptographic Bill of
@@ -928,18 +1042,23 @@ public static class CryptoTags
         MlKem768PublicKey, MlKem768PrivateKey,
         MlKem1024PublicKey, MlKem1024PrivateKey,
         AesGcmIv, AesGcmCiphertext, AesGcmAuthTag, AesGcmAad, AesGcmDecryptedContent, AesGcmCek,
+        BrainpoolP224r1PublicKey, BrainpoolP224r1PrivateKey, BrainpoolP224r1Signature,
         BrainpoolP256r1PublicKey, BrainpoolP256r1PrivateKey, BrainpoolP256r1Signature,
         BrainpoolP320r1PublicKey, BrainpoolP320r1PrivateKey, BrainpoolP320r1Signature,
         BrainpoolP384r1PublicKey, BrainpoolP384r1PrivateKey, BrainpoolP384r1Signature,
         BrainpoolP512r1PublicKey, BrainpoolP512r1PrivateKey, BrainpoolP512r1Signature,
+        BrainpoolP224r1ExchangePublicKey, BrainpoolP224r1ExchangePrivateKey,
         BrainpoolP256r1ExchangePublicKey, BrainpoolP256r1ExchangePrivateKey,
         BrainpoolP320r1ExchangePublicKey, BrainpoolP320r1ExchangePrivateKey,
         BrainpoolP384r1ExchangePublicKey, BrainpoolP384r1ExchangePrivateKey,
         BrainpoolP512r1ExchangePublicKey, BrainpoolP512r1ExchangePrivateKey,
         MdocIssuerSignedItemRandom, WireDecodedDisclosureSalt,
         CoseEncodedSign1, AlgorithmAgnosticSignature, CoseEncodedMac0, CoseEncodedProtectedHeader,
+        CmsEncodedSignedData, CmsSignedAttributeValue,
         Sha256Digest, Sha384Digest, Sha512Digest,
         HmacSha256Key, HmacSha384Key, HmacSha512Key,
-        HmacSha256Value, HmacSha384Value, HmacSha512Value
+        HmacSha256Value, HmacSha384Value, HmacSha512Value,
+        TripleDesCbc, TripleDesCbcDecryptedContent, RetailMac,
+        Aes128Cbc, Aes128CbcDecryptedContent, Aes128Cmac
     ];
 }

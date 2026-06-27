@@ -541,22 +541,64 @@ public static class EllipticCurveConstants
         public const int CompressedPointByteCount = 1 + PointArrayLength;
 
         /// <summary>The curve prime p per RFC 5639 §3.4.</summary>
-        public static readonly BigInteger Prime = BigInteger.Parse(
-            "00A9FB57DBA1EEA9BC3E660A909D838D726E3BF623D52620282013481D1F6E5377",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> PrimeBytes => new byte[PointArrayLength] { 0xa9, 0xfb, 0x57, 0xdb, 0xa1, 0xee, 0xa9, 0xbc, 0x3e, 0x66, 0x0a, 0x90, 0x9d, 0x83, 0x8d, 0x72, 0x6e, 0x3b, 0xf6, 0x23, 0xd5, 0x26, 0x20, 0x28, 0x20, 0x13, 0x48, 0x1d, 0x1f, 0x6e, 0x53, 0x77 };
 
         /// <summary>The curve a coefficient per RFC 5639 §3.4.</summary>
-        public static readonly BigInteger CoefficientA = BigInteger.Parse(
-            "007D5A0975FC2C3057EEF67530417AFFE7FB8055C126DC5C6CE94A4B44F330B5D9",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> CoefficientABytes => new byte[PointArrayLength] { 0x7d, 0x5a, 0x09, 0x75, 0xfc, 0x2c, 0x30, 0x57, 0xee, 0xf6, 0x75, 0x30, 0x41, 0x7a, 0xff, 0xe7, 0xfb, 0x80, 0x55, 0xc1, 0x26, 0xdc, 0x5c, 0x6c, 0xe9, 0x4a, 0x4b, 0x44, 0xf3, 0x30, 0xb5, 0xd9 };
 
         /// <summary>The curve b coefficient per RFC 5639 §3.4.</summary>
-        public static readonly BigInteger CoefficientB = BigInteger.Parse(
-            "0026DC5C6CE94A4B44F330B5D9BBD77CBF958416295CF7E1CE6BCCDC18FF8C07B6",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> CoefficientBBytes => new byte[PointArrayLength] { 0x26, 0xdc, 0x5c, 0x6c, 0xe9, 0x4a, 0x4b, 0x44, 0xf3, 0x30, 0xb5, 0xd9, 0xbb, 0xd7, 0x7c, 0xbf, 0x95, 0x84, 0x16, 0x29, 0x5c, 0xf7, 0xe1, 0xce, 0x6b, 0xcc, 0xdc, 0x18, 0xff, 0x8c, 0x07, 0xb6 };
+
+        /// <summary>Turns <see cref="PrimeBytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger Prime => new(PrimeBytes, true, true);
+
+        /// <summary>Turns <see cref="CoefficientABytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger CoefficientA => new(CoefficientABytes, true, true);
+
+        /// <summary>Turns <see cref="CoefficientBBytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger CoefficientB => new(CoefficientBBytes, true, true);
 
         /// <summary>The square-root exponent (Prime + 1) / 4 for Tonelli–Shanks shortcut when p ≡ 3 (mod 4).</summary>
-        public static readonly BigInteger PIdentity = (Prime + 1) / 4;
+        public static BigInteger PIdentity => (Prime + 1) / 4;
+    }
+
+
+    /// <summary>
+    /// Pre-computed constants for the Brainpool P-224r1 elliptic curve per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639 §3.3</see>.
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The curve constants are organized like this on purpose.")]
+    public static class BrainpoolP224r1
+    {
+        /// <summary>The length of a Brainpool P-224r1 field element in bytes.</summary>
+        public const int PointArrayLength = 28;
+
+        /// <summary>The byte length of an uncompressed Brainpool P-224r1 point encoding: 0x04 prefix + X + Y.</summary>
+        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+
+        /// <summary>The byte length of a compressed Brainpool P-224r1 point encoding: 0x02/0x03 prefix + X.</summary>
+        public const int CompressedPointByteCount = 1 + PointArrayLength;
+
+        /// <summary>The curve prime p per RFC 5639 §3.3.</summary>
+        public static ReadOnlySpan<byte> PrimeBytes => new byte[PointArrayLength] { 0xd7, 0xc1, 0x34, 0xaa, 0x26, 0x43, 0x66, 0x86, 0x2a, 0x18, 0x30, 0x25, 0x75, 0xd1, 0xd7, 0x87, 0xb0, 0x9f, 0x07, 0x57, 0x97, 0xda, 0x89, 0xf5, 0x7e, 0xc8, 0xc0, 0xff };
+
+        /// <summary>The curve a coefficient per RFC 5639 §3.3.</summary>
+        public static ReadOnlySpan<byte> CoefficientABytes => new byte[PointArrayLength] { 0x68, 0xa5, 0xe6, 0x2c, 0xa9, 0xce, 0x6c, 0x1c, 0x29, 0x98, 0x03, 0xa6, 0xc1, 0x53, 0x0b, 0x51, 0x4e, 0x18, 0x2a, 0xd8, 0xb0, 0x04, 0x2a, 0x59, 0xca, 0xd2, 0x9f, 0x43 };
+
+        /// <summary>The curve b coefficient per RFC 5639 §3.3.</summary>
+        public static ReadOnlySpan<byte> CoefficientBBytes => new byte[PointArrayLength] { 0x25, 0x80, 0xf6, 0x3c, 0xcf, 0xe4, 0x41, 0x38, 0x87, 0x07, 0x13, 0xb1, 0xa9, 0x23, 0x69, 0xe3, 0x3e, 0x21, 0x35, 0xd2, 0x66, 0xdb, 0xb3, 0x72, 0x38, 0x6c, 0x40, 0x0b };
+
+        /// <summary>Turns <see cref="PrimeBytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger Prime => new(PrimeBytes, true, true);
+
+        /// <summary>Turns <see cref="CoefficientABytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger CoefficientA => new(CoefficientABytes, true, true);
+
+        /// <summary>Turns <see cref="CoefficientBBytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger CoefficientB => new(CoefficientBBytes, true, true);
+
+        /// <summary>The square-root exponent (Prime + 1) / 4 for Tonelli–Shanks shortcut when p ≡ 3 (mod 4).</summary>
+        public static BigInteger PIdentity => (Prime + 1) / 4;
     }
 
 
@@ -577,22 +619,25 @@ public static class EllipticCurveConstants
         public const int CompressedPointByteCount = 1 + PointArrayLength;
 
         /// <summary>The curve prime p per RFC 5639 §3.5.</summary>
-        public static readonly BigInteger Prime = BigInteger.Parse(
-            "00D35E472036BC4FB7E13C785ED201E065F98FCFA6F6F40DEF4F92B9EC7893EC28FCD412B1F1B32E27",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> PrimeBytes => new byte[PointArrayLength] { 0xd3, 0x5e, 0x47, 0x20, 0x36, 0xbc, 0x4f, 0xb7, 0xe1, 0x3c, 0x78, 0x5e, 0xd2, 0x01, 0xe0, 0x65, 0xf9, 0x8f, 0xcf, 0xa6, 0xf6, 0xf4, 0x0d, 0xef, 0x4f, 0x92, 0xb9, 0xec, 0x78, 0x93, 0xec, 0x28, 0xfc, 0xd4, 0x12, 0xb1, 0xf1, 0xb3, 0x2e, 0x27 };
 
         /// <summary>The curve a coefficient per RFC 5639 §3.5.</summary>
-        public static readonly BigInteger CoefficientA = BigInteger.Parse(
-            "003EE30B568FBAB0F883CCEBD46D3F3BB8A2A73513F5EB79DA66190EB085FFA9F492F375A97D860EB4",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> CoefficientABytes => new byte[PointArrayLength] { 0x3e, 0xe3, 0x0b, 0x56, 0x8f, 0xba, 0xb0, 0xf8, 0x83, 0xcc, 0xeb, 0xd4, 0x6d, 0x3f, 0x3b, 0xb8, 0xa2, 0xa7, 0x35, 0x13, 0xf5, 0xeb, 0x79, 0xda, 0x66, 0x19, 0x0e, 0xb0, 0x85, 0xff, 0xa9, 0xf4, 0x92, 0xf3, 0x75, 0xa9, 0x7d, 0x86, 0x0e, 0xb4 };
 
         /// <summary>The curve b coefficient per RFC 5639 §3.5.</summary>
-        public static readonly BigInteger CoefficientB = BigInteger.Parse(
-            "00520883949DFDBC42D3AD198640688A6FE13F41349554B49ACC31DCCD884539816F5EB4AC8FB1F1A6",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> CoefficientBBytes => new byte[PointArrayLength] { 0x52, 0x08, 0x83, 0x94, 0x9d, 0xfd, 0xbc, 0x42, 0xd3, 0xad, 0x19, 0x86, 0x40, 0x68, 0x8a, 0x6f, 0xe1, 0x3f, 0x41, 0x34, 0x95, 0x54, 0xb4, 0x9a, 0xcc, 0x31, 0xdc, 0xcd, 0x88, 0x45, 0x39, 0x81, 0x6f, 0x5e, 0xb4, 0xac, 0x8f, 0xb1, 0xf1, 0xa6 };
+
+        /// <summary>Turns <see cref="PrimeBytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger Prime => new(PrimeBytes, true, true);
+
+        /// <summary>Turns <see cref="CoefficientABytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger CoefficientA => new(CoefficientABytes, true, true);
+
+        /// <summary>Turns <see cref="CoefficientBBytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger CoefficientB => new(CoefficientBBytes, true, true);
 
         /// <summary>The square-root exponent (Prime + 1) / 4 for Tonelli–Shanks shortcut when p ≡ 3 (mod 4).</summary>
-        public static readonly BigInteger PIdentity = (Prime + 1) / 4;
+        public static BigInteger PIdentity => (Prime + 1) / 4;
     }
 
 
@@ -613,22 +658,25 @@ public static class EllipticCurveConstants
         public const int CompressedPointByteCount = 1 + PointArrayLength;
 
         /// <summary>The curve prime p per RFC 5639 §3.6.</summary>
-        public static readonly BigInteger Prime = BigInteger.Parse(
-            "008CB91E82A3386D280F5D6F7E50E641DF152F7109ED5456B412B1DA197FB71123ACD3A729901D1A71874700133107EC53",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> PrimeBytes => new byte[PointArrayLength] { 0x8c, 0xb9, 0x1e, 0x82, 0xa3, 0x38, 0x6d, 0x28, 0x0f, 0x5d, 0x6f, 0x7e, 0x50, 0xe6, 0x41, 0xdf, 0x15, 0x2f, 0x71, 0x09, 0xed, 0x54, 0x56, 0xb4, 0x12, 0xb1, 0xda, 0x19, 0x7f, 0xb7, 0x11, 0x23, 0xac, 0xd3, 0xa7, 0x29, 0x90, 0x1d, 0x1a, 0x71, 0x87, 0x47, 0x00, 0x13, 0x31, 0x07, 0xec, 0x53 };
 
         /// <summary>The curve a coefficient per RFC 5639 §3.6.</summary>
-        public static readonly BigInteger CoefficientA = BigInteger.Parse(
-            "007BC382C63D8C150C3C72080ACE05AFA0C2BEA28E4FB22787139165EFBA91F90F8AA5814A503AD4EB04A8C7DD22CE2826",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> CoefficientABytes => new byte[PointArrayLength] { 0x7b, 0xc3, 0x82, 0xc6, 0x3d, 0x8c, 0x15, 0x0c, 0x3c, 0x72, 0x08, 0x0a, 0xce, 0x05, 0xaf, 0xa0, 0xc2, 0xbe, 0xa2, 0x8e, 0x4f, 0xb2, 0x27, 0x87, 0x13, 0x91, 0x65, 0xef, 0xba, 0x91, 0xf9, 0x0f, 0x8a, 0xa5, 0x81, 0x4a, 0x50, 0x3a, 0xd4, 0xeb, 0x04, 0xa8, 0xc7, 0xdd, 0x22, 0xce, 0x28, 0x26 };
 
         /// <summary>The curve b coefficient per RFC 5639 §3.6.</summary>
-        public static readonly BigInteger CoefficientB = BigInteger.Parse(
-            "0004A8C7DD22CE28268B39B55416F0447C2FB77DE107DCD2A62E880EA53EEB62D57CB4390295DBC9943AB78696FA504C11",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> CoefficientBBytes => new byte[PointArrayLength] { 0x04, 0xa8, 0xc7, 0xdd, 0x22, 0xce, 0x28, 0x26, 0x8b, 0x39, 0xb5, 0x54, 0x16, 0xf0, 0x44, 0x7c, 0x2f, 0xb7, 0x7d, 0xe1, 0x07, 0xdc, 0xd2, 0xa6, 0x2e, 0x88, 0x0e, 0xa5, 0x3e, 0xeb, 0x62, 0xd5, 0x7c, 0xb4, 0x39, 0x02, 0x95, 0xdb, 0xc9, 0x94, 0x3a, 0xb7, 0x86, 0x96, 0xfa, 0x50, 0x4c, 0x11 };
+
+        /// <summary>Turns <see cref="PrimeBytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger Prime => new(PrimeBytes, true, true);
+
+        /// <summary>Turns <see cref="CoefficientABytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger CoefficientA => new(CoefficientABytes, true, true);
+
+        /// <summary>Turns <see cref="CoefficientBBytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger CoefficientB => new(CoefficientBBytes, true, true);
 
         /// <summary>The square-root exponent (Prime + 1) / 4 for Tonelli–Shanks shortcut when p ≡ 3 (mod 4).</summary>
-        public static readonly BigInteger PIdentity = (Prime + 1) / 4;
+        public static BigInteger PIdentity => (Prime + 1) / 4;
     }
 
 
@@ -649,21 +697,24 @@ public static class EllipticCurveConstants
         public const int CompressedPointByteCount = 1 + PointArrayLength;
 
         /// <summary>The curve prime p per RFC 5639 §3.7.</summary>
-        public static readonly BigInteger Prime = BigInteger.Parse(
-            "00AADD9DB8DBE9C48B3FD4E6AE33C9FC07CB308DB3B3C9D20ED6639CCA703308717D4D9B009BC66842AECDA12AE6A380E62881FF2F2D82C68528AA6056583A48F3",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> PrimeBytes => new byte[PointArrayLength] { 0xaa, 0xdd, 0x9d, 0xb8, 0xdb, 0xe9, 0xc4, 0x8b, 0x3f, 0xd4, 0xe6, 0xae, 0x33, 0xc9, 0xfc, 0x07, 0xcb, 0x30, 0x8d, 0xb3, 0xb3, 0xc9, 0xd2, 0x0e, 0xd6, 0x63, 0x9c, 0xca, 0x70, 0x33, 0x08, 0x71, 0x7d, 0x4d, 0x9b, 0x00, 0x9b, 0xc6, 0x68, 0x42, 0xae, 0xcd, 0xa1, 0x2a, 0xe6, 0xa3, 0x80, 0xe6, 0x28, 0x81, 0xff, 0x2f, 0x2d, 0x82, 0xc6, 0x85, 0x28, 0xaa, 0x60, 0x56, 0x58, 0x3a, 0x48, 0xf3 };
 
         /// <summary>The curve a coefficient per RFC 5639 §3.7.</summary>
-        public static readonly BigInteger CoefficientA = BigInteger.Parse(
-            "007830A3318B603B89E2327145AC234CC594CBDD8D3DF91610A83441CAEA9863BC2DED5D5AA8253AA10A2EF1C98B9AC8B57F1117A72BF2C7B9E7C1AC4D77FC94CA",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> CoefficientABytes => new byte[PointArrayLength] { 0x78, 0x30, 0xa3, 0x31, 0x8b, 0x60, 0x3b, 0x89, 0xe2, 0x32, 0x71, 0x45, 0xac, 0x23, 0x4c, 0xc5, 0x94, 0xcb, 0xdd, 0x8d, 0x3d, 0xf9, 0x16, 0x10, 0xa8, 0x34, 0x41, 0xca, 0xea, 0x98, 0x63, 0xbc, 0x2d, 0xed, 0x5d, 0x5a, 0xa8, 0x25, 0x3a, 0xa1, 0x0a, 0x2e, 0xf1, 0xc9, 0x8b, 0x9a, 0xc8, 0xb5, 0x7f, 0x11, 0x17, 0xa7, 0x2b, 0xf2, 0xc7, 0xb9, 0xe7, 0xc1, 0xac, 0x4d, 0x77, 0xfc, 0x94, 0xca };
 
         /// <summary>The curve b coefficient per RFC 5639 §3.7.</summary>
-        public static readonly BigInteger CoefficientB = BigInteger.Parse(
-            "003DF91610A83441CAEA9863BC2DED5D5AA8253AA10A2EF1C98B9AC8B57F1117A72BF2C7B9E7C1AC4D77FC94CADC083E67984050B75EBAE5DD2809BD638016F723",
-            NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        public static ReadOnlySpan<byte> CoefficientBBytes => new byte[PointArrayLength] { 0x3d, 0xf9, 0x16, 0x10, 0xa8, 0x34, 0x41, 0xca, 0xea, 0x98, 0x63, 0xbc, 0x2d, 0xed, 0x5d, 0x5a, 0xa8, 0x25, 0x3a, 0xa1, 0x0a, 0x2e, 0xf1, 0xc9, 0x8b, 0x9a, 0xc8, 0xb5, 0x7f, 0x11, 0x17, 0xa7, 0x2b, 0xf2, 0xc7, 0xb9, 0xe7, 0xc1, 0xac, 0x4d, 0x77, 0xfc, 0x94, 0xca, 0xdc, 0x08, 0x3e, 0x67, 0x98, 0x40, 0x50, 0xb7, 0x5e, 0xba, 0xe5, 0xdd, 0x28, 0x09, 0xbd, 0x63, 0x80, 0x16, 0xf7, 0x23 };
+
+        /// <summary>Turns <see cref="PrimeBytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger Prime => new(PrimeBytes, true, true);
+
+        /// <summary>Turns <see cref="CoefficientABytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger CoefficientA => new(CoefficientABytes, true, true);
+
+        /// <summary>Turns <see cref="CoefficientBBytes"/> into a <see cref="BigInteger"/> for calculations.</summary>
+        public static BigInteger CoefficientB => new(CoefficientBBytes, true, true);
 
         /// <summary>The square-root exponent (Prime + 1) / 4 for Tonelli–Shanks shortcut when p ≡ 3 (mod 4).</summary>
-        public static readonly BigInteger PIdentity = (Prime + 1) / 4;
+        public static BigInteger PIdentity => (Prime + 1) / 4;
     }
 }

@@ -145,16 +145,16 @@ public static class MdocCoseKeyCurves
     /// <summary>secp256k1 per RFC 8812.</summary>
     public const int Secp256k1 = 8;
 
-    /// <summary>Brainpool P-256r1 per the COSE registration alongside RFC 9784.</summary>
+    /// <summary>Brainpool P-256r1 per the COSE registration alongside RFC 9864.</summary>
     public const int BrainpoolP256r1 = 256;
 
-    /// <summary>Brainpool P-320r1 per the COSE registration alongside RFC 9784.</summary>
+    /// <summary>Brainpool P-320r1 per the COSE registration alongside RFC 9864.</summary>
     public const int BrainpoolP320r1 = 257;
 
-    /// <summary>Brainpool P-384r1 per the COSE registration alongside RFC 9784.</summary>
+    /// <summary>Brainpool P-384r1 per the COSE registration alongside RFC 9864.</summary>
     public const int BrainpoolP384r1 = 258;
 
-    /// <summary>Brainpool P-512r1 per the COSE registration alongside RFC 9784.</summary>
+    /// <summary>Brainpool P-512r1 per the COSE registration alongside RFC 9864.</summary>
     public const int BrainpoolP512r1 = 259;
 }
 

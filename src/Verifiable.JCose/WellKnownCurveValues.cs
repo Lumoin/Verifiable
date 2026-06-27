@@ -83,6 +83,19 @@ namespace Verifiable.JCose
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7748">X448</see>.</remarks>
         public static readonly string X448 = Utf8Constants.ToInternedString(X448Utf8);
 
+        /// <summary>The UTF-8 source literal of <see cref="BrainpoolP224r1"/>.</summary>
+        public static ReadOnlySpan<byte> BrainpoolP224r1Utf8 => "brainpoolP224r1"u8;
+
+        /// <summary>
+        /// Brainpool P-224r1 curve (ECDH key agreement; eMRTD Chip Authentication).
+        /// </summary>
+        /// <remarks>
+        /// Named per <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>; the JWK <c>crv</c>
+        /// string matches the BouncyCastle registered curve name. brainpoolP224r1 has no fully-specified
+        /// ECDSA / COSE algorithm registration, so it appears as an ECDH curve identified by this <c>crv</c>.
+        /// </remarks>
+        public static readonly string BrainpoolP224r1 = Utf8Constants.ToInternedString(BrainpoolP224r1Utf8);
+
         /// <summary>The UTF-8 source literal of <see cref="BrainpoolP256r1"/>.</summary>
         public static ReadOnlySpan<byte> BrainpoolP256r1Utf8 => "brainpoolP256r1"u8;
 
@@ -189,6 +202,12 @@ namespace Verifiable.JCose
 
 
         /// <summary>
+        /// If <paramref name="crv"/> is <see cref="BrainpoolP224r1"/> or not.
+        /// </summary>
+        public static bool IsBrainpoolP224r1(string crv) => Equals(crv, BrainpoolP224r1);
+
+
+        /// <summary>
         /// If <paramref name="crv"/> is <see cref="BrainpoolP256r1"/> or not.
         /// </summary>
         public static bool IsBrainpoolP256r1(string crv) => Equals(crv, BrainpoolP256r1);
@@ -216,7 +235,7 @@ namespace Verifiable.JCose
         /// If <paramref name="crv"/> is any Brainpool r1 curve.
         /// </summary>
         public static bool IsBrainpool(string crv) =>
-            IsBrainpoolP256r1(crv) || IsBrainpoolP320r1(crv) || IsBrainpoolP384r1(crv) || IsBrainpoolP512r1(crv);
+            IsBrainpoolP224r1(crv) || IsBrainpoolP256r1(crv) || IsBrainpoolP320r1(crv) || IsBrainpoolP384r1(crv) || IsBrainpoolP512r1(crv);
 
 
         /// <summary>
@@ -235,6 +254,7 @@ namespace Verifiable.JCose
             string _ when IsSecp256k1(crv) => Secp256k1,
             string _ when IsX25519(crv) => X25519,
             string _ when IsX448(crv) => X448,
+            string _ when IsBrainpoolP224r1(crv) => BrainpoolP224r1,
             string _ when IsBrainpoolP256r1(crv) => BrainpoolP256r1,
             string _ when IsBrainpoolP320r1(crv) => BrainpoolP320r1,
             string _ when IsBrainpoolP384r1(crv) => BrainpoolP384r1,

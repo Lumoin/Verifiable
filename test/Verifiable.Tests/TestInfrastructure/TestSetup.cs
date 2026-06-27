@@ -133,8 +133,11 @@ internal static class TestSetup
     {
         InitializeCoders();
         InitializeCryptoFunctions();
+        InitializeRecoverableSignatureFunctions();
         InitializeEntropyFunctions();
         InitializeHmacFunctions();
+        InitializeSymmetricFunctions();
+        InitializeEcPointFunctions();
         InitializeKeyAgreementFunctions();
         MulticodecHeaderRegistry.Initialize();
     }
@@ -173,10 +176,15 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignSecp256k1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignRsa2048Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignRsa4096Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsaSha256Pkcs1Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256Pss) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsaSha256PssAsync,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsaSha512Pkcs1Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512Pss) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsaSha512PssAsync,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignEd25519Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa44) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignMlDsa44Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa65) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignMlDsa65Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa87) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignMlDsa87Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP224r1) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignBrainpoolP224r1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP256r1) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignBrainpoolP256r1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP320r1) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignBrainpoolP320r1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP384r1) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignBrainpoolP384r1Async,
@@ -195,16 +203,48 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifySecp256k1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyRsa2048Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyRsa4096Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha256Pkcs1Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256Pss) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha256PssAsync,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha512Pkcs1Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512Pss) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha512PssAsync,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyEd25519Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa44) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyMlDsa44Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa65) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyMlDsa65Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa87) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyMlDsa87Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP224r1) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyBrainpoolP224r1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP256r1) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyBrainpoolP256r1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP320r1) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyBrainpoolP320r1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP384r1) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyBrainpoolP384r1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP512r1) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyBrainpoolP512r1Async,
                     _ => throw new ArgumentException(
                         $"No verification function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
+                };
+            });
+    }
+
+
+    private static void InitializeRecoverableSignatureFunctions()
+    {
+        //ISO/IEC 9796-2 message-recovery RSA signatures (eMRTD RSA Active Authentication) are routed through
+        //their own registry, the same way key agreement and AEAD are, because message recovery does not fit
+        //the detached signing/verification contract. Only BouncyCastle implements ISO-9796-2.
+        RecoverableSignatureFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(
+            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+            {
+                return (algorithm, purpose) switch
+                {
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaIso9796d2) && p.Equals(Purpose.Signing) => BouncyCastleRecoverableSignatureFunctions.SignRsaIso9796d2Async,
+                    _ => throw new ArgumentException(
+                        $"No recoverable signing function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
+                };
+            },
+            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+            {
+                return (algorithm, purpose) switch
+                {
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaIso9796d2) && p.Equals(Purpose.Verification) => BouncyCastleRecoverableSignatureFunctions.VerifyRsaIso9796d2Async,
+                    _ => throw new ArgumentException(
+                        $"No recoverable verification function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
                 };
             });
     }
@@ -224,6 +264,22 @@ internal static class TestSetup
         CryptographicKeyFactory.RegisterFunction(
             typeof(ComputeDigestDelegate),
             (ComputeDigestDelegate)MicrosoftEntropyFunctions.ComputeDigestAsync);
+
+        //CMS SignedData verification (eMRTD Passive Authentication and CAdES). The Microsoft backend is the
+        //default; the BouncyCastle backend is registered under a qualifier so a cross-backend test can prove
+        //the seam is provider-neutral (an independent backend produces the same verified content).
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(Verifiable.Cryptography.Pki.VerifyCmsSignedDataDelegate),
+            (Verifiable.Cryptography.Pki.VerifyCmsSignedDataDelegate)MicrosoftCmsFunctions.VerifyCmsSignedDataAsync);
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(Verifiable.Cryptography.Pki.VerifyCmsSignedDataDelegate),
+            (Verifiable.Cryptography.Pki.VerifyCmsSignedDataDelegate)BouncyCastleCmsFunctions.VerifyCmsSignedDataAsync,
+            qualifier: "BouncyCastle");
+        //The fully managed backend (own ASN.1 parse, delegates only the EC primitive to the registered seam).
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(Verifiable.Cryptography.Pki.VerifyCmsSignedDataDelegate),
+            (Verifiable.Cryptography.Pki.VerifyCmsSignedDataDelegate)Verifiable.Cryptography.Pki.ManagedCmsVerification.VerifyCmsSignedDataAsync,
+            qualifier: "Managed");
     }
 
 
@@ -236,6 +292,58 @@ internal static class TestSetup
         CryptographicKeyFactory.RegisterFunction(
             typeof(VerifyHmacDelegate),
             (VerifyHmacDelegate)MicrosoftHmacFunctions.VerifyHmacAsync);
+    }
+
+
+    private static void InitializeSymmetricFunctions()
+    {
+        //BouncyCastle backs the unauthenticated block-cipher and block-cipher MAC primitives
+        //(Triple-DES CBC + ISO 9797-1 Retail MAC for eMRTD), since the AOT-clean Microsoft
+        //backend does not expose them.
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(SymmetricEncryptDelegate),
+            (SymmetricEncryptDelegate)BouncyCastleSymmetricFunctions.SymmetricEncryptAsync);
+
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(SymmetricDecryptDelegate),
+            (SymmetricDecryptDelegate)BouncyCastleSymmetricFunctions.SymmetricDecryptAsync);
+
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(ComputeBlockCipherMacDelegate),
+            (ComputeBlockCipherMacDelegate)BouncyCastleSymmetricFunctions.ComputeBlockCipherMacAsync);
+
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(VerifyBlockCipherMacDelegate),
+            (VerifyBlockCipherMacDelegate)BouncyCastleSymmetricFunctions.VerifyBlockCipherMacAsync);
+    }
+
+
+    private static void InitializeEcPointFunctions()
+    {
+        //BouncyCastle backs the encoded-point EC arithmetic seam (scalar*G, scalar*P, P+Q) that
+        //protocols such as PACE Generic Mapping build on; a managed backend can replace it by
+        //registering different implementations of the same delegates.
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(EcMultiplyGeneratorDelegate),
+            (EcMultiplyGeneratorDelegate)BouncyCastleEcPointFunctions.MultiplyGeneratorAsync);
+
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(EcMultiplyPointDelegate),
+            (EcMultiplyPointDelegate)BouncyCastleEcPointFunctions.MultiplyPointAsync);
+
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(EcAddPointsDelegate),
+            (EcAddPointsDelegate)BouncyCastleEcPointFunctions.AddPointsAsync);
+
+        //The Integrated Mapping point encoding f_G (Doc 9303 App B), the fourth EC-arithmetic primitive.
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(EcMap2PointDelegate),
+            (EcMap2PointDelegate)BouncyCastleEcPointFunctions.Map2PointAsync);
+
+        //The Chip Authentication Mapping data CA_IC = s_IC^-1 * s_Map,IC mod n (Doc 9303 Sec 4.4.3.5.1).
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(EcChipAuthenticationDataDelegate),
+            (EcChipAuthenticationDataDelegate)BouncyCastleEcPointFunctions.ChipAuthenticationDataAsync);
     }
 
 
@@ -254,6 +362,9 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p)
                         when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Exchange) =>
                             BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP521Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.BrainpoolP224r1) && p.Equals(Purpose.Exchange) =>
+                            BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptBrainpoolP224r1Async,
                     (CryptoAlgorithm a, Purpose p)
                         when a.Equals(CryptoAlgorithm.BrainpoolP256r1) && p.Equals(Purpose.Exchange) =>
                             BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptBrainpoolP256r1Async,
@@ -284,6 +395,9 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p)
                         when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Exchange) =>
                             BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP521Async,
+                    (CryptoAlgorithm a, Purpose p)
+                        when a.Equals(CryptoAlgorithm.BrainpoolP224r1) && p.Equals(Purpose.Exchange) =>
+                            BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptBrainpoolP224r1Async,
                     (CryptoAlgorithm a, Purpose p)
                         when a.Equals(CryptoAlgorithm.BrainpoolP256r1) && p.Equals(Purpose.Exchange) =>
                             BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptBrainpoolP256r1Async,

@@ -268,6 +268,16 @@ public static class BouncyCastleKeyAgreementFunctions
     }
 
 
+    /// <summary>Performs ECDH key agreement (encrypt side) using Brainpool P-224r1 (RFC 5639). Matches <see cref="KeyAgreementEncryptDelegate"/>.</summary>
+    public static ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptBrainpoolP224r1Async(
+        PublicKeyMemory recipientPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        EcdhEncryptBrainpoolAsync("brainpoolP224r1", 28, CryptoTags.BrainpoolP224r1ExchangePublicKey, CryptoTags.BrainpoolP224r1ExchangePrivateKey, recipientPublicKey, pool, cancellationToken);
+
+    /// <summary>Performs ECDH key agreement (decrypt side) using Brainpool P-224r1 (RFC 5639). Matches <see cref="KeyAgreementDecryptDelegate"/>.</summary>
+    public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptBrainpoolP224r1Async(
+        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        EcdhDecryptBrainpoolAsync("brainpoolP224r1", 28, CryptoTags.BrainpoolP224r1ExchangePrivateKey, privateKeyBytes, epk, pool, cancellationToken);
+
     /// <summary>Performs ECDH key agreement (encrypt side) using Brainpool P-256r1 (RFC 5639). Matches <see cref="KeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptBrainpoolP256r1Async(
         PublicKeyMemory recipientPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>

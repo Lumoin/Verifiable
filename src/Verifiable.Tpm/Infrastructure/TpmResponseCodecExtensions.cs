@@ -41,10 +41,15 @@ public static class TpmResponseCodecExtensions
         ///   <item><description>TPM2B_DIGEST randomBytes - the random data.</description></item>
         /// </list>
         /// <para>
+        /// The first (and only) response parameter, <c>randomBytes</c>, is a <c>TPM2B_DIGEST</c> sized buffer,
+        /// so it is eligible for session-based parameter encryption (the <c>encrypt</c> attribute).
+        /// </para>
+        /// <para>
         /// See TPM 2.0 Part 3, Section 16.1 - TPM2_GetRandom.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec GetRandom => TpmResponseCodec.Create(GetRandomResponse.Parse);
+        public static TpmResponseCodec GetRandom => TpmResponseCodec.Create(
+            GetRandomResponse.Parse, responseFirstParameterIsEncryptable: true);
 
         /// <summary>
         /// Codec for TPM2_StartAuthSession response.
@@ -81,7 +86,123 @@ public static class TpmResponseCodecExtensions
         /// See TPM 2.0 Part 3, Section 28.4 - TPM2_FlushContext.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec FlushContext => TpmResponseCodec.NoParameters();
+        public static TpmResponseCodec FlushContext => TpmResponseCodec.NoParameters(FlushContextResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_PolicyCommandCode response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This command has no response handles and no response parameters.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 23.4 - TPM2_PolicyCommandCode.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec PolicyCommandCode => TpmResponseCodec.NoParameters(PolicyCommandCodeResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_PolicyAuthValue response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This command has no response handles and no response parameters.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 23.18 - TPM2_PolicyAuthValue.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec PolicyAuthValue => TpmResponseCodec.NoParameters(PolicyAuthValueResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_PolicyPCR response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This command has no response handles and no response parameters.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 23.7 - TPM2_PolicyPCR.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec PolicyPcr => TpmResponseCodec.NoParameters(PolicyPcrResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_PolicyOR response. This command has no response handles and no response parameters
+        /// (TPM 2.0 Library Part 3, Section 23.6).
+        /// </summary>
+        public static TpmResponseCodec PolicyOr => TpmResponseCodec.NoParameters(PolicyOrResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_PolicyNV response. This command has no response handles and no response parameters
+        /// (TPM 2.0 Library Part 3, Section 23.9).
+        /// </summary>
+        public static TpmResponseCodec PolicyNv => TpmResponseCodec.NoParameters(PolicyNvResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_PolicyGetDigest response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>policyDigest (TPM2B_DIGEST) - the session's current policy digest.</description></item>
+        /// </list>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 23.6 - TPM2_PolicyGetDigest.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec PolicyGetDigest => TpmResponseCodec.Create(PolicyGetDigestResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_PolicySecret response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>timeout (TPM2B_TIMEOUT) - empty in the immediate (expiration 0) form.</description></item>
+        ///   <item><description>policyTicket (TPMT_TK_AUTH) - a NULL ticket in the immediate form.</description></item>
+        /// </list>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 23.4 - TPM2_PolicySecret.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec PolicySecret => TpmResponseCodec.Create(PolicySecretResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_NV_DefineSpace response. This command has no response handles and no response
+        /// parameters (TPM 2.0 Library Part 3, Section 31.3).
+        /// </summary>
+        public static TpmResponseCodec NvDefineSpace => TpmResponseCodec.NoParameters(NvDefineSpaceResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_NV_Read response.
+        /// </summary>
+        /// <remarks>
+        /// Response parameters: data (TPM2B_MAX_NV_BUFFER). See TPM 2.0 Library Part 3, Section 31.13.
+        /// </remarks>
+        public static TpmResponseCodec NvRead => TpmResponseCodec.Create(NvReadResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_NV_Write response. This command has no response handles and no response parameters
+        /// (TPM 2.0 Library Part 3, Section 31.7).
+        /// </summary>
+        public static TpmResponseCodec NvWrite => TpmResponseCodec.NoParameters(NvWriteResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_NV_UndefineSpace response. This command has no response handles and no response
+        /// parameters (TPM 2.0 Library Part 3, Section 31.4).
+        /// </summary>
+        public static TpmResponseCodec NvUndefineSpace => TpmResponseCodec.NoParameters(NvUndefineSpaceResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_EvictControl response. This command has no response handles and no response parameters
+        /// (TPM 2.0 Library Part 3, Section 28.5).
+        /// </summary>
+        public static TpmResponseCodec EvictControl => TpmResponseCodec.NoParameters(EvictControlResponse.Instance);
 
         /// <summary>
         /// Codec for TPM2_CreatePrimary response.
@@ -110,6 +231,40 @@ public static class TpmResponseCodecExtensions
         public static TpmResponseCodec CreatePrimary => TpmResponseCodec.CreateWithHandle(
             static (ref TpmReader reader, uint handle, System.Buffers.MemoryPool<byte> pool) =>
                 CreatePrimaryResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
+
+        /// <summary>
+        /// Codec for TPM2_Create response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// No response handle (the created object is not loaded). Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>outPrivate (TPM2B_PRIVATE) - the parent-wrapped private blob.</description></item>
+        ///   <item><description>outPublic (TPM2B_PUBLIC) - the public area of the created object.</description></item>
+        ///   <item><description>creationData (TPM2B_CREATION_DATA), creationHash (TPM2B_DIGEST), creationTicket (TPMT_TK_CREATION).</description></item>
+        /// </list>
+        /// <para>
+        /// Named <c>CreateObject</c> rather than <c>Create</c> to avoid colliding with the
+        /// <see cref="TpmResponseCodec.Create{TResponse}"/> factory. See TPM 2.0 Part 3, Section 12.1.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec CreateObject => TpmResponseCodec.Create(CreateResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_Load response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response handle: objectHandle (TPMI_DH_OBJECT). Response parameters: name (TPM2B_NAME).
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 12.2 - TPM2_Load.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec Load => TpmResponseCodec.CreateWithHandle(
+            static (ref TpmReader reader, uint handle, System.Buffers.MemoryPool<byte> pool) =>
+                LoadResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>
         /// Codec for TPM2_GetCapability response.
@@ -155,13 +310,114 @@ public static class TpmResponseCodecExtensions
         /// Response parameters:
         /// </para>
         /// <list type="bullet">
-        ///   <item><description>signature (TPMT_SIGNATURE) - the signature: sigAlg (2) + hashAlg (2) + TPM2B_ECC_PARAMETER(r) + TPM2B_ECC_PARAMETER(s).</description></item>
+        ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member: ECDSA (hash + TPM2B_ECC_PARAMETER(r) + TPM2B_ECC_PARAMETER(s)) or RSASSA/RSAPSS (hash + TPM2B_PUBLIC_KEY_RSA).</description></item>
         /// </list>
         /// <para>
         /// See TPM 2.0 Part 3, Section 20.2 - TPM2_Sign.
         /// </para>
         /// </remarks>
         public static TpmResponseCodec Sign => TpmResponseCodec.Create(SignResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_Quote response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>quoted (TPM2B_ATTEST) - the signed attestation (a marshaled TPMS_ATTEST).</description></item>
+        ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
+        /// </list>
+        /// <para>
+        /// The first response parameter, <c>quoted</c>, is a sized buffer and so would be encrypt-eligible, but a
+        /// quote is public by design (it proves platform state to a relying party), so it is left non-encryptable.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 18.4 - TPM2_Quote.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec Quote => TpmResponseCodec.Create(QuoteResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_Certify response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>certifyInfo (TPM2B_ATTEST) - the signed attestation (a marshaled TPMS_ATTEST of type TPM_ST_ATTEST_CERTIFY).</description></item>
+        ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
+        /// </list>
+        /// <para>
+        /// The first response parameter, <c>certifyInfo</c>, is a sized buffer and so would be encrypt-eligible,
+        /// but an attestation is public by design, so it is left non-encryptable.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 18.2 - TPM2_Certify.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec Certify => TpmResponseCodec.Create(CertifyResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_MakeCredential response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>credentialBlob (TPM2B_ID_OBJECT) - the integrity-protected, encrypted credential.</description></item>
+        ///   <item><description>secret (TPM2B_ENCRYPTED_SECRET) - the seed encrypted to the credential key's public area.</description></item>
+        /// </list>
+        /// <para>
+        /// Both outputs are public (they protect the credential cryptographically), so the first parameter is left
+        /// non-encryptable. See TPM 2.0 Part 3, Section 12.6 - TPM2_MakeCredential.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec MakeCredential => TpmResponseCodec.Create(MakeCredentialResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_ActivateCredential response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>certInfo (TPM2B_DIGEST) - the recovered credential secret.</description></item>
+        /// </list>
+        /// <para>
+        /// The recovered secret is confidential, so the first (and only) response parameter is eligible for
+        /// session-based parameter encryption (the <c>encrypt</c> attribute). See TPM 2.0 Part 3, Section 12.5 -
+        /// TPM2_ActivateCredential.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec ActivateCredential => TpmResponseCodec.Create(
+            ActivateCredentialResponse.Parse, responseFirstParameterIsEncryptable: true);
+
+        /// <summary>
+        /// Codec for TPM2_Unseal response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>outData (TPM2B_SENSITIVE_DATA) - the recovered sealed data.</description></item>
+        /// </list>
+        /// <para>
+        /// The first (and only) response parameter, <c>outData</c>, is a sized buffer, so it is eligible for
+        /// session-based parameter encryption (the <c>encrypt</c> attribute) - the recovered secret can be
+        /// returned over an AES-CFB-encrypted channel.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 12.7 - TPM2_Unseal.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec Unseal => TpmResponseCodec.Create(
+            UnsealResponse.Parse, responseFirstParameterIsEncryptable: true);
 
         /// <summary>
         /// Codec for TPM2_ECDH_ZGen response.

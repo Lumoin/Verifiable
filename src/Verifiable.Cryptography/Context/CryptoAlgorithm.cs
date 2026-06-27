@@ -367,8 +367,8 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.
     /// </summary>
     /// <remarks>
-    /// Paired with SHA-256 under RFC 9784 fully-specified ECDSA identifier
-    /// <c>ESB256</c> (COSE algorithm <c>-261</c>). Used by EUDI Wallet ARF
+    /// Paired with SHA-256 under RFC 9864 fully-specified ECDSA identifier
+    /// <c>ESB256</c> (COSE algorithm <c>-265</c>). Used by EUDI Wallet ARF
     /// profiles that need EU-domestic curve parameters distinct from the
     /// NIST P-256 generator.
     /// </remarks>
@@ -381,8 +381,8 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.
     /// </summary>
     /// <remarks>
-    /// Paired with SHA-384 under RFC 9784 fully-specified ECDSA identifier
-    /// <c>ESB320</c> (COSE algorithm <c>-262</c>). The 320-bit field has no
+    /// Paired with SHA-384 under RFC 9864 fully-specified ECDSA identifier
+    /// <c>ESB320</c> (COSE algorithm <c>-266</c>). The 320-bit field has no
     /// direct NIST equivalent.
     /// </remarks>
     public static CryptoAlgorithm BrainpoolP320r1 { get; } = new CryptoAlgorithm(25);
@@ -394,8 +394,8 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.
     /// </summary>
     /// <remarks>
-    /// Paired with SHA-384 under RFC 9784 fully-specified ECDSA identifier
-    /// <c>ESB384</c> (COSE algorithm <c>-263</c>).
+    /// Paired with SHA-384 under RFC 9864 fully-specified ECDSA identifier
+    /// <c>ESB384</c> (COSE algorithm <c>-267</c>).
     /// </remarks>
     public static CryptoAlgorithm BrainpoolP384r1 { get; } = new CryptoAlgorithm(26);
 
@@ -406,11 +406,26 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.
     /// </summary>
     /// <remarks>
-    /// Paired with SHA-512 under RFC 9784 fully-specified ECDSA identifier
-    /// <c>ESB512</c> (COSE algorithm <c>-264</c>). Field size matches NIST
+    /// Paired with SHA-512 under RFC 9864 fully-specified ECDSA identifier
+    /// <c>ESB512</c> (COSE algorithm <c>-268</c>). Field size matches NIST
     /// P-521 in practice; the curve parameters differ.
     /// </remarks>
     public static CryptoAlgorithm BrainpoolP512r1 { get; } = new CryptoAlgorithm(27);
+
+
+    /// <summary>
+    /// Brainpool P-224r1 elliptic curve (224-bit field, twisted prime curve)
+    /// as defined in
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5639">RFC 5639</see>.
+    /// </summary>
+    /// <remarks>
+    /// Used for elliptic-curve Diffie–Hellman key agreement — notably eMRTD Chip Authentication, which
+    /// announces the chip's static key in EF.DG14 — rather than signing: brainpoolP224r1 has no
+    /// fully-specified ECDSA registration in RFC 9864 / IANA COSE, so it carries no COSE algorithm or
+    /// COSE elliptic-curve identifier. The numeric identifier follows the symmetric algorithms because
+    /// 28–30 were already taken when this curve was added.
+    /// </remarks>
+    public static CryptoAlgorithm BrainpoolP224r1 { get; } = new CryptoAlgorithm(31);
 
 
     /// <summary>
@@ -427,6 +442,49 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     /// of the bytes within the operation.
     /// </remarks>
     public static CryptoAlgorithm Aes256 { get; } = new CryptoAlgorithm(28);
+
+
+    /// <summary>
+    /// Triple-DES (TDEA) as defined in
+    /// <see href="https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-67r2.pdf">NIST SP 800-67</see>.
+    /// </summary>
+    /// <remarks>
+    /// Identifies Triple-DES symmetric key material and the values produced under it
+    /// regardless of keying option — the two-key (16-byte) variant is the one ICAO
+    /// Doc 9303 Basic Access Control and 3DES Secure Messaging use, where it also keys
+    /// the ISO/IEC 9797-1 MAC Algorithm 3 ("Retail MAC"). The <see cref="Purpose"/>
+    /// component of a <see cref="Tag"/> distinguishes the role of the bytes
+    /// (<see cref="Purpose.Encryption"/> for the CBC cipher, <see cref="Purpose.Mac"/>
+    /// for the Retail MAC).
+    /// </remarks>
+    public static CryptoAlgorithm TripleDes { get; } = new CryptoAlgorithm(29);
+
+
+    /// <summary>
+    /// AES with a 128-bit key as defined in
+    /// <see href="https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197-upd1.pdf">FIPS 197</see>.
+    /// </summary>
+    /// <remarks>
+    /// Identifies 128-bit AES symmetric key material and the values produced under it
+    /// regardless of the mode of operation — CBC and CMAC for ICAO Doc 9303 PACE and AES
+    /// Secure Messaging. The <see cref="Purpose"/> component of a <see cref="Tag"/>
+    /// distinguishes the role of the bytes (<see cref="Purpose.Encryption"/> for the cipher,
+    /// <see cref="Purpose.Mac"/> for CMAC).
+    /// </remarks>
+    public static CryptoAlgorithm Aes128 { get; } = new CryptoAlgorithm(30);
+
+
+    /// <summary>
+    /// RSA signatures with message recovery per ISO/IEC 9796-2 Digital Signature scheme 1 — the scheme
+    /// ICAO Doc 9303 Part 11 §6.1 Active Authentication uses for RSA chip keys.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from the PKCS#1 v1.5 and PSS RSA algorithms in two ways: the signature itself carries
+    /// (recovers) part of the signed message, and the hash function is identified by the signature trailer
+    /// rather than fixed by the algorithm. The hash is therefore not part of this identifier — a verifier
+    /// reads it from the recovered trailer. The numeric identifier follows brainpoolP224r1 (31).
+    /// </remarks>
+    public static CryptoAlgorithm RsaIso9796d2 { get; } = new CryptoAlgorithm(32);
 
 
     private static readonly List<CryptoAlgorithm> algorithms = new([Rsa2048]);
@@ -604,11 +662,15 @@ public static class CryptoAlgorithmNames
         var a when a == CryptoAlgorithm.MlKem512.Algorithm => nameof(CryptoAlgorithm.MlKem512),
         var a when a == CryptoAlgorithm.MlKem768.Algorithm => nameof(CryptoAlgorithm.MlKem768),
         var a when a == CryptoAlgorithm.MlKem1024.Algorithm => nameof(CryptoAlgorithm.MlKem1024),
+        var a when a == CryptoAlgorithm.BrainpoolP224r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP224r1),
         var a when a == CryptoAlgorithm.BrainpoolP256r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP256r1),
         var a when a == CryptoAlgorithm.BrainpoolP320r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP320r1),
         var a when a == CryptoAlgorithm.BrainpoolP384r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP384r1),
         var a when a == CryptoAlgorithm.BrainpoolP512r1.Algorithm => nameof(CryptoAlgorithm.BrainpoolP512r1),
         var a when a == CryptoAlgorithm.Aes256.Algorithm => nameof(CryptoAlgorithm.Aes256),
+        var a when a == CryptoAlgorithm.TripleDes.Algorithm => nameof(CryptoAlgorithm.TripleDes),
+        var a when a == CryptoAlgorithm.Aes128.Algorithm => nameof(CryptoAlgorithm.Aes128),
+        var a when a == CryptoAlgorithm.RsaIso9796d2.Algorithm => nameof(CryptoAlgorithm.RsaIso9796d2),
         _ => $"Custom: ('{algorithm}')."
     };
 }

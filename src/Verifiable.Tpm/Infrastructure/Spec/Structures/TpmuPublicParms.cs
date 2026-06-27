@@ -62,6 +62,11 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
     public TpmsMlKemParms? MlKemDetail { get; init; }
 
     /// <summary>
+    /// Gets the keyed-hash parameters (when Type is TPM_ALG_KEYEDHASH).
+    /// </summary>
+    public TpmsKeyedHashParms? KeyedHashDetail { get; init; }
+
+    /// <summary>
     /// Creates RSA public parameters.
     /// </summary>
     /// <param name="rsaParms">The RSA parameters.</param>
@@ -117,6 +122,17 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
     };
 
     /// <summary>
+    /// Creates keyed-hash public parameters (for an HMAC/XOR key or a sealed data object).
+    /// </summary>
+    /// <param name="keyedHashParms">The keyed-hash parameters.</param>
+    /// <returns>The union containing keyed-hash parameters.</returns>
+    public static TpmuPublicParms KeyedHash(TpmsKeyedHashParms keyedHashParms) => new()
+    {
+        Type = TpmAlgIdConstants.TPM_ALG_KEYEDHASH,
+        KeyedHashDetail = keyedHashParms
+    };
+
+    /// <summary>
     /// Gets the serialized size of this union.
     /// </summary>
     public int SerializedSize => Type switch
@@ -126,6 +142,7 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
         TpmAlgIdConstants.TPM_ALG_MLDSA => TpmsMlDsaParms.SerializedSize,
         TpmAlgIdConstants.TPM_ALG_HASH_MLDSA => TpmsHashMlDsaParms.SerializedSize,
         TpmAlgIdConstants.TPM_ALG_MLKEM => MlKemDetail!.Value.SerializedSize,
+        TpmAlgIdConstants.TPM_ALG_KEYEDHASH => KeyedHashDetail!.Value.SerializedSize,
         _ => throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization.")
     };
 
@@ -140,23 +157,40 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
     {
         switch(Type)
         {
-            case TpmAlgIdConstants.TPM_ALG_RSA:
+            case(TpmAlgIdConstants.TPM_ALG_RSA):
+            {
                 RsaDetail!.Value.WriteTo(ref writer);
                 break;
-            case TpmAlgIdConstants.TPM_ALG_ECC:
+            }
+            case(TpmAlgIdConstants.TPM_ALG_ECC):
+            {
                 EccDetail!.Value.WriteTo(ref writer);
                 break;
-            case TpmAlgIdConstants.TPM_ALG_MLDSA:
+            }
+            case(TpmAlgIdConstants.TPM_ALG_MLDSA):
+            {
                 MlDsaDetail!.Value.WriteTo(ref writer);
                 break;
-            case TpmAlgIdConstants.TPM_ALG_HASH_MLDSA:
+            }
+            case(TpmAlgIdConstants.TPM_ALG_HASH_MLDSA):
+            {
                 HashMlDsaDetail!.Value.WriteTo(ref writer);
                 break;
-            case TpmAlgIdConstants.TPM_ALG_MLKEM:
+            }
+            case(TpmAlgIdConstants.TPM_ALG_MLKEM):
+            {
                 MlKemDetail!.Value.WriteTo(ref writer);
                 break;
+            }
+            case(TpmAlgIdConstants.TPM_ALG_KEYEDHASH):
+            {
+                KeyedHashDetail!.Value.WriteTo(ref writer);
+                break;
+            }
             default:
+            {
                 throw new NotSupportedException($"Algorithm type '{Type}' is not supported for serialization.");
+            }
         }
     }
 
@@ -193,6 +227,11 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
             Type = type,
             MlKemDetail = TpmsMlKemParms.Parse(ref reader)
         },
+        TpmAlgIdConstants.TPM_ALG_KEYEDHASH => new TpmuPublicParms
+        {
+            Type = type,
+            KeyedHashDetail = TpmsKeyedHashParms.Parse(ref reader)
+        },
         _ => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing.")
     };
 
@@ -203,13 +242,14 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
         Nullable.Equals(EccDetail, other.EccDetail) &&
         Nullable.Equals(MlDsaDetail, other.MlDsaDetail) &&
         Nullable.Equals(HashMlDsaDetail, other.HashMlDsaDetail) &&
-        Nullable.Equals(MlKemDetail, other.MlKemDetail);
+        Nullable.Equals(MlKemDetail, other.MlKemDetail) &&
+        Nullable.Equals(KeyedHashDetail, other.KeyedHashDetail);
 
     /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is TpmuPublicParms other && Equals(other);
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Type, RsaDetail, EccDetail, MlDsaDetail, HashMlDsaDetail, MlKemDetail);
+    public override int GetHashCode() => HashCode.Combine(Type, RsaDetail, EccDetail, MlDsaDetail, HashMlDsaDetail, MlKemDetail, KeyedHashDetail);
 
     /// <summary>
     /// Equality operator.

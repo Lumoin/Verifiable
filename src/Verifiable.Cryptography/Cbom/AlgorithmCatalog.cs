@@ -54,6 +54,7 @@ internal static class AlgorithmCatalog
         var a when a == CryptoAlgorithm.P384 => Ec("P-384", "p384", 192),
         var a when a == CryptoAlgorithm.P521 => Ec("P-521", "p521", 256),
         var a when a == CryptoAlgorithm.Secp256k1 => Ec("secp256k1", "secp256k1", 128),
+        var a when a == CryptoAlgorithm.BrainpoolP224r1 => Ec("brainpoolP224r1", "brainpoolp224r1", 112),
         var a when a == CryptoAlgorithm.BrainpoolP256r1 => Ec("brainpoolP256r1", "brainpoolp256r1", 128),
         var a when a == CryptoAlgorithm.BrainpoolP320r1 => Ec("brainpoolP320r1", "brainpoolp320r1", 160),
         var a when a == CryptoAlgorithm.BrainpoolP384r1 => Ec("brainpoolP384r1", "brainpoolp384r1", 192),
