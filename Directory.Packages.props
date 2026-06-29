@@ -9,7 +9,7 @@
     The build system enforces that core libraries do not have hard dependencies on serialization libraries, making them interchangeable.
   -->
   <ItemGroup Label="Library">
-    <PackageVersion Include="Lumoin.Base" Version="0.0.2" />
+    <PackageVersion Include="Lumoin.Base" Version="0.0.4" />
     <PackageVersion Include="Lumoin.Veridical.Core" Version="0.0.3" />
     <PackageVersion Include="Lumoin.Veridical.Hashing" Version="0.0.3" />
     <PackageVersion Include="Lumoin.Veridical.Backends.Managed" Version="0.0.3" />
