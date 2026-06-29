@@ -10,22 +10,22 @@
       },
       "dotNetRdf": {
         "type": "Direct",
-        "requested": "[3.5.1, )",
-        "resolved": "3.5.1",
-        "contentHash": "DZA9h0hsyrgqOF44aEPhtI2eXj4a7uC6b0iFY3Y0EldvZ+cU3UKH8OpjK2NbuTvvCJZdwr3cXeVWVOAOlNIGCQ==",
+        "requested": "[3.5.2, )",
+        "resolved": "3.5.2",
+        "contentHash": "jDYzeS4tefkZZz1eplGFvcGkAvZd2m72RMBCG3F7IpGhtAdWCcwQNTjTahbIlwftTU4k5CBKYVVmux9AZf24lA==",
         "dependencies": {
-          "dotNetRdf.Client": "3.5.1",
-          "dotNetRdf.Core": "3.5.1",
-          "dotNetRdf.Data.DataTables": "3.5.1",
-          "dotNetRdf.Dynamic": "3.5.1",
-          "dotNetRdf.Inferencing": "3.5.1",
-          "dotNetRdf.Ldf": "3.5.1",
-          "dotNetRdf.Ontology": "3.5.1",
-          "dotNetRdf.Query.FullText": "3.5.1",
-          "dotNetRdf.Query.Spin": "3.5.1",
-          "dotNetRdf.Shacl": "3.5.1",
-          "dotNetRdf.Skos": "3.5.1",
-          "dotNetRdf.Writing.HtmlSchema": "3.5.1"
+          "dotNetRdf.Client": "3.5.2",
+          "dotNetRdf.Core": "3.5.2",
+          "dotNetRdf.Data.DataTables": "3.5.2",
+          "dotNetRdf.Dynamic": "3.5.2",
+          "dotNetRdf.Inferencing": "3.5.2",
+          "dotNetRdf.Ldf": "3.5.2",
+          "dotNetRdf.Ontology": "3.5.2",
+          "dotNetRdf.Query.FullText": "3.5.2",
+          "dotNetRdf.Query.Spin": "3.5.2",
+          "dotNetRdf.Shacl": "3.5.2",
+          "dotNetRdf.Skos": "3.5.2",
+          "dotNetRdf.Writing.HtmlSchema": "3.5.2"
         }
       },
       "LiquidTestReports.Markdown": {
@@ -234,108 +234,108 @@
       },
       "dotNetRdf.Client": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "Sqb3+uVz7yPU9Vt0mpya/sPst4iV6C+yYb9qiLRSF69YkYbxQpQ+pYG26Ks7Bii9aXPaDC9Fp8vKB1FMavoFJA==",
+        "resolved": "3.5.2",
+        "contentHash": "VGOZGxelfNhhMoy4hLslS+2uLcDZ77wMM+XuAJrYO1ciOqPHV2yV3Alho9nOaPRnjdQSt7xJsZnHIZHt8uF/sA==",
         "dependencies": {
-          "dotNetRdf.Core": "3.5.1"
+          "dotNetRdf.Core": "3.5.2"
         }
       },
       "dotNetRdf.Core": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "geBVQv2MaIoqhQ6rsLLKFp8Fop8gDjzzzRor60lC+mCiS5kcneqijuhitH0B7nUP/Ns/Jl1LtDsJDZLqGOSi2g==",
+        "resolved": "3.5.2",
+        "contentHash": "rHp/RXZelasYYuWLdqAlXuN7bPx6zkxBZ5fOi2WV5tG1plb2muaZCDgnHb8CBwtrsQyCH+oBOICfF33IxIKBjg==",
         "dependencies": {
           "AngleSharp": "1.4.0",
           "HtmlAgilityPack": "1.12.4",
           "Newtonsoft.Json": "13.0.4",
-          "System.Configuration.ConfigurationManager": "10.0.2",
+          "System.Configuration.ConfigurationManager": "10.0.8",
           "System.Reflection.TypeExtensions": "4.7.0",
-          "VDS.Common": "3.0.0"
+          "VDS.Common": "3.0.1"
         }
       },
       "dotNetRdf.Data.DataTables": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "ysV3VrOaLuJ8QzuqsMAsFmLMlDe9FutNnsFfoh4A3fTfXymUs0OvKP1M3bsHK26twCGFhEUazhjNl9MTlA29Kg==",
+        "resolved": "3.5.2",
+        "contentHash": "MBYBY9f311zUFW0j2xp2ybhWWeRqneAE0WTrdKnY2Su7GR3UWYZQsW/o+5MFhJnurJfXNaa08nLPDXGz0Xl54g==",
         "dependencies": {
-          "dotNetRdf.Core": "3.5.1"
+          "dotNetRdf.Core": "3.5.2"
         }
       },
       "dotNetRdf.Dynamic": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "kXAlM3L8FBhX0DoRPJ+1cvFmwUooanK9TYOKA90pfwqmgRPmFmAANSKgtjJWc3JqBQQktQEWnofXYdNkd3xEtA==",
+        "resolved": "3.5.2",
+        "contentHash": "MESHU29pBYbxDNst2Y0ivK7pDClTu8bw3UQDi5tDoPuCp7fFdtBNTFepO5beI4fCF5FtvDhgHkCiHED8UfV8iQ==",
         "dependencies": {
-          "dotNetRdf.Core": "3.5.1"
+          "dotNetRdf.Core": "3.5.2"
         }
       },
       "dotNetRdf.Inferencing": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "T1tNHLNhiXcMOX2r+eeBBjb6DakdVt4IMWFbcliV9w3D04Egqi/4yYlHf3ECmOij7o8qsDzjh9v7twdA0h5NpQ==",
+        "resolved": "3.5.2",
+        "contentHash": "2yhSTW+iQVr41tjhbrx3uSCkTlrgSPXSbsb1StvB5Og6YUb6qMOyZ9HfrW2Yfv/oTB9mifPCHOTu23nIk8Qm5A==",
         "dependencies": {
-          "dotNetRdf.Ontology": "3.5.1"
+          "dotNetRdf.Ontology": "3.5.2"
         }
       },
       "dotNetRdf.Ldf": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "USmBstE77ztBALox0ksXgm0lfFay7YQB+XdKP0m4kTKLGihqt8DRpzQm98PvbrzVbeX0Hb9Yn+jzRgGQhOPt7A==",
+        "resolved": "3.5.2",
+        "contentHash": "U+BDYqvvpfP+Y0LlMWS9NMh74SWqNsKV62IbGTsPgDbMRjK3iS4G3iihbY51pEwOJco4fOHepjwx2Y2LshyW5g==",
         "dependencies": {
           "Resta.UriTemplates": "1.4.0",
-          "dotNetRdf.Core": "3.5.1"
+          "dotNetRdf.Core": "3.5.2"
         }
       },
       "dotNetRdf.Ontology": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "MH9s12lrr40yMin0b9vUgzgKHRqBVucFp/MrLG745N3pdH2fIJg5kFY9zF/YnWVb2tgY0YPXjgScTrHPCpBvDA==",
+        "resolved": "3.5.2",
+        "contentHash": "NNHfc3XRB5mT9bNEbUxPVr96ZuEaumt0pcNTCyL2HwcjmJLr7HJhMhfSwblD6bt0q1NIJnEQGlZz9MJslBR86w==",
         "dependencies": {
-          "dotNetRdf.Core": "3.5.1"
+          "dotNetRdf.Core": "3.5.2"
         }
       },
       "dotNetRdf.Query.FullText": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "calgDH+JDmTdy5KKeokdZQOBlkJl9nLGFWV5VgJwHCVg5Dfr4OUDi9LjKRDcwx66U3rcQQFNhFP/xVIkO7+UXA==",
+        "resolved": "3.5.2",
+        "contentHash": "eIpfaQOHbzb+0SE51LS+Q7/z+NJagRf2i2f/btM7C4icvtJIDZo6pQVMLM5hMfmKDCfCgKKj8KJXlV/Qk5lwzQ==",
         "dependencies": {
           "Lucene.Net": "4.8.0-beta00017",
           "Lucene.Net.QueryParser": "4.8.0-beta00017",
           "SharpZipLib": "1.4.2",
-          "dotNetRdf.Core": "3.5.1"
+          "dotNetRdf.Core": "3.5.2"
         }
       },
       "dotNetRdf.Query.Spin": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "vZXiH8SVtuPYaaN/nWeta85f9Us5ww3NAt525t8N9xJbgMU4NRRLGAozA6TENWJx4djoCMu7yupTZoRazyvgUQ==",
+        "resolved": "3.5.2",
+        "contentHash": "V5Xmf5RgKycdkjVTp68fmwTumkl6UfrMfzCE48/FT7fX0JenFFJdj3giqaQsAE1Q4dSAg3xMkY7W/bX4N1ejEg==",
         "dependencies": {
-          "dotNetRdf.Core": "3.5.1",
-          "dotNetRdf.Inferencing": "3.5.1"
+          "dotNetRdf.Core": "3.5.2",
+          "dotNetRdf.Inferencing": "3.5.2"
         }
       },
       "dotNetRdf.Shacl": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "fYC0cwcqy4H/FWkcnwI4M1rBt3LCN6bm+JoxIGA9u/+phW805ik+ZiTfRkzleEjUuAHUmszaOMZFSyXCXg/gXA==",
+        "resolved": "3.5.2",
+        "contentHash": "b+nU+kECqC/W1LdBOVRboBiR9MacOj3fkPskZOV5IButKsyRfWHNQMXVRDyArQ3APYXC50wXrLPILpQISez8ow==",
         "dependencies": {
-          "dotNetRdf.Core": "3.5.1"
+          "dotNetRdf.Core": "3.5.2"
         }
       },
       "dotNetRdf.Skos": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "ePZBoDKTRhJpSWSLRJC2MuMqdEYZ9GhjmzhQ8CxaRHaJPr6mymEzQZCXVO/Z55+9t8vt7pMOQoWf5AkxLV3C+w==",
+        "resolved": "3.5.2",
+        "contentHash": "qwarGxSu3USOj1AUztXNdOtjOWXYy89RJwHAKwgYbzvVPBT9zEK9Jg6ewbgF0ihqxSeGwOftknePo35lH3rRlg==",
         "dependencies": {
-          "dotNetRdf.Core": "3.5.1"
+          "dotNetRdf.Core": "3.5.2"
         }
       },
       "dotNetRdf.Writing.HtmlSchema": {
         "type": "Transitive",
-        "resolved": "3.5.1",
-        "contentHash": "u2HrgE+Gq96uwZ0wd+6yYxY2OZUwsX6u9VRjobSAfM59AbjqlyxQ3qjE4eMYsF5o9YX5hK6qAWEoGTF1IaPYaw==",
+        "resolved": "3.5.2",
+        "contentHash": "LXSAyo+buXR47Z9sY1pc8cejmaRyQIpxzuXi/dtJ2xrTnUMOBjj1QavFFwowMN48OGlM8jxhc0KlNSeerNo3cw==",
         "dependencies": {
-          "dotNetRdf.Core": "3.5.1"
+          "dotNetRdf.Core": "3.5.2"
         }
       },
       "HtmlAgilityPack": {
@@ -584,10 +584,10 @@
       },
       "System.Configuration.ConfigurationManager": {
         "type": "Transitive",
-        "resolved": "10.0.2",
-        "contentHash": "UpBPpVzF+xbB3GsBrraPvlYCwUiOhs+RLxnTMKLqDs2gNNaAtxQRlKjXfMV3zxE+hiQkGId5olZ+9tE6xXHdwQ==",
+        "resolved": "10.0.8",
+        "contentHash": "QG+HHwJjLyUiRuA9axr5pDqHAxboo7FXCTRakxMABE9CUAUij/tsd/MsgQPJUEppkf+YBLT+F/P/wKIVCAIcNg==",
         "dependencies": {
-          "System.Security.Cryptography.ProtectedData": "10.0.2"
+          "System.Security.Cryptography.ProtectedData": "10.0.8"
         }
       },
       "System.Formats.Nrbf": {
@@ -628,8 +628,8 @@
       },
       "VDS.Common": {
         "type": "Transitive",
-        "resolved": "3.0.0",
-        "contentHash": "fFYBEVmVlyoeq2dhjM8OR3OCr+ZNCL8E7nEePCZyH2BVo3ky5lHZZiF0PcWwOJmRTyIA/6c0716DfHKNB5oKKg=="
+        "resolved": "3.0.1",
+        "contentHash": "37Xq3UfF7gbcKhFhx2dgRIatLCrbkg/99XVSkIi9pJtttmHEfGX483Ix52mO3PPPZI6YNbZjzHfH5hQwwb+X2g=="
       },
       "verifiable": {
         "type": "Project",
@@ -640,7 +640,7 @@
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Microsoft": "[0.0.0, )",
           "Verifiable.Tpm": "[0.0.0, )",
-          "dotNetRdf": "[3.5.1, )"
+          "dotNetRdf": "[3.5.2, )"
         }
       },
       "verifiable.apdu": {
