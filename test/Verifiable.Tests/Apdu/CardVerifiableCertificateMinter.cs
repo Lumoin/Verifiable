@@ -104,6 +104,38 @@ internal static class CardVerifiableCertificateMinter
 
 
     /// <summary>
+    /// Mints a card-verifiable certificate over an externally-created elliptic-curve subject — an uncompressed
+    /// public point produced by the library or a hardware device rather than a framework <see cref="ECDsa"/> — so
+    /// a terminal whose private key never materialises as a framework key (for example a TPM-held key) can still
+    /// be certified. The issuer signs with its independent <see cref="ECDsa"/> as usual; only the subject key
+    /// differs. The subject inherits the issuer's curve and carries no domain parameters.
+    /// </summary>
+    /// <param name="issuerKey">The elliptic-curve key signing the certificate body.</param>
+    /// <param name="subjectPublicPoint">The subject's uncompressed SEC1 public point (<c>0x04 ‖ X ‖ Y</c>).</param>
+    /// <param name="certificationAuthorityReference">The issuer's holder reference (DO'42').</param>
+    /// <param name="certificateHolderReference">The subject's holder reference (DO'5F20').</param>
+    /// <param name="authorizationOctet">The first relative-authorization octet (the certificate role and, for an Inspection System, the read-access grant).</param>
+    /// <param name="effective">The certificate effective date.</param>
+    /// <param name="expiration">The certificate expiration date.</param>
+    /// <param name="inheritedCurve">The issuing curve the subject inherits.</param>
+    /// <param name="pool">The memory pool for the encoding and the parsed carrier.</param>
+    /// <param name="terminalType">The terminal type the Certificate Holder Authorization Template declares. Defaults to an Authentication Terminal.</param>
+    /// <returns>The parsed certificate. The caller disposes it.</returns>
+    public static CardVerifiableCertificate Mint(
+        ECDsa issuerKey,
+        ReadOnlyMemory<byte> subjectPublicPoint,
+        string certificationAuthorityReference,
+        string certificateHolderReference,
+        byte authorizationOctet,
+        DateOnly effective,
+        DateOnly expiration,
+        Tag? inheritedCurve,
+        MemoryPool<byte> pool,
+        TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
+        MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectPublicPoint), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve, pool, terminalType, tamperSignature: false);
+
+
+    /// <summary>
     /// Mints a card-verifiable certificate with an RSA subject key (id-TA-RSA-v1-5-SHA-256), signed by the
     /// elliptic-curve issuer. Used for an RSA terminal under an elliptic-curve chain: the subject's key is RSA
     /// while the certificate's own signature stays ECDSA, so only the terminal's EXTERNAL AUTHENTICATE signature
@@ -325,6 +357,13 @@ internal static class CardVerifiableCertificateMinter
             return;
         }
 
+        if(!subjectKey.EllipticCurvePoint.IsEmpty)
+        {
+            WriteEllipticCurvePublicKey(writer, subjectKey.EllipticCurvePoint.Span);
+
+            return;
+        }
+
         WriteEllipticCurvePublicKey(writer, subjectKey.EllipticCurveKey!, subjectKey.IncludeDomainParameters);
     }
 
@@ -353,6 +392,21 @@ internal static class CardVerifiableCertificateMinter
             {
                 WritePoint(writer, subjectKey);
             }
+        }
+    }
+
+
+    /// <summary>
+    /// Writes the elliptic-curve public-key element (7F49) for an externally-created subject: id-TA-ECDSA-SHA-256
+    /// and the supplied uncompressed public point, with no domain parameters (the subject inherits its issuer's
+    /// curve). The point is the same <c>0x04 ‖ X ‖ Y</c> encoding the framework-key path writes.
+    /// </summary>
+    private static void WriteEllipticCurvePublicKey(AsnWriter writer, ReadOnlySpan<byte> uncompressedPoint)
+    {
+        using(writer.PushSequence(PublicKeyTag))
+        {
+            writer.WriteObjectIdentifier(IdTaEcdsaSha256Oid);
+            writer.WriteOctetString(uncompressedPoint, PublicPointTag);
         }
     }
 
@@ -469,17 +523,36 @@ internal static class CardVerifiableCertificateMinter
             EllipticCurveKey = null;
             IncludeDomainParameters = false;
             RsaKey = rsaKey;
+            EllipticCurvePoint = default;
         }
 
 
-        /// <summary>Gets the elliptic-curve subject key, or <see langword="null"/> when the subject key is RSA.</summary>
+        /// <summary>
+        /// Initialises an elliptic-curve subject from an externally-created uncompressed public point (a key the
+        /// library or a hardware device produced), so the subject key need not be a framework <see cref="ECDsa"/>.
+        /// Such a subject inherits its issuer's curve and embeds no domain parameters.
+        /// </summary>
+        /// <param name="uncompressedPoint">The subject's uncompressed SEC1 public point (<c>0x04 ‖ X ‖ Y</c>).</param>
+        public SubjectPublicKey(ReadOnlyMemory<byte> uncompressedPoint)
+        {
+            EllipticCurveKey = null;
+            IncludeDomainParameters = false;
+            RsaKey = null;
+            EllipticCurvePoint = uncompressedPoint;
+        }
+
+
+        /// <summary>Gets the elliptic-curve subject key, or <see langword="null"/> when the subject key is RSA or an external point.</summary>
         public ECDsa? EllipticCurveKey { get; }
 
-        /// <summary>Gets whether to embed the curve domain parameters (elliptic-curve subjects only).</summary>
+        /// <summary>Gets whether to embed the curve domain parameters (framework elliptic-curve subjects only).</summary>
         public bool IncludeDomainParameters { get; }
 
         /// <summary>Gets the RSA subject key, or <see langword="null"/> when the subject key is elliptic-curve.</summary>
         public RSA? RsaKey { get; }
+
+        /// <summary>Gets the externally-created uncompressed elliptic-curve public point, or empty when the subject is a framework key.</summary>
+        public ReadOnlyMemory<byte> EllipticCurvePoint { get; }
     }
 
 

@@ -154,6 +154,26 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     }
 
     /// <summary>
+    /// Creates a TPM2B_PUBLIC for a generated ECC signing key, carrying the key's actual public point (the
+    /// <c>outPublic</c> form), as opposed to the empty-unique template <see cref="CreateEccSigningTemplate"/>.
+    /// </summary>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="objectAttributes">Object attributes.</param>
+    /// <param name="curve">ECC curve.</param>
+    /// <param name="scheme">Signing scheme.</param>
+    /// <param name="unique">The generated public point; ownership transfers to the returned buffer.</param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateEccSigningKey(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        TpmEccCurveConstants curve,
+        TpmtEccScheme scheme,
+        TpmsEccPoint unique)
+    {
+        return FromTemplate(TpmtPublic.CreateEccSigningKey(nameAlg, objectAttributes, curve, scheme, unique));
+    }
+
+    /// <summary>
     /// Creates a TPM2B_PUBLIC for an RSA signing key template.
     /// </summary>
     /// <param name="nameAlg">Hash algorithm for Name computation.</param>
@@ -169,6 +189,28 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     {
         var publicArea = TpmtPublic.CreateRsaSigningTemplate(nameAlg, objectAttributes, keyBits, scheme);
         return FromTemplate(publicArea);
+    }
+
+    /// <summary>
+    /// Creates a TPM2B_PUBLIC for a generated RSA signing key, carrying the key's actual public modulus (the
+    /// <c>outPublic</c> form), as opposed to the empty-unique template <see cref="CreateRsaSigningTemplate"/>.
+    /// </summary>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="objectAttributes">Object attributes.</param>
+    /// <param name="keyBits">Key size in bits.</param>
+    /// <param name="scheme">Signing scheme.</param>
+    /// <param name="modulus">The generated public modulus (big-endian); copied into pooled storage the returned buffer owns.</param>
+    /// <param name="pool">The memory pool for the modulus storage.</param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateRsaSigningKey(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        ushort keyBits,
+        TpmtRsaScheme scheme,
+        ReadOnlySpan<byte> modulus,
+        MemoryPool<byte> pool)
+    {
+        return FromTemplate(TpmtPublic.CreateRsaSigningKey(nameAlg, objectAttributes, keyBits, scheme, modulus, pool));
     }
 
 
@@ -199,6 +241,24 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
         bool noDa = false)
     {
         return FromTemplate(TpmtPublic.CreateEccStorageParentTemplate(nameAlg, curve, noDa));
+    }
+
+    /// <summary>
+    /// Creates a TPM2B_PUBLIC for a generated ECC restricted storage key, carrying the key's actual public point
+    /// (the <c>outPublic</c> form), as opposed to the empty-unique template <see cref="CreateEccStorageParentTemplate"/>.
+    /// </summary>
+    /// <param name="nameAlg">The hash algorithm for Name computation.</param>
+    /// <param name="objectAttributes">The object attributes (a storage parent: RESTRICTED + DECRYPT).</param>
+    /// <param name="curve">The ECC curve.</param>
+    /// <param name="unique">The generated public point; ownership transfers to the returned buffer.</param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateEccStorageParent(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        TpmEccCurveConstants curve,
+        TpmsEccPoint unique)
+    {
+        return FromTemplate(TpmtPublic.CreateEccStorageParent(nameAlg, objectAttributes, curve, unique));
     }
 
     /// <summary>

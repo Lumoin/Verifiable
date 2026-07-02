@@ -9,9 +9,8 @@ using System.Threading.Tasks;
 using Verifiable.Core.EventLogs;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.TestInfrastructure.TpmSimulator;
 using Verifiable.Tpm;
+using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
@@ -41,38 +40,43 @@ internal sealed record TpmAttestationState(byte[] AttestationKey, byte[] LatestP
 /// <summary>
 /// The trust input an application supplies to attestation-log replay: the attestation key it has enrolled (and
 /// therefore decided to trust). In a production system this trust decision is the result of validating the AK's
-/// EK-bound credential — the place an EK→AK certificate chain is checked through
+/// endorsement-bound credential — the place an EK→AK certificate chain is checked through
 /// <c>ValidateCertificateChainAsyncDelegate</c> — rather than a pre-enrolled key.
 /// </summary>
 /// <param name="EnrolledAttestationKey">The compressed public key of the enrolled attestation key.</param>
 internal sealed record TpmAttestationTrustContext(byte[] EnrolledAttestationKey);
 
 /// <summary>
-/// Exemplifies, from a library-user's perspective, a real TPM attestation log built on the generic crypto-proof
-/// replay path: a richer domain state than a bare counter, hash-chain–linked entries, and proof validation that
-/// composes the domain-agnostic signature check (<see cref="CryptoProofValidation"/>) with a domain rule —
-/// every quote must be signed by the attestation key the application enrolled and bound at genesis.
+/// Exemplifies, from a library-user's perspective, a TPM attestation log built on the generic crypto-proof replay
+/// path against the in-house behavioural <see cref="TpmSimulator"/> — entirely in-process, with no external assets:
+/// a richer domain state than a bare counter, hash-chain–linked entries, and proof validation that composes the
+/// domain-agnostic signature check (<see cref="CryptoProofValidation"/>) with a domain rule — every quote must be
+/// signed by the attestation key the application enrolled and bound at genesis.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is the "what's possible" shape: a relying party creates an attestation key, enrolls it (the trust
-/// decision), then accumulates quotes as a tamper-evident <see cref="LogReplayer{TState,TOperation,TProof,TContext}"/>
-/// stream. The signer-key trust is carried on the validation context, which is exactly where an EK→AK certificate
-/// chain validated through <c>ValidateCertificateChainAsyncDelegate</c> would replace the pre-enrolled-key
-/// comparison (gap #4: EK/AK + credential activation). Nothing here is TPM-specific in the library: the quote is
-/// reduced to neutral <see cref="CryptoProof"/> carriers and the same path serves any signed-attestation domain.
+/// This is the "what's possible" shape: a relying party creates an attestation key (AK) with
+/// <c>TPM2_CreatePrimary()</c>, enrolls it (the trust decision), then accumulates <c>TPM2_Quote()</c> attestations
+/// (TPM 2.0 Library Part 3, clause 18.4) as a tamper-evident
+/// <see cref="LogReplayer{TState,TOperation,TProof,TContext}"/> stream. The signer-key trust is carried on the
+/// validation context, which is exactly where an EK→AK certificate chain validated through
+/// <c>ValidateCertificateChainAsyncDelegate</c> would replace the pre-enrolled-key comparison. Nothing here is
+/// TPM-specific in the library: the quote is reduced to neutral <see cref="CryptoProof"/> carriers and the same
+/// path serves any signed-attestation domain.
 /// </para>
 /// <para>
-/// The tests are gated on a running simulator (start the container from
-/// <c>test/Verifiable.Tests/TestInfrastructure/TpmSimulator/Dockerfile</c>, publishing ports 2321/2322); they
-/// report <see cref="Assert.Inconclusive(string)"/> when none is reachable, so they are safe in any run.
+/// The enrollment case proves AK↔EK co-residence by credential activation — <c>TPM2_MakeCredential()</c> wraps a
+/// challenge to the endorsement key's public area bound to the AK's Name, and <c>TPM2_ActivateCredential()</c>
+/// recovers it only in a device holding both keys (TPM 2.0 Library Part 1, clause 24; Part 3, clauses 12.6 and
+/// 12.5). Every command runs through the same production command path the production code uses
+/// (<see cref="TpmCommandExecutor"/> with the real inputs and response codecs); the signing backend is injected so
+/// the production <c>Verifiable.Tpm</c> assembly stays provider-agnostic, and the simulator runs both sides, so the
+/// signatures and the credential-protection crypto are cryptographically real. A fresh powered-on simulator serves
+/// each test.
 /// </para>
 /// </remarks>
-[ConditionalTestClass]
-[SkipIfNoTpmSimulator]
-[DoNotParallelize]
-[TestCategory("RequiresTpmSimulator")]
-internal sealed class TpmSimulatorAttestationLogTests
+[TestClass]
+internal sealed class TpmInHouseSimulatorAttestationLogTests
 {
     /// <summary>The number of bytes in a NIST P-256 ECDSA r/s component.</summary>
     private const int P256ComponentSize = 32;
@@ -95,57 +99,15 @@ internal sealed class TpmSimulatorAttestationLogTests
     private static byte[] EnrollmentChallenge { get; } =
         [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F];
 
-    /// <summary>The connection to the simulator, established once for the class.</summary>
-    private static MsTpmSimulatorConnection? Connection { get; set; }
-
-    /// <summary>The TPM device created over the simulator connection.</summary>
-    private static TpmDevice? Tpm { get; set; }
-
-    /// <summary>Whether a simulator was reachable at class initialization.</summary>
-    private static bool HasSimulator { get; set; }
-
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
-
-    /// <summary>Connects to the simulator (if one is reachable) and brings up a TPM device for the class.</summary>
-    /// <param name="context">The class-level test context.</param>
-    [ClassInitialize]
-    public static async Task ClassInit(TestContext context)
-    {
-        if(!MsTpmSimulatorConnection.IsAvailable("localhost", MsTpmSimulatorConnection.DefaultCommandPort, TimeSpan.FromSeconds(1)))
-        {
-            return;
-        }
-
-        Connection = await MsTpmSimulatorConnection.ConnectAsync(
-            "localhost", MsTpmSimulatorConnection.DefaultCommandPort, context.CancellationToken).ConfigureAwait(false);
-        Tpm = TpmDevice.Create(Connection.SubmitAsync);
-        HasSimulator = true;
-    }
-
-    /// <summary>Releases the TPM device and simulator connection.</summary>
-    [ClassCleanup]
-    public static void ClassCleanup()
-    {
-        Tpm?.Dispose();
-        Connection?.Dispose();
-    }
-
-    /// <summary>Skips the test when no simulator is reachable.</summary>
-    [TestInitialize]
-    public void TestInit()
-    {
-        if(!HasSimulator)
-        {
-            Assert.Inconclusive("No TPM simulator is reachable on localhost:2321/2322. Start the container from TestInfrastructure/TpmSimulator/Dockerfile.");
-        }
-    }
 
     [TestMethod]
     public async Task MultiQuoteAttestationLogReplaysAndAccumulatesState()
     {
-        TpmDevice tpm = Tpm!;
         MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
@@ -187,8 +149,9 @@ internal sealed class TpmSimulatorAttestationLogTests
     [TestMethod]
     public async Task QuoteFromUnenrolledKeyIsRejected()
     {
-        TpmDevice tpm = Tpm!;
         MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
         //The enrolled AK (owner hierarchy) and a different, unenrolled key (endorsement hierarchy).
@@ -244,8 +207,9 @@ internal sealed class TpmSimulatorAttestationLogTests
     [TestMethod]
     public async Task EnrolledViaActivationThenAttestationLogReplays()
     {
-        TpmDevice tpm = Tpm!;
         MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
         //The endorsement (credential) key and the attestation key.
@@ -267,8 +231,8 @@ internal sealed class TpmSimulatorAttestationLogTests
 
                 //2. ATTEST: the now-enrolled AK signs a quote, which replays as the genesis of its attestation log
                 //against the trust context whose enrolled key was established by the activation above. (In
-                //production the EK is itself trusted via its EK-certificate chain to the manufacturer CA — gap #4a;
-                //here the locally created EK stands in, but the AK↔EK binding is genuinely proven.)
+                //production the EK is itself trusted via its EK-certificate chain to the manufacturer CA; here the
+                //locally created EK stands in, but the AK↔EK binding is genuinely proven.)
                 (byte[] canonical, TpmQuoteOperation op, Signature signature) = await QuoteAsync(tpm, registry, pool, ak.ObjectHandle, GenesisNonce).ConfigureAwait(false);
                 using Signature sig = signature;
 
@@ -584,5 +548,49 @@ internal sealed class TpmSimulatorAttestationLogTests
         }
 
         await Task.CompletedTask.ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Creates a simulator with the ECC (BouncyCastle) signing backend wired, powers it on, and brings it through
+    /// <c>TPM2_Startup(CLEAR)</c> into the operational phase. The ECC backend is required so the simulator services
+    /// <c>TPM2_CreatePrimary()</c> for the EK and AK primaries, signs the attestation for <c>TPM2_Quote()</c>, and
+    /// runs the ECDH secret exchange of credential activation.
+    /// </summary>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The operational simulator.</returns>
+    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    {
+        var simulator = new TpmSimulator("tpm-in-house-attestationlog", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
+
+        return simulator;
+    }
+
+    /// <summary>
+    /// Issues <c>TPM2_Startup(CLEAR)</c> directly against the simulator, mirroring how the executor frames an
+    /// unauthorized command on the wire, to move it into <see cref="TpmLifecyclePhase.Operational"/>.
+    /// </summary>
+    /// <param name="simulator">The simulator to bring operational.</param>
+    /// <param name="pool">The memory pool.</param>
+    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    {
+        var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
+        int length = TpmHeader.HeaderSize + input.GetSerializedSize();
+        using IMemoryOwner<byte> owner = pool.Rent(length);
+
+        var writer = new TpmWriter(owner.Memory.Span);
+        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)length, (uint)input.CommandCode);
+        header.WriteTo(ref writer);
+        input.WriteHandles(ref writer);
+        input.WriteParameters(ref writer);
+
+        TpmResult<TpmResponse> result = await simulator.SubmitAsync(owner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, "TPM2_Startup(CLEAR) must succeed.");
+        using TpmResponse response = result.Value;
+        var reader = new TpmReader(response.AsReadOnlySpan());
+        TpmHeader responseHeader = TpmHeader.Parse(ref reader);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, (TpmRcConstants)responseHeader.Code);
+        Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase);
     }
 }

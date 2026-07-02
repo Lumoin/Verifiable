@@ -2,9 +2,8 @@ using System;
 using System.Buffers;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
-using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.TestInfrastructure.TpmSimulator;
 using Verifiable.Tpm;
+using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
@@ -18,45 +17,42 @@ using Verifiable.Tpm.Structures.Spec.Constants;
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
-/// Acceptance tests for PCR-gated TPM sealing ("tie a secret to this computer <i>and</i> this state") against
-/// the TCG ms-tpm-20-ref software TPM simulator.
+/// Drives PCR-gated TPM sealing ("tie a secret to this computer <i>and</i> this state") against the in-house
+/// behavioural <see cref="TpmSimulator"/> — entirely in-process, with no external assets — through the same
+/// production command path the production code uses (<see cref="TpmCommandExecutor"/> with the real
+/// <see cref="CreateInput"/>, <see cref="LoadInput"/>, and <see cref="UnsealInput"/>, the
+/// <see cref="TpmDeviceExtensions"/> policy commands, <see cref="TpmSession"/>, and
+/// <see cref="TpmPolicySession"/> over the real command/response codecs).
 /// </summary>
 /// <remarks>
 /// <para>
-/// A secret is sealed into a KEYEDHASH object whose authPolicy is a <c>TPM2_PolicyPCR</c> digest, so the
-/// unseal is authorized only when a policy session reproduces that digest over the live PCR values. Recovery
-/// uses two sessions: a satisfied <see cref="TpmPolicySession"/> (the authorizing session, supplied first,
-/// which carries an empty HMAC because the policy itself is the authorization) plus a bound HMAC session with
-/// AES-CFB parameter encryption and the <c>encrypt</c> attribute, so the recovered secret is decrypted only
-/// after the response HMAC verifies — the maximum-security channel the unsealed secret warrants.
+/// A secret is sealed into a <c>TPM_ALG_KEYEDHASH</c> object whose authPolicy is a <c>TPM2_PolicyPCR()</c> digest,
+/// so the unseal is authorized only when a policy session reproduces that digest over the live PCR values (TPM 2.0
+/// Library Part 3, clause 12.7; Part 1, clause 19.7). Recovery uses two sessions: a satisfied
+/// <see cref="TpmPolicySession"/> (the authorizing session, supplied first, which carries an empty HMAC because the
+/// policy itself is the authorization, Part 1, clause 19.6) plus a bound HMAC session with AES-CFB parameter
+/// encryption and the <c>encrypt</c> attribute (Part 1, clauses 18.7 and 19), so the recovered secret is decrypted
+/// only after the response HMAC verifies.
 /// </para>
 /// <para>
-/// The positive test computes the seal's authPolicy from the very session that later authorizes the unseal, so
-/// the sealed digest and the unseal digest are bound to the same captured PCR state. The negative test seals
-/// under a deliberately wrong PCR digest (computed in a trial session) and confirms the unseal is rejected with
+/// The positive test computes the seal's authPolicy from the very session that later authorizes the unseal, so the
+/// sealed digest and the unseal digest are bound to the same captured PCR state. The wrapped blob is
+/// persisted-and-reloaded through wire bytes only (the private blob is copied and the public area reserialized),
+/// mirroring the disk round-trip a real deployment performs. The negative test seals under a deliberately wrong PCR
+/// digest (computed in a trial session, Part 3, clause 23.7) and confirms the unseal is rejected with
 /// <c>TPM_RC_POLICY_FAIL</c> — the "wrong state ⇒ no access" half of the guarantee.
 /// </para>
 /// <para>
-/// The tests are gated on a running simulator (start the container from
-/// <c>test/Verifiable.Tests/TestInfrastructure/TpmSimulator/Dockerfile</c>, publishing ports 2321/2322); they
-/// report <see cref="Assert.Inconclusive(string)"/> when none is reachable, so they are safe in any run.
+/// The simulator advances each session's policyDigest and frames the two-session response through the SAME seams
+/// the host <see cref="TpmSession"/> verifies with (Part 1, clauses 17.6, 18.7, and 19), so the on-device
+/// derivation and the host's verification cannot diverge by construction: a session key, nonce, keystream, or
+/// response-framing byte that the simulator produced off by one would make the executor reject the response and
+/// fail the positive test's byte-exact equality assertion.
 /// </para>
 /// </remarks>
-[ConditionalTestClass]
-[SkipIfNoTpmSimulator]
-[DoNotParallelize]
-[TestCategory("RequiresTpmSimulator")]
-internal sealed class TpmSimulatorPcrSealTests
+[TestClass]
+internal sealed class TpmInHouseSimulatorPcrSealTests
 {
-    /// <summary>The connection to the simulator, established once for the class.</summary>
-    private static MsTpmSimulatorConnection? Connection { get; set; }
-
-    /// <summary>The TPM device created over the simulator connection.</summary>
-    private static TpmDevice? Tpm { get; set; }
-
-    /// <summary>Whether a simulator was reachable at class initialization.</summary>
-    private static bool HasSimulator { get; set; }
-
     /// <summary>The session/policy/name hash algorithm used throughout.</summary>
     private const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
@@ -64,56 +60,23 @@ internal sealed class TpmSimulatorPcrSealTests
     private const TpmAlgIdConstants PcrBank = TpmAlgIdConstants.TPM_ALG_SHA256;
 
     /// <summary>
-    /// The PCR(s) the seal is bound to. PCR 23 is the debug PCR; binding to it keeps the test from depending on
-    /// boot-measured PCRs and minimizes interference with other state.
+    /// The PCR(s) the seal is bound to. PCR 23 is the application/debug register, reset to the all-zero image
+    /// (TPM 2.0 Library Part 1, clause 17.5.3), so binding to it keeps the test off the boot-measured registers.
     /// </summary>
     private static int[] PcrIndices { get; } = [23];
 
     /// <summary>The fixed secret sealed and recovered by the test.</summary>
-    private static byte[] SecretBytes { get; } = "PCR-gated secret to this state."u8.ToArray();
+    private static byte[] SecretBytes { get; } = "Tie this secret to the in-house TPM and its state."u8.ToArray();
 
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Connects to the simulator (if one is reachable) and brings up a TPM device for the class.</summary>
-    /// <param name="context">The class-level test context.</param>
-    [ClassInitialize]
-    public static async Task ClassInit(TestContext context)
-    {
-        if(!MsTpmSimulatorConnection.IsAvailable("localhost", MsTpmSimulatorConnection.DefaultCommandPort, TimeSpan.FromSeconds(1)))
-        {
-            return;
-        }
-
-        Connection = await MsTpmSimulatorConnection.ConnectAsync(
-            "localhost", MsTpmSimulatorConnection.DefaultCommandPort, context.CancellationToken).ConfigureAwait(false);
-        Tpm = TpmDevice.Create(Connection.SubmitAsync);
-        HasSimulator = true;
-    }
-
-    /// <summary>Releases the TPM device and simulator connection.</summary>
-    [ClassCleanup]
-    public static void ClassCleanup()
-    {
-        Tpm?.Dispose();
-        Connection?.Dispose();
-    }
-
-    /// <summary>Skips the test when no simulator is reachable.</summary>
-    [TestInitialize]
-    public void TestInit()
-    {
-        if(!HasSimulator)
-        {
-            Assert.Inconclusive("No TPM simulator is reachable on localhost:2321/2322. Start the container from TestInfrastructure/TpmSimulator/Dockerfile.");
-        }
-    }
-
     [TestMethod]
     public async Task PcrGatedSealUnsealsWhenPolicySatisfied()
     {
-        TpmDevice tpm = Tpm!;
         MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
         TpmtSymDef symmetric = TpmtSymDef.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB);
 
@@ -135,6 +98,8 @@ internal sealed class TpmSimulatorPcrSealTests
             using StartAuthSessionResponse policyStart = policyStartResult.Value;
             policyHandle = policyStart.SessionHandle.Value;
 
+            //On a real (non-trial) session the TPM binds the policy to the LIVE PCR composite (Part 3, clause 23.7),
+            //so no caller pcrDigest is supplied — the empty digest lets the TPM fold in its own live value.
             TpmResult<PolicyPcrResponse> pcrResult = await tpm.PolicyPcrAsync(
                 policyHandle, PcrBank, PcrIndices, default, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(pcrResult.IsSuccess, $"PolicyPCR failed: '{pcrResult.ResponseCode}'.");
@@ -223,8 +188,9 @@ internal sealed class TpmSimulatorPcrSealTests
     [TestMethod]
     public async Task PcrGatedSealRejectsUnsealWhenPolicyUnsatisfied()
     {
-        TpmDevice tpm = Tpm!;
         MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
@@ -236,7 +202,7 @@ internal sealed class TpmSimulatorPcrSealTests
         try
         {
             //1. Compute a WRONG PCR policy digest in a trial session, using a fabricated PCR digest the live PCRs
-            //will not reproduce (a trial session uses the caller's pcrDigest verbatim).
+            //will not reproduce (a trial session uses the caller's pcrDigest verbatim, Part 3, clause 23.7).
             byte[] wrongPcrDigest = new byte[32];
             Array.Fill(wrongPcrDigest, (byte)0xAB);
 
@@ -362,7 +328,6 @@ internal sealed class TpmSimulatorPcrSealTests
         _ = registry.Register(TpmCcConstants.TPM_CC_Load, TpmResponseCodec.Load);
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
         _ = registry.Register(TpmCcConstants.TPM_CC_Unseal, TpmResponseCodec.Unseal);
-        _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 
         return registry;
     }
@@ -399,5 +364,48 @@ internal sealed class TpmSimulatorPcrSealTests
         var reader = new TpmReader(owner.Memory.Span[..size]);
 
         return Tpm2bPublic.Parse(ref reader, pool);
+    }
+
+    /// <summary>
+    /// Creates a simulator with the ECC (BouncyCastle) signing backend wired, powers it on, and brings it through
+    /// <c>TPM2_Startup(CLEAR)</c> into the operational phase. The ECC backend is required so the simulator services
+    /// <c>TPM2_CreatePrimary()</c>; the storage parent is used only as a handle to parent the sealed object here.
+    /// </summary>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The operational simulator.</returns>
+    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    {
+        var simulator = new TpmSimulator("tpm-in-house-pcrseal", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
+
+        return simulator;
+    }
+
+    /// <summary>
+    /// Issues <c>TPM2_Startup(CLEAR)</c> directly against the simulator, mirroring how the executor frames an
+    /// unauthorized command on the wire, to move it into <see cref="TpmLifecyclePhase.Operational"/>.
+    /// </summary>
+    /// <param name="simulator">The simulator to bring operational.</param>
+    /// <param name="pool">The memory pool.</param>
+    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    {
+        var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
+        int length = TpmHeader.HeaderSize + input.GetSerializedSize();
+        using IMemoryOwner<byte> owner = pool.Rent(length);
+
+        var writer = new TpmWriter(owner.Memory.Span);
+        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)length, (uint)input.CommandCode);
+        header.WriteTo(ref writer);
+        input.WriteHandles(ref writer);
+        input.WriteParameters(ref writer);
+
+        TpmResult<TpmResponse> result = await simulator.SubmitAsync(owner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, "TPM2_Startup(CLEAR) must succeed.");
+        using TpmResponse response = result.Value;
+        var reader = new TpmReader(response.AsReadOnlySpan());
+        TpmHeader responseHeader = TpmHeader.Parse(ref reader);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, (TpmRcConstants)responseHeader.Code);
+        Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase);
     }
 }

@@ -144,25 +144,12 @@ public static class TerminalAuthentication
         ArgumentNullException.ThrowIfNull(chain);
         ArgumentNullException.ThrowIfNull(pool);
 
-        if(chain.Count == 0)
+        if(!await PrepareAsync(device, session, chain, pool, cancellationToken).ConfigureAwait(false))
         {
             return false;
         }
 
-        CardVerifiableCertificate terminalCertificate = chain[^1];
-        CardVerifiableCertificatePublicKey terminalKey = terminalCertificate.PublicKey;
-
-        if(!await PresentCertificateChainAsync(device, session, chain, pool, cancellationToken).ConfigureAwait(false))
-        {
-            return false;
-        }
-
-        bool selected = await SetAuthenticationTemplateAsync(
-            device, session, terminalKey.SignatureScheme, terminalCertificate.CertificateHolderReference, pool, cancellationToken).ConfigureAwait(false);
-        if(!selected)
-        {
-            return false;
-        }
+        CardVerifiableCertificatePublicKey terminalKey = chain[^1].PublicKey;
 
         using IMemoryOwner<byte>? challenge = await RequestChallengeAsync(device, session, pool, cancellationToken).ConfigureAwait(false);
         if(challenge is null)
@@ -180,9 +167,100 @@ public static class TerminalAuthentication
                 terminalPrivateKey, terminalKey.SignatureScheme, chipIdentifier, challenge.Memory[..ChipChallengeLength], terminalEphemeralPublicKey,
                 pool, cancellationToken).ConfigureAwait(false);
 
-        return await SendProtectedCommandAsync(
-            device, session, InstructionCode.ExternalAuthenticate.Code, 0x00, 0x00, signature.AsReadOnlyMemory(), pool, cancellationToken).ConfigureAwait(false);
+        return await SendExternalAuthenticateAsync(device, session, signature, pool, cancellationToken).ConfigureAwait(false);
     }
+
+
+    /// <summary>
+    /// Runs the full Terminal Authentication exchange with a terminal key whose signing primitive is bound to
+    /// the key itself, so the terminal's Terminal Authentication private key may live in hardware (for example a
+    /// TPM) and never leave it: presents the certificate chain, selects the terminal key, gets the chip's
+    /// challenge, and proves possession with an EXTERNAL AUTHENTICATE signature over
+    /// <c>ID_IC ‖ r_IC ‖ Comp(PK_DH,IFD)</c> that <paramref name="terminalKey"/> produces.
+    /// </summary>
+    /// <remarks>
+    /// The chip side is unchanged: it still verifies the signature against the terminal certificate's public
+    /// key, so the certificate must have been minted over the public key matching <paramref name="terminalKey"/>.
+    /// The certificate (its <c>id-TA-*</c> scheme and holder reference), not the private key, still drives
+    /// MSE:Set AT, so a hardware key and a software key follow the identical exchange.
+    /// </remarks>
+    /// <param name="device">The card device. Borrowed, not disposed.</param>
+    /// <param name="session">The Secure Messaging session (from Chip Authentication or PACE Chip Authentication Mapping) the exchange runs over. Borrowed, not disposed.</param>
+    /// <param name="chain">The certificate chain to present, in issuing order (Document Verifier first, terminal last); the terminal certificate ends the chain.</param>
+    /// <param name="terminalKey">The terminal's Terminal Authentication private key with its signing function bound (matching the terminal certificate's public key). Borrowed.</param>
+    /// <param name="terminalEphemeralPublicKey">The terminal's ephemeral public key <c>PK_DH,IFD</c> (uncompressed SEC1) from Chip Authentication or PACE Chip Authentication Mapping.</param>
+    /// <param name="chipIdentifier">The chip identifier <c>ID_IC</c> the access protocol produced.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns><see langword="true"/> when the chip accepted the chain and the terminal's signature; otherwise <see langword="false"/>.</returns>
+    public static async ValueTask<bool> AuthenticateAsync(
+        ApduDevice device,
+        SecureMessagingSession session,
+        IReadOnlyList<CardVerifiableCertificate> chain,
+        PrivateKey terminalKey,
+        ReadOnlyMemory<byte> terminalEphemeralPublicKey,
+        ReadOnlyMemory<byte> chipIdentifier,
+        BaseMemoryPool pool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(chain);
+        ArgumentNullException.ThrowIfNull(terminalKey);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        if(!await PrepareAsync(device, session, chain, pool, cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        using IMemoryOwner<byte>? challenge = await RequestChallengeAsync(device, session, pool, cancellationToken).ConfigureAwait(false);
+        if(challenge is null)
+        {
+            return false;
+        }
+
+        using Signature signature = await TerminalAuthenticationSignature.SignAsync(
+            terminalKey, chipIdentifier, challenge.Memory[..ChipChallengeLength], terminalEphemeralPublicKey, pool, cancellationToken).ConfigureAwait(false);
+
+        return await SendExternalAuthenticateAsync(device, session, signature, pool, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Presents the certificate chain and selects the terminal key with MSE:Set AT — the shared prologue of the
+    /// AuthenticateAsync overloads — returning whether every step succeeded. MSE:Set AT is driven by the terminal
+    /// certificate (its signature scheme and holder reference), so a software and a hardware terminal key are
+    /// indistinguishable here.
+    /// </summary>
+    private static async ValueTask<bool> PrepareAsync(
+        ApduDevice device, SecureMessagingSession session, IReadOnlyList<CardVerifiableCertificate> chain, BaseMemoryPool pool, CancellationToken cancellationToken)
+    {
+        if(chain.Count == 0)
+        {
+            return false;
+        }
+
+        CardVerifiableCertificate terminalCertificate = chain[^1];
+
+        if(!await PresentCertificateChainAsync(device, session, chain, pool, cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        return await SetAuthenticationTemplateAsync(
+            device, session, terminalCertificate.PublicKey.SignatureScheme, terminalCertificate.CertificateHolderReference, pool, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Sends EXTERNAL AUTHENTICATE carrying the terminal's signature <c>s_IFD</c> and reports whether the chip
+    /// accepted it (granting the effective access authorization).
+    /// </summary>
+    private static ValueTask<bool> SendExternalAuthenticateAsync(
+        ApduDevice device, SecureMessagingSession session, Signature signature, BaseMemoryPool pool, CancellationToken cancellationToken) =>
+        SendProtectedCommandAsync(
+            device, session, InstructionCode.ExternalAuthenticate.Code, 0x00, 0x00, signature.AsReadOnlyMemory(), pool, cancellationToken);
 
 
     /// <summary>

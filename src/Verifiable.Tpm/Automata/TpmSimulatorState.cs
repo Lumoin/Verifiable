@@ -66,6 +66,52 @@ namespace Verifiable.Tpm.Automata;
 /// (clause 17.8.1), so a wrong owner authValue is a plain bad-authorization, never a counter-feeding
 /// auth-failure. Empty by default; <c>TPM2_HierarchyChangeAuth()</c> (a later slice) sets it.
 /// </param>
+/// <param name="TransientObjects">
+/// The loaded transient objects, keyed by handle. Populated by <c>TPM2_CreatePrimary()</c> and consulted by
+/// <c>TPM2_Sign()</c>; the object/signing path the create-then-sign slice exercises (TPM 2.0 Library Part 3,
+/// clauses 24.1 and 20.2).
+/// </param>
+/// <param name="PersistentObjects">
+/// The persistent objects, keyed by their persistent handle (<c>TPM_HT_PERSISTENT</c>, MSO <c>0x81</c>).
+/// <c>TPM2_EvictControl()</c> persists a transient object here (a copy, the transient stays loaded) and evicts
+/// one from here; this is the object-persistence half of a provisioning flow (TPM 2.0 Library Part 3, clause 28.5).
+/// </param>
+/// <param name="LoadedSealedObjects">
+/// The loaded sealed data objects, keyed by transient handle. Populated by <c>TPM2_Load()</c> of a wrapped
+/// KEYEDHASH object and consulted by <c>TPM2_Unseal()</c>; the seal-then-unseal path the create/load/unseal
+/// slice exercises (TPM 2.0 Library Part 3, clauses 12.1, 12.2, and 12.7).
+/// </param>
+/// <param name="Sha256PcrBank">
+/// The SHA-256 Platform Configuration Register bank. Read by <c>TPM2_PCR_Read()</c> and hashed into the
+/// composite digest <c>TPM2_Quote()</c> signs (TPM 2.0 Library Part 1, clause 17.1). Initialized to its reset
+/// image at power-on; this slice models no <c>TPM2_PCR_Extend()</c>, so the registers stay at their reset value.
+/// </param>
+/// <param name="PolicySessions">
+/// The started policy (enhanced authorization) sessions, keyed by session handle. Populated by
+/// <c>TPM2_StartAuthSession()</c>, driven by the <c>TPM2_Policy*()</c> command family (each advancing the
+/// session's policyDigest), read by <c>TPM2_PolicyGetDigest()</c>, and released by <c>TPM2_FlushContext()</c>
+/// (TPM 2.0 Library Part 1, clause 19.7).
+/// </param>
+/// <param name="NextObjectHandle">
+/// The handle the next created transient object receives, advanced on each <c>TPM2_CreatePrimary()</c>. Starts
+/// at <see cref="TransientHandleBase"/> (the base of the <c>TPM_HT_TRANSIENT</c> range, TPM 2.0 Library Part 2,
+/// clause 7.2).
+/// </param>
+/// <param name="NextSessionHandle">
+/// The handle the next started policy session receives, advanced on each <c>TPM2_StartAuthSession()</c>. Starts
+/// at <see cref="PolicySessionHandleBase"/> (the base of the <c>TPM_HT_POLICY_SESSION</c> range, TPM 2.0 Library
+/// Part 2, clause 7.2), disjoint from the transient-object range so a session handle never collides with an object.
+/// </param>
+/// <param name="HmacSessions">
+/// The started bound HMAC sessions with parameter encryption, keyed by session handle. Populated by
+/// <c>TPM2_StartAuthSession()</c> for an HMAC session, driven by encrypt-attributed commands (each rolling the
+/// session's nonceTPM), and released by <c>TPM2_FlushContext()</c> (TPM 2.0 Library Part 1, clauses 17.6 and 19).
+/// </param>
+/// <param name="NextHmacSessionHandle">
+/// The handle the next started HMAC session receives, advanced on each HMAC <c>TPM2_StartAuthSession()</c>. Starts
+/// at <see cref="HmacSessionHandleBase"/> (the base of the <c>TPM_HT_HMAC_SESSION</c> range, TPM 2.0 Library Part
+/// 2, clause 7.2), disjoint from the policy-session and transient-object ranges.
+/// </param>
 /// <param name="NextAction">The effectful action the runner must execute next; <see cref="NullAction.Instance"/> when none.</param>
 /// <param name="ResponseIntent">The logical response produced by the last command, or <see langword="null"/> when none (e.g. after <c>_TPM_Init</c>).</param>
 public sealed record TpmSimulatorState(
@@ -80,11 +126,47 @@ public sealed record TpmSimulatorState(
     uint LockoutRecovery,
     ImmutableDictionary<uint, NvIndexState> NvIndexes,
     ReadOnlyMemory<byte> OwnerAuth,
+    ImmutableDictionary<uint, TransientKeyState> TransientObjects,
+    ImmutableDictionary<uint, TransientKeyState> PersistentObjects,
+    ImmutableDictionary<uint, SealedObjectState> LoadedSealedObjects,
+    PcrBankState Sha256PcrBank,
+    ImmutableDictionary<uint, PolicySessionState> PolicySessions,
+    ImmutableDictionary<uint, HmacSessionState> HmacSessions,
+    uint NextObjectHandle,
+    uint NextSessionHandle,
+    uint NextHmacSessionHandle,
     PdaAction NextAction,
     TpmResponseIntent? ResponseIntent)
 {
     /// <summary>The default <see cref="MaxTries"/> for a freshly powered-off simulated TPM.</summary>
     public const uint DefaultMaxTries = 32;
+
+    /// <summary>
+    /// The base handle of the <c>TPM_HT_TRANSIENT</c> range (TPM 2.0 Library Part 2, clause 7.2): the handle the
+    /// first created transient object receives.
+    /// </summary>
+    public const uint TransientHandleBase = 0x8000_0000;
+
+    /// <summary>
+    /// The base handle of the <c>TPM_HT_PERSISTENT</c> range (TPM 2.0 Library Part 2, clause 7.2): a persistent
+    /// handle has the most-significant octet <c>0x81</c>. <c>TPM2_EvictControl()</c> assigns handles in this range.
+    /// </summary>
+    public const uint PersistentHandleBase = 0x8100_0000;
+
+    /// <summary>
+    /// The base handle of the <c>TPM_HT_POLICY_SESSION</c> range (TPM 2.0 Library Part 2, clause 7.2): a policy
+    /// session handle has the most-significant octet <c>0x03</c>. <c>TPM2_StartAuthSession()</c> assigns handles in
+    /// this range, disjoint from the <c>TPM_HT_TRANSIENT</c> object range (<see cref="TransientHandleBase"/>).
+    /// </summary>
+    public const uint PolicySessionHandleBase = 0x0300_0000;
+
+    /// <summary>
+    /// The base handle of the <c>TPM_HT_HMAC_SESSION</c> range (TPM 2.0 Library Part 2, clause 7.2): an HMAC
+    /// session handle has the most-significant octet <c>0x02</c>. <c>TPM2_StartAuthSession()</c> assigns HMAC
+    /// session handles in this range, disjoint from the policy-session (<see cref="PolicySessionHandleBase"/>) and
+    /// transient-object (<see cref="TransientHandleBase"/>) ranges so a handle never collides across kinds.
+    /// </summary>
+    public const uint HmacSessionHandleBase = 0x0200_0000;
 
     /// <summary>The default <see cref="RecoveryTime"/> in seconds for a freshly powered-off simulated TPM.</summary>
     public const uint DefaultRecoveryTimeSeconds = 7200;
@@ -121,6 +203,15 @@ public sealed record TpmSimulatorState(
             DefaultLockoutRecoverySeconds,
             ImmutableDictionary<uint, NvIndexState>.Empty,
             ReadOnlyMemory<byte>.Empty,
+            ImmutableDictionary<uint, TransientKeyState>.Empty,
+            ImmutableDictionary<uint, TransientKeyState>.Empty,
+            ImmutableDictionary<uint, SealedObjectState>.Empty,
+            PcrBankState.Sha256AtReset(),
+            ImmutableDictionary<uint, PolicySessionState>.Empty,
+            ImmutableDictionary<uint, HmacSessionState>.Empty,
+            TransientHandleBase,
+            PolicySessionHandleBase,
+            HmacSessionHandleBase,
             NullAction.Instance,
             null);
 }

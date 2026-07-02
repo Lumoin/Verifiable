@@ -11,6 +11,7 @@ using Verifiable.Apdu.Bac;
 using Verifiable.Apdu.Eac;
 using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
+using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Apdu;
@@ -81,6 +82,86 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
         Assert.IsTrue(outcome.DataGroup3Matches, "EF.DG3 must read back byte-for-byte over the Terminal-Authentication session.");
         Assert.IsTrue(outcome.DataGroup4Status.IsSuccess, "EF.DG4 must be readable when the effective authorization grants the iris bit.");
         Assert.IsTrue(outcome.DataGroup4Matches, "EF.DG4 must read back byte-for-byte over the Terminal-Authentication session.");
+    }
+
+
+    [TestMethod]
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The terminal PrivateKey takes ownership of the BouncyCastle private-key memory and is disposed by its using declaration; all other carriers are disposed by using declarations.")]
+    public async Task GrantsAccessWhenTheTerminalSignsWithAnInjectedLibraryKey()
+    {
+        Tag chipCurve = CryptoTags.BrainpoolP256r1ExchangePublicKey;
+        EcMultiplyGeneratorDelegate multiplyGenerator = Resolve<EcMultiplyGeneratorDelegate>();
+        ReadOnlyMemory<byte> terminalEphemeralPrivateKey = Convert.FromHexString(TerminalEphemeralPrivateKey);
+
+        using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        using CardVerifiableCertificate trustAnchor = CardVerifiableCertificateMinter.Mint(
+            cvcaKey, cvcaKey, CvcaReference, CvcaReference, (byte)(CvcaRole | ReadDataGroup3 | ReadDataGroup4), includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.InspectionSystem);
+        Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
+        using CardVerifiableCertificate documentVerifier = CardVerifiableCertificateMinter.Mint(
+            cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, (byte)(DocumentVerifierRole | ReadDataGroup3 | ReadDataGroup4), includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem);
+
+        //The terminal key is created through the library on the cross-platform BouncyCastle backend (framework
+        //ECDSA private-key export is unreliable on macOS) and never as a raw ECDsa: BouncyCastle mints the scalar,
+        //the registered EC-multiply (a delegate passed the key bytes, with the curve and pool threaded as state,
+        //no closure) derives its uncompressed public point, and the Document Verifier certifies that point. The
+        //terminal then signs EXTERNAL AUTHENTICATE through the injected PrivateKey, the seam a TPM-held key uses.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> terminalKeys = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
+        using PublicKeyMemory unusedCompressedPublicKey = terminalKeys.PublicKey;
+        using EncodedEcPoint terminalPublicPoint = await terminalKeys.PrivateKey.WithKeyBytesAsync(
+            static (scalar, state) => state.Generator(scalar, state.Curve, state.Pool, state.Token),
+            (Generator: multiplyGenerator, Curve: CryptoTags.P256ExchangePublicKey, Pool: (MemoryPool<byte>)BaseMemoryPool.Shared, Token: TestContext.CancellationToken));
+        using PrivateKey terminalKey = CryptographicKeyFactory.CreatePrivateKey(terminalKeys.PrivateKey, "terminal-p256", terminalKeys.PrivateKey.Tag);
+        using CardVerifiableCertificate terminal = CardVerifiableCertificateMinter.Mint(
+            documentVerifierKey, terminalPublicPoint.AsReadOnlyMemory(), DocumentVerifierReference, TerminalReference, (byte)(TerminalRole | ReadDataGroup3 | ReadDataGroup4), Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem);
+
+        using EncodedEcPoint chipStaticPublicKey = await multiplyGenerator(Convert.FromHexString(ChipStaticPrivateKey), chipCurve, BaseMemoryPool.Shared, TestContext.CancellationToken);
+        using EncodedEcPoint terminalEphemeralPublicKey = await multiplyGenerator(terminalEphemeralPrivateKey, chipCurve, BaseMemoryPool.Shared, TestContext.CancellationToken);
+
+        using ElementaryFile dataGroup14File = DataGroup14.Write(chipStaticPublicKey, ChipAuthenticationCipher.Aes128, version: 1, keyId: null, BaseMemoryPool.Shared);
+        using ElementaryFile efCom = EfCom.Write("0106", "040000", [0x61, 0x6E], BaseMemoryPool.Shared);
+        using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
+        using ElementaryFile dataGroup3 = DataGroup3.Write(FingerRecord, BaseMemoryPool.Shared);
+        using ElementaryFile dataGroup4 = DataGroup4.Write(IrisRecord, BaseMemoryPool.Shared);
+        using ChipAuthenticationKey chipKey = CreateChipKey(ChipStaticPrivateKey);
+
+        using var card = new CardSimulator(
+            "passport-ta-injected-key", [efCom, dataGroup1, dataGroup14File, dataGroup3, dataGroup4],
+            chipAuthenticationKeys: [chipKey], terminalAuthenticationTrustAnchor: trustAnchor, terminalAuthenticationDate: WithinValidity);
+        using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
+
+        (SecureMessagingSession bacSession, SymmetricKeyMemory accessEncryptionKey, SymmetricKeyMemory accessMacKey) =
+            await EstablishBacAsync(device);
+        using(accessEncryptionKey)
+        using(accessMacKey)
+        using(bacSession)
+        {
+            using DataGroup14 dataGroup14 = DataGroup14.Parse(dataGroup14File.AsReadOnlySpan(), BaseMemoryPool.Shared);
+            ChipAuthenticationPublicKeyInfo chipKeyInfo = dataGroup14.ChipAuthenticationPublicKeyInfos[0];
+
+            (SymmetricKeyMemory encryptionKey, SymmetricKeyMemory macKey) = await ChipAuthentication.EstablishAsync(
+                device, bacSession, chipKeyInfo.PublicKey, ChipAuthenticationCipher.Aes128, terminalEphemeralPrivateKey, chipKeyInfo.KeyId,
+                BaseMemoryPool.Shared, TestContext.CancellationToken);
+
+            using SecureMessagingSession reKeyed = new(encryptionKey, macKey, new byte[SecureMessagingProfile.Aes128.BlockSize], SecureMessagingProfile.Aes128, BaseMemoryPool.Shared);
+
+            byte[] chipIdentifier = Encoding.ASCII.GetBytes(TerminalAuthentication.ChipIdentifierForBasicAccessControl(DocumentNumber));
+            bool accepted = await TerminalAuthentication.AuthenticateAsync(
+                device, reKeyed, [documentVerifier, terminal], terminalKey, terminalEphemeralPublicKey.AsReadOnlyMemory(), chipIdentifier,
+                BaseMemoryPool.Shared, TestContext.CancellationToken);
+
+            (StatusWord dataGroup3Status, bool dataGroup3Matches) = await ReadSensitiveFileAsync(
+                device, reKeyed, DataGroup3.FileIdentifier, dataGroup3.AsReadOnlyMemory(), TestContext.CancellationToken);
+            (StatusWord dataGroup4Status, bool dataGroup4Matches) = await ReadSensitiveFileAsync(
+                device, reKeyed, DataGroup4.FileIdentifier, dataGroup4.AsReadOnlyMemory(), TestContext.CancellationToken);
+
+            Assert.IsTrue(accepted, "The chip must accept a terminal that signs EXTERNAL AUTHENTICATE with an injected library PrivateKey.");
+            Assert.IsTrue(dataGroup3Status.IsSuccess, "EF.DG3 must be readable after injected-key Terminal Authentication.");
+            Assert.IsTrue(dataGroup3Matches, "EF.DG3 must read back byte-for-byte.");
+            Assert.IsTrue(dataGroup4Status.IsSuccess, "EF.DG4 must be readable after injected-key Terminal Authentication.");
+            Assert.IsTrue(dataGroup4Matches, "EF.DG4 must read back byte-for-byte.");
+        }
     }
 
 

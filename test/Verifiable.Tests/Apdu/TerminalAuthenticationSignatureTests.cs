@@ -3,7 +3,9 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Verifiable.Apdu.Eac;
 using Verifiable.Apdu.Lds;
+using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -146,6 +148,33 @@ internal sealed class TerminalAuthenticationSignatureTests
             BaseMemoryPool.Shared, TestContext.CancellationToken);
 
         Assert.IsFalse(verified, "A signature made with a key other than the certificate's public key is rejected.");
+    }
+
+
+    [TestMethod]
+    public async Task SignsWithAnInjectedPrivateKeyTheChipsVerifierAccepts()
+    {
+        using ECDsa terminalEphemeralKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        byte[] terminalEphemeralPublicKey = UncompressedPoint(terminalEphemeralKey);
+
+        //The terminal's Terminal Authentication key is presented as an injected PrivateKey rather than as raw key
+        //bytes — the same seam a hardware-held key (for example a TPM-resident key whose scalar never leaves the
+        //device) uses. Here it wraps a software P-256 key bound to the registered signing function; nothing on the
+        //chip side can tell a software key from a hardware one.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = BouncyCastleKeyMaterialCreator.CreateP256Keys(BaseMemoryPool.Shared);
+        using PublicKeyMemory terminalPublicKey = keys.PublicKey;
+        using PrivateKey terminalKey = CryptographicKeyFactory.CreatePrivateKey(keys.PrivateKey, "terminal-p256", keys.PrivateKey.Tag);
+
+        using Signature signature = await TerminalAuthenticationSignature.SignAsync(
+            terminalKey, ChipIdentifier, ChipChallenge, terminalEphemeralPublicKey, BaseMemoryPool.Shared, TestContext.CancellationToken);
+
+        //The chip verifies an injected-key signature exactly as it verifies a raw-key one: with the registered
+        //P-256 verifier over the §7.1.2 message, requiring the plain r || s encoding (TR-03111).
+        VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.P256, Purpose.Verification);
+        bool verified = await verify(
+            SignedMessage(terminalEphemeralPublicKey), signature.AsReadOnlyMemory(), terminalPublicKey.AsReadOnlyMemory(), null, TestContext.CancellationToken);
+
+        Assert.IsTrue(verified, "A signature from an injected PrivateKey must verify with the chip's registered P-256 verifier over the §7.1.2 message.");
     }
 
 

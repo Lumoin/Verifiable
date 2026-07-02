@@ -1,83 +1,41 @@
 using System;
+using System.Buffers;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
-using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.TestInfrastructure.TpmSimulator;
 using Verifiable.Tpm;
+using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
-using Verifiable.Tpm.Infrastructure.Spec.Structures;
+using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
-/// Acceptance tests for <see cref="TpmPolicyBuilder"/> / <see cref="TpmPolicy"/> against the TCG ms-tpm-20-ref
-/// software TPM simulator. They confirm a policy described once drives a live session to exactly the policyDigest
-/// the same description predicts host-side — i.e. the two duals (predict and execute) cannot drift apart.
+/// Drives <see cref="TpmPolicyBuilder"/> / <see cref="TpmPolicy"/> against the in-house behavioural
+/// <see cref="TpmSimulator"/> — entirely in-process, with no external assets. Each test builds a policy once, then
+/// confirms that <see cref="TpmPolicy.ComputeDigest"/> (the host prediction) and <see cref="TpmPolicy.ExecuteAsync"/>
+/// (the on-device replay, through the production command path) agree on a live session, so the two duals — predict
+/// and execute — cannot drift apart (TPM 2.0 Library Part 1, clause 19.7).
 /// </summary>
 /// <remarks>
-/// The tests are gated on a running simulator (start the container from
-/// <c>test/Verifiable.Tests/TestInfrastructure/TpmSimulator/Dockerfile</c>, publishing ports 2321/2322); they
-/// report <see cref="Assert.Inconclusive(string)"/> when none is reachable, so they are safe in any run.
+/// The simulator advances the session's policyDigest by calling the same <see cref="TpmPolicyDigest"/> methods the
+/// prediction uses, so the executed digest equalling the predicted one exercises the wire round-trip and assertion
+/// composition end to end, not the raw spec formula (that is the role of <see cref="TpmPolicyDigest"/>'s unit tests).
 /// </remarks>
-[ConditionalTestClass]
-[SkipIfNoTpmSimulator]
-[DoNotParallelize]
-[TestCategory("RequiresTpmSimulator")]
-internal sealed class TpmSimulatorPolicyBuilderTests
+[TestClass]
+internal sealed class TpmInHouseSimulatorPolicyBuilderTests
 {
-    /// <summary>The connection to the simulator, established once for the class.</summary>
-    private static MsTpmSimulatorConnection? Connection { get; set; }
-
-    /// <summary>The TPM device created over the simulator connection.</summary>
-    private static TpmDevice? Tpm { get; set; }
-
-    /// <summary>Whether a simulator was reachable at class initialization.</summary>
-    private static bool HasSimulator { get; set; }
-
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
-
-    /// <summary>Connects to the simulator (if one is reachable) and brings up a TPM device for the class.</summary>
-    /// <param name="context">The class-level test context.</param>
-    [ClassInitialize]
-    public static async Task ClassInit(TestContext context)
-    {
-        if(!MsTpmSimulatorConnection.IsAvailable("localhost", MsTpmSimulatorConnection.DefaultCommandPort, TimeSpan.FromSeconds(1)))
-        {
-            return;
-        }
-
-        Connection = await MsTpmSimulatorConnection.ConnectAsync(
-            "localhost", MsTpmSimulatorConnection.DefaultCommandPort, context.CancellationToken).ConfigureAwait(false);
-        Tpm = TpmDevice.Create(Connection.SubmitAsync);
-        HasSimulator = true;
-    }
-
-    /// <summary>Releases the TPM device and simulator connection.</summary>
-    [ClassCleanup]
-    public static void ClassCleanup()
-    {
-        Tpm?.Dispose();
-        Connection?.Dispose();
-    }
-
-    /// <summary>Skips the test when no simulator is reachable.</summary>
-    [TestInitialize]
-    public void TestInit()
-    {
-        if(!HasSimulator)
-        {
-            Assert.Inconclusive("No TPM simulator is reachable on localhost:2321/2322. Start the container from TestInfrastructure/TpmSimulator/Dockerfile.");
-        }
-    }
 
     [TestMethod]
     public async Task BuiltPolicyExecutesToItsComputedDigest()
     {
-        TpmDevice tpm = Tpm!;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
 
         //One description: require the object's authValue, then restrict the session to TPM2_Sign.
@@ -118,7 +76,9 @@ internal sealed class TpmSimulatorPolicyBuilderTests
     [TestMethod]
     public async Task BuiltOrPolicyExecutesToItsComputedDigest()
     {
-        TpmDevice tpm = Tpm!;
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
         int size = TpmPolicyDigest.Size(PolicyHash);
 
@@ -164,5 +124,48 @@ internal sealed class TpmSimulatorPolicyBuilderTests
         {
             _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Creates a simulator with the ECC (BouncyCastle) signing backend wired, powers it on, and brings it through
+    /// <c>TPM2_Startup(CLEAR)</c> into the operational phase. The policy commands themselves need no signing
+    /// backend, but the backend is wired for parity with the other in-house simulator tests.
+    /// </summary>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The operational simulator.</returns>
+    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    {
+        var simulator = new TpmSimulator("tpm-in-house-policy-builder", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
+
+        return simulator;
+    }
+
+    /// <summary>
+    /// Issues <c>TPM2_Startup(CLEAR)</c> directly against the simulator, mirroring how the executor frames an
+    /// unauthorized command on the wire, to move it into <see cref="TpmLifecyclePhase.Operational"/>.
+    /// </summary>
+    /// <param name="simulator">The simulator to bring operational.</param>
+    /// <param name="pool">The memory pool.</param>
+    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    {
+        var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
+        int length = TpmHeader.HeaderSize + input.GetSerializedSize();
+        using IMemoryOwner<byte> owner = pool.Rent(length);
+
+        var writer = new TpmWriter(owner.Memory.Span);
+        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)length, (uint)input.CommandCode);
+        header.WriteTo(ref writer);
+        input.WriteHandles(ref writer);
+        input.WriteParameters(ref writer);
+
+        TpmResult<TpmResponse> result = await simulator.SubmitAsync(owner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, "TPM2_Startup(CLEAR) must succeed.");
+        using TpmResponse response = result.Value;
+        var reader = new TpmReader(response.AsReadOnlySpan());
+        TpmHeader responseHeader = TpmHeader.Parse(ref reader);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, (TpmRcConstants)responseHeader.Code);
+        Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase);
     }
 }
