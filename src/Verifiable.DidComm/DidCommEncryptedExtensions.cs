@@ -1919,12 +1919,7 @@ public static class DidCommEncryptedExtensions
     //VerificationMethodExtensions.CreatePublicKeyFromVerificationMethod so the resolved sender key carries
     //the metadata the agreement delegate expects.
     private static Tag TagFor(CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme) =>
-        new Tag(new Dictionary<Type, object>
-        {
-            [typeof(CryptoAlgorithm)] = algorithm,
-            [typeof(Purpose)] = purpose,
-            [typeof(EncodingScheme)] = scheme
-        });
+        Tag.Create(algorithm).With(purpose).With(scheme);
 
 
     //Detects whether the decrypted content is a nested signed JWM and, when so, verifies it as the

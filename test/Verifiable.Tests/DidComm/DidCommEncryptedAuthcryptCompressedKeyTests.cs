@@ -224,10 +224,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
             EllipticCurveUtilities.SliceXCoordinate(uncompressed),
             EllipticCurveUtilities.SliceYCoordinate(uncompressed));
 
-        Tag compressedTag = Tag.Create(
-            (typeof(CryptoAlgorithm), algorithm),
-            (typeof(Purpose), Purpose.Exchange),
-            (typeof(EncodingScheme), EncodingScheme.EcCompressed));
+        Tag compressedTag = Tag.Create(algorithm).With(Purpose.Exchange).With(EncodingScheme.EcCompressed);
 
         IMemoryOwner<byte> compressedOwner = Pool.Rent(compressedBytes.Length);
         compressedBytes.CopyTo(compressedOwner.Memory.Span);

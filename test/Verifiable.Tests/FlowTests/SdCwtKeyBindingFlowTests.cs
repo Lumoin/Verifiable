@@ -134,10 +134,7 @@ internal sealed class SdCwtKeyBindingFlowTests
     }
 
 
-    private static readonly Tag Sha256CommitmentTag = new(new Dictionary<Type, object>
-    {
-        [typeof(HashAlgorithmName)] = HashAlgorithmName.SHA256
-    });
+    private static readonly Tag Sha256CommitmentTag = Tag.Create(HashAlgorithmName.SHA256);
 
 
     /// <summary>A verifier-side commitment store keyed by commitment bytes, shared across two verifications.</summary>

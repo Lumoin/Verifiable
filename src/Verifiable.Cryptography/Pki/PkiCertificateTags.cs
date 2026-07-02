@@ -13,14 +13,14 @@ namespace Verifiable.Cryptography.Pki;
 public static class PkiCertificateTags
 {
     /// <summary>Tag for a DER-encoded X.509 v3 certificate per RFC 5280.</summary>
-    public static Tag X509Certificate { get; } = Tag.Create((typeof(PkiObjectKind), PkiObjectKind.X509Certificate));
+    public static Tag X509Certificate { get; } = Tag.Create(PkiObjectKind.X509Certificate);
 
     /// <summary>Tag for a DER-encoded Certificate Revocation List per RFC 5280.</summary>
-    public static Tag X509Crl { get; } = Tag.Create((typeof(PkiObjectKind), PkiObjectKind.X509Crl));
+    public static Tag X509Crl { get; } = Tag.Create(PkiObjectKind.X509Crl);
 
     /// <summary>Tag for a DER-encoded OCSP response per RFC 6960.</summary>
-    public static Tag OcspResponse { get; } = Tag.Create((typeof(PkiObjectKind), PkiObjectKind.OcspResponse));
+    public static Tag OcspResponse { get; } = Tag.Create(PkiObjectKind.OcspResponse);
 
     /// <summary>Tag for a DER-encoded RFC 3161 timestamp token.</summary>
-    public static Tag TimestampToken { get; } = Tag.Create((typeof(PkiObjectKind), PkiObjectKind.TimestampToken));
+    public static Tag TimestampToken { get; } = Tag.Create(PkiObjectKind.TimestampToken);
 }

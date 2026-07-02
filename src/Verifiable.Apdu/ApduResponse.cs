@@ -51,6 +51,38 @@ public sealed class ApduResponse : SensitiveMemory
     }
 
     /// <summary>
+    /// Creates an <see cref="ApduResponse"/> from the complete response bytes a platform transport returned (the
+    /// data field followed by the two-byte status word). The bytes are copied into a buffer rented from
+    /// <paramref name="pool"/>; the returned response owns that buffer and must be disposed by the caller.
+    /// </summary>
+    /// <remarks>
+    /// This is the construction seam a <see cref="TransceiveDelegate"/> implementation uses to wrap a raw transceive
+    /// result — for example the bytes returned by PC/SC <c>SCardTransmit</c>, Android <c>IsoDep.Transceive</c>, or
+    /// iOS <c>NFCISO7816Tag.SendCommand</c> — into the response the protocol engine consumes.
+    /// </remarks>
+    /// <param name="responseBytes">The complete response APDU bytes (data, then SW1 and SW2).</param>
+    /// <param name="pool">The memory pool the response buffer is rented from.</param>
+    /// <returns>An <see cref="ApduResponse"/> wrapping a pooled copy of <paramref name="responseBytes"/>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="pool"/> is <see langword="null"/>.</exception>
+    public static ApduResponse FromResponseBytes(ReadOnlySpan<byte> responseBytes, MemoryPool<byte> pool)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        IMemoryOwner<byte> storage = pool.Rent(responseBytes.Length);
+        try
+        {
+            responseBytes.CopyTo(storage.Memory.Span);
+
+            return new ApduResponse(storage, responseBytes.Length);
+        }
+        catch
+        {
+            storage.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Gets the total length of the response in bytes (data + status word).
     /// </summary>
     public int Length { get; }

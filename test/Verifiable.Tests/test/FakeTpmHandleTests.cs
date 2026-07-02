@@ -37,11 +37,7 @@ internal class FakeTpmHandleTests
             };
 
         //Create TPM tag.
-        var tpmTag = new Tag(new Dictionary<Type, object>
-        {
-            [typeof(CryptoAlgorithm)] = CryptoAlgorithm.Ed25519,
-            [typeof(Purpose)] = Purpose.Verification
-        });
+        var tpmTag = Tag.Create(CryptoAlgorithm.Ed25519).With(Purpose.Verification);
 
         //Encode handle as bytes for storage.
         string tpmHandle = "Tpm-key-handle-123";

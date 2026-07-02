@@ -520,13 +520,10 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         try
         {
             HashAlgorithmName algorithmName = ToHashAlgorithmName(sessionAlg);
-            Tag tag = new Tag(new System.Collections.Generic.Dictionary<Type, object>
-            {
-                [typeof(HashAlgorithmName)] = algorithmName,
-                [typeof(Purpose)] = Purpose.Hmac,
-                [typeof(EncodingScheme)] = EncodingScheme.Raw,
-                [typeof(MaterialSemantics)] = MaterialSemantics.Direct
-            });
+            Tag tag = Tag.Create(algorithmName)
+                .With(Purpose.Hmac)
+                .With(EncodingScheme.Raw)
+                .With(MaterialSemantics.Direct);
 
             using HmacValue result = await CryptographicKeyEvents.ComputeHmacAsync(
                 data,

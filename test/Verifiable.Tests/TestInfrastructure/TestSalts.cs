@@ -63,12 +63,9 @@ internal static class TestSalts
         string assemblyVersion = typeof(TestSalts).Assembly.GetName().Version?.ToString()
             ?? "Unknown";
 
-        return new Tag(new Dictionary<Type, object>
-        {
-            [typeof(Purpose)] = Purpose.Salt,
-            [typeof(ProviderLibrary)] = new ProviderLibrary(assemblyName, assemblyVersion),
-            [typeof(ProviderClass)] = new ProviderClass(nameof(TestSalts))
-        });
+        return Tag.Create(Purpose.Salt)
+            .With(new ProviderLibrary(assemblyName, assemblyVersion))
+            .With(new ProviderClass(nameof(TestSalts)));
     }
 
 

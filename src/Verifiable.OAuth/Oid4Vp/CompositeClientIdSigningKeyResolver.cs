@@ -446,10 +446,7 @@ public static class CompositeClientIdSigningKeyResolver
             (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) decoded =
                 VerificationMethodCryptoConversions.DefaultConverter(verificationMethod, pool);
 
-            Tag tag = Tag.Create(
-                (typeof(CryptoAlgorithm), decoded.algorithm),
-                (typeof(Purpose), decoded.purpose),
-                (typeof(EncodingScheme), decoded.scheme));
+            Tag tag = Tag.Create(decoded.algorithm).With(decoded.purpose).With(decoded.scheme);
 
             return new PublicKeyMemory(decoded.keyMaterial, tag);
         };

@@ -186,10 +186,7 @@ public static class SdJwtVpTokenVerification
             var (algorithm, purpose, scheme, keyBytesOwner) =
                 CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
                     jwkDict, pool, decoder);
-            Tag holderTag = Tag.Create(
-                (typeof(CryptoAlgorithm), algorithm),
-                (typeof(Purpose), purpose),
-                (typeof(EncodingScheme), scheme));
+            Tag holderTag = Tag.Create(algorithm).With(purpose).With(scheme);
             using PublicKeyMemory holderPublicKey = new(keyBytesOwner, holderTag);
 
             //Verify KB-JWT signature against the holder key from cnf.
@@ -203,11 +200,7 @@ public static class SdJwtVpTokenVerification
             {
                 HashAlgorithmName algorithmName = WellKnownHashAlgorithms.ToHashAlgorithmName(sdAlg);
                 int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(algorithmName);
-                Tag digestTag = new(new Dictionary<Type, object>
-                {
-                    [typeof(HashAlgorithmName)] = algorithmName,
-                    [typeof(Purpose)] = Purpose.Digest
-                });
+                Tag digestTag = Tag.Create(algorithmName).With(Purpose.Digest);
 
                 string hashInput = computeHashInput(token);
                 int inputByteCount = Encoding.ASCII.GetByteCount(hashInput);

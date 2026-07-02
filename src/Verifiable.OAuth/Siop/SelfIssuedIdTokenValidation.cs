@@ -286,10 +286,7 @@ public static class SelfIssuedIdTokenValidation
             var (algorithm, purpose, scheme, keyBytesOwner) =
                 CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
                     subJwk, memoryPool, base64UrlDecoder);
-            Tag subjectTag = Tag.Create(
-                (typeof(CryptoAlgorithm), algorithm),
-                (typeof(Purpose), purpose),
-                (typeof(EncodingScheme), scheme));
+            Tag subjectTag = Tag.Create(algorithm).With(purpose).With(scheme);
             using PublicKeyMemory subjectKey = new(keyBytesOwner, subjectTag);
 
             return await Jws.VerifyAsync(

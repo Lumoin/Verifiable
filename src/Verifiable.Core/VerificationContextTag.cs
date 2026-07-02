@@ -23,7 +23,7 @@ public static class VerificationContextTag
     /// <param name="verificationMethod">The verification method / key id, or <see langword="null"/>.</param>
     public static Tag Create(string? verificationMethod)
     {
-        var tag = Tag.Create((typeof(Purpose), Purpose.Verification));
+        var tag = Tag.Create(Purpose.Verification);
         if(!string.IsNullOrWhiteSpace(verificationMethod))
         {
             tag = tag.With(new KeyId(verificationMethod));

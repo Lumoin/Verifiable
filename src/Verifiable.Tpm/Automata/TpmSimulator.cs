@@ -1227,23 +1227,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //The digest tag for the session's rpHash: the hash family carried inline (TPM sessions may use SHA-1, which the
     //convenience CryptoTags deliberately omit), mirroring the executor's own tag construction.
     private static Tag SessionDigestTag(TpmAlgIdConstants hashAlg) =>
-        new(new Dictionary<Type, object>
-        {
-            [typeof(HashAlgorithmName)] = SessionHashName(hashAlg),
-            [typeof(Purpose)] = Purpose.Digest,
-            [typeof(EncodingScheme)] = EncodingScheme.Raw,
-            [typeof(MaterialSemantics)] = MaterialSemantics.Direct
-        });
+        Tag.Create(SessionHashName(hashAlg))
+            .With(Purpose.Digest)
+            .With(EncodingScheme.Raw)
+            .With(MaterialSemantics.Direct);
 
     //The HMAC tag for the session's response HMAC, mirroring the host TpmSession's own tag construction.
     private static Tag SessionHmacTag(TpmAlgIdConstants hashAlg) =>
-        new(new Dictionary<Type, object>
-        {
-            [typeof(HashAlgorithmName)] = SessionHashName(hashAlg),
-            [typeof(Purpose)] = Purpose.Hmac,
-            [typeof(EncodingScheme)] = EncodingScheme.Raw,
-            [typeof(MaterialSemantics)] = MaterialSemantics.Direct
-        });
+        Tag.Create(SessionHashName(hashAlg))
+            .With(Purpose.Hmac)
+            .With(EncodingScheme.Raw)
+            .With(MaterialSemantics.Direct);
 
     //The credential-protection outer wrap uses the credential key's (endorsement key's) symmetric algorithm, which
     //for the ECC storage/EK template this model creates is AES-128-CFB (TPM 2.0 Library Part 1, clause 25.2; the

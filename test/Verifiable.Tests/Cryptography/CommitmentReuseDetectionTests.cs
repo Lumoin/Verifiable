@@ -18,10 +18,7 @@ internal sealed class CommitmentReuseDetectionTests
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
-    private static readonly Tag DigestTag = new(new Dictionary<Type, object>
-    {
-        [typeof(HashAlgorithmName)] = HashAlgorithmName.SHA256
-    });
+    private static readonly Tag DigestTag = Tag.Create(HashAlgorithmName.SHA256);
 
 
     [TestMethod]

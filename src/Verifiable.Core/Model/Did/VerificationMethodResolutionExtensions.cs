@@ -496,12 +496,9 @@ public static class VerificationMethodResolutionExtensions
         ArgumentNullException.ThrowIfNull(memoryPool);
 
         var rawKeyMaterial = verificationMethod.ExtractKeyMaterial(memoryPool);
-        var tag = new Tag(new Dictionary<Type, object>
-        {
-            [typeof(CryptoAlgorithm)] = rawKeyMaterial.Algorithm,
-            [typeof(Purpose)] = rawKeyMaterial.Purpose,
-            [typeof(EncodingScheme)] = rawKeyMaterial.Scheme
-        });
+        var tag = Tag.Create(rawKeyMaterial.Algorithm)
+            .With(rawKeyMaterial.Purpose)
+            .With(rawKeyMaterial.Scheme);
 
         return new PublicKeyMemory(rawKeyMaterial.keyMaterial, tag);
     }

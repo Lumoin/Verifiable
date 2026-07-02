@@ -441,13 +441,10 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// <returns>The 32-byte digest.</returns>
     private static async Task<byte[]> ComputeSha256Async(ReadOnlyMemory<byte> message, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
-        Tag tag = new(new Dictionary<Type, object>
-        {
-            [typeof(HashAlgorithmName)] = HashAlgorithmName.SHA256,
-            [typeof(Purpose)] = Purpose.Digest,
-            [typeof(EncodingScheme)] = EncodingScheme.Raw,
-            [typeof(MaterialSemantics)] = MaterialSemantics.Direct
-        });
+        Tag tag = Tag.Create(HashAlgorithmName.SHA256)
+            .With(Purpose.Digest)
+            .With(EncodingScheme.Raw)
+            .With(MaterialSemantics.Direct);
 
         using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
             new ReadOnlySequence<byte>(message),

@@ -114,13 +114,10 @@ public sealed class CryptoAlgorithmRegistrationAttribute: Attribute
 /// These values are stored in <see cref="Tag"/> to describe key material:
 /// </para>
 /// <code>
-/// var tag = new Tag(new Dictionary&lt;Type, object&gt;
-/// {
-///     [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P256,
-///     [typeof(Purpose)] = Purpose.Signing,
-///     [typeof(EncodingScheme)] = EncodingScheme.Raw,
-///     [typeof(MaterialSemantics)] = MaterialSemantics.Direct
-/// });
+/// var tag = Tag.Create(CryptoAlgorithm.P256)
+///     .With(Purpose.Signing)
+///     .With(EncodingScheme.Raw)
+///     .With(MaterialSemantics.Direct);
 /// </code>
 /// </remarks>
 /// <seealso cref="Purpose"/>

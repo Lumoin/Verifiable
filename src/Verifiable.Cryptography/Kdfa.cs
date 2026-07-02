@@ -166,13 +166,7 @@ public static class Kdfa
     }
 
     private static Tag HmacTag(HashAlgorithmName hashAlgorithm) =>
-        new(new Dictionary<Type, object>
-        {
-            [typeof(HashAlgorithmName)] = hashAlgorithm,
-            [typeof(Purpose)] = Purpose.Hmac,
-            [typeof(EncodingScheme)] = EncodingScheme.Raw,
-            [typeof(MaterialSemantics)] = MaterialSemantics.Direct
-        });
+        Tag.Create(hashAlgorithm).With(Purpose.Hmac).With(EncodingScheme.Raw).With(MaterialSemantics.Direct);
 
     private static int DigestSize(HashAlgorithmName hashAlgorithm)
     {

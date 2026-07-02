@@ -670,26 +670,14 @@ internal sealed class TpmParameterEncryptionExecutorTests
     /// digest, raw encoding, direct material.
     /// </summary>
     private static Tag DigestTag() =>
-        new(new Dictionary<Type, object>
-        {
-            [typeof(HashAlgorithmName)] = HashAlgorithmName.SHA256,
-            [typeof(Purpose)] = Purpose.Digest,
-            [typeof(EncodingScheme)] = EncodingScheme.Raw,
-            [typeof(MaterialSemantics)] = MaterialSemantics.Direct
-        });
+        Tag.Create(HashAlgorithmName.SHA256).With(Purpose.Digest).With(EncodingScheme.Raw).With(MaterialSemantics.Direct);
 
     /// <summary>
     /// Builds the HMAC <see cref="Tag"/> exactly as <c>TpmSession.ComputeSessionHmacAsync</c> does: SHA-256
     /// HMAC, raw encoding, direct material.
     /// </summary>
     private static Tag HmacTag() =>
-        new(new Dictionary<Type, object>
-        {
-            [typeof(HashAlgorithmName)] = HashAlgorithmName.SHA256,
-            [typeof(Purpose)] = Purpose.Hmac,
-            [typeof(EncodingScheme)] = EncodingScheme.Raw,
-            [typeof(MaterialSemantics)] = MaterialSemantics.Direct
-        });
+        Tag.Create(HashAlgorithmName.SHA256).With(Purpose.Hmac).With(EncodingScheme.Raw).With(MaterialSemantics.Direct);
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The frame owner ownership transfers to the returned TpmResponse, disposed by the executor under test.")]
