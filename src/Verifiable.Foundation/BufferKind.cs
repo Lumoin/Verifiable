@@ -65,7 +65,7 @@ namespace Verifiable.Foundation;
 /// <code>
 /// //Serializer allocates internally - we wrap without copying.
 /// byte[] json = JsonSerializer.SerializeToUtf8Bytes(credential);
-/// var tag = Tag.Create((typeof(BufferKind), BufferKind.JwtPayload));
+/// var tag = Tag.Create(BufferKind.JwtPayload);
 /// var buffer = new TaggedMemory&lt;byte&gt;(json, tag);
 /// </code>
 /// <para>

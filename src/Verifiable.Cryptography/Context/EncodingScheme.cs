@@ -108,13 +108,10 @@ namespace Verifiable.Cryptography.Context;
 /// These values are stored in <see cref="Tag"/> to describe key material:
 /// </para>
 /// <code>
-/// var tag = new Tag(new Dictionary&lt;Type, object&gt;
-/// {
-///     [typeof(CryptoAlgorithm)] = CryptoAlgorithm.P256,
-///     [typeof(Purpose)] = Purpose.Verification,
-///     [typeof(EncodingScheme)] = EncodingScheme.EcCompressed,
-///     [typeof(MaterialSemantics)] = MaterialSemantics.Direct
-/// });
+/// var tag = Tag.Create(CryptoAlgorithm.P256)
+///     .With(Purpose.Verification)
+///     .With(EncodingScheme.EcCompressed)
+///     .With(MaterialSemantics.Direct);
 /// </code>
 /// </remarks>
 /// <seealso cref="CryptoAlgorithm"/>

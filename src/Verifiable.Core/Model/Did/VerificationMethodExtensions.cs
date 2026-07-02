@@ -78,12 +78,9 @@ namespace Verifiable.Core.Model.Did
             }
 
             //Create PublicKeyMemory with proper tags
-            var publicKeyMemory = new PublicKeyMemory(rawKeyMaterial.keyMaterial, new Tag(new Dictionary<Type, object>
-            {
-                [typeof(CryptoAlgorithm)] = rawKeyMaterial.Algorithm,
-                [typeof(Purpose)] = rawKeyMaterial.Purpose,
-                [typeof(EncodingScheme)] = rawKeyMaterial.Scheme
-            }));
+            var publicKeyMemory = new PublicKeyMemory(rawKeyMaterial.keyMaterial, Tag.Create(rawKeyMaterial.Algorithm)
+                .With(rawKeyMaterial.Purpose)
+                .With(rawKeyMaterial.Scheme));
 
             return CryptographicKeyFactory.CreatePublicKey(
                 publicKeyMemory,

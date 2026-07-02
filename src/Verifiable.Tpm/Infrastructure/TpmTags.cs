@@ -35,9 +35,7 @@ public static class TpmTags
     /// Used for nonceCaller and nonceTPM in session protocols.
     /// See TPM 2.0 Part 1, Section 17.6.3 - Session Nonces.
     /// </remarks>
-    public static Tag Nonce { get; } = Tag.Create(
-        (typeof(Purpose), Purpose.Nonce),
-        (typeof(MaterialSemantics), MaterialSemantics.Direct));
+    public static Tag Nonce { get; } = Tag.Create(Purpose.Nonce).With(MaterialSemantics.Direct);
 
     /// <summary>
     /// Tag for TPM2B_AUTH - authorization values.
@@ -46,9 +44,7 @@ public static class TpmTags
     /// Used for passwords, HMACs, and authValue in authorization protocols.
     /// See TPM 2.0 Part 1, Section 17.6.4 - Authorization Values.
     /// </remarks>
-    public static Tag Auth { get; } = Tag.Create(
-        (typeof(Purpose), Purpose.Hmac),
-        (typeof(MaterialSemantics), MaterialSemantics.Direct));
+    public static Tag Auth { get; } = Tag.Create(Purpose.Hmac).With(MaterialSemantics.Direct);
 
     /// <summary>
     /// Tag for TPM2B_DIGEST - hash digest values.
@@ -56,9 +52,7 @@ public static class TpmTags
     /// <remarks>
     /// Used for hash results, PCR values, and cpHash/rpHash computations.
     /// </remarks>
-    public static Tag Digest { get; } = Tag.Create(
-        (typeof(Purpose), Purpose.Digest),
-        (typeof(MaterialSemantics), MaterialSemantics.Direct));
+    public static Tag Digest { get; } = Tag.Create(Purpose.Digest).With(MaterialSemantics.Direct);
 
     /// <summary>
     /// Tag for raw TPM response data.
@@ -66,9 +60,7 @@ public static class TpmTags
     /// <remarks>
     /// Used for the raw byte response from a TPM command before parsing.
     /// </remarks>
-    public static Tag Response { get; } = Tag.Create(
-        (typeof(Purpose), Purpose.Transport),
-        (typeof(MaterialSemantics), MaterialSemantics.Direct));
+    public static Tag Response { get; } = Tag.Create(Purpose.Transport).With(MaterialSemantics.Direct);
 
     /// <summary>
     /// Tag for TPM2B_ECC_PARAMETER - ECC coordinate values.
@@ -77,9 +69,7 @@ public static class TpmTags
     /// Used for x and y coordinates in ECC public points.
     /// See TPM 2.0 Part 2, Section 10.2.5.
     /// </remarks>
-    public static Tag EccParameter { get; } = Tag.Create(
-        (typeof(Purpose), Purpose.Verification),
-        (typeof(MaterialSemantics), MaterialSemantics.Direct));
+    public static Tag EccParameter { get; } = Tag.Create(Purpose.Verification).With(MaterialSemantics.Direct);
 
     /// <summary>
     /// Tag for TPM2B_SENSITIVE_DATA - sensitive user data.
@@ -88,7 +78,5 @@ public static class TpmTags
     /// Used for sensitive data in sealed objects or key derivation.
     /// See TPM 2.0 Part 2, Section 10.9.3.
     /// </remarks>
-    public static Tag SensitiveData { get; } = Tag.Create(
-        (typeof(Purpose), Purpose.Encryption),
-        (typeof(MaterialSemantics), MaterialSemantics.Direct));
+    public static Tag SensitiveData { get; } = Tag.Create(Purpose.Encryption).With(MaterialSemantics.Direct);
 }

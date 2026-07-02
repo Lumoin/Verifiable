@@ -24,6 +24,5 @@ public static class JoseBufferTags
     /// <summary>
     /// Tag for JWS/JWT protected header bytes, carrying <see cref="JwtHeaderKind"/>.
     /// </summary>
-    public static Tag JwtHeader { get; } = Tag.Create(
-        (typeof(BufferKind), JwtHeaderKind));
+    public static Tag JwtHeader { get; } = Tag.Create(JwtHeaderKind);
 }

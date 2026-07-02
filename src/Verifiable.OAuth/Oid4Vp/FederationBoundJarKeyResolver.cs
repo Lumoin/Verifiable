@@ -221,12 +221,7 @@ public static class FederationBoundJarKeyResolver
         (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
             CryptoFormatConversions.DefaultJwkToAlgorithmConverter(matchedJwk, memoryPool, base64UrlDecoder);
 
-        Tag tag = new(new Dictionary<Type, object>
-        {
-            [typeof(CryptoAlgorithm)] = algorithm,
-            [typeof(Purpose)] = purpose,
-            [typeof(EncodingScheme)] = scheme,
-        });
+        Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
 
         return new PublicKeyMemory(keyMaterial, tag);
     }

@@ -410,10 +410,7 @@ internal sealed class FullLifecycleTests
 
             var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
                 jwkDict, Pool, TestSetup.Base64UrlDecoder);
-            Tag recipientTag = Tag.Create(
-                (typeof(CryptoAlgorithm), algorithm),
-                (typeof(Purpose), purpose),
-                (typeof(EncodingScheme), scheme));
+            Tag recipientTag = Tag.Create(algorithm).With(purpose).With(scheme);
             using PublicKeyMemory recipientKey = new(keyBytes, recipientTag);
 
             return await HaipProfile.EncryptResponseAsync(
@@ -532,10 +529,7 @@ internal sealed class FullLifecycleTests
 
         var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
             jwk!, Pool, TestSetup.Base64UrlDecoder);
-        Tag proofTag = Tag.Create(
-            (typeof(CryptoAlgorithm), algorithm),
-            (typeof(Purpose), purpose),
-            (typeof(EncodingScheme), scheme));
+        Tag proofTag = Tag.Create(algorithm).With(purpose).With(scheme);
         PublicKeyMemory proofKey = new(keyBytes, proofTag);
 
         string payloadJson = DecodeSegment(proofJwt, segmentIndex: 1);

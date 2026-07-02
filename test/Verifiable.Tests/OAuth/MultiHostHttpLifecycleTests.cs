@@ -398,10 +398,7 @@ internal sealed class MultiHostHttpLifecycleTests
 
         var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
             jwk!, Pool, TestSetup.Base64UrlDecoder);
-        Tag proofTag = Tag.Create(
-            (typeof(CryptoAlgorithm), algorithm),
-            (typeof(Purpose), purpose),
-            (typeof(EncodingScheme), scheme));
+        Tag proofTag = Tag.Create(algorithm).With(purpose).With(scheme);
         PublicKeyMemory proofKey = new(keyBytes, proofTag);
 
         string payloadJson = DecodeSegment(proofJwt, segmentIndex: 1);

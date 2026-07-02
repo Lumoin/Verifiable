@@ -29,12 +29,10 @@ public static class BufferTags
     /// <summary>
     /// Tag for general JSON-encoded bytes.
     /// </summary>
-    public static Tag Json { get; } = Tag.Create(
-        (typeof(BufferKind), BufferKind.Json));
+    public static Tag Json { get; } = Tag.Create(BufferKind.Json);
 
     /// <summary>
     /// Tag for CBOR-encoded bytes.
     /// </summary>
-    public static Tag Cbor { get; } = Tag.Create(
-        (typeof(BufferKind), BufferKind.Cbor));
+    public static Tag Cbor { get; } = Tag.Create(BufferKind.Cbor);
 }

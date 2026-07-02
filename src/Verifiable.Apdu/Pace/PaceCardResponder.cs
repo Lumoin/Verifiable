@@ -45,10 +45,7 @@ public static class PaceCardResponder
 
     //eMRTD PACE derives the password key with SHA-1; the convenience digest tags omit SHA-1 by design, so
     //it is composed inline here.
-    private static Tag Sha1DigestTag { get; } = Tag.Create(
-        (typeof(HashAlgorithmName), HashAlgorithmName.SHA1),
-        (typeof(Purpose), Purpose.Digest),
-        (typeof(EncodingScheme), EncodingScheme.Raw));
+    private static Tag Sha1DigestTag { get; } = Tag.Create(HashAlgorithmName.SHA1).With(Purpose.Digest).With(EncodingScheme.Raw);
 
 
     /// <summary>

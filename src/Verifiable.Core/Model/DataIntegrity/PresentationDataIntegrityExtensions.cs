@@ -159,11 +159,7 @@ public static class PresentationDataIntegrityExtensions
 
             var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(cryptosuite.HashAlgorithm);
             int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
-            var digestTag = new Tag(new Dictionary<Type, object>
-            {
-                [typeof(HashAlgorithmName)] = hashAlgorithm,
-                [typeof(Purpose)] = Purpose.Digest
-            });
+            var digestTag = Tag.Create(hashAlgorithm).With(Purpose.Digest);
 
             var presentationByteCount = Encoding.UTF8.GetByteCount(presentationCanonicalization.CanonicalForm);
             var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
@@ -498,11 +494,7 @@ public static class PresentationDataIntegrityExtensions
 
         var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
         int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
-        var digestTag = new Tag(new Dictionary<Type, object>
-        {
-            [typeof(HashAlgorithmName)] = hashAlgorithm,
-            [typeof(Purpose)] = Purpose.Digest
-        });
+        var digestTag = Tag.Create(hashAlgorithm).With(Purpose.Digest);
 
         var presentationByteCount = Encoding.UTF8.GetByteCount(presentationCanonicalization.CanonicalForm);
         var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
@@ -534,11 +526,7 @@ public static class PresentationDataIntegrityExtensions
 
         using var signatureBytes = decodeProofValue(proof.ProofValue!, decoder, memoryPool);
 
-        var signatureTag = new Tag(new Dictionary<Type, object>
-        {
-            [typeof(CryptoAlgorithm)] = proof.Cryptosuite.SignatureAlgorithm,
-            [typeof(Purpose)] = Purpose.Verification
-        });
+        var signatureTag = Tag.Create(proof.Cryptosuite.SignatureAlgorithm).With(Purpose.Verification);
         using var signature = new Signature(signatureBytes, signatureTag);
         var isValid = await verificationMethod.VerifySignatureAsync(hashDataOwner.Memory, signature, memoryPool)
             .ConfigureAwait(false);

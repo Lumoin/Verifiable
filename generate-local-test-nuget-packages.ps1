@@ -1,9 +1,11 @@
 $projects = @(
+    'Verifiable.Apdu',
     'Verifiable.BouncyCastle',
     'Verifiable.Cbor',
     'Verifiable.Core',
     'Verifiable.Cryptography',
     'Verifiable.DecentralizedWebNode',
+    'Verifiable.DidComm',
     'Verifiable.Foundation',
     'Verifiable.JCose',
     'Verifiable.Json',

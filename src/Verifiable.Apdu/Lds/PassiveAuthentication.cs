@@ -125,10 +125,7 @@ public static class PassiveAuthentication
         if(hashAlgorithm == HashAlgorithmName.SHA1)
         {
             //The convenience tags omit SHA-1 by design; older eMRTD security objects still use it, so it is composed inline.
-            Tag sha1 = Tag.Create(
-                (typeof(HashAlgorithmName), HashAlgorithmName.SHA1),
-                (typeof(Purpose), Purpose.Digest),
-                (typeof(EncodingScheme), EncodingScheme.Raw));
+            Tag sha1 = Tag.Create(HashAlgorithmName.SHA1).With(Purpose.Digest).With(EncodingScheme.Raw);
 
             return (sha1, 20);
         }

@@ -72,22 +72,13 @@ public static class CryptoProviderInstrumentation
         ArgumentNullException.ThrowIfNull(providerClass);
         ArgumentNullException.ThrowIfNull(operation);
 
-        //Collect original entries then append provenance — later entries overwrite
-        //earlier ones on duplicate keys, so provenance always wins.
-        var entries = new System.Collections.Generic.List<(System.Type, object)>(
-            tag.Data.Count + 4);
-
-        foreach(System.Collections.Generic.KeyValuePair<System.Type, object> kv in tag.Data)
-        {
-            entries.Add((kv.Key, kv.Value));
-        }
-
-        entries.Add((typeof(ProviderLibrary), providerLibrary));
-        entries.Add((typeof(CryptoLibraryInfo), cryptoLibrary));
-        entries.Add((typeof(ProviderClass), providerClass));
-        entries.Add((typeof(ProviderOperation), operation));
-
-        return Tag.Create([.. entries]);
+        //Append the four provenance entries to the original tag. With overwrites on key conflict, so
+        //provenance always wins over any same-typed entry already present.
+        return tag
+            .With(providerLibrary)
+            .With(cryptoLibrary)
+            .With(providerClass)
+            .With(operation);
     }
 
 

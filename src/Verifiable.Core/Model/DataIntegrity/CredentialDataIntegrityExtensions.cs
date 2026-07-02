@@ -222,11 +222,7 @@ public static class CredentialDataIntegrityExtensions
             //Hash using the cryptosuite's hash algorithm.
             var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(cryptosuite.HashAlgorithm);
             int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
-            var digestTag = new Tag(new Dictionary<Type, object>
-            {
-                [typeof(HashAlgorithmName)] = hashAlgorithm,
-                [typeof(Purpose)] = Purpose.Digest
-            });
+            var digestTag = Tag.Create(hashAlgorithm).With(Purpose.Digest);
 
             var credentialByteCount = Encoding.UTF8.GetByteCount(credentialCanonicalization.CanonicalForm);
             var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
@@ -486,11 +482,7 @@ public static class CredentialDataIntegrityExtensions
 
         var hashAlgorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(proof.Cryptosuite.HashAlgorithm);
         int digestByteLength = WellKnownHashAlgorithms.GetSizeBytes(hashAlgorithm);
-        var digestTag = new Tag(new Dictionary<Type, object>
-        {
-            [typeof(HashAlgorithmName)] = hashAlgorithm,
-            [typeof(Purpose)] = Purpose.Digest
-        });
+        var digestTag = Tag.Create(hashAlgorithm).With(Purpose.Digest);
 
         var credentialByteCount = Encoding.UTF8.GetByteCount(credentialCanonicalization.CanonicalForm);
         var proofOptionsByteCount = Encoding.UTF8.GetByteCount(proofOptionsCanonicalization.CanonicalForm);
@@ -526,11 +518,7 @@ public static class CredentialDataIntegrityExtensions
 
         //Build signature with algorithm from cryptosuite and verify using the verification
         //method (uses CryptoFunctionRegistry internally).
-        var signatureTag = new Tag(new Dictionary<Type, object>
-        {
-            [typeof(CryptoAlgorithm)] = proof.Cryptosuite.SignatureAlgorithm,
-            [typeof(Purpose)] = Purpose.Verification
-        });
+        var signatureTag = Tag.Create(proof.Cryptosuite.SignatureAlgorithm).With(Purpose.Verification);
         using var signature = new Signature(signatureBytes, signatureTag);
         var isValid = await verificationMethod.VerifySignatureAsync(hashDataOwner.Memory, signature, memoryPool).ConfigureAwait(false);
 

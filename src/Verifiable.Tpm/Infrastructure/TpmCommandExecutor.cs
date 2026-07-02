@@ -858,13 +858,10 @@ public static class TpmCommandExecutor
     private static Tag BuildDigestTag(TpmAlgIdConstants hashAlg)
     {
         HashAlgorithmName algorithmName = ToHashAlgorithmName(hashAlg);
-        return new Tag(new Dictionary<Type, object>
-        {
-            [typeof(HashAlgorithmName)] = algorithmName,
-            [typeof(Purpose)] = Purpose.Digest,
-            [typeof(EncodingScheme)] = EncodingScheme.Raw,
-            [typeof(MaterialSemantics)] = MaterialSemantics.Direct
-        });
+        return Tag.Create(algorithmName)
+            .With(Purpose.Digest)
+            .With(EncodingScheme.Raw)
+            .With(MaterialSemantics.Direct);
     }
 
     private static HashAlgorithmName ToHashAlgorithmName(TpmAlgIdConstants hashAlg) => hashAlg switch

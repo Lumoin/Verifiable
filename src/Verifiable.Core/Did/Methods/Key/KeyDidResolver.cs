@@ -168,10 +168,7 @@ public static class KeyDidResolver
 
             //Tag the decoded bytes so downstream consumers route through the
             //correct verification primitives.
-            Tag publicKeyTag = Tag.Create(
-                (typeof(CryptoAlgorithm), decoded.algorithm),
-                (typeof(Purpose), decoded.purpose),
-                (typeof(EncodingScheme), decoded.scheme));
+            Tag publicKeyTag = Tag.Create(decoded.algorithm).With(decoded.purpose).With(decoded.scheme);
             PublicKeyMemory publicKey = new(decoded.keyMaterial, publicKeyTag);
 
             DidDocument document = await new KeyDidBuilder().BuildAsync(
@@ -217,10 +214,7 @@ public static class KeyDidResolver
                     return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
                 }
 
-                Tag x25519Tag = Tag.Create(
-                    (typeof(CryptoAlgorithm), CryptoAlgorithm.X25519),
-                    (typeof(Purpose), Purpose.Exchange),
-                    (typeof(EncodingScheme), EncodingScheme.Raw));
+                Tag x25519Tag = Tag.Create(CryptoAlgorithm.X25519).With(Purpose.Exchange).With(EncodingScheme.Raw);
                 PublicKeyMemory x25519Key = new(x25519Material, x25519Tag);
 
                 AppendDerivedKeyAgreement(document, x25519Key, did);

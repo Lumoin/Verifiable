@@ -310,10 +310,7 @@ internal sealed class PeerDidGeneratorTests
         var decoded = CryptoFormatConversions.DefaultBase58ToAlgorithmConverter(
             multibaseKey, pool, DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase)));
 
-        return new PublicKeyMemory(decoded.keyMaterial, Tag.Create(
-            (typeof(CryptoAlgorithm), decoded.Algorithm),
-            (typeof(Purpose), decoded.Purpose),
-            (typeof(EncodingScheme), decoded.Scheme)));
+        return new PublicKeyMemory(decoded.keyMaterial, Tag.Create(decoded.Algorithm).With(decoded.Purpose).With(decoded.Scheme));
     }
 
 

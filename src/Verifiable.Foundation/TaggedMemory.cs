@@ -139,7 +139,7 @@ public readonly struct TaggedMemory<T>: IEquatable<TaggedMemory<T>>
         {
             string tagInfo = Tag.TryGet<BufferKind>(out var kind)
                 ? kind.ToString()
-                : Tag.Data.Count > 0 ? "Tagged" : "Untagged";
+                : Tag.Count > 0 ? "Tagged" : "Untagged";
             return $"TaggedMemory<{typeof(T).Name}>[{Length}] ({tagInfo})";
         }
     }

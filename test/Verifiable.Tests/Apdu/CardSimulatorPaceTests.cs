@@ -299,10 +299,7 @@ internal sealed class CardSimulatorPaceTests
     {
         ComputeDigestDelegate digest = CryptographicKeyFactory.GetFunction<ComputeDigestDelegate>(typeof(ComputeDigestDelegate))
             ?? throw new InvalidOperationException("No ComputeDigestDelegate has been registered.");
-        Tag sha1 = Tag.Create(
-            (typeof(HashAlgorithmName), HashAlgorithmName.SHA1),
-            (typeof(Purpose), Purpose.Digest),
-            (typeof(EncodingScheme), EncodingScheme.Raw));
+        Tag sha1 = Tag.Create(HashAlgorithmName.SHA1).With(Purpose.Digest).With(EncodingScheme.Raw);
 
         (DigestValue value, _) = await digest(
             new ReadOnlySequence<byte>(Encoding.ASCII.GetBytes(text)), 20, sha1, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);

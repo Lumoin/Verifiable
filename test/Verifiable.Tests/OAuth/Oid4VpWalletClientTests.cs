@@ -593,10 +593,7 @@ internal sealed class Oid4VpWalletClientTests
         DcqlFixtures.PidFamilyNamePrepared();
 
 
-    private static readonly Tag Sha256CommitmentTag = new(new Dictionary<Type, object>
-    {
-        [typeof(HashAlgorithmName)] = HashAlgorithmName.SHA256
-    });
+    private static readonly Tag Sha256CommitmentTag = Tag.Create(HashAlgorithmName.SHA256);
 
 
     /// <summary>

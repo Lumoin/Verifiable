@@ -265,10 +265,7 @@ public static class PeerDidResolver
             return false;
         }
 
-        Tag publicKeyTag = Tag.Create(
-            (typeof(CryptoAlgorithm), decoded.algorithm),
-            (typeof(Purpose), decoded.purpose),
-            (typeof(EncodingScheme), decoded.scheme));
+        Tag publicKeyTag = Tag.Create(decoded.algorithm).With(decoded.purpose).With(decoded.scheme);
 
         KeyFormat keyFormat;
         using(PublicKeyMemory publicKey = new(decoded.keyMaterial, publicKeyTag))

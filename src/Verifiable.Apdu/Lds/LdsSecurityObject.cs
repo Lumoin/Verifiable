@@ -163,10 +163,7 @@ public sealed class LdsSecurityObject: IDisposable
         if(hashAlgorithm == HashAlgorithmName.SHA384) { return CryptoTags.Sha384Digest; }
         if(hashAlgorithm == HashAlgorithmName.SHA512) { return CryptoTags.Sha512Digest; }
 
-        return Tag.Create(
-            (typeof(HashAlgorithmName), hashAlgorithm),
-            (typeof(Purpose), Purpose.Digest),
-            (typeof(EncodingScheme), EncodingScheme.Raw));
+        return Tag.Create(hashAlgorithm).With(Purpose.Digest).With(EncodingScheme.Raw);
     }
 
 

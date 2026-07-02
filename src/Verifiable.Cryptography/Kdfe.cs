@@ -171,13 +171,7 @@ public static class Kdfe
     }
 
     private static Tag DigestTag(HashAlgorithmName hashAlgorithm) =>
-        new(new Dictionary<Type, object>
-        {
-            [typeof(HashAlgorithmName)] = hashAlgorithm,
-            [typeof(Purpose)] = Purpose.Digest,
-            [typeof(EncodingScheme)] = EncodingScheme.Raw,
-            [typeof(MaterialSemantics)] = MaterialSemantics.Direct
-        });
+        Tag.Create(hashAlgorithm).With(Purpose.Digest).With(EncodingScheme.Raw).With(MaterialSemantics.Direct);
 
     private static int DigestSize(HashAlgorithmName hashAlgorithm)
     {
