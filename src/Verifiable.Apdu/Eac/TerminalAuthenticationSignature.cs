@@ -82,6 +82,43 @@ public static class TerminalAuthenticationSignature
 
 
     /// <summary>
+    /// Signs the Terminal Authentication message with a terminal private key whose signing primitive is bound to
+    /// the key itself (the terminal side), so the key may be a software key or a hardware-held key — for example
+    /// a TPM-resident key whose private scalar never leaves the device — without this primitive, or
+    /// <c>Verifiable.Apdu</c>, knowing which.
+    /// </summary>
+    /// <remarks>
+    /// The signed message <c>ID_IC ‖ r_IC ‖ Comp(PK_DH,IFD)</c> and the chip-side verification are identical to
+    /// the curve- and scheme-specific overloads; only the source of the signature differs. The key's bound
+    /// signing function must produce the on-wire encoding the chip's verifier expects — plain <c>r ‖ s</c> for an
+    /// elliptic-curve key (TR-03111), the raw signature for RSA — the same contract the registered signing
+    /// functions honour.
+    /// </remarks>
+    /// <param name="terminalKey">The terminal's Terminal Authentication private key with its signing function bound (matching the terminal certificate's public key). Borrowed.</param>
+    /// <param name="chipIdentifier">The chip identifier <c>ID_IC</c> the access protocol produced.</param>
+    /// <param name="chipChallenge">The chip's challenge <c>r_IC</c> from GET CHALLENGE.</param>
+    /// <param name="terminalEphemeralPublicKey">The terminal's ephemeral public key <c>PK_DH,IFD</c> (uncompressed SEC1) from Chip Authentication or PACE Chip Authentication Mapping.</param>
+    /// <param name="pool">The memory pool for the message buffer.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The terminal's signature <c>s_IFD</c>. The caller owns and disposes it.</returns>
+    public static async ValueTask<Signature> SignAsync(
+        PrivateKey terminalKey,
+        ReadOnlyMemory<byte> chipIdentifier,
+        ReadOnlyMemory<byte> chipChallenge,
+        ReadOnlyMemory<byte> terminalEphemeralPublicKey,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(terminalKey);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        using IMemoryOwner<byte> message = BuildSignedMessage(chipIdentifier.Span, chipChallenge.Span, terminalEphemeralPublicKey.Span, pool, out int messageLength);
+
+        return await terminalKey.SignAsync(message.Memory[..messageLength], pool).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// Verifies the terminal's Terminal Authentication signature against the terminal certificate's public key
     /// (the chip side).
     /// </summary>

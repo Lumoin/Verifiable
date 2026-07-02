@@ -192,13 +192,13 @@ internal sealed class TpmSimulatorLifecycleTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
-        //TPM2_PCR_Read is not modelled by this slice, so while operational it is rejected as an unknown
+        //TPM2_MakeCredential is not modelled by this slice, so while operational it is rejected as an unknown
         //command code. (TPM2_GetRandom is modelled and would instead succeed here.)
         MemoryPool<byte> pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
         Memory<byte> command = owner.Memory[..TpmHeader.HeaderSize];
         var writer = new TpmWriter(command.Span);
-        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)TpmHeader.HeaderSize, (uint)TpmCcConstants.TPM_CC_PCR_Read);
+        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)TpmHeader.HeaderSize, (uint)TpmCcConstants.TPM_CC_MakeCredential);
         header.WriteTo(ref writer);
 
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, command).ConfigureAwait(false);

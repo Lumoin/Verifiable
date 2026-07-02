@@ -135,10 +135,45 @@ public sealed class TpmuPublicId: IDisposable
     public static TpmuPublicId EmptyRsa() => new(TpmAlgIdConstants.TPM_ALG_RSA, null, 0);
 
     /// <summary>
+    /// Creates an RSA public ID carrying a concrete public modulus — the unique area of a generated RSA key, as
+    /// distinct from <see cref="EmptyRsa"/>, which leaves it empty for an input template.
+    /// </summary>
+    /// <param name="modulus">The RSA public modulus (big-endian); copied into pooled storage the returned union owns.</param>
+    /// <param name="pool">The memory pool for the modulus storage.</param>
+    /// <returns>An RSA unique carrying <paramref name="modulus"/>.</returns>
+    public static TpmuPublicId FromRsaModulus(ReadOnlySpan<byte> modulus, MemoryPool<byte> pool)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        if(modulus.IsEmpty)
+        {
+            return EmptyRsa();
+        }
+
+        IMemoryOwner<byte> storage = pool.Rent(modulus.Length);
+        modulus.CopyTo(storage.Memory.Span);
+
+        return new TpmuPublicId(TpmAlgIdConstants.TPM_ALG_RSA, storage, modulus.Length);
+    }
+
+    /// <summary>
     /// Creates an empty ECC public ID (for templates).
     /// </summary>
     /// <returns>An empty ECC unique.</returns>
     public static TpmuPublicId EmptyEcc() => new(TpmAlgIdConstants.TPM_ALG_ECC, TpmsEccPoint.Empty);
+
+    /// <summary>
+    /// Creates an ECC public ID carrying a concrete public point — the unique area of a generated key, as
+    /// distinct from <see cref="EmptyEcc"/>, which leaves it empty for an input template.
+    /// </summary>
+    /// <param name="point">The public point (X, Y); ownership transfers to the returned union.</param>
+    /// <returns>An ECC unique carrying <paramref name="point"/>.</returns>
+    public static TpmuPublicId FromEccPoint(TpmsEccPoint point)
+    {
+        ArgumentNullException.ThrowIfNull(point);
+
+        return new TpmuPublicId(TpmAlgIdConstants.TPM_ALG_ECC, point);
+    }
 
     /// <summary>
     /// Creates an empty keyed-hash public ID (for sealed-data templates; the TPM fills in the unique value).

@@ -166,6 +166,37 @@ public sealed class TpmtPublic: IDisposable
     }
 
     /// <summary>
+    /// Creates a public area for a generated ECC signing key: an ECC signing public area carrying the key's
+    /// actual public point — the form a TPM returns in <c>outPublic</c>, as opposed to the empty-unique template
+    /// a caller supplies in <c>inPublic</c> (<see cref="CreateEccSigningTemplate"/>).
+    /// </summary>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="objectAttributes">Object attributes.</param>
+    /// <param name="curve">ECC curve.</param>
+    /// <param name="scheme">Signing scheme.</param>
+    /// <param name="unique">The generated public point; ownership transfers to the returned public area.</param>
+    /// <returns>The public area.</returns>
+    public static TpmtPublic CreateEccSigningKey(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        TpmEccCurveConstants curve,
+        TpmtEccScheme scheme,
+        TpmsEccPoint unique)
+    {
+        ArgumentNullException.ThrowIfNull(unique);
+
+        TpmuPublicParms parameters = TpmuPublicParms.Ecc(TpmsEccParms.ForSigning(curve, scheme));
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_ECC,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Empty,
+            parameters,
+            TpmuPublicId.FromEccPoint(unique));
+    }
+
+    /// <summary>
     /// Creates a public area for an RSA signing key template.
     /// </summary>
     /// <param name="nameAlg">Hash algorithm for Name computation.</param>
@@ -189,6 +220,39 @@ public sealed class TpmtPublic: IDisposable
             Tpm2bDigest.Empty,
             parameters,
             unique);
+    }
+
+    /// <summary>
+    /// Creates a public area for a generated RSA signing key: an RSA signing public area carrying the key's actual
+    /// public modulus — the form a TPM returns in <c>outPublic</c>, as opposed to the empty-unique template a
+    /// caller supplies in <c>inPublic</c> (<see cref="CreateRsaSigningTemplate"/>).
+    /// </summary>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="objectAttributes">Object attributes.</param>
+    /// <param name="keyBits">Key size in bits.</param>
+    /// <param name="scheme">Signing scheme.</param>
+    /// <param name="modulus">The generated public modulus (big-endian); copied into pooled storage the returned area owns.</param>
+    /// <param name="pool">The memory pool for the modulus storage.</param>
+    /// <returns>The public area.</returns>
+    public static TpmtPublic CreateRsaSigningKey(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        ushort keyBits,
+        TpmtRsaScheme scheme,
+        ReadOnlySpan<byte> modulus,
+        MemoryPool<byte> pool)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        TpmuPublicParms parameters = TpmuPublicParms.Rsa(TpmsRsaParms.ForSigning(keyBits, scheme));
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_RSA,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Empty,
+            parameters,
+            TpmuPublicId.FromRsaModulus(modulus, pool));
     }
 
     
@@ -280,6 +344,37 @@ public sealed class TpmtPublic: IDisposable
             Tpm2bDigest.Empty,
             parameters,
             TpmuPublicId.EmptyEcc());
+    }
+
+    /// <summary>
+    /// Creates a public area for a generated ECC restricted storage key, carrying the key's actual public point —
+    /// the form a TPM returns in <c>outPublic</c> for a storage primary, as opposed to the empty-unique template a
+    /// caller supplies in <c>inPublic</c> (<see cref="CreateEccStorageParentTemplate"/>). The symmetric definition
+    /// (AES-128-CFB) matches the template so the object round-trips identically apart from the populated point.
+    /// </summary>
+    /// <param name="nameAlg">The hash algorithm for Name computation.</param>
+    /// <param name="objectAttributes">The object attributes (a storage parent: RESTRICTED + DECRYPT).</param>
+    /// <param name="curve">The ECC curve.</param>
+    /// <param name="unique">The generated public point; ownership transfers to the returned public area.</param>
+    /// <returns>The public area.</returns>
+    public static TpmtPublic CreateEccStorageParent(
+        TpmAlgIdConstants nameAlg,
+        TpmaObject objectAttributes,
+        TpmEccCurveConstants curve,
+        TpmsEccPoint unique)
+    {
+        ArgumentNullException.ThrowIfNull(unique);
+
+        TpmuPublicParms parameters = TpmuPublicParms.Ecc(
+            TpmsEccParms.ForStorage(curve, TpmtSymDefObject.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB)));
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_ECC,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Empty,
+            parameters,
+            TpmuPublicId.FromEccPoint(unique));
     }
 
     /// <summary>

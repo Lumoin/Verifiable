@@ -23,19 +23,15 @@ namespace Verifiable.Tpm.Automata;
 /// (clause 10.4), both of which the table admits in that phase.
 /// </para>
 /// <para>
-/// <b>Modelled scope (current).</b> The table covers the lifecycle, entropy, capability, and NV commands the
-/// simulator computes responses for. The object, session, policy, and attestation command families the library
-/// now exercise against the external reference simulator — <c>TPM2_Create()</c>/<c>TPM2_Load()</c>/<c>TPM2_Unseal()</c>
-/// (sealed KEYEDHASH objects), <c>TPM2_Sign()</c>, <c>TPM2_Quote()</c>/<c>TPM2_Certify()</c> (attestation),
-/// <c>TPM2_MakeCredential()</c>/<c>TPM2_ActivateCredential()</c> (credential activation), <c>TPM2_NV_Write()</c>
-/// (NV data storage; the in-house model covers NV define/read authorization, not stored data),
-/// <c>TPM2_NV_UndefineSpace()</c>/<c>TPM2_EvictControl()</c> (NV teardown and object persistence),
-/// <c>TPM2_StartAuthSession()</c>, and the <c>TPM2_Policy*()</c> family with policy-session authorization — are
-/// deliberately not yet modelled here: while operational they fall through to <c>TPM_RC_COMMAND_CODE</c>, the
-/// faithful "command unsupported" answer, rather than half-state that would drift from reality. Modelling them
-/// (real keygen/sign, sessions with cpHash/rpHash and parameter encryption, KEYEDHASH seal/unseal gated on a
-/// policyDigest, and quotes over the PCR composite digest) is the staged buildout in
-/// <c>tempdocs/2026-06-23-tpm-inhouse-simulator-design.md</c>.
+/// <b>Modelled scope (current).</b> The table covers the lifecycle, entropy, capability, NV define/read/write, NV undefine and object persistence, the
+/// ECC and RSA signing-object commands, the sealed-data path <c>TPM2_Create()</c>/<c>TPM2_Load()</c>/<c>TPM2_Unseal()</c> (a KEYEDHASH object sealed under an ECC storage parent and recovered over password authorization), the object-attestation command <c>TPM2_Certify()</c> (an ECC signing key attests another loaded object's Name over a caller nonce, both handles password-authorized), the PCR-attestation path <c>TPM2_PCR_Read()</c>/<c>TPM2_Quote()</c> (reading the SHA-256 bank and quoting a PCR composite digest over a caller nonce with an ECC signing key), and the policy (enhanced authorization) family <c>TPM2_StartAuthSession()</c> (policy and trial sessions) with <c>TPM2_PolicyCommandCode()</c>/<c>TPM2_PolicyAuthValue()</c>/<c>TPM2_PolicyPCR()</c>/<c>TPM2_PolicySecret()</c>/<c>TPM2_PolicyOR()</c>/<c>TPM2_PolicyNV()</c>/<c>TPM2_PolicyGetDigest()</c> driving a session's policyDigest, the bound HMAC-session path <c>TPM2_StartAuthSession()</c> (an HMAC session that negotiates a symmetric definition) with an encrypt-attributed <c>TPM2_GetRandom()</c> whose response is parameter-encrypted and authenticated over the derived session key (the response HMAC and the XOR/AES-CFB channel), the credential-protection path <c>TPM2_MakeCredential()</c>/<c>TPM2_ActivateCredential()</c> (an ECDH-transported seed protects a credential bound to an object's Name, recovered only by a TPM holding both the credential key and the bound object; Part 1, clause 24), and <c>TPM2_FlushContext()</c> releasing a session or transient object, the simulator computes responses for — including <c>TPM2_CreatePrimary()</c> and
+/// <c>TPM2_Sign()</c> (ECDSA over an exported P-256 key, and RSASSA/RSAPSS over an exported RSA key). The
+/// remaining object, session, and attestation
+/// command families — command-side HMAC verification and the parameter encryption of the request (the modelled HMAC session encrypts the response only; the policy sessions modelled here accumulate a policyDigest but do not gate an object's use),
+/// and <c>TPM2_PCR_Extend()</c> (PCR measurement; the in-house model covers reading and quoting the reset bank, not extending it)— are deliberately not yet modelled here: while operational they fall through to
+/// <c>TPM_RC_COMMAND_CODE</c>, the faithful "command unsupported" answer, rather than half-state that would drift
+/// from reality. Modelling them (sessions with cpHash/rpHash and parameter encryption, KEYEDHASH seal/unseal
+/// gated on a policyDigest, and PCR extension with a policyPCR gate) is a staged buildout.
 /// </para>
 /// </remarks>
 public static class TpmCommandPreconditions
@@ -50,7 +46,29 @@ public static class TpmCommandPreconditions
             [TpmCcConstants.TPM_CC_GetRandom] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_GetCapability] = new[] { TpmLifecyclePhase.Operational, TpmLifecyclePhase.FailureMode }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_NV_DefineSpace] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
-            [TpmCcConstants.TPM_CC_NV_Read] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet()
+            [TpmCcConstants.TPM_CC_NV_Read] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_NV_Write] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_NV_UndefineSpace] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_EvictControl] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_CreatePrimary] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_Sign] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_Create] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_Load] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_Unseal] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_Certify] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_PCR_Read] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_Quote] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_StartAuthSession] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_PolicyCommandCode] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_PolicyAuthValue] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_PolicyPCR] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_PolicySecret] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_PolicyOR] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_PolicyNV] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_PolicyGetDigest] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_MakeCredential] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_ActivateCredential] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_FlushContext] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet()
         }.ToFrozenDictionary();
 
     /// <summary>

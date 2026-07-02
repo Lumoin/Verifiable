@@ -121,6 +121,12 @@ internal static class SyntheticPassportFactory
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, critical: true));
         request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, critical: false));
 
+        //The Authority Key Identifier ties the Document Signer to its issuing CSCA's key (ICAO Doc 9303 Part 12).
+        //Without it, a master list carrying several CSCAs that share a subject name is an ambiguous set of issuers:
+        //name-based path builders can select the wrong CSCA and report a signature failure instead of chaining.
+        request.CertificateExtensions.Add(
+            X509AuthorityKeyIdentifierExtension.CreateFromCertificate(csca, includeKeyIdentifier: true, includeIssuerAndSerial: false));
+
         byte[] serial = new byte[8];
         serial[0] = 0x01;
         X509Certificate2 issued = request.Create(csca, NotBefore, NotAfter, serial);

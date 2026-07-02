@@ -7,10 +7,9 @@ using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
-using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.TestInfrastructure.TpmSimulator;
 using Verifiable.Tests.X509;
 using Verifiable.Tpm;
+using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
@@ -23,32 +22,37 @@ using Verifiable.Tpm.Structures.Spec.Constants;
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
-/// Exemplifies the endorsement-key trust leg of the chain of trust: a TPM's endorsement key (EK) is trusted
-/// because its certificate chains to a manufacturer CA the relying party already trusts. The validation runs
-/// through the same <c>Verifiable.Cryptography</c> chain seam (<see cref="MicrosoftX509Functions.ValidateChainAsync"/>,
-/// an implementation of <see cref="Verifiable.Cryptography.Pki.ValidateCertificateChainAsyncDelegate"/>) that
-/// X.509 and mdoc verification use — the convergence point.
+/// Exemplifies the endorsement-key trust leg of the chain of trust against the in-house behavioural
+/// <see cref="TpmSimulator"/> — entirely in-process, with no external assets — through the same production command
+/// path the production code uses (<see cref="TpmCommandExecutor"/> with the real <see cref="CreatePrimaryInput"/>,
+/// <see cref="NvDefineSpaceInput"/>, <see cref="NvWriteInput"/>, <see cref="NvReadInput"/>, and response codecs):
+/// a TPM's endorsement key (EK) is trusted because its certificate chains to a manufacturer CA the relying party
+/// already trusts. The validation runs through the same <c>Verifiable.Cryptography</c> chain seam
+/// (<see cref="MicrosoftX509Functions.ValidateChainAsync"/>, an implementation of
+/// <see cref="Verifiable.Cryptography.Pki.ValidateCertificateChainAsyncDelegate"/>) that X.509 and mdoc
+/// verification use — the convergence point.
 /// </summary>
 /// <remarks>
 /// <para>
-/// A real TPM stores its EK certificate in a well-known NV index, written at manufacture; here a test CA stands
-/// in for the manufacturer and issues an EK certificate over the TPM's actual exported EK public key (TPM2_NV
-/// provisioning of that certificate is a follow-on, requiring TPM2_NV_Write). Validating that certificate to the
-/// CA, and confirming it certifies the TPM's real EK, is what turns "an EK I created" into "an EK whose origin a
-/// relying party can trust" — the missing leg above credential activation (which proves an attestation key
-/// co-resides with this EK).
+/// <c>TPM2_CreatePrimary()</c> mints a restricted-decrypt ECC storage primary under the endorsement hierarchy (the
+/// EK); a test CA stands in for the manufacturer and issues an EK certificate over the TPM's actual exported EK
+/// public key (TPM 2.0 Library Part 3, clause 24.1; the EK role is defined in Part 1, clause 25.2). Validating that
+/// certificate to the CA, and confirming it certifies the TPM's real EK, is what turns "an EK I created" into "an
+/// EK whose origin a relying party can trust" — the missing leg above credential activation (which proves an
+/// attestation key co-resides with this EK). The negative case validates the same certificate against an unrelated
+/// CA and requires a rejection.
 /// </para>
 /// <para>
-/// The tests are gated on a running simulator (start the container from
-/// <c>test/Verifiable.Tests/TestInfrastructure/TpmSimulator/Dockerfile</c>, publishing ports 2321/2322); they
-/// report <see cref="Assert.Inconclusive(string)"/> when none is reachable, so they are safe in any run.
+/// A real TPM stores its EK certificate in a well-known NV Index, written at manufacture. The round-trip case
+/// provisions that certificate into an NV Index with <c>TPM2_NV_DefineSpace()</c> and <c>TPM2_NV_Write()</c>
+/// (Part 3, clauses 31.3 and 31.7), reads it back with <c>TPM2_NV_Read()</c> (clause 31.13), and then validates the
+/// NV-sourced certificate to the CA — the relying party obtains the EK certificate from the TPM's own NV rather
+/// than a side channel. The certificate machinery is independent BCL/framework crypto acting as the manufacturer
+/// oracle; the TPM side never touches the CA private key.
 /// </para>
 /// </remarks>
-[ConditionalTestClass]
-[SkipIfNoTpmSimulator]
-[DoNotParallelize]
-[TestCategory("RequiresTpmSimulator")]
-internal sealed class TpmSimulatorEndorsementTrustTests
+[TestClass]
+internal sealed class TpmInHouseSimulatorEndorsementTrustTests
 {
     /// <summary>The number of bytes in a NIST P-256 coordinate.</summary>
     private const int P256ComponentSize = 32;
@@ -56,63 +60,18 @@ internal sealed class TpmSimulatorEndorsementTrustTests
     /// <summary>The NV Index handle the EK certificate is provisioned into (MSO 0x01 = TPM_HT_NV_INDEX).</summary>
     private const uint EkCertificateNvIndex = 0x0100_0010;
 
-    /// <summary>
-    /// The NV Index capacity reserved for the EK certificate — generously sized above a P-256 EK certificate so
-    /// the same index serves repeated runs (the index, once defined, persists on the simulator).
-    /// </summary>
+    /// <summary>The NV Index capacity reserved for the EK certificate — generously sized above a P-256 EK certificate.</summary>
     private const int EkCertificateNvCapacity = 1024;
-
-    /// <summary>The connection to the simulator, established once for the class.</summary>
-    private static MsTpmSimulatorConnection? Connection { get; set; }
-
-    /// <summary>The TPM device created over the simulator connection.</summary>
-    private static TpmDevice? Tpm { get; set; }
-
-    /// <summary>Whether a simulator was reachable at class initialization.</summary>
-    private static bool HasSimulator { get; set; }
 
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Connects to the simulator (if one is reachable) and brings up a TPM device for the class.</summary>
-    /// <param name="context">The class-level test context.</param>
-    [ClassInitialize]
-    public static async Task ClassInit(TestContext context)
-    {
-        if(!MsTpmSimulatorConnection.IsAvailable("localhost", MsTpmSimulatorConnection.DefaultCommandPort, TimeSpan.FromSeconds(1)))
-        {
-            return;
-        }
-
-        Connection = await MsTpmSimulatorConnection.ConnectAsync(
-            "localhost", MsTpmSimulatorConnection.DefaultCommandPort, context.CancellationToken).ConfigureAwait(false);
-        Tpm = TpmDevice.Create(Connection.SubmitAsync);
-        HasSimulator = true;
-    }
-
-    /// <summary>Releases the TPM device and simulator connection.</summary>
-    [ClassCleanup]
-    public static void ClassCleanup()
-    {
-        Tpm?.Dispose();
-        Connection?.Dispose();
-    }
-
-    /// <summary>Skips the test when no simulator is reachable.</summary>
-    [TestInitialize]
-    public void TestInit()
-    {
-        if(!HasSimulator)
-        {
-            Assert.Inconclusive("No TPM simulator is reachable on localhost:2321/2322. Start the container from TestInfrastructure/TpmSimulator/Dockerfile.");
-        }
-    }
-
     [TestMethod]
     public async Task EndorsementKeyCertificateValidatesToManufacturerCa()
     {
-        TpmDevice tpm = Tpm!;
         MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
         TimeProvider time = TimeProvider.System;
 
@@ -150,8 +109,9 @@ internal sealed class TpmSimulatorEndorsementTrustTests
     [TestMethod]
     public async Task EndorsementKeyCertificateFromUntrustedCaIsRejected()
     {
-        TpmDevice tpm = Tpm!;
         MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
         TimeProvider time = TimeProvider.System;
 
@@ -191,8 +151,9 @@ internal sealed class TpmSimulatorEndorsementTrustTests
     [TestMethod]
     public async Task EndorsementKeyCertificateRoundTripsThroughNvAndValidates()
     {
-        TpmDevice tpm = Tpm!;
         MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
         TimeProvider time = TimeProvider.System;
 
@@ -206,7 +167,7 @@ internal sealed class TpmSimulatorEndorsementTrustTests
             using X509Certificate2 ekCertificate = IssueEkCertificate(manufacturerCa, ekPublic, time);
             byte[] certificateDer = ekCertificate.RawData;
 
-            //Provision the EK certificate into an NV index the way a manufacturer does, then read it back — the
+            //Provision the EK certificate into an NV Index the way a manufacturer does, then read it back — the
             //relying party obtains the EK certificate from the TPM's own NV rather than a side channel.
             await ProvisionNvAsync(tpm, registry, pool, EkCertificateNvIndex, certificateDer).ConfigureAwait(false);
             byte[] certificateFromNv = await ReadNvAsync(tpm, registry, pool, EkCertificateNvIndex, certificateDer.Length).ConfigureAwait(false);
@@ -228,8 +189,9 @@ internal sealed class TpmSimulatorEndorsementTrustTests
     }
 
     /// <summary>
-    /// Defines (if not already present) an NV Index authorized by its own empty auth value and writes
-    /// <paramref name="data"/> to it at offset zero.
+    /// Defines an NV Index authorized by its own empty auth value and writes <paramref name="data"/> to it at
+    /// offset zero. The in-house simulator starts fresh each test, so the Index does not pre-exist and the define
+    /// succeeds cleanly (TPM 2.0 Library Part 3, clauses 31.3 and 31.7).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
@@ -252,11 +214,7 @@ internal sealed class TpmSimulatorEndorsementTrustTests
         {
             TpmResult<NvDefineSpaceResponse> defineResult = await TpmCommandExecutor.ExecuteAsync<NvDefineSpaceResponse>(
                 tpm, defineInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
-
-            //The index persists across runs on the shared simulator, so an already-defined index is expected.
-            Assert.IsTrue(
-                defineResult.IsSuccess || defineResult.ResponseCode == TpmRcConstants.TPM_RC_NV_DEFINED,
-                $"NV_DefineSpace failed: '{defineResult.ResponseCode}'.");
+            Assert.IsTrue(defineResult.IsSuccess, $"NV_DefineSpace failed: '{defineResult.ResponseCode}'.");
         }
 
         using TpmPasswordSession writeAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -395,6 +353,49 @@ internal sealed class TpmSimulatorEndorsementTrustTests
         Assert.IsTrue(result.IsSuccess, $"CreatePrimary EK ({hierarchy}) failed: '{result.ResponseCode}'.");
 
         return result.Value;
+    }
+
+    /// <summary>
+    /// Creates a simulator with the ECC (BouncyCastle) signing backend wired, powers it on, and brings it through
+    /// <c>TPM2_Startup(CLEAR)</c> into the operational phase. The ECC backend is required so the simulator services
+    /// <c>TPM2_CreatePrimary()</c> for the EK storage primary.
+    /// </summary>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The operational simulator.</returns>
+    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    {
+        var simulator = new TpmSimulator("tpm-in-house-endorsement", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
+
+        return simulator;
+    }
+
+    /// <summary>
+    /// Issues <c>TPM2_Startup(CLEAR)</c> directly against the simulator, mirroring how the executor frames an
+    /// unauthorized command on the wire, to move it into <see cref="TpmLifecyclePhase.Operational"/>.
+    /// </summary>
+    /// <param name="simulator">The simulator to bring operational.</param>
+    /// <param name="pool">The memory pool.</param>
+    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    {
+        var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
+        int length = TpmHeader.HeaderSize + input.GetSerializedSize();
+        using IMemoryOwner<byte> owner = pool.Rent(length);
+
+        var writer = new TpmWriter(owner.Memory.Span);
+        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)length, (uint)input.CommandCode);
+        header.WriteTo(ref writer);
+        input.WriteHandles(ref writer);
+        input.WriteParameters(ref writer);
+
+        TpmResult<TpmResponse> result = await simulator.SubmitAsync(owner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, "TPM2_Startup(CLEAR) must succeed.");
+        using TpmResponse response = result.Value;
+        var reader = new TpmReader(response.AsReadOnlySpan());
+        TpmHeader responseHeader = TpmHeader.Parse(ref reader);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, (TpmRcConstants)responseHeader.Code);
+        Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase);
     }
 
     /// <summary>
