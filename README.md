@@ -1,4 +1,4 @@
-<img style="display: block; margin-inline-start: auto; margin-inline-end: auto;" src="resources/verifiable-github-logo.svg" width="800" height="400" alt="Verifiable project logo: A shield in blue hues with a rounded top that narrows downwards in a 'V' like shape. In the center there is the tip of white 'V' that elongates across the left corner of the shield to white background. Underneath the lower side of 'V' there is a stylistic key handle also elongating over the edge of the shield.">
+<img style="display: block; margin-inline-start: auto; margin-inline-end: auto;" src="resources/lumoin-verifiable-github-logo.svg" width="800" height="151" alt="Verifiable wordmark: a circular emblem in gradient blue-to-cyan hues followed by the project name in matching lettering.">
 
 # Verifiable
 
@@ -36,7 +36,6 @@ The core value proposition is documents that can be distinctly identified, crypt
 | **Verifiable.Microsoft** | .NET standard cryptographic functions | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Microsoft.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Microsoft/) |
 | **Verifiable.Tpm** | Trusted Platform Module integration | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Tpm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Tpm/) |
 | **Verifiable.Apdu** | ISO/IEC 7816-4 APDUs and ICAO 9303 eMRTD reading | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Apdu.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Apdu/) |
-| **Verifiable.Sidetree** | Sidetree protocol implementation | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Sidetree.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Sidetree/) |
 | **Verifiable.DidWebs** | KERI-backed did:webs DID method: identifier resolution and key-state verification | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DidWebs.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DidWebs/) |
 | **Verifiable.Jwt** | JWT integration | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Jwt.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Jwt/) |
 | **Verifiable.Security.DataStorage** | Secure storage utilities | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DataStorage.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DataStorage/) |

@@ -83,7 +83,6 @@
     <ProjectReference Include="..\..\src\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.NSec\Verifiable.NSec.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.OAuth\Verifiable.OAuth.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable.Sidetree\Verifiable.Sidetree.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Vcalm\Verifiable.Vcalm.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.WebFinger\Verifiable.WebFinger.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />

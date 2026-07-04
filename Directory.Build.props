@@ -94,7 +94,7 @@
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Copyright>Lumoin</Copyright>
-    <PackageIcon>resources/verifiable-nuget-logo.png</PackageIcon>
+    <PackageIcon>resources/lumoin-verifiable-nuget-logo.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageProjectUrl>https://github.com/lumoin/Verifiable/</PackageProjectUrl>
     <Company>Lumoin</Company>
@@ -131,7 +131,7 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
   <!-- As this file is used in project file locations, the path is relative to them. -->
   <!-- Only include logo in packable (non-test) projects. -->
   <ItemGroup Condition="!$(MSBuildProjectName.EndsWith('Tests'))">
-    <None Include="../../resources/verifiable-nuget-logo.png">
+    <None Include="../../resources/lumoin-verifiable-nuget-logo.png">
       <Pack>True</Pack>
       <PackagePath>/resources</PackagePath>
     </None>

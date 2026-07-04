@@ -6,7 +6,6 @@ $projects = @(
     'Verifiable.Cesr',
     'Verifiable.Core',
     'Verifiable.Cryptography',
-    'Verifiable.DecentralizedWebNode',
     'Verifiable.DidComm',
     'Verifiable.DidWebs',
     'Verifiable.Foundation',
@@ -18,7 +17,6 @@ $projects = @(
     'Verifiable.NSec',
     'Verifiable.OAuth',
     'Verifiable.Server',
-    'Verifiable.Sidetree',
     'Verifiable.Tpm',
     'Verifiable.Vcalm',
     'Verifiable.WebFinger'
