@@ -9,7 +9,6 @@
     <Title>A command line tool for security elements, DIDs and VCs</Title>
     <Description>A command line tool for system security elements, decentralized identifiers and verifiable credentials.</Description>
     <PackageTags>ssi wallet tpm2 trusted-platform-module eidas did self-sovereign-identity verifiable-credentials decentralized-identifiers</PackageTags>
-    <ApplicationIcon>resources/verifiable-nuget-logo.ico</ApplicationIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
 
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
