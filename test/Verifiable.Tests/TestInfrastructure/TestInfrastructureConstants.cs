@@ -26,11 +26,6 @@ namespace Verifiable.Tests.TestInfrastructure
         public const string RelativeTestPathToDeprecated = "..//..//..//TestDocuments//Deprecated//";
 
         /// <summary>
-        /// Path to Sidetree documents.
-        /// </summary>
-        public const string RelativeTestPathToSidetree = "..//..//../TestDocuments//Sidetree//";
-
-        /// <summary>
         /// Test material is loaded from external files. This check preconditions assumed on them hold.
         /// </summary>
         /// <param name="didDocumentFilename">The filename under test.</param>

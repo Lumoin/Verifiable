@@ -32,7 +32,6 @@ $projects = @(
     'Verifiable.Cbor',
     'Verifiable.Core',
     'Verifiable.Cryptography',
-    'Verifiable.DecentralizedWebNode',
     'Verifiable.Foundation',
     'Verifiable.JCose',
     'Verifiable.Json',
@@ -41,7 +40,6 @@ $projects = @(
     'Verifiable.NSec',
     'Verifiable.OAuth',
     'Verifiable.Server',
-    'Verifiable.Sidetree',
     'Verifiable.Tpm',
     'Verifiable.Vcalm'
 )

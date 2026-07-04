@@ -1,4 +1,4 @@
-<img style="display: block; margin-inline-start: auto; margin-inline-end: auto;" src="resources/verifiable-github-logo.svg" width="800" height="400" alt="Verifiable project logo: A shield in blue hues with a rounded top that narrows downwards in a 'V' like shape. In the center there is the tip of white 'V' that elongates across the left corner of the shield to white background. Underneath the lower side of 'V' there is a stylistic key handle also elongating over the edge of the shield.">
+<img style="display: block; margin-inline-start: auto; margin-inline-end: auto;" src="resources/lumoin-verifiable-github-logo.svg" width="800" height="151" alt="Verifiable wordmark: a circular emblem in gradient blue-to-cyan hues followed by the project name in matching lettering.">
 
 # Verifiable
 
@@ -31,15 +31,16 @@ The core value proposition is documents that can be distinctly identified, crypt
 | **Verifiable.DidComm** | DIDComm Messaging v2.1: signed/encrypted messages, routing, out-of-band, discover features, pluggable transport | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DidComm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DidComm/) |
 | **Verifiable.Json** | JSON serialization converters | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Json.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Json/) |
 | **Verifiable.Cbor** | CBOR serialization for COSE envelopes | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cbor.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cbor/) |
+| **Verifiable.JsonPointer** | JSON Pointer (RFC 6901) resolution and JSONata query evaluation | [![NuGet](https://img.shields.io/nuget/v/Verifiable.JsonPointer.svg?style=flat)](https://www.nuget.org/packages/Verifiable.JsonPointer/) |
 | **Verifiable.BouncyCastle** | Cross-platform cryptography via BouncyCastle | [![NuGet](https://img.shields.io/nuget/v/Verifiable.BouncyCastle.svg?style=flat)](https://www.nuget.org/packages/Verifiable.BouncyCastle/) |
 | **Verifiable.NSec** | High-performance cryptography via NSec | [![NuGet](https://img.shields.io/nuget/v/Verifiable.NSec.svg?style=flat)](https://www.nuget.org/packages/Verifiable.NSec/) |
 | **Verifiable.Microsoft** | .NET standard cryptographic functions | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Microsoft.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Microsoft/) |
 | **Verifiable.Tpm** | Trusted Platform Module integration | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Tpm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Tpm/) |
 | **Verifiable.Apdu** | ISO/IEC 7816-4 APDUs and ICAO 9303 eMRTD reading | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Apdu.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Apdu/) |
-| **Verifiable.Sidetree** | Sidetree protocol implementation | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Sidetree.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Sidetree/) |
+| **Verifiable.Cesr** | Composable Event Streaming Representation (CESR): text and binary codec for the KERI, ACDC, and did:webs suite | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cesr.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cesr/) |
+| **Verifiable.Keri** | KERI protocol layer over CESR: key event log (KEL) framing and key-state processing | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Keri.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Keri/) |
+| **Verifiable.Acdc** | Authentic Chained Data Containers (ACDC): SAID-anchored credentials with selective disclosure | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Acdc.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Acdc/) |
 | **Verifiable.DidWebs** | KERI-backed did:webs DID method: identifier resolution and key-state verification | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DidWebs.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DidWebs/) |
-| **Verifiable.Jwt** | JWT integration | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Jwt.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Jwt/) |
-| **Verifiable.Security.DataStorage** | Secure storage utilities | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DataStorage.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DataStorage/) |
 
 ## Key capabilities
 
