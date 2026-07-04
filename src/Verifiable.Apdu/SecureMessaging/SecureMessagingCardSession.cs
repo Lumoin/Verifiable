@@ -126,7 +126,7 @@ public sealed class SecureMessagingCardSession: IDisposable
         ArgumentNullException.ThrowIfNull(pool);
         ThrowIfDisposed();
 
-        ParsedCommand parsed = ParseCommand(protectedCommand.Span);
+        ParsedCommand parsed = ParseCommand(protectedCommand.Span, Profile.MacLength);
         int blockSize = Profile.BlockSize;
 
         //The terminal incremented the SSC before protecting; match it before verifying.
@@ -458,7 +458,9 @@ public sealed class SecureMessagingCardSession: IDisposable
     /// Parses the secure-messaging data objects of a protected command APDU into byte ranges over it.
     /// Synchronous so the <see cref="ApduReader"/> ref struct never crosses an <see langword="await"/>.
     /// </summary>
-    private static ParsedCommand ParseCommand(ReadOnlySpan<byte> protectedCommand)
+    /// <param name="protectedCommand">The protected command APDU bytes.</param>
+    /// <param name="expectedMacLength">The profile's fixed MAC length; a DO'8E' of any other length is rejected.</param>
+    private static ParsedCommand ParseCommand(ReadOnlySpan<byte> protectedCommand, int expectedMacLength)
     {
         if(protectedCommand.Length < ApduConstants.CommandHeaderSize + 1)
         {
@@ -495,24 +497,44 @@ public sealed class SecureMessagingCardSession: IDisposable
 
             switch(tag)
             {
-                case CryptogramTag:
+                case(CryptogramTag):
+                {
                     encryptedObjectStart = start;
                     encryptedObjectLength = reader.Consumed - start;
                     //The DO'87' value is the padding-content indicator followed by the cryptogram.
                     cryptogramStart = valueStart + 1;
                     cryptogramLength = length - 1;
+
                     break;
-                case ExpectedLengthTag:
+                }
+                case(ExpectedLengthTag):
+                {
                     expectedLengthObjectStart = start;
                     expectedLengthObjectLength = reader.Consumed - start;
                     expectedResponseLength = protectedCommand[valueStart];
+
                     break;
-                case MacTag:
+                }
+                case(MacTag):
+                {
+                    //Pin the MAC length to the profile (see the response parser): an attacker-supplied short or
+                    //empty DO'8E' length otherwise lets a truncated MAC compare equal and bypasses the command
+                    //channel authentication with no key.
+                    if(length != expectedMacLength)
+                    {
+                        throw new InvalidOperationException(
+                            $"The Secure Messaging command MAC (DO'8E') is {length} bytes; the profile requires exactly {expectedMacLength}.");
+                    }
+
                     macStart = valueStart;
                     macLength = length;
+
                     break;
+                }
                 default:
+                {
                     throw new InvalidOperationException($"Unexpected Secure Messaging command data object tag 0x{tag:X2}.");
+                }
             }
         }
 

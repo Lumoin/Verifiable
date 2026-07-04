@@ -7,11 +7,11 @@ namespace Verifiable.Core.Resolvers;
 
 /// <summary>
 /// Options controlling DID resolution behavior, passed to the <c>resolve</c> function
-/// per W3C DID Resolution v0.3 �4.1.
+/// per W3C DID Resolution v0.3 §4.1.
 /// </summary>
 /// <remarks>
 /// <para>
-/// See <see href="https://w3c.github.io/did-resolution/#did-resolution-options">DID Resolution �4.1</see>.
+/// See <see href="https://www.w3.org/TR/did-resolution/#did-resolution-options">DID Resolution §4.1</see>.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("Accept={Accept,nq} ExpandRelativeUrls={ExpandRelativeUrls} VersionId={VersionId,nq} VersionTime={VersionTime}")]
@@ -24,7 +24,7 @@ public sealed class DidResolutionOptions: IEquatable<DidResolutionOptions>
 
     /// <summary>
     /// The media type the caller prefers for the DID document representation.
-    /// The value MUST follow the <c>Accept</c> header format defined in RFC 9110 �12.5.1.
+    /// The value MUST follow the <c>Accept</c> header format defined in RFC 9110 §12.5.1.
     /// </summary>
     public string? Accept { get; init; }
 

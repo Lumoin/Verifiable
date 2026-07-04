@@ -10,7 +10,7 @@ namespace Verifiable.Core.Resolvers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// See <see href="https://w3c.github.io/did-resolution/#document-metadata">W3C DID Resolution section 7.1 Document Metadata</see>.
+/// See <see href="https://www.w3.org/TR/did-resolution/#document-metadata">W3C DID Resolution §7.1 Document Metadata</see>.
 /// </para>
 /// <para>
 /// The DID Resolution document metadata is an open structure. Method-specific and registered properties are

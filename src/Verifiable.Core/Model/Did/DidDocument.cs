@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -28,7 +29,13 @@ namespace Verifiable.Core.Model.Did
     /// <item><description>Service endpoints for interacting with the subject</description></item>
     /// </list>
     /// <para>
-    /// See <see href="https://www.w3.org/TR/did-1.0/#did-documents">DID Core �4 DID Documents</see>
+    /// DID Core 1.1 refactors the data model to layer on top of Controlled Identifiers (CID) 1.0: the
+    /// DID-specific members (<c>id</c>, the <c>@context</c> value, DID syntax) are defined by DID Core, while the
+    /// verification-method, verification-relationship, <c>service</c>, <c>controller</c> and <c>alsoKnownAs</c>
+    /// members are defined by reference to CID — which is why those properties below link to the CID 1.0 sections.
+    /// </para>
+    /// <para>
+    /// See <see href="https://www.w3.org/TR/did-1.1/#data-model">DID Core 1.1 §4 Data Model</see>
     /// and <see href="https://www.w3.org/TR/cid-1.0/">Controlled Identifiers (CID) 1.0</see>.
     /// </para>
     /// </remarks>
@@ -41,12 +48,15 @@ namespace Verifiable.Core.Model.Did
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The <c>@context</c> property defines the vocabulary used in the DID document.
-        /// At minimum, this should include the DID Core context. Additional contexts
-        /// may be added for verification method types, service types, or other extensions.
+        /// The <c>@context</c> property defines the vocabulary used in the DID document. For a JSON-LD
+        /// representation its first value is the DID Core context — <see cref="Context.DidCore10"/>
+        /// (<c>https://www.w3.org/ns/did/v1</c>) or, for DID Core 1.1, <see cref="Context.DidCore11"/>
+        /// (<c>https://www.w3.org/ns/did/v1.1</c>); additional contexts (verification-method suites, service types)
+        /// follow. The library carries these context values verbatim — it does not perform JSON-LD processing
+        /// (term expansion, framing, canonicalization); that is the concern of a dedicated JSON-LD processor.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/did-1.0/#production-0">DID Core �4.1 @context</see>.
+        /// See <see href="https://www.w3.org/TR/did-1.1/#json-ld-processors">DID Core 1.1 §6.2.3 JSON-LD Processors</see>.
         /// </para>
         /// </remarks>
         public Context? Context { get; set; }
@@ -61,10 +71,11 @@ namespace Verifiable.Core.Model.Did
         /// This is the only required property in a DID document. The type is
         /// <see cref="GenericDidMethod"/> to allow lenient parsing of any DID method;
         /// the serialization converter may produce a more specific type if the
-        /// DID method is recognized.
+        /// DID method is recognized. Its value MUST conform to the DID syntax.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/did-1.0/#did-subject">DID Core �4.2 DID Subject</see>.
+        /// See <see href="https://www.w3.org/TR/did-1.1/#did-subject">DID Core 1.1 §5.1.1 DID Subject</see>
+        /// and <see href="https://www.w3.org/TR/did-1.1/#did-syntax">DID Core 1.1 §3.1 DID Syntax</see>.
         /// </para>
         /// </remarks>
         public GenericDidMethod? Id { get; set; }
@@ -79,7 +90,7 @@ namespace Verifiable.Core.Model.Did
         /// known by. These can be other DIDs or any conformant URI per RFC 3986.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#also-known-as">CID 1.0 �2.1.3 Also Known As</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#also-known-as">CID 1.0 §2.1.3 Also Known As</see>.
         /// </para>
         /// </remarks>
         public string[]? AlsoKnownAs { get; set; }
@@ -95,7 +106,7 @@ namespace Verifiable.Core.Model.Did
         /// by a DID.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#controller">CID 1.0 �2.1.2 Controller</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#controller">CID 1.0 §2.1.2 Controller</see>.
         /// </para>
         /// </remarks>
         public Controller[]? Controller { get; set; }
@@ -112,7 +123,7 @@ namespace Verifiable.Core.Model.Did
         /// referenced by a verification relationship.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 �2.2 Verification Methods</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#verification-methods">CID 1.0 §2.2 Verification Methods</see>.
         /// </para>
         /// </remarks>
         public VerificationMethod[]? VerificationMethod { get; set; }
@@ -129,7 +140,7 @@ namespace Verifiable.Core.Model.Did
         /// </para>
         /// <para>
         /// See <see cref="AuthenticationMethod"/> and
-        /// <see href="https://www.w3.org/TR/cid-1.0/#authentication">CID 1.0 �2.3.1 Authentication</see>.
+        /// <see href="https://www.w3.org/TR/cid-1.0/#authentication">CID 1.0 §2.3.1 Authentication</see>.
         /// </para>
         /// </remarks>
         public AuthenticationMethod[]? Authentication { get; set; }
@@ -146,7 +157,7 @@ namespace Verifiable.Core.Model.Did
         /// </para>
         /// <para>
         /// See <see cref="AssertionMethod"/> and
-        /// <see href="https://www.w3.org/TR/cid-1.0/#assertion">CID 1.0 �2.3.2 Assertion</see>.
+        /// <see href="https://www.w3.org/TR/cid-1.0/#assertion">CID 1.0 §2.3.2 Assertion</see>.
         /// </para>
         /// </remarks>
         public AssertionMethod[]? AssertionMethod { get; set; }
@@ -163,7 +174,7 @@ namespace Verifiable.Core.Model.Did
         /// </para>
         /// <para>
         /// See <see cref="KeyAgreementMethod"/> and
-        /// <see href="https://www.w3.org/TR/cid-1.0/#key-agreement">CID 1.0 �2.3.3 Key Agreement</see>.
+        /// <see href="https://www.w3.org/TR/cid-1.0/#key-agreement">CID 1.0 §2.3.3 Key Agreement</see>.
         /// </para>
         /// </remarks>
         public KeyAgreementMethod[]? KeyAgreement { get; set; }
@@ -180,7 +191,7 @@ namespace Verifiable.Core.Model.Did
         /// </para>
         /// <para>
         /// See <see cref="CapabilityInvocationMethod"/> and
-        /// <see href="https://www.w3.org/TR/cid-1.0/#capability-invocation">CID 1.0 �2.3.4 Capability Invocation</see>.
+        /// <see href="https://www.w3.org/TR/cid-1.0/#capability-invocation">CID 1.0 §2.3.4 Capability Invocation</see>.
         /// </para>
         /// </remarks>
         public CapabilityInvocationMethod[]? CapabilityInvocation { get; set; }
@@ -197,7 +208,7 @@ namespace Verifiable.Core.Model.Did
         /// </para>
         /// <para>
         /// See <see cref="CapabilityDelegationMethod"/> and
-        /// <see href="https://www.w3.org/TR/cid-1.0/#capability-delegation">CID 1.0 �2.3.5 Capability Delegation</see>.
+        /// <see href="https://www.w3.org/TR/cid-1.0/#capability-delegation">CID 1.0 §2.3.5 Capability Delegation</see>.
         /// </para>
         /// </remarks>
         public CapabilityDelegationMethod[]? CapabilityDelegation { get; set; }
@@ -214,10 +225,29 @@ namespace Verifiable.Core.Model.Did
         /// type of service.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 �2.1.4 Services</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#services">CID 1.0 §2.1.4 Services</see>.
         /// </para>
         /// </remarks>
         public Service[]? Service { get; set; }
+
+
+        /// <summary>
+        /// Top-level members not part of the W3C DID core data model, preserved verbatim.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A DID document MAY carry method-specific or extension members beyond the W3C core set (the DID and
+        /// JSON-LD data models are explicitly extensible). Rather than silently dropping them — which could
+        /// discard security-relevant terms such as a status, expiry, or constraint — the
+        /// <see cref="DidDocument"/> serialization converter funnels any unrecognized top-level member into this
+        /// dictionary and writes it back out, so an arbitrary DID document round-trips faithfully and unknown
+        /// members can be interpreted later. The data is preserved, not trusted: verification always runs over
+        /// the received wire bytes, and a member is acted upon only once it is explicitly modelled. This mirrors
+        /// <see cref="Service.AdditionalData"/> and the credential models. Following the library convention, the
+        /// capture is performed by the converter into a plain dictionary; no serializer attributes are used.
+        /// </para>
+        /// </remarks>
+        public IDictionary<string, object>? AdditionalData { get; set; }
 
 
         /// <inheritdoc/>

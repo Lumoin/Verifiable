@@ -67,6 +67,11 @@ namespace Verifiable.Cryptography
         /// </summary>
         public const string EcPublicKey = "1.2.840.10045.2.1";
 
+        /// <summary>
+        /// OID for the X.509 Key Usage certificate extension (id-ce-keyUsage) per RFC 5280 §4.2.1.3.
+        /// </summary>
+        public const string KeyUsageExtension = "2.5.29.15";
+
 
         //The DER value bytes (the content after the 0x06 OBJECT IDENTIFIER tag and length) of the OIDs
         //above, for callers that compare against an OID parsed from a DER structure (e.g. a

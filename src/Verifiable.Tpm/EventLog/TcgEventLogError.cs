@@ -53,7 +53,12 @@ public enum TcgEventLogError: uint
     /// <summary>
     /// The TCG_EfiSpecIdEvent structure is invalid or too small.
     /// </summary>
-    InvalidSpecIdEvent = 0x80290008
+    InvalidSpecIdEvent = 0x80290008,
+
+    /// <summary>
+    /// A known hash algorithm's declared digest size disagrees with its fixed output width.
+    /// </summary>
+    InconsistentDigestSize = 0x80290009
 }
 
 /// <summary>
@@ -76,6 +81,7 @@ public static class TcgEventLogErrorExtensions
             TcgEventLogError.TooManyDigests => "Too many digest algorithms in a single event (max 16).",
             TcgEventLogError.UnknownAlgorithm => "Unknown hash algorithm with no size information available.",
             TcgEventLogError.InvalidSpecIdEvent => "The TCG_EfiSpecIdEvent structure is invalid or too small.",
+            TcgEventLogError.InconsistentDigestSize => "A known hash algorithm's declared digest size disagrees with its fixed output width.",
             _ => $"Unknown event log error: 0x{(uint)error:X8}"
         };
     }

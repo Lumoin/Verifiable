@@ -8,7 +8,6 @@ using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Did;
 
-[JsonSerializable(typeof(TestExtendedDidDocument))]
 [JsonSerializable(typeof(Dictionary<string, JsonElement>))]
 [JsonSerializable(typeof(OpenIdConnectVersion1))]
 [JsonSerializable(typeof(SocialWebInboxService))]
@@ -190,15 +189,15 @@ internal sealed class DidDocumentTests
 
 
     /// <summary>
-    /// Checks that the reader only can serialize and deserialize documents and does not
-    /// read anything extra unless the DID document is extended to do so.
+    /// Checks that the base <see cref="DidDocument"/> preserves members beyond the W3C core set in
+    /// <see cref="DidDocument.AdditionalData"/> (via the <c>DidDocumentConverter</c>) and round-trips an
+    /// extended document faithfully, without requiring a bespoke extended type.
     /// </summary>
     /// <param name="didDocumentFilename">The DID document data file under test.</param>
     /// <param name="didDocumentFileContents">The DID document data file contents.</param>
-    /// <remarks>By default reading is disallowed due to security and information leak concerns.</remarks>
     [TestMethod]
     [FilesData(TestInfrastructureConstants.RelativeTestPathToExtended, "did-w3c-extended-1.json")]
-    public void CanRoundtripExtendedDidOnlyWithExtendedType(string didDocumentFilename, string didDocumentFileContents)
+    public void CanRoundtripExtendedDidPreservingAdditionalData(string didDocumentFilename, string didDocumentFileContents)
     {
         TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
 
@@ -207,21 +206,16 @@ internal sealed class DidDocumentTests
             VerifiableJsonContext.Default,
             DidDocumentTestsJsonContext.Default);
 
-        var (deserializedDidDocumentNonExtended, deserializedDidDocumentExtended, reserializedDidDocumentNonExtended, reserializedDidDocumentExtended) =
-            JsonSerializationUtilities.PerformExtendedSerializationCycle<DidDocument, TestExtendedDidDocument>(didDocumentFileContents, options);
+        var (deserializedDidDocument, reserializedDidDocument) =
+            JsonSerializationUtilities.PerformSerializationCycle<DidDocument>(didDocumentFileContents, options);
 
-        //Assertions for DidDocument.
-        Assert.IsNotNull(deserializedDidDocumentNonExtended?.Id);
-        Assert.IsNotNull(deserializedDidDocumentNonExtended?.Context);
-        Assert.IsNotNull(reserializedDidDocumentNonExtended);
+        Assert.IsNotNull(deserializedDidDocument?.Id);
+        Assert.IsNotNull(deserializedDidDocument?.Context);
+        //The members beyond the W3C core model are preserved rather than dropped.
+        Assert.IsNotNull(deserializedDidDocument?.AdditionalData);
+        Assert.IsNotNull(reserializedDidDocument);
 
-        //Assertions for TestExtendedDidDocument.
-        Assert.IsNotNull(deserializedDidDocumentExtended?.Id);
-        Assert.IsNotNull(deserializedDidDocumentExtended?.Context);
-        Assert.IsNotNull(deserializedDidDocumentExtended?.AdditionalData);
-        Assert.IsNotNull(reserializedDidDocumentExtended);
-
-        bool areJsonElementsEqual = JsonSerializationUtilities.CompareJsonElements(didDocumentFileContents, reserializedDidDocumentExtended);
+        bool areJsonElementsEqual = JsonSerializationUtilities.CompareJsonElements(didDocumentFileContents, reserializedDidDocument);
         Assert.IsTrue(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");
     }
 

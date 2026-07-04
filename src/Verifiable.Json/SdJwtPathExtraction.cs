@@ -176,20 +176,19 @@ public static class SdJwtPathExtraction
         //preserved to keep the public ComputeDisclosureDigest API stable; the
         //~32-64 byte allocation per call is negligible against the SD-JWT path.
         HashAlgorithmName algorithm = WellKnownHashAlgorithms.ToHashAlgorithmName(algorithmName);
-        (int outputLength, Tag tag) = algorithm.Name switch
+        (int outputLength, Tag tag, string? hashQualifier) = algorithm.Name switch
         {
-            WellKnownHashAlgorithms.Sha256 => (32, CryptoTags.Sha256Digest),
-            WellKnownHashAlgorithms.Sha384 => (48, CryptoTags.Sha384Digest),
-            WellKnownHashAlgorithms.Sha512 => (64, CryptoTags.Sha512Digest),
+            WellKnownHashAlgorithms.Sha256 => (32, CryptoTags.Sha256Digest, (string?)null),
+            WellKnownHashAlgorithms.Sha384 => (48, CryptoTags.Sha384Digest, nameof(HashAlgorithmName.SHA384)),
+            WellKnownHashAlgorithms.Sha512 => (64, CryptoTags.Sha512Digest, nameof(HashAlgorithmName.SHA512)),
             _ => throw new ArgumentException($"Unsupported hash algorithm: '{algorithmName}'.", nameof(algorithmName))
         };
 
-        //ComputeDisclosureDigest's public API is sync byte[]-returning; bridge via
-        //ComputeDigestSyncBridge which asserts the registered delegate completed
-        //synchronously (true for the Microsoft software backend). The data byte[]
-        //wraps in ReadOnlyMemory cheaply for the bridge.
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigestSyncBridge(
-            data.AsMemory(), outputLength, tag, BaseMemoryPool.Shared);
+        //An SD-JWT disclosure digest is a hash of a local disclosure string — sync by nature, no hardware-async
+        //backend — so it hashes through the registered synchronous HashFunctionDelegate seam. The digest is
+        //algorithm-agile (_sd_alg), so a non-SHA-256 request selects the seam by qualifier.
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            data, outputLength, tag, BaseMemoryPool.Shared, hashQualifier);
         return digest.AsReadOnlySpan().ToArray();
     }
 

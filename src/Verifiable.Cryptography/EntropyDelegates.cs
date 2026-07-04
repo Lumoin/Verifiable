@@ -42,10 +42,12 @@ public delegate (Salt Result, CryptoEvent? Event) GenerateSaltDelegate(
 /// nodes and pass it directly.
 /// </para>
 /// <para>
-/// Sync callers that cannot propagate async (key derivation, JWK thumbprint
-/// computation) bridge via the convenience helper
-/// <see cref="CryptographicKeyEvents.ComputeDigestSyncBridge"/> which asserts the
-/// underlying delegate completed synchronously before returning.
+/// This async seam is for digests that may be hardware- or network-backed (TPM2_Hash, KMS) or that live inside an
+/// async verification pipeline (SAID, KERI/ACDC, did:webvh/peer/webplus). Hashes that are sync by nature — a hash
+/// of public or local data with no async backend, such as a JWK thumbprint, a PKCE S256 challenge, or a Concat KDF
+/// round — use the synchronous <see cref="HashFunctionDelegate"/> seam via
+/// <see cref="CryptographicKeyEvents.ComputeDigest(System.ReadOnlySpan{byte}, int, Tag, MemoryPool{byte}, string?)"/>
+/// instead, so no async colouring propagates into otherwise-synchronous code.
 /// </para>
 /// </remarks>
 public delegate ValueTask<(DigestValue Result, CryptoEvent? Event)> ComputeDigestDelegate(

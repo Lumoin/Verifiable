@@ -64,6 +64,74 @@ internal sealed class WebVhDidResolverResolvingTests
 
 
     /// <summary>
+    /// WVH-RES-9: an update entry's <c>versionTime</c> MUST be strictly later than its predecessor's, so two
+    /// entries sharing the same <c>versionTime</c> MUST be rejected as invalidDid (did:webvh v1.0, Read: the
+    /// versionTime ordering). The two entries are otherwise valid (same update key, no pre-rotation), so the equal
+    /// timestamp is the only violation.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveRejectsEntryWithVersionTimeEqualToPredecessor()
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintAsync(Domain,
+        [
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime),
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime)
+        ]).ConfigureAwait(false);
+
+        DidResolutionResult result = await ResolveAsync(log.Did, log.Lines).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful, "A did:webvh entry whose versionTime equals its predecessor's MUST NOT resolve.");
+        Assert.AreEqual(DidResolutionErrors.InvalidDid, result.ResolutionMetadata.Error, "An equal versionTime MUST be rejected as invalidDid.");
+    }
+
+
+    /// <summary>
+    /// WVH-RES-14: the resolved DID MUST match the top-level id of at least one verified version. A VALID log
+    /// (its SCID self-certifies and its chain verifies) served under a DID with the SAME scid but a DIFFERENT host
+    /// carries that host in no entry's id, so resolution MUST fail — this blocks serving one DID's log as another's.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveRejectsLogWhoseIdMatchesNoRequestedVersion()
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+
+        //Same SCID, different host: the served log is valid for its own id (example.com) but the requested DID
+        //(evil.example.com) appears in no version's top-level id.
+        string substitutedDid = $"did:webvh:{log.Scid}:evil.example.com";
+
+        DidResolutionResult result = await ResolveAsync(substitutedDid, log.Lines).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful, "A did:webvh whose log id matches no requested version MUST NOT resolve.");
+        Assert.AreEqual(DidResolutionErrors.InvalidDid, result.ResolutionMetadata.Error, "A substituted-host DID whose log never carries it MUST be rejected as invalidDid.");
+    }
+
+
+    /// <summary>
+    /// WVH-PAR-METHOD-3: the <c>method</c> parameter MUST NOT change to an unsupported version after the first
+    /// entry. This resolver processes a single method version, so a later entry declaring a different (here lower)
+    /// method value MUST be rejected at the parameter fold as invalidDid (did:webvh v1.0, Parameters: the method
+    /// parameter).
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveRejectsSubsequentEntryDeclaringDifferentMethod()
+    {
+        using WebVhController controller = WebVhController.Create();
+        WebVhMintedLog log = await WebVhTestLog.MintAsync(Domain,
+        [
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime),
+            new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, MethodOverride: "did:webvh:0.5")
+        ]).ConfigureAwait(false);
+
+        DidResolutionResult result = await ResolveAsync(log.Did, log.Lines).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful, "A did:webvh entry declaring a different method version MUST NOT resolve.");
+        Assert.AreEqual(DidResolutionErrors.InvalidDid, result.ResolutionMetadata.Error, "A method change after the first entry MUST be rejected as invalidDid.");
+    }
+
+
+    /// <summary>
     /// DNS-rebinding defense for the did.jsonl fetch: a did:webvh whose log host is a public NAME that resolves
     /// to a loopback address MUST be blocked at connection-time by the pinning transport — the URL gate cannot
     /// catch a rebinding host name (it does no DNS). The host is never dialed and the DID does not resolve.
@@ -108,7 +176,6 @@ internal sealed class WebVhDidResolverResolvingTests
             WebVhLogEntryJson.DocumentIdentityReader,
             DeserializeState,
             WebVhLogEntryJson.Canonicalizer,
-            SHA256.HashData,
             Base58Encoder,
             Base58Decoder,
             BaseMemoryPool.Shared,
@@ -211,11 +278,10 @@ internal sealed class WebVhDidResolverResolvingTests
 
         DidMethodResolverDelegate webVh = WebVhDidResolver.Build(
             transport.Delegate, WebVhLogEntryJson.Parser, WebVhLogEntryJson.WitnessFileParser, WebVhLogEntryJson.DocumentIdentityReader, DeserializeState, WebVhLogEntryJson.Canonicalizer,
-            SHA256.HashData, Base58Encoder, Base58Decoder, BaseMemoryPool.Shared, TimeProvider.System);
+            Base58Encoder, Base58Decoder, BaseMemoryPool.Shared, TimeProvider.System);
 
         DidResolver composed = DidResolverComposition.Build(
             BaseMemoryPool.Shared,
-            SHA256.HashData,
             static (request, context, cancellationToken) => ValueTask.FromResult(new OutboundResponse { StatusCode = 404, Body = TaggedMemory<byte>.Empty }),
             static jsonUtf8 => null,
             static jsonUtf8 => null,
@@ -1256,7 +1322,6 @@ internal sealed class WebVhDidResolverResolvingTests
             WebVhLogEntryJson.DocumentIdentityReader,
             DeserializeState,
             WebVhLogEntryJson.Canonicalizer,
-            SHA256.HashData,
             Base58Encoder,
             Base58Decoder,
             BaseMemoryPool.Shared,

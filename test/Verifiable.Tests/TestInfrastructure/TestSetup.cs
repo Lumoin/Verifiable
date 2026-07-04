@@ -261,9 +261,32 @@ internal static class TestSetup
             typeof(GenerateSaltDelegate),
             (GenerateSaltDelegate)MicrosoftEntropyFunctions.GenerateSalt);
 
+        //The registered digest is algorithm-agile by tag: a BLAKE3 tag (CryptoAlgorithm.Blake3, e.g. did:webplus
+        //self-hashes) routes to the BouncyCastle BLAKE3 backend; HashAlgorithmName-tagged SHA digests go to the
+        //Microsoft backend. This is the default the registry-backed resolver overloads consume.
         CryptographicKeyFactory.RegisterFunction(
             typeof(ComputeDigestDelegate),
-            (ComputeDigestDelegate)MicrosoftEntropyFunctions.ComputeDigestAsync);
+            (ComputeDigestDelegate)((input, outputByteLength, tag, pool, context, cancellationToken) =>
+                tag.TryGet<CryptoAlgorithm>(out CryptoAlgorithm algorithm) && algorithm == CryptoAlgorithm.Blake3
+                    ? BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)
+                    : MicrosoftEntropyFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)));
+
+        //The synchronous SHA-family seam for hashes that are sync by nature (JWK thumbprint, PKCE S256, Concat KDF,
+        //SD-JWT disclosure digests): public/local-data hashes with no hardware-async backend. SHA-256 is the
+        //default; SHA-384/512 are registered under qualifiers for the algorithm-agile SD-JWT caller.
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(HashFunctionDelegate),
+            (HashFunctionDelegate)System.Security.Cryptography.SHA256.HashData);
+
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(HashFunctionDelegate),
+            (HashFunctionDelegate)System.Security.Cryptography.SHA384.HashData,
+            qualifier: nameof(System.Security.Cryptography.HashAlgorithmName.SHA384));
+
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(HashFunctionDelegate),
+            (HashFunctionDelegate)System.Security.Cryptography.SHA512.HashData,
+            qualifier: nameof(System.Security.Cryptography.HashAlgorithmName.SHA512));
 
         //CMS SignedData verification (eMRTD Passive Authentication and CAdES). The Microsoft backend is the
         //default; the BouncyCastle backend is registered under a qualifier so a cross-backend test can prove
@@ -280,6 +303,17 @@ internal static class TestSetup
             typeof(Verifiable.Cryptography.Pki.VerifyCmsSignedDataDelegate),
             (Verifiable.Cryptography.Pki.VerifyCmsSignedDataDelegate)Verifiable.Cryptography.Pki.ManagedCmsVerification.VerifyCmsSignedDataAsync,
             qualifier: "Managed");
+
+        //The X.509 certificate-profile reader (eMRTD Passive Authentication enforces the ICAO Doc 9303 Part 12
+        //Document Signer profile through it). The Microsoft backend is the default; the BouncyCastle backend is
+        //registered under a qualifier so a cross-backend test can prove the seam is provider-neutral.
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(Verifiable.Cryptography.Pki.ReadCertificateProfileDelegate),
+            (Verifiable.Cryptography.Pki.ReadCertificateProfileDelegate)MicrosoftX509Functions.ReadCertificateProfile);
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(Verifiable.Cryptography.Pki.ReadCertificateProfileDelegate),
+            (Verifiable.Cryptography.Pki.ReadCertificateProfileDelegate)BouncyCastleX509Functions.ReadCertificateProfile,
+            qualifier: "BouncyCastle");
     }
 
 

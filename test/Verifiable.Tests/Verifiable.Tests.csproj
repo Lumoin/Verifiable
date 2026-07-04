@@ -28,6 +28,20 @@
   <ItemGroup>
     <PackageReference Include="dotNetRdf" />
     <PackageReference Include="CsCheck" />
+    <!--
+      An independent MessagePack codec used ONLY as a conformance oracle for the MGPK serialization the CESR
+      specification requires a parser to support. The library ships the serializer-agnostic decode seam plus the
+      JSON, CBOR, and CESR-native arms; it does not bundle an MGPK reader. This test mints and decodes MGPK KERI
+      event bytes with this codec and feeds the result through the same neutral-map reader, demonstrating that an
+      MGPK deployment wires through the seam unchanged. Test-only, never referenced by any src/ project.
+    -->
+    <!--
+      The NuGet audit advisories for this package concern untrusted-data deserialization (typeless/contractless
+      paths and hash-collision denial of service). This test uses only the low-level reader and writer over bytes
+      it mints itself, so that class does not apply; the audit warnings are suppressed for this reference alone,
+      not project-wide, so real advisories on every other package still fail the build.
+    -->
+    <PackageReference Include="MessagePack" NoWarn="NU1902;NU1903" />
     <PackageReference Include="LiquidTestReports.Markdown" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
     <PackageReference Include="ModelContextProtocol" />
@@ -53,20 +67,25 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Verifiable.Acdc\Verifiable.Acdc.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Apdu\Verifiable.Apdu.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.BouncyCastle\Verifiable.BouncyCastle.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Cbor\Verifiable.Cbor.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Cesr\Verifiable.Cesr.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Core\Verifiable.Core.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.DidComm\Verifiable.DidComm.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.DidWebs\Verifiable.DidWebs.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Foundation\Verifiable.Foundation.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.JCose\Verifiable.JCose.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Json\Verifiable.Json.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Keri\Verifiable.Keri.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.NSec\Verifiable.NSec.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.OAuth\Verifiable.OAuth.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Sidetree\Verifiable.Sidetree.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Vcalm\Verifiable.Vcalm.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.WebFinger\Verifiable.WebFinger.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
     <ProjectReference Include="..\..\src\Verifiable\Verifiable.csproj" />
   </ItemGroup>

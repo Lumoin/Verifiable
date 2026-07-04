@@ -133,10 +133,20 @@ public sealed class TpmtPublic: IDisposable
         var nameAlg = (TpmAlgIdConstants)reader.ReadUInt16();
         var objectAttributes = (TpmaObject)reader.ReadUInt32();
         var authPolicy = Tpm2bDigest.Parse(ref reader, pool);
-        var parameters = TpmuPublicParms.Parse(type, ref reader);
-        var unique = TpmuPublicId.Parse(type, ref reader, pool);
+        try
+        {
+            var parameters = TpmuPublicParms.Parse(type, ref reader);
+            var unique = TpmuPublicId.Parse(type, ref reader, pool);
 
-        return new TpmtPublic(type, nameAlg, objectAttributes, authPolicy, parameters, unique);
+            return new TpmtPublic(type, nameAlg, objectAttributes, authPolicy, parameters, unique);
+        }
+        catch
+        {
+            //An unmodelled public-area type makes the parms/unique union arm throw; the pooled, policy-sensitive
+            //authPolicy digest already rented above must be returned to the pool rather than leaked.
+            authPolicy.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

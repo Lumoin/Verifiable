@@ -302,6 +302,19 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
             throw new InvalidOperationException("A CV certificate public point must be an uncompressed elliptic-curve point.");
         }
 
+        //Every sibling field here is length-validated; validate the point length too. Extracting the coordinates
+        //rejects a truncated point — for example the bare 0x04 byte this prefix-only check would otherwise accept —
+        //that would only surface as an uncaught exception when the key is later used to verify a signature. The
+        //curve-specific length and on-curve checks stay in the cryptographic layer that consumes the key.
+        try
+        {
+            EllipticCurveUtilities.ExtractCoordinates(point, EllipticCurveTypes.None, out _, out _);
+        }
+        catch(ArgumentOutOfRangeException exception)
+        {
+            throw new InvalidOperationException("A CV certificate public point must be a supported-length uncompressed elliptic-curve point.", exception);
+        }
+
         if(!publicKey.IsEmpty && publicKey.PeekBytes(1)[0] == CofactorTag)
         {
             _ = ReadPrimitive(ref publicKey, CofactorTag, "cofactor");

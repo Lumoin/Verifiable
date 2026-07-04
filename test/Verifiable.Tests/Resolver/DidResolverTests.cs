@@ -214,6 +214,148 @@ internal sealed class DidResolverTests
     }
 
     [TestMethod]
+    public async Task DereferenceVerificationMethodAuthorizedForRelationshipReturnsTheMethod()
+    {
+        //A conforming verification method that is listed in the requested relationship array
+        //satisfies the CID 1.0 §3.3 algorithm, so dereferencing returns the method itself.
+        var document = CreateDocumentWithKey("did:example:123", "#key-1", inRelationship: "authentication", conforming: true);
+        var resolver = ResolverReturning(document);
+
+        var result = await resolver.DereferenceAsync(
+            "did:example:123#key-1",
+            Context,
+            new DidDereferencingOptions { VerificationRelationship = "authentication" },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccessful);
+        Assert.IsInstanceOfType<VerificationMethod>(result.ContentStream);
+        Assert.AreEqual("did:example:123#key-1", ((VerificationMethod)result.ContentStream!).Id);
+    }
+
+    [TestMethod]
+    public async Task DereferenceVerificationMethodNotInRequestedRelationshipReturnsInvalidRelationshipError()
+    {
+        //The method is conforming and present in the document, but it is authorized only for
+        //assertionMethod. Requesting authentication MUST raise INVALID_RELATIONSHIP_FOR_VERIFICATION_METHOD
+        //per CID 1.0 §3.3 step 11.
+        var document = CreateDocumentWithKey("did:example:123", "#key-1", inRelationship: "assertionMethod", conforming: true);
+        var resolver = ResolverReturning(document);
+
+        var result = await resolver.DereferenceAsync(
+            "did:example:123#key-1",
+            Context,
+            new DidDereferencingOptions { VerificationRelationship = "authentication" },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful);
+        Assert.AreEqual<DidProblemDetails>(
+            DidResolutionErrors.InvalidRelationshipForVerificationMethod, result.DereferencingMetadata.Error);
+    }
+
+    [TestMethod]
+    public async Task DereferenceNonConformingVerificationMethodUnderRelationshipReturnsInvalidVerificationMethodError()
+    {
+        //The method is listed in the requested relationship array but is not a conforming
+        //verification method (no type, no key material), which MUST raise INVALID_VERIFICATION_METHOD
+        //per CID 1.0 §3.3 step 8 — checked before the relationship-membership step.
+        var document = CreateDocumentWithKey("did:example:123", "#key-1", inRelationship: "authentication", conforming: false);
+        var resolver = ResolverReturning(document);
+
+        var result = await resolver.DereferenceAsync(
+            "did:example:123#key-1",
+            Context,
+            new DidDereferencingOptions { VerificationRelationship = "authentication" },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful);
+        Assert.AreEqual<DidProblemDetails>(
+            DidResolutionErrors.InvalidVerificationMethod, result.DereferencingMetadata.Error);
+    }
+
+    [TestMethod]
+    public async Task DereferenceVerificationMethodWithControllerMismatchReturnsInvalidVerificationMethodError()
+    {
+        //The method is well-formed but its controller does not equal the controller document
+        //(CID 1.0 §3.3 step 10), which MUST raise INVALID_VERIFICATION_METHOD.
+        string vmId = "did:example:123#key-1";
+        var document = new DidDocument
+        {
+            Id = new GenericDidMethod("did:example:123"),
+            VerificationMethod =
+            [
+                new VerificationMethod
+                {
+                    Id = vmId,
+                    Type = "Multikey",
+                    Controller = "did:example:other",
+                    KeyFormat = new PublicKeyMultibase("z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK")
+                }
+            ],
+            Authentication = [new AuthenticationMethod(vmId)]
+        };
+
+        var resolver = ResolverReturning(document);
+
+        var result = await resolver.DereferenceAsync(
+            vmId,
+            Context,
+            new DidDereferencingOptions { VerificationRelationship = "authentication" },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful);
+        Assert.AreEqual<DidProblemDetails>(
+            DidResolutionErrors.InvalidVerificationMethod, result.DereferencingMetadata.Error);
+    }
+
+    [TestMethod]
+    public async Task DereferenceVerificationMethodWithoutRelationshipOptionSkipsConformanceChecks()
+    {
+        //Without a verificationRelationship option, the §3.3 Retrieve Verification Method algorithm
+        //does not run; a plain secondary-resource dereference returns the matched method as-is even
+        //when it would not be conforming under §3.3.
+        var document = CreateDocumentWithKey("did:example:123", "#key-1", inRelationship: "authentication", conforming: false);
+        var resolver = ResolverReturning(document);
+
+        var result = await resolver.DereferenceAsync(
+            "did:example:123#key-1", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccessful);
+        Assert.IsInstanceOfType<VerificationMethod>(result.ContentStream);
+    }
+
+    [TestMethod]
+    public void DidErrorTypesRoundTripThroughErrorCodes()
+    {
+        //Every standard error type URI maps to a lowerCamelCase code and back to the same URI.
+        Uri[] errorTypes =
+        [
+            DidErrorTypes.InvalidDid,
+            DidErrorTypes.InvalidDidDocument,
+            DidErrorTypes.NotFound,
+            DidErrorTypes.RepresentationNotSupported,
+            DidErrorTypes.InvalidDidUrl,
+            DidErrorTypes.MethodNotSupported,
+            DidErrorTypes.InvalidOptions,
+            DidErrorTypes.InternalError,
+            DidErrorTypes.FeatureNotSupported,
+            DidErrorTypes.InvalidVerificationMethod,
+            DidErrorTypes.InvalidRelationshipForVerificationMethod
+        ];
+
+        foreach(var type in errorTypes)
+        {
+            Assert.AreEqual(type, DidErrorTypes.FromErrorCode(DidErrorTypes.ToErrorCode(type)));
+        }
+    }
+
+    [TestMethod]
+    public void CidDereferencingErrorCodesAreTheExpectedLowerCamelCaseStrings()
+    {
+        Assert.AreEqual("invalidVerificationMethod", DidErrorTypes.ToErrorCode(DidErrorTypes.InvalidVerificationMethod));
+        Assert.AreEqual("invalidRelationshipForVerificationMethod", DidErrorTypes.ToErrorCode(DidErrorTypes.InvalidRelationshipForVerificationMethod));
+    }
+
+    [TestMethod]
     public void DidResolutionResultSuccessFactoryCreatesDocumentKind()
     {
         var doc = CreateTestDocument("did:example:123");
@@ -503,5 +645,64 @@ internal sealed class DidResolverTests
     private static DidDocument CreateTestDocument(string did)
     {
         return new DidDocument { Id = new GenericDidMethod(did) };
+    }
+
+    /// <summary>
+    /// Builds a resolver whose <c>did:example</c> handler resolves to <paramref name="document"/>,
+    /// so a dereference test can drive fragment processing against a known document. The document
+    /// flows through a <see cref="DocumentStub"/> instance rather than a captured variable.
+    /// </summary>
+    private static DidResolver ResolverReturning(DidDocument document)
+    {
+        var stub = new DocumentStub(document);
+        return new DidResolver(DidMethodSelectors.FromResolvers((ExampleDidPrefix, stub.ResolveAsync)));
+    }
+
+    /// <summary>
+    /// Carries a fixed <see cref="DidDocument"/> for a test resolver stub without using closures.
+    /// The document is injected at construction and flows to <see cref="ResolveAsync"/> through the
+    /// instance rather than a captured variable.
+    /// </summary>
+    private sealed class DocumentStub(DidDocument document)
+    {
+        private DidDocument Document { get; } = document;
+
+        /// <summary>
+        /// Resolves any DID to the fixed document supplied at construction.
+        /// </summary>
+        public ValueTask<DidResolutionResult> ResolveAsync(
+            string did,
+            DidResolutionOptions options,
+            ExchangeContext context,
+            CancellationToken cancellationToken)
+        {
+            return ValueTask.FromResult(DidResolutionResult.Success(Document, DidDocumentMetadata.Empty));
+        }
+    }
+
+    /// <summary>
+    /// Builds a document containing a single verification method (id = <paramref name="did"/> +
+    /// <paramref name="vmFragment"/>) listed in the <paramref name="inRelationship"/> array. When
+    /// <paramref name="conforming"/> is <see langword="false"/> the method omits its type and key
+    /// material so it fails the CID 1.0 §3.3 conformance check.
+    /// </summary>
+    private static DidDocument CreateDocumentWithKey(string did, string vmFragment, string inRelationship, bool conforming)
+    {
+        string vmId = $"{did}{vmFragment}";
+        var vm = new VerificationMethod
+        {
+            Id = vmId,
+            Type = conforming ? "Multikey" : null,
+            Controller = did,
+            KeyFormat = conforming ? new PublicKeyMultibase("z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK") : null
+        };
+
+        return new DidDocument
+        {
+            Id = new GenericDidMethod(did),
+            VerificationMethod = [vm],
+            Authentication = inRelationship == AuthenticationMethod.Purpose ? [new AuthenticationMethod(vmId)] : null,
+            AssertionMethod = inRelationship == AssertionMethod.Purpose ? [new AssertionMethod(vmId)] : null
+        };
     }
 }

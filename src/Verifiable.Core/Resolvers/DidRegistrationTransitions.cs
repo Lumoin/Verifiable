@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Foundation.Automata;
 using Verifiable.Core.Model.Did;
+using Verifiable.Core.Did.Methods.Key;
 
 namespace Verifiable.Core.Resolvers;
 
@@ -50,18 +52,56 @@ public sealed record RegistrationFailed(string Error) : RegistrationFlowState;
 public abstract record RegistrationInput;
 
 /// <summary>
-/// Begin a create operation.
+/// Begin a create operation. Maps to the DIF
+/// <see href="https://identity.foundation/did-registration/#create">create(method, options, secret, didDocument)</see>
+/// function: <paramref name="Method"/> is the method, <paramref name="Options"/> the (possibly method-specific)
+/// options, <paramref name="Keys"/> the public key material a method builder needs (the resolved
+/// <c>secret.verificationMethod</c> templates), and <paramref name="Document"/> a pre-built initial document.
 /// </summary>
 /// <param name="Method">The DID method to use.</param>
-/// <param name="Document">An optional initial DID document.</param>
-public sealed record BeginCreate(string Method, DidDocument? Document) : RegistrationInput;
+/// <param name="Document">
+/// An optional pre-built initial DID document. Supply this to register a document directly; supply
+/// <paramref name="Keys"/> instead to have the method builder construct the document from key material.
+/// </param>
+/// <param name="Keys">
+/// The public key material the method builder constructs verification methods from, or <see langword="null"/> when
+/// a pre-built <paramref name="Document"/> is supplied. Consumed by the
+/// <see cref="DidRegistrationBuilders"/> method handler (the builder join).
+/// </param>
+/// <param name="Options">
+/// Method-specific create options (per the DIF <c>options</c> object) — for example the
+/// <see cref="WellKnownDidRegistrationValues.WebDomainOption"/> the <c>did:web</c> builder reads. May be
+/// <see langword="null"/>.
+/// </param>
+public sealed record BeginCreate(
+    string Method,
+    DidDocument? Document,
+    IReadOnlyList<KeyMaterialInput>? Keys = null,
+    IReadOnlyDictionary<string, object?>? Options = null) : RegistrationInput;
 
 /// <summary>
-/// Begin an update operation.
+/// Begin an update operation. Maps to the DIF
+/// <see href="https://identity.foundation/did-registration/#update">update(did, options, secret, didDocumentOperation, didDocument)</see>
+/// function, whose <c>didDocumentOperation</c> and <c>didDocument</c> are two index-paired arrays applied in
+/// sequence; <paramref name="Operations"/> is that paired sequence.
 /// </summary>
 /// <param name="Did">The DID to update.</param>
-/// <param name="Document">The updated DID document.</param>
-public sealed record BeginUpdate(string Did, DidDocument? Document) : RegistrationInput;
+/// <param name="Operations">
+/// The ordered <c>didDocumentOperation</c> steps to apply, each pairing an operation with its DID document operand.
+/// At least one step; a DIF request that omits <c>didDocumentOperation</c> is mapped (at the wire boundary) to a
+/// single <see cref="WellKnownDidRegistrationValues.SetDidDocument"/> step.
+/// </param>
+/// <param name="CurrentDocument">
+/// The current DID document the first step transforms, which a leading <c>addToDidDocument</c> or
+/// <c>removeFromDidDocument</c> needs to merge into or prune (a leading <c>setDidDocument</c> ignores it; later steps
+/// transform the running result). Supplied by the caller (which resolves the existing DID); the generic registration
+/// handler applies the operations through <see cref="DidDocumentOperations"/> rather than resolving the DID itself.
+/// <see langword="null"/> when the first operation is <c>setDidDocument</c>.
+/// </param>
+public sealed record BeginUpdate(
+    string Did,
+    IReadOnlyList<DidDocumentOperationStep> Operations,
+    DidDocument? CurrentDocument = null) : RegistrationInput;
 
 /// <summary>
 /// Begin a deactivate operation.
@@ -185,8 +225,8 @@ public static class DidRegistrationTransitions
         RegistrationFlowState initiated = input switch
         {
             BeginCreate create => new RegistrationInitiated(create.Method, create.Document),
-            BeginUpdate update => new RegistrationInitiated("", update.Document),
-            BeginDeactivate deactivate => new RegistrationInitiated("", null),
+            BeginUpdate => new RegistrationInitiated("", null),
+            BeginDeactivate => new RegistrationInitiated("", null),
             _ => throw new InvalidOperationException($"Unexpected input type: {input.GetType().Name}.")
         };
 

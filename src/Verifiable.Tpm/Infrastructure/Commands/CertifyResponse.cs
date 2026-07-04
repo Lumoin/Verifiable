@@ -60,10 +60,28 @@ public sealed class CertifyResponse: IDisposable, ITpmWireType
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bAttest certifyInfo = Tpm2bAttest.Parse(ref reader, pool);
-        var sigAlg = (TpmAlgIdConstants)reader.ReadUInt16();
-        TpmuSignature signature = TpmuSignature.Parse(sigAlg, ref reader, pool);
+        try
+        {
+            //A TPM2_Certify response's attestation type is fixed to TPM_ST_ATTEST_CERTIFY (Part 3, §18.2). Reject a
+            //type-confused body (for example a replayed TPM2_Quote attestation) here rather than surfacing it as a
+            //successful CertifyResponse whose Attested.Certify is null and faults the first consumer that reads it.
+            if(certifyInfo.AttestationData.Type != TpmStConstants.TPM_ST_ATTEST_CERTIFY)
+            {
+                throw new InvalidOperationException(
+                    $"TPM2_Certify response attestation type must be TPM_ST_ATTEST_CERTIFY but was {certifyInfo.AttestationData.Type}.");
+            }
 
-        return new CertifyResponse(certifyInfo, sigAlg, signature);
+            var sigAlg = (TpmAlgIdConstants)reader.ReadUInt16();
+            TpmuSignature signature = TpmuSignature.Parse(sigAlg, ref reader, pool);
+
+            return new CertifyResponse(certifyInfo, sigAlg, signature);
+        }
+        catch
+        {
+            //A mismatched type or an unsupported signature scheme must not leak the pooled attestation buffer.
+            certifyInfo.Dispose();
+            throw;
+        }
     }
 
     /// <inheritdoc/>

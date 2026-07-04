@@ -299,7 +299,7 @@ internal sealed class DidCommEncryptedHeaderPolicyTests
 
     private static DidResolver CreateResolver() =>
         new(DidMethodSelectors.FromResolvers(
-            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(Pool, DeserializeDidDocument, SHA256.HashData))));
+            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(Pool, DeserializeDidDocument))));
 
 
     private static DidDocument? DeserializeDidDocument(ReadOnlySpan<byte> jsonUtf8)

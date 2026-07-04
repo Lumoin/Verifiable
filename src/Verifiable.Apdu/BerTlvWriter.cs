@@ -13,13 +13,32 @@ namespace Verifiable.Apdu;
 /// Constructed (nested) elements are written header-first, so a caller computes a content length up front
 /// with <see cref="ElementSize"/> / <see cref="LengthFieldSize"/> / <see cref="TagSize"/>, writes the
 /// outer header with <see cref="WriteHeader"/>, then writes the inner elements into the same buffer. Tags
-/// up to two bytes and lengths up to <c>0xFFFF</c> are supported, which covers the eMRTD LDS data groups.
+/// up to two bytes and definite lengths through the four-byte long form are supported, spanning the eMRTD
+/// LDS data groups and the larger structures (high-resolution biometrics, a CSCA Master List) that exceed 64 KiB.
 /// </para>
 /// </remarks>
 public ref struct BerTlvWriter
 {
-    private readonly Span<byte> buffer;
-    private int position;
+    /// <summary>The largest content length the short form encodes directly in a single byte.</summary>
+    private const int ShortFormMaxLength = 0x7F;
+
+    /// <summary>The high bit set on a long-form leading byte, ORed with the count of length bytes that follow.</summary>
+    private const int LongFormMarker = 0x80;
+
+    /// <summary>The number of bits in a byte — the shift between successive big-endian tag or length bytes.</summary>
+    private const int BitsPerByte = 8;
+
+    /// <summary>The largest tag value that encodes in a single byte; a larger tag takes two bytes.</summary>
+    private const int MaxSingleByteTag = 0xFF;
+
+    /// <summary>The largest content length a one-byte long-form length holds.</summary>
+    private const int OneByteMaxLength = 0xFF;
+
+    /// <summary>The largest content length a two-byte long-form length holds.</summary>
+    private const int TwoByteMaxLength = 0xFFFF;
+
+    /// <summary>The largest content length a three-byte long-form length holds.</summary>
+    private const int ThreeByteMaxLength = 0xFFFFFF;
 
 
     /// <summary>
@@ -28,13 +47,19 @@ public ref struct BerTlvWriter
     /// <param name="buffer">The destination buffer.</param>
     public BerTlvWriter(Span<byte> buffer)
     {
-        this.buffer = buffer;
-        position = 0;
+        Buffer = buffer;
+        Position = 0;
     }
 
 
+    /// <summary>Gets the destination buffer the elements are written into.</summary>
+    private Span<byte> Buffer { get; }
+
+    /// <summary>Gets or sets the write cursor: the number of bytes written so far.</summary>
+    private int Position { get; set; }
+
     /// <summary>Gets the number of bytes written so far.</summary>
-    public readonly int Written => position;
+    public readonly int Written => Position;
 
 
     /// <summary>
@@ -43,35 +68,39 @@ public ref struct BerTlvWriter
     /// <param name="tag">The tag (1 or 2 bytes).</param>
     public void WriteTag(int tag)
     {
-        if(tag > 0xFF)
+        if(tag > MaxSingleByteTag)
         {
-            buffer[position++] = (byte)(tag >> 8);
+            Buffer[Position++] = (byte)(tag >> BitsPerByte);
         }
 
-        buffer[position++] = (byte)tag;
+        Buffer[Position++] = (byte)tag;
     }
 
 
     /// <summary>
-    /// Writes a BER-TLV definite-length field (short form, or long form with <c>0x81</c> / <c>0x82</c>).
+    /// Writes a BER-TLV definite-length field (short form, or long form with <c>0x81</c> through <c>0x84</c>),
+    /// spanning the same one-to-four length-byte range <see cref="ApduReader.ReadTlvLength"/> reads.
     /// </summary>
     /// <param name="length">The content length.</param>
+    /// <remarks>
+    /// The three- and four-byte long forms matter for content that exceeds 64 KiB (a high-resolution biometric
+    /// image or a CSCA Master List): a writer that stopped at the two-byte form would silently emit the low 16
+    /// bits of the length while writing the full content, producing a corrupt, self-desynchronising structure.
+    /// </remarks>
     public void WriteLength(int length)
     {
-        if(length <= 0x7F)
+        if(length <= ShortFormMaxLength)
         {
-            buffer[position++] = (byte)length;
+            Buffer[Position++] = (byte)length;
+
+            return;
         }
-        else if(length <= 0xFF)
+
+        int lengthBytes = LongFormByteCount(length);
+        Buffer[Position++] = (byte)(LongFormMarker | lengthBytes);
+        for(int shift = (lengthBytes - 1) * BitsPerByte; shift >= 0; shift -= BitsPerByte)
         {
-            buffer[position++] = 0x81;
-            buffer[position++] = (byte)length;
-        }
-        else
-        {
-            buffer[position++] = 0x82;
-            buffer[position++] = (byte)(length >> 8);
-            buffer[position++] = (byte)length;
+            Buffer[Position++] = (byte)(length >> shift);
         }
     }
 
@@ -82,8 +111,8 @@ public ref struct BerTlvWriter
     /// <param name="value">The bytes to write.</param>
     public void WriteValue(scoped ReadOnlySpan<byte> value)
     {
-        value.CopyTo(buffer[position..]);
-        position += value.Length;
+        value.CopyTo(Buffer[Position..]);
+        Position += value.Length;
     }
 
 
@@ -93,7 +122,7 @@ public ref struct BerTlvWriter
     /// <param name="value">The ASCII string to write.</param>
     public void WriteAscii(string value)
     {
-        position += Encoding.ASCII.GetBytes(value, buffer[position..]);
+        Position += Encoding.ASCII.GetBytes(value, Buffer[Position..]);
     }
 
 
@@ -126,16 +155,31 @@ public ref struct BerTlvWriter
     /// </summary>
     /// <param name="tag">The tag.</param>
     /// <returns>The tag size in bytes.</returns>
-    public static int TagSize(int tag) => tag > 0xFF ? 2 : 1;
+    public static int TagSize(int tag) => tag > MaxSingleByteTag ? 2 : 1;
 
 
     /// <summary>
-    /// The number of bytes a definite-length field occupies for <paramref name="contentLength"/>.
+    /// The number of bytes a definite-length field occupies for <paramref name="contentLength"/>, matching the
+    /// one-to-four long-form range <see cref="WriteLength"/> emits (the leading byte plus the length bytes).
     /// </summary>
     /// <param name="contentLength">The content length.</param>
     /// <returns>The length-field size in bytes.</returns>
     public static int LengthFieldSize(int contentLength) =>
-        contentLength <= 0x7F ? 1 : contentLength <= 0xFF ? 2 : 3;
+        contentLength <= ShortFormMaxLength ? 1 : 1 + LongFormByteCount(contentLength);
+
+
+    /// <summary>
+    /// The number of long-form length bytes needed to hold <paramref name="length"/>, one through four.
+    /// </summary>
+    /// <param name="length">A content length greater than the short-form maximum.</param>
+    /// <returns>The number of big-endian length bytes.</returns>
+    private static int LongFormByteCount(int length) => length switch
+    {
+        <= OneByteMaxLength => 1,
+        <= TwoByteMaxLength => 2,
+        <= ThreeByteMaxLength => 3,
+        _ => 4
+    };
 
 
     /// <summary>

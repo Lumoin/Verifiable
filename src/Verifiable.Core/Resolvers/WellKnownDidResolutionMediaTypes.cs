@@ -6,7 +6,7 @@ namespace Verifiable.Core.Resolvers;
 /// response body; the base path is the GET interface the binding mounts.
 /// </summary>
 /// <remarks>
-/// See <see href="https://w3c.github.io/did-resolution/#bindings-https">DID Resolution HTTP(S) Binding</see>.
+/// See <see href="https://www.w3.org/TR/did-resolution/#bindings-https">DID Resolution HTTP(S) Binding</see>.
 /// </remarks>
 public static class WellKnownDidResolutionMediaTypes
 {

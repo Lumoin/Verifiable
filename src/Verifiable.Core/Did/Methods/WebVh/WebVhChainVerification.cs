@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.Text;
 using System.Threading.Tasks;
-using Verifiable.Core.EventLogs;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Did.Methods.WebVh;
@@ -31,37 +31,38 @@ public static class WebVhChainVerification
     /// Creates the entryHash chain integrity delegate for did:webvh replay.
     /// </summary>
     /// <param name="entryHashInput">Produces the JCS-canonical entry-hash input (proof removed, versionId set to the predecessor).</param>
-    /// <param name="hashFunction">The SHA-256 hash function fixed by did:webvh v1.0.</param>
+    /// <param name="computeDigest">The digest implementation (caller-supplied or the registered default) used for the entryHash.</param>
     /// <param name="base58Encoder">The raw base58btc encoder (no multibase prefix).</param>
     /// <param name="base58Decoder">The raw base58btc decoder, used to parse the claimed entryHash's multihash algorithm prefix.</param>
     /// <param name="pool">The pool the decoded multihash bytes are rented from.</param>
     /// <returns>A delegate that verifies one entry's position in the entryHash chain.</returns>
     public static VerifyChainIntegrityDelegate<WebVhRawEntry, WebVhProof> Create(
         WebVhEntryHashInput entryHashInput,
-        HashFunctionDelegate hashFunction,
+        ComputeDigestDelegate computeDigest,
         EncodeDelegate base58Encoder,
         DecodeDelegate base58Decoder,
         MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(entryHashInput);
-        ArgumentNullException.ThrowIfNull(hashFunction);
+        ArgumentNullException.ThrowIfNull(computeDigest);
         ArgumentNullException.ThrowIfNull(base58Encoder);
         ArgumentNullException.ThrowIfNull(base58Decoder);
         ArgumentNullException.ThrowIfNull(pool);
 
         return (entry, previousEntryDigest, cancellationToken) =>
-            ValueTask.FromResult(Verify(entry, previousEntryDigest, entryHashInput, hashFunction, base58Encoder, base58Decoder, pool));
+            VerifyAsync(entry, previousEntryDigest, entryHashInput, computeDigest, base58Encoder, base58Decoder, pool, cancellationToken);
     }
 
 
-    private static string? Verify(
+    private static async ValueTask<string?> VerifyAsync(
         LogEntry<WebVhRawEntry, WebVhProof> entry,
         ReadOnlyMemory<byte>? previousEntryDigest,
         WebVhEntryHashInput entryHashInput,
-        HashFunctionDelegate hashFunction,
+        ComputeDigestDelegate computeDigest,
         EncodeDelegate base58Encoder,
         DecodeDelegate base58Decoder,
-        MemoryPool<byte> pool)
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
     {
         if(entry.Operation is not WebVhRawEntry rawEntry)
         {
@@ -95,7 +96,7 @@ public static class WebVhChainVerification
         }
 
         TaggedMemory<byte> canonicalInput = entryHashInput(entry.CanonicalBytes, predecessorVersionId);
-        string computedEntryHash = WebVhHash.ComputeBase58(canonicalInput.Span, hashFunction, base58Encoder);
+        string computedEntryHash = await WebVhHash.ComputeBase58Async(canonicalInput.Memory, computeDigest, base58Encoder, pool, cancellationToken).ConfigureAwait(false);
 
         if(!string.Equals(computedEntryHash, claimedEntryHash, StringComparison.Ordinal))
         {

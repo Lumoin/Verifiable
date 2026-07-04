@@ -294,6 +294,101 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
         }
     }
 
+    [TestMethod]
+    public async Task PcrGatedSealRejectsUnsealAuthorizedByTrialSession()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint parentHandle = parent.ObjectHandle.Value;
+
+        uint trialHandle = 0;
+        uint itemHandle = 0;
+        try
+        {
+            //1. A trial session folds the caller's pcrDigest verbatim (Part 3, clause 23.7), so it can be driven to
+            //ANY target policyDigest. Compute the object's authPolicy in this trial session and keep the session at
+            //that digest — the attacker's lever for reproducing a sealed object's authPolicy without the live state.
+            byte[] chosenPcrDigest = new byte[32];
+            Array.Fill(chosenPcrDigest, (byte)0xAB);
+
+            TpmResult<StartAuthSessionResponse> trialStartResult = await tpm.StartTrialPolicySessionAsync(
+                SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(trialStartResult.IsSuccess, $"StartAuthSession (trial) failed: '{trialStartResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse trialStart = trialStartResult.Value;
+            trialHandle = trialStart.SessionHandle.Value;
+
+            TpmResult<PolicyPcrResponse> trialPcrResult = await tpm.PolicyPcrAsync(
+                trialHandle, PcrBank, PcrIndices, chosenPcrDigest, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(trialPcrResult.IsSuccess, $"Trial PolicyPCR failed: '{trialPcrResult.ResponseCode}'.");
+
+            byte[] authPolicy;
+            TpmResult<PolicyGetDigestResponse> trialDigestResult = await tpm.PolicyGetDigestAsync(
+                trialHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(trialDigestResult.IsSuccess, $"Trial PolicyGetDigest failed: '{trialDigestResult.ResponseCode}'.");
+            using(PolicyGetDigestResponse trialDigestResponse = trialDigestResult.Value)
+            {
+                authPolicy = trialDigestResponse.PolicyDigest.AsReadOnlySpan().ToArray();
+            }
+
+            //2. Seal the secret under that policy: the trial session's digest equals the object's authPolicy exactly.
+            using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, pool);
+            using Tpm2bPublic sealTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy, noDa: true);
+            using CreateInput createInput = new(parentHandle, inSensitive, sealTemplate, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+            using TpmPasswordSession createParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+            TpmResult<CreateResponse> createResult = await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
+                tpm, createInput, [createParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(createResult.IsSuccess, $"Create (seal) failed: '{createResult.ResponseCode}'.");
+
+            using CreateResponse sealedObject = createResult.Value;
+
+            //3. Persist-then-reload through wire bytes and load the wrapped object.
+            using Tpm2bPrivate inPrivate = Tpm2bPrivate.Create(sealedObject.OutPrivate.Span, pool);
+            using Tpm2bPublic inPublic = ClonePublic(sealedObject.OutPublic, pool);
+            using LoadInput loadInput = new(parentHandle, inPrivate, inPublic);
+            using TpmPasswordSession loadParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+            TpmResult<LoadResponse> loadResult = await TpmCommandExecutor.ExecuteAsync<LoadResponse>(
+                tpm, loadInput, [loadParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(loadResult.IsSuccess, $"Load (sealed object) failed: '{loadResult.ResponseCode}'.");
+
+            using LoadResponse loaded = loadResult.Value;
+            itemHandle = loaded.ObjectHandle.Value;
+            ReadOnlyMemory<byte>[] handleNames = [loaded.Name.Span.ToArray()];
+
+            //4. Attempt the unseal authorized by the TRIAL session, whose digest is byte-identical to the sealed
+            //authPolicy. A trial session accumulates a digest but authorizes nothing (Part 1, clause 19.3), so the
+            //unseal must still be rejected with TPM_RC_POLICY_FAIL — otherwise the trial-session lever above would
+            //defeat PCR sealing entirely.
+            using TpmPolicySession trialPolicySession = TpmPolicySession.ForSession(trialHandle, SessionAlg, pool);
+            UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
+
+            TpmResult<UnsealResponse> unsealResult = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
+                tpm, unsealInput, [trialPolicySession], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsFalse(unsealResult.IsSuccess,
+                "A trial policy session must not authorize an unseal even when its digest equals the sealed authPolicy.");
+
+            //TPM_RC_POLICY_FAIL is a format-one code annotated with the offending session; strip the modifier bits
+            //to compare the base error (Part 2, Section 6.6.3).
+            const uint FormatOneModifierMask = (uint)(TpmRcConstants.TPM_RC_P | TpmRcConstants.TPM_RC_S | TpmRcConstants.TPM_RC_N_MASK);
+            var baseError = (TpmRcConstants)((uint)unsealResult.ResponseCode & ~FormatOneModifierMask);
+            Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY_FAIL, baseError,
+                $"Unseal authorized by a trial session must surface as TPM_RC_POLICY_FAIL (got '{unsealResult.ResponseCode}').");
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, itemHandle).ConfigureAwait(false);
+            await FlushIfPresentAsync(tpm, trialHandle).ConfigureAwait(false);
+            await FlushIfPresentAsync(tpm, parentHandle).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     /// Creates the deterministic ECC storage parent under the owner hierarchy and returns the response (the
     /// caller owns it and flushes <see cref="CreatePrimaryResponse.ObjectHandle"/>).

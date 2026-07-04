@@ -153,9 +153,10 @@ public static class JweAgreementInfo
     }
 
 
-    //Computes the raw apv digest: SHA-256(UTF8(sorted(recipient kids) joined with ".")), through the same
-    //registered software-digest seam ConcatKdf and the produce side hash through, so CBOM/observability
-    //provenance stays consistent. Kids are sorted ordinal and joined with a single '.' (DIDComm v2.1).
+    //Computes the raw apv digest: SHA-256(UTF8(sorted(recipient kids) joined with ".")). This is a hash of public
+    //kid strings — sync by nature, no hardware-async backend — so it goes through the registered synchronous
+    //HashFunctionDelegate seam, the same seam ConcatKdf hashes through. Kids are sorted ordinal and joined with a
+    //single '.' (DIDComm v2.1).
     private static DigestValue ComputeApvDigest(IReadOnlyCollection<string> recipientKeyIds, MemoryPool<byte> pool)
     {
         string[] sorted = [.. recipientKeyIds];
@@ -166,8 +167,8 @@ public static class JweAgreementInfo
         using IMemoryOwner<byte> inputOwner = pool.Rent(byteCount);
         Encoding.UTF8.GetBytes(joined, inputOwner.Memory.Span);
 
-        return CryptographicKeyEvents.ComputeDigestSyncBridge(
-            inputOwner.Memory[..byteCount],
+        return CryptographicKeyEvents.ComputeDigest(
+            inputOwner.Memory.Span[..byteCount],
             SHA256.HashSizeInBytes,
             CryptoTags.Sha256Digest,
             pool);

@@ -484,6 +484,19 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     public static CryptoAlgorithm RsaIso9796d2 { get; } = new CryptoAlgorithm(32);
 
 
+    /// <summary>
+    /// BLAKE3 cryptographic hash as defined by the
+    /// <see href="https://github.com/BLAKE3-team/BLAKE3-specs/blob/master/blake3.pdf">BLAKE3 specification</see>.
+    /// </summary>
+    /// <remarks>
+    /// An extendable-output hash; the digest length is carried alongside the tag (e.g. 32 bytes for the 256-bit
+    /// output). BLAKE3 is not a <see cref="System.Security.Cryptography.HashAlgorithmName"/>, so a digest tag names
+    /// it through this identifier rather than a <c>HashAlgorithmName</c>. It is the default did:webplus self-hash
+    /// algorithm (<c>MultihashHeaders.Blake3</c>). The numeric identifier follows RsaIso9796d2 (32).
+    /// </remarks>
+    public static CryptoAlgorithm Blake3 { get; } = new CryptoAlgorithm(33);
+
+
     private static readonly List<CryptoAlgorithm> algorithms = new([Rsa2048]);
 
 
@@ -668,6 +681,7 @@ public static class CryptoAlgorithmNames
         var a when a == CryptoAlgorithm.TripleDes.Algorithm => nameof(CryptoAlgorithm.TripleDes),
         var a when a == CryptoAlgorithm.Aes128.Algorithm => nameof(CryptoAlgorithm.Aes128),
         var a when a == CryptoAlgorithm.RsaIso9796d2.Algorithm => nameof(CryptoAlgorithm.RsaIso9796d2),
+        var a when a == CryptoAlgorithm.Blake3.Algorithm => nameof(CryptoAlgorithm.Blake3),
         _ => $"Custom: ('{algorithm}')."
     };
 }

@@ -294,11 +294,20 @@ public static class WebVhWitnessVerification
                 return null;
             }
 
-            //eddsa-jcs-2022 signs SHA-256(JCS(proofOptions)) concatenated with SHA-256(JCS(document)).
+            //eddsa-jcs-2022 signs SHA-256(JCS(proofOptions)) concatenated with SHA-256(JCS(document)). Both digests
+            //flow through the registered ComputeDigestDelegate (telemetry, CBOM stamping, event emission); this method
+            //is already async, so it awaits the digest. The digests are computed before the hashData span is taken,
+            //so no Span local spans an await.
             using IMemoryOwner<byte> hashOwner = context.MemoryPool.Rent(HashDataLength);
-            Span<byte> hashData = hashOwner.Memory.Span[..HashDataLength];
-            context.HashFunction(proofOptions.Span, hashData[..Sha256DigestLength]);
-            context.HashFunction(document.Span, hashData[Sha256DigestLength..]);
+            using(DigestValue proofOptionsDigest = await CryptographicKeyEvents.ComputeDigestAsync(
+                context.ComputeDigest, new System.Buffers.ReadOnlySequence<byte>(proofOptions.Memory), Sha256DigestLength, CryptoTags.Sha256Digest, context.MemoryPool, cancellationToken: cancellationToken).ConfigureAwait(false))
+            using(DigestValue documentDigest = await CryptographicKeyEvents.ComputeDigestAsync(
+                context.ComputeDigest, new System.Buffers.ReadOnlySequence<byte>(document.Memory), Sha256DigestLength, CryptoTags.Sha256Digest, context.MemoryPool, cancellationToken: cancellationToken).ConfigureAwait(false))
+            {
+                Span<byte> hashData = hashOwner.Memory.Span[..HashDataLength];
+                proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData[..Sha256DigestLength]);
+                documentDigest.AsReadOnlySpan().CopyTo(hashData[Sha256DigestLength..]);
+            }
 
             VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification);
             bool isValid = await verify(hashOwner.Memory[..HashDataLength], signatureOwner.Memory, keyData.Memory, null, cancellationToken).ConfigureAwait(false);

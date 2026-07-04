@@ -20,6 +20,17 @@ namespace Verifiable.JCose;
 /// </remarks>
 public static class WellKnownJoseHeaderNames
 {
+    /// <summary>The UTF-8 source literal of <see cref="B64"/>.</summary>
+    public static ReadOnlySpan<byte> B64Utf8 => "b64"u8;
+
+    /// <summary>
+    /// The <c>b64</c> (Base64url-Encode Payload) header parameter per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7797">RFC 7797</see>. A Boolean defaulting to
+    /// <see langword="true"/>; when <see langword="false"/> the payload is signed unencoded and MUST be listed
+    /// in <c>crit</c>.
+    /// </summary>
+    public static readonly string B64 = Utf8Constants.ToInternedString(B64Utf8);
+
     /// <summary>The UTF-8 source literal of <see cref="Typ"/>.</summary>
     public static ReadOnlySpan<byte> TypUtf8 => "typ"u8;
 

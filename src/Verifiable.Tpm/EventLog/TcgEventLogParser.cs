@@ -300,19 +300,31 @@ public static class TcgEventLogParser
             var algorithm = (TpmAlgIdConstants)algId;
             int digestSize;
 
-            if(digestSizes.TryGetValue(algorithm, out ushort specifiedSize))
+            //A known hash has a fixed output width; the SpecId table cannot redefine it. Trusting a wire-declared
+            //size that disagrees would slice this digest (and desynchronize every field after it) at the wrong
+            //width, so the known width is authoritative and a contradicting declaration is a malformed log. The
+            //declared size is trusted only for a genuinely unknown algorithm, which has no fixed width to check.
+            //A known hash has a fixed output width; the SpecId table cannot redefine it. Trusting a wire-declared
+            //size that disagrees would slice this digest (and desynchronize every field after it) at the wrong
+            //width, so the known width is authoritative and a contradicting declaration is a malformed log. The
+            //declared size is trusted only for a genuinely unknown algorithm, which has no fixed width to check.
+            int? knownSize = algorithm.GetDigestSize();
+            if(knownSize is not null)
+            {
+                if(digestSizes.TryGetValue(algorithm, out ushort declaredSize) && declaredSize != knownSize.Value)
+                {
+                    return TpmResult<CryptoAgileEvent>.TransportError((uint)TcgEventLogError.InconsistentDigestSize);
+                }
+
+                digestSize = knownSize.Value;
+            }
+            else if(digestSizes.TryGetValue(algorithm, out ushort specifiedSize))
             {
                 digestSize = specifiedSize;
             }
             else
             {
-                int? knownSize = algorithm.GetDigestSize();
-                if(knownSize is null)
-                {
-                    return TpmResult<CryptoAgileEvent>.TransportError((uint)TcgEventLogError.UnknownAlgorithm);
-                }
-
-                digestSize = knownSize.Value;
+                return TpmResult<CryptoAgileEvent>.TransportError((uint)TcgEventLogError.UnknownAlgorithm);
             }
 
             if(offset + digestSize > data.Length)
@@ -598,8 +610,11 @@ public static class TcgEventLogParser
         const int devicePathLengthOffset = 24;
         ulong devicePathLength = BinaryPrimitives.ReadUInt64LittleEndian(eventData.AsSpan(devicePathLengthOffset, sizeof(ulong)));
 
+        //Bound the 64-bit length against the bytes actually present before narrowing to int: a value differing
+        //from a legitimate length by a multiple of 2^32 would otherwise truncate to a wrong (or negative) length
+        //and either read a bogus slice or throw. The comparison is done entirely in ulong so the cast is safe.
         const int devicePathOffset = 32;
-        if(devicePathLength > 0 && devicePathOffset + (int)devicePathLength <= eventData.Length)
+        if(devicePathLength > 0 && devicePathLength <= (ulong)(eventData.Length - devicePathOffset))
         {
             byte[] pathData = eventData.AsSpan(devicePathOffset, (int)devicePathLength).ToArray();
             string? path = TryExtractDevicePathString(pathData);

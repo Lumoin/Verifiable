@@ -204,13 +204,10 @@ namespace Verifiable.Core.Did.Methods.Web
                     string fragment = keyInput.Fragment ?? fragmentGenerator(buildState);
                     string verificationMethodId = CreateVerificationMethodId(buildState.WebDomain, fragment);
 
-                    var verificationMethod = new VerificationMethod
-                    {
-                        Id = verificationMethodId,
-                        Type = keyInput.VerificationMethodType.TypeName,
-                        Controller = CreateDidId(buildState.WebDomain),
-                        KeyFormat = keyInput.VerificationMethodType.CreateKeyFormat(keyInput.PublicKey)
-                    };
+                    //The standard verification-method construction (id, type, controller, key format) is shared
+                    //across every DID method builder; only the id format is method-specific.
+                    VerificationMethod verificationMethod = DidBuilderExtensions.CreateVerificationMethod(
+                        keyInput.PublicKey, keyInput.VerificationMethodType, verificationMethodId, CreateDidId(buildState.WebDomain));
 
                     verificationMethods.Add(verificationMethod);
                 }
@@ -239,18 +236,8 @@ namespace Verifiable.Core.Did.Methods.Web
                     string fragment = keyInput.Fragment ?? fragmentGenerator(buildState);
                     string verificationMethodId = CreateVerificationMethodId(buildState.WebDomain, fragment);
 
-                    if(keyInput.PublicKey.SupportsSigning())
-                    {
-                        didDocument.WithAuthentication(verificationMethodId)
-                                   .WithAssertionMethod(verificationMethodId)
-                                   .WithCapabilityInvocation(verificationMethodId)
-                                   .WithCapabilityDelegation(verificationMethodId);
-                    }
-
-                    if(keyInput.PublicKey.SupportsKeyAgreement())
-                    {
-                        didDocument.WithKeyAgreement(verificationMethodId);
-                    }
+                    //The signing/key-agreement relationship assignment is the shared standard step.
+                    didDocument.WithStandardVerificationRelationships(keyInput.PublicKey, verificationMethodId);
                 }
 
                 return ValueTask.FromResult(didDocument);

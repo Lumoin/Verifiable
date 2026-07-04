@@ -21,7 +21,7 @@ namespace Verifiable.Core.Resolvers;
 /// </para>
 /// <para>
 /// See <see href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457 Problem Details for HTTP APIs</see>
-/// and <see href="https://w3c.github.io/did-resolution/#errors">W3C DID Resolution §9 Errors</see>.
+/// and <see href="https://www.w3.org/TR/did-resolution/#errors">W3C DID Resolution §9 Errors</see>.
 /// </para>
 /// </remarks>
 /// <param name="Type">

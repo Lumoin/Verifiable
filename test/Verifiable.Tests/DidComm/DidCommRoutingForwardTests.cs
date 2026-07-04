@@ -765,7 +765,7 @@ internal sealed class DidCommRoutingForwardTests
         bob = PeerParty.Mint(bobServices);
 
         DidResolver resolver = new(DidMethodSelectors.FromResolvers(
-            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(Pool, DeserializeDidDocument, SHA256.HashData))));
+            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(Pool, DeserializeDidDocument))));
 
         //Resolve each party's single keyAgreement kid once the resolver exists; the absolute kid is read
         //from the resolved document, the same way a real sender/mediator reads it.

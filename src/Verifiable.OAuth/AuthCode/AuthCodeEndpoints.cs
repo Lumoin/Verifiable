@@ -5988,13 +5988,9 @@ public static class AuthCodeEndpoints
         EncodeDelegate encoder,
         MemoryPool<byte> pool)
     {
-        //AuthCode endpoint handlers run inside sync endpoint-builder lambdas that
-        //don't have an await boundary at this layer; bridge to async via
-        //CryptographicKeyEvents.ComputeDigestSyncBridge. The computeDigest
-        //parameter is retained for API stability but the registered delegate is
-        //used directly via the bridge — both resolve to the same backend in
-        //practice. If a future profile needs a non-default qualifier here, the
-        //helper migrates to async at that point.
+        //PKCE S256 verification here is a SHA-256 of the presented code verifier — sync by nature, no
+        //hardware-async backend — so it hashes through the registered synchronous HashFunctionDelegate seam. The
+        //computeDigest parameter is retained for API stability; the registered sync hash is used directly.
         _ = computeDigest;
 
         int inputByteCount = System.Text.Encoding.ASCII.GetByteCount(input);
@@ -6002,8 +5998,8 @@ public static class AuthCodeEndpoints
         Span<byte> inputBytes = inputOwner.Memory.Span[..inputByteCount];
         System.Text.Encoding.ASCII.GetBytes(input, inputBytes);
 
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigestSyncBridge(
-            inputOwner.Memory[..inputByteCount], digestByteLength, algorithmTag, pool);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            inputBytes, digestByteLength, algorithmTag, pool);
 
         return encoder(digest.AsReadOnlySpan());
     }

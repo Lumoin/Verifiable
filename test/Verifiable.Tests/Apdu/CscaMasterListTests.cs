@@ -123,7 +123,7 @@ internal sealed class CscaMasterListTests
 
         PassiveAuthenticationResult result = await PassiveAuthentication.VerifyAsync(
             passport.EfSod, passport.DataGroups, parsed.CountrySigningCertificateAuthorities, ValidationTime,
-            MicrosoftX509Functions.ValidateChainAsync, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+            MicrosoftX509Functions.ValidateChainAsync, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.AllDataGroupsValid,
             "A passport whose Document Signer chains to a CSCA recovered from a parsed master list must pass Passive Authentication.");

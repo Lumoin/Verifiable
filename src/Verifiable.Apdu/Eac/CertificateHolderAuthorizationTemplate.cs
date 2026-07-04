@@ -60,7 +60,10 @@ public sealed class CertificateHolderAuthorizationTemplate: SensitiveMemory
     /// Terminal template carries no eMRTD read bits in that octet, so the result is
     /// <see cref="InspectionSystemAccess.None"/>.
     /// </summary>
-    public InspectionSystemAccess InspectionSystemReadAccess => (InspectionSystemAccess)(AsReadOnlySpan()[0] & EmrtdReadAccessMask);
+    public InspectionSystemAccess InspectionSystemReadAccess =>
+        TerminalType == TerminalType.InspectionSystem
+            ? (InspectionSystemAccess)(AsReadOnlySpan()[0] & EmrtdReadAccessMask)
+            : InspectionSystemAccess.None;
 }
 
 

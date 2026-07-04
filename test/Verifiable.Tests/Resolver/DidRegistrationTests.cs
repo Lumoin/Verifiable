@@ -46,9 +46,10 @@ internal sealed class DidRegistrationTests
         var signingRequest = new SigningRequest
         {
             RequestId = "sign-1",
-            Payload = new byte[] { 0x01, 0x02, 0x03 },
+            SerializedPayload = new byte[] { 0x01, 0x02, 0x03 },
             Kid = "did:key:z6Mk...#key-1",
-            Algorithm = "EdDSA"
+            Algorithm = "EdDSA",
+            Purpose = "authentication"
         };
 
         var pda = CreateTestAutomaton((state, input, ct) => (state, input) switch
@@ -71,6 +72,7 @@ internal sealed class DidRegistrationTests
 
         var awaiting = (AwaitingSignature)pda.CurrentState;
         Assert.AreEqual("sign-1", awaiting.Request.RequestId);
+        Assert.AreEqual("authentication", awaiting.Request.Purpose);
 
         //Step 2: Provide signature — PDA transitions to Completed, pops signing frame.
         var response = new SigningResponse
@@ -124,7 +126,7 @@ internal sealed class DidRegistrationTests
             if(input is BeginUpdate update)
             {
                 return ValueTask.FromResult<RegistrationFlowState>(
-                    new RegistrationCompleted(update.Did, update.Document));
+                    new RegistrationCompleted(update.Did, update.Operations[0].Document));
             }
 
             return ValueTask.FromResult(state);
@@ -132,7 +134,8 @@ internal sealed class DidRegistrationTests
 
         var updatedDoc = new DidDocument { Id = (GenericDidMethod)"did:web:example.com" };
         await pda.StepAsync(
-            new BeginUpdate("did:web:example.com", updatedDoc), TestContext.CancellationToken).ConfigureAwait(false);
+            new BeginUpdate("did:web:example.com", [new DidDocumentOperationStep(WellKnownDidRegistrationValues.SetDidDocument, updatedDoc)]),
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(pda.IsAccepted);
         var completed = (RegistrationCompleted)pda.CurrentState;
@@ -223,6 +226,55 @@ internal sealed class DidRegistrationTests
         Assert.AreEqual(
             new DateTimeOffset(2025, 9, 1, 8, 0, 0, TimeSpan.Zero),
             entries[0].Timestamp);
+    }
+
+    [TestMethod]
+    public async Task UpdateFlowCarriesDidDocumentOperation()
+    {
+        //The DIF didDocumentOperation selects how the supplied document is applied; it must reach the
+        //method handler so the method can honor setDidDocument vs addToDidDocument vs removeFromDidDocument.
+        string? observedOperation = null;
+        var pda = CreateTestAutomaton((state, input, ct) =>
+        {
+            if(input is BeginUpdate update)
+            {
+                observedOperation = update.Operations[0].Operation;
+                return ValueTask.FromResult<RegistrationFlowState>(
+                    new RegistrationCompleted(update.Did, update.Operations[0].Document));
+            }
+
+            return ValueTask.FromResult(state);
+        });
+
+        var updatedDoc = new DidDocument { Id = (GenericDidMethod)"did:web:example.com" };
+        await pda.StepAsync(
+            new BeginUpdate("did:web:example.com", [new DidDocumentOperationStep(WellKnownDidRegistrationValues.AddToDidDocument, updatedDoc)]),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(pda.IsAccepted);
+        Assert.AreEqual(WellKnownDidRegistrationValues.AddToDidDocument, observedOperation);
+    }
+
+    [TestMethod]
+    public void KnownDidDocumentOperationsAreRecognized()
+    {
+        Assert.IsTrue(WellKnownDidRegistrationValues.IsKnownDidDocumentOperation(WellKnownDidRegistrationValues.SetDidDocument));
+        Assert.IsTrue(WellKnownDidRegistrationValues.IsKnownDidDocumentOperation(WellKnownDidRegistrationValues.AddToDidDocument));
+        Assert.IsTrue(WellKnownDidRegistrationValues.IsKnownDidDocumentOperation(WellKnownDidRegistrationValues.RemoveFromDidDocument));
+        Assert.IsTrue(WellKnownDidRegistrationValues.IsKnownDidDocumentOperation(WellKnownDidRegistrationValues.DeactivateOperation));
+        Assert.IsFalse(WellKnownDidRegistrationValues.IsKnownDidDocumentOperation("methodSpecificOperation"));
+        Assert.IsFalse(WellKnownDidRegistrationValues.IsKnownDidDocumentOperation(null));
+    }
+
+    [TestMethod]
+    public void KnownDidStatesAreRecognized()
+    {
+        Assert.IsTrue(WellKnownDidRegistrationValues.IsKnownState(WellKnownDidRegistrationValues.StateFinished));
+        Assert.IsTrue(WellKnownDidRegistrationValues.IsKnownState(WellKnownDidRegistrationValues.StateFailed));
+        Assert.IsTrue(WellKnownDidRegistrationValues.IsKnownState(WellKnownDidRegistrationValues.StateAction));
+        Assert.IsTrue(WellKnownDidRegistrationValues.IsKnownState(WellKnownDidRegistrationValues.StateWait));
+        Assert.IsFalse(WellKnownDidRegistrationValues.IsKnownState("pending"));
+        Assert.IsFalse(WellKnownDidRegistrationValues.IsKnownState(null));
     }
 
     //Helper methods at end of test class.

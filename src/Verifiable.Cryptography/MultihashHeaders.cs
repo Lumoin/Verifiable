@@ -11,6 +11,12 @@ namespace Verifiable.Cryptography
         public static ReadOnlySpan<byte> None => [];
 
         /// <summary>
+        /// BLAKE3 (256-bit output), multihash code <c>0x1e</c>. The did:webplus default hash function,
+        /// and a common digest across the KERI/ACDC suite.
+        /// </summary>
+        public static ReadOnlySpan<byte> Blake3 => [0x1e];
+
+        /// <summary>
         /// .
         /// </summary>
         /// <remarks>.</remarks>

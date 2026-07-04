@@ -213,7 +213,7 @@ internal sealed class DidCommPeerKeyAgreementE2ETests
     //numalgo-2 documents exercised here use neither.
     private static DidResolver CreateResolver() =>
         new(DidMethodSelectors.FromResolvers(
-            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(Pool, DeserializeDidDocument, SHA256.HashData))));
+            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(Pool, DeserializeDidDocument))));
 
 
     //The did:peer:4 embedded document is deserialized by the JSON layer; Verifiable.Core never parses it.

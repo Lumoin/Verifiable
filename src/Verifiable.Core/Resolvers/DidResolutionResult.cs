@@ -6,7 +6,7 @@ namespace Verifiable.Core.Resolvers;
 
 /// <summary>
 /// The complete result of DID resolution, containing the document, resolution metadata,
-/// and document metadata per W3C DID Resolution v0.3 �4.
+/// and document metadata per W3C DID Resolution v0.3 §4.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,7 +18,7 @@ namespace Verifiable.Core.Resolvers;
 ///   <item><description><see cref="DidResolutionKind.VerifiedLog"/>: <see cref="DocumentUrl"/> points to a verifiable history log.</description></item>
 /// </list>
 /// <para>
-/// See <see href="https://w3c.github.io/did-resolution/#did-resolution-result">DID Resolution �8</see>.
+/// See <see href="https://www.w3.org/TR/did-resolution/#did-resolution-result">DID Resolution §8</see>.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{Kind} IsSuccessful={IsSuccessful} Error={ResolutionMetadata.Error.Type.AbsoluteUri,nq} Document={Document?.Id,nq} DocumentUrl={DocumentUrl,nq}")]

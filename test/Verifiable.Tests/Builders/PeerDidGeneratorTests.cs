@@ -79,7 +79,7 @@ internal sealed class PeerDidGeneratorTests
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.NotFound, standalone.ResolutionMetadata.Error);
 
         //Given the stored long form, the short form resolves and is contextualized with the short-form DID.
-        var result = PeerDidResolver.ResolveShortForm(longForm, BaseMemoryPool.Shared, DeserializeDidDocument, SHA256.HashData);
+        var result = await PeerDidResolver.ResolveShortForm(longForm, BaseMemoryPool.Shared, DeserializeDidDocument, TestContext.CancellationToken);
         Assert.IsTrue(result.IsSuccessful);
         var document = result.Document;
         Assert.IsNotNull(document);
@@ -132,6 +132,100 @@ internal sealed class PeerDidGeneratorTests
         //The service is preserved.
         Assert.AreEqual("#didcomm", document.Service![0].Id!.ToString());
         Assert.AreEqual("DIDCommMessaging", document.Service![0].Type);
+    }
+
+
+    /// <summary>
+    /// Per the did:peer:4 specification the input document MUST NOT include a root <c>id</c> — the id is
+    /// assigned only when the DID is later resolved. An input document carrying a root id is rejected by the
+    /// generator.
+    /// </summary>
+    [TestMethod]
+    public void GenerateNumalgo4RejectsInputDocumentWithRootId()
+    {
+        var inputDocument = NewInputDocument();
+        inputDocument.Id = new GenericDidMethod("did:example:123456789abcdefghi");
+
+        Assert.ThrowsExactly<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo4(
+            inputDocument, SerializeDidDocument, SHA256.HashData, BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>
+    /// Per the did:peer:4 specification all identifiers within the input document MUST be relative. A
+    /// verification method whose <c>id</c> is an absolute DID URL rather than a fragment reference is
+    /// rejected by the generator.
+    /// </summary>
+    [TestMethod]
+    public void GenerateNumalgo4RejectsAbsoluteVerificationMethodIdentifier()
+    {
+        var inputDocument = new DidDocument
+        {
+            Context = new Context { Contexts = [Context.DidCore10, Context.Multikey10] },
+            VerificationMethod =
+            [
+                new VerificationMethod { Id = "did:example:123456789abcdefghi#key-1", Type = "Multikey", KeyFormat = new PublicKeyMultibase(SigningKey) }
+            ]
+        };
+
+        Assert.ThrowsExactly<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo4(
+            inputDocument, SerializeDidDocument, SHA256.HashData, BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>
+    /// Per the did:peer:4 specification all references pointing to resources within the input document MUST
+    /// be relative. A verification relationship referencing a key by an absolute DID URL is rejected by the
+    /// generator.
+    /// </summary>
+    [TestMethod]
+    public void GenerateNumalgo4RejectsAbsoluteVerificationRelationshipReference()
+    {
+        var inputDocument = new DidDocument
+        {
+            Context = new Context { Contexts = [Context.DidCore10, Context.Multikey10] },
+            VerificationMethod =
+            [
+                new VerificationMethod { Id = "#key-1", Type = "Multikey", KeyFormat = new PublicKeyMultibase(SigningKey) }
+            ]
+        };
+        inputDocument.WithAuthentication("did:example:123456789abcdefghi#key-1");
+
+        Assert.ThrowsExactly<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo4(
+            inputDocument, SerializeDidDocument, SHA256.HashData, BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>
+    /// Per the did:peer:4 specification a verification method's <c>controller</c> MUST be omitted when the
+    /// subject owns the method and INCLUDED when another party controls it; an absolute other-party
+    /// controller DID is therefore legitimate and MUST NOT be rejected by the relativity rule (which reaches
+    /// only the subject's own identifiers and references). Such a document still generates and round-trips,
+    /// with the foreign controller preserved verbatim.
+    /// </summary>
+    [TestMethod]
+    public async Task GenerateNumalgo4AcceptsAbsoluteForeignControllerOnVerificationMethod()
+    {
+        var inputDocument = new DidDocument
+        {
+            Context = new Context { Contexts = [Context.DidCore10, Context.Multikey10] },
+            VerificationMethod =
+            [
+                new VerificationMethod { Id = "#key-1", Type = "Multikey", Controller = "did:example:other", KeyFormat = new PublicKeyMultibase(SigningKey) }
+            ]
+        };
+        inputDocument.WithAuthentication("#key-1");
+
+        string longForm = PeerDidGenerator.GenerateNumalgo4(inputDocument, SerializeDidDocument, SHA256.HashData, BaseMemoryPool.Shared);
+        Assert.IsTrue(longForm.StartsWith("did:peer:4", StringComparison.Ordinal));
+
+        var result = await CreateResolver().ResolveAsync(longForm, ResolutionContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccessful);
+
+        //An explicit foreign controller is a legitimate other-party assertion, preserved verbatim; the
+        //relativity rule does not rewrite or reject it.
+        Assert.AreEqual("did:example:other", result.Document!.VerificationMethod![0].Controller);
     }
 
 
@@ -348,7 +442,7 @@ internal sealed class PeerDidGeneratorTests
 
     private static DidResolver CreateResolver() =>
         new(DidMethodSelectors.FromResolvers(
-            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(BaseMemoryPool.Shared, DeserializeDidDocument, SHA256.HashData))));
+            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(BaseMemoryPool.Shared, DeserializeDidDocument))));
 
 
     private static string SerializeDidDocument(DidDocument document) =>

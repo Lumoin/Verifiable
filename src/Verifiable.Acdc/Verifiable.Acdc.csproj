@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Authentic Chained Data Container (ACDC) credential layer.</Title>
+    <Description>The ACDC credential layer over the Composable Event Streaming Representation (CESR) codec and the Self-Addressing IDentifier (SAID) primitive. Models the ACDC container — its top-level sections (schema, attribute, aggregate, edge, rule), its public/private/metadata variants, and its most-compact-form SAID — independently of the serialization (JSON, CBOR, MGPK, or CESR-native). Designed for AOT compatibility and trimming safety.</Description>
+    <PackageTags>ACDC CESR SAID VerifiableCredentials ChainLinkConfidentiality TrustOverIP</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Cesr\Verifiable.Cesr.csproj" />
+    <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
+    <ProjectReference Include="..\Verifiable.Keri\Verifiable.Keri.csproj" />
+  </ItemGroup>
+
+</Project>

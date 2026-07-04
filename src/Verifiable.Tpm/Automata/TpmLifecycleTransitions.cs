@@ -790,6 +790,15 @@ public static class TpmLifecycleTransitions
             return Reject(state, TpmCcConstants.TPM_CC_Unseal, TpmRcConstants.TPM_RC_HANDLE);
         }
 
+        //A trial policy session (Part 1, clause 19.3) accumulates a policyDigest for prediction but authorizes
+        //nothing; folding a caller-chosen pcrDigest into a trial session (the trial PolicyPCR takes the caller's
+        //digest verbatim) would otherwise reproduce any authPolicy byte-for-byte, so a trial session presented to
+        //authorize the unseal is rejected before the object's authPolicy is consulted.
+        if(policySession.IsTrial)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_Unseal, TpmRcConstants.TPM_RC_POLICY_FAIL);
+        }
+
         //Policy gate (Part 3, clause 12.7; Part 1, clause 19.7): an object with a non-empty authPolicy is authorized
         //only when the authorizing policy session's accumulated policyDigest equals that authPolicy. On mismatch the
         //TPM answers TPM_RC_POLICY_FAIL. That is a format-one code a real TPM annotates with the offending session
@@ -1244,8 +1253,8 @@ public static class TpmLifecycleTransitions
             offset += values[i].Length;
         }
 
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigestSyncBridge(
-            composite.Memory[..total], digestSize, CryptoTags.Sha256Digest, pool);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            composite.Memory.Span[..total], digestSize, CryptoTags.Sha256Digest, pool);
 
         return digest.AsReadOnlySpan().ToArray();
     }
@@ -1279,6 +1288,16 @@ public static class TpmLifecycleTransitions
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnPolicySecret(TpmSimulatorState state, TpmPolicySecretRequested request)
     {
         if(!state.PolicySessions.TryGetValue(request.PolicySession, out PolicySessionState? session))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        //This slice models PolicySecret only for permanent hierarchies (empty auth), whose Name is the 4-byte
+        //handle value (Part 1, clause 16). A non-permanent authHandle (an NV Index or object) has a computed
+        //Name and its own authValue; folding the raw handle bytes for such an entity would both diverge from the
+        //TPM Name formula and skip the authorization it requires, so an unsupported authorization entity is rejected
+        //rather than silently advancing the policyDigest as if its secret had been proven.
+        if(!IsPermanentHandle(request.AuthHandle))
         {
             return Reject(state, TpmCcConstants.TPM_CC_PolicySecret, TpmRcConstants.TPM_RC_HANDLE);
         }
@@ -1532,8 +1551,8 @@ public static class TpmLifecycleTransitions
         var writer = new TpmWriter(publicArea);
         nvPublic.WriteTo(ref writer);
 
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigestSyncBridge(
-            owner.Memory[..publicSize], nameAlgSize, CryptoTags.Sha256Digest, pool);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            owner.Memory.Span[..publicSize], nameAlgSize, CryptoTags.Sha256Digest, pool);
 
         byte[] name = new byte[sizeof(ushort) + nameAlgSize];
         BinaryPrimitives.WriteUInt16BigEndian(name, (ushort)TpmAlgIdConstants.TPM_ALG_SHA256);
@@ -1542,10 +1561,11 @@ public static class TpmLifecycleTransitions
         return name;
     }
 
-    //The policy hash algorithms the enhanced-authorization digest formula supports (TpmPolicyDigest.Size).
+    //The policy hash algorithms the enhanced-authorization digest formula actually computes (TpmPolicyDigest.Hash).
+    //SHA-1 is intentionally excluded: advertising it here while the fold cannot compute it left a session that
+    //faulted on its first assertion, so StartAuthSession now rejects it up front with TPM_RC_HASH.
     private static bool IsSupportedPolicyHash(TpmAlgIdConstants hash) =>
-        hash is TpmAlgIdConstants.TPM_ALG_SHA1
-            or TpmAlgIdConstants.TPM_ALG_SHA256
+        hash is TpmAlgIdConstants.TPM_ALG_SHA256
             or TpmAlgIdConstants.TPM_ALG_SHA384
             or TpmAlgIdConstants.TPM_ALG_SHA512;
 

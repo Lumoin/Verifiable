@@ -106,19 +106,26 @@ public static class BouncyCastleX509Functions
     /// using <see cref="PkixCertPathBuilder"/> per RFC 5280 and returns the leaf
     /// certificate's public key as a <see cref="PublicKeyMemory"/>.
     /// </summary>
+    /// <param name="checkRevocation">
+    /// An optional revocation-status checker. When supplied, the leaf certificate that chained is additionally
+    /// checked and the result is fail-closed (a revoked or indeterminate status throws); when <see langword="null"/>
+    /// only chain building is performed. The PKIX builder's own revocation is left off
+    /// (<c>IsRevocationEnabled = false</c>) so revocation flows through this supplied seam.
+    /// </param>
     /// <remarks>
-    /// Validation is in-memory (revocation disabled), so this completes synchronously via a
-    /// completed <see cref="ValueTask{TResult}"/>; the async signature reserves the seam for
-    /// revocation and remote-anchor resolution.
+    /// Chain building is in-memory; the async signature carries the optionally-supplied <paramref name="checkRevocation"/>
+    /// seam (an OCSP/CRL round-trip) and reserves the seam for remote-anchor resolution. With no checker the method
+    /// completes without awaiting.
     /// </remarks>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the returned PublicKeyMemory transfers to the caller via the ValueTask; the caller disposes it.")]
-    public static ValueTask<PublicKeyMemory> ValidateChainAsync(
+    public static async ValueTask<PublicKeyMemory> ValidateChainAsync(
         IReadOnlyList<PkiCertificateMemory> chain,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
         MemoryPool<byte> pool,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        CheckCertificateRevocationStatusAsyncDelegate? checkRevocation = null)
     {
         ArgumentNullException.ThrowIfNull(chain);
         ArgumentNullException.ThrowIfNull(trustAnchors);
@@ -179,7 +186,21 @@ public static class BouncyCastleX509Functions
         BouncyCastleX509 validatedLeaf =
             (BouncyCastleX509)result.CertPath.Certificates[0];
 
-        return ValueTask.FromResult(ExtractPublicKey(validatedLeaf, pool));
+        //Revocation is part of path validation: when a revocation source is configured, the leaf that just chained
+        //must additionally be checked and the result is fail-closed — anything but an affirmative Good (a revoked
+        //leaf or an indeterminate status) rejects the chain.
+        if(checkRevocation is not null)
+        {
+            CertificateRevocationStatus revocationStatus = await checkRevocation(
+                chain[0], trustAnchors, validationTime, pool, cancellationToken).ConfigureAwait(false);
+            if(revocationStatus != CertificateRevocationStatus.Good)
+            {
+                throw new System.Security.SecurityException(
+                    $"X.509 certificate revocation check failed: the leaf certificate's revocation status is '{revocationStatus}'.");
+            }
+        }
+
+        return ExtractPublicKey(validatedLeaf, pool);
     }
 
 
@@ -242,6 +263,47 @@ public static class BouncyCastleX509Functions
             certificate.AsReadOnlyMemory().ToArray());
 
         return cert.IssuerDN.Equivalent(cert.SubjectDN);
+    }
+
+
+    /// <summary>
+    /// Implements <see cref="ReadCertificateProfileDelegate"/>. Reads the certificate's Key Usage and
+    /// Basic Constraints via BouncyCastle and reports the profile-relevant constraints as
+    /// backend-neutral booleans.
+    /// </summary>
+    /// <param name="certificate">The certificate to inspect.</param>
+    /// <returns>The certificate's <see cref="X509CertificateProfile"/>.</returns>
+    public static X509CertificateProfile ReadCertificateProfile(PkiCertificateMemory certificate)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        BouncyCastleX509 cert;
+        try
+        {
+            cert = CertificateParser.ReadCertificate(certificate.AsReadOnlyMemory().ToArray());
+        }
+        catch(Org.BouncyCastle.Security.Certificates.CertificateException exception)
+        {
+            //The parser rejects a malformed certificate — including the RFC 5280 §4.2 duplicate-extension shape
+            //(a certificate MUST NOT include more than one instance of an extension) that the Microsoft backend's
+            //explicit guard also rejects. Surface it as the same CryptographicException, so the seam has one
+            //exception contract regardless of which backend is registered.
+            throw new System.Security.Cryptography.CryptographicException(
+                "The certificate could not be read as a valid X.509 certificate (for example it includes a duplicate extension that RFC 5280 §4.2 forbids).", exception);
+        }
+
+        //GetKeyUsage returns the RFC 5280 §4.2.1.3 bits (index 0 digitalSignature, index 5 keyCertSign),
+        //or null when the Key Usage extension is absent; trailing zero bits may be omitted, so the length
+        //is guarded before indexing. GetBasicConstraints returns -1 when the certificate is not a CA (the
+        //extension is absent or sets cA=FALSE) and the path-length value otherwise (RFC 5280 §4.2.1.9).
+        bool[]? keyUsage = cert.GetKeyUsage();
+
+        return new X509CertificateProfile
+        {
+            AssertsDigitalSignature = keyUsage is { Length: > 0 } && keyUsage[0],
+            AssertsKeyCertSign = keyUsage is { Length: > 5 } && keyUsage[5],
+            IsCertificateAuthority = cert.GetBasicConstraints() != -1
+        };
     }
 
 

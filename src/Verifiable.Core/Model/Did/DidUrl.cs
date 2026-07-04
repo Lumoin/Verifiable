@@ -37,7 +37,7 @@ namespace Verifiable.Core.Model.Did
     /// in different contexts.
     /// </para>
     /// <para>
-    /// Reference: <see href="https://www.w3.org/TR/did-1.0/#did-url-syntax">W3C DID 1.0 Section 3.2</see>
+    /// Reference: <see href="https://www.w3.org/TR/did-1.1/#did-url-syntax">W3C DID 1.1 Section 3.2</see>
     /// </para>
     /// </remarks>
     [DebuggerDisplay("DidUrl({ToString(),nq})")]
@@ -57,7 +57,7 @@ namespace Verifiable.Core.Model.Did
         /// (a-z) and digits (0-9) only.
         /// </para>
         /// <para>
-        /// Reference: <see href="https://www.w3.org/TR/did-1.0/#did-syntax">W3C DID 1.0 Section 3.1</see>
+        /// Reference: <see href="https://www.w3.org/TR/did-1.1/#did-syntax">W3C DID 1.1 Section 3.1</see>
         /// </para>
         /// </remarks>
         public string? Method { get; }
@@ -76,7 +76,7 @@ namespace Verifiable.Core.Model.Did
         /// underscores (_), and percent-encoded characters.
         /// </para>
         /// <para>
-        /// Reference: <see href="https://www.w3.org/TR/did-1.0/#did-syntax">W3C DID 1.0 Section 3.1</see>
+        /// Reference: <see href="https://www.w3.org/TR/did-1.1/#did-syntax">W3C DID 1.1 Section 3.1</see>
         /// </para>
         /// </remarks>
         public string? MethodSpecificId { get; }
@@ -95,7 +95,7 @@ namespace Verifiable.Core.Model.Did
         /// component is specified in the DID URL.
         /// </para>
         /// <para>
-        /// Reference: <see href="https://www.w3.org/TR/did-1.0/#did-url-syntax">W3C DID 1.0 Section 3.2</see>
+        /// Reference: <see href="https://www.w3.org/TR/did-1.1/#did-url-syntax">W3C DID 1.1 Section 3.2</see>
         /// </para>
         /// </remarks>
         public string? Path { get; }
@@ -124,7 +124,7 @@ namespace Verifiable.Core.Model.Did
         /// component is specified in the DID URL.
         /// </para>
         /// <para>
-        /// Reference: <see href="https://www.w3.org/TR/did-1.0/#did-parameters">W3C DID 1.0 Section 3.2.1</see>
+        /// Reference: <see href="https://www.w3.org/TR/did-1.1/#did-parameters">W3C DID 1.1 Section 3.2.1</see>
         /// </para>
         /// </remarks>
         public string? Query { get; }
@@ -152,7 +152,7 @@ namespace Verifiable.Core.Model.Did
         /// component is specified in the DID URL.
         /// </para>
         /// <para>
-        /// Reference: <see href="https://www.w3.org/TR/did-1.0/#did-url-syntax">W3C DID 1.0 Section 3.2</see>
+        /// Reference: <see href="https://www.w3.org/TR/did-1.1/#did-url-syntax">W3C DID 1.1 Section 3.2</see>
         /// </para>
         /// </remarks>
         public string? Fragment { get; }
@@ -175,7 +175,7 @@ namespace Verifiable.Core.Model.Did
         /// method with an appropriate base DID.
         /// </para>
         /// <para>
-        /// Reference: <see href="https://www.w3.org/TR/did-1.0/#relative-did-urls">W3C DID 1.0 Section 3.2.2</see>
+        /// Reference: <see href="https://www.w3.org/TR/did-1.1/#relative-did-urls">W3C DID 1.1 Section 3.2.2</see>
         /// </para>
         /// </remarks>
         public bool IsRelative { get; }
@@ -492,7 +492,7 @@ namespace Verifiable.Core.Model.Did
         /// <item><description>Result: "did:example:123#key-1"</description></item>
         /// </list>
         /// <para>
-        /// Reference: <see href="https://www.w3.org/TR/did-1.0/#relative-did-urls">W3C DID 1.0 Section 3.2.2</see>
+        /// Reference: <see href="https://www.w3.org/TR/did-1.1/#relative-did-urls">W3C DID 1.1 Section 3.2.2</see>
         /// </para>
         /// </remarks>
         public DidUrl Resolve(DidUrl baseDid)

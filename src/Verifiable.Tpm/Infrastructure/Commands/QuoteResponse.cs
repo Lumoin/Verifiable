@@ -60,10 +60,28 @@ public sealed class QuoteResponse: IDisposable, ITpmWireType
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bAttest quoted = Tpm2bAttest.Parse(ref reader, pool);
-        var sigAlg = (TpmAlgIdConstants)reader.ReadUInt16();
-        TpmuSignature signature = TpmuSignature.Parse(sigAlg, ref reader, pool);
+        try
+        {
+            //A TPM2_Quote response's attestation type is fixed to TPM_ST_ATTEST_QUOTE (Part 3, §18.4). Reject a
+            //type-confused body (for example a replayed TPM2_Certify attestation) here rather than surfacing it as
+            //a successful QuoteResponse whose Attested.Quote is null and faults the first consumer that reads it.
+            if(quoted.AttestationData.Type != TpmStConstants.TPM_ST_ATTEST_QUOTE)
+            {
+                throw new InvalidOperationException(
+                    $"TPM2_Quote response attestation type must be TPM_ST_ATTEST_QUOTE but was {quoted.AttestationData.Type}.");
+            }
 
-        return new QuoteResponse(quoted, sigAlg, signature);
+            var sigAlg = (TpmAlgIdConstants)reader.ReadUInt16();
+            TpmuSignature signature = TpmuSignature.Parse(sigAlg, ref reader, pool);
+
+            return new QuoteResponse(quoted, sigAlg, signature);
+        }
+        catch
+        {
+            //A mismatched type or an unsupported signature scheme must not leak the pooled attestation buffer.
+            quoted.Dispose();
+            throw;
+        }
     }
 
     /// <inheritdoc/>

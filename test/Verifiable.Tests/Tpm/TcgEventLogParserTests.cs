@@ -71,6 +71,28 @@ internal class TcgEventLogParserTests
     }
 
     [TestMethod]
+    public void ParseRejectsCryptoAgileEventWhoseKnownAlgorithmDigestSizeIsMisdeclared()
+    {
+        //A hostile crypto-agile log declares SHA-256 with a 1-byte digest size in its SpecId algorithm table and
+        //then emits a SHA-256 TPMT_HA sliced at that wrong width. Trusting the declaration would slice the digest
+        //at 1 byte and desynchronize every field after it; the parser must instead treat the known 32-byte width
+        //as authoritative and reject the event (so it is not folded in as a genuine 1-byte SHA-256 digest).
+        const ushort MisdeclaredSha256Size = 1;
+        byte[] specIdEventData = BuildSpecIdEventData(sha256DigestSize: MisdeclaredSha256Size);
+        byte[] firstEvent = BuildLegacyEvent(0, TcgEventType.EV_NO_ACTION, new byte[20], specIdEventData);
+        byte[] cryptoAgileEvent = BuildCryptoAgileEvent(0, TcgEventType.EV_POST_CODE, [], TpmAlgIdConstants.TPM_ALG_SHA256, MisdeclaredSha256Size);
+        byte[] log = CombineEvents([firstEvent, cryptoAgileEvent]);
+
+        var result = TcgEventLogParser.Parse(log);
+
+        //The SpecId event still parses; the misdeclared crypto-agile event is rejected and the log is truncated
+        //there rather than accepting a wrong-width digest.
+        Assert.IsTrue(result.IsSuccess);
+        Assert.IsTrue(result.Value!.IsTruncated);
+        Assert.HasCount(1, result.Value.Events);
+    }
+
+    [TestMethod]
     public void ParseSeparatorEventSuccessValue()
     {
         byte[] separatorData = new byte[4];
@@ -246,7 +268,7 @@ internal class TcgEventLogParserTests
         return CombineEvents([firstEvent, cryptoAgileEvent]);
     }
 
-    private static byte[] BuildSpecIdEventData()
+    private static byte[] BuildSpecIdEventData(ushort sha256DigestSize = 32)
     {
         //TCG_EfiSpecIdEvent: Signature(16) + PlatformClass(4) + SpecVersionMinor(1) +
         //SpecVersionMajor(1) + SpecErrata(1) + UintnSize(1) + NumberOfAlgorithms(4) +
@@ -276,9 +298,9 @@ internal class TcgEventLogParserTests
         data.AddRange(BitConverter.GetBytes((ushort)TpmAlgIdConstants.TPM_ALG_SHA1));
         data.AddRange(BitConverter.GetBytes((ushort)20));
 
-        //Algorithm 2: SHA256.
+        //Algorithm 2: SHA256 (digest size is a parameter so a test can misdeclare it).
         data.AddRange(BitConverter.GetBytes((ushort)TpmAlgIdConstants.TPM_ALG_SHA256));
-        data.AddRange(BitConverter.GetBytes((ushort)32));
+        data.AddRange(BitConverter.GetBytes(sha256DigestSize));
 
         //VendorInfoSize.
         data.Add(0);

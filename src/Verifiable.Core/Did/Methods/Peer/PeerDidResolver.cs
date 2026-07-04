@@ -46,12 +46,12 @@ public delegate DidDocument? PeerDidDocumentDeserializer(ReadOnlySpan<byte> didD
 /// </para>
 /// <para>
 /// Like <see cref="KeyDidResolver"/>, the resolver needs a <see cref="MemoryPool{T}"/> for decoded key
-/// and service material; numalgo 4 additionally needs a <see cref="PeerDidDocumentDeserializer"/> and a
-/// <see cref="HashFunctionDelegate"/> for the embedded document. Build the delegate via <see cref="Build"/>
-/// and register the returned instance:
+/// and service material; numalgo 4 additionally needs a <see cref="PeerDidDocumentDeserializer"/> for the
+/// embedded document, whose SHA-256 hash is verified through the registered <see cref="ComputeDigestDelegate"/>.
+/// Build the delegate via <see cref="Build"/> and register the returned instance:
 /// </para>
 /// <code>
-/// DidMethodResolverDelegate peerResolver = PeerDidResolver.Build(pool, deserializeDidDocument, SHA256.HashData);
+/// DidMethodResolverDelegate peerResolver = PeerDidResolver.Build(pool, deserializeDidDocument);
 /// DidResolver resolver = new(DidMethodSelectors.FromResolvers(
 ///     (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, peerResolver)));
 /// </code>
@@ -77,31 +77,74 @@ public static class PeerDidResolver
     /// Deserializer for the <c>did:peer:4</c> embedded DID document. Required because the resolver
     /// supports the whole <c>did:peer</c> method, of which numalgo 4 is part.
     /// </param>
-    /// <param name="hashFunction">
-    /// The hash function used to verify the <c>did:peer:4</c> embedded-document hash, which the
-    /// specification fixes to SHA-256.
-    /// </param>
     /// <returns>
     /// A <see cref="DidMethodResolverDelegate"/> suitable for registration with
     /// <see cref="DidMethodSelectors.FromResolvers"/>.
     /// </returns>
+    /// <remarks>
+    /// This overload takes the registered <see cref="ComputeDigestDelegate"/> from <see cref="CryptographicKeyFactory"/>
+    /// and forwards to the explicit-delegate overload; supply a digest there to control the implementation.
+    /// </remarks>
+    public static DidMethodResolverDelegate Build(
+        MemoryPool<byte> pool,
+        PeerDidDocumentDeserializer didDocumentDeserializer)
+        => Build(pool, didDocumentDeserializer, ResolveRegisteredDigest());
+
+
+    /// <summary>
+    /// Builds a <c>did:peer</c> resolver using an explicitly supplied <see cref="ComputeDigestDelegate"/> for the
+    /// did:peer:4 embedded-document SHA-256 hash — the caller controls the digest implementation.
+    /// </summary>
+    /// <param name="pool">Memory pool for decoded key, service, and document material.</param>
+    /// <param name="didDocumentDeserializer">Deserializer for the <c>did:peer:4</c> embedded DID document.</param>
+    /// <param name="computeDigest">The SHA-256 digest implementation (telemetry/CBOM-bearing) for the numalgo-4 hash.</param>
+    /// <returns>A <see cref="DidMethodResolverDelegate"/> for registration with <see cref="DidMethodSelectors.FromResolvers"/>.</returns>
     public static DidMethodResolverDelegate Build(
         MemoryPool<byte> pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
-        HashFunctionDelegate hashFunction)
+        ComputeDigestDelegate computeDigest)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(didDocumentDeserializer);
-        ArgumentNullException.ThrowIfNull(hashFunction);
+        ArgumentNullException.ThrowIfNull(computeDigest);
 
         //did:peer is purely synthetic — no network dereference — so the threaded context is unused.
         return (did, _, _, cancellationToken) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            return ValueTask.FromResult(Resolve(did, pool, didDocumentDeserializer, hashFunction));
+            return Resolve(did, pool, didDocumentDeserializer, computeDigest, cancellationToken);
         };
     }
+
+
+    /// <summary>
+    /// Resolves the registered <see cref="ComputeDigestDelegate"/> for the no-digest <see cref="Build"/> overload.
+    /// </summary>
+    /// <returns>The registered digest delegate.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no <see cref="ComputeDigestDelegate"/> is registered.</exception>
+    private static ComputeDigestDelegate ResolveRegisteredDigest()
+        => CryptographicKeyFactory.GetFunction<ComputeDigestDelegate>(typeof(ComputeDigestDelegate))
+            ?? throw new InvalidOperationException(
+                $"No {nameof(ComputeDigestDelegate)} has been registered. Supply one to the explicit {nameof(Build)} overload "
+                + "or register one via CryptographicKeyFactory.RegisterFunction during application startup.");
+
+
+    /// <summary>
+    /// Registry-backed convenience for
+    /// <see cref="ResolveShortForm(string, MemoryPool{byte}, PeerDidDocumentDeserializer, ComputeDigestDelegate, System.Threading.CancellationToken)"/>:
+    /// resolves the registered <see cref="ComputeDigestDelegate"/> and forwards.
+    /// </summary>
+    /// <param name="longFormDid">The stored long-form <c>did:peer:4</c> identifier.</param>
+    /// <param name="pool">Memory pool for decoded material.</param>
+    /// <param name="didDocumentDeserializer">Deserializer for the embedded DID document.</param>
+    /// <returns>The resolution result, contextualized with the short-form DID.</returns>
+    public static ValueTask<DidResolutionResult> ResolveShortForm(
+        string longFormDid,
+        MemoryPool<byte> pool,
+        PeerDidDocumentDeserializer didDocumentDeserializer,
+        CancellationToken cancellationToken = default)
+        => ResolveShortForm(longFormDid, pool, didDocumentDeserializer, ResolveRegisteredDigest(), cancellationToken);
 
 
     /// <summary>
@@ -113,18 +156,19 @@ public static class PeerDidResolver
     /// <param name="longFormDid">The stored long-form <c>did:peer:4</c> identifier.</param>
     /// <param name="pool">Memory pool for decoded material.</param>
     /// <param name="didDocumentDeserializer">Deserializer for the embedded DID document.</param>
-    /// <param name="hashFunction">The hash function verifying the embedded multihash (SHA-256).</param>
+    /// <param name="computeDigest">The digest implementation verifying the embedded SHA-256 multihash.</param>
     /// <returns>The resolution result, contextualized with the short-form DID.</returns>
-    public static DidResolutionResult ResolveShortForm(
+    public static async ValueTask<DidResolutionResult> ResolveShortForm(
         string longFormDid,
         MemoryPool<byte> pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
-        HashFunctionDelegate hashFunction)
+        ComputeDigestDelegate computeDigest,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(longFormDid);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(didDocumentDeserializer);
-        ArgumentNullException.ThrowIfNull(hashFunction);
+        ArgumentNullException.ThrowIfNull(computeDigest);
 
         if(!longFormDid.StartsWith(PeerDidMethod.Prefix, StringComparison.Ordinal))
         {
@@ -137,15 +181,16 @@ public static class PeerDidResolver
             return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
         }
 
-        return PeerDid4.ResolveShort(longFormDid, numalgoAndElements[1..], pool, didDocumentDeserializer, hashFunction);
+        return await PeerDid4.ResolveShort(longFormDid, numalgoAndElements[1..], pool, didDocumentDeserializer, computeDigest, cancellationToken).ConfigureAwait(false);
     }
 
 
-    private static DidResolutionResult Resolve(
+    private static async ValueTask<DidResolutionResult> Resolve(
         string did,
         MemoryPool<byte> pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
-        HashFunctionDelegate hashFunction)
+        ComputeDigestDelegate computeDigest,
+        CancellationToken cancellationToken)
     {
         if(!did.StartsWith(PeerDidMethod.Prefix, StringComparison.Ordinal))
         {
@@ -164,7 +209,7 @@ public static class PeerDidResolver
         //numalgo 4 embeds the whole DID document; everything after the numalgo is "{hash}:{encoded}".
         if(numalgo == '4')
         {
-            return PeerDid4.Resolve(did, numalgoAndElements[1..], pool, didDocumentDeserializer, hashFunction);
+            return await PeerDid4.Resolve(did, numalgoAndElements[1..], pool, didDocumentDeserializer, computeDigest, cancellationToken).ConfigureAwait(false);
         }
 
         //numalgo 0 (single inception key) and 1 (genesis-document hash) are not resolved by this build.

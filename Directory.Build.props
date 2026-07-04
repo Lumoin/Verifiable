@@ -54,8 +54,12 @@
        every identifier site routes through GenerateIdentifierDelegate
        (server or client) or through FillEntropy for raw entropy. The
        timestamp-injecting Guid.CreateVersion7(DateTimeOffset) overload
-       remains permitted for internal-ephemeral PDA runId generation. -->
-  <ItemGroup Condition="$(MSBuildProjectName) == 'Verifiable.OAuth'">
+       remains permitted for internal-ephemeral PDA runId generation.
+       Verifiable.WebFinger is transport-agnostic like Verifiable.OAuth
+       (RFC 7033 §4/§4.2 HTTPS-only queries are issued through an injected
+       transport, never System.Net.Http directly), so it shares the same
+       banned-symbols file. -->
+  <ItemGroup Condition="$(MSBuildProjectName) == 'Verifiable.OAuth' OR $(MSBuildProjectName) == 'Verifiable.WebFinger'">
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.OAuth.txt" Visible="false" />
   </ItemGroup>
 

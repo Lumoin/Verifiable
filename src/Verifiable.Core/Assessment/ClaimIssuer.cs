@@ -37,7 +37,7 @@ namespace Verifiable.Core.Assessment
     /// expiration, or any binding whose validity depends on the history of what came
     /// before — is deliberately <em>not</em> modelled as a claim here. Its source of
     /// truth is the authenticated append-only cryptographic log (<c>LogReplayer</c> /
-    /// <c>LogEntry</c> in <c>Verifiable.Core.EventLogs</c>), where each lifecycle
+    /// <c>LogEntry</c> in <c>Verifiable.Cryptography.EventLogs</c>), where each lifecycle
     /// transition is a verified link rather than an asserted fact. This issuer
     /// <em>consumes</em> the replayed log state as evidence and turns it into
     /// point-in-time claims; it must not reinvent the lifecycle or treat a momentary

@@ -40,7 +40,7 @@ namespace Verifiable.Core.Model.Did
     /// </para>
     /// <para>
     /// For more information about key formats in DID documents, see the
-    /// <see href="https://www.w3.org/TR/did-core/#key-types-and-formats">DID Core specification</see>.
+    /// <see href="https://www.w3.org/TR/did-1.1/#key-types-and-formats">DID Core specification</see>.
     /// </para>
     /// </remarks>
     public abstract class KeyFormat: IEquatable<KeyFormat>

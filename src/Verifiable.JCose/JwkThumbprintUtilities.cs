@@ -524,25 +524,15 @@ public static class JwkThumbprintUtilities
     /// </remarks>
     private static IMemoryOwner<byte> ComputeSha256Hash(MemoryPool<byte> pool, ReadOnlySpan<byte> input)
     {
-        //JwkThumbprintUtilities is sync. ComputeDigestSyncBridge asserts the
-        //registered delegate completed synchronously; throws if a hardware-async
-        //backend is registered. Span input is copied into a pool-rented buffer
-        //first because the sync bridge takes ReadOnlyMemory.
-        IMemoryOwner<byte> inputOwner = pool.Rent(input.Length);
-        try
-        {
-            input.CopyTo(inputOwner.Memory.Span);
-            using DigestValue digest = CryptographicKeyEvents.ComputeDigestSyncBridge(
-                inputOwner.Memory[..input.Length], Sha256HashSize, CryptoTags.Sha256Digest, pool);
+        //A JWK thumbprint (RFC 7638) is a SHA-256 over the canonical JSON of PUBLIC key members — sync by nature,
+        //with no hardware-async backend. It hashes through the registered synchronous HashFunctionDelegate seam
+        //(CBOM/observability via DigestValue), not the async digest seam, so no async colouring propagates up.
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            input, Sha256HashSize, CryptoTags.Sha256Digest, pool);
 
-            IMemoryOwner<byte> owner = pool.Rent(Sha256HashSize);
-            digest.AsReadOnlySpan().CopyTo(owner.Memory.Span);
-            return owner;
-        }
-        finally
-        {
-            inputOwner.Dispose();
-        }
+        IMemoryOwner<byte> owner = pool.Rent(Sha256HashSize);
+        digest.AsReadOnlySpan().CopyTo(owner.Memory.Span);
+        return owner;
     }
 
 

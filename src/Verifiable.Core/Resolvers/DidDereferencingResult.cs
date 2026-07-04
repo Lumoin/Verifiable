@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace Verifiable.Core.Resolvers;
 
 /// <summary>
-/// The complete result of DID URL dereferencing per W3C DID Resolution v0.3 �5.
+/// The complete result of DID URL dereferencing per W3C DID Resolution v0.3 §5.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -12,7 +12,7 @@ namespace Verifiable.Core.Resolvers;
 /// string for a service endpoint, or any other resource format identified via a media type.
 /// </para>
 /// <para>
-/// See <see href="https://w3c.github.io/did-resolution/#did-url-dereferencing-result">DID Resolution �8.2</see>.
+/// See <see href="https://www.w3.org/TR/did-resolution/#did-url-dereferencing-result">DID Resolution §8.2</see>.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("IsSuccessful={IsSuccessful} Error={DereferencingMetadata.Error.Type.AbsoluteUri,nq} ContentStream={ContentStream}")]

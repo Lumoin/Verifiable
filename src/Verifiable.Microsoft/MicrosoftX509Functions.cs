@@ -103,23 +103,31 @@ public static class MicrosoftX509Functions
     /// <param name="validationTime">UTC time for certificate validity evaluation.</param>
     /// <param name="pool">Memory pool for key material allocation.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="checkRevocation">
+    /// An optional revocation-status checker. When supplied, the leaf certificate that chained is additionally
+    /// checked and the result is fail-closed (a revoked or indeterminate status throws); when <see langword="null"/>
+    /// only chain building is performed. The built-in <see cref="X509Chain"/> revocation is left off
+    /// (<see cref="X509RevocationMode.NoCheck"/>) so revocation flows through this supplied seam rather than the OS.
+    /// </param>
     /// <returns>Leaf public key. Caller must dispose.</returns>
     /// <remarks>
-    /// Validation is in-memory today (<see cref="X509RevocationMode.NoCheck"/>), so this
-    /// completes synchronously via a completed <see cref="ValueTask{TResult}"/>; the async
-    /// signature reserves the seam for revocation (OCSP/CRL) and remote-anchor resolution.
+    /// Chain building is in-memory; the async signature carries the optionally-supplied
+    /// <paramref name="checkRevocation"/> seam (an OCSP/CRL round-trip) and reserves the seam for remote-anchor
+    /// resolution. With no checker the method completes without awaiting.
     /// </remarks>
     /// <exception cref="System.Security.SecurityException">
-    /// Thrown when chain validation fails.
+    /// Thrown when chain validation fails, including when <paramref name="checkRevocation"/> reports the leaf as
+    /// revoked or of indeterminate status.
     /// </exception>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the returned PublicKeyMemory transfers to the caller via the ValueTask; the caller disposes it.")]
-    public static ValueTask<PublicKeyMemory> ValidateChainAsync(
+    public static async ValueTask<PublicKeyMemory> ValidateChainAsync(
         IReadOnlyList<PkiCertificateMemory> chain,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
         MemoryPool<byte> pool,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        CheckCertificateRevocationStatusAsyncDelegate? checkRevocation = null)
     {
         ArgumentNullException.ThrowIfNull(chain);
         ArgumentNullException.ThrowIfNull(trustAnchors);
@@ -171,7 +179,21 @@ public static class MicrosoftX509Functions
                     $"X.509 certificate chain validation failed: {errors}");
             }
 
-            return ValueTask.FromResult(ExtractPublicKey(leafCert, pool));
+            //Revocation is part of path validation: when a revocation source is configured, the leaf that just
+            //chained must additionally be checked and the result is fail-closed — anything but an affirmative Good
+            //(a revoked leaf or an indeterminate status) rejects the chain.
+            if(checkRevocation is not null)
+            {
+                CertificateRevocationStatus revocationStatus = await checkRevocation(
+                    chain[0], trustAnchors, validationTime, pool, cancellationToken).ConfigureAwait(false);
+                if(revocationStatus != CertificateRevocationStatus.Good)
+                {
+                    throw new System.Security.SecurityException(
+                        $"X.509 certificate revocation check failed: the leaf certificate's revocation status is '{revocationStatus}'.");
+                }
+            }
+
+            return ExtractPublicKey(leafCert, pool);
         }
         finally
         {
@@ -301,6 +323,49 @@ public static class MicrosoftX509Functions
         }
 
         return base64UrlEncoder(keyIdentifier.Span);
+    }
+
+
+    /// <summary>
+    /// Implements <see cref="ReadCertificateProfileDelegate"/>. Reads the certificate's Key Usage
+    /// (<c>2.5.29.15</c>) and Basic Constraints (<c>2.5.29.19</c>) extensions and reports the
+    /// profile-relevant constraints as backend-neutral booleans.
+    /// </summary>
+    /// <param name="certificate">The certificate to inspect.</param>
+    /// <returns>The certificate's <see cref="X509CertificateProfile"/>.</returns>
+    public static X509CertificateProfile ReadCertificateProfile(PkiCertificateMemory certificate)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        using X509Certificate2 cert = X509CertificateLoader.LoadCertificate(certificate.AsReadOnlyMemory().Span);
+
+        //RFC 5280 §4.2: a certificate MUST NOT include more than one instance of a particular extension. The
+        //base class library loader tolerates a duplicate, so reading a single instance with
+        //OfType<>().FirstOrDefault() below would derive the profile from whichever instance the DER happens to
+        //encode first — letting a malformed certificate hide a second KeyUsage asserting keyCertSign behind a
+        //conformant one. Reject the certificate instead, so the profile is never taken from an arbitrarily chosen
+        //instance (the BouncyCastle backend's parser refuses a duplicate extension OID outright, so both backends
+        //fail closed on the same bytes).
+        string? duplicateExtensionOid = cert.Extensions
+            .GroupBy(extension => extension.Oid?.Value)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .FirstOrDefault();
+        if(duplicateExtensionOid is not null)
+        {
+            throw new CryptographicException(
+                $"The certificate includes more than one instance of the extension '{duplicateExtensionOid}', which RFC 5280 §4.2 forbids.");
+        }
+
+        X509KeyUsageExtension? keyUsage = cert.Extensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
+        X509BasicConstraintsExtension? basicConstraints = cert.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
+
+        return new X509CertificateProfile
+        {
+            AssertsDigitalSignature = keyUsage is not null && keyUsage.KeyUsages.HasFlag(X509KeyUsageFlags.DigitalSignature),
+            AssertsKeyCertSign = keyUsage is not null && keyUsage.KeyUsages.HasFlag(X509KeyUsageFlags.KeyCertSign),
+            IsCertificateAuthority = basicConstraints is not null && basicConstraints.CertificateAuthority
+        };
     }
 
 

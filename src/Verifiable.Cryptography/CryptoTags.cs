@@ -591,6 +591,13 @@ public static class CryptoTags
     /// </summary>
     public static Tag Sha512Digest { get; } = Tag.Create(HashAlgorithmName.SHA512).With(Purpose.Digest).With(EncodingScheme.Raw);
 
+    /// <summary>
+    /// Tag for BLAKE3 digest values. BLAKE3 is not a <see cref="HashAlgorithmName"/>, so the algorithm is carried
+    /// via <see cref="CryptoAlgorithm.Blake3"/> (with <see cref="Purpose.Digest"/>, raw encoding) and a digest
+    /// dispatcher routes it to the BLAKE3 backend. The default did:webplus self-hash algorithm.
+    /// </summary>
+    public static Tag Blake3Digest { get; } = Tag.Create(CryptoAlgorithm.Blake3).With(Purpose.Digest).With(EncodingScheme.Raw);
+
 
     //HMAC tags. Key and Value variants carry identical Tag composition; they exist for
     //ergonomic call-site clarity — `new SymmetricKeyMemory(owner, CryptoTags.HmacSha256Key)`
@@ -700,7 +707,7 @@ public static class CryptoTags
         MdocIssuerSignedItemRandom, WireDecodedDisclosureSalt,
         CoseEncodedSign1, AlgorithmAgnosticSignature, CoseEncodedMac0, CoseEncodedProtectedHeader,
         CmsEncodedSignedData, CmsSignedAttributeValue,
-        Sha256Digest, Sha384Digest, Sha512Digest,
+        Sha256Digest, Sha384Digest, Sha512Digest, Blake3Digest,
         HmacSha256Key, HmacSha384Key, HmacSha512Key,
         HmacSha256Value, HmacSha384Value, HmacSha512Value,
         TripleDesCbc, TripleDesCbcDecryptedContent, RetailMac,

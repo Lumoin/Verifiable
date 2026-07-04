@@ -16,7 +16,7 @@ namespace Verifiable.Core.Model.Did.CryptographicSuites
     /// </list>
     /// <para>
     /// This aligns with the concept of <em>verification method</em> in the
-    /// <a href="https://www.w3.org/TR/did-core/">W3C DID Core specification</a>,
+    /// <a href="https://www.w3.org/TR/did-1.1/">W3C DID Core specification</a>,
     /// which defines public key material and how it is bound to cryptographic proofs.
     /// </para>
     /// </remarks>

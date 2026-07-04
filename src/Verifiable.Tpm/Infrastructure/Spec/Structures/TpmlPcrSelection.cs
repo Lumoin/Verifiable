@@ -136,18 +136,34 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
 
         var selections = new TpmsPcrSelection[(int)count];
         var storageOwners = new IMemoryOwner<byte>[(int)count];
-
-        for(int i = 0; i < count; i++)
+        int filled = 0;
+        try
         {
-            var hashAlg = (TpmAlgIdConstants)reader.ReadUInt16();
-            byte sizeofSelect = reader.ReadByte();
+            for(int i = 0; i < count; i++)
+            {
+                var hashAlg = (TpmAlgIdConstants)reader.ReadUInt16();
+                byte sizeofSelect = reader.ReadByte();
 
-            IMemoryOwner<byte> storage = pool.Rent(sizeofSelect);
-            ReadOnlySpan<byte> source = reader.ReadBytes(sizeofSelect);
-            source.CopyTo(storage.Memory.Span.Slice(0, sizeofSelect));
+                //Record the rental before the read that can throw, so a later selection whose sizeofSelect
+                //overruns the buffer disposes this buffer and every earlier one rather than orphaning them.
+                IMemoryOwner<byte> storage = pool.Rent(sizeofSelect);
+                storageOwners[i] = storage;
+                filled = i + 1;
 
-            storageOwners[i] = storage;
-            selections[i] = new TpmsPcrSelection(hashAlg, storage.Memory.Slice(0, sizeofSelect));
+                ReadOnlySpan<byte> source = reader.ReadBytes(sizeofSelect);
+                source.CopyTo(storage.Memory.Span.Slice(0, sizeofSelect));
+
+                selections[i] = new TpmsPcrSelection(hashAlg, storage.Memory.Slice(0, sizeofSelect));
+            }
+        }
+        catch
+        {
+            for(int i = 0; i < filled; i++)
+            {
+                storageOwners[i]?.Dispose();
+            }
+
+            throw;
         }
 
         return new TpmlPcrSelection(selections, storageOwners);

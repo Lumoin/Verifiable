@@ -74,7 +74,10 @@ internal static class CbeffBiometricTemplate
 
         int recordLength = reader.ReadTlvLength();
         int recordOffset = reader.Consumed;
-        if(recordOffset + recordLength > dataGroup.Length)
+
+        //Compare by subtraction, never `recordOffset + recordLength` (which can overflow int to a negative value
+        //that slips past the guard). recordOffset is a position within dataGroup, so the right side is non-negative.
+        if(recordLength > dataGroup.Length - recordOffset)
         {
             throw new InvalidOperationException($"{dataGroupName} biometric data block length {recordLength} exceeds the data group.");
         }

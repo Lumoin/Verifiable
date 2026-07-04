@@ -64,13 +64,30 @@ public sealed class TpmlDigest: IDisposable
     /// <returns>The parsed digest list.</returns>
     public static TpmlDigest Parse(ref TpmReader reader, MemoryPool<byte> pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         uint count = reader.ReadUInt32();
-        var digests = new List<Tpm2bDigest>((int)count);
 
-        for(int i = 0; i < count; i++)
+        //Each digest is a TPM2B_DIGEST occupying at least its 2-byte size prefix, so a count larger than the
+        //remaining buffer can hold is a malformed length and must not size the backing list (Part 2, §10.5.2).
+        reader.EnsureCount(count, sizeof(ushort));
+
+        var digests = new List<Tpm2bDigest>((int)count);
+        try
         {
-            Tpm2bDigest digest = Tpm2bDigest.Parse(ref reader, pool);
-            digests.Add(digest);
+            for(int i = 0; i < count; i++)
+            {
+                Tpm2bDigest digest = Tpm2bDigest.Parse(ref reader, pool);
+                digests.Add(digest);
+            }
+        }
+        catch
+        {
+            foreach(var parsed in digests)
+            {
+                parsed.Dispose();
+            }
+
+            throw;
         }
 
         return new TpmlDigest(digests);

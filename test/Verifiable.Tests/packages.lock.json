@@ -38,11 +38,22 @@
           "Microsoft.TestPlatform.ObjectModel": "16.9.1"
         }
       },
+      "MessagePack": {
+        "type": "Direct",
+        "requested": "[3.1.4, )",
+        "resolved": "3.1.4",
+        "contentHash": "BH0wlHWmVoZpbAPyyt2Awbq30C+ZsS3eHSkYdnyUAbqVJ22fAJDzn2xTieBeoT5QlcBzp61vHcv878YJGfi3mg==",
+        "dependencies": {
+          "MessagePack.Annotations": "3.1.4",
+          "MessagePackAnalyzer": "3.1.4",
+          "Microsoft.NET.StringTools": "17.11.4"
+        }
+      },
       "Microsoft.CodeAnalysis.BannedApiAnalyzers": {
         "type": "Direct",
-        "requested": "[4.14.0, )",
-        "resolved": "4.14.0",
-        "contentHash": "gSWJlDWwmDhtbrEJGiHqvEjz9KthIiFD0qYB8zZ6a7z+xpMSPEtM9yTYELSa58iFWYlzSRqP9FXO6KoT3+ZMtg=="
+        "requested": "[5.6.0, )",
+        "resolved": "5.6.0",
+        "contentHash": "Kcobt3pnOdO0A+6CKiMHZdTEluJpsfxiV20axtZdmfBQnDmiWTKPJADlgAfdTuKNAnVarrkJa0UEGwuOo91muw=="
       },
       "Microsoft.Extensions.TimeProvider.Testing": {
         "type": "Direct",
@@ -410,6 +421,16 @@
         "resolved": "0.41.1",
         "contentHash": "vRSlilV2gcm769RDMe158oftaQN7FZpGe2roEEMGOXLcNUlmSbNUVppZIKaAFIQ/E575divDfoAV3yz6GL6R9Q=="
       },
+      "MessagePack.Annotations": {
+        "type": "Transitive",
+        "resolved": "3.1.4",
+        "contentHash": "aVWrDAkCdqxwQsz/q0ldPh2EFn48M99YUzE9OvZjMq2RNLKz4o2z88iGFvSvbMqOWRweRvKPHBJZe22PRqzslQ=="
+      },
+      "MessagePackAnalyzer": {
+        "type": "Transitive",
+        "resolved": "3.1.4",
+        "contentHash": "CTaSsN/liJ7MhLCAB7Z4ZLBNuVGCq9lt2BT/cbrc9vzGv89yK3CqIA+z9T19a11eQYl9etZHL6MQJgCqECRVpg=="
+      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -643,6 +664,14 @@
           "dotNetRdf": "[3.5.2, )"
         }
       },
+      "verifiable.acdc": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Cesr": "[0.0.0, )",
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Keri": "[0.0.0, )"
+        }
+      },
       "verifiable.apdu": {
         "type": "Project",
         "dependencies": {
@@ -665,6 +694,13 @@
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )"
+        }
+      },
+      "verifiable.cesr": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.core": {
@@ -694,6 +730,14 @@
           "Verifiable.JCose": "[0.0.0, )"
         }
       },
+      "verifiable.didwebs": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Cesr": "[0.0.0, )",
+          "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Keri": "[0.0.0, )"
+        }
+      },
       "verifiable.foundation": {
         "type": "Project",
         "dependencies": {
@@ -716,11 +760,19 @@
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )",
           "Verifiable.OAuth": "[0.0.0, )",
-          "Verifiable.Vcalm": "[0.0.0, )"
+          "Verifiable.Vcalm": "[0.0.0, )",
+          "Verifiable.WebFinger": "[0.0.0, )"
         }
       },
       "verifiable.jsonpointer": {
         "type": "Project"
+      },
+      "verifiable.keri": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Cesr": "[0.0.0, )",
+          "Verifiable.Cryptography": "[0.0.0, )"
+        }
       },
       "verifiable.microsoft": {
         "type": "Project",
@@ -774,6 +826,13 @@
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
+          "Verifiable.Server": "[0.0.0, )"
+        }
+      },
+      "verifiable.webfinger": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Server": "[0.0.0, )"
         }
       },

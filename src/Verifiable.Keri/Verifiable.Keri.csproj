@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Key Event Receipt Infrastructure (KERI) / ACDC protocol layer.</Title>
+    <Description>The KERI / ACDC protocol-genus layer over the Composable Event Streaming Representation (CESR) codec. Supplies the genus-specific meaning of CESR count and group codes — which group code frames controller or witness signatures, seals, receipts, or nested groups — so a stream consumer can descend a group the codec framed. The foundation for KERI key event logs (KEL) and ACDC credentials. Designed for AOT compatibility and trimming safety.</Description>
+    <PackageTags>KERI ACDC CESR KeyEventLog VerifiableCredentials TrustOverIP</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Cesr\Verifiable.Cesr.csproj" />
+    <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
+  </ItemGroup>
+
+</Project>
