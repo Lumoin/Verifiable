@@ -35,7 +35,7 @@ jobs:
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+      uses: github/codeql-action/init@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a
       with:
         languages: 'csharp'
         build-mode: none
@@ -47,9 +47,9 @@ jobs:
 
     - name: Autobuild
       if: ${{ github.actor != 'dependabot[bot]' }}
-      uses: github/codeql-action/autobuild@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+      uses: github/codeql-action/autobuild@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a
 
     - name: CodeQL Analysis
       if: ${{ github.actor != 'dependabot[bot]' }}
-      uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+      uses: github/codeql-action/analyze@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a
       timeout-minutes: 100

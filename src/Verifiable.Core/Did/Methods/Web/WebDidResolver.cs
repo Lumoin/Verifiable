@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
-using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Core;
@@ -50,8 +49,6 @@ public delegate DidDocument? WebDidDocumentDeserializer(ReadOnlySpan<byte> didDo
 /// </remarks>
 public static class WebDidResolver
 {
-    private static readonly char[] PathSeparator = [':'];
-
     /// <summary>
     /// Computes the HTTPS document URL for a <c>did:web</c> identifier.
     /// </summary>
@@ -74,100 +71,27 @@ public static class WebDidResolver
                 nameof(didWebIdentifier));
         }
 
-        //Split on colons: colons in the DID method-specific ID are path separators, while %3A is the
-        //percent-encoded literal colon of a port. Each segment is decoded INDEPENDENTLY and ONLY for the
-        //port colon — a %2F inside a segment is NOT turned into a path separator (the URL-confusion
-        //mitigation the did:web spec requires). The first segment is the host[:port]; the rest is the path.
-        string[] parts = didWebIdentifier[prefixWithColon.Length..].Split(PathSeparator);
-
-        string host = DecodePortColon(parts[0]);
-
-        //did:web forbids an IP-address host (it MUST be a domain name): reject an IPv4/IPv6 literal at the
-        //method layer rather than relying on a downstream SSRF policy that only blocks private/loopback ranges.
-        if(IsIpAddressHost(host))
-        {
-            throw new ArgumentException(
-                $"The did:web host '{host}' is an IP address; did:web requires a domain name.",
-                nameof(didWebIdentifier));
-        }
-
-        var builder = new System.Text.StringBuilder("https://");
-        builder.Append(host);
-
-        bool hasPath = parts.Length > 1;
-        for(int i = 1; i < parts.Length; i++)
-        {
-            //A segment that encodes its own '/' would forge an extra path segment after decode, so it is
-            //rejected rather than silently split.
-            string segment = parts[i];
-            if(ContainsEncodedSlash(segment))
-            {
-                throw new ArgumentException(
-                    $"The did:web path segment '{segment}' contains an encoded path separator.",
-                    nameof(didWebIdentifier));
-            }
-
-            builder.Append('/');
-            builder.Append(Uri.UnescapeDataString(segment));
-        }
-
-        if(!hasPath)
-        {
-            builder.Append("/.well-known");
-        }
-
-        builder.Append("/did.json");
-
-        return builder.ToString();
+        return WebHttpsTransform.MapToUrl(didWebIdentifier[prefixWithColon.Length..], didWebIdentifier, TransformPolicy);
     }
 
 
-    //Decodes only the percent-encoded port colon (%3A) in the host segment, leaving every other character
-    //as-is so no other percent-encoded delimiter can be smuggled in.
-    private static string DecodePortColon(string hostSegment)
+    /// <summary>
+    /// The did:web DID-to-HTTPS policy: no leading segment precedes the host, the host is not IDNA-encoded, a
+    /// <c>/.well-known</c> segment is inserted when the identifier declares no path, each path segment is used
+    /// as-is (the method-specific id is already in URL path form; did:web "Read"), and the document file is
+    /// <c>did.json</c>.
+    /// </summary>
+    private static WebHttpsTransformPolicy TransformPolicy { get; } = new()
     {
-        return hostSegment
-            .Replace("%3A", ":", StringComparison.OrdinalIgnoreCase);
-    }
+        LeadingSegmentsToDrop = 0,
+        IdnaEncodeHost = false,
+        LocalhostUsesHttp = false,
+        WellKnownWhenNoPath = true,
+        MinimumPathSegments = 0,
+        SegmentMapping = WebHttpsSegmentMapping.Preserve,
+        DocumentFileName = "did.json"
+    };
 
-
-    //A segment contains an encoded path separator when it carries %2F (the percent-encoded '/').
-    private static bool ContainsEncodedSlash(string segment)
-    {
-        return segment.Contains("%2F", StringComparison.OrdinalIgnoreCase);
-    }
-
-
-    //Determines whether a host[:port] string is an IP-address literal (IPv4 dotted-quad or a bracketed/raw
-    //IPv6 literal) rather than a domain name. The whole host is percent-decoded for this check so a literal
-    //smuggled in encoded form (for example a bracketed IPv6 with percent-encoded brackets) is still caught.
-    private static bool IsIpAddressHost(string host)
-    {
-        string candidate = Uri.UnescapeDataString(host);
-
-        if(candidate.StartsWith('['))
-        {
-            //A bracketed IPv6 literal: the address is between the brackets, anything after ']' is a port.
-            int close = candidate.IndexOf(']', StringComparison.Ordinal);
-            candidate = close > 0 ? candidate[1..close] : candidate.Trim('[', ']');
-        }
-        else
-        {
-            //An unbracketed host with a single ':' is host:port (IPv4 or domain); two or more colons is a raw
-            //IPv6 literal. Strip a single trailing port; leave a multi-colon IPv6 candidate intact.
-            int firstColon = candidate.IndexOf(':', StringComparison.Ordinal);
-            if(firstColon >= 0)
-            {
-                int lastColon = candidate.LastIndexOf(':');
-                if(firstColon == lastColon)
-                {
-                    candidate = candidate[..firstColon];
-                }
-            }
-        }
-
-        return IPAddress.TryParse(candidate, out _);
-    }
 
     /// <summary>
     /// Resolves a <c>did:web</c> identifier and returns a <see cref="DidResolutionResult"/>

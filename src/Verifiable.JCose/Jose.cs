@@ -331,10 +331,10 @@ public static class Jws
 
         TaggedMemory<byte> headerBytes = protectedHeaderEncoder(protectedHeader);
         string headerSegment = base64UrlEncoder(headerBytes.Span);
-        string payloadSegment = base64UrlEncoder(payload.Span);
+        bool base64UrlPayload = IsPayloadBase64UrlEncoded(headerBytes.Span);
 
         using IMemoryOwner<byte> dataToSignOwner = RentSigningInput(
-            headerSegment, payloadSegment, signaturePool, out int signingInputLength);
+            headerSegment, payload.Span, base64UrlPayload, base64UrlEncoder, signaturePool, out int signingInputLength);
 
         Signature signature = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
@@ -479,9 +479,45 @@ public static class Jws
     /// <param name="pool">Memory pool for the signing-input buffer.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
+    public static ValueTask<bool> VerifySignatureAsync(
+        string protectedSegment,
+        ReadOnlyMemory<byte> payload,
+        ReadOnlyMemory<byte> signature,
+        EncodeDelegate base64UrlEncoder,
+        VerificationDelegate verificationDelegate,
+        ReadOnlyMemory<byte> publicKey,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
+    {
+        return VerifySignatureAsync(
+            protectedSegment, payload, base64UrlPayload: true, signature,
+            base64UrlEncoder, verificationDelegate, publicKey, pool, cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Verifies a single JWS signature over a (protected-segment, detached payload) pair, honoring the RFC 7797
+    /// <c>b64</c> option: when <paramref name="base64UrlPayload"/> is <see langword="false"/> the JWS Signing
+    /// Input is <c>ASCII(b64url(protected) ".")</c> followed by the RAW <paramref name="payload"/> bytes
+    /// (RFC 7797 §3), the form a <c>did:webplus</c> proof and other unencoded-payload JWS use. The caller reads
+    /// the flag from the protected header (<see cref="WellKnownJoseHeaderNames.B64"/>) and is responsible for
+    /// <c>crit</c> validation declaring <c>b64</c> understood. The algorithm is the caller's resolved key, never
+    /// the wire <c>alg</c>.
+    /// </summary>
+    /// <param name="protectedSegment">The Base64Url-encoded protected header exactly as it appeared on the wire.</param>
+    /// <param name="payload">The raw payload bytes the signature covers (supplied out of band for a detached JWS).</param>
+    /// <param name="base64UrlPayload">Whether the payload is base64url-encoded in the signing input (RFC 7797 <c>b64</c>): <see langword="false"/> for the unencoded-payload option.</param>
+    /// <param name="signature">The signature bytes.</param>
+    /// <param name="base64UrlEncoder">Encodes bytes to Base64Url strings; used only when <paramref name="base64UrlPayload"/> is <see langword="true"/>.</param>
+    /// <param name="verificationDelegate">The verification function to use.</param>
+    /// <param name="publicKey">The verifying public key material.</param>
+    /// <param name="pool">Memory pool for the signing-input buffer.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     public static async ValueTask<bool> VerifySignatureAsync(
         string protectedSegment,
         ReadOnlyMemory<byte> payload,
+        bool base64UrlPayload,
         ReadOnlyMemory<byte> signature,
         EncodeDelegate base64UrlEncoder,
         VerificationDelegate verificationDelegate,
@@ -496,10 +532,8 @@ public static class Jws
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        string payloadSegment = base64UrlEncoder(payload.Span);
-
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
-            protectedSegment, payloadSegment, pool, out int signingInputLength);
+            protectedSegment, payload.Span, base64UrlPayload, base64UrlEncoder, pool, out int signingInputLength);
 
         return await verificationDelegate(
             dataToVerifyOwner.Memory[..signingInputLength],
@@ -1178,6 +1212,42 @@ public static class Jws
         span[segment1.Length] = (byte)'.';
         Encoding.ASCII.GetBytes(segment2, span[(segment1.Length + 1)..]);
         return owner;
+    }
+
+
+    //Builds the JWS Signing Input honoring the RFC 7797 b64 option. When base64UrlPayload is true (the default,
+    //b64 absent or true), the input is ASCII(b64url(protected) "." b64url(payload)) per RFC 7515 §5.1. When
+    //false (b64:false), the input is ASCII(b64url(protected) ".") followed by the RAW payload bytes per RFC 7797
+    //§3 — the payload may be arbitrary octets, so it is appended verbatim rather than encoded.
+    internal static IMemoryOwner<byte> RentSigningInput(
+        string protectedSegment,
+        ReadOnlySpan<byte> payload,
+        bool base64UrlPayload,
+        EncodeDelegate base64UrlEncoder,
+        MemoryPool<byte> pool,
+        out int signingInputLength)
+    {
+        if(base64UrlPayload)
+        {
+            return RentSigningInput(protectedSegment, base64UrlEncoder(payload), pool, out signingInputLength);
+        }
+
+        signingInputLength = checked(protectedSegment.Length + 1 + payload.Length);
+        IMemoryOwner<byte> owner = pool.Rent(signingInputLength);
+        Span<byte> span = owner.Memory.Span[..signingInputLength];
+        Encoding.ASCII.GetBytes(protectedSegment, span);
+        span[protectedSegment.Length] = (byte)'.';
+        payload.CopyTo(span[(protectedSegment.Length + 1)..]);
+        return owner;
+    }
+
+
+    //Whether the payload is base64url-encoded in the JWS Signing Input, per the RFC 7797 b64 header parameter:
+    //true unless the protected header carries b64:false. A b64 value of true, an absent b64, or a non-Boolean
+    //b64 all yield the default (encoded) behavior.
+    internal static bool IsPayloadBase64UrlEncoded(ReadOnlySpan<byte> protectedHeaderJson)
+    {
+        return !(JwkJsonReader.TryExtractBooleanValue(protectedHeaderJson, WellKnownJoseHeaderNames.B64Utf8, out bool b64) && !b64);
     }
 
 

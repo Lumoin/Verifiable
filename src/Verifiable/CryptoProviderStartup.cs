@@ -1,4 +1,5 @@
 using System;
+using System.Security.Cryptography;
 using System.Threading;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -81,5 +82,24 @@ internal static class CryptoProviderStartup
         CryptographicKeyFactory.RegisterFunction(
             typeof(ComputeDigestDelegate),
             (ComputeDigestDelegate)MicrosoftEntropyFunctions.ComputeDigestAsync);
+
+        //The synchronous SHA-family seam for hashes that are sync by nature (a JWK thumbprint, a PKCE S256
+        //challenge, a Concat KDF round, an SD-JWT disclosure digest): public/local-data hashes with no
+        //hardware-async backend. SHA*.HashData match the HashFunctionDelegate signature and are the same Microsoft
+        //backend the async digest above uses. SHA-256 is the default; SHA-384/512 are registered under qualifiers
+        //for the algorithm-agile SD-JWT caller.
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(HashFunctionDelegate),
+            (HashFunctionDelegate)SHA256.HashData);
+
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(HashFunctionDelegate),
+            (HashFunctionDelegate)SHA384.HashData,
+            qualifier: nameof(HashAlgorithmName.SHA384));
+
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(HashFunctionDelegate),
+            (HashFunctionDelegate)SHA512.HashData,
+            qualifier: nameof(HashAlgorithmName.SHA512));
     }
 }

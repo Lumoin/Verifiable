@@ -52,13 +52,13 @@ namespace Verifiable.Core.Model.Did;
 /// </para>
 /// <list type="bullet">
 /// <item><description>
-/// <see href="https://www.w3.org/TR/did-core/#assertion">DID Core �5.3.2 Assertion</see>
+/// <see href="https://www.w3.org/TR/did-1.1/#assertion">DID Core 1.1 Assertion (verification relationship; defined by reference to CID)</see>
 /// </description></item>
 /// <item><description>
-/// <see href="https://www.w3.org/TR/cid-1.0/#assertion">CID 1.0 �2.3.2 Assertion</see>
+/// <see href="https://www.w3.org/TR/cid-1.0/#assertion">CID 1.0 §2.3.2 Assertion</see>
 /// </description></item>
 /// <item><description>
-/// <see href="https://www.w3.org/TR/vc-data-integrity/#proof-purposes">VC Data Integrity �4.1 Proof Purposes</see>
+/// <see href="https://www.w3.org/TR/vc-data-integrity/#proof-purposes">VC Data Integrity §4.1 Proof Purposes</see>
 /// </description></item>
 /// </list>
 /// </remarks>

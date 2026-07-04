@@ -67,7 +67,7 @@ public static class BouncyCastleEcPointFunctions
         cancellationToken.ThrowIfCancellationRequested();
 
         X9ECParameters parameters = ResolveCurve(curve);
-        ECPoint decoded = parameters.Curve.DecodePoint(point.ToArray());
+        ECPoint decoded = DecodeValidPublicPoint(parameters, curve, point);
         ECPoint result = decoded.Multiply(ToScalar(scalar));
 
         return ValueTask.FromResult(Encode(result, curve, pool));
@@ -251,6 +251,48 @@ public static class BouncyCastleEcPointFunctions
         byte[] encoded = point.Normalize().GetEncoded(false);
 
         return EncodedEcPoint.FromBytes(encoded, curve, pool);
+    }
+
+
+    /// <summary>
+    /// Decodes an encoded peer-supplied elliptic-curve point and validates it as a usable public key before it is
+    /// used in a key agreement (an ECDH scalar multiplication). Skipping this check lets a hostile peer send the
+    /// SEC1 point-at-infinity encoding (a single <c>0x00</c> byte), which multiplies to the identity for any scalar
+    /// and collapses the shared secret to a fixed, key-independent value — a full PACE / Chip Authentication bypass.
+    /// Validation runs the shared partial public-key check (NIST SP 800-186 D.1.1.1, the identity/range/on-curve
+    /// steps): <see cref="EllipticCurveUtilities.ExtractCoordinates"/> rejects the point at infinity and any non-SEC1
+    /// or wrong-length encoding, and <see cref="EllipticCurveUtilities.CheckPointOnCurve"/> rejects an off-curve or
+    /// out-of-range point. The ICAO curves have cofactor 1, so on-curve and non-identity is full public-key validation.
+    /// </summary>
+    private static ECPoint DecodeValidPublicPoint(X9ECParameters parameters, Tag curve, ReadOnlyMemory<byte> point)
+    {
+        if(!curve.TryGet(out CryptoAlgorithm algorithm))
+        {
+            throw new ArgumentException("The tag must carry a CryptoAlgorithm to select the curve.", nameof(curve));
+        }
+
+        EllipticCurveTypes curveType = EllipticCurveUtilities.CurveTypeFor(algorithm);
+        bool onCurve;
+        try
+        {
+            EllipticCurveUtilities.ExtractCoordinates(point.Span, curveType, out ReadOnlySpan<byte> x, out ReadOnlySpan<byte> y);
+            onCurve = EllipticCurveUtilities.CheckPointOnCurve(x, y, curveType);
+        }
+        catch(ArgumentOutOfRangeException exception)
+        {
+            //ExtractCoordinates throws for the point at infinity (a single 0x00 byte) and any non-SEC1 or
+            //wrong-length encoding; surface every invalid-point rejection as one ArgumentException.
+            throw new ArgumentException(
+                "The supplied elliptic-curve point is not a valid public key: it is the point at infinity, out of range, or a malformed encoding.", nameof(point), exception);
+        }
+
+        if(!onCurve)
+        {
+            throw new ArgumentException(
+                "The supplied elliptic-curve point is not a valid public key: it is not on the expected curve.", nameof(point));
+        }
+
+        return parameters.Curve.DecodePoint(point.ToArray());
     }
 
 

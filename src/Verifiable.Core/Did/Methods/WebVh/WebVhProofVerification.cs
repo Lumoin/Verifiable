@@ -5,7 +5,7 @@ using System.Globalization;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Verifiable.Core.EventLogs;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -113,7 +113,7 @@ public static class WebVhProofVerification
 
         if(prior is null)
         {
-            string? scidError = VerifyScid(rawLine, effective, context);
+            string? scidError = await VerifyScidAsync(rawLine, effective, context, cancellationToken).ConfigureAwait(false);
             if(scidError is not null)
             {
                 return scidError;
@@ -121,7 +121,7 @@ public static class WebVhProofVerification
         }
         else if(prior.Parameters.IsPreRotationActive)
         {
-            string? preRotationError = VerifyPreRotation(declared, prior.Parameters, context);
+            string? preRotationError = await VerifyPreRotationAsync(declared, prior.Parameters, context, cancellationToken).ConfigureAwait(false);
             if(preRotationError is not null)
             {
                 return preRotationError;
@@ -214,7 +214,7 @@ public static class WebVhProofVerification
     }
 
 
-    private static string? VerifyScid(ReadOnlyMemory<byte> rawLine, WebVhParameters effective, WebVhValidationContext context)
+    private static async ValueTask<string?> VerifyScidAsync(ReadOnlyMemory<byte> rawLine, WebVhParameters effective, WebVhValidationContext context, CancellationToken cancellationToken)
     {
         //The SCID is a self-describing multihash; did:webvh v1.0 fixes SHA-256, so a claimed SCID whose
         //multihash algorithm prefix is not sha2-256 is rejected by algorithm before any value comparison.
@@ -224,7 +224,7 @@ public static class WebVhProofVerification
         }
 
         TaggedMemory<byte> scidInput = context.Canonicalizer.ScidInput(rawLine, effective.Scid);
-        string computedScid = WebVhHash.ComputeBase58(scidInput.Span, context.HashFunction, context.Base58Encoder);
+        string computedScid = await WebVhHash.ComputeBase58Async(scidInput.Memory, context.ComputeDigest, context.Base58Encoder, context.MemoryPool, cancellationToken).ConfigureAwait(false);
 
         if(!string.Equals(computedScid, effective.Scid, StringComparison.Ordinal))
         {
@@ -237,7 +237,7 @@ public static class WebVhProofVerification
 
     //Pre-rotation: while active, both updateKeys and nextKeyHashes MUST be present in the entry, and every
     //updateKey MUST have its multihash committed in the previous entry's nextKeyHashes.
-    private static string? VerifyPreRotation(WebVhDeclaredParameters declared, WebVhParameters prior, WebVhValidationContext context)
+    private static async ValueTask<string?> VerifyPreRotationAsync(WebVhDeclaredParameters declared, WebVhParameters prior, WebVhValidationContext context, CancellationToken cancellationToken)
     {
         if(declared.UpdateKeys is not { Length: > 0 } declaredUpdateKeys)
         {
@@ -253,10 +253,9 @@ public static class WebVhProofVerification
         {
             int byteCount = Encoding.UTF8.GetByteCount(updateKey);
             using IMemoryOwner<byte> updateKeyBytes = context.MemoryPool.Rent(byteCount);
-            Span<byte> updateKeyBytesSpan = updateKeyBytes.Memory.Span[..byteCount];
-            Encoding.UTF8.GetBytes(updateKey, updateKeyBytesSpan);
+            Encoding.UTF8.GetBytes(updateKey, updateKeyBytes.Memory.Span[..byteCount]);
 
-            string keyHash = WebVhHash.ComputeBase58(updateKeyBytesSpan, context.HashFunction, context.Base58Encoder);
+            string keyHash = await WebVhHash.ComputeBase58Async(updateKeyBytes.Memory[..byteCount], context.ComputeDigest, context.Base58Encoder, context.MemoryPool, cancellationToken).ConfigureAwait(false);
             if(!prior.NextKeyHashes.Contains(keyHash))
             {
                 return $"The did:webvh updateKey '{updateKey}' was not pre-rotation committed in the previous entry's nextKeyHashes.";
@@ -387,11 +386,20 @@ public static class WebVhProofVerification
                 return "A did:webvh v1.0 update key MUST be an Ed25519 multikey.";
             }
 
-            //eddsa-jcs-2022 signs SHA-256(JCS(proofOptions)) concatenated with SHA-256(JCS(document)).
+            //eddsa-jcs-2022 signs SHA-256(JCS(proofOptions)) concatenated with SHA-256(JCS(document)). Both digests
+            //flow through the registered ComputeDigestDelegate (telemetry, CBOM stamping, event emission); this method
+            //is already async, so it awaits the digest rather than bridging it synchronously. The two digests are
+            //computed before the hashData span is taken, so no Span local spans an await.
             using IMemoryOwner<byte> hashOwner = context.MemoryPool.Rent(HashDataLength);
-            Span<byte> hashData = hashOwner.Memory.Span[..HashDataLength];
-            context.HashFunction(proofOptions.Span, hashData[..Sha256DigestLength]);
-            context.HashFunction(document.Span, hashData[Sha256DigestLength..]);
+            using(DigestValue proofOptionsDigest = await CryptographicKeyEvents.ComputeDigestAsync(
+                context.ComputeDigest, new System.Buffers.ReadOnlySequence<byte>(proofOptions.Memory), Sha256DigestLength, CryptoTags.Sha256Digest, context.MemoryPool, cancellationToken: cancellationToken).ConfigureAwait(false))
+            using(DigestValue documentDigest = await CryptographicKeyEvents.ComputeDigestAsync(
+                context.ComputeDigest, new System.Buffers.ReadOnlySequence<byte>(document), Sha256DigestLength, CryptoTags.Sha256Digest, context.MemoryPool, cancellationToken: cancellationToken).ConfigureAwait(false))
+            {
+                Span<byte> hashData = hashOwner.Memory.Span[..HashDataLength];
+                proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData[..Sha256DigestLength]);
+                documentDigest.AsReadOnlySpan().CopyTo(hashData[Sha256DigestLength..]);
+            }
 
             VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification);
             bool isValid = await verify(hashOwner.Memory[..HashDataLength], signatureOwner.Memory, keyData.Memory, null, cancellationToken).ConfigureAwait(false);

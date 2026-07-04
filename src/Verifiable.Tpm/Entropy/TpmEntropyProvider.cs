@@ -39,8 +39,9 @@ namespace Verifiable.Tpm;
 /// is asynchronous. This provider therefore requires a synchronously-completing device — the in-process
 /// simulator, the virtual replay device, and the synchronous Windows TBS path all qualify. A genuinely
 /// asynchronous backend (the Linux kernel resource manager, a network HSM) cannot be consumed from the
-/// synchronous entropy path and causes <see cref="GenerateNonce"/>/<see cref="GenerateSalt"/> to throw,
-/// mirroring <see cref="CryptographicKeyEvents.ComputeDigestSyncBridge(ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, string?)"/>.
+/// synchronous entropy path and causes <see cref="GenerateNonce"/>/<see cref="GenerateSalt"/> to throw. This
+/// synchronous-completion requirement is specific to the synchronous <see cref="GenerateNonceDelegate"/>/
+/// <see cref="GenerateSaltDelegate"/> entropy seam; the digest seam is async-first (<see cref="ComputeDigestDelegate"/>).
 /// </para>
 /// <para>
 /// <strong>Health.</strong> <see cref="AssessHealthAsync"/> runs <c>TPM2_SelfTest()</c> and maps the

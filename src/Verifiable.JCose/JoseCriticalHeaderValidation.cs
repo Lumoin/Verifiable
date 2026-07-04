@@ -95,6 +95,26 @@ public static class JoseCriticalHeaderValidation
         TryValidate(headerJson, understoodCriticalExtensions, out _);
 
 
+    /// <summary>
+    /// Whether <c>crit</c> is present and lists <paramref name="extension"/> as a critical header parameter.
+    /// RFC 7515 treats <c>crit</c> as optional in general (so <see cref="IsSatisfied(ReadOnlySpan{byte})"/> accepts
+    /// an absent <c>crit</c>), but some parameters MUST be marked critical by their own specification — for example
+    /// RFC 7797 §6 requires a producer of an unencoded-payload JWS (<c>b64:false</c>) to include <c>b64</c> in
+    /// <c>crit</c>. A caller with such a requirement uses this to reject a header whose <c>crit</c> is absent or does
+    /// not name the parameter; the remaining <c>crit</c> rules are validated separately by
+    /// <see cref="IsSatisfied(ReadOnlySpan{byte}, IReadOnlySet{string})"/>.
+    /// </summary>
+    /// <param name="headerJson">The decoded UTF-8 protected header JSON bytes.</param>
+    /// <param name="extension">The header parameter name that MUST appear in <c>crit</c>.</param>
+    /// <returns><see langword="true"/> when <c>crit</c> is a string array that contains <paramref name="extension"/>.</returns>
+    public static bool MarksCritical(ReadOnlySpan<byte> headerJson, string extension)
+    {
+        List<string>? critNames = JwkJsonReader.ExtractStringArrayProperty(headerJson, "crit"u8);
+
+        return critNames is not null && critNames.Contains(extension);
+    }
+
+
     //RFC 7515 §4.1.11 / RFC 7516 §4.1.13: the single crit rule set, expressed without throwing so both a
     //throwing (JWE) and a fail-closed bool (JWS) caller can share it. Returns false with a reason on any
     //violation: a present-but-non-array crit, the empty list, a registered name, a name absent from the

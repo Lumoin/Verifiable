@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
+using Verifiable.Core.Model.Did;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -39,15 +40,14 @@ namespace Verifiable.Tests.Did
         {
             TestInfrastructureConstants.ThrowIfPreconditionFails(didDocumentFilename, didDocumentFileContents);
 
-            //Combine the library's source-generated context with a reflection fallback
-            //for the test-only TestExtendedDidDocument type. In production, library users
-            //would create their own source-generated context instead of DefaultJsonTypeInfoResolver.
+            //The base DidDocument preserves members beyond the W3C core set in AdditionalData (via the
+            //DidDocumentConverter), so the deprecated embedded publicKey round-trips without a bespoke type.
             var options = new JsonSerializerOptions().ApplyVerifiableDefaults();
             options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
                 VerifiableJsonContext.Default,
                 new DefaultJsonTypeInfoResolver());
 
-            TestExtendedDidDocument? deseserializedDidDocument = JsonSerializerExtensions.Deserialize<TestExtendedDidDocument>(didDocumentFileContents, options);
+            DidDocument? deseserializedDidDocument = JsonSerializerExtensions.Deserialize<DidDocument>(didDocumentFileContents, options);
             string reserializedDidDocument = JsonSerializerExtensions.Serialize(deseserializedDidDocument, options);
 
             //All the DID documents need to have an ID and a context.

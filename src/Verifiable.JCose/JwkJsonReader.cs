@@ -445,6 +445,59 @@ public static class JwkJsonReader
 
 
     /// <summary>
+    /// Extracts a JSON Boolean value (<c>true</c>/<c>false</c>) from a top-level property by key. Used for the
+    /// RFC 7797 <c>b64</c> JWS header parameter.
+    /// </summary>
+    /// <param name="json">UTF-8 JSON bytes to search.</param>
+    /// <param name="key">The property key as a UTF-8 literal.</param>
+    /// <param name="value">The parsed Boolean if found.</param>
+    /// <returns><see langword="true"/> if the key was found and its value is a JSON Boolean; otherwise <see langword="false"/>.</returns>
+    public static bool TryExtractBooleanValue(ReadOnlySpan<byte> json, ReadOnlySpan<byte> key, out bool value)
+    {
+        value = false;
+
+        int keyStart = IndexOfKey(json, key);
+        if(keyStart < 0)
+        {
+            return false;
+        }
+
+        int afterKey = keyStart + key.Length + 1;
+        afterKey = SkipWhitespaceAndColon(json, afterKey);
+        if(afterKey < 0 || afterKey >= json.Length)
+        {
+            return false;
+        }
+
+        //The value must be exactly the literal true or false, closed by a JSON structural byte or whitespace —
+        //so a token such as "truething" is not misread as true.
+        ReadOnlySpan<byte> remaining = json[afterKey..];
+        if(remaining.StartsWith("true"u8) && IsValueClosed(json, afterKey + 4))
+        {
+            value = true;
+
+            return true;
+        }
+
+        if(remaining.StartsWith("false"u8) && IsValueClosed(json, afterKey + 5))
+        {
+            value = false;
+
+            return true;
+        }
+
+        return false;
+    }
+
+
+    //Whether the byte at index closes a JSON value: end of input, or a structural/whitespace terminator.
+    private static bool IsValueClosed(ReadOnlySpan<byte> json, int index)
+    {
+        return index >= json.Length || IsNumberTerminator(json[index]);
+    }
+
+
+    /// <summary>
     /// Extracts a <see cref="long"/> value from a top-level JSON property by key.
     /// Used for numeric JWT claims such as <c>iat</c>, <c>exp</c>, and <c>nbf</c>.
     /// </summary>

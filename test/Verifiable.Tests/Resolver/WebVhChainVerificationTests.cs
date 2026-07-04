@@ -2,11 +2,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using Verifiable.Core.Did.Methods.WebVh;
-using Verifiable.Core.EventLogs;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.Foundation;
 using Verifiable.Json;
+using Verifiable.Microsoft;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -34,7 +35,7 @@ internal sealed class WebVhChainVerificationTests
     private static readonly EncodeDelegate Base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
     private static readonly DecodeDelegate Base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
     private static readonly VerifyChainIntegrityDelegate<WebVhRawEntry, WebVhProof> Verify =
-        WebVhChainVerification.Create(WebVhLogEntryJson.Canonicalizer.EntryHashInput, SHA256.HashData, Base58Encoder, Base58Decoder, BaseMemoryPool.Shared);
+        WebVhChainVerification.Create(WebVhLogEntryJson.Canonicalizer.EntryHashInput, MicrosoftEntropyFunctions.ComputeDigestAsync, Base58Encoder, Base58Decoder, BaseMemoryPool.Shared);
 
 
     public TestContext TestContext { get; set; } = null!;
@@ -105,7 +106,7 @@ internal sealed class WebVhChainVerificationTests
 
         //Mint the second entry's versionId over the genesis versionId as predecessor.
         var canonicalInput = WebVhLogEntryJson.Canonicalizer.EntryHashInput(Encoding.UTF8.GetBytes(secondBody), GenesisVersionId);
-        string secondEntryHash = WebVhHash.ComputeBase58(canonicalInput.Span, SHA256.HashData, Base58Encoder);
+        string secondEntryHash = WebVhTestLog.MultihashBase58(canonicalInput.Span);
         string secondVersionId = "2-" + secondEntryHash;
 
         JsonObject published = JsonNode.Parse(secondBody)!.AsObject();

@@ -3,12 +3,12 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Verifiable.Core.EventLogs;
+using Verifiable.Cryptography.EventLogs;
+using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
@@ -42,23 +42,21 @@ namespace Verifiable.Core.Did.Methods.WebVh;
 /// </remarks>
 public static class WebVhDidResolver
 {
-    private static readonly char[] PathSeparator = [':'];
-
-    //An upper bound on the fetched did.jsonl size, so a malicious or misconfigured host cannot exhaust resolver
-    //memory by serving an unbounded DID Log (did:webvh v1.0: resolvers SHOULD guard against resource-exhaustion
-    //during retrieval). The bound is generous relative to a real DID Log (each entry is a single JSON line) yet
-    //rejects an obviously hostile payload.
+    /// <summary>
+    /// An upper bound on the fetched <c>did.jsonl</c> size, so a malicious or misconfigured host cannot exhaust
+    /// resolver memory by serving an unbounded DID Log (did:webvh v1.0: resolvers SHOULD guard against
+    /// resource-exhaustion during retrieval). The bound is generous relative to a real DID Log (each entry is a
+    /// single JSON line) yet rejects an obviously hostile payload.
+    /// </summary>
     private const int MaxDidLogBytes = 8 * 1024 * 1024;
 
-    //An upper bound on the fetched did-witness.json size, mirroring MaxDidLogBytes so a malicious or MITM'd
-    //witness host cannot exhaust resolver memory/CPU by serving an unbounded witness file (verifying every
-    //entry × proof is JCS-canonicalize + 2×SHA-256 + Ed25519). The size cap bounds the proof count too, since
-    //each proof costs bytes. Enforced before the body is copied into a pooled buffer.
+    /// <summary>
+    /// An upper bound on the fetched <c>did-witness.json</c> size, mirroring <see cref="MaxDidLogBytes"/> so a
+    /// malicious or MITM'd witness host cannot exhaust resolver memory/CPU by serving an unbounded witness file
+    /// (verifying every entry × proof is JCS-canonicalize + 2×SHA-256 + Ed25519). The size cap bounds the proof
+    /// count too, since each proof costs bytes. Enforced before the body is copied into a pooled buffer.
+    /// </summary>
     private const int MaxWitnessFileBytes = 8 * 1024 * 1024;
-
-    //IDNA2008 mapping for the DID-to-HTTPS domain transform. IdnMapping.GetAscii applies RFC3491 Unicode
-    //normalization and Punycode-encodes each international label, leaving ASCII domains unchanged.
-    private static readonly IdnMapping DomainIdnMapping = new();
 
     /// <summary>
     /// Computes the HTTPS <c>did.jsonl</c> DID Log location for a <c>did:webvh</c> identifier.
@@ -82,52 +80,40 @@ public static class WebVhDidResolver
                 nameof(didWebVhIdentifier));
         }
 
-        //The method-specific id is "<scid>:<domain>[:<path>...]". Split on colons — a colon separates DID
-        //segments while %3A is a literal colon for a port — then drop the SCID (the first segment), leaving the
-        //domain segment and any path segments to map exactly as did:web does.
-        string[] parts = didWebVhIdentifier[prefixWithColon.Length..].Split(PathSeparator);
-        if(parts.Length < 2 || parts[0].Length == 0)
-        {
-            throw new ArgumentException(
-                $"The did:webvh identifier '{didWebVhIdentifier}' must contain an SCID segment followed by a domain.",
-                nameof(didWebVhIdentifier));
-        }
-
-        //The domain is the first segment after the SCID. RFC3491 Unicode normalization and IDNA2008 Punycode
-        //encoding apply to the host (jp納豆.例.jp -> xn--jp-cd2fp15c.xn--fsq.jp), while a percent-encoded port
-        //(%3A) is decoded to a literal colon and the port number kept as-is (did:webvh v1.0, DID-to-HTTPS
-        //Transformation).
-        string domain = EncodeDomainSegment(parts[1]);
-
-        //Each remaining path segment is percent-encoded per RFC3986 (用户 -> %E7%94%A8%E6%88%B7) so an
-        //internationalized path maps to a valid HTTP URL; the ':' separators become '/'.
-        var location = new StringBuilder(domain);
-        for(int i = 2; i < parts.Length; i++)
-        {
-            location.Append('/');
-            location.Append(Uri.EscapeDataString(parts[i]));
-        }
-
-        bool hasPath = parts.Length > 2;
-        string logUrl = $"https://{location}";
-
-        if(!hasPath)
-        {
-            logUrl += $"/{WellKnownWebVhValues.WellKnownSegment}";
-        }
-
-        logUrl += $"/{WellKnownWebVhValues.DidLogFile}";
-
-        return logUrl;
+        return WebHttpsTransform.MapToUrl(didWebVhIdentifier[prefixWithColon.Length..], didWebVhIdentifier, TransformPolicy);
     }
 
 
-    //The did:webvh SCID ABNF: exactly 46 characters drawn from the base58btc alphabet (did:webvh v1.0: "scid =
-    //46(base58-alphabet)"). The base58btc alphabet excludes 0, O, I and l to avoid visually ambiguous characters.
+    /// <summary>
+    /// The did:webvh DID-to-HTTPS policy: the SCID (the first method-specific segment) precedes the host, the host
+    /// is IDNA/Punycode-encoded, a <c>/.well-known</c> segment is inserted when the identifier declares no path,
+    /// each path segment is percent-decoded then re-encoded to a canonical RFC3986 percent-encoding (did:webvh
+    /// v1.0, The DID to HTTPS Transformation), and the document file is the DID Log file.
+    /// </summary>
+    private static WebHttpsTransformPolicy TransformPolicy { get; } = new()
+    {
+        LeadingSegmentsToDrop = 1,
+        IdnaEncodeHost = true,
+        LocalhostUsesHttp = false,
+        WellKnownWhenNoPath = true,
+        MinimumPathSegments = 0,
+        SegmentMapping = WebHttpsSegmentMapping.DecodeThenReencode,
+        DocumentFileName = WellKnownWebVhValues.DidLogFile
+    };
+
+
+    /// <summary>
+    /// The did:webvh SCID length: exactly 46 characters drawn from the base58btc alphabet (did:webvh v1.0:
+    /// <c>scid = 46(base58-alphabet)</c>).
+    /// </summary>
     private const int ScidLength = 46;
+
+    /// <summary>The base58btc alphabet, which excludes 0, O, I and l to avoid visually ambiguous characters.</summary>
     private const string Base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-    //Whether the SCID segment of a did:webvh identifier (the first segment after "did:webvh:") is well-formed.
+    /// <summary>Whether the SCID segment of a did:webvh identifier (the first segment after <c>did:webvh:</c>) is well-formed.</summary>
+    /// <param name="did">The did:webvh identifier.</param>
+    /// <returns><see langword="true"/> when the SCID is exactly 46 base58btc-alphabet characters.</returns>
     private static bool HasWellFormedScid(string did)
     {
         string prefixWithColon = $"{WellKnownDidMethodPrefixes.WebVhDidMethodPrefix}:";
@@ -157,21 +143,16 @@ public static class WebVhDidResolver
     }
 
 
-    //Maps a did:webvh domain segment to its HTTPS host[:port] form: IDNA/Punycode-encode the host per IDNA2008
-    //(RFC3491 Unicode normalization is applied by IdnMapping.GetAscii), and preserve a %3A-encoded port by
-    //decoding only that colon — the host stays IDNA-encoded (did:webvh v1.0, DID-to-HTTPS Transformation).
-    private static string EncodeDomainSegment(string domainSegment)
-    {
-        //%3A (or %3a) is the literal colon separating host and port. Splitting on it isolates the host so the
-        //port number is preserved verbatim while only the host is IDNA-encoded.
-        int portIndex = domainSegment.IndexOf("%3A", StringComparison.OrdinalIgnoreCase);
-        string host = portIndex >= 0 ? domainSegment[..portIndex] : domainSegment;
-        string? port = portIndex >= 0 ? domainSegment[(portIndex + 3)..] : null;
-
-        string asciiHost = DomainIdnMapping.GetAscii(host);
-
-        return port is null ? asciiHost : $"{asciiHost}:{port}";
-    }
+    /// <summary>
+    /// Resolves the registered <see cref="ComputeDigestDelegate"/> for the no-digest <see cref="Build"/> overload.
+    /// </summary>
+    /// <returns>The registered digest delegate.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no <see cref="ComputeDigestDelegate"/> is registered.</exception>
+    private static ComputeDigestDelegate ResolveRegisteredDigest()
+        => CryptographicKeyFactory.GetFunction<ComputeDigestDelegate>(typeof(ComputeDigestDelegate))
+            ?? throw new InvalidOperationException(
+                $"No {nameof(ComputeDigestDelegate)} has been registered. Supply one to the explicit {nameof(Build)} overload "
+                + "or register one via CryptographicKeyFactory.RegisterFunction during application startup.");
 
 
     /// <summary>
@@ -187,7 +168,41 @@ public static class WebVhDidResolver
     /// <param name="documentIdentityReader">Reads each entry's DIDDoc <c>id</c> and <c>alsoKnownAs</c> for the portability check.</param>
     /// <param name="stateDeserializer">Deserializes the resolved entry's <c>state</c> into a <see cref="DidDocument"/>.</param>
     /// <param name="canonicalizer">The JCS canonicalizers the verification steps hash and sign over.</param>
-    /// <param name="hashFunction">The SHA-256 hash function fixed by did:webvh v1.0.</param>
+    /// <param name="base58Encoder">The raw base58btc encoder (no multibase prefix).</param>
+    /// <param name="base58Decoder">The base58btc decoder for update keys and proof values.</param>
+    /// <param name="pool">The pool the key, signature, hash and witness-file buffers are rented from.</param>
+    /// <param name="timeProvider">The clock used for the <c>versionTime</c> checks.</param>
+    /// <returns>A <see cref="DidMethodResolverDelegate"/> for registration with the resolver composition.</returns>
+    /// <remarks>
+    /// This overload takes the registered <see cref="ComputeDigestDelegate"/> from <see cref="CryptographicKeyFactory"/>
+    /// and forwards to the explicit-delegate overload; supply a digest there to control the implementation per resolver.
+    /// </remarks>
+    public static DidMethodResolverDelegate Build(
+        OutboundTransportDelegate transport,
+        WebVhLineParser lineParser,
+        WebVhWitnessFileParser witnessFileParser,
+        WebVhDocumentIdentityReader documentIdentityReader,
+        WebVhStateDeserializer stateDeserializer,
+        WebVhCanonicalizer canonicalizer,
+        EncodeDelegate base58Encoder,
+        DecodeDelegate base58Decoder,
+        MemoryPool<byte> pool,
+        TimeProvider timeProvider)
+        => Build(transport, lineParser, witnessFileParser, documentIdentityReader, stateDeserializer, canonicalizer,
+            ResolveRegisteredDigest(), base58Encoder, base58Decoder, pool, timeProvider);
+
+
+    /// <summary>
+    /// Builds a <c>did:webvh</c> resolver using an explicitly supplied <see cref="ComputeDigestDelegate"/> for the
+    /// SHA-256 SCID, entryHash and pre-rotation hashes — the caller controls the digest implementation.
+    /// </summary>
+    /// <param name="transport">The application-supplied single-hop transport the guarded fetch drives.</param>
+    /// <param name="lineParser">Parses one <c>did.jsonl</c> line into a <see cref="WebVhRawEntry"/>.</param>
+    /// <param name="witnessFileParser">Parses the <c>did-witness.json</c> file into its witness proof records.</param>
+    /// <param name="documentIdentityReader">Reads each entry's DIDDoc <c>id</c> and <c>alsoKnownAs</c> for the portability check.</param>
+    /// <param name="stateDeserializer">Deserializes the resolved entry's <c>state</c> into a <see cref="DidDocument"/>.</param>
+    /// <param name="canonicalizer">The JCS canonicalizers the verification steps hash and sign over.</param>
+    /// <param name="computeDigest">The SHA-256 digest implementation (telemetry/CBOM-bearing) the verification steps use.</param>
     /// <param name="base58Encoder">The raw base58btc encoder (no multibase prefix).</param>
     /// <param name="base58Decoder">The base58btc decoder for update keys and proof values.</param>
     /// <param name="pool">The pool the key, signature, hash and witness-file buffers are rented from.</param>
@@ -200,7 +215,7 @@ public static class WebVhDidResolver
         WebVhDocumentIdentityReader documentIdentityReader,
         WebVhStateDeserializer stateDeserializer,
         WebVhCanonicalizer canonicalizer,
-        HashFunctionDelegate hashFunction,
+        ComputeDigestDelegate computeDigest,
         EncodeDelegate base58Encoder,
         DecodeDelegate base58Decoder,
         MemoryPool<byte> pool,
@@ -212,14 +227,14 @@ public static class WebVhDidResolver
         ArgumentNullException.ThrowIfNull(documentIdentityReader);
         ArgumentNullException.ThrowIfNull(stateDeserializer);
         ArgumentNullException.ThrowIfNull(canonicalizer);
-        ArgumentNullException.ThrowIfNull(hashFunction);
+        ArgumentNullException.ThrowIfNull(computeDigest);
         ArgumentNullException.ThrowIfNull(base58Encoder);
         ArgumentNullException.ThrowIfNull(base58Decoder);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         VerifyChainIntegrityDelegate<WebVhRawEntry, WebVhProof> verifyChainIntegrity =
-            WebVhChainVerification.Create(canonicalizer.EntryHashInput, hashFunction, base58Encoder, base58Decoder, pool);
+            WebVhChainVerification.Create(canonicalizer.EntryHashInput, computeDigest, base58Encoder, base58Decoder, pool);
 
         return async (did, options, context, cancellationToken) =>
         {
@@ -236,7 +251,7 @@ public static class WebVhDidResolver
                 ValidationContext = new WebVhValidationContext
                 {
                     Canonicalizer = canonicalizer,
-                    HashFunction = hashFunction,
+                    ComputeDigest = computeDigest,
                     Base58Encoder = base58Encoder,
                     Base58Decoder = base58Decoder,
                     MemoryPool = pool,
@@ -494,11 +509,19 @@ public static class WebVhDidResolver
     }
 
 
-    //Fetches the DID Log from the primary location, then — only on a not-found condition — from each supplied
-    //alternative source (Watcher URL) in turn. Returns the first successful 200 response body, or null when no
-    //source yields one. A transport failure or a non-200 status is treated as not-found for fallback purposes;
-    //the retrieved log is verified by the caller exactly as the primary would be, so a tampered alternative
-    //source still fails verification (did:webvh v1.0, Read: L886).
+    /// <summary>
+    /// Fetches the DID Log from the primary location, then — only on a not-found condition — from each supplied
+    /// alternative source (Watcher URL) in turn. Returns the first successful 200 response body, or
+    /// <see langword="null"/> when no source yields one. A transport failure or a non-200 status is treated as
+    /// not-found for fallback purposes; the retrieved log is verified by the caller exactly as the primary would
+    /// be, so a tampered alternative source still fails verification (did:webvh v1.0, Read: L886).
+    /// </summary>
+    /// <param name="primaryTarget">The DID's designated DID Log location.</param>
+    /// <param name="options">The resolution options carrying any watcher URLs.</param>
+    /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
+    /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The first successful response, or <see langword="null"/> when no source yields a 200.</returns>
     private static async ValueTask<OutboundResponse?> FetchDidLogAsync(
         Uri primaryTarget,
         DidResolutionOptions options,
@@ -535,8 +558,15 @@ public static class WebVhDidResolver
     }
 
 
-    //Drives one guarded fetch for the DID Log, returning the response only on a successful 200, or null on a
-    //transport failure or any non-200 status. Cancellation is always propagated.
+    /// <summary>
+    /// Drives one guarded fetch for the DID Log, returning the response only on a successful 200, or
+    /// <see langword="null"/> on a transport failure or any non-200 status. Cancellation is always propagated.
+    /// </summary>
+    /// <param name="target">The DID Log URL to fetch.</param>
+    /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
+    /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The successful response, or <see langword="null"/> when the fetch did not yield a 200.</returns>
     private static async ValueTask<OutboundResponse?> TryFetchLogAsync(
         Uri target,
         OutboundTransportDelegate transport,
@@ -563,9 +593,19 @@ public static class WebVhDidResolver
     }
 
 
-    //Fetches and verifies did-witness.json when the replayed log has active witnesses. Returns a problem
-    //detail to fail resolution closed (the file is absent/unreachable while witnesses are active, or a
-    //threshold is unmet), or null when every entry requiring witnessing is approved.
+    /// <summary>
+    /// Fetches and verifies <c>did-witness.json</c> when the replayed log has active witnesses. Returns a problem
+    /// detail to fail resolution closed (the file is absent/unreachable while witnesses are active, or a threshold
+    /// is unmet), or <see langword="null"/> when every entry requiring witnessing is approved.
+    /// </summary>
+    /// <param name="logUrl">The DID Log URL, whose final path element is replaced to locate the witness file.</param>
+    /// <param name="states">The verified entry states, carrying the witness rules and versionIds.</param>
+    /// <param name="witnessFileParser">Parses the <c>did-witness.json</c> body into its witness proof records.</param>
+    /// <param name="validationContext">The verification seams the witness-proof check runs over.</param>
+    /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
+    /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A problem detail to fail resolution closed, or <see langword="null"/> when witnessing is satisfied.</returns>
     private static async ValueTask<DidProblemDetails?> VerifyWitnessesAsync(
         string logUrl,
         IReadOnlyList<WebVhState> states,
@@ -654,10 +694,15 @@ public static class WebVhDidResolver
     }
 
 
-    //Whether a did-witness.json response carries an acceptable Content-Type: application/json (the SHOULD media
-    //type), or no Content-Type header at all (the SHOULD does not require the header to be present). Any media
-    //type parameters (for example "; charset=utf-8") are ignored, comparing only the media type. A response
-    //declaring a different media type is rejected so the witness file is consumed only in its defined form.
+    /// <summary>
+    /// Whether a <c>did-witness.json</c> response carries an acceptable <c>Content-Type</c>: <c>application/json</c>
+    /// (the SHOULD media type), or no <c>Content-Type</c> header at all (the SHOULD does not require the header to
+    /// be present). Any media-type parameters (for example <c>; charset=utf-8</c>) are ignored, comparing only the
+    /// media type. A response declaring a different media type is rejected so the witness file is consumed only in
+    /// its defined form.
+    /// </summary>
+    /// <param name="response">The witness-file response to inspect.</param>
+    /// <returns><see langword="true"/> when the Content-Type is acceptable or absent.</returns>
     private static bool IsAcceptableJsonContentType(OutboundResponse response)
     {
         if(!response.TryGetHeader("Content-Type", out string? contentType) || contentType is not { Length: > 0 })
@@ -672,9 +717,13 @@ public static class WebVhDidResolver
     }
 
 
-    //The witness proofs file shares the DID's web location with only the final path element changed
-    //(did.jsonl -> did-witness.json) (did:webvh v1.0, The Witness Proofs File). The log URL is produced by
-    //Resolve, which always ends in the DID Log file name.
+    /// <summary>
+    /// The witness proofs file shares the DID's web location with only the final path element changed
+    /// (<c>did.jsonl</c> → <c>did-witness.json</c>) (did:webvh v1.0, The Witness Proofs File). The log URL is
+    /// produced by <see cref="Resolve"/>, which always ends in the DID Log file name.
+    /// </summary>
+    /// <param name="logUrl">The DID Log URL.</param>
+    /// <returns>The witness-file URL.</returns>
     private static string ResolveWitnessUrl(string logUrl)
     {
         return logUrl.EndsWith(WellKnownWebVhValues.DidLogFile, StringComparison.Ordinal)
@@ -683,10 +732,14 @@ public static class WebVhDidResolver
     }
 
 
-    //did:webvh resolution maps every invalidating condition to the invalidDid error (did:webvh v1.0, Read:
-    //"invalidDid — Any error that renders the did:webvh DID invalid during resolution"); a precise message is
-    //carried as the occurrence-specific problemDetails.Detail. The detail-free form equals the shared
-    //DidResolutionErrors.InvalidDid by problem-type, so callers can still compare by type.
+    /// <summary>
+    /// did:webvh resolution maps every invalidating condition to the invalidDid error (did:webvh v1.0, Read:
+    /// "invalidDid — Any error that renders the did:webvh DID invalid during resolution"); a precise message is
+    /// carried as the occurrence-specific <c>problemDetails.Detail</c>. The detail-free form equals the shared
+    /// <see cref="DidResolutionErrors.InvalidDid"/> by problem-type, so callers can still compare by type.
+    /// </summary>
+    /// <param name="detail">The occurrence-specific detail, or <see langword="null"/> for the shared instance.</param>
+    /// <returns>The invalid-DID problem details.</returns>
     private static DidProblemDetails InvalidDid(string? detail)
     {
         return detail is null
@@ -695,6 +748,13 @@ public static class WebVhDidResolver
     }
 
 
+    /// <summary>
+    /// Whether the requested DID matches the top-level <c>id</c> of any verified version — a portable DID's
+    /// resolved version may carry a different <c>id</c> than an earlier one (did:webvh v1.0, Read).
+    /// </summary>
+    /// <param name="identities">The per-version document identities.</param>
+    /// <param name="did">The requested DID.</param>
+    /// <returns><see langword="true"/> when some verified version's id equals the requested DID.</returns>
     private static bool MatchesAnyVersionId(List<WebVhDocumentIdentity> identities, string did)
     {
         foreach(WebVhDocumentIdentity identity in identities)
@@ -709,10 +769,15 @@ public static class WebVhDidResolver
     }
 
 
-    //Adds the did:webvh implicit #files (relativeRef) and #whois (LinkedVerifiablePresentation) services to the
-    //resolved DIDDoc unless an explicit service of the same id is already present — an explicit service
-    //overrides the implicit one (did:webvh v1.0, DID URL Resolution). The serviceEndpoint base is the DID Log
-    //location with the did.jsonl file and any .well-known/ segment removed.
+    /// <summary>
+    /// Adds the did:webvh implicit <c>#files</c> (relativeRef) and <c>#whois</c> (LinkedVerifiablePresentation)
+    /// services to the resolved DIDDoc unless an explicit service of the same id is already present — an explicit
+    /// service overrides the implicit one (did:webvh v1.0, DID URL Resolution). The <c>serviceEndpoint</c> base is
+    /// the DID Log location with the <c>did.jsonl</c> file and any <c>.well-known/</c> segment removed.
+    /// </summary>
+    /// <param name="document">The resolved DID document to augment.</param>
+    /// <param name="did">The resolved DID, used to form the service ids.</param>
+    /// <param name="logUrl">The DID Log URL the service-endpoint base is derived from.</param>
     private static void AddImplicitServices(DidDocument document, string did, string logUrl)
     {
         string baseUrl = ServiceBaseUrl(logUrl);
@@ -745,6 +810,12 @@ public static class WebVhDidResolver
     }
 
 
+    /// <summary>
+    /// The implicit-service endpoint base: the DID Log URL with the <c>did.jsonl</c> file name and any trailing
+    /// <c>.well-known/</c> segment removed.
+    /// </summary>
+    /// <param name="logUrl">The DID Log URL.</param>
+    /// <returns>The service-endpoint base URL.</returns>
     private static string ServiceBaseUrl(string logUrl)
     {
         string baseUrl = logUrl.EndsWith(WellKnownWebVhValues.DidLogFile, StringComparison.Ordinal)
@@ -759,8 +830,14 @@ public static class WebVhDidResolver
     }
 
 
-    //Whether the DIDDoc already defines a service whose id carries the given fragment (an absolute
-    //"&lt;did&gt;#files" or a relative "#files"), in which case the explicit service overrides the implicit one.
+    /// <summary>
+    /// Whether the DIDDoc already defines a service whose id carries the given fragment (an absolute
+    /// <c>&lt;did&gt;#files</c> or a relative <c>#files</c>), in which case the explicit service overrides the
+    /// implicit one.
+    /// </summary>
+    /// <param name="document">The DID document to inspect.</param>
+    /// <param name="fragment">The service-id fragment to look for.</param>
+    /// <returns><see langword="true"/> when a service with that fragment is already present.</returns>
     private static bool HasServiceWithFragment(DidDocument document, string fragment)
     {
         if(document.Service is not { } services)
@@ -780,10 +857,16 @@ public static class WebVhDidResolver
     }
 
 
-    //Selects the log entry index the resolution targets per the version-query parameters: an exact versionId,
-    //an exact versionNumber, the entry active at versionTime (the latest entry whose versionTime is at or
-    //before the requested time), or — with no version query — the latest entry. A requested version that is
-    //absent or not active at the requested time is a NotFound (did:webvh v1.0, Reading did:webvh DID URLs).
+    /// <summary>
+    /// Selects the log entry index the resolution targets per the version-query parameters: an exact
+    /// <c>versionId</c>, an exact <c>versionNumber</c>, the entry active at <c>versionTime</c> (the latest entry
+    /// whose <c>versionTime</c> is at or before the requested time), or — with no version query — the latest
+    /// entry. A requested version that is absent or not active at the requested time is a NotFound (did:webvh
+    /// v1.0, Reading did:webvh DID URLs).
+    /// </summary>
+    /// <param name="entries">The parsed DID Log entries.</param>
+    /// <param name="options">The resolution options carrying any version query.</param>
+    /// <returns>The target entry index and a <see langword="null"/> error, or <c>-1</c> and a NotFound problem.</returns>
     private static (int Index, DidProblemDetails? Error) SelectTargetEntry(
         List<LogEntry<WebVhRawEntry, WebVhProof>> entries,
         DidResolutionOptions options)
@@ -838,8 +921,14 @@ public static class WebVhDidResolver
     }
 
 
-    //A version selected by versionId/versionNumber is only valid at a requested versionTime if its own
-    //versionTime is at or before that time.
+    /// <summary>
+    /// A version selected by <c>versionId</c>/<c>versionNumber</c> is only valid at a requested <c>versionTime</c>
+    /// if its own <c>versionTime</c> is at or before that time.
+    /// </summary>
+    /// <param name="entries">The parsed DID Log entries.</param>
+    /// <param name="index">The index selected by versionId/versionNumber.</param>
+    /// <param name="options">The resolution options carrying any versionTime constraint.</param>
+    /// <returns>The validated index, or <c>-1</c> and a NotFound problem when the time constraint is violated.</returns>
     private static (int Index, DidProblemDetails? Error) ValidateTimeConstraint(
         List<LogEntry<WebVhRawEntry, WebVhProof>> entries,
         int index,
@@ -856,6 +945,13 @@ public static class WebVhDidResolver
     }
 
 
+    /// <summary>
+    /// Reads an entry's <c>versionTime</c> using the same strict UTC-'Z' grammar as the verifier, so a
+    /// <c>versionTime</c> query selects the entry a conformant resolver would.
+    /// </summary>
+    /// <param name="entry">The DID Log entry.</param>
+    /// <param name="value">When this returns <see langword="true"/>, the entry's parsed <c>versionTime</c>.</param>
+    /// <returns><see langword="true"/> when the entry carries a parseable <c>versionTime</c>.</returns>
     private static bool TryGetEntryTime(LogEntry<WebVhRawEntry, WebVhProof> entry, out DateTimeOffset value)
     {
         value = default;
@@ -868,7 +964,9 @@ public static class WebVhDidResolver
     }
 
 
-    //The first entry is the genesis; an entry declaring deactivated:true is terminal; all others update.
+    /// <summary>The first entry is the genesis; an entry declaring <c>deactivated:true</c> is terminal; all others update.</summary>
+    /// <param name="entry">The entry to classify.</param>
+    /// <returns>The entry's classification.</returns>
     private static LogEntryClassification ClassifyEntry(LogEntry<WebVhRawEntry, WebVhProof> entry)
     {
         if(entry.Index == 0)
@@ -885,8 +983,15 @@ public static class WebVhDidResolver
     }
 
 
-    //Folds the declared parameters onto the accumulated state and advances to the active (or, for a
-    //deactivation entry, terminal) state. The fold re-succeeds here because proof validation already ran it.
+    /// <summary>
+    /// Folds the declared parameters onto the accumulated state and advances to the active (or, for a deactivation
+    /// entry, terminal) state. The fold re-succeeds here because proof validation already ran it.
+    /// </summary>
+    /// <param name="classification">The entry's classification.</param>
+    /// <param name="currentState">The current log state before this entry is applied.</param>
+    /// <param name="entry">The entry to apply.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The new log state and <see langword="null"/> on success, or the unchanged state and an error.</returns>
     private static ValueTask<(LogState<WebVhState> State, string? Error)> ApplyEntry(
         LogEntryClassification classification,
         LogState<WebVhState> currentState,
@@ -927,8 +1032,13 @@ public static class WebVhDidResolver
     }
 
 
-    //Splits the fetched did.jsonl into entries, slicing each line out of the fetched buffer (no re-encode);
-    //the line slice backs the entry's CanonicalBytes that the canonicalizers re-parse.
+    /// <summary>
+    /// Splits the fetched <c>did.jsonl</c> into entries, slicing each line out of the fetched buffer (no
+    /// re-encode); the line slice backs the entry's <c>CanonicalBytes</c> that the canonicalizers re-parse.
+    /// </summary>
+    /// <param name="body">The fetched DID Log body.</param>
+    /// <param name="lineParser">Parses one <c>did.jsonl</c> line into a <see cref="WebVhRawEntry"/>.</param>
+    /// <returns>The parsed log entries, one per non-empty line.</returns>
     private static List<LogEntry<WebVhRawEntry, WebVhProof>> ParseEntries(ReadOnlyMemory<byte> body, WebVhLineParser lineParser)
     {
         var entries = new List<LogEntry<WebVhRawEntry, WebVhProof>>();
@@ -968,6 +1078,9 @@ public static class WebVhDidResolver
     }
 
 
+    /// <summary>Trims leading and trailing ASCII whitespace from a DID Log line slice.</summary>
+    /// <param name="value">The line slice to trim.</param>
+    /// <returns>The slice with leading and trailing ASCII whitespace removed.</returns>
     private static ReadOnlyMemory<byte> TrimAsciiWhitespace(ReadOnlyMemory<byte> value)
     {
         ReadOnlySpan<byte> span = value.Span;
@@ -988,10 +1101,20 @@ public static class WebVhDidResolver
     }
 
 
+    /// <summary>Whether the byte is an ASCII space, tab, carriage return or line feed.</summary>
+    /// <param name="value">The byte to test.</param>
+    /// <returns><see langword="true"/> when the byte is ASCII whitespace.</returns>
     private static bool IsAsciiWhitespace(byte value) =>
         value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
 
 
+    /// <summary>
+    /// Adapts the parsed entries to the <see cref="IAsyncEnumerable{T}"/> the
+    /// <see cref="LogReplayer{TState,TOperation,TProof,TContext}"/> consumes, observing cancellation per entry.
+    /// </summary>
+    /// <param name="entries">The parsed DID Log entries.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The entries as an async stream.</returns>
     private static async IAsyncEnumerable<LogEntry<WebVhRawEntry, WebVhProof>> ToAsync(
         List<LogEntry<WebVhRawEntry, WebVhProof>> entries,
         [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -1006,18 +1129,24 @@ public static class WebVhDidResolver
     }
 
 
-    //A TimeProvider frozen at a single instant, so every versionTime and proof-expiry comparison in one
-    //resolution is judged against the same committed resolution clock rather than a clock that advances
-    //mid-replay. The underlying TimeProvider's UTC instant is captured once at the start of each resolve.
+    /// <summary>
+    /// A <see cref="TimeProvider"/> frozen at a single instant, so every <c>versionTime</c> and proof-expiry
+    /// comparison in one resolution is judged against the same committed resolution clock rather than a clock that
+    /// advances mid-replay. The underlying provider's UTC instant is captured once at the start of each resolve.
+    /// </summary>
     private sealed class FrozenTimeProvider: TimeProvider
     {
+        /// <summary>The committed resolution instant returned for every <see cref="GetUtcNow"/> call.</summary>
         private readonly DateTimeOffset instant;
 
+        /// <summary>Creates a provider frozen at the given instant.</summary>
+        /// <param name="instant">The instant to freeze at.</param>
         public FrozenTimeProvider(DateTimeOffset instant)
         {
             this.instant = instant;
         }
 
+        /// <inheritdoc />
         public override DateTimeOffset GetUtcNow()
         {
             return instant;

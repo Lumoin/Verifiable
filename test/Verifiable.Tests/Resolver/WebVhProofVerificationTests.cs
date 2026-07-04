@@ -4,10 +4,11 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Verifiable.Core.Did.Methods.WebVh;
-using Verifiable.Core.EventLogs;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.Json;
+using Verifiable.Microsoft;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -27,7 +28,7 @@ internal sealed class WebVhProofVerificationTests
     private static readonly WebVhValidationContext Context = new()
     {
         Canonicalizer = WebVhLogEntryJson.Canonicalizer,
-        HashFunction = SHA256.HashData,
+        ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
         Base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase)),
         Base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase)),
         MemoryPool = BaseMemoryPool.Shared,

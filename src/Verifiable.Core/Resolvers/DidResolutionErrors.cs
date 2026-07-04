@@ -18,7 +18,7 @@ namespace Verifiable.Core.Resolvers;
 /// <see cref="DidErrorTypes"/> URI rather than using these defaults.
 /// </para>
 /// <para>
-/// See <see href="https://w3c.github.io/did-resolution/#errors">DID Resolution §9 Errors</see>.
+/// See <see href="https://www.w3.org/TR/did-resolution/#errors">DID Resolution §9 Errors</see>.
 /// </para>
 /// </remarks>
 public static class DidResolutionErrors
@@ -86,4 +86,21 @@ public static class DidResolutionErrors
     public static readonly DidProblemDetails FeatureNotSupported = new(
         DidErrorTypes.FeatureNotSupported,
         Title: "Feature not supported");
+
+    /// <summary>
+    /// A DID URL dereferenced to a resource that is not a conforming verification method, or
+    /// whose <c>id</c> or <c>controller</c> does not match the controller document
+    /// (CID 1.0 §3.3 steps 8–10).
+    /// </summary>
+    public static readonly DidProblemDetails InvalidVerificationMethod = new(
+        DidErrorTypes.InvalidVerificationMethod,
+        Title: "Invalid verification method");
+
+    /// <summary>
+    /// A DID URL dereferenced to a verification method that is not associated with the requested
+    /// verification relationship (CID 1.0 §3.3 step 11).
+    /// </summary>
+    public static readonly DidProblemDetails InvalidRelationshipForVerificationMethod = new(
+        DidErrorTypes.InvalidRelationshipForVerificationMethod,
+        Title: "Invalid relationship for verification method");
 }

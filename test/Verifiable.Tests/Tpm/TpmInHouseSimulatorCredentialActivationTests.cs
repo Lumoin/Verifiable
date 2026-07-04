@@ -143,6 +143,45 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
         }
     }
 
+    [TestMethod]
+    public async Task ActivateCredentialRejectsUndersizedCredentialBlob()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStoragePrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                //A wire-legal but empty credentialBlob and secret (size-zero TPM2B fields) reach the effect executor
+                //after the handles resolve; a too-small buffer must fail closed with TPM_RC_SIZE rather than throw an
+                //out-of-range exception out of the executor, which the PDA runner does not catch (Part 3, clause 12.5).
+                using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
+                    ak.ObjectHandle, ek.ObjectHandle, ReadOnlySpan<byte>.Empty, ReadOnlySpan<byte>.Empty, pool);
+                using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+                TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                    tpm, activateInput, [activateAuth, keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                Assert.IsFalse(activateResult.IsSuccess, "An undersized credentialBlob/secret must be rejected, not crash.");
+                Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, activateResult.ResponseCode);
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     /// Wraps <see cref="CredentialSecret"/> to the given key's public area, bound to <paramref name="objectName"/>.
     /// </summary>

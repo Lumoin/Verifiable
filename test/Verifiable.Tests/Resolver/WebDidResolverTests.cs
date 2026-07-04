@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.EventLogs;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Resolvers;
 using Verifiable.Core.Did.Methods.Web;
@@ -58,11 +58,38 @@ internal sealed class WebDidResolverTests
         Assert.AreEqual("https://example.com:8443/.well-known/did.json", result);
     }
 
+    /// <summary>
+    /// did:web maps path segments as-is: an already-percent-encoded segment is used verbatim, NOT percent-decoded,
+    /// so the URL preserves the DID's encoding (did:web "Read": the method-specific id is already in URL path form).
+    /// </summary>
+    [TestMethod]
+    public void ResolvePreservesPercentEncodedPathSegment()
+    {
+        Assert.AreEqual("https://example.com/a%2Bb/did.json", WebDidResolver.Resolve("did:web:example.com:a%2Bb"));
+    }
+
     [TestMethod]
     public void ResolveThrowsForNonDidWebIdentifier()
     {
         Assert.ThrowsExactly<ArgumentException>(() =>
             WebDidResolver.Resolve("did:key:z6Mk..."));
+    }
+
+    /// <summary>
+    /// A did:web host MUST be a domain name and a path segment MUST name a single component: an IP-literal host,
+    /// a dot-segment, or a segment carrying an encoded path separator (<c>%2F</c>) is rejected so it cannot
+    /// re-target the document location (did:web DID-to-HTTPS transformation; the shared host/segment guards).
+    /// </summary>
+    [TestMethod]
+    [DataRow("did:web:127.0.0.1")]                 //IPv4-literal host.
+    [DataRow("did:web:192.168.1.1:user:alice")]    //Private IPv4-literal host.
+    [DataRow("did:web:example.com:..")]            //Literal parent dot-segment (path traversal).
+    [DataRow("did:web:example.com:%2E%2E")]        //Percent-encoded parent dot-segment.
+    [DataRow("did:web:example.com:a%2Fb")]         //Segment carrying an encoded path separator.
+    [DataRow("did:web:example.com:.")]             //Literal current dot-segment.
+    public void ResolveThrowsForIpHostOrUnsafePathSegment(string did)
+    {
+        Assert.ThrowsExactly<ArgumentException>(() => WebDidResolver.Resolve(did));
     }
 
     [TestMethod]

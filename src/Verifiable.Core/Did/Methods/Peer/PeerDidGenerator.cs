@@ -85,6 +85,8 @@ public static class PeerDidGenerator
         ArgumentNullException.ThrowIfNull(hashFunction);
         ArgumentNullException.ThrowIfNull(pool);
 
+        ValidateInputDocument(inputDocument);
+
         EncodeDelegate base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
 
         //Encoded document = multibase-base58btc( json multicodec || utf8(serialized document) ).
@@ -115,6 +117,125 @@ public static class PeerDidGenerator
         string hashPortion = MultibaseSerializer.Encode(digest, multihashPrefix, MultibaseAlgorithms.Base58Btc, base58Encoder, pool);
 
         return $"did:peer:4{hashPortion}:{encodedDocument}";
+    }
+
+
+    /// <summary>
+    /// Enforces the <c>did:peer:4</c> input-document constraints before encoding: the document MUST NOT
+    /// carry a root <c>id</c>, and every identifier and every reference to the subject's OWN resources MUST
+    /// be relative (a fragment reference such as <c>#key-1</c>) per the
+    /// <see href="https://identity.foundation/peer-did-4/">did:peer:4 specification</see> input-document
+    /// requirements. A verification method's <c>controller</c> is deliberately NOT checked: the
+    /// specification requires the controller to be omitted when the subject owns the method and included
+    /// when another party controls it, so an absolute other-party controller DID is legitimate.
+    /// </summary>
+    /// <param name="inputDocument">The candidate input document.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the document carries a root id, or when a subject-owned identifier or reference is an
+    /// absolute value rather than a relative one.
+    /// </exception>
+    private static void ValidateInputDocument(DidDocument inputDocument)
+    {
+        //did:peer:4 input document: "The document MUST NOT include an id at the root."
+        if(!string.IsNullOrEmpty(inputDocument.Id?.Id))
+        {
+            throw new ArgumentException(
+                "The did:peer:4 input document MUST NOT include a root id; the id is assigned when the DID is resolved.",
+                nameof(inputDocument));
+        }
+
+        //did:peer:4 input document: "All identifiers within this document MUST be relative." A verification
+        //method id and a service id both identify one of the subject's own resources.
+        if(inputDocument.VerificationMethod is not null)
+        {
+            foreach(VerificationMethod verificationMethod in inputDocument.VerificationMethod)
+            {
+                RequireRelative(verificationMethod.Id, "verificationMethod id");
+            }
+        }
+
+        if(inputDocument.Service is not null)
+        {
+            foreach(Service service in inputDocument.Service)
+            {
+                RequireRelative(service.Id?.ToString(), "service id");
+            }
+        }
+
+        //did:peer:4 input document: "All references pointing to resources within this document MUST be
+        //relative." A verification relationship either references the subject's own key by fragment or
+        //embeds a verification method, whose own id is likewise a subject identifier.
+        ValidateRelationship(inputDocument.Authentication);
+        ValidateRelationship(inputDocument.AssertionMethod);
+        ValidateRelationship(inputDocument.KeyAgreement);
+        ValidateRelationship(inputDocument.CapabilityInvocation);
+        ValidateRelationship(inputDocument.CapabilityDelegation);
+
+        //Validates one verification-relationship array. The array is only read, so passing a derived
+        //relationship array (covariant to the base reference type) is safe.
+        static void ValidateRelationship(VerificationMethodReference[]? references)
+        {
+            if(references is null)
+            {
+                return;
+            }
+
+            foreach(VerificationMethodReference reference in references)
+            {
+                if(reference.EmbeddedVerification is VerificationMethod embedded)
+                {
+                    RequireRelative(embedded.Id, "embedded verificationMethod id");
+                }
+                else
+                {
+                    RequireRelative(reference.VerificationReferenceId, "verification relationship reference");
+                }
+            }
+        }
+
+        //Throws when a present subject-owned identifier or reference is not a relative reference. A null
+        //value is a legitimately absent identifier (for example a service that omits its id) and is skipped.
+        static void RequireRelative(string? identifier, string fieldDescription)
+        {
+            if(identifier is not null && !IsRelativeReference(identifier))
+            {
+                throw new ArgumentException(
+                    $"The did:peer:4 input document {fieldDescription} MUST be relative, not an absolute identifier: '{identifier}'.",
+                    nameof(inputDocument));
+            }
+        }
+
+        //RFC 3986 §4.2: a relative reference does not begin with a scheme. The value is absolute when a
+        //scheme — ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) — is terminated by ':' before any '/', '?' or
+        //'#'. Detecting the scheme explicitly avoids the cross-platform pitfalls of Uri parsing.
+        static bool IsRelativeReference(string reference)
+        {
+            if(reference.Length == 0 || !char.IsAsciiLetter(reference[0]))
+            {
+                return true;
+            }
+
+            for(int i = 1; i < reference.Length; i++)
+            {
+                char c = reference[i];
+                if(c == ':')
+                {
+                    return false;
+                }
+
+                if(c is '/' or '?' or '#')
+                {
+                    return true;
+                }
+
+                if(!(char.IsAsciiLetterOrDigit(c) || c is '+' or '-' or '.'))
+                {
+                    return true;
+                }
+            }
+
+            return true;
+        }
     }
 
 

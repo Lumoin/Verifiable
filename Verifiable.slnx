@@ -37,23 +37,28 @@
     <File Path="documents/ADRs/validation-and-secops.md" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Verifiable.Acdc/Verifiable.Acdc.csproj" />
     <Project Path="src/Verifiable.Apdu/Verifiable.Apdu.csproj" />
     <Project Path="src/Verifiable.BouncyCastle/Verifiable.BouncyCastle.csproj" />
     <Project Path="src/Verifiable.Cbor/Verifiable.Cbor.csproj" Id="38096bd8-b6f1-4028-aa63-99b1379eefc6" />
+    <Project Path="src/Verifiable.Cesr/Verifiable.Cesr.csproj" />
     <Project Path="src/Verifiable.Core/Verifiable.Core.csproj" />
     <Project Path="src/Verifiable.Cryptography/Verifiable.Cryptography.csproj" Id="a968ac12-8957-4f2a-877a-8054e1de96fd" />
     <Project Path="src/Verifiable.DecentralizedWebNode/Verifiable.DecentralizedWebNode.csproj" />
     <Project Path="src/Verifiable.DidComm/Verifiable.DidComm.csproj" />
+    <Project Path="src/Verifiable.DidWebs/Verifiable.DidWebs.csproj" Id="7c6a2f0e-5b3d-4a1c-9e8f-2d4b6a7c9e1f" />
     <Project Path="src/Verifiable.Foundation/Verifiable.Foundation.csproj" />
     <Project Path="src/Verifiable.JCose/Verifiable.JCose.csproj" />
     <Project Path="src/Verifiable.Json/Verifiable.Json.csproj" Id="cf528db6-4a4f-4738-991d-21720336c535" />
     <Project Path="src/Verifiable.JsonPointer/Verifiable.JsonPointer.csproj" Id="e2ec613b-f5d9-4d9f-8657-e047c5a6f7e5" />
+    <Project Path="src/Verifiable.Keri/Verifiable.Keri.csproj" />
     <Project Path="src/Verifiable.Microsoft/Verifiable.Microsoft.csproj" />
     <Project Path="src/Verifiable.NSec/Verifiable.NSec.csproj" />
     <Project Path="src/Verifiable.OAuth/Verifiable.OAuth.csproj" Id="96704fa5-df6c-47f4-9d51-5300c6b988e6" />
     <Project Path="src/Verifiable.Server/Verifiable.Server.csproj" />
     <Project Path="src/Verifiable.Sidetree/Verifiable.Sidetree.csproj" />
     <Project Path="src/Verifiable.Vcalm/Verifiable.Vcalm.csproj" />
+    <Project Path="src/Verifiable.WebFinger/Verifiable.WebFinger.csproj" />
     <Project Path="src/Verifiable.Tpm/Verifiable.Tpm.csproj" />
     <Project Path="src/Verifiable/Verifiable.csproj" />
   </Folder>

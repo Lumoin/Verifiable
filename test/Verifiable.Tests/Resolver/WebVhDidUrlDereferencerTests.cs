@@ -540,7 +540,6 @@ internal sealed class WebVhDidUrlDereferencerTests
             WebVhLogEntryJson.DocumentIdentityReader,
             DeserializeState,
             WebVhLogEntryJson.Canonicalizer,
-            SHA256.HashData,
             Base58Encoder,
             Base58Decoder,
             BaseMemoryPool.Shared,
@@ -560,7 +559,6 @@ internal sealed class WebVhDidUrlDereferencerTests
 
         DidResolver composed = DidResolverComposition.Build(
             BaseMemoryPool.Shared,
-            SHA256.HashData,
             static (request, context, cancellationToken) => ValueTask.FromResult(new OutboundResponse { StatusCode = 404, Body = TaggedMemory<byte>.Empty }),
             static jsonUtf8 => null,
             static jsonUtf8 => null,

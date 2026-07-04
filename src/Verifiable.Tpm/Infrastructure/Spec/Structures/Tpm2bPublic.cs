@@ -111,14 +111,23 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
 
         // Read raw bytes for Name computation.
         IMemoryOwner<byte> rawStorage = pool.Rent(size);
-        ReadOnlySpan<byte> source = reader.ReadBytes(size);
-        source.CopyTo(rawStorage.Memory.Span.Slice(0, size));
+        try
+        {
+            ReadOnlySpan<byte> source = reader.ReadBytes(size);
+            source.CopyTo(rawStorage.Memory.Span.Slice(0, size));
 
-        // Parse the structure from the raw bytes.
-        var innerReader = new TpmReader(rawStorage.Memory.Span.Slice(0, size));
-        var publicArea = TpmtPublic.Parse(ref innerReader, pool);
+            // Parse the structure from the raw bytes.
+            var innerReader = new TpmReader(rawStorage.Memory.Span.Slice(0, size));
+            var publicArea = TpmtPublic.Parse(ref innerReader, pool);
 
-        return new Tpm2bPublic(publicArea, rawStorage, size);
+            return new Tpm2bPublic(publicArea, rawStorage, size);
+        }
+        catch
+        {
+            //A short buffer or an unmodelled inner public area must not leak the pooled raw-bytes rental.
+            rawStorage.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

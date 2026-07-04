@@ -35,6 +35,9 @@ public static class WellKnownDidMethodPrefixes
     /// <summary>The prefix for did:webvh (did:web with a verifiable history): <c>did:webvh</c>.</summary>
     public static string WebVhDidMethodPrefix { get; } = "did:webvh";
 
+    /// <summary>The prefix for did:webplus (a JCS web microledger DID, LedgerDomain Draft v0.4): <c>did:webplus</c>.</summary>
+    public static string WebPlusDidMethodPrefix { get; } = "did:webplus";
+
     /// <summary>The prefix for <see cref="EbsiDidMethod"/>: <c>did:ebsi</c>.</summary>
     public static string EbsiDidMethodPrefix { get; } = "did:ebsi";
 
@@ -60,6 +63,11 @@ public static class WellKnownDidMethodPrefixes
     public static bool IsWebVhDidPrefix(string didPrefix) => Equals(WebVhDidMethodPrefix, didPrefix);
 
     /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="didPrefix"/> is <see cref="WebPlusDidMethodPrefix"/>.
+    /// </summary>
+    public static bool IsWebPlusDidPrefix(string didPrefix) => Equals(WebPlusDidMethodPrefix, didPrefix);
+
+    /// <summary>
     /// Returns <see langword="true"/> when <paramref name="didPrefix"/> is <see cref="EbsiDidMethodPrefix"/>.
     /// </summary>
     public static bool IsEbsiDidPrefix(string didPrefix) => Equals(EbsiDidMethodPrefix, didPrefix);
@@ -81,6 +89,7 @@ public static class WellKnownDidMethodPrefixes
     public static string GetCanonicalizedValue(string didPrefix) => didPrefix switch
     {
         string _ when IsKeyDidPrefix(didPrefix) => KeyDidMethodPrefix,
+        string _ when IsWebPlusDidPrefix(didPrefix) => WebPlusDidMethodPrefix,
         string _ when IsWebVhDidPrefix(didPrefix) => WebVhDidMethodPrefix,
         string _ when IsWebDidPrefix(didPrefix) => WebDidMethodPrefix,
         string _ when IsEbsiDidPrefix(didPrefix) => EbsiDidMethodPrefix,

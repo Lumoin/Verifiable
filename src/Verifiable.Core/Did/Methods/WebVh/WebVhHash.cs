@@ -26,24 +26,40 @@ internal static class WebVhHash
 
 
     /// <summary>
-    /// Computes <c>base58btc(multihash(input, SHA-256))</c> for the given input bytes.
+    /// Computes <c>base58btc(multihash(input, SHA-256))</c> for the given input bytes, taking the SHA-256 digest
+    /// through the supplied <see cref="ComputeDigestDelegate"/> — and so its telemetry, CBOM stamping and event
+    /// emission — by awaiting <see cref="CryptographicKeyEvents.ComputeDigestAsync(ComputeDigestDelegate, System.Buffers.ReadOnlySequence{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}, System.Threading.CancellationToken)"/>,
+    /// so a hardware-async digest backend (TPM2_Hash, KMS) works as well as a synchronously-completing software one.
     /// </summary>
     /// <param name="input">The bytes to hash.</param>
-    /// <param name="hashFunction">The SHA-256 hash function; its 32-byte output matches the fixed multihash code and length.</param>
+    /// <param name="computeDigest">The digest implementation the verification was built with (caller-supplied or the registered default).</param>
     /// <param name="base58Encoder">The raw base58btc encoder, which produces no multibase prefix.</param>
+    /// <param name="pool">The pool the digest input and output buffers are rented from.</param>
+    /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns>The base58btc-encoded SHA-256 multihash string.</returns>
-    public static string ComputeBase58(ReadOnlySpan<byte> input, HashFunctionDelegate hashFunction, EncodeDelegate base58Encoder)
+    public static async ValueTask<string> ComputeBase58Async(ReadOnlyMemory<byte> input, ComputeDigestDelegate computeDigest, EncodeDelegate base58Encoder, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(hashFunction);
+        ArgumentNullException.ThrowIfNull(computeDigest);
         ArgumentNullException.ThrowIfNull(base58Encoder);
+        ArgumentNullException.ThrowIfNull(pool);
 
-        ReadOnlySpan<byte> sha256Code = MultihashHeaders.Sha2Bits256;
-        Span<byte> multihash = stackalloc byte[sha256Code.Length + 1 + Sha256DigestLength];
-        sha256Code.CopyTo(multihash);
-        multihash[sha256Code.Length] = Sha256DigestLength;
-        hashFunction(input, multihash[(sha256Code.Length + 1)..]);
+        using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+            computeDigest, new ReadOnlySequence<byte>(input), Sha256DigestLength, CryptoTags.Sha256Digest, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        return base58Encoder(multihash);
+        return EncodeMultihash(digest.AsReadOnlySpan(), base58Encoder);
+
+        //The multihash assembly is a pure-compute span operation with no seam; kept in a synchronous local so no
+        //ref struct (the stackalloc buffer) is live across the await above.
+        static string EncodeMultihash(ReadOnlySpan<byte> digest, EncodeDelegate base58Encoder)
+        {
+            ReadOnlySpan<byte> sha256Code = MultihashHeaders.Sha2Bits256;
+            Span<byte> multihash = stackalloc byte[sha256Code.Length + 1 + Sha256DigestLength];
+            sha256Code.CopyTo(multihash);
+            multihash[sha256Code.Length] = Sha256DigestLength;
+            digest.CopyTo(multihash[(sha256Code.Length + 1)..]);
+
+            return base58Encoder(multihash);
+        }
     }
 
 

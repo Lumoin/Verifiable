@@ -36,6 +36,20 @@ internal sealed class WebVhDidResolverTests
     }
 
 
+    /// <summary>
+    /// A path segment that is ALREADY percent-encoded is canonicalized (percent-decoded, then re-encoded), not
+    /// double-encoded: the did:webvh transform percent-decodes, validates, then re-encodes each segment, so an
+    /// already-encoded segment is idempotent (did:webvh v1.0, The DID to HTTPS Transformation).
+    /// </summary>
+    [TestMethod]
+    public void ResolveLogUrlCanonicalizesAlreadyEncodedPathSegment()
+    {
+        Assert.AreEqual(
+            "https://example.com/%E7%94%A8%E6%88%B7/did.jsonl",
+            WebVhDidResolver.Resolve("did:webvh:QmScid:example.com:%E7%94%A8%E6%88%B7"));
+    }
+
+
     /// <summary>An internationalized domain with a percent-encoded (%3A) port keeps the port and IDNA-encodes only the host.</summary>
     [TestMethod]
     public void ResolveLogUrlIdnaDomainWithPortKeepsPort()
@@ -43,6 +57,27 @@ internal sealed class WebVhDidResolverTests
         Assert.AreEqual(
             "https://xn--fsq.jp:3000/dids/issuer/did.jsonl",
             WebVhDidResolver.Resolve("did:webvh:QmScid:例.jp%3A3000:dids:issuer"));
+    }
+
+
+    /// <summary>
+    /// The did:webvh transform inherits the did:web host and path-segment rules (it "otherwise mirrors the
+    /// did:web location rules"): the host MUST be a domain name, so an IP-literal host is rejected; and a path
+    /// segment MUST name a single component, so a dot-segment, an encoded path separator (<c>%2F</c>), or an
+    /// empty segment is rejected — it would otherwise re-target the DID Log location, escaping the DID's
+    /// designated path (did:webvh v1.0, DID-to-HTTPS Transformation; the shared host/segment guards).
+    /// </summary>
+    [TestMethod]
+    [DataRow("did:webvh:QmScid:127.0.0.1")]                 //IPv4-literal host.
+    [DataRow("did:webvh:QmScid:127.0.0.1%3A3000")]          //IPv4-literal host with a %3A-encoded port.
+    [DataRow("did:webvh:QmScid:192.168.1.1:dids:issuer")]   //Private IPv4-literal host.
+    [DataRow("did:webvh:QmScid:example.com:..")]            //Literal parent dot-segment (path traversal).
+    [DataRow("did:webvh:QmScid:example.com:%2E%2E")]        //Percent-encoded parent dot-segment.
+    [DataRow("did:webvh:QmScid:example.com:a%2Fb")]         //Segment carrying an encoded path separator.
+    [DataRow("did:webvh:QmScid:example.com:.")]             //Literal current dot-segment.
+    public void RejectsIpHostAndUnsafePathSegment(string did)
+    {
+        Assert.ThrowsExactly<ArgumentException>(() => WebVhDidResolver.Resolve(did));
     }
 
 

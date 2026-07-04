@@ -149,6 +149,31 @@ public ref struct TpmReader
     }
 
     /// <summary>
+    /// Validates that a wire-declared element count cannot exceed what the remaining buffer can hold,
+    /// so a hostile count never drives an unbounded pre-allocation before the elements are read.
+    /// </summary>
+    /// <param name="count">The element count read from the wire.</param>
+    /// <param name="minBytesPerElement">The minimum number of bytes a single element occupies on the wire.</param>
+    /// <remarks>
+    /// A well-formed TPM response carries exactly <paramref name="count"/> elements, so it always has at
+    /// least <paramref name="count"/> * <paramref name="minBytesPerElement"/> bytes remaining; a count larger
+    /// than <see cref="Remaining"/> / <paramref name="minBytesPerElement"/> is therefore malformed and is
+    /// rejected here rather than sizing a list or array from it (the class of length-lie that turns a few wire
+    /// bytes into a multi-gigabyte allocation).
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the count cannot fit in the remaining buffer.</exception>
+    public readonly void EnsureCount(uint count, int minBytesPerElement)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(minBytesPerElement);
+
+        if(count > (uint)(remaining.Length / minBytesPerElement))
+        {
+            throw new InvalidOperationException(
+                $"Element count {count} exceeds what the remaining {remaining.Length} bytes can contain at {minBytesPerElement} bytes per element.");
+        }
+    }
+
+    /// <summary>
     /// Peeks at bytes without consuming them.
     /// </summary>
     /// <param name="count">The number of bytes to peek.</param>

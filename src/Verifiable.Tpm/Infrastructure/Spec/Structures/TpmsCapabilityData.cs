@@ -197,6 +197,11 @@ public sealed class TpmsCapabilityData: IDisposable
     private static TpmsCapabilityData ParseAlgorithms(ref TpmReader reader, TpmCapConstants capability)
     {
         uint count = reader.ReadUInt32();
+
+        //Each TPMS_ALG_PROPERTY is algId(2) + attributes(4); reject a count the buffer cannot hold before
+        //sizing the array, so a lying count cannot force an unbounded allocation (Part 2, §10.8).
+        reader.EnsureCount(count, sizeof(ushort) + sizeof(uint));
+
         var algorithms = new TpmsAlgProperty[count];
 
         for(int i = 0; i < count; i++)
@@ -210,6 +215,11 @@ public sealed class TpmsCapabilityData: IDisposable
     private static TpmsCapabilityData ParseHandles(ref TpmReader reader, TpmCapConstants capability, bool isHandles)
     {
         uint count = reader.ReadUInt32();
+
+        //Each handle is a 4-byte TPM_HANDLE; reject a count the buffer cannot hold before sizing the array
+        //so a lying count cannot force an unbounded allocation (Part 2, §10.9).
+        reader.EnsureCount(count, sizeof(uint));
+
         var handles = new uint[count];
 
         for(int i = 0; i < count; i++)
@@ -223,6 +233,11 @@ public sealed class TpmsCapabilityData: IDisposable
     private static TpmsCapabilityData ParseCommandCodes(ref TpmReader reader, TpmCapConstants capability)
     {
         uint count = reader.ReadUInt32();
+
+        //Each command code is a 4-byte TPM_CC; reject a count the buffer cannot hold before sizing the array
+        //so a lying count cannot force an unbounded allocation (Part 2, §10.8).
+        reader.EnsureCount(count, sizeof(uint));
+
         var commands = new uint[count];
 
         for(int i = 0; i < count; i++)
@@ -242,6 +257,11 @@ public sealed class TpmsCapabilityData: IDisposable
     private static TpmsCapabilityData ParseTpmProperties(ref TpmReader reader, TpmCapConstants capability)
     {
         uint count = reader.ReadUInt32();
+
+        //Each TPMS_TAGGED_PROPERTY is property(4) + value(4); reject a count the buffer cannot hold before
+        //sizing the array so a lying count cannot force an unbounded allocation (Part 2, §10.8).
+        reader.EnsureCount(count, sizeof(uint) + sizeof(uint));
+
         var properties = new TpmsTaggedProperty[count];
 
         for(int i = 0; i < count; i++)
@@ -258,6 +278,11 @@ public sealed class TpmsCapabilityData: IDisposable
     private static TpmsCapabilityData ParseEccCurves(ref TpmReader reader, TpmCapConstants capability)
     {
         uint count = reader.ReadUInt32();
+
+        //Each TPM_ECC_CURVE is a 2-byte selector; reject a count the buffer cannot hold before sizing the
+        //array so a lying count cannot force an unbounded allocation (Part 2, §10.8).
+        reader.EnsureCount(count, sizeof(ushort));
+
         var curves = new TpmEccCurveConstants[count];
 
         for(int i = 0; i < count; i++)

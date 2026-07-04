@@ -164,6 +164,42 @@ namespace Verifiable.Tests.Cryptography
         }
 
 
+        [TestMethod]
+        public void IsValidPublicKeyRejectsForgeryAndWeakKeys()
+        {
+            using RSA rsa = RSA.Create(2048);
+            RSAParameters parameters = rsa.ExportParameters(includePrivateParameters: false);
+            byte[] modulus = parameters.Modulus!;
+            byte[] exponent = parameters.Exponent!;
+
+            Assert.IsTrue(RsaUtilities.IsValidPublicKey(modulus, exponent), "A well-formed 2048-bit key with the standard public exponent is valid.");
+
+            //e = 1 is the identity map: an ISO/IEC 9796-2 recovered message equals the signature, so any value "verifies".
+            Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, [0x01]), "A public exponent of 1 (the identity map) must be rejected.");
+
+            //An even public exponent shares a factor with phi(n) and cannot be an RSA exponent.
+            Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, [0x02]), "An even public exponent must be rejected.");
+
+            //A public exponent at least as large as the modulus is outside the valid range.
+            Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, modulus), "A public exponent not less than the modulus must be rejected.");
+
+            //An even modulus is not a product of two odd primes.
+            byte[] evenModulus = (byte[])modulus.Clone();
+            evenModulus[^1] &= 0xFE;
+            Assert.IsFalse(RsaUtilities.IsValidPublicKey(evenModulus, exponent), "An even modulus must be rejected.");
+
+            //A modulus below the minimum bit length is too weak to sign; a 512-bit odd modulus with a valid exponent still fails.
+            byte[] weakModulus = new byte[64];
+            weakModulus[0] = 0xFF;
+            weakModulus[^1] = 0x03;
+            Assert.IsFalse(RsaUtilities.IsValidPublicKey(weakModulus, exponent), "A modulus below the minimum bit length must be rejected.");
+
+            //An empty modulus or exponent is malformed.
+            Assert.IsFalse(RsaUtilities.IsValidPublicKey([], exponent), "An empty modulus must be rejected.");
+            Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, []), "An empty exponent must be rejected.");
+        }
+
+
         /// <summary>
         /// This is a platform provided way to get the DER encoded public key.
         /// </summary>

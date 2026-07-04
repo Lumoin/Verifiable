@@ -34,7 +34,6 @@ public static class DidResolverComposition
     /// <paramref name="additionalMethods"/>.
     /// </summary>
     /// <param name="pool">The memory pool the key-decoding methods (<c>did:key</c>, <c>did:peer</c>) allocate from.</param>
-    /// <param name="hashFunction">The hash function the <c>did:peer</c> numalgo-4 integrity check uses.</param>
     /// <param name="webTransport">The single-hop transport the guarded fetch drives for <c>did:web</c>.</param>
     /// <param name="webDocumentDeserializer">Parses a fetched <c>did:web</c> <c>did.json</c> into a DID document.</param>
     /// <param name="peerDocumentDeserializer">Parses an embedded <c>did:peer</c> numalgo-4 DID document.</param>
@@ -49,9 +48,15 @@ public static class DidResolverComposition
     /// for methods not wired here. A later registration for an already-registered prefix overrides it.
     /// </param>
     /// <returns>A <see cref="DidResolver"/> dispatching across the registered methods.</returns>
+    /// <remarks>
+    /// The <c>did:peer</c> numalgo-4 SHA-256 integrity hash is taken from the registered
+    /// <see cref="ComputeDigestDelegate"/>. To control that digest per resolver, compose
+    /// <see cref="PeerDidResolver.Build(MemoryPool{byte}, PeerDidDocumentDeserializer, ComputeDigestDelegate)"/>
+    /// explicitly and pass it through <paramref name="additionalMethods"/> (a later registration overrides the
+    /// default <c>did:peer</c> one).
+    /// </remarks>
     public static DidResolver Build(
         MemoryPool<byte> pool,
-        HashFunctionDelegate hashFunction,
         OutboundTransportDelegate webTransport,
         WebDidDocumentDeserializer webDocumentDeserializer,
         PeerDidDocumentDeserializer peerDocumentDeserializer,
@@ -59,7 +64,6 @@ public static class DidResolverComposition
         params (string Prefix, DidMethodResolverDelegate Resolver)[] additionalMethods)
     {
         ArgumentNullException.ThrowIfNull(pool);
-        ArgumentNullException.ThrowIfNull(hashFunction);
         ArgumentNullException.ThrowIfNull(webTransport);
         ArgumentNullException.ThrowIfNull(webDocumentDeserializer);
         ArgumentNullException.ThrowIfNull(peerDocumentDeserializer);
@@ -70,7 +74,7 @@ public static class DidResolverComposition
             (WellKnownDidMethodPrefixes.KeyDidMethodPrefix, KeyDidResolver.Build(pool)),
             (WellKnownDidMethodPrefixes.WebDidMethodPrefix, WebDidResolver.BuildResolving(webTransport, webDocumentDeserializer)),
             (WellKnownDidMethodPrefixes.CheqdDidMethodPrefix, CheqdDidResolver.ResolveAsync),
-            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(pool, peerDocumentDeserializer, hashFunction))
+            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(pool, peerDocumentDeserializer))
         };
         registrations.AddRange(additionalMethods);
 

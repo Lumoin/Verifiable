@@ -26,8 +26,8 @@ namespace Verifiable.Core.Resolvers;
 /// ));
 /// </code>
 /// <para>
-/// See <see href="https://w3c.github.io/did-resolution/#resolving">DID Resolution §4.4</see>
-/// and <see href="https://w3c.github.io/did-resolution/#dereferencing-algorithm">§5.4</see>.
+/// See <see href="https://www.w3.org/TR/did-resolution/#resolving">DID Resolution §4.4</see>
+/// and <see href="https://www.w3.org/TR/did-resolution/#dereferencing-algorithm">§5.4</see>.
 /// </para>
 /// </remarks>
 public sealed class DidResolver
@@ -123,6 +123,20 @@ public sealed class DidResolver
             && result.DocumentMetadata.Deactivated)
         {
             return result;
+        }
+
+        //Step 5.3 (MUST): "The value of id in the resolved DID document MUST be string equal to the DID that
+        //was resolved." A mismatch means the method resolver returned a document for a different DID, so fail
+        //closed rather than surface a document the caller did not ask for. The spec names no error for this; the
+        //returned document is malformed, so invalidDidDocument is the precise signal (distinct from the
+        //internalError raised above for an execution exception). Only enforced when an id is present — the
+        //wrong-DID document is the defect this guards against.
+        if(result.IsSuccessful
+            && result.Kind == DidResolutionKind.Document
+            && result.Document is { Id: { } resolvedDocumentId }
+            && !string.Equals(resolvedDocumentId.ToString(), did, StringComparison.Ordinal))
+        {
+            return DidResolutionResult.Failure(DidResolutionErrors.InvalidDidDocument);
         }
 
         //Apply expandRelativeUrls post-processing when the option is enabled and a document
@@ -271,10 +285,18 @@ public sealed class DidResolver
                     endpoint = endpoint.TrimEnd('/') + '/' + relativeRef.TrimStart('/');
                 }
 
-                //When a fragment is present on the DID URL and the result is a service endpoint
-                //URL, the fragment is appended to the endpoint URL per §5.4.2.
+                //When a fragment is present on the DID URL and the result is a service endpoint URL, the
+                //fragment is appended to the endpoint URL per §5.4.2. Step 2.1 (MUST): "If the selected DID
+                //service endpoint URL contains a fragment component, raise an error." — appending would
+                //otherwise yield a URL with two fragments, so a service endpoint that already carries one is
+                //malformed for this dereference and fails closed (the spec names no specific error here).
                 if(parsed.Fragment is not null)
                 {
+                    if(endpoint.Contains('#', StringComparison.Ordinal))
+                    {
+                        return DidDereferencingResult.Failure(DidResolutionErrors.InvalidDidDocument);
+                    }
+
                     endpoint = $"{endpoint}#{parsed.Fragment}";
                 }
 
@@ -368,13 +390,46 @@ public sealed class DidResolver
             AlsoKnownAs = document.AlsoKnownAs,
             Controller = document.Controller,
             VerificationMethod = expandedVms ?? document.VerificationMethod,
-            Authentication = document.Authentication,
-            AssertionMethod = document.AssertionMethod,
-            KeyAgreement = document.KeyAgreement,
-            CapabilityInvocation = document.CapabilityInvocation,
-            CapabilityDelegation = document.CapabilityDelegation,
+            Authentication = ExpandRelationshipReferences(document.Authentication, baseDid, static id => new AuthenticationMethod(id)),
+            AssertionMethod = ExpandRelationshipReferences(document.AssertionMethod, baseDid, static id => new AssertionMethod(id)),
+            KeyAgreement = ExpandRelationshipReferences(document.KeyAgreement, baseDid, static id => new KeyAgreementMethod(id)),
+            CapabilityInvocation = ExpandRelationshipReferences(document.CapabilityInvocation, baseDid, static id => new CapabilityInvocationMethod(id)),
+            CapabilityDelegation = ExpandRelationshipReferences(document.CapabilityDelegation, baseDid, static id => new CapabilityDelegationMethod(id)),
             Service = expandedServices ?? document.Service
         };
+    }
+
+    /// <summary>
+    /// Expands the relative DID URL fragments in a verification relationship array to absolute DID
+    /// URLs against <paramref name="baseDid"/>, per W3C DID Resolution §4.4 step 6. Only
+    /// by-reference relative fragments (those starting with <c>#</c>) are rewritten — embedded
+    /// verification methods and already-absolute references are returned unchanged.
+    /// <paramref name="fromReference"/> reconstructs an element of the concrete relationship type
+    /// from an expanded reference id (a relationship reference's id is immutable, so the element is
+    /// rebuilt rather than mutated).
+    /// </summary>
+    private static T[]? ExpandRelationshipReferences<T>(T[]? references, string baseDid, Func<string, T> fromReference)
+        where T : VerificationMethodReference
+    {
+        if(references is null)
+        {
+            return null;
+        }
+
+        T[]? expanded = null;
+        for(int i = 0; i < references.Length; ++i)
+        {
+            var reference = references[i];
+            if(!reference.IsEmbeddedVerification
+                && reference.VerificationReferenceId is { } id
+                && id.StartsWith('#'))
+            {
+                expanded ??= (T[])references.Clone();
+                expanded[i] = fromReference($"{baseDid}{id}");
+            }
+        }
+
+        return expanded ?? references;
     }
 
     /// <summary>
@@ -493,15 +548,33 @@ public sealed class DidResolver
 
             if(match is not null)
             {
-                //When a verificationRelationship option is present, validate that the
-                //matched verification method is authorized for that relationship.
-                if(verificationRelationship is not null
-                    && !IsAuthorizedForRelationship(document, match.Id!, verificationRelationship))
+                //When a verificationRelationship option is present, the CID 1.0 §3.3 "Retrieve
+                //Verification Method" algorithm applies to the matched method.
+                if(verificationRelationship is not null)
                 {
-                    return DidDereferencingResult.Failure(new DidProblemDetails(
-                        DidErrorTypes.InvalidDidUrl,
-                        Title: "Invalid verification relationship",
-                        Detail: $"The verification method '{match.Id}' is not authorized for the '{verificationRelationship}' relationship."));
+                    //CID 1.0 §3.3 steps 8 and 10: the dereferenced resource MUST be a conforming
+                    //verification method, and its controller MUST equal the controller document.
+                    //Step 9 (id equals the requested URL) is already satisfied — the fragment match
+                    //selected this method by its id. Cross-document delegation (a foreign controller
+                    //whose own document would be retrieved by steps 5–7) is out of scope at this
+                    //single-document dereference layer.
+                    if(!IsConformingVerificationMethod(match, document.Id?.ToString()))
+                    {
+                        return DidDereferencingResult.Failure(new DidProblemDetails(
+                            DidErrorTypes.InvalidVerificationMethod,
+                            Title: "Invalid verification method",
+                            Detail: $"The verification method '{match.Id}' is not a conforming verification method for this document."));
+                    }
+
+                    //CID 1.0 §3.3 step 11: the verification method MUST be associated, by reference
+                    //or by value, with the requested verification relationship array.
+                    if(!IsAuthorizedForRelationship(document, match.Id!, verificationRelationship))
+                    {
+                        return DidDereferencingResult.Failure(new DidProblemDetails(
+                            DidErrorTypes.InvalidRelationshipForVerificationMethod,
+                            Title: "Invalid relationship for verification method",
+                            Detail: $"The verification method '{match.Id}' is not authorized for the '{verificationRelationship}' relationship."));
+                    }
                 }
 
                 return DidDereferencingResult.Success(match, contentMetadata);
@@ -522,6 +595,22 @@ public sealed class DidResolver
         }
 
         return DidDereferencingResult.Failure(DidResolutionErrors.NotFound);
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="vm"/> is a conforming verification
+    /// method per CID 1.0 §2.2 — it carries an <c>id</c>, a <c>type</c>, a <c>controller</c>, and
+    /// verification material — and its controller equals <paramref name="controllerDocumentId"/>
+    /// (CID 1.0 §3.3 steps 8 and 10). Step 9 (the method's <c>id</c> equals the dereferenced URL)
+    /// is verified by the caller's fragment match, so it is not re-checked here.
+    /// </summary>
+    private static bool IsConformingVerificationMethod(VerificationMethod vm, string? controllerDocumentId)
+    {
+        return vm.Id is not null
+            && !string.IsNullOrEmpty(vm.Type)
+            && !string.IsNullOrEmpty(vm.Controller)
+            && vm.KeyFormat is not null
+            && string.Equals(vm.Controller, controllerDocumentId, StringComparison.Ordinal);
     }
 
     /// <summary>

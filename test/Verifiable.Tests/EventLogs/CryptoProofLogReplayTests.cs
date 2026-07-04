@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
-using Verifiable.Core.EventLogs;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestDataProviders;

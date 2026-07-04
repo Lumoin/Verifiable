@@ -1,6 +1,8 @@
 using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Formats.Asn1;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Verifiable.Apdu;
@@ -9,6 +11,7 @@ using Verifiable.Apdu.Bac;
 using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -75,6 +78,45 @@ internal sealed class CardSimulatorRsaActiveAuthenticationTests
         {
             await RunPlaintextAuthenticationAsync(genuinePublicKey, clonePrivateKey, expected: false).ConfigureAwait(false);
         }
+    }
+
+
+    [TestMethod]
+    public async Task RejectsRsaActiveAuthenticationKeyWithExponentOne()
+    {
+        //A chip that announces an EF.DG15 RSA public key with public exponent 1 turns ISO/IEC 9796-2 verification
+        //into the identity map: the recovered message equals the signature, so any hash is forged. The terminal
+        //must reject the degenerate key and fail closed, whatever signature accompanies it (the key is rejected
+        //before the signature is ever processed).
+        using RSA rsa = RSA.Create(1024);
+        byte[] modulus = rsa.ExportParameters(includePrivateParameters: false).Modulus!;
+        using RsaPublicKey exponentOneKey = BuildRsaPublicKey(modulus, [0x01]);
+
+        RecoverableVerificationDelegate verify = RecoverableSignatureFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
+            CryptoAlgorithm.RsaIso9796d2, Purpose.Verification);
+
+        bool verified = await verify(
+            Convert.FromHexString(Challenge), new byte[128], exponentOneKey.AsReadOnlyMemory(), null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(verified, "An RSA Active Authentication key with a public exponent of 1 is an identity-map forgery vector and must be rejected.");
+    }
+
+
+    /// <summary>
+    /// Builds a PKCS#1 <c>RSAPublicKey</c> (a SEQUENCE of the modulus and public exponent) from the raw integers
+    /// into a pooled <see cref="RsaPublicKey"/> carrier — the same wire form and carrier EF.DG15 provides — so the
+    /// key material lives in a tracked, zeroised buffer rather than a naked array. The caller disposes it.
+    /// </summary>
+    private static RsaPublicKey BuildRsaPublicKey(ReadOnlySpan<byte> modulus, ReadOnlySpan<byte> exponent)
+    {
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        using(writer.PushSequence())
+        {
+            writer.WriteInteger(new BigInteger(modulus, isUnsigned: true, isBigEndian: true));
+            writer.WriteInteger(new BigInteger(exponent, isUnsigned: true, isBigEndian: true));
+        }
+
+        return RsaPublicKey.FromBytes(writer.Encode(), BaseMemoryPool.Shared);
     }
 
 

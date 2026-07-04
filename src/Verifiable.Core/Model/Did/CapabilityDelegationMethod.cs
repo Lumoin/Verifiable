@@ -54,7 +54,9 @@ namespace Verifiable.Core.Model.Did;
 /// }
 /// </code>
 /// <para>
-/// See <see href="https://www.w3.org/TR/cid-1.0/#capability-delegation">CID 1.0 §2.3.5 Capability Delegation</see>.
+/// See <see href="https://www.w3.org/TR/did-1.1/#capability-delegation">DID Core 1.1 Capability Delegation</see>
+/// (verification relationship; defined by reference to
+/// <see href="https://www.w3.org/TR/cid-1.0/#capability-delegation">CID 1.0 §2.3.5 Capability Delegation</see>).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CapabilityDelegationMethod(Id = {Id}, IsEmbedded = {IsEmbeddedVerification})")]

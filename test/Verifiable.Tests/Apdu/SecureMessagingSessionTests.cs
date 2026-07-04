@@ -88,6 +88,43 @@ internal sealed class SecureMessagingSessionTests
     }
 
 
+    /// <summary>
+    /// A response whose DO'8E' carries a MAC of any length but the profile's fixed length is rejected. Taking the
+    /// MAC length from the wire would let an attacker present a short or empty MAC (<c>8E 00</c> / <c>8E 01 xx</c>):
+    /// the verifier truncates its own computed MAC to that length and compares equal-length spans, so an empty MAC
+    /// compares equal to an empty computed MAC and the channel authentication is bypassed with no key. Each vector
+    /// is a well-formed response (DO'99' status, DO'8E' MAC, transport status word) differing only in the MAC length.
+    /// </summary>
+    /// <param name="responseApduHex">The forged response APDU.</param>
+    [TestMethod]
+    [DataRow("990290008E009000")]
+    [DataRow("990290008E01009000")]
+    public async Task UnprotectRejectsAResponseWhoseMacLengthIsNotTheProfileLength(string responseApduHex)
+    {
+        using SecureMessagingSession session = CreateSession();
+
+        //Advance the session exactly as the genuine exchange would before the first response.
+        using(ProtectedCommandApdu _ = await session.ProtectCommandAsync(
+            0x00, 0xA4, 0x02, 0x0C, Convert.FromHexString("011E"), null,
+            BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
+        {
+        }
+
+        bool threw = false;
+        try
+        {
+            using SecureMessagingResponse _ = await session.UnprotectResponseAsync(
+                Convert.FromHexString(responseApduHex), BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+        catch(InvalidOperationException)
+        {
+            threw = true;
+        }
+
+        Assert.IsTrue(threw, "Unprotect must reject a response whose DO'8E' MAC length is not the profile's fixed length.");
+    }
+
+
     private async Task AssertProtectedCommand(
         SecureMessagingSession session,
         byte cla, byte ins, byte p1, byte p2,

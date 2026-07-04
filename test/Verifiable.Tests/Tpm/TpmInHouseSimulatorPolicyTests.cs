@@ -86,6 +86,83 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     }
 
     [TestMethod]
+    public async Task StartPolicySessionRejectsUnsupportedSha1PolicyHash()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+
+        //The enhanced-authorization digest fold does not compute SHA-1, so a SHA-1 policy session must be refused
+        //at StartAuthSession with TPM_RC_HASH rather than created and left to fault on its first assertion.
+        TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+            TpmAlgIdConstants.TPM_ALG_SHA1, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(startResult.IsSuccess, "A SHA-1 policy session must be rejected.");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_HASH, startResult.ResponseCode);
+    }
+
+    [TestMethod]
+    public async Task PolicySecretRejectsNonPermanentAuthHandle()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+
+        TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+            TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
+
+        using StartAuthSessionResponse session = startResult.Value;
+        uint sessionHandle = session.SessionHandle.Value;
+        try
+        {
+            //An NV Index handle is not a permanent hierarchy; PolicySecret over it would fold the raw handle as a
+            //Name and skip the entity's authValue, so the simulator rejects it with TPM_RC_HANDLE rather than
+            //advancing the policyDigest as if the entity's secret had been proven.
+            const uint NvIndexHandle = 0x01000001u;
+            TpmResult<PolicySecretResponse> secretResult = await tpm.PolicySecretAsync(
+                NvIndexHandle, sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsFalse(secretResult.IsSuccess, "PolicySecret over a non-permanent handle must be rejected.");
+            Assert.AreEqual(TpmRcConstants.TPM_RC_HANDLE, secretResult.ResponseCode);
+        }
+        finally
+        {
+            _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    [TestMethod]
+    public async Task PolicyOrRejectsBranchCountBelowTwo()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+
+        TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+            TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
+
+        using StartAuthSessionResponse session = startResult.Value;
+        uint sessionHandle = session.SessionHandle.Value;
+        try
+        {
+            //TPM2_PolicyOR requires two to eight branches (Part 3, clause 23.6); a single-branch pHashList is a
+            //malformed command the simulator must reject with TPM_RC_SIZE rather than fold silently.
+            var oneBranch = new ReadOnlyMemory<byte>[] { new byte[32] };
+            TpmResult<PolicyOrResponse> orResult = await tpm.PolicyOrAsync(
+                sessionHandle, oneBranch, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsFalse(orResult.IsSuccess, "PolicyOR with fewer than two branches must be rejected.");
+            Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, orResult.ResponseCode);
+        }
+        finally
+        {
+            _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    [TestMethod]
     public async Task PolicyAuthValueThenPolicyCommandCodeComposeAsPredicted()
     {
         MemoryPool<byte> pool = BaseMemoryPool.Shared;

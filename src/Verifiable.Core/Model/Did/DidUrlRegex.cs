@@ -12,15 +12,15 @@ namespace Verifiable.Core.Did
     /// </para>
     /// <list type="bullet">
     /// <item><description>
-    /// <strong>DID Syntax:</strong> <see href="https://www.w3.org/TR/did-1.0/#did-syntax">Section 3.1</see>
+    /// <strong>DID Syntax:</strong> <see href="https://www.w3.org/TR/did-1.1/#did-syntax">Section 3.1</see>
     /// - <c>did = "did:" method-name ":" method-specific-id</c>.
     /// </description></item>
     /// <item><description>
-    /// <strong>DID URL Syntax:</strong> <see href="https://www.w3.org/TR/did-1.0/#did-url-syntax">Section 3.2</see>
+    /// <strong>DID URL Syntax:</strong> <see href="https://www.w3.org/TR/did-1.1/#did-url-syntax">Section 3.2</see>
     /// - <c>did-url = did path-abempty [ "?" query ] [ "#" fragment ]</c>.
     /// </description></item>
     /// <item><description>
-    /// <strong>Relative DID URLs:</strong> <see href="https://www.w3.org/TR/did-1.0/#relative-did-urls">Section 3.2.2</see>
+    /// <strong>Relative DID URLs:</strong> <see href="https://www.w3.org/TR/did-1.1/#relative-did-urls">Section 3.2.2</see>
     /// - Fragment-only references like "#key-1" used in verification relationships.
     /// </description></item>
     /// </list>
@@ -47,7 +47,7 @@ namespace Verifiable.Core.Did
         /// <item><description>Fragment component (optional, e.g., "key-1").</description></item>
         /// </list>
         /// <para>
-        /// Reference: <see href="https://www.w3.org/TR/did-1.0/#did-url-syntax">W3C DID 1.0 Section 3.2</see>
+        /// Reference: <see href="https://www.w3.org/TR/did-1.1/#did-url-syntax">W3C DID 1.1 Section 3.2</see>
         /// </para>
         /// </remarks>
         [GeneratedRegex(@"^did:([a-z0-9]+):((?:[a-zA-Z0-9._-]|%[0-9a-fA-F]{2})+(?::(?:[a-zA-Z0-9._-]|%[0-9a-fA-F]{2})+)*)(/[^?#]*)?(\?[^#]*)?(#.*)?$")]
@@ -77,7 +77,7 @@ namespace Verifiable.Core.Did
         /// <item><description>Service references: "#agent" → resolves to "did:example:123#agent".</description></item>
         /// </list>
         /// <para>
-        /// Reference: <see href="https://www.w3.org/TR/did-1.0/#relative-did-urls">W3C DID 1.0 Section 3.2.2</see>.
+        /// Reference: <see href="https://www.w3.org/TR/did-1.1/#relative-did-urls">W3C DID 1.1 Section 3.2.2</see>.
         /// </para>
         /// </remarks>
         [GeneratedRegex("^#(.+)$")]
@@ -111,8 +111,8 @@ namespace Verifiable.Core.Did
         /// </list>
         /// <para>
         /// References:
-        /// <see href="https://www.w3.org/TR/did-1.0/#did-url-syntax">W3C DID 1.0 Section 3.2</see> and
-        /// <see href="https://www.w3.org/TR/did-1.0/#relative-did-urls">Section 3.2.2</see>.
+        /// <see href="https://www.w3.org/TR/did-1.1/#did-url-syntax">W3C DID 1.1 Section 3.2</see> and
+        /// <see href="https://www.w3.org/TR/did-1.1/#relative-did-urls">Section 3.2.2</see>.
         /// </para>
         /// </remarks>
         [GeneratedRegex("^(?:did:([a-z0-9]+):((?:[a-zA-Z0-9]|\\.|-|_|%[0-9a-fA-F]{2})+)(\\/[^?#]*)?(\\?[^#]*)?(?:#(.*))?|(#(.+)))$")]

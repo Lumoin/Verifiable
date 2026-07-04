@@ -122,16 +122,29 @@ public sealed class DataGroup2: IDisposable
         }
 
         ReadOnlySpan<byte> facialInformation = facialRecord[FacialRecordHeaderLength..];
-        int facialBlockLength = (int)BinaryPrimitives.ReadUInt32BigEndian(facialInformation);
-        int featurePoints = BinaryPrimitives.ReadUInt16BigEndian(facialInformation[4..]);
+        if(facialInformation.Length < FacialInformationBlockLength)
+        {
+            throw new InvalidOperationException("DG2 facial record is truncated before its facial information block.");
+        }
 
+        int facialBlockLength = (int)BinaryPrimitives.ReadUInt32BigEndian(facialInformation);
+        int featurePoints = BinaryPrimitives.ReadUInt16BigEndian(facialInformation[sizeof(uint)..]);
+
+        //The image information block follows the facial information block and the feature points, whose count is
+        //attacker-controlled (up to 65535). Bound its position against the buffer BEFORE indexing into it, and
+        //compare by subtraction so a large feature-point count cannot overflow `offset + block` past the guard.
         int imageInformationOffset = FacialInformationBlockLength + (featurePoints * FeaturePointLength);
+        if(imageInformationOffset > facialInformation.Length - ImageInformationBlockLength)
+        {
+            throw new InvalidOperationException("DG2 facial record image information block is out of range.");
+        }
+
         byte imageDataType = facialInformation[imageInformationOffset + 1];
         FaceImageFormat format = imageDataType == JpegImageDataType ? FaceImageFormat.Jpeg : FaceImageFormat.Jpeg2000;
 
         int imageOffset = imageInformationOffset + ImageInformationBlockLength;
         int imageLength = facialBlockLength - imageOffset;
-        if(imageLength <= 0 || imageOffset + imageLength > facialInformation.Length)
+        if(imageLength <= 0 || imageLength > facialInformation.Length - imageOffset)
         {
             throw new InvalidOperationException("DG2 facial record image length is invalid.");
         }

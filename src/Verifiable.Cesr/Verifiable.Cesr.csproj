@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Composable Event Streaming Representation (CESR) codec.</Title>
+    <Description>Text and binary domain codec for the Composable Event Streaming Representation (CESR), the self-framing dual-domain encoding used by the KERI / ACDC / did:webs trust suite. Provides the master code tables, primitive transcoding (qualified Base64URL and binary domains), indexed signatures, count and group framing, and self-addressing identifiers (SAID). Designed for AOT compatibility and trimming safety.</Description>
+    <PackageTags>CESR KERI ACDC Encoding Base64Url SAID VerifiableCredentials</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
+    <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
+  </ItemGroup>
+
+</Project>

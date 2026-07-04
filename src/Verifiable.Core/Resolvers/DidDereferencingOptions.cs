@@ -4,11 +4,11 @@ using System.Diagnostics;
 namespace Verifiable.Core.Resolvers;
 
 /// <summary>
-/// Options controlling DID URL dereferencing behavior per W3C DID Resolution v0.3 �5.1.
+/// Options controlling DID URL dereferencing behavior per W3C DID Resolution v0.3 §5.1.
 /// </summary>
 /// <remarks>
 /// <para>
-/// See <see href="https://w3c.github.io/did-resolution/#did-url-dereferencing-options">DID Resolution �5.1</see>.
+/// See <see href="https://www.w3.org/TR/did-resolution/#did-url-dereferencing-options">DID Resolution §5.1</see>.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("Accept={Accept,nq} VerificationRelationship={VerificationRelationship,nq}")]
@@ -21,7 +21,7 @@ public sealed class DidDereferencingOptions: IEquatable<DidDereferencingOptions>
 
     /// <summary>
     /// The media type the caller prefers for the dereferenced resource.
-    /// The value MUST follow the <c>Accept</c> header format defined in RFC 9110 �12.5.1.
+    /// The value MUST follow the <c>Accept</c> header format defined in RFC 9110 §12.5.1.
     /// </summary>
     public string? Accept { get; init; }
 

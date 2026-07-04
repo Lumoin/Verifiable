@@ -78,59 +78,85 @@ public sealed class DidRegistrationState
 }
 
 /// <summary>
-/// A signing request issued by the registrar in client-managed secret mode.
-/// The client signs the payload and returns a <see cref="SigningResponse"/>.
+/// A signing request issued by the registrar in client-managed secret mode (a <c>signingRequest</c>
+/// entry in the <c>action</c> didState). The client signs <see cref="SerializedPayload"/> and returns
+/// a <see cref="SigningResponse"/>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// See <see href="https://identity.foundation/did-registration/#client-managed-secret-mode">DIF DID Registration client-managed secret mode</see>.
+/// See <see href="https://identity.foundation/did-registration/#signingrequest">DIF DID Registration
+/// §signingRequest</see> and
+/// <see href="https://identity.foundation/did-registration/#client-managed-secret-mode">§client-managed
+/// secret mode</see>.
 /// </para>
 /// </remarks>
 public sealed class SigningRequest
 {
     /// <summary>
-    /// An identifier for this signing request, used to correlate with the response.
+    /// An identifier for this signing request, used to correlate with the response. Maps to the key
+    /// of the <c>signingRequest</c> map in the DIF didState.
     /// </summary>
     public required string RequestId { get; init; }
 
     /// <summary>
-    /// The payload to sign.
+    /// The serialized payload to sign — the DIF <c>serializedPayload</c> member (base64-encoded on the
+    /// wire). Required.
     /// </summary>
-    public required ReadOnlyMemory<byte> Payload { get; init; }
+    public required ReadOnlyMemory<byte> SerializedPayload { get; init; }
 
     /// <summary>
-    /// The key identifier that should be used for signing.
+    /// The key identifier that should be used for signing — the DIF <c>kid</c> member.
     /// </summary>
     public string? Kid { get; init; }
 
     /// <summary>
-    /// The algorithm to use for signing (e.g., <c>"EdDSA"</c>, <c>"ES256"</c>).
+    /// The algorithm to use for signing (e.g., <c>"EdDSA"</c>, <c>"ES256"</c>) — the DIF <c>alg</c>
+    /// member. Required by the spec.
     /// </summary>
     public string? Algorithm { get; init; }
+
+    /// <summary>
+    /// The verification relationship the signature is for (e.g., <c>"authentication"</c>) — the DIF
+    /// <c>purpose</c> member. Optional.
+    /// </summary>
+    public string? Purpose { get; init; }
 }
 
 /// <summary>
-/// A signing response from the client in client-managed secret mode.
+/// A signing response from the client in client-managed secret mode (a <c>signingResponse</c> entry in
+/// the <c>secret</c>).
 /// </summary>
+/// <remarks>
+/// <para>
+/// See <see href="https://identity.foundation/did-registration/#signingresponse">DIF DID Registration
+/// §signingResponse</see>.
+/// </para>
+/// </remarks>
 public sealed class SigningResponse
 {
     /// <summary>
-    /// The identifier of the signing request this responds to.
+    /// The identifier of the signing request this responds to (the correlating <see cref="SigningRequest.RequestId"/>).
     /// </summary>
     public required string RequestId { get; init; }
 
     /// <summary>
-    /// The signature produced by the client.
+    /// The signature produced by the client — the DIF <c>signature</c> member (base64-encoded on the
+    /// wire). Required.
     /// </summary>
     public required ReadOnlyMemory<byte> Signature { get; init; }
 
     /// <summary>
-    /// The key identifier used for signing.
+    /// The key identifier used for signing — the DIF <c>kid</c> member.
     /// </summary>
     public string? Kid { get; init; }
 
     /// <summary>
-    /// The algorithm used for signing.
+    /// The algorithm used for signing — the DIF <c>alg</c> member.
     /// </summary>
     public string? Algorithm { get; init; }
+
+    /// <summary>
+    /// The verification relationship the signature is for — the DIF <c>purpose</c> member. Optional.
+    /// </summary>
+    public string? Purpose { get; init; }
 }

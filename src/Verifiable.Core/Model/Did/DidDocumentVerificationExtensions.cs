@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.Did
 {
@@ -192,6 +193,44 @@ namespace Verifiable.Core.Model.Did
                     id => new CapabilityDelegationMethod(id),
                     doc => doc.CapabilityDelegation,
                     (doc, items) => doc.CapabilityDelegation = items);
+            }
+
+
+            /// <summary>
+            /// Adds the standard verification relationships for a key based on its capabilities: a signing key is
+            /// registered under <c>authentication</c>, <c>assertionMethod</c>, <c>capabilityInvocation</c> and
+            /// <c>capabilityDelegation</c>; a key-agreement (key-exchange) key is registered under
+            /// <c>keyAgreement</c>. This is the shared relationship-assignment step every DID method builder uses
+            /// (did:key, did:web, did:ebsi, did:webvh, did:webplus, …), so a method builder plugs in only its
+            /// method-specific verification-method id format while the standard relationships stay uniform.
+            /// </summary>
+            /// <param name="publicKey">The verification method's public key, whose <see cref="Verifiable.Cryptography.Context.Purpose"/> selects the relationships.</param>
+            /// <param name="verificationMethodId">The verification method id the relationships reference.</param>
+            /// <returns>The same DID document instance with the standard relationships added.</returns>
+            /// <exception cref="ArgumentNullException">Thrown when <paramref name="publicKey"/> is null.</exception>
+            /// <exception cref="ArgumentException">Thrown when <paramref name="verificationMethodId"/> is null or whitespace.</exception>
+            public DidDocument WithStandardVerificationRelationships(PublicKeyMemory publicKey, string verificationMethodId)
+            {
+                ArgumentNullException.ThrowIfNull(publicKey);
+                ArgumentException.ThrowIfNullOrWhiteSpace(verificationMethodId);
+
+                //Signing keys (private signing and public verification) authorize control, assertions and
+                //capability use; key-exchange keys authorize key agreement. The capability checks are the shared
+                //SupportsSigning/SupportsKeyAgreement predicates over the key's Purpose.
+                if(publicKey.SupportsSigning())
+                {
+                    document.WithAuthentication(verificationMethodId)
+                            .WithAssertionMethod(verificationMethodId)
+                            .WithCapabilityInvocation(verificationMethodId)
+                            .WithCapabilityDelegation(verificationMethodId);
+                }
+
+                if(publicKey.SupportsKeyAgreement())
+                {
+                    document.WithKeyAgreement(verificationMethodId);
+                }
+
+                return document;
             }
         }
 

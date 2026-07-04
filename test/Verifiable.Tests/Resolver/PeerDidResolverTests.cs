@@ -43,7 +43,7 @@ internal sealed class PeerDidResolverTests
 
     private static DidResolver CreateResolver() =>
         new(DidMethodSelectors.FromResolvers(
-            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(BaseMemoryPool.Shared, DeserializeDidDocument, SHA256.HashData))));
+            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(BaseMemoryPool.Shared, DeserializeDidDocument))));
 
 
     //The did:peer:4 embedded document is deserialized by the JSON layer; Verifiable.Core never parses it.
@@ -246,7 +246,7 @@ internal sealed class PeerDidResolverTests
         //A throwing deserializer is a closed InvalidDidDocument failure, not an escaping fault that the
         //DidResolver maps to InternalError.
         var resolver = new DidResolver(DidMethodSelectors.FromResolvers(
-            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(BaseMemoryPool.Shared, ThrowingDeserializer, SHA256.HashData))));
+            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(BaseMemoryPool.Shared, ThrowingDeserializer))));
 
         var result = await resolver.ResolveAsync(PeerDid4TestVectors.TutorialLongForm, ResolutionContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -287,7 +287,7 @@ internal sealed class PeerDidResolverTests
     private static DidResolver ResolverReturning(DidDocument? document) =>
         new(DidMethodSelectors.FromResolvers(
             (WellKnownDidMethodPrefixes.PeerDidMethodPrefix,
-             PeerDidResolver.Build(BaseMemoryPool.Shared, new ConstantDocumentDeserializer(document).Deserialize, SHA256.HashData))));
+             PeerDidResolver.Build(BaseMemoryPool.Shared, new ConstantDocumentDeserializer(document).Deserialize))));
 
 
     private sealed class ConstantDocumentDeserializer(DidDocument? document)
@@ -398,6 +398,40 @@ internal sealed class PeerDidResolverTests
 
         Assert.IsNull(document.KeyAgreement);
         Assert.IsNull(document.Service);
+    }
+
+
+    /// <summary>
+    /// Per the Peer DID Method specification (§ Method Specific Identifier) peer DIDs MUST be compared
+    /// case-sensitively and MUST NOT be case-normalized. Resolution preserves the identifier's exact case,
+    /// and two identifiers differing only in case are distinct values rather than folded together.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveNumalgo2PreservesCaseAndTreatsCaseVariantsAsDistinct()
+    {
+        var resolver = CreateResolver();
+        var result = await resolver.ResolveAsync(GoldenVectorDid, ResolutionContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccessful);
+        var document = result.Document;
+        Assert.IsNotNull(document);
+
+        //A case-altered variant of the same DID, keeping the lowercase "did:peer:" method prefix intact so
+        //only the method-specific identifier differs by case.
+        string caseVariantDid = PeerDidMethod.Prefix + GoldenVectorDid[PeerDidMethod.Prefix.Length..].ToUpperInvariant();
+
+        //The resolved id is the input verbatim (mixed case), NOT the case-folded variant: the resolver does
+        //not case-normalize the identifier.
+        Assert.AreEqual(GoldenVectorDid, document.Id!.Id);
+        Assert.AreNotEqual(caseVariantDid, document.Id!.Id);
+
+        //Identity is value-based and ordinal: the same-cased identifier is equal, but the case-altered
+        //variant is a distinct identifier — peer DIDs are compared case-sensitively.
+        var original = new PeerDidMethod(GoldenVectorDid);
+        var sameCase = new PeerDidMethod(GoldenVectorDid);
+        var caseVariant = new PeerDidMethod(caseVariantDid);
+        Assert.AreEqual(original, sameCase);
+        Assert.AreNotEqual(original, caseVariant);
     }
 
 
@@ -638,6 +672,28 @@ internal sealed class PeerDidResolverTests
     {
         //'!' is outside the base64url alphabet, so the service value cannot be decoded.
         string did = "did:peer:2.V" + AuthenticationKey + ".S!!!";
+
+        var resolver = CreateResolver();
+        var result = await resolver.ResolveAsync(did, ResolutionContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccessful);
+        Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDid, result.ResolutionMetadata.Error);
+    }
+
+
+    /// <summary>
+    /// Per the Peer DID Method specification (§ Generating a did:peer:2) each service is encoded
+    /// individually as its own base64url <c>.S</c> element; a service MUST NOT be encoded as a JSON list.
+    /// A <c>.S</c> element whose bytes decode to a JSON array — even one wrapping an otherwise valid
+    /// service object — is not a valid service encoding and must fail closed as an invalid DID.
+    /// </summary>
+    [TestMethod]
+    public async Task ResolveServiceEncodedAsJsonListReturnsInvalidDid()
+    {
+        //The wrapped object resolves when encoded on its own (see the id-less service tests); wrapping the
+        //same object in a JSON array is the specific violation and must be rejected.
+        string did = "did:peer:2.V" + AuthenticationKey
+            + ServiceSegment("[{\"t\":\"dm\",\"s\":\"https://example.com/ep\"}]");
 
         var resolver = CreateResolver();
         var result = await resolver.ResolveAsync(did, ResolutionContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

@@ -33,6 +33,25 @@ internal static class WebVhTestLog
     public static DecodeDelegate Base58Decoder { get; } = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
 
 
+    /// <summary>
+    /// Independently computes <c>base58btc(multihash(input, SHA-256))</c> on the minter side using this oracle's own
+    /// SHA-256 (<see cref="Hash"/>) — never the resolver's registered digest seam. The issuer-side minter and the
+    /// verifier under test must not share a hash implementation, so the SHA-256 multihash header
+    /// (<c>0x12</c> sha2-256, <c>0x20</c> length) is composed here rather than through the production primitive.
+    /// </summary>
+    /// <param name="input">The bytes to hash.</param>
+    /// <returns>The base58btc-encoded SHA-256 multihash string.</returns>
+    public static string MultihashBase58(ReadOnlySpan<byte> input)
+    {
+        Span<byte> multihash = stackalloc byte[2 + 32];
+        multihash[0] = 0x12;
+        multihash[1] = 0x20;
+        Hash(input, multihash[2..]);
+
+        return Base58Encoder(multihash);
+    }
+
+
     /// <summary>Mints a single-entry (genesis-only) log signed by <paramref name="signer"/>.</summary>
     public static Task<WebVhMintedLog> MintGenesisAsync(
         string domain,
@@ -150,6 +169,11 @@ internal static class WebVhTestLog
         {
             ["updateKeys"] = ToJsonArray(plan.UpdateKeys)
         };
+
+        if(plan.MethodOverride is { } method)
+        {
+            parameters["method"] = method;
+        }
 
         if(plan.NextKeyHashes is { } nextKeyHashes)
         {
@@ -383,7 +407,7 @@ internal static class WebVhTestLog
     {
         var canonical = new TaggedMemory<byte>(Jcs.CanonicalizeToUtf8Bytes(json), BufferTags.Json);
 
-        return WebVhHash.ComputeBase58(canonical.Span, Hash, Base58Encoder);
+        return MultihashBase58(canonical.Span);
     }
 
 
@@ -525,7 +549,7 @@ internal sealed class WebVhController: IDisposable
     public string WitnessId => $"did:key:{Multikey}";
 
     /// <summary>The pre-rotation commitment hash of this key's multikey, for a previous entry's <c>nextKeyHashes</c>.</summary>
-    public string KeyHash => WebVhHash.ComputeBase58(Encoding.UTF8.GetBytes(Multikey), WebVhTestLog.Hash, WebVhTestLog.Base58Encoder);
+    public string KeyHash => WebVhTestLog.MultihashBase58(Encoding.UTF8.GetBytes(Multikey));
 
 
     /// <summary>Generates a new Ed25519 controller key.</summary>
@@ -572,6 +596,7 @@ internal sealed class WebVhController: IDisposable
 /// <param name="ExplicitFilesServiceEndpoint">An optional explicit <c>#files</c> serviceEndpoint that overrides the implicit one (for example a non-HTTP(S) scheme, for negative dereferencing tests).</param>
 /// <param name="ExplicitFilesServiceEndpointMap">An optional explicit <c>#files</c> serviceEndpoint expressed as a map (the URL is a member value), overriding the implicit service.</param>
 /// <param name="ExplicitWhoisServiceEndpoint">An optional explicit <c>#whois</c> serviceEndpoint at a different HTTP(S) location, overriding the implicit whois service.</param>
+/// <param name="MethodOverride">When set, this (non-genesis) entry declares this <c>method</c> parameter value, used to exercise the rejection of a method change/downgrade after the first entry.</param>
 internal sealed record WebVhEntryPlan(
     WebVhController Signer,
     ImmutableArray<string> UpdateKeys,
@@ -589,7 +614,8 @@ internal sealed record WebVhEntryPlan(
     string? ExplicitFilesServiceEndpointMap = null,
     string? ExplicitWhoisServiceEndpoint = null,
     string? MoveChangeScid = null,
-    ImmutableArray<string>? GenesisAlsoKnownAs = null);
+    ImmutableArray<string>? GenesisAlsoKnownAs = null,
+    string? MethodOverride = null);
 
 
 /// <summary>

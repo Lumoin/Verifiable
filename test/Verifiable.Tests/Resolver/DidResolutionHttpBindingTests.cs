@@ -480,7 +480,6 @@ internal sealed class DidResolutionHttpBindingTests
             WebVhLogEntryJson.DocumentIdentityReader,
             DeserializeState,
             WebVhLogEntryJson.Canonicalizer,
-            SHA256.HashData,
             Base58Encoder,
             Base58Decoder,
             BaseMemoryPool.Shared,
@@ -500,7 +499,6 @@ internal sealed class DidResolutionHttpBindingTests
 
         return DidResolverComposition.Build(
             BaseMemoryPool.Shared,
-            SHA256.HashData,
             transport.Delegate,
             static jsonUtf8 => null,
             static jsonUtf8 => null,

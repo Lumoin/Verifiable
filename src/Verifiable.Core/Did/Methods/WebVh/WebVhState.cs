@@ -5,7 +5,7 @@ namespace Verifiable.Core.Did.Methods.WebVh;
 /// parameters, the entry's <c>versionId</c>, and its <c>versionTime</c>.
 /// </summary>
 /// <remarks>
-/// This is the domain state the <see cref="EventLogs.LogReplayer{TState,TOperation,TProof,TContext}"/>
+/// This is the domain state the <see cref="Verifiable.Cryptography.EventLogs.LogReplayer{TState,TOperation,TProof,TContext}"/>
 /// carries forward. The active <see cref="WebVhParameters"/> drive verification of the next entry (the
 /// authorized <c>updateKeys</c>, the pre-rotation commitments), and the <see cref="VersionTime"/> anchors
 /// the monotonic <c>versionTime</c> check (did:webvh v1.0, Read (Resolve)).

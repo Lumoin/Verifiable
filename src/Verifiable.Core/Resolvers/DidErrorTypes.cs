@@ -20,7 +20,7 @@ namespace Verifiable.Core.Resolvers;
 /// so the DID URL parser would correctly reject them.
 /// </para>
 /// <para>
-/// See <see href="https://w3c.github.io/did-resolution/#errors">DID Resolution §9 Errors</see>
+/// See <see href="https://www.w3.org/TR/did-resolution/#errors">DID Resolution §9 Errors</see>
 /// for the normative list of error types.
 /// </para>
 /// </remarks>
@@ -79,6 +79,32 @@ public static class DidErrorTypes
     public static readonly Uri FeatureNotSupported = new(Namespace + "FEATURE_NOT_SUPPORTED");
 
     /// <summary>
+    /// A DID URL dereferenced to a resource that is not a conforming verification method, or
+    /// whose <c>id</c> or <c>controller</c> does not match the controller document. Raised by
+    /// the Retrieve Verification Method algorithm.
+    /// </summary>
+    /// <remarks>
+    /// See <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID 1.0 §3.3
+    /// Retrieve Verification Method</see> (steps 8–10), surfaced through
+    /// <see href="https://www.w3.org/TR/did-resolution/#dereferencing-secondary-resource">DID
+    /// Resolution §5.4.2</see>.
+    /// </remarks>
+    public static readonly Uri InvalidVerificationMethod = new(Namespace + "INVALID_VERIFICATION_METHOD");
+
+    /// <summary>
+    /// A DID URL dereferenced to a verification method that is not associated, either by
+    /// reference or by value, with the verification relationship the caller requested. Raised by
+    /// the Retrieve Verification Method algorithm.
+    /// </summary>
+    /// <remarks>
+    /// See <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method">CID 1.0 §3.3
+    /// Retrieve Verification Method</see> (step 11), surfaced through
+    /// <see href="https://www.w3.org/TR/did-resolution/#dereferencing-secondary-resource">DID
+    /// Resolution §5.4.2</see>.
+    /// </remarks>
+    public static readonly Uri InvalidRelationshipForVerificationMethod = new(Namespace + "INVALID_RELATIONSHIP_FOR_VERIFICATION_METHOD");
+
+    /// <summary>
     /// Maps a standard DID error type URI to the lowerCamelCase string code the W3C DID Resolution and the
     /// did:webvh specification require in the metadata <c>error</c> field (for example
     /// <c>#NOT_FOUND</c> -&gt; <c>notFound</c>, <c>#INVALID_DID</c> -&gt; <c>invalidDid</c>,
@@ -102,6 +128,8 @@ public static class DidErrorTypes
             var uri when uri == InvalidOptions.AbsoluteUri => "invalidOptions",
             var uri when uri == InternalError.AbsoluteUri => "internalError",
             var uri when uri == FeatureNotSupported.AbsoluteUri => "featureNotSupported",
+            var uri when uri == InvalidVerificationMethod.AbsoluteUri => "invalidVerificationMethod",
+            var uri when uri == InvalidRelationshipForVerificationMethod.AbsoluteUri => "invalidRelationshipForVerificationMethod",
             _ => "internalError"
         };
     }
@@ -129,6 +157,8 @@ public static class DidErrorTypes
             "invalidOptions" => InvalidOptions,
             "internalError" => InternalError,
             "featureNotSupported" => FeatureNotSupported,
+            "invalidVerificationMethod" => InvalidVerificationMethod,
+            "invalidRelationshipForVerificationMethod" => InvalidRelationshipForVerificationMethod,
             _ => InternalError
         };
     }

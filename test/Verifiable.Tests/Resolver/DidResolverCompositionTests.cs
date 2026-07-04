@@ -147,7 +147,6 @@ internal sealed class DidResolverCompositionTests
 
         return DidResolverComposition.Build(
             Pool,
-            SHA256.HashData,
             webTransport,
             new WebDidDocumentDeserializer(DeserializeDocument),
             new PeerDidDocumentDeserializer(DeserializeDocument),

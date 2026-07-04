@@ -101,6 +101,26 @@ internal sealed class CardVerifiableCertificateChainTests
 
 
     [TestMethod]
+    public async Task RejectsAChainThatDoesNotEndInATerminal()
+    {
+        using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        using CardVerifiableCertificate cvca = MintCvca(cvcaKey, "UTCVCA00001");
+        Tag curve = cvca.PublicKey.EllipticCurvePoint!.Tag;
+        //A validly signed, correctly linked, role-narrowing chain that stops at the Document Verifier: every link
+        //verifies, but no terminal certificate was presented, so the terminal proved possession of no key.
+        using CardVerifiableCertificate documentVerifier = MintDocumentVerifier(cvcaKey, documentVerifierKey, "UTCVCA00001", "UTDVDE00001", curve);
+
+        CvcChainVerificationResult result = await CardVerifiableCertificateChain.VerifyAsync(
+            cvca, [documentVerifier], WithinValidity, TestContext.CancellationToken);
+
+        Assert.AreEqual(CvcChainVerificationResult.ChainNotTerminatedByTerminal, result,
+            "A chain whose every link verifies but which does not end in a terminal certificate presents no Terminal-Authentication key.");
+    }
+
+
+    [TestMethod]
     public async Task VerifiesAFullRsaCvcaToDocumentVerifierToTerminalChain()
     {
         using RSA cvcaKey = RSA.Create(2048);

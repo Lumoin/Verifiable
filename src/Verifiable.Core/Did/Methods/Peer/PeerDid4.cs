@@ -25,13 +25,14 @@ internal static class PeerDid4
     /// <c>did:peer:4</c> prefix: <c>{hash}:{encoded document}</c> for the long form, or just
     /// <c>{hash}</c> for the short form (which cannot be resolved without the long form).
     /// </summary>
-    public static DidResolutionResult Resolve(
+    public static ValueTask<DidResolutionResult> Resolve(
         string longFormDid,
         string afterNumalgo,
         MemoryPool<byte> pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
-        HashFunctionDelegate hashFunction)
-        => ResolveCore(longFormDid, afterNumalgo, pool, didDocumentDeserializer, hashFunction, asShortForm: false);
+        ComputeDigestDelegate computeDigest,
+        CancellationToken cancellationToken)
+        => ResolveCoreAsync(longFormDid, afterNumalgo, pool, didDocumentDeserializer, computeDigest, asShortForm: false, cancellationToken);
 
 
     /// <summary>
@@ -39,22 +40,24 @@ internal static class PeerDid4
     /// stored — a short form has no embedded document of its own). The result is contextualized with the
     /// short-form DID, with the long form recorded in <c>alsoKnownAs</c>.
     /// </summary>
-    public static DidResolutionResult ResolveShort(
+    public static ValueTask<DidResolutionResult> ResolveShort(
         string longFormDid,
         string afterNumalgo,
         MemoryPool<byte> pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
-        HashFunctionDelegate hashFunction)
-        => ResolveCore(longFormDid, afterNumalgo, pool, didDocumentDeserializer, hashFunction, asShortForm: true);
+        ComputeDigestDelegate computeDigest,
+        CancellationToken cancellationToken)
+        => ResolveCoreAsync(longFormDid, afterNumalgo, pool, didDocumentDeserializer, computeDigest, asShortForm: true, cancellationToken);
 
 
-    private static DidResolutionResult ResolveCore(
+    private static async ValueTask<DidResolutionResult> ResolveCoreAsync(
         string longFormDid,
         string afterNumalgo,
         MemoryPool<byte> pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
-        HashFunctionDelegate hashFunction,
-        bool asShortForm)
+        ComputeDigestDelegate computeDigest,
+        bool asShortForm,
+        CancellationToken cancellationToken)
     {
         int separator = afterNumalgo.IndexOf(':', StringComparison.Ordinal);
         if(separator < 0)
@@ -74,7 +77,7 @@ internal static class PeerDid4
         DecodeDelegate base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
 
         //The hash binds the short form to the long form; a tampered encoded document must be rejected.
-        if(!IsHashValid(hashPortion, encodedDocument, base58Decoder, hashFunction, pool))
+        if(!await IsHashValidAsync(hashPortion, encodedDocument, base58Decoder, computeDigest, pool, cancellationToken).ConfigureAwait(false))
         {
             return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
         }
@@ -141,17 +144,17 @@ internal static class PeerDid4
 
     //Recreates the SHA2-256 multihash over the encoded-document string and compares it against the
     //hash embedded in the DID. Any decode failure of the hash portion is a non-conforming DID.
-    private static bool IsHashValid(string hashPortion, string encodedDocument, DecodeDelegate base58Decoder, HashFunctionDelegate hashFunction, MemoryPool<byte> pool)
+    private static async ValueTask<bool> IsHashValidAsync(string hashPortion, string encodedDocument, DecodeDelegate base58Decoder, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
-        //did:peer:4 fixes the hash to SHA2-256, validated against the multihash code below.
-        Span<byte> digest = stackalloc byte[Sha256DigestLength];
+        //did:peer:4 fixes the hash to SHA2-256, validated against the multihash code below. The digest is taken
+        //through the supplied ComputeDigestDelegate (telemetry, CBOM stamping, event emission) by awaiting the
+        //async seam, so a hardware-async backend (TPM2_Hash, KMS) works as well as a synchronous software one.
         int byteCount = Encoding.UTF8.GetByteCount(encodedDocument);
-        using(IMemoryOwner<byte> encodedBytes = pool.Rent(byteCount))
-        {
-            Span<byte> encodedSpan = encodedBytes.Memory.Span[..byteCount];
-            Encoding.UTF8.GetBytes(encodedDocument, encodedSpan);
-            hashFunction(encodedSpan, digest);
-        }
+        using IMemoryOwner<byte> encodedBytes = pool.Rent(byteCount);
+        Encoding.UTF8.GetBytes(encodedDocument, encodedBytes.Memory.Span[..byteCount]);
+
+        using DigestValue computed = await CryptographicKeyEvents.ComputeDigestAsync(
+            computeDigest, new ReadOnlySequence<byte>(encodedBytes.Memory[..byteCount]), Sha256DigestLength, CryptoTags.Sha256Digest, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -168,7 +171,8 @@ internal static class PeerDid4
                 return false;
             }
 
-            return bytes[(sha256Code.Length + 1)..].SequenceEqual(digest);
+            //The computed digest, held in the pooled DigestValue (not a ref struct), is compared after the await.
+            return bytes[(sha256Code.Length + 1)..].SequenceEqual(computed.AsReadOnlySpan());
         }
         catch(Exception decodeException) when(decodeException is FormatException or ArgumentException or IndexOutOfRangeException)
         {

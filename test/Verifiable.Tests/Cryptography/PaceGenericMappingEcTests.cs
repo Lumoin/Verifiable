@@ -101,6 +101,28 @@ internal sealed class PaceGenericMappingEcTests
     }
 
 
+    [TestMethod]
+    public async Task PointMultiplyRejectsThePointAtInfinity()
+    {
+        //The SEC1 point at infinity — a single 0x00 byte — multiplies to the identity for any scalar, collapsing
+        //the ECDH shared secret to a fixed, key-independent value: a full PACE / Chip Authentication bypass. The
+        //point is rejected before it reaches the curve arithmetic.
+        await Assert.ThrowsExactlyAsync<ArgumentException>(
+            async () => await MultiplyPoint(KeyAgreementPrivateIfd, "00").ConfigureAwait(false)).ConfigureAwait(false);
+    }
+
+
+    [TestMethod]
+    public async Task PointMultiplyRejectsAPointNotOnTheCurve()
+    {
+        //An uncompressed point of the correct length whose coordinates do not satisfy the curve equation is not a
+        //valid public key; multiplying by it is an invalid-curve foothold, so it is rejected.
+        string offCurvePoint = "04" + new string('7', 128);
+        await Assert.ThrowsExactlyAsync<ArgumentException>(
+            async () => await MultiplyPoint(KeyAgreementPrivateIfd, offCurvePoint).ConfigureAwait(false)).ConfigureAwait(false);
+    }
+
+
     private async Task<string> MultiplyGenerator(string scalarHex)
     {
         EcMultiplyGeneratorDelegate multiply = Resolve<EcMultiplyGeneratorDelegate>();

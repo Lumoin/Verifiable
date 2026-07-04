@@ -27,8 +27,8 @@ namespace Verifiable.Core.Model.Did
     /// created those proofs.
     /// </para>
     /// <para>
-    /// See <see href="https://www.w3.org/TR/cid-1.0/#controllers">CID 1.0 �2.1.2 Controllers</see>
-    /// and <see href="https://www.w3.org/TR/did-core/#did-controller">DID Core �5.1.2 DID Controller</see>.
+    /// See <see href="https://www.w3.org/TR/did-1.1/#did-controller">DID Core 1.1 §5.1.2 DID Controller</see>
+    /// and <see href="https://www.w3.org/TR/cid-1.0/#controllers">CID 1.0 §2.1.2 Controllers</see>.
     /// </para>
     /// </remarks>
     [DebuggerDisplay("Controller(Did = {Did})")]
@@ -43,7 +43,7 @@ namespace Verifiable.Core.Model.Did
         /// dereferenced to obtain verification methods for authenticating control operations.
         /// </para>
         /// <para>
-        /// See <see href="https://www.w3.org/TR/cid-1.0/#controllers">CID 1.0 �2.1.2 Controllers</see>.
+        /// See <see href="https://www.w3.org/TR/cid-1.0/#controllers">CID 1.0 §2.1.2 Controllers</see>.
         /// </para>
         /// </remarks>
         public string Did { get; }

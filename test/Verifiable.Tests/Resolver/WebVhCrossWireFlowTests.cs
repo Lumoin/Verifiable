@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -47,20 +48,21 @@ namespace Verifiable.Tests.Resolver;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The DID's domain is the bare host <c>127.0.0.1%3A{port}</c> (a <c>%3A</c>-encoded port, no path), so the
-/// did:webvh DID-to-HTTPS transform lands on <c>https://127.0.0.1:{port}/.well-known/did.jsonl</c>, the witness
-/// file on <c>https://127.0.0.1:{port}/.well-known/did-witness.json</c>, the implicit whois on
-/// <c>https://127.0.0.1:{port}/whois.vp</c>, and the implicit #files base on <c>https://127.0.0.1:{port}/</c>
+/// The DID's domain is the bare host <c>localhost%3A{port}</c> (a <c>%3A</c>-encoded port, no path), so the
+/// did:webvh DID-to-HTTPS transform lands on <c>https://localhost:{port}/.well-known/did.jsonl</c>, the witness
+/// file on <c>https://localhost:{port}/.well-known/did-witness.json</c>, the implicit whois on
+/// <c>https://localhost:{port}/whois.vp</c>, and the implicit #files base on <c>https://localhost:{port}/</c>
 /// (so a <c>/governance/issuers.json</c> path URL dereferences to
-/// <c>https://127.0.0.1:{port}/governance/issuers.json</c>).
+/// <c>https://localhost:{port}/governance/issuers.json</c>).
 /// </para>
 /// <para>
 /// Node A listens on plain http (the repo convention for real-socket binding tests; TLS is the deployment
-/// transport's responsibility). Node B's resolver computes the genuine <c>https://127.0.0.1:{port}/...</c> URL,
+/// transport's responsibility). Node B's resolver computes the genuine <c>https://localhost:{port}/...</c> URL,
 /// the policy on the threaded <see cref="ExchangeContext"/> gates it (loopback explicitly allowed, exactly like
-/// <c>TestHostShell.LoopbackOutboundFetchPolicy</c>), and the single-hop transport rewrites only the scheme
-/// (<c>https</c> → <c>http</c>) before dialing node A's socket — the same scheme-rebind the did:web cross-wire
-/// resolver uses.
+/// <c>TestHostShell.LoopbackOutboundFetchPolicy</c>), and the single-hop transport rebases that URL's authority
+/// (scheme, host and port) onto node A's real loopback socket before dialing, standing in for the DNS + network
+/// hop a deployment would make. A raw IP-literal host is rejected by the transform (the shared did:web-family host
+/// rule), so the DID uses the <c>localhost</c> registered name.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -103,7 +105,7 @@ internal sealed class WebVhCrossWireFlowTests
         int port = nodeA.BaseAddress.Port;
 
         //The bare-host domain whose %3A-encoded port resolves to node A's loopback socket.
-        string domain = $"127.0.0.1%3A{port}";
+        string domain = $"localhost%3A{port}";
 
         using WebVhController controller = WebVhController.Create();
         using WebVhController authentication = WebVhController.Create();
@@ -138,6 +140,18 @@ internal sealed class WebVhCrossWireFlowTests
         using HttpClient httpClient = new();
         DidResolver composed = BuildCrossWireResolver(httpClient, nodeA.BaseAddress);
 
+        //OTel double-check: each log entry's eddsa-jcs-2022 proof is verified through the registered Ed25519
+        //verification, which emits a crypto.verify span on the Verifiable.Cryptography source. Listening for those
+        //spans proves the wired resolve also writes OpenTelemetry trace, not only that it returns the right state.
+        var cryptoSpanNames = new ConcurrentBag<string>();
+        using ActivityListener cryptoListener = new()
+        {
+            ShouldListenTo = source => source.Name == CryptoActivitySource.Name,
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity => cryptoSpanNames.Add(activity.OperationName)
+        };
+        ActivitySource.AddActivityListener(cryptoListener);
+
         //(a) Resolve the DID over the real socket: it MUST verify despite the active witness rule, which forces
         //the did-witness.json fetch — both fetches are asserted against node A's request log below.
         ExchangeContext resolveContext = NewLoopbackContext();
@@ -148,6 +162,12 @@ internal sealed class WebVhCrossWireFlowTests
         Assert.AreEqual(log.Did, resolution.Document!.Id?.ToString(), "The resolved document id MUST equal the published DID.");
         Assert.AreEqual(log.VersionIds[^1], resolution.DocumentMetadata.VersionId, "The resolved versionId MUST be the latest entry.");
         Assert.IsFalse(resolution.DocumentMetadata.Deactivated, "The resolved DID MUST NOT be deactivated.");
+
+        //The wired resolve verified every entry (and witness) proof, and those verifications surfaced as OTel spans.
+        List<string> cryptoSpans = [.. cryptoSpanNames];
+        Assert.IsNotEmpty(cryptoSpans, "The wired resolve MUST emit OpenTelemetry crypto spans (the per-entry proof verifications).");
+        CollectionAssert.Contains(cryptoSpans, CryptoTelemetry.ActivityNames.Verify,
+            "Resolving the multi-entry did:webvh log MUST emit a crypto.verify span for the entry-proof verification.");
 
         Assert.IsTrue(nodeA.WasRequested("/.well-known/did.jsonl"), "The DID Log MUST have been fetched over the socket.");
         Assert.IsTrue(nodeA.WasRequested("/.well-known/did-witness.json"),
@@ -200,7 +220,7 @@ internal sealed class WebVhCrossWireFlowTests
         int port = nodeA.BaseAddress.Port;
 
         //Mint a valid DID at node A's host but DO NOT publish its log: every path 404s over the socket.
-        string domain = $"127.0.0.1%3A{port}";
+        string domain = $"localhost%3A{port}";
         using WebVhController controller = WebVhController.Create();
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(domain, controller, GenesisTime).ConfigureAwait(false);
 
@@ -223,7 +243,7 @@ internal sealed class WebVhCrossWireFlowTests
 
     /// <summary>
     /// A portability move across the wire: a Portable genesis at node A's bare host, then a move to a path
-    /// location <c>127.0.0.1%3A{port}:moved</c>. A path-bearing domain has no <c>.well-known</c> segment, so the
+    /// location <c>localhost%3A{port}:moved</c>. A path-bearing domain has no <c>.well-known</c> segment, so the
     /// whole log is published at <c>/moved/did.jsonl</c>; node B resolves the moved DID and gets the moved id.
     /// </summary>
     [TestMethod]
@@ -232,8 +252,8 @@ internal sealed class WebVhCrossWireFlowTests
         await using StaticContentHttpHost nodeA = await StaticContentHttpHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
         int port = nodeA.BaseAddress.Port;
 
-        string originDomain = $"127.0.0.1%3A{port}";
-        string movedDomain = $"127.0.0.1%3A{port}:moved";
+        string originDomain = $"localhost%3A{port}";
+        string movedDomain = $"localhost%3A{port}:moved";
 
         using WebVhController controller = WebVhController.Create();
         WebVhMintedLog log = await WebVhTestLog.MintAsync(originDomain,
@@ -242,10 +262,10 @@ internal sealed class WebVhCrossWireFlowTests
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, MoveToDomain: movedDomain)
         ]).ConfigureAwait(false);
 
-        //The moved DID's path-bearing domain (".../moved") transforms to https://127.0.0.1:{port}/moved/did.jsonl
+        //The moved DID's path-bearing domain (".../moved") transforms to https://localhost:{port}/moved/did.jsonl
         //(no .well-known for a path location), so the whole log is published there.
         string movedLogUrl = WebVhDidResolver.Resolve(log.Did);
-        Assert.AreEqual($"https://127.0.0.1:{port}/moved/did.jsonl", movedLogUrl,
+        Assert.AreEqual($"https://localhost:{port}/moved/did.jsonl", movedLogUrl,
             "The moved DID's log URL MUST transform to the path location, not a .well-known segment.");
 
         nodeA.Publish("/moved/did.jsonl", Encoding.UTF8.GetBytes(string.Join('\n', log.Lines)), "application/jsonl");
@@ -264,7 +284,7 @@ internal sealed class WebVhCrossWireFlowTests
     }
 
 
-    //A fresh ExchangeContext whose policy allows https loopback so the genuine https://127.0.0.1:{port}/... URL
+    //A fresh ExchangeContext whose policy allows https loopback so the genuine https://localhost:{port}/... URL
     //the resolver computes is permitted, mirroring TestHostShell.LoopbackOutboundFetchPolicy: production keeps
     //SecureDefault (which would deny a loopback target before any network contact).
     private static ExchangeContext NewLoopbackContext()
@@ -289,7 +309,17 @@ internal sealed class WebVhCrossWireFlowTests
 
         OutboundTransportDelegate transport = async (request, context, cancellationToken) =>
         {
-            UriBuilder rebased = new(request.Target) { Scheme = loopbackBase.Scheme };
+            //The DID's domain is a registered name (localhost), which the transform maps to a genuine https URL;
+            //this transport plays DNS + network by rebasing that URL's authority (scheme, host and port) onto node
+            //A's real loopback socket, preserving the path and query. The dial is deterministic (it does not depend
+            //on how 'localhost' resolves across the IPv4/IPv6 loopback stacks) and still crosses the real socket —
+            //node A's request-path log proves each hop.
+            UriBuilder rebased = new(request.Target)
+            {
+                Scheme = loopbackBase.Scheme,
+                Host = loopbackBase.Host,
+                Port = loopbackBase.Port
+            };
             OutboundRequest rebasedRequest = request with { Target = rebased.Uri };
 
             return await singleHop(rebasedRequest, context, cancellationToken).ConfigureAwait(false);
@@ -302,7 +332,6 @@ internal sealed class WebVhCrossWireFlowTests
             WebVhLogEntryJson.DocumentIdentityReader,
             DeserializeState,
             WebVhLogEntryJson.Canonicalizer,
-            SHA256.HashData,
             Base58Encoder,
             Base58Decoder,
             BaseMemoryPool.Shared,
@@ -322,7 +351,6 @@ internal sealed class WebVhCrossWireFlowTests
 
         return DidResolverComposition.Build(
             BaseMemoryPool.Shared,
-            SHA256.HashData,
             transport,
             static jsonUtf8 => null,
             static jsonUtf8 => null,

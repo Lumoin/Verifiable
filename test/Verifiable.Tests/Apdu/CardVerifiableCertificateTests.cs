@@ -187,6 +187,53 @@ internal sealed class CardVerifiableCertificateTests
     }
 
 
+    [TestMethod]
+    public void RejectsTruncatedPublicPoint()
+    {
+        //A public point that is only the 0x04 prefix — or any length short of a full uncompressed SEC1 point — is
+        //rejected at parse. Left to the prefix-only check it would parse, then throw an uncaught exception when the
+        //key was later used to verify a signature; its length is validated here like every other field's.
+        byte[] body = Body(
+            profileIdentifier: 0x00,
+            certificationAuthorityReference: "UTCVCA00001",
+            publicKey: EllipticCurvePublicKey(IdTaEcdsaSha256Hex, includeDomainParameters: false, [0x04]),
+            certificateHolderReference: "UTDVDE00001",
+            chat: Chat(IdAuthenticationTerminalHex, [0x80, 0x01, 0x02, 0x03, 0x04]),
+            effectiveDate: Date(2024, 5, 17),
+            expirationDate: Date(2024, 11, 17));
+        byte[] certificate = Tlv(0x7F21, body, Tlv(0x5F37, Filled(64, 0x01)));
+
+        Assert.IsTrue(Throws(() => CardVerifiableCertificate.Parse(certificate, BaseMemoryPool.Shared, CryptoTags.BrainpoolP256r1ExchangePublicKey)),
+            "A public point shorter than a full uncompressed SEC1 point is rejected at parse, not left to crash at signature verification.");
+    }
+
+
+    [TestMethod]
+    public void AuthenticationTerminalTemplateGrantsNoInspectionSystemReadAccess()
+    {
+        //An Authentication Terminal's five-octet relative authorization has a different bit layout than an
+        //Inspection System's one-octet one; its first octet's low bits are not the EF.DG3/EF.DG4 read bits. Reading
+        //them as such would grant sensitive-data access the terminal was never authorised for, so the eMRTD read
+        //access is defined only when the template is an Inspection System — here the first octet's low bits are set.
+        byte[] body = Body(
+            profileIdentifier: 0x00,
+            certificationAuthorityReference: "UTCVCA00001",
+            publicKey: EllipticCurvePublicKey(IdTaEcdsaSha256Hex, includeDomainParameters: false, BuildUncompressedPoint(0x77)),
+            certificateHolderReference: "UTATDE00001",
+            chat: Chat(IdAuthenticationTerminalHex, [0x03, 0x00, 0x00, 0x00, 0x00]),
+            effectiveDate: Date(2024, 5, 17),
+            expirationDate: Date(2024, 11, 17));
+        byte[] certificate = Tlv(0x7F21, body, Tlv(0x5F37, Filled(64, 0x01)));
+
+        using CardVerifiableCertificate parsed = CardVerifiableCertificate.Parse(
+            certificate, BaseMemoryPool.Shared, CryptoTags.BrainpoolP256r1ExchangePublicKey);
+
+        Assert.AreEqual(TerminalType.AuthenticationTerminal, parsed.Chat.TerminalType, "The id-AT object identifier selects an Authentication Terminal.");
+        Assert.AreEqual(InspectionSystemAccess.None, parsed.Chat.InspectionSystemReadAccess,
+            "An Authentication Terminal template grants no Inspection System eMRTD read access, whatever bits its own access value sets.");
+    }
+
+
     /// <summary>Builds the certificate body (<c>7F4E</c>) from its ordered elements.</summary>
     private static byte[] Body(
         byte profileIdentifier,

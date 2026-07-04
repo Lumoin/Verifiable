@@ -15,7 +15,7 @@ namespace Verifiable.Core.Model.Did
     /// </listheader>
     /// <item>
     ///    <term>General DID</term>
-    ///    <description><see href="https://www.w3.org/TR/did-core/#dfn-publickeyjwk">DID</see></description>
+    ///    <description><see href="https://www.w3.org/TR/did-1.1/#dfn-publickeyjwk">DID</see></description>
     /// </item>
     /// <item>
     ///    <term>Specific DID</term>

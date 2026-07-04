@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>WebFinger (RFC 7033) client and endpoint for handle-to-resource discovery</Title>
+    <Description>Implements the WebFinger protocol (RFC 7033): a client that resolves a resource identifier to a JSON Resource Descriptor and a capability-gated endpoint that serves one over the multi-tenant server, taking no transport or JSON serializer dependency.</Description>
+    <PackageTags>webfinger rfc7033 discovery did jrd</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+    <ProjectReference Include="..\Verifiable.Server\Verifiable.Server.csproj" />
+  </ItemGroup>
+
+</Project>

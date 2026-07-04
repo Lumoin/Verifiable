@@ -215,14 +215,12 @@ public static class ConcatKdf
             {
                 BinaryPrimitives.WriteInt32BigEndian(hashInput[..4], counter);
 
-                //Hash through the registered ComputeDigestDelegate so Concat KDF picks up
-                //the same observability and CBOM provenance stamping as every other digest.
-                //ConcatKdf.Derive is sync (pure mathematics, no I/O); the sync bridge
-                //asserts the underlying delegate completed synchronously (true for the
-                //Microsoft software backend) and throws if a hardware-async backend is
-                //registered.
-                using DigestValue digest = CryptographicKeyEvents.ComputeDigestSyncBridge(
-                    hashInputOwner.Memory[..hashInputLength],
+                //Concat KDF is sync by nature (pure mathematics over an in-memory shared secret, no I/O and no
+                //hardware-async backend), so it hashes through the registered synchronous HashFunctionDelegate
+                //seam rather than the async digest seam — no async colouring propagates into the JWE key
+                //agreement above it.
+                using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+                    hashInput,
                     SHA256.HashSizeInBytes,
                     CryptoTags.Sha256Digest,
                     pool);

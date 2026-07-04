@@ -53,7 +53,9 @@ namespace Verifiable.Core.Model.Did;
 /// }
 /// </code>
 /// <para>
-/// See <see href="https://www.w3.org/TR/cid-1.0/#capability-invocation">CID 1.0 §2.3.4 Capability Invocation</see>.
+/// See <see href="https://www.w3.org/TR/did-1.1/#capability-invocation">DID Core 1.1 Capability Invocation</see>
+/// (verification relationship; defined by reference to
+/// <see href="https://www.w3.org/TR/cid-1.0/#capability-invocation">CID 1.0 §2.3.4 Capability Invocation</see>).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CapabilityInvocationMethod(Id = {Id}, IsEmbedded = {IsEmbeddedVerification})")]

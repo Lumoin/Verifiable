@@ -1,7 +1,6 @@
 using System;
 using System.Buffers;
 using System.Collections.Frozen;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography;
 
@@ -133,13 +132,44 @@ public static class CryptographicKeyEvents
 
 
     /// <summary>
-    /// Retrieves the registered async <see cref="ComputeDigestDelegate"/>, invokes
-    /// it, and emits any produced <see cref="CryptoEvent"/> to <see cref="Events"/>.
+    /// Invokes the supplied <see cref="ComputeDigestDelegate"/> and emits any produced
+    /// <see cref="CryptoEvent"/> to <see cref="Events"/>. This is the explicit-delegate primary: a caller that
+    /// holds its own digest implementation passes it here; the registry overload resolves the registered delegate
+    /// and calls this one.
+    /// </summary>
+    public static async ValueTask<DigestValue> ComputeDigestAsync(
+        ComputeDigestDelegate computeDigest,
+        ReadOnlySequence<byte> input,
+        int outputByteLength,
+        Tag tag,
+        MemoryPool<byte> pool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(computeDigest);
+        ArgumentNullException.ThrowIfNull(tag);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        (DigestValue result, CryptoEvent? evt) = await computeDigest(
+            input, outputByteLength, tag, pool, context, cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            subject.OnNext(evt);
+        }
+
+        return result;
+    }
+
+
+    /// <summary>
+    /// Retrieves the registered async <see cref="ComputeDigestDelegate"/> and forwards to the explicit-delegate
+    /// overload, emitting any produced <see cref="CryptoEvent"/> to <see cref="Events"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// Thrown when no <see cref="ComputeDigestDelegate"/> has been registered.
     /// </exception>
-    public static async ValueTask<DigestValue> ComputeDigestAsync(
+    public static ValueTask<DigestValue> ComputeDigestAsync(
         ReadOnlySequence<byte> input,
         int outputByteLength,
         Tag tag,
@@ -162,15 +192,7 @@ public static class CryptographicKeyEvents
                 "Call CryptographicKeyFactory.RegisterFunction during application startup.");
         }
 
-        (DigestValue result, CryptoEvent? evt) = await compute(
-            input, outputByteLength, tag, pool, context, cancellationToken).ConfigureAwait(false);
-
-        if(evt is not null)
-        {
-            subject.OnNext(evt);
-        }
-
-        return result;
+        return ComputeDigestAsync(compute, input, outputByteLength, tag, pool, context, cancellationToken);
     }
 
 
@@ -190,59 +212,44 @@ public static class CryptographicKeyEvents
 
 
     /// <summary>
-    /// Synchronous bridge to
+    /// Computes a digest <strong>synchronously</strong> through the registered <see cref="HashFunctionDelegate"/> —
+    /// the sync counterpart of
     /// <see cref="ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, FrozenDictionary{string, object}?, string?, CancellationToken)"/>
-    /// for callers that cannot propagate async (key derivation, JWK thumbprint
-    /// computation, similar). Asserts the underlying delegate's ValueTask is
-    /// already completed; throws <see cref="InvalidOperationException"/> if not.
+    /// for a caller whose hash is sync by nature: a hash of public or local data that can never have a
+    /// hardware-async backend (a JWK thumbprint, a PKCE S256 challenge, a Concat KDF round, an SD-JWT disclosure
+    /// digest). Unlike the removed sync bridge, this consumes a genuinely synchronous
+    /// <see cref="HashFunctionDelegate"/>, so it never asserts or blocks on a <see cref="ValueTask"/>. The async
+    /// <see cref="ComputeDigestDelegate"/> remains the seam for the trust/custody digests that may be TPM2_Hash- or
+    /// KMS-backed (SAID, KERI/ACDC, did:webvh/peer/webplus self-hashing).
     /// </summary>
-    /// <remarks>
-    /// Safe for the in-process Microsoft software backend (which always completes
-    /// synchronously). If a hardware-async digest backend (TPM2_Hash, KMS) is
-    /// registered, the bridge throws rather than block — the caller must migrate
-    /// to async.
-    /// </remarks>
-    [SuppressMessage("Reliability", "CA2012:Use ValueTasks correctly", Justification = "IsCompleted is asserted before GetAwaiter().GetResult() is called.")]
-    public static DigestValue ComputeDigestSyncBridge(
-        ReadOnlyMemory<byte> input,
+    /// <param name="input">The bytes to hash.</param>
+    /// <param name="outputByteLength">The digest length in bytes (32 for SHA-256).</param>
+    /// <param name="tag">The tag naming the hash algorithm, e.g. <see cref="CryptoTags.Sha256Digest"/>.</param>
+    /// <param name="pool">The pool the digest buffer is rented from.</param>
+    /// <param name="qualifier">Selects a non-default registered hash (for an algorithm-agile caller such as SD-JWT, which may request SHA-384/512); <see langword="null"/> uses the default SHA-256 registration.</param>
+    /// <returns>The computed digest.</returns>
+    /// <exception cref="InvalidOperationException">No matching <see cref="HashFunctionDelegate"/> has been registered.</exception>
+    public static DigestValue ComputeDigest(
+        ReadOnlySpan<byte> input,
         int outputByteLength,
         Tag tag,
         MemoryPool<byte> pool,
         string? qualifier = null)
     {
-        ValueTask<DigestValue> task = ComputeDigestAsync(input, outputByteLength, tag, pool, qualifier: qualifier);
-        if(!task.IsCompleted)
+        ArgumentNullException.ThrowIfNull(tag);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        HashFunctionDelegate? hashFunction =
+            CryptographicKeyFactory.GetFunction<HashFunctionDelegate>(typeof(HashFunctionDelegate), qualifier);
+        if(hashFunction is null)
         {
             throw new InvalidOperationException(
-                "ComputeDigestSyncBridge requires a synchronously-completing "
-                + "ComputeDigestDelegate. A hardware-async digest backend cannot be "
-                + "consumed from a sync entry point; migrate the caller to async.");
+                $"No {nameof(HashFunctionDelegate)} has been registered"
+                + (qualifier is null ? ". " : $" under qualifier '{qualifier}'. ")
+                + "Call CryptographicKeyFactory.RegisterFunction during application startup.");
         }
-        return task.GetAwaiter().GetResult();
-    }
 
-
-    /// <summary>
-    /// Synchronous bridge for the multi-segment
-    /// <see cref="ReadOnlySequence{T}"/> case.
-    /// </summary>
-    [SuppressMessage("Reliability", "CA2012:Use ValueTasks correctly", Justification = "IsCompleted is asserted before GetAwaiter().GetResult() is called.")]
-    public static DigestValue ComputeDigestSyncBridge(
-        ReadOnlySequence<byte> input,
-        int outputByteLength,
-        Tag tag,
-        MemoryPool<byte> pool,
-        string? qualifier = null)
-    {
-        ValueTask<DigestValue> task = ComputeDigestAsync(input, outputByteLength, tag, pool, qualifier: qualifier);
-        if(!task.IsCompleted)
-        {
-            throw new InvalidOperationException(
-                "ComputeDigestSyncBridge requires a synchronously-completing "
-                + "ComputeDigestDelegate. A hardware-async digest backend cannot be "
-                + "consumed from a sync entry point; migrate the caller to async.");
-        }
-        return task.GetAwaiter().GetResult();
+        return DigestValue.Compute(input, hashFunction, outputByteLength, tag, pool);
     }
 
 

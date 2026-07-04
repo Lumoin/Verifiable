@@ -380,7 +380,7 @@ internal sealed class DidCommTrustPingTests
     //A did:peer resolver: the synthetic numalgo-2 resolution wired onto the did:peer method prefix.
     private static DidResolver CreateResolver() =>
         new(DidMethodSelectors.FromResolvers(
-            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(Pool, DeserializeDidDocument, SHA256.HashData))));
+            (WellKnownDidMethodPrefixes.PeerDidMethodPrefix, PeerDidResolver.Build(Pool, DeserializeDidDocument))));
 
 
     //The did:peer:4 embedded document is deserialized by the JSON layer; Verifiable.Core never parses it.

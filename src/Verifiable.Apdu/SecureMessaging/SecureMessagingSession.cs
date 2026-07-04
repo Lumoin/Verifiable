@@ -490,27 +490,50 @@ public sealed class SecureMessagingSession: IDisposable
 
             switch(tag)
             {
-                case CryptogramTag:
+                case(CryptogramTag):
+                {
                     encryptedObjectStart = start;
                     encryptedObjectLength = reader.Consumed - start;
                     //The DO'87' value is the padding-content indicator followed by the cryptogram.
                     cryptogramStart = valueStart + 1;
                     cryptogramLength = length - 1;
+
                     break;
-                case StatusTag:
+                }
+                case(StatusTag):
+                {
                     statusObjectStart = start;
                     statusObjectLength = reader.Consumed - start;
+
                     break;
-                case MacTag:
+                }
+                case(MacTag):
+                {
+                    //Pin the MAC length to the profile. Taking it from the wire lets an attacker present a short
+                    //or empty DO'8E': the verifier computes the real MAC truncated to that length and compares
+                    //equal-length spans, so an 8E 00 (empty) MAC compares equal to an empty computed MAC and the
+                    //channel authentication is bypassed with no key. Reject any length but the profile's.
+                    if(length != Profile.MacLength)
+                    {
+                        throw new InvalidOperationException(
+                            $"The Secure Messaging response MAC (DO'8E') is {length} bytes; the profile requires exactly {Profile.MacLength}.");
+                    }
+
                     macStart = valueStart;
                     macLength = length;
+
                     break;
-                case ExpectedLengthTag:
+                }
+                case(ExpectedLengthTag):
+                {
                     //DO'97' is echoed in some responses; it is not part of the response MAC.
                     break;
+                }
                 default:
+                {
                     throw new InvalidOperationException(
                         $"Unexpected Secure Messaging response data object tag 0x{tag:X2}.");
+                }
             }
         }
 

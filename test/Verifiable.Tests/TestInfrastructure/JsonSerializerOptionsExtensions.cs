@@ -36,6 +36,7 @@ internal static class JsonSerializerOptionsExtensions
         options.TypeInfoResolver = VerifiableJsonContext.Default;
 
         //DID document converters.
+        options.Converters.Add(new DidDocumentConverter());
         options.Converters.Add(new DictionaryStringObjectJsonConverter(VerifiableJsonContext.Default));
         options.Converters.Add(new SingleOrArrayControllerConverter());
         options.Converters.Add(new VerificationMethodReferenceConverterFactory());

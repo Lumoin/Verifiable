@@ -42,10 +42,10 @@ namespace Verifiable.Core.Model.Did;
 /// </para>
 /// <list type="bullet">
 /// <item><description>
-/// <see href="https://www.w3.org/TR/did-core/#verification-methods">DID Core §5.2 Verification Methods</see>
+/// <see href="https://www.w3.org/TR/did-1.1/#verification-methods">DID Core 1.1 §5.2 Verification Methods</see>
 /// </description></item>
 /// <item><description>
-/// <see href="https://www.w3.org/TR/did-core/#verification-relationships">DID Core §5.3 Verification Relationships</see>
+/// <see href="https://www.w3.org/TR/did-1.1/#verification-relationships">DID Core 1.1 §5.3 Verification Relationships</see>
 /// </description></item>
 /// <item><description>
 /// <see href="https://www.w3.org/TR/cid-1.0/#referring-to-verification-methods">CID 1.0 §2.2.4 Referring to Verification Methods</see>

@@ -71,6 +71,14 @@ public static class CardVerifiableCertificateChain
             issuer = certificate;
         }
 
+        //A Terminal Authentication chain must present the terminal's own certificate as its last link — that is the
+        //key EXTERNAL AUTHENTICATE proves possession of. A chain that stops at a Document Verifier links validly but
+        //never proves a terminal key, so it is not a complete Terminal Authentication chain.
+        if(issuer.Chat.Role != CertificateRole.Terminal)
+        {
+            return CvcChainVerificationResult.ChainNotTerminatedByTerminal;
+        }
+
         return CvcChainVerificationResult.Valid;
     }
 
@@ -150,12 +158,23 @@ public static class CardVerifiableCertificateChain
 
         VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification);
 
-        return await verify(
-            certificate.ToBeSigned,
-            certificate.Signature.AsReadOnlyMemory(),
-            issuerKey.EllipticCurvePoint!.AsReadOnlyMemory(),
-            null,
-            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await verify(
+                certificate.ToBeSigned,
+                certificate.Signature.AsReadOnlyMemory(),
+                issuerKey.EllipticCurvePoint!.AsReadOnlyMemory(),
+                null,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception exception) when(exception is ArgumentException or FormatException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
+        {
+            //A malformed issuer public key — a point off the curve or one sized for a different curve than its tag
+            //names — makes the registered verification function throw rather than report a failed signature. Chain
+            //verification is fail-closed: an issuer key that cannot verify a signature stops the walk as if the
+            //signature were invalid, never as an uncaught exception out of the chain walk.
+            return false;
+        }
     }
 
 
@@ -174,12 +193,22 @@ public static class CardVerifiableCertificateChain
 
         VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification);
 
-        return await verify(
-            certificate.ToBeSigned,
-            certificate.Signature.AsReadOnlyMemory(),
-            issuerKey.RsaKey!.AsReadOnlyMemory(),
-            null,
-            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await verify(
+                certificate.ToBeSigned,
+                certificate.Signature.AsReadOnlyMemory(),
+                issuerKey.RsaKey!.AsReadOnlyMemory(),
+                null,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception exception) when(exception is ArgumentException or FormatException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
+        {
+            //A malformed issuer public key makes the registered verification function throw rather than report a
+            //failed signature. Chain verification is fail-closed: an unusable issuer key stops the walk as if the
+            //signature were invalid, never as an uncaught exception out of the chain walk.
+            return false;
+        }
     }
 
 
@@ -232,5 +261,8 @@ public enum CvcChainVerificationResult
     InvalidSignature,
 
     /// <summary>An issuer's public key uses a signature scheme chain verification does not support — a retired SHA-1 <c>id-TA-RSA</c> scheme.</summary>
-    UnsupportedIssuerKey
+    UnsupportedIssuerKey,
+
+    /// <summary>Every link verified but the chain does not end in a terminal certificate, so no Terminal-Authentication key was presented.</summary>
+    ChainNotTerminatedByTerminal
 }

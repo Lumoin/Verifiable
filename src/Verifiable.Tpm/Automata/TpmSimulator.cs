@@ -1462,6 +1462,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         byte[] credentialKeyX;
         byte[] blobHmac;
         byte[] encIdentity;
+        try
         {
             var pointReader = new TpmReader(action.Secret.Span);
             ushort xLen = pointReader.ReadUInt16();
@@ -1476,6 +1477,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             ushort hmacLen = blobReader.ReadUInt16();
             blobHmac = blobReader.ReadBytes(hmacLen).ToArray();
             encIdentity = blobReader.ReadBytes(blobReader.Remaining).ToArray();
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+            //credentialBlob and secret are attacker-influenceable wire buffers; a structurally legal but too-small
+            //TPM2B (an under-length ECC point or HMAC) must fail closed as TPM_RC_SIZE rather than throw an
+            //out-of-range exception out of the effect executor, which the PDA runner does not catch (Part 3,
+            //clause 12.5). The reads and the point assembly are the only under-length-sensitive steps here.
+            return new TpmCredentialActivated(TpmRcConstants.TPM_RC_SIZE, null, 0);
         }
 
         using IMemoryOwner<byte> sharedValue = await backend.ComputeSharedSecret(
@@ -3226,6 +3235,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         uint policySession = reader.ReadUInt32();
         uint count = reader.ReadUInt32();
+
+        //TPM2_PolicyOR's pHashList carries at least two and at most eight digests (Part 3, clause 23.6); a count
+        //outside that range is a malformed command, not an assertion the simulator should fold (a trial session
+        //would otherwise silently accept an empty or single-branch list and produce a nonstandard digest).
+        const uint MinPolicyOrBranches = 2;
+        const uint MaxPolicyOrBranches = 8;
+        if(count < MinPolicyOrBranches || count > MaxPolicyOrBranches)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
 
         ImmutableArray<ReadOnlyMemory<byte>>.Builder branches = ImmutableArray.CreateBuilder<ReadOnlyMemory<byte>>();
         for(uint i = 0; i < count; i++)

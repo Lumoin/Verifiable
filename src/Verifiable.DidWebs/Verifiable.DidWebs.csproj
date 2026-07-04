@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Code data types and algorithms for the did:webs DID method</Title>
+    <Description>Includes and implements core data types and algorithms for the KERI-backed did:webs DID method.</Description>
+    <PackageTags>decentralized did:webs KERI</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+    <ProjectReference Include="..\Verifiable.Keri\Verifiable.Keri.csproj" />
+    <ProjectReference Include="..\Verifiable.Cesr\Verifiable.Cesr.csproj" />
+  </ItemGroup>
+
+</Project>

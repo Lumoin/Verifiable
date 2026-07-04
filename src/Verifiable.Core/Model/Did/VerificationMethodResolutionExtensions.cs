@@ -551,7 +551,7 @@ public static class VerificationMethodResolutionExtensions
     /// document's <c>verificationMethod</c> array.
     /// </para>
     /// <para>
-    /// See: <see href="https://www.w3.org/TR/did-core/#verification-relationships"/>.
+    /// See: <see href="https://www.w3.org/TR/did-1.1/#verification-relationships"/>.
     /// </para>
     /// </remarks>
     private static VerificationMethod[] ResolveLocalVerificationMethods<T>(
@@ -593,7 +593,7 @@ public static class VerificationMethodResolutionExtensions
     /// separator (e.g., <c>did:example:123#key-1</c>).
     /// </para>
     /// <para>
-    /// See: <see href="https://www.w3.org/TR/did-core/#did-url-syntax"/>.
+    /// See: <see href="https://www.w3.org/TR/did-1.1/#did-url-syntax"/>.
     /// </para>
     /// </remarks>
     private static VerificationMethod? ResolveLocalVerificationMethodById<T>(
@@ -653,7 +653,7 @@ public static class VerificationMethodResolutionExtensions
     /// <item><description>A reference (DID URL string) to a verification method.</description></item>
     /// </list>
     /// <para>
-    /// See: <see href="https://www.w3.org/TR/did-core/#verification-methods"/>.
+    /// See: <see href="https://www.w3.org/TR/did-1.1/#verification-methods"/>.
     /// </para>
     /// </remarks>
     private static VerificationMethod? ResolveLocalReference(VerificationMethodReference reference, DidDocument document)
@@ -692,7 +692,7 @@ public static class VerificationMethodResolutionExtensions
     /// external document before the verification method can be extracted.
     /// </para>
     /// <para>
-    /// See: <see href="https://www.w3.org/TR/did-core/#verification-relationships"/> and
+    /// See: <see href="https://www.w3.org/TR/did-1.1/#verification-relationships"/> and
     /// <see href="https://w3c-ccg.github.io/did-resolution/#dereferencing"/>.
     /// </para>
     /// </remarks>

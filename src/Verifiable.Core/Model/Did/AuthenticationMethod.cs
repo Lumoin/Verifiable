@@ -45,10 +45,10 @@ namespace Verifiable.Core.Model.Did;
 /// </para>
 /// <list type="bullet">
 /// <item><description>
-/// <see href="https://www.w3.org/TR/did-core/#authentication">DID Core �5.3.1 Authentication</see>
+/// <see href="https://www.w3.org/TR/did-1.1/#authentication">DID Core 1.1 Authentication (verification relationship; defined by reference to CID)</see>
 /// </description></item>
 /// <item><description>
-/// <see href="https://www.w3.org/TR/cid-1.0/#authentication">CID 1.0 �2.3.1 Authentication</see>
+/// <see href="https://www.w3.org/TR/cid-1.0/#authentication">CID 1.0 §2.3.1 Authentication</see>
 /// </description></item>
 /// </list>
 /// </remarks>

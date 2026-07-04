@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Numerics;
 using System.Text;
 using Verifiable.Cryptography.Text;
 
@@ -214,6 +215,41 @@ namespace Verifiable.Cryptography
         public static bool IsRsaModulusMsbBitSet(ReadOnlySpan<byte> rsaModulusBytes)
         {
             return (rsaModulusBytes[0] & 0x80) != 0;
+        }
+
+
+        /// <summary>The smallest RSA modulus bit length a public key is accepted at.</summary>
+        public static int MinimumModulusBitLength => 1024;
+
+
+        /// <summary>
+        /// Validates an RSA public key (modulus <c>n</c>, public exponent <c>e</c>) as safe to verify a signature
+        /// under, so that a degenerate self-declared key cannot make verification meaningless. The public exponent
+        /// must be an odd integer with <c>3 &lt;= e &lt; n</c> — a chip announcing <c>e = 1</c> would make the RSA
+        /// operation the identity map (<c>x^1 mod n == x</c>), so any "signature" is just the attacker-chosen block
+        /// and verification proves no private-key possession; an even <c>e</c> is not a valid RSA exponent. The
+        /// modulus must be odd (a product of odd primes) and at least <see cref="MinimumModulusBitLength"/> bits.
+        /// </summary>
+        /// <param name="modulus">The RSA modulus as unsigned big-endian bytes.</param>
+        /// <param name="publicExponent">The RSA public exponent as unsigned big-endian bytes.</param>
+        /// <param name="minimumModulusBitLength">The minimum accepted modulus bit length; defaults to <see cref="MinimumModulusBitLength"/>.</param>
+        /// <returns><see langword="true"/> when the key is a valid, non-degenerate RSA public key; otherwise <see langword="false"/>.</returns>
+        public static bool IsValidPublicKey(ReadOnlySpan<byte> modulus, ReadOnlySpan<byte> publicExponent, int? minimumModulusBitLength = null)
+        {
+            if(modulus.IsEmpty || publicExponent.IsEmpty)
+            {
+                return false;
+            }
+
+            var n = new BigInteger(modulus, isUnsigned: true, isBigEndian: true);
+            var e = new BigInteger(publicExponent, isUnsigned: true, isBigEndian: true);
+
+            if(e < 3 || e.IsEven || e >= n)
+            {
+                return false;
+            }
+
+            return !n.IsEven && n.GetBitLength() >= (minimumModulusBitLength ?? MinimumModulusBitLength);
         }
     }
 }

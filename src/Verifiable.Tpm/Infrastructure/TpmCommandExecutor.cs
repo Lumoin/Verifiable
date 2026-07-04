@@ -722,6 +722,17 @@ public static class TpmCommandExecutor
             return TpmResult<TpmResponseLayout>.TpmError((TpmRcConstants)responseCode);
         }
 
+        //A truncated or hostile response must not drive an out-of-bounds read: the header, the codec's fixed
+        //output handles, and (for a TPM_ST_SESSIONS response) the 4-byte parameterSize field must all fit within
+        //the already-validated responseSize before anything is read from them (Part 1, §16.10 response framing).
+        bool responseHasSessions = responseTag == (ushort)TpmStConstants.TPM_ST_SESSIONS;
+        long handlesEnd = (long)TpmConstants.HeaderSize + ((long)outHandleCount * sizeof(uint));
+        long minimumSize = responseHasSessions ? handlesEnd + sizeof(uint) : handlesEnd;
+        if(responseSize < minimumSize)
+        {
+            return TpmResult<TpmResponseLayout>.TpmError(TpmRcConstants.TPM_RC_SIZE);
+        }
+
         //Parse output handles.
         int handlesStartOffset = TpmConstants.HeaderSize;
         var reader = new TpmReader(response[handlesStartOffset..]);
@@ -734,7 +745,6 @@ public static class TpmCommandExecutor
 
         //Split parameters and auth.
         int currentOffset = TpmConstants.HeaderSize + (outHandleCount * sizeof(uint));
-        bool responseHasSessions = responseTag == (ushort)TpmStConstants.TPM_ST_SESSIONS;
 
         int parametersStart;
         int parametersLength;
@@ -747,6 +757,15 @@ public static class TpmCommandExecutor
             currentOffset += sizeof(uint);
 
             parametersStart = currentOffset;
+
+            //parameterSize is attacker-influenced wire data: bound it to the bytes actually remaining in the
+            //response so it can neither drive a huge pool rental nor, once cast to int, go negative and throw an
+            //out-of-range exception past the fail-closed TpmResult contract (Part 1, §16.10 parameter/auth split).
+            if(parameterSize > (uint)(responseSize - (uint)parametersStart))
+            {
+                return TpmResult<TpmResponseLayout>.TpmError(TpmRcConstants.TPM_RC_SIZE);
+            }
+
             parametersLength = (int)parameterSize;
 
             authStart = parametersStart + parametersLength;

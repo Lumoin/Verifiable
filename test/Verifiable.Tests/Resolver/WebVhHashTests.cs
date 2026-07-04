@@ -3,11 +3,12 @@ using Verifiable.Core.Did.Methods.WebVh;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.Json;
+using Verifiable.Microsoft;
 
 namespace Verifiable.Tests.Resolver;
 
 /// <summary>
-/// Tests for <see cref="WebVhHash.ComputeBase58"/> — the did:webvh <c>base58btc(multihash(input, SHA-256))</c>
+/// Tests for <see cref="WebVhHash.ComputeBase58Async"/> — the did:webvh <c>base58btc(multihash(input, SHA-256))</c>
 /// primitive that underpins the SCID, the entryHash and the pre-rotation key hashes. Anchored on the
 /// entryHash worked example in the did:webvh specification (Entry Hash Generation section).
 /// </summary>
@@ -26,11 +27,11 @@ internal sealed class WebVhHashTests
 
     /// <summary>The specification's entryHash example reproduces exactly: base58btc(multihash(JCS(entry), SHA-256)).</summary>
     [TestMethod]
-    public void ComputesSpecificationEntryHashVector()
+    public async Task ComputesSpecificationEntryHashVector()
     {
         EncodeDelegate base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
 
-        string hash = WebVhHash.ComputeBase58(Jcs.CanonicalizeToUtf8Bytes(PreliminaryLogEntry), SHA256.HashData, base58Encoder);
+        string hash = await WebVhHash.ComputeBase58Async(Jcs.CanonicalizeToUtf8Bytes(PreliminaryLogEntry), MicrosoftEntropyFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.AreEqual(ExpectedEntryHash, hash);
     }
@@ -38,11 +39,11 @@ internal sealed class WebVhHashTests
 
     /// <summary>A SHA-256 multihash always renders to a base58btc string of the canonical Qm... shape.</summary>
     [TestMethod]
-    public void ProducesCanonicalSha256MultihashShape()
+    public async Task ProducesCanonicalSha256MultihashShape()
     {
         EncodeDelegate base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
 
-        string hash = WebVhHash.ComputeBase58("did:webvh test input"u8, SHA256.HashData, base58Encoder);
+        string hash = await WebVhHash.ComputeBase58Async("did:webvh test input"u8.ToArray(), MicrosoftEntropyFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.StartsWith("Qm", hash, "A base58btc SHA-256 multihash begins with the 0x12 0x20 prefix, which encodes to 'Qm'.");
         Assert.AreEqual(46, hash.Length, "A base58btc-encoded 34-byte SHA-256 multihash is 46 characters.");
@@ -51,12 +52,12 @@ internal sealed class WebVhHashTests
 
     /// <summary>The hash is a deterministic function of its input.</summary>
     [TestMethod]
-    public void IsDeterministic()
+    public async Task IsDeterministic()
     {
         EncodeDelegate base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
 
-        string first = WebVhHash.ComputeBase58("same input"u8, SHA256.HashData, base58Encoder);
-        string second = WebVhHash.ComputeBase58("same input"u8, SHA256.HashData, base58Encoder);
+        string first = await WebVhHash.ComputeBase58Async("same input"u8.ToArray(), MicrosoftEntropyFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
+        string second = await WebVhHash.ComputeBase58Async("same input"u8.ToArray(), MicrosoftEntropyFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.AreEqual(first, second);
     }
