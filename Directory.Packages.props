@@ -48,7 +48,7 @@
   -->
   <ItemGroup Label="Test">
     <PackageVersion Include="CsCheck" Version="4.7.0" />
-    <PackageVersion Include="MessagePack" Version="3.1.4" />
+    <PackageVersion Include="MessagePack" Version="3.1.7" />
     <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
     <PackageVersion Include="System.Reactive" Version="6.1.0" />
     <PackageVersion Include="Microsoft.Reactive.Testing" Version="6.1.0" />
