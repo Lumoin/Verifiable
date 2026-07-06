@@ -43,7 +43,8 @@ internal sealed class TpmtPublicEccKeyTests
             attributes,
             TpmEccCurveConstants.TPM_ECC_NIST_P256,
             TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256),
-            TpmsEccPoint.Create(x, y, BaseMemoryPool.Shared));
+            TpmsEccPoint.Create(x, y, BaseMemoryPool.Shared),
+            BaseMemoryPool.Shared);
 
         int size = publicArea.GetSerializedSize();
         using IMemoryOwner<byte> buffer = BaseMemoryPool.Shared.Rent(size);

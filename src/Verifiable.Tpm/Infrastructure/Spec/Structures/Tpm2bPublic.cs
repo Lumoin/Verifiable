@@ -171,15 +171,19 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// <param name="curve">ECC curve.</param>
     /// <param name="scheme">Signing scheme.</param>
     /// <param name="unique">The generated public point; ownership transfers to the returned buffer.</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest (used only when one is supplied).</param>
+    /// <param name="authPolicy">The authorization policy digest to re-emit into the exported public area, or empty (default) for none.</param>
     /// <returns>The sized public buffer.</returns>
     public static Tpm2bPublic CreateEccSigningKey(
         TpmAlgIdConstants nameAlg,
         TpmaObject objectAttributes,
         TpmEccCurveConstants curve,
         TpmtEccScheme scheme,
-        TpmsEccPoint unique)
+        TpmsEccPoint unique,
+        MemoryPool<byte> pool,
+        ReadOnlySpan<byte> authPolicy = default)
     {
-        return FromTemplate(TpmtPublic.CreateEccSigningKey(nameAlg, objectAttributes, curve, scheme, unique));
+        return FromTemplate(TpmtPublic.CreateEccSigningKey(nameAlg, objectAttributes, curve, scheme, unique, pool, authPolicy));
     }
 
     /// <summary>
@@ -209,7 +213,8 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// <param name="keyBits">Key size in bits.</param>
     /// <param name="scheme">Signing scheme.</param>
     /// <param name="modulus">The generated public modulus (big-endian); copied into pooled storage the returned buffer owns.</param>
-    /// <param name="pool">The memory pool for the modulus storage.</param>
+    /// <param name="pool">The memory pool for the modulus storage and the authPolicy digest.</param>
+    /// <param name="authPolicy">The authorization policy digest to re-emit into the exported public area, or empty (default) for none.</param>
     /// <returns>The sized public buffer.</returns>
     public static Tpm2bPublic CreateRsaSigningKey(
         TpmAlgIdConstants nameAlg,
@@ -217,9 +222,10 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
         ushort keyBits,
         TpmtRsaScheme scheme,
         ReadOnlySpan<byte> modulus,
-        MemoryPool<byte> pool)
+        MemoryPool<byte> pool,
+        ReadOnlySpan<byte> authPolicy = default)
     {
-        return FromTemplate(TpmtPublic.CreateRsaSigningKey(nameAlg, objectAttributes, keyBits, scheme, modulus, pool));
+        return FromTemplate(TpmtPublic.CreateRsaSigningKey(nameAlg, objectAttributes, keyBits, scheme, modulus, pool, authPolicy));
     }
 
 
@@ -253,6 +259,24 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     }
 
     /// <summary>
+    /// Creates a sized public buffer template for the standard ECC NIST P-256 endorsement key (TCG EK Credential
+    /// Profile, Annex B.3.4, Template L-2).
+    /// </summary>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="curve">The ECC curve (<see cref="TpmEccCurveConstants.TPM_ECC_NIST_P256"/> for Template L-2).</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest and the all-zero unique point.</param>
+    /// <param name="authPolicy">The 32-octet "PolicyA" digest (SHA-256 nameAlg).</param>
+    /// <returns>The sized public buffer.</returns>
+    public static Tpm2bPublic CreateEccEndorsementKeyTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmEccCurveConstants curve,
+        MemoryPool<byte> pool,
+        ReadOnlySpan<byte> authPolicy)
+    {
+        return FromTemplate(TpmtPublic.CreateEccEndorsementKeyTemplate(nameAlg, curve, pool, authPolicy));
+    }
+
+    /// <summary>
     /// Creates a TPM2B_PUBLIC for a generated ECC restricted storage key, carrying the key's actual public point
     /// (the <c>outPublic</c> form), as opposed to the empty-unique template <see cref="CreateEccStorageParentTemplate"/>.
     /// </summary>
@@ -260,14 +284,21 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// <param name="objectAttributes">The object attributes (a storage parent: RESTRICTED + DECRYPT).</param>
     /// <param name="curve">The ECC curve.</param>
     /// <param name="unique">The generated public point; ownership transfers to the returned buffer.</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest (used only when one is supplied).</param>
+    /// <param name="authPolicy">
+    /// The authorization policy digest to re-emit into the exported public area (for example a standard
+    /// endorsement key's "PolicyA"), or empty (default) for none.
+    /// </param>
     /// <returns>The sized public buffer.</returns>
     public static Tpm2bPublic CreateEccStorageParent(
         TpmAlgIdConstants nameAlg,
         TpmaObject objectAttributes,
         TpmEccCurveConstants curve,
-        TpmsEccPoint unique)
+        TpmsEccPoint unique,
+        MemoryPool<byte> pool,
+        ReadOnlySpan<byte> authPolicy = default)
     {
-        return FromTemplate(TpmtPublic.CreateEccStorageParent(nameAlg, objectAttributes, curve, unique));
+        return FromTemplate(TpmtPublic.CreateEccStorageParent(nameAlg, objectAttributes, curve, unique, pool, authPolicy));
     }
 
     /// <summary>

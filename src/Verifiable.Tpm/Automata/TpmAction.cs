@@ -52,13 +52,15 @@ public sealed record TpmRngAction(int ByteCount): TpmAction;
 /// <param name="Attributes">The object attributes to carry in the exported public area.</param>
 /// <param name="Curve">The ECC curve to generate the key on.</param>
 /// <param name="SchemeHashAlg">The ECDSA signing scheme's hash algorithm.</param>
+/// <param name="AuthPolicy">The authorization policy digest to re-emit into the exported public area (empty for an authValue-only key).</param>
 public sealed record TpmCreateEccKeyAction(
     uint Handle,
     uint Hierarchy,
     TpmAlgIdConstants NameAlg,
     TpmaObject Attributes,
     TpmEccCurveConstants Curve,
-    TpmAlgIdConstants SchemeHashAlg): TpmAction;
+    TpmAlgIdConstants SchemeHashAlg,
+    ReadOnlyMemory<byte> AuthPolicy): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must generate an RSA signing key before the next transition — the RSA
@@ -73,13 +75,15 @@ public sealed record TpmCreateEccKeyAction(
 /// <param name="Attributes">The object attributes to carry in the exported public area.</param>
 /// <param name="KeyBits">The RSA modulus size in bits to generate.</param>
 /// <param name="Scheme">The RSA signing scheme carried in the template (echoed into the exported public area).</param>
+/// <param name="AuthPolicy">The authorization policy digest to re-emit into the exported public area (empty for an authValue-only key).</param>
 public sealed record TpmCreateRsaKeyAction(
     uint Handle,
     uint Hierarchy,
     TpmAlgIdConstants NameAlg,
     TpmaObject Attributes,
     ushort KeyBits,
-    TpmtRsaScheme Scheme): TpmAction;
+    TpmtRsaScheme Scheme,
+    ReadOnlyMemory<byte> AuthPolicy): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must sign a digest with a retained key before the next transition. Emitted
@@ -126,13 +130,18 @@ public sealed record TpmRsaSignAction(
 /// <param name="Attributes">The storage object attributes to record on the parent (<c>RESTRICTED</c> and <c>DECRYPT</c>).</param>
 /// <param name="Curve">The ECC curve the storage template names.</param>
 /// <param name="NoDa">Whether the template set <c>TPMA_OBJECT.noDA</c>, so the exported public area reproduces the caller's template.</param>
+/// <param name="AuthPolicy">
+/// The authorization policy digest to re-emit into the exported public area (empty for the generic storage
+/// parent; a standard endorsement key's "PolicyA" otherwise).
+/// </param>
 public sealed record TpmCreateStorageParentAction(
     uint Handle,
     uint Hierarchy,
     TpmAlgIdConstants NameAlg,
     TpmaObject Attributes,
     TpmEccCurveConstants Curve,
-    bool NoDa): TpmAction;
+    bool NoDa,
+    ReadOnlyMemory<byte> AuthPolicy): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must seal caller-supplied data into a KEYEDHASH object before the next transition.

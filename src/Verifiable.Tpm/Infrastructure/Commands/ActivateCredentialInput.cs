@@ -29,7 +29,10 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// <para>
 /// Both handles require authorization, so the executor is given two authorization sessions in handle order: the
-/// activate object's first, the key key's second.
+/// activate object's first, the key's second. The activate object's session is password-only in this slice (ADMIN
+/// role); the key's session may be a password session or, for a key whose <c>userWithAuth</c> attribute is CLEAR
+/// (for example a standard endorsement key), a policy session satisfying the key's authPolicy (TPM 2.0 Part 3,
+/// Section 5.6).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]

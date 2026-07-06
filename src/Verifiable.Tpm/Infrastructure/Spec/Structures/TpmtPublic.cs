@@ -185,15 +185,20 @@ public sealed class TpmtPublic: IDisposable
     /// <param name="curve">ECC curve.</param>
     /// <param name="scheme">Signing scheme.</param>
     /// <param name="unique">The generated public point; ownership transfers to the returned public area.</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest (used only when one is supplied).</param>
+    /// <param name="authPolicy">The authorization policy digest to re-emit into the exported public area, or empty (default) for none.</param>
     /// <returns>The public area.</returns>
     public static TpmtPublic CreateEccSigningKey(
         TpmAlgIdConstants nameAlg,
         TpmaObject objectAttributes,
         TpmEccCurveConstants curve,
         TpmtEccScheme scheme,
-        TpmsEccPoint unique)
+        TpmsEccPoint unique,
+        MemoryPool<byte> pool,
+        ReadOnlySpan<byte> authPolicy = default)
     {
         ArgumentNullException.ThrowIfNull(unique);
+        ArgumentNullException.ThrowIfNull(pool);
 
         TpmuPublicParms parameters = TpmuPublicParms.Ecc(TpmsEccParms.ForSigning(curve, scheme));
 
@@ -201,7 +206,7 @@ public sealed class TpmtPublic: IDisposable
             TpmAlgIdConstants.TPM_ALG_ECC,
             nameAlg,
             objectAttributes,
-            Tpm2bDigest.Empty,
+            Tpm2bDigest.Create(authPolicy, pool),
             parameters,
             TpmuPublicId.FromEccPoint(unique));
     }
@@ -242,7 +247,8 @@ public sealed class TpmtPublic: IDisposable
     /// <param name="keyBits">Key size in bits.</param>
     /// <param name="scheme">Signing scheme.</param>
     /// <param name="modulus">The generated public modulus (big-endian); copied into pooled storage the returned area owns.</param>
-    /// <param name="pool">The memory pool for the modulus storage.</param>
+    /// <param name="pool">The memory pool for the modulus storage and the authPolicy digest.</param>
+    /// <param name="authPolicy">The authorization policy digest to re-emit into the exported public area, or empty (default) for none.</param>
     /// <returns>The public area.</returns>
     public static TpmtPublic CreateRsaSigningKey(
         TpmAlgIdConstants nameAlg,
@@ -250,7 +256,8 @@ public sealed class TpmtPublic: IDisposable
         ushort keyBits,
         TpmtRsaScheme scheme,
         ReadOnlySpan<byte> modulus,
-        MemoryPool<byte> pool)
+        MemoryPool<byte> pool,
+        ReadOnlySpan<byte> authPolicy = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -260,7 +267,7 @@ public sealed class TpmtPublic: IDisposable
             TpmAlgIdConstants.TPM_ALG_RSA,
             nameAlg,
             objectAttributes,
-            Tpm2bDigest.Empty,
+            Tpm2bDigest.Create(authPolicy, pool),
             parameters,
             TpmuPublicId.FromRsaModulus(modulus, pool));
     }
@@ -366,14 +373,22 @@ public sealed class TpmtPublic: IDisposable
     /// <param name="objectAttributes">The object attributes (a storage parent: RESTRICTED + DECRYPT).</param>
     /// <param name="curve">The ECC curve.</param>
     /// <param name="unique">The generated public point; ownership transfers to the returned public area.</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest (used only when one is supplied).</param>
+    /// <param name="authPolicy">
+    /// The authorization policy digest to re-emit into the exported public area (for example a standard
+    /// endorsement key's "PolicyA", <see cref="CreateEccEndorsementKeyTemplate"/>), or empty (default) for none.
+    /// </param>
     /// <returns>The public area.</returns>
     public static TpmtPublic CreateEccStorageParent(
         TpmAlgIdConstants nameAlg,
         TpmaObject objectAttributes,
         TpmEccCurveConstants curve,
-        TpmsEccPoint unique)
+        TpmsEccPoint unique,
+        MemoryPool<byte> pool,
+        ReadOnlySpan<byte> authPolicy = default)
     {
         ArgumentNullException.ThrowIfNull(unique);
+        ArgumentNullException.ThrowIfNull(pool);
 
         TpmuPublicParms parameters = TpmuPublicParms.Ecc(
             TpmsEccParms.ForStorage(curve, TpmtSymDefObject.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB)));
@@ -382,9 +397,79 @@ public sealed class TpmtPublic: IDisposable
             TpmAlgIdConstants.TPM_ALG_ECC,
             nameAlg,
             objectAttributes,
-            Tpm2bDigest.Empty,
+            Tpm2bDigest.Create(authPolicy, pool),
             parameters,
             TpmuPublicId.FromEccPoint(unique));
+    }
+
+    /// <summary>
+    /// Creates a public area template for the standard ECC NIST P-256 endorsement key (TCG EK Credential Profile,
+    /// Annex B.3.4, Template L-2): a restricted storage key whose USER-role authorization is gated on a policy
+    /// session over the Endorsement Hierarchy's authorization ("PolicyA") rather than on the object's own authValue.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The attributes are <see cref="TpmaObject.FIXED_TPM"/> | <see cref="TpmaObject.FIXED_PARENT"/> |
+    /// <see cref="TpmaObject.SENSITIVE_DATA_ORIGIN"/> | <see cref="TpmaObject.ADMIN_WITH_POLICY"/> |
+    /// <see cref="TpmaObject.RESTRICTED"/> | <see cref="TpmaObject.DECRYPT"/>. <see cref="TpmaObject.USER_WITH_AUTH"/>
+    /// is deliberately CLEAR — USER-role actions on the key (for example <c>TPM2_ActivateCredential()</c>'s
+    /// <c>keyHandle</c>) require a policy session satisfying <paramref name="authPolicy"/> — and
+    /// <see cref="TpmaObject.NO_DA"/> is deliberately CLEAR: TCG EK Credential Profile, Annex B.3.1 states the EK
+    /// stays dictionary-attack protected because it is privacy sensitive.
+    /// </para>
+    /// <para>
+    /// The symmetric definition is AES-128-CFB with a NULL scheme, the same combination
+    /// <see cref="CreateEccStorageParentTemplate"/> uses (TCG EK Credential Profile, Annex B.3.4, Table 3).
+    /// </para>
+    /// <para>
+    /// <paramref name="authPolicy"/> is the caller-computed "PolicyA" digest (TCG EK Credential Profile, Annex
+    /// B.6.2: <c>H(H(0{32} ‖ TPM_CC_PolicySecret ‖ TPM_RH_ENDORSEMENT))</c>, reproduced by
+    /// <see cref="Verifiable.Tpm.Infrastructure.TpmPolicyDigest.ExtendForSecret"/>), copied into pooled storage the
+    /// returned area owns and disposes — the same authPolicy-storage shape <see cref="CreateSealedDataTemplate"/> uses.
+    /// </para>
+    /// <para>
+    /// <c>unique</c> is a <b>present</b>, all-zero 32+32-octet ECC point rather than the zero-length template shape
+    /// <see cref="TpmuPublicId.EmptyEcc"/> produces: TCG EK Credential Profile, Annex B.3.1 requires "the buffer
+    /// reserved for the public key of the EK is set to all zeros", so the template's serialized size already
+    /// matches the size the generated key's public area will carry.
+    /// </para>
+    /// </remarks>
+    /// <param name="nameAlg">Hash algorithm for Name computation.</param>
+    /// <param name="curve">The ECC curve (<see cref="TpmEccCurveConstants.TPM_ECC_NIST_P256"/> for Template L-2).</param>
+    /// <param name="pool">The memory pool backing the authPolicy digest and the all-zero unique point.</param>
+    /// <param name="authPolicy">The 32-octet "PolicyA" digest (SHA-256 nameAlg).</param>
+    /// <returns>The public area template.</returns>
+    public static TpmtPublic CreateEccEndorsementKeyTemplate(
+        TpmAlgIdConstants nameAlg,
+        TpmEccCurveConstants curve,
+        MemoryPool<byte> pool,
+        ReadOnlySpan<byte> authPolicy)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        TpmaObject objectAttributes =
+            TpmaObject.FIXED_TPM |
+            TpmaObject.FIXED_PARENT |
+            TpmaObject.SENSITIVE_DATA_ORIGIN |
+            TpmaObject.ADMIN_WITH_POLICY |
+            TpmaObject.RESTRICTED |
+            TpmaObject.DECRYPT;
+
+        TpmuPublicParms parameters = TpmuPublicParms.Ecc(
+            TpmsEccParms.ForStorage(curve, TpmtSymDefObject.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB)));
+
+        //TCG EK Credential Profile, Annex B.3.1: the public-key buffer is present and all zero, not the
+        //zero-length TpmuPublicId.EmptyEcc() shape a caller-supplied signing/storage template ordinarily uses.
+        Span<byte> zeroCoordinate = stackalloc byte[32];
+        TpmuPublicId unique = TpmuPublicId.FromEccPoint(TpmsEccPoint.Create(zeroCoordinate, zeroCoordinate, pool));
+
+        return new TpmtPublic(
+            TpmAlgIdConstants.TPM_ALG_ECC,
+            nameAlg,
+            objectAttributes,
+            Tpm2bDigest.Create(authPolicy, pool),
+            parameters,
+            unique);
     }
 
     /// <summary>

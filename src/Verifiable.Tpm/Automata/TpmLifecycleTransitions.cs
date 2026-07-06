@@ -147,6 +147,7 @@ public static class TpmLifecycleTransitions
             TpmPolicyNvRequested policyNv => OnPolicyNv(state, policyNv),
             TpmMakeCredentialRequested makeCredential => OnMakeCredential(state, makeCredential),
             TpmActivateCredentialRequested activateCredential => OnActivateCredential(state, activateCredential),
+            TpmActivateCredentialOverSessionRequested activateCredentialOverSession => OnActivateCredentialOverSession(state, activateCredentialOverSession),
             TpmFlushContextRequested flushContext => OnFlushContext(state, flushContext),
             _ => throw new System.InvalidOperationException($"Command input '{input.GetType().Name}' passed precondition gating but has no dispatch handler.")
         };
@@ -586,7 +587,7 @@ public static class TpmLifecycleTransitions
             state with
             {
                 NextObjectHandle = state.NextObjectHandle + 1,
-                NextAction = new TpmCreateEccKeyAction(handle, request.Hierarchy, request.NameAlg, request.Attributes, request.Curve, request.SchemeHashAlg),
+                NextAction = new TpmCreateEccKeyAction(handle, request.Hierarchy, request.NameAlg, request.Attributes, request.Curve, request.SchemeHashAlg, request.AuthPolicy),
                 ResponseIntent = null
             },
             "CreatePrimary:Requested");
@@ -608,7 +609,7 @@ public static class TpmLifecycleTransitions
             state with
             {
                 NextObjectHandle = state.NextObjectHandle + 1,
-                NextAction = new TpmCreateRsaKeyAction(handle, request.Hierarchy, request.NameAlg, request.Attributes, request.KeyBits, request.Scheme),
+                NextAction = new TpmCreateRsaKeyAction(handle, request.Hierarchy, request.NameAlg, request.Attributes, request.KeyBits, request.Scheme, request.AuthPolicy),
                 ResponseIntent = null
             },
             "CreatePrimary:Requested");
@@ -677,7 +678,7 @@ public static class TpmLifecycleTransitions
             state with
             {
                 NextObjectHandle = state.NextObjectHandle + 1,
-                NextAction = new TpmCreateStorageParentAction(handle, request.Hierarchy, request.NameAlg, request.Attributes, request.Curve, request.NoDa),
+                NextAction = new TpmCreateStorageParentAction(handle, request.Hierarchy, request.NameAlg, request.Attributes, request.Curve, request.NoDa, request.AuthPolicy),
                 ResponseIntent = null
             },
             "CreatePrimary:Requested");
@@ -1019,26 +1020,28 @@ public static class TpmLifecycleTransitions
     //TPM2_ActivateCredential() recovers a wrapped credential, proving the activate object (the attestation key) and
     //the credential key (the endorsement key) co-reside in one TPM (Part 3, clause 12.5). Both handles must resolve
     //to loaded objects (a missing one is TPM_RC_HANDLE); the credential key must be a restricted-decrypt ECC key
-    //carrying both its private scalar and its exported point (else TPM_RC_TYPE). The seed recovery and integrity
+    //carrying both its private scalar and its exported point (else TPM_RC_TYPE) — TryResolveActivateCredentialObjects
+    //shares this plus the ADMIN-role fail-closed check with OnActivateCredentialOverSession. The USER-role gate here
+    //is form-specific: a password session on @keyHandle authorizes USER role only when the key's userWithAuth
+    //attribute is SET (Part 3, clause 5.6); a standard endorsement key clears it, so a password session there is
+    //TPM_RC_POLICY_FAIL and must instead go through OnActivateCredentialOverSession. The seed recovery and integrity
     //check need the ECC backend and the digest/HMAC seams, so the transition folds the activate object's Name and
     //the credential key's scalar/point/curve into a TpmActivateCredentialAction and leaves no response yet;
-    //OnCredentialActivated frames the recovered secret or the integrity-failure rejection. The two handles are
-    //password-authorized (empty auth), so the supplied authorization values are consumed but not retained.
+    //OnCredentialActivated frames the recovered secret or the integrity-failure rejection. The two handles' supplied
+    //authorization values are consumed but not retained (the objects this slice authorizes by password carry empty auth).
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnActivateCredential(TpmSimulatorState state, TpmActivateCredentialRequested request)
     {
-        if(!state.TransientObjects.TryGetValue(request.ActivateHandle, out TransientKeyState? activateObject))
+        if(!TryResolveActivateCredentialObjects(state, request.ActivateHandle, request.KeyHandle, out TransientKeyState? activateObject, out TransientKeyState? key, out TpmRcConstants rejectionCode))
         {
-            return Reject(state, TpmCcConstants.TPM_CC_ActivateCredential, TpmRcConstants.TPM_RC_HANDLE);
+            return Reject(state, TpmCcConstants.TPM_CC_ActivateCredential, rejectionCode);
         }
 
-        if(!state.TransientObjects.TryGetValue(request.KeyHandle, out TransientKeyState? key))
+        //USER role gate (Part 3, clause 5.6, item 1): "If the entity being authorized is an object and its
+        //userWithAuth attribute is CLEAR, then the associated authorization session is a policy session
+        //(TPM_RC_POLICY_FAIL)." Objects with userWithAuth SET keep today's behavior.
+        if((key.Attributes & TpmaObject.USER_WITH_AUTH) == 0)
         {
-            return Reject(state, TpmCcConstants.TPM_CC_ActivateCredential, TpmRcConstants.TPM_RC_HANDLE);
-        }
-
-        if(key.KeyType != TpmAlgIdConstants.TPM_ALG_ECC || !IsStorageParent(key.Attributes) || key.PublicPoint.IsEmpty || key.PrivateKey.IsEmpty)
-        {
-            return Reject(state, TpmCcConstants.TPM_CC_ActivateCredential, TpmRcConstants.TPM_RC_TYPE);
+            return Reject(state, TpmCcConstants.TPM_CC_ActivateCredential, TpmRcConstants.TPM_RC_POLICY_FAIL);
         }
 
         return Transition(
@@ -1049,6 +1052,102 @@ public static class TpmLifecycleTransitions
                 ResponseIntent = null
             },
             "ActivateCredential:Requested");
+    }
+
+    //TPM2_ActivateCredential() whose @keyHandle session is a policy session (TpmActivateCredentialOverSessionRequested)
+    //— the form a standard endorsement key (userWithAuth CLEAR, authPolicy = "PolicyA") requires. Shares handle
+    //resolution, the ADMIN-role fail-closed check, and the key type/shape check with OnActivateCredential via
+    //TryResolveActivateCredentialObjects; only the USER-role gate differs (a policy-digest comparison here instead
+    //of an attribute check). Mirrors OnUnsealOverSessions's policy gate (Part 3, clause 5.6, item 4; Part 1, clause
+    //19.7): the policy session must resolve (else TPM_RC_HANDLE), must not be a trial session (Part 1, clause 19.3:
+    //a trial session authorizes nothing), and its accumulated policyDigest must reproduce the key's authPolicy when
+    //one is set.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnActivateCredentialOverSession(TpmSimulatorState state, TpmActivateCredentialOverSessionRequested request)
+    {
+        if(!TryResolveActivateCredentialObjects(state, request.ActivateHandle, request.KeyHandle, out TransientKeyState? activateObject, out TransientKeyState? key, out TpmRcConstants rejectionCode))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_ActivateCredential, rejectionCode);
+        }
+
+        if(!state.PolicySessions.TryGetValue(request.KeyPolicySession, out PolicySessionState? policySession))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_ActivateCredential, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        if(policySession.IsTrial)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_ActivateCredential, TpmRcConstants.TPM_RC_POLICY_FAIL);
+        }
+
+        //Policy gate: a satisfying policy session authorizes USER role regardless of userWithAuth (Part 1, clause
+        //19.2: "A policy session that satisfies the authPolicy of the entity may be used regardless of the setting
+        //of userWithAuth."). An empty authPolicy leaves the key outside the policy path entirely, mirroring
+        //OnUnsealOverSessions's identical opt-in guard.
+        if(!key.AuthPolicy.IsEmpty
+            && !key.AuthPolicy.Span.SequenceEqual(policySession.PolicyDigest.Span))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_ActivateCredential, TpmRcConstants.TPM_RC_POLICY_FAIL);
+        }
+
+        //The effect and response need ZERO changes from the password form: TpmActivateCredentialResponse is already
+        //framed TPM_ST_NO_SESSIONS, and the executor accepts a no-sessions response regardless of how many sessions
+        //authorized the request (the same simplification OnUnsealOverSessions's no-encrypt-session branch relies on).
+        return Transition(
+            state with
+            {
+                NextAction = new TpmActivateCredentialAction(
+                    request.CredentialBlob, request.Secret, activateObject.Name, key.PrivateKey, key.PublicPoint, key.Curve, TpmAlgIdConstants.TPM_ALG_SHA256),
+                ResponseIntent = null
+            },
+            "ActivateCredentialOverSession:Requested");
+    }
+
+    //Shared by OnActivateCredential and OnActivateCredentialOverSession: resolves both handles (TPM_RC_HANDLE if
+    //either is unloaded), fails closed on an ADMIN-role policy requirement this slice does not model on
+    //@activateHandle (Part 3, clause 5.6, item 1: adminWithPolicy SET requires a policy session there — no template
+    //this simulator builds sets the bit today, so this is pure fail-closed guarding for when one does), and checks
+    //the credential key's type/shape (Part 1, clause 24: a restricted-decrypt ECC key carrying both its private
+    //scalar and its exported point).
+    private static bool TryResolveActivateCredentialObjects(
+        TpmSimulatorState state,
+        uint activateHandle,
+        uint keyHandle,
+        [NotNullWhen(true)] out TransientKeyState? activateObject,
+        [NotNullWhen(true)] out TransientKeyState? key,
+        out TpmRcConstants rejectionCode)
+    {
+        key = null;
+        rejectionCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(!state.TransientObjects.TryGetValue(activateHandle, out activateObject))
+        {
+            rejectionCode = TpmRcConstants.TPM_RC_HANDLE;
+
+            return false;
+        }
+
+        if(!state.TransientObjects.TryGetValue(keyHandle, out key))
+        {
+            rejectionCode = TpmRcConstants.TPM_RC_HANDLE;
+
+            return false;
+        }
+
+        if((activateObject.Attributes & TpmaObject.ADMIN_WITH_POLICY) != 0)
+        {
+            rejectionCode = TpmRcConstants.TPM_RC_AUTH_TYPE;
+
+            return false;
+        }
+
+        if(key.KeyType != TpmAlgIdConstants.TPM_ALG_ECC || !IsStorageParent(key.Attributes) || key.PublicPoint.IsEmpty || key.PrivateKey.IsEmpty)
+        {
+            rejectionCode = TpmRcConstants.TPM_RC_TYPE;
+
+            return false;
+        }
+
+        return true;
     }
 
     //Frames the TPM2_ActivateCredential() response the effect produced: the recovered secret on success, or the
@@ -1733,6 +1832,7 @@ public static class TpmLifecycleTransitions
             TpmPolicyNvRequested => TpmCcConstants.TPM_CC_PolicyNV,
             TpmMakeCredentialRequested => TpmCcConstants.TPM_CC_MakeCredential,
             TpmActivateCredentialRequested => TpmCcConstants.TPM_CC_ActivateCredential,
+            TpmActivateCredentialOverSessionRequested => TpmCcConstants.TPM_CC_ActivateCredential,
             TpmFlushContextRequested => TpmCcConstants.TPM_CC_FlushContext,
             TpmUnsupportedCommandReceived unsupported => unsupported.CommandCode,
             _ => throw new System.InvalidOperationException($"Input '{input.GetType().Name}' is not a command and must not reach command dispatch.")

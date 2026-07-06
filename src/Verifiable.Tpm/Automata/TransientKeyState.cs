@@ -50,6 +50,12 @@ namespace Verifiable.Tpm.Automata;
 /// exchange of <c>TPM2_MakeCredential</c> / <c>TPM2_ActivateCredential</c> (Part 1, clause 24; Part 3, clauses 12.6
 /// and 12.5) — can use it without reconstructing it from the private scalar.
 /// </param>
+/// <param name="AuthPolicy">
+/// The authorization policy digest carried in the object's public area (TPM 2.0 Library Part 1, clause 19.7),
+/// empty when the object is authorized by its authValue alone. Durable model state like <see cref="PrivateKey"/>
+/// and <see cref="Name"/>, retained so a USER-role use of the object (for example
+/// <c>TPM2_ActivateCredential()</c>'s <c>keyHandle</c>) can be gated on a policy session reproducing it.
+/// </param>
 public sealed record TransientKeyState(
     uint Handle,
     uint Hierarchy,
@@ -58,4 +64,5 @@ public sealed record TransientKeyState(
     ReadOnlyMemory<byte> PrivateKey,
     ReadOnlyMemory<byte> Name,
     TpmaObject Attributes,
-    ReadOnlyMemory<byte> PublicPoint);
+    ReadOnlyMemory<byte> PublicPoint,
+    ReadOnlyMemory<byte> AuthPolicy);

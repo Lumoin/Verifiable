@@ -174,12 +174,14 @@ public sealed record TpmRandomGenerated(IMemoryOwner<byte> Bytes, int Length): T
 /// <param name="Attributes">The object attributes (<c>TPMA_OBJECT</c>) the template requests, echoed into the exported public area.</param>
 /// <param name="Curve">The ECC curve the key is generated on.</param>
 /// <param name="SchemeHashAlg">The ECDSA signing scheme's hash algorithm.</param>
+/// <param name="AuthPolicy">The authorization policy digest carried in the template (empty when the key is authorized by its authValue alone), re-emitted into the exported public area.</param>
 public sealed record TpmCreatePrimaryRequested(
     uint Hierarchy,
     TpmAlgIdConstants NameAlg,
     TpmaObject Attributes,
     TpmEccCurveConstants Curve,
-    TpmAlgIdConstants SchemeHashAlg): TpmSimulatorInput;
+    TpmAlgIdConstants SchemeHashAlg,
+    ReadOnlyMemory<byte> AuthPolicy): TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_CreatePrimary()</c> command for an RSA signing key (TPM 2.0 Library Part 3, clause 24.1) — the
@@ -191,12 +193,14 @@ public sealed record TpmCreatePrimaryRequested(
 /// <param name="Attributes">The object attributes (<c>TPMA_OBJECT</c>) the template requests, echoed into the exported public area.</param>
 /// <param name="KeyBits">The RSA modulus size in bits the template requests.</param>
 /// <param name="Scheme">The RSA signing scheme carried in the template.</param>
+/// <param name="AuthPolicy">The authorization policy digest carried in the template (empty when the key is authorized by its authValue alone), re-emitted into the exported public area.</param>
 public sealed record TpmCreateRsaPrimaryRequested(
     uint Hierarchy,
     TpmAlgIdConstants NameAlg,
     TpmaObject Attributes,
     ushort KeyBits,
-    TpmtRsaScheme Scheme): TpmSimulatorInput;
+    TpmtRsaScheme Scheme,
+    ReadOnlyMemory<byte> AuthPolicy): TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_Sign()</c> command (TPM 2.0 Library Part 3, clause 20.2) over an externally-computed digest
@@ -264,12 +268,18 @@ public sealed record TpmMessageSigned(Signature Signature, TpmAlgIdConstants Sig
 /// <param name="Attributes">The object attributes (<c>TPMA_OBJECT</c>) the template requests, including <c>RESTRICTED</c> and <c>DECRYPT</c> (a storage key).</param>
 /// <param name="Curve">The ECC curve the storage template names.</param>
 /// <param name="NoDa">Whether the template sets <c>TPMA_OBJECT.noDA</c>, re-derived so the exported public area reproduces the caller's template.</param>
+/// <param name="AuthPolicy">
+/// The authorization policy digest carried in the template (empty for the generic storage parent; a standard
+/// endorsement key's "PolicyA" for <see cref="Verifiable.Tpm.Infrastructure.Commands.CreatePrimaryInput.ForEndorsementKey"/>),
+/// re-emitted into the exported public area.
+/// </param>
 public sealed record TpmCreateStorageParentRequested(
     uint Hierarchy,
     TpmAlgIdConstants NameAlg,
     TpmaObject Attributes,
     TpmEccCurveConstants Curve,
-    bool NoDa): TpmSimulatorInput;
+    bool NoDa,
+    ReadOnlyMemory<byte> AuthPolicy): TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_Create()</c> command that seals caller-supplied data into a KEYEDHASH object under a loaded storage
@@ -722,8 +732,10 @@ public sealed record TpmCredentialMade(
 /// <summary>
 /// A <c>TPM2_ActivateCredential()</c> command (TPM 2.0 Library Part 3, clause 12.5): recovers a credential wrapped
 /// by <c>TPM2_MakeCredential()</c>, proving that the activate object (the attestation key) and the credential key
-/// (the endorsement key) are loaded in the same TPM. Both handles require authorization, so the parser consumes
-/// two password sessions in handle order.
+/// (the endorsement key) are loaded in the same TPM. Both handles require authorization; this is the form where
+/// <c>keyHandle</c>'s session resolves to <c>TPM_RS_PW</c> — the activate object's session is always password-only
+/// in this slice (Part 3, clause 5.6). A policy session on <c>keyHandle</c> instead parses as
+/// <see cref="TpmActivateCredentialOverSessionRequested"/>.
 /// </summary>
 /// <param name="ActivateHandle">The object the credential is bound to (the attestation key); its Name re-keys the credential's integrity.</param>
 /// <param name="KeyHandle">The credential key that decrypts the seed (the endorsement key); its private scalar recovers the shared value.</param>
@@ -734,6 +746,33 @@ public sealed record TpmActivateCredentialRequested(
     uint KeyHandle,
     ReadOnlyMemory<byte> CredentialBlob,
     ReadOnlyMemory<byte> Secret): TpmSimulatorInput;
+
+/// <summary>
+/// A <c>TPM2_ActivateCredential()</c> command (TPM 2.0 Library Part 3, clause 12.5) whose <c>keyHandle</c> (the
+/// credential key, USER role) is authorized by a policy session rather than a password — the form a standard
+/// endorsement key (<see cref="Verifiable.Tpm.Infrastructure.Commands.CreatePrimaryInput.ForEndorsementKey"/>,
+/// whose <c>authPolicy</c> is "PolicyA" and whose <c>userWithAuth</c> attribute is CLEAR) requires (Part 3, clause
+/// 5.6). <c>activateHandle</c> stays password-authorized in this slice, exactly as in
+/// <see cref="TpmActivateCredentialRequested"/>.
+/// </summary>
+/// <param name="ActivateHandle">The object the credential is bound to (the attestation key), password-authorized (ADMIN role).</param>
+/// <param name="KeyHandle">The credential key (the endorsement key) whose <c>authPolicy</c> the policy session must satisfy (USER role).</param>
+/// <param name="CredentialBlob">The credential blob from <c>TPM2_MakeCredential()</c> (a <c>TPM2B_ID_OBJECT</c> value), copied into durable model memory.</param>
+/// <param name="Secret">The encrypted seed from <c>TPM2_MakeCredential()</c> (a <c>TPM2B_ENCRYPTED_SECRET</c> value), copied into durable model memory.</param>
+/// <param name="KeyPolicySession">The policy session handle authorizing <paramref name="KeyHandle"/>.</param>
+/// <param name="KeyPolicyAttributes">
+/// The policy session's command session-attributes byte. Unused by the response: <c>TPM2_ActivateCredential()</c>'s
+/// response is framed <c>TPM_ST_NO_SESSIONS</c> regardless (see <see cref="TpmActivateCredentialResponse"/>), so
+/// there is no response session entry to echo it into — the same simplification
+/// <see cref="TpmUnsealOverSessionsRequested"/>'s no-encrypt-session branch relies on.
+/// </param>
+public sealed record TpmActivateCredentialOverSessionRequested(
+    uint ActivateHandle,
+    uint KeyHandle,
+    ReadOnlyMemory<byte> CredentialBlob,
+    ReadOnlyMemory<byte> Secret,
+    uint KeyPolicySession,
+    byte KeyPolicyAttributes): TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmActivateCredentialAction"/>: either the recovered credential secret

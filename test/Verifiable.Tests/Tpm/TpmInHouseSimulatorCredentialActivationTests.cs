@@ -5,6 +5,7 @@ using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
+using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
@@ -49,6 +50,9 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     /// <summary>The secret credential wrapped and recovered by the tests (16 bytes, within the EK nameAlg digest size).</summary>
     private static byte[] CredentialSecret { get; } =
         [0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF];
+
+    /// <summary>The policy session hash algorithm used by the standard-EK (PolicyA) tests.</summary>
+    private const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
@@ -183,6 +187,251 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     }
 
     /// <summary>
+    /// Verifies the canonical standard-EK activation (TCG EK Credential Profile, Annex B.3.2): a real policy
+    /// session satisfied by <c>TPM2_PolicySecret()</c> against the Endorsement Hierarchy authorizes the standard
+    /// EK's USER role at <c>TPM2_ActivateCredential()</c>'s <c>keyHandle</c>, and the wrapped credential round-trips.
+    /// </summary>
+    [TestMethod]
+    public async Task StandardEkActivatesCredentialThroughThePolicyAPath()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStandardEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                using MakeCredentialResponse made = await MakeCredentialAsync(tpm, registry, pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
+
+                uint policyHandle = 0;
+                try
+                {
+                    //Satisfy PolicyA the canonical way: TPM2_PolicySecret() against the Endorsement Hierarchy (TCG
+                    //EK Credential Profile, Annex B.3.2), authorized here with the hierarchy's empty auth value.
+                    TpmResult<StartAuthSessionResponse> policyStartResult = await tpm.StartPolicySessionAsync(
+                        SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(policyStartResult.IsSuccess, $"StartAuthSession (policy) failed: '{policyStartResult.ResponseCode}'.");
+                    using StartAuthSessionResponse policyStart = policyStartResult.Value;
+                    policyHandle = policyStart.SessionHandle.Value;
+
+                    TpmResult<PolicySecretResponse> secretResult = await tpm.PolicySecretAsync(
+                        (uint)TpmRh.TPM_RH_ENDORSEMENT, policyHandle, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(secretResult.IsSuccess, $"PolicySecret failed: '{secretResult.ResponseCode}'.");
+                    secretResult.Value.Dispose();
+
+                    //Device side: the AK is the activate object (ADMIN role, password), the EK recovers the seed
+                    //(USER role) — but the EK's userWithAuth is CLEAR, so its session must be the satisfied policy
+                    //session rather than a password. Both handles are transient objects, so the executor needs their
+                    //Names to compute cpHash for the policy session (Part 1, equation 15).
+                    using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
+                        ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                    using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                    using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+                    ReadOnlyMemory<byte>[] handleNames = [ak.Name.Span.ToArray(), ek.Name.Span.ToArray()];
+
+                    TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, activateInput, [activateAuth, keySession], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(activateResult.IsSuccess, $"TPM2_ActivateCredential (PolicyA path) failed: '{activateResult.ResponseCode}'.");
+
+                    using ActivateCredentialResponse activated = activateResult.Value;
+                    Assert.IsTrue(
+                        activated.CertInfo.AsReadOnlySpan().SequenceEqual(CredentialSecret),
+                        "The recovered credential must equal the secret wrapped by TPM2_MakeCredential, proving the PolicyA path authorizes the standard EK.");
+                }
+                finally
+                {
+                    await FlushIfPresentAsync(tpm, policyHandle).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that a password session on the standard EK's <c>keyHandle</c> is rejected with
+    /// <c>TPM_RC_POLICY_FAIL</c>: the standard template clears <c>userWithAuth</c>, so USER-role authorization by
+    /// authValue is not available (TPM 2.0 Library Part 3, clause 5.6).
+    /// </summary>
+    [TestMethod]
+    public async Task StandardEkRejectsPasswordAuthOnTheKeyHandle()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStandardEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                using MakeCredentialResponse made = await MakeCredentialAsync(tpm, registry, pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
+
+                //Both sessions password: the standard EK clears userWithAuth, so USER-role authorization by password
+                //is not available at all (Part 3, clause 5.6, item 1) — this must fail regardless of the credential
+                //blob's validity.
+                using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
+                    ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+                TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                    tpm, activateInput, [activateAuth, keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                Assert.IsFalse(activateResult.IsSuccess, "A password session on the standard EK's keyHandle must be rejected.");
+                Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY_FAIL, activateResult.ResponseCode);
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that a real policy session whose accumulated policyDigest does not reproduce the standard EK's
+    /// authPolicy is rejected with <c>TPM_RC_POLICY_FAIL</c> (TPM 2.0 Library Part 3, clause 5.6: the session's
+    /// policyDigest must match the authPolicy associated with the handle).
+    /// </summary>
+    [TestMethod]
+    public async Task StandardEkRejectsAnUnsatisfiedPolicySession()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStandardEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                using MakeCredentialResponse made = await MakeCredentialAsync(tpm, registry, pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
+
+                uint policyHandle = 0;
+                try
+                {
+                    //A real policy session that never ran TPM2_PolicySecret() (or any assertion): its accumulated
+                    //policyDigest stays at all-zero, which cannot equal PolicyA.
+                    TpmResult<StartAuthSessionResponse> policyStartResult = await tpm.StartPolicySessionAsync(
+                        SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(policyStartResult.IsSuccess, $"StartAuthSession (policy) failed: '{policyStartResult.ResponseCode}'.");
+                    using StartAuthSessionResponse policyStart = policyStartResult.Value;
+                    policyHandle = policyStart.SessionHandle.Value;
+
+                    using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
+                        ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                    using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                    using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+                    ReadOnlyMemory<byte>[] handleNames = [ak.Name.Span.ToArray(), ek.Name.Span.ToArray()];
+
+                    TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, activateInput, [activateAuth, keySession], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                    Assert.IsFalse(activateResult.IsSuccess, "An unsatisfied policy session must not authorize the standard EK.");
+                    Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY_FAIL, activateResult.ResponseCode);
+                }
+                finally
+                {
+                    await FlushIfPresentAsync(tpm, policyHandle).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that a trial policy session cannot authorize the standard EK even when its accumulated
+    /// policyDigest is byte-identical to PolicyA — proving the trial check, not the digest comparison, rejects it
+    /// (TPM 2.0 Library Part 1, clause 19.3: a trial session authorizes nothing).
+    /// </summary>
+    [TestMethod]
+    public async Task StandardEkRejectsATrialPolicySession()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStandardEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                using MakeCredentialResponse made = await MakeCredentialAsync(tpm, registry, pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
+
+                uint trialHandle = 0;
+                try
+                {
+                    //A trial session that ran the SAME TPM2_PolicySecret() assertion, so its accumulated policyDigest
+                    //is byte-identical to PolicyA — proving that it is the IsTrial check, not the digest comparison,
+                    //that rejects it (Part 1, clause 19.3: a trial session authorizes nothing).
+                    TpmResult<StartAuthSessionResponse> trialStartResult = await tpm.StartTrialPolicySessionAsync(
+                        SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(trialStartResult.IsSuccess, $"StartAuthSession (trial) failed: '{trialStartResult.ResponseCode}'.");
+                    using StartAuthSessionResponse trialStart = trialStartResult.Value;
+                    trialHandle = trialStart.SessionHandle.Value;
+
+                    TpmResult<PolicySecretResponse> secretResult = await tpm.PolicySecretAsync(
+                        (uint)TpmRh.TPM_RH_ENDORSEMENT, trialHandle, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(secretResult.IsSuccess, $"Trial PolicySecret failed: '{secretResult.ResponseCode}'.");
+                    secretResult.Value.Dispose();
+
+                    using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
+                        ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                    using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                    using TpmPolicySession trialSession = TpmPolicySession.ForSession(trialHandle, SessionAlg, pool);
+                    ReadOnlyMemory<byte>[] handleNames = [ak.Name.Span.ToArray(), ek.Name.Span.ToArray()];
+
+                    TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, activateInput, [activateAuth, trialSession], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                    Assert.IsFalse(activateResult.IsSuccess,
+                        "A trial policy session must not authorize the standard EK even when its digest equals PolicyA.");
+                    Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY_FAIL, activateResult.ResponseCode);
+                }
+                finally
+                {
+                    await FlushIfPresentAsync(tpm, trialHandle).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Wraps <see cref="CredentialSecret"/> to the given key's public area, bound to <paramref name="objectName"/>.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
@@ -222,6 +471,27 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
         TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
             tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(result.IsSuccess, $"CreatePrimary storage key ({hierarchy}) failed: '{result.ResponseCode}'.");
+
+        return result.Value;
+    }
+
+    /// <summary>
+    /// Creates the standard ECC NIST P-256 endorsement key (TCG EK Credential Profile, Annex B.3.4, Template L-2)
+    /// under the Endorsement Hierarchy, through <see cref="CreatePrimaryInput.ForEndorsementKey"/>.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
+    private async Task<CreatePrimaryResponse> CreateStandardEndorsementKeyAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    {
+        using CreatePrimaryInput input = CreatePrimaryInput.ForEndorsementKey(TpmRh.TPM_RH_ENDORSEMENT, pool);
+        using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"CreatePrimary (standard EK) failed: '{result.ResponseCode}'.");
 
         return result.Value;
     }
@@ -323,5 +593,21 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
         var flush = FlushContextInput.ForHandle(handle);
         _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
             tpm, flush, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Flushes a policy session handle if one was actually started (<paramref name="handle"/> non-zero), ignoring
+    /// the result. A test that fails before starting its policy session leaves nothing to flush.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="handle">The session handle to flush, or <c>0</c> if none was started.</param>
+    private async Task FlushIfPresentAsync(TpmDevice tpm, uint handle)
+    {
+        if(handle == 0)
+        {
+            return;
+        }
+
+        _ = await tpm.FlushContextAsync(handle, TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

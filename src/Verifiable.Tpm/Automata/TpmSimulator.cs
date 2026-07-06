@@ -306,13 +306,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         TpmsEccPoint eccPoint = TpmsEccPoint.Create(x, y, pool);
         Tpm2bPublic outPublic = Tpm2bPublic.CreateEccSigningKey(
-            action.NameAlg, action.Attributes, action.Curve, TpmtEccScheme.Ecdsa(action.SchemeHashAlg), eccPoint);
+            action.NameAlg, action.Attributes, action.Curve, TpmtEccScheme.Ecdsa(action.SchemeHashAlg), eccPoint, pool, action.AuthPolicy.Span);
 
         //The Name is filled by the caller once it has been computed from the exported public area (through the
         //asynchronous digest seam, which this synchronous point-splitting step must not cross). The SEC1 point is
         //retained so a later ECDH-based command can use this object's public key (TPM 2.0 Library Part 1, clause 24).
         var keyState = new TransientKeyState(
-            action.Handle, action.Hierarchy, TpmAlgIdConstants.TPM_ALG_ECC, action.Curve, scalar.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, point.ToArray());
+            action.Handle, action.Hierarchy, TpmAlgIdConstants.TPM_ALG_ECC, action.Curve, scalar.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, point.ToArray(), action.AuthPolicy);
 
         return (outPublic, keyState);
     }
@@ -360,13 +360,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         ReadOnlySpan<byte> privateKey = key.PrivateKey.AsReadOnlySpan();
 
         Tpm2bPublic outPublic = Tpm2bPublic.CreateRsaSigningKey(
-            action.NameAlg, action.Attributes, action.KeyBits, action.Scheme, modulus, pool);
+            action.NameAlg, action.Attributes, action.KeyBits, action.Scheme, modulus, pool, action.AuthPolicy.Span);
 
         //The Name is filled by the caller once computed from the exported public area (through the asynchronous
         //digest seam, which this synchronous key-copying step must not cross). An RSA key carries no SEC1 point, so
         //the retained public point is empty (the ECDH-based credential commands model only ECC credential keys).
         var keyState = new TransientKeyState(
-            action.Handle, action.Hierarchy, TpmAlgIdConstants.TPM_ALG_RSA, default, privateKey.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, ReadOnlyMemory<byte>.Empty);
+            action.Handle, action.Hierarchy, TpmAlgIdConstants.TPM_ALG_RSA, default, privateKey.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, ReadOnlyMemory<byte>.Empty, action.AuthPolicy);
 
         return (outPublic, keyState);
     }
@@ -667,13 +667,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         ReadOnlySpan<byte> scalar = key.PrivateScalar.AsReadOnlySpan();
 
         TpmsEccPoint eccPoint = TpmsEccPoint.Create(x, y, pool);
-        Tpm2bPublic outPublic = Tpm2bPublic.CreateEccStorageParent(action.NameAlg, action.Attributes, action.Curve, eccPoint);
+        Tpm2bPublic outPublic = Tpm2bPublic.CreateEccStorageParent(action.NameAlg, action.Attributes, action.Curve, eccPoint, pool, action.AuthPolicy.Span);
 
         //The Name is filled by the caller once it has been computed from the exported public area (through the
         //asynchronous digest seam, which this synchronous point-splitting step must not cross). The SEC1 point is
         //retained so credential protection (the endorsement key is a storage parent) can use this object's public key.
         var keyState = new TransientKeyState(
-            action.Handle, action.Hierarchy, TpmAlgIdConstants.TPM_ALG_ECC, action.Curve, scalar.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, point.ToArray());
+            action.Handle, action.Hierarchy, TpmAlgIdConstants.TPM_ALG_ECC, action.Curve, scalar.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, point.ToArray(), action.AuthPolicy);
 
         return (outPublic, keyState);
     }
@@ -2478,6 +2478,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         request = null;
         malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
 
+        //Retained so the created object's exported public area — and therefore its Name — carries the template's
+        //authPolicy (empty for every template except a standard endorsement key's "PolicyA"), mirroring how
+        //TryParseCreate retains TpmCreateSealedObjectRequested.AuthPolicy for the sealed-data path.
+        ReadOnlyMemory<byte> authPolicy = publicArea.AuthPolicy.AsReadOnlySpan().ToArray();
+
         if(publicArea.Type == TpmAlgIdConstants.TPM_ALG_ECC
             && publicArea.Parameters.EccDetail is TpmsEccParms eccParms
             && eccParms.Scheme.Scheme == TpmAlgIdConstants.TPM_ALG_ECDSA)
@@ -2490,7 +2495,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 return false;
             }
 
-            request = new TpmCreatePrimaryRequested(hierarchy, publicArea.NameAlg, publicArea.ObjectAttributes, eccParms.CurveId, eccParms.Scheme.HashAlg);
+            request = new TpmCreatePrimaryRequested(hierarchy, publicArea.NameAlg, publicArea.ObjectAttributes, eccParms.CurveId, eccParms.Scheme.HashAlg, authPolicy);
 
             return true;
         }
@@ -2511,7 +2516,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             }
 
             bool noDa = (publicArea.ObjectAttributes & TpmaObject.NO_DA) != 0;
-            request = new TpmCreateStorageParentRequested(hierarchy, publicArea.NameAlg, publicArea.ObjectAttributes, storageParms.CurveId, noDa);
+            request = new TpmCreateStorageParentRequested(hierarchy, publicArea.NameAlg, publicArea.ObjectAttributes, storageParms.CurveId, noDa, authPolicy);
 
             return true;
         }
@@ -2526,7 +2531,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 return false;
             }
 
-            request = new TpmCreateRsaPrimaryRequested(hierarchy, publicArea.NameAlg, publicArea.ObjectAttributes, rsaParms.KeyBits, rsaParms.Scheme);
+            request = new TpmCreateRsaPrimaryRequested(hierarchy, publicArea.NameAlg, publicArea.ObjectAttributes, rsaParms.KeyBits, rsaParms.Scheme, authPolicy);
 
             return true;
         }
@@ -2966,9 +2971,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     //TPM2_ActivateCredential() is authorized and takes two handles, so its wire layout after the header is: handle
     //area (@activateHandle — the attestation key, ADMIN role; @keyHandle — the credential key, USER role — 2 handles,
-    //both require auth), authorization area (two password sessions in handle order), then parameters (credentialBlob
-    //as TPM2B_ID_OBJECT, secret as TPM2B_ENCRYPTED_SECRET). It is framed with TPM_ST_SESSIONS (TPM 2.0 Library Part 3,
-    //clause 12.5). The blob and secret are copied into durable model memory.
+    //both require auth), authorization area, then parameters (credentialBlob as TPM2B_ID_OBJECT, secret as
+    //TPM2B_ENCRYPTED_SECRET). It is framed with TPM_ST_SESSIONS (TPM 2.0 Library Part 3, clause 12.5). The blob and
+    //secret are copied into durable model memory.
+    //
+    //The authorization area is read inline rather than via TryReadTwoPasswordSessions (still used by
+    //TPM2_Certify()): session 1 (@activateHandle, ADMIN role) stays password-only in this slice via
+    //TryReadPasswordSessionBody — no template this simulator builds sets adminWithPolicy, so a non-password session
+    //there keeps failing TPM_RC_AUTH_TYPE, today's behavior. Session 2 (@keyHandle, USER role) is read generically
+    //via TryReadHmacCommandSession, mirroring TryParseUnseal's first session: a standard endorsement key's
+    //authPolicy makes TPM_RS_PW insufficient there, so the wire form (not just the transition) must be able to
+    //carry a policy session handle. The transition, not the parser, resolves whether that handle names a real
+    //policy session and whether it satisfies the key's authPolicy.
     private static bool TryParseActivateCredential(ref TpmReader reader, ushort tag, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
@@ -2992,7 +3006,27 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         uint activateHandle = reader.ReadUInt32();
         uint keyHandle = reader.ReadUInt32();
 
-        if(!TryReadTwoPasswordSessions(ref reader, out malformedResponseCode))
+        if(!TryBeginAuthArea(ref reader, out int sessionsStart, out uint authorizationSize, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Session 1 authorizes @activateHandle (ADMIN role); password-only in this slice.
+        if(!TryReadPasswordSessionBody(ref reader, out _, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Session 2 authorizes @keyHandle (USER role): read generically so a policy session handle parses, then let
+        //the transition resolve it (password vs. policy) exactly as Unseal's over-sessions form does.
+        if(!TryReadHmacCommandSession(ref reader, out uint keyPolicySession, out _, out byte keyPolicyAttributes, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //A third session in the area (for example an attempted encrypt session) is not modelled for this command;
+        //TryEndAuthArea rejects the surplus naturally with TPM_RC_AUTHSIZE.
+        if(!TryEndAuthArea(ref reader, sessionsStart, authorizationSize, out malformedResponseCode))
         {
             return false;
         }
@@ -3017,7 +3051,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return false;
         }
 
-        input = new TpmActivateCredentialRequested(activateHandle, keyHandle, credentialBlob, secret);
+        input = keyPolicySession == (uint)TpmRh.TPM_RH_PW
+            ? new TpmActivateCredentialRequested(activateHandle, keyHandle, credentialBlob, secret)
+            : new TpmActivateCredentialOverSessionRequested(activateHandle, keyHandle, credentialBlob, secret, keyPolicySession, keyPolicyAttributes);
 
         return true;
     }
