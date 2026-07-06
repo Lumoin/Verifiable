@@ -67,6 +67,7 @@ public static class TpmLifecycleTransitions
                 TpmObjectQuoted objectQuoted => OnObjectQuoted(state, objectQuoted),
                 TpmTimeAttested timeAttested => OnTimeAttested(state, timeAttested),
                 TpmNvIndexCertified nvIndexCertified => OnNvIndexCertified(state, nvIndexCertified),
+                TpmSignatureVerified signatureVerified => OnSignatureVerified(state, signatureVerified),
                 TpmHmacSessionStarted hmacSessionStarted => OnHmacSessionStarted(state, hmacSessionStarted),
                 TpmEncryptedRandomProduced encryptedRandom => OnEncryptedRandomProduced(state, encryptedRandom),
                 TpmUnsealedOverSessions unsealedOverSessions => OnUnsealedOverSessions(state, unsealedOverSessions),
@@ -141,6 +142,7 @@ public static class TpmLifecycleTransitions
             TpmQuoteRequested quote => OnQuote(state, quote),
             TpmGetTimeRequested getTime => OnGetTime(state, getTime),
             TpmNvCertifyRequested nvCertify => OnNvCertify(state, nvCertify),
+            TpmVerifySignatureRequested verifySignature => OnVerifySignature(state, verifySignature),
             TpmStartAuthSessionRequested startAuthSession => OnStartAuthSession(state, startAuthSession),
             TpmStartHmacSessionRequested startHmacSession => OnStartHmacSession(state, startHmacSession),
             TpmGetRandomOverSessionRequested getRandomOverSession => OnGetRandomOverSession(state, getRandomOverSession),
@@ -1540,6 +1542,76 @@ public static class TpmLifecycleTransitions
             },
             "NvCertify:Completed");
 
+    //TPM2_VerifySignature() checks that a caller-supplied signature is valid over a caller-supplied digest for the
+    //key referenced by keyHandle (Part 3, clause 20.1). Unlike every attest-producing command, this is a
+    //public-key operation: keyHandle needs no authorization, and — deliberately, unlike OnCertify/OnCertifyCreation
+    //and friends — the signer's sign attribute is never consulted, because verifying a signature does not use the
+    //private part of the key at all. keyHandle must resolve in TransientObjects (TPM_RC_HANDLE); the scheme hash
+    //algorithm is restricted to SHA-256/384/512 (TPM_RC_HASH), mirroring every other attest command; the signature
+    //algorithm must be compatible with the resolved key's type (TPM_RC_SCHEME on mismatch, mirroring OnCertify's
+    //dispatch). The actual verification needs the asynchronous verify-delegate seam, so it is folded into the
+    //effect (TpmVerifySignatureAction/TpmRsaVerifySignatureAction) rather than checked here; the transition resolves
+    //the key, folds its retained fields into the matching action, and leaves no response yet.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnVerifySignature(TpmSimulatorState state, TpmVerifySignatureRequested request)
+    {
+        if(!state.TransientObjects.TryGetValue(request.KeyHandle, out TransientKeyState? signer))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_VerifySignature, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        if(!IsSupportedAttestHashAlg(request.SchemeHashAlg))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_VerifySignature, TpmRcConstants.TPM_RC_HASH);
+        }
+
+        TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
+        {
+            (TpmAlgIdConstants.TPM_ALG_RSA, TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS) =>
+                new TpmRsaVerifySignatureAction(
+                    signer.Name, signer.Hierarchy, signer.PrivateKey, request.Digest, request.Signature, request.SignatureScheme, request.SchemeHashAlg),
+            (TpmAlgIdConstants.TPM_ALG_ECC, TpmAlgIdConstants.TPM_ALG_ECDSA) =>
+                new TpmVerifySignatureAction(
+                    signer.Name, signer.Hierarchy, signer.PublicPoint, signer.Curve, request.Digest, request.Signature, request.SchemeHashAlg),
+            _ => null
+        };
+
+        if(action is null)
+        {
+            //A scheme incompatible with the key's type — e.g. an ECDSA signature against an RSA key, or vice
+            //versa — fails closed rather than silently coercing to the key's native scheme (mirrors OnCertify).
+            return Reject(state, TpmCcConstants.TPM_CC_VerifySignature, TpmRcConstants.TPM_RC_SCHEME);
+        }
+
+        return Transition(
+            state with
+            {
+                NextAction = action,
+                ResponseIntent = null
+            },
+            "VerifySignature:Requested");
+    }
+
+    //Frames the TPM2_VerifySignature() response the effect produced: the TPMT_TK_VERIFIED validation ticket, or
+    //the signature-mismatch rejection (TPM_RC_SIGNATURE) the effect's verify delegate found — mirroring
+    //OnObjectCreationCertified's success/rejection split, the only other place a rejection is decided inside the
+    //effect rather than the pure transition.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnSignatureVerified(TpmSimulatorState state, TpmSignatureVerified verified) =>
+        verified.TicketDigest is { } ticketDigest
+            ? Transition(
+                state with
+                {
+                    NextAction = NullAction.Instance,
+                    ResponseIntent = new TpmVerifySignatureResponse(TpmRcConstants.TPM_RC_SUCCESS, verified.Hierarchy, ticketDigest, verified.TicketDigestLength)
+                },
+                "VerifySignature:Completed")
+            : Transition(
+                state with
+                {
+                    NextAction = NullAction.Instance,
+                    ResponseIntent = new TpmHeaderOnlyResponse(verified.ResponseCode)
+                },
+                "VerifySignature:Rejected");
+
     //Decodes a TPML_PCR_SELECTION and gathers the selected SHA-256 bank register values in ascending PCR-index
     //order — the order the PCR composite hashes them in (TPM 2.0 Library Part 4, PCRComputeCurrentDigest) and the
     //order TPM2_PCR_Read() returns them. A selection naming a bank other than the modelled SHA-256 bank
@@ -2109,6 +2181,7 @@ public static class TpmLifecycleTransitions
             TpmQuoteRequested => TpmCcConstants.TPM_CC_Quote,
             TpmGetTimeRequested => TpmCcConstants.TPM_CC_GetTime,
             TpmNvCertifyRequested => TpmCcConstants.TPM_CC_NV_Certify,
+            TpmVerifySignatureRequested => TpmCcConstants.TPM_CC_VerifySignature,
             TpmStartAuthSessionRequested => TpmCcConstants.TPM_CC_StartAuthSession,
             TpmStartHmacSessionRequested => TpmCcConstants.TPM_CC_StartAuthSession,
             TpmGetRandomOverSessionRequested => TpmCcConstants.TPM_CC_GetRandom,

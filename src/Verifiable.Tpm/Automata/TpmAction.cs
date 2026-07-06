@@ -688,3 +688,56 @@ public sealed record TpmComputeNvNameAction(
     ReadOnlyMemory<byte> OperandB,
     ushort Offset,
     ushort Operation): TpmAction;
+
+/// <summary>
+/// Declares that the simulator must verify a digest/signature pair against a loaded ECC key's public point and,
+/// on success, produce a <c>TPMT_TK_VERIFIED</c>. Emitted by the <c>TPM2_VerifySignature()</c> transition; the
+/// effectful loop calls the injected <see cref="TpmEccDigestVerifyDelegate"/> and, when it returns
+/// <see langword="true"/>, re-derives the verifying key's hierarchy proof and computes
+/// <c>HMAC(proof, TPM_ST_VERIFIED || digest || keyName)</c> — the mirror image of the creation ticket's
+/// <c>name || creationHash</c> field order — feeding the result back as a <see cref="TpmSignatureVerified"/> input
+/// (TPM 2.0 Library Part 3, clause 20.1; Part 2, clause 10.7.4).
+/// </summary>
+/// <remarks>
+/// The transition resolves the <c>keyHandle</c> against the loaded-object table and folds its Name, hierarchy,
+/// and public point into this action, so the effect needs no automaton state and captures nothing. This slice
+/// models an elliptic-curve key (ECDSA), as the signing paths do. Verification is a public-key operation, so
+/// unlike every signing action the key's <c>sign</c> attribute is never consulted here.
+/// </remarks>
+/// <param name="KeyName">The verifying key's Name, folded into the ticket HMAC.</param>
+/// <param name="KeyHierarchy">The permanent hierarchy the verifying key was created under, from which its ticket proof re-derives.</param>
+/// <param name="PublicPoint">The verifying key's retained public point, SEC1 uncompressed.</param>
+/// <param name="Curve">The ECC curve the public point lives on.</param>
+/// <param name="Digest">The caller-supplied digest the signature is claimed to be over.</param>
+/// <param name="Signature">The caller-supplied signature, IEEE P1363 <c>r ‖ s</c>.</param>
+/// <param name="HashAlg">The hash algorithm carried inside the signature.</param>
+public sealed record TpmVerifySignatureAction(
+    ReadOnlyMemory<byte> KeyName,
+    uint KeyHierarchy,
+    ReadOnlyMemory<byte> PublicPoint,
+    TpmEccCurveConstants Curve,
+    ReadOnlyMemory<byte> Digest,
+    ReadOnlyMemory<byte> Signature,
+    TpmAlgIdConstants HashAlg): TpmAction;
+
+/// <summary>
+/// The RSA counterpart of <see cref="TpmVerifySignatureAction"/>: verify a digest/signature pair against a loaded
+/// RSA key's retained private key (the simulator retains no standalone RSA public encoding, so the injected
+/// <see cref="TpmRsaDigestVerifyDelegate"/> derives the public part from it) under the requested RSA scheme, and
+/// on success produce a <c>TPMT_TK_VERIFIED</c> the same way <see cref="TpmVerifySignatureAction"/> does.
+/// </summary>
+/// <param name="KeyName">The verifying key's Name, folded into the ticket HMAC.</param>
+/// <param name="KeyHierarchy">The permanent hierarchy the verifying key was created under, from which its ticket proof re-derives.</param>
+/// <param name="PrivateKey">The verifying key's retained private key, in the backend's own encoding.</param>
+/// <param name="Digest">The caller-supplied digest the signature is claimed to be over.</param>
+/// <param name="Signature">The caller-supplied raw RSA signature octets.</param>
+/// <param name="Scheme">The RSA signing scheme (<c>TPM_ALG_RSASSA</c> or <c>TPM_ALG_RSAPSS</c>) to verify under.</param>
+/// <param name="HashAlg">The hash algorithm carried inside the signature.</param>
+public sealed record TpmRsaVerifySignatureAction(
+    ReadOnlyMemory<byte> KeyName,
+    uint KeyHierarchy,
+    ReadOnlyMemory<byte> PrivateKey,
+    ReadOnlyMemory<byte> Digest,
+    ReadOnlyMemory<byte> Signature,
+    TpmAlgIdConstants Scheme,
+    TpmAlgIdConstants HashAlg): TpmAction;

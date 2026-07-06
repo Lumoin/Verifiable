@@ -47,7 +47,7 @@ internal static class BouncyCastleTpmEccSigningBackend
     /// models NIST P-256 (<see cref="TpmEccCurveConstants.TPM_ECC_NIST_P256"/>); any other curve throws.
     /// </summary>
     /// <returns>The signing backend to inject into a <see cref="TpmSimulator"/>.</returns>
-    public static TpmEccSigningBackend Create() => new(GenerateKeyAsync, SignDigestAsync, ComputeSharedSecretAsync);
+    public static TpmEccSigningBackend Create() => new(GenerateKeyAsync, SignDigestAsync, ComputeSharedSecretAsync, VerifyDigestAsync);
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented scalar and point buffers transfers to the returned carriers, which the simulator disposes.")]
@@ -101,6 +101,45 @@ internal static class BouncyCastleTpmEccSigningBackend
         Array.Clear(p1363);
 
         return ValueTask.FromResult(result);
+    }
+
+    /// <summary>
+    /// Verifies an IEEE P1363 ECDSA signature over a pre-computed digest against a public point, modelling the
+    /// public-key operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.1). Never
+    /// re-hashes the digest, mirroring <see cref="SignDigestAsync"/>.
+    /// </summary>
+    /// <param name="publicPoint">The verifying key's public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>).</param>
+    /// <param name="digest">The digest the signature is claimed to be over.</param>
+    /// <param name="signature">The signature to verify, as IEEE P1363 <c>r ‖ s</c>.</param>
+    /// <param name="curve">The ECC curve the public point lives on.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns><see langword="true"/> when the signature verifies; otherwise <see langword="false"/>.</returns>
+    private static ValueTask<bool> VerifyDigestAsync(
+        ReadOnlyMemory<byte> publicPoint, ReadOnlyMemory<byte> digest, ReadOnlyMemory<byte> signature, TpmEccCurveConstants curve, CancellationToken cancellationToken)
+    {
+        if((signature.Length & 1) != 0)
+        {
+            //Not a canonical IEEE P1363 r ‖ s pair (equal-width halves) — cannot be a valid signature.
+            return ValueTask.FromResult(false);
+        }
+
+        X9ECParameters parameters = ResolveCurve(curve);
+        var domain = new ECDomainParameters(parameters.Curve, parameters.G, parameters.N, parameters.H, parameters.GetSeed());
+
+        Org.BouncyCastle.Math.EC.ECPoint point = domain.Curve.DecodePoint(publicPoint.ToArray());
+        var key = new ECPublicKeyParameters(point, domain);
+        var verifier = new ECDsaSigner();
+        verifier.Init(forSigning: false, key);
+
+        int fieldWidth = signature.Length / 2;
+        var r = new BigInteger(1, signature.Span[..fieldWidth].ToArray());
+        var s = new BigInteger(1, signature.Span[fieldWidth..].ToArray());
+
+        //VerifySignature checks the supplied digest directly — no re-hashing — exactly as TPM2_VerifySignature()
+        //over a caller-supplied TPM2B_DIGEST does.
+        bool verified = verifier.VerifySignature(digest.ToArray(), r, s);
+
+        return ValueTask.FromResult(verified);
     }
 
     /// <summary>

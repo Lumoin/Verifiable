@@ -273,6 +273,26 @@ public sealed record TpmNvCertifyResponse(
     TpmAlgIdConstants HashAlg): TpmResponseIntent(ResponseCode);
 
 /// <summary>
+/// The successful response to <c>TPM2_VerifySignature()</c>: a <c>TPMT_TK_VERIFIED</c> validation ticket (TPM 2.0
+/// Library Part 3, clause 20.1) — unlike every other attest-producing command in this file, there is no
+/// <c>TPM2B_ATTEST</c> and no <c>TPMT_SIGNATURE</c>.
+/// </summary>
+/// <remarks>
+/// <see cref="TicketDigest"/> is a pooled buffer holding the ticket's HMAC digest; <see cref="TpmSimulator"/>
+/// frames the fixed <c>tag</c>/<c>hierarchy</c> fields followed by the digest as a <c>TPM2B_DIGEST</c> and then
+/// disposes it, as the terminal owner.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="Hierarchy">The hierarchy containing the verifying key's Name, framed in the ticket's <c>hierarchy</c> field.</param>
+/// <param name="TicketDigest">The pooled buffer holding the ticket HMAC digest; disposed after framing.</param>
+/// <param name="TicketDigestLength">The number of valid octets in <paramref name="TicketDigest"/>.</param>
+public sealed record TpmVerifySignatureResponse(
+    TpmRcConstants ResponseCode,
+    uint Hierarchy,
+    IMemoryOwner<byte> TicketDigest,
+    int TicketDigestLength): TpmResponseIntent(ResponseCode);
+
+/// <summary>
 /// The successful response to <c>TPM2_PCR_Read()</c>: the PCR update counter, the selection actually read, and
 /// the selected register values (TPM 2.0 Library Part 3, clause 22.4).
 /// </summary>

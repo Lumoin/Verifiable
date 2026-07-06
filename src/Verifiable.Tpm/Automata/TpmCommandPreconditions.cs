@@ -59,6 +59,7 @@ public static class TpmCommandPreconditions
             [TpmCcConstants.TPM_CC_CertifyCreation] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_GetTime] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_NV_Certify] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_VerifySignature] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_PCR_Read] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_Quote] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_StartAuthSession] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),

@@ -300,7 +300,15 @@ internal static class X509ChainTestRing
     }
 
 
-    private static X509SubjectKeyIdentifierExtension? FindSubjectKeyIdentifier(X509Certificate2 cert)
+    /// <summary>
+    /// Finds a certificate's own Subject Key Identifier extension, if present. Shared by the intermediate/leaf
+    /// builders here and by test-only certificate minting elsewhere in this assembly that needs to chain an
+    /// Authority Key Identifier to an issuer's Subject Key Identifier (for example an in-house TPM simulator's
+    /// EK/AK certificate profile).
+    /// </summary>
+    /// <param name="cert">The certificate to search.</param>
+    /// <returns>The Subject Key Identifier extension, or <see langword="null"/> when absent.</returns>
+    internal static X509SubjectKeyIdentifierExtension? FindSubjectKeyIdentifier(X509Certificate2 cert)
     {
         foreach(X509Extension ext in cert.Extensions)
         {

@@ -424,6 +424,22 @@ public static class TpmResponseCodecExtensions
         public static TpmResponseCodec NvCertify => TpmResponseCodec.Create(NvCertifyResponse.Parse);
 
         /// <summary>
+        /// Codec for TPM2_VerifySignature response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>validation (TPMT_TK_VERIFIED) - the validation ticket. Unlike every attest-producing command, there is no TPM2B_ATTEST and no TPMT_SIGNATURE.</description></item>
+        /// </list>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 20.1 - TPM2_VerifySignature.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec VerifySignature => TpmResponseCodec.Create(VerifySignatureResponse.Parse);
+
+        /// <summary>
         /// Codec for TPM2_MakeCredential response.
         /// </summary>
         /// <remarks>

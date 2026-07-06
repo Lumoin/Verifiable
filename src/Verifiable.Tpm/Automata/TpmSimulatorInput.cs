@@ -619,6 +619,41 @@ public sealed record TpmNvIndexCertified(
     TpmAlgIdConstants HashAlg): TpmSimulatorInput;
 
 /// <summary>
+/// A <c>TPM2_VerifySignature()</c> command (TPM 2.0 Library Part 3, clause 20.1): validate that <see cref="Signature"/>
+/// is a valid signature over <see cref="Digest"/> made with the key referenced by <see cref="KeyHandle"/>. This is a
+/// public-key operation — <see cref="KeyHandle"/> requires no authorization at all, so the parser consumes no
+/// session.
+/// </summary>
+/// <param name="KeyHandle">The loaded key whose public part verifies the signature.</param>
+/// <param name="Digest">The digest the signature is claimed to be over.</param>
+/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>), the <c>TPMU_SIGNATURE</c> selector.</param>
+/// <param name="SchemeHashAlg">The hash algorithm carried inside the signature.</param>
+/// <param name="Signature">The signature octets: IEEE P1363 r ‖ s for ECDSA, or the raw RSA signature for RSASSA/RSAPSS.</param>
+public sealed record TpmVerifySignatureRequested(
+    uint KeyHandle,
+    ReadOnlyMemory<byte> Digest,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants SchemeHashAlg,
+    ReadOnlyMemory<byte> Signature): TpmSimulatorInput;
+
+/// <summary>
+/// The result of executing a <see cref="TpmVerifySignatureAction"/> or <see cref="TpmRsaVerifySignatureAction"/>:
+/// whether the signature verified and, on success, the octets of the ticket digest the effectful loop computed. A
+/// failed verification (TPM 2.0 Library Part 3, clause 20.1: "Otherwise, the TPM shall return TPM_RC_SIGNATURE")
+/// carries <c>TPM_RC_SIGNATURE</c> with no ticket, mirroring <see cref="TpmObjectCreationCertified"/>'s
+/// success/rejection split. Internal to the effect loop; never arrives from the command transport.
+/// </summary>
+/// <param name="ResponseCode"><c>TPM_RC_SUCCESS</c> when the signature verified; otherwise <c>TPM_RC_SIGNATURE</c>.</param>
+/// <param name="Hierarchy">The hierarchy containing the verifying key's Name, framed in the ticket's <c>hierarchy</c> field.</param>
+/// <param name="TicketDigest">The pooled buffer holding the ticket HMAC digest; ownership flows to the <c>TpmVerifySignatureResponse</c> and is released by <see cref="TpmSimulator"/> once framed. <see langword="null"/> when the signature did not verify.</param>
+/// <param name="TicketDigestLength">The number of valid octets in <paramref name="TicketDigest"/>.</param>
+public sealed record TpmSignatureVerified(
+    TpmRcConstants ResponseCode,
+    uint Hierarchy,
+    IMemoryOwner<byte>? TicketDigest,
+    int TicketDigestLength): TpmSimulatorInput;
+
+/// <summary>
 /// A <c>TPM2_StartAuthSession()</c> command (TPM 2.0 Library Part 3, clause 11.1) that starts a policy or trial
 /// policy session. The tests start unbound, unsalted sessions (tpmKey and bind both <c>TPM_RH_NULL</c>, empty
 /// nonceCaller and encryptedSalt, <c>TPM_ALG_NULL</c> symmetric), so only the fields the session model needs are

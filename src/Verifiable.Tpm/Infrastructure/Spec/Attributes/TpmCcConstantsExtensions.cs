@@ -176,6 +176,12 @@ public static partial class TpmCcConstantsExtensions
         TpmCcConstants.TPM_CC_NV_Certify
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 3),
 
+        //Section 20.1 - TPM2_VerifySignature.
+        //Handle area: keyHandle (1 handle, no auth required - a public-key operation).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_VerifySignature
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
         //Section 12.6 - TPM2_MakeCredential.
         //Handle area: handle (1 handle, no auth - uses only the public area).
         //Response: no handles.

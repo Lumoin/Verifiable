@@ -237,6 +237,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             TpmRsaGetTimeAction rsaGetTimeAction => await AttestTimeRsaAsync(rsaGetTimeAction, context, cancellationToken).ConfigureAwait(false),
             TpmNvCertifyAction nvCertifyAction => await CertifyNvIndexAsync(nvCertifyAction, context, cancellationToken).ConfigureAwait(false),
             TpmRsaNvCertifyAction rsaNvCertifyAction => await CertifyNvIndexRsaAsync(rsaNvCertifyAction, context, cancellationToken).ConfigureAwait(false),
+            TpmVerifySignatureAction verifySignatureAction => await VerifySignatureEccAsync(verifySignatureAction, context, cancellationToken).ConfigureAwait(false),
+            TpmRsaVerifySignatureAction rsaVerifySignatureAction => await VerifySignatureRsaAsync(rsaVerifySignatureAction, context, cancellationToken).ConfigureAwait(false),
             TpmStartHmacSessionAction startHmacAction => await StartHmacSessionAsync(startHmacAction, context, cancellationToken).ConfigureAwait(false),
             TpmEncryptRandomAction encryptRandomAction => await EncryptRandomOverSessionAsync(encryptRandomAction, context, cancellationToken).ConfigureAwait(false),
             TpmUnsealDataAction unsealAction => await UnsealOverSessionsAsync(unsealAction, context, cancellationToken).ConfigureAwait(false),
@@ -1562,6 +1564,97 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
     }
 
+    //TPM2_VerifySignature() over an ECC key (Part 3, clause 20.1): verify the caller-supplied digest and signature
+    //against the key's own retained public point through the injected ECC backend's verify delegate — a
+    //public-key operation that needs no authorization and consults no sign attribute (contrast TPM2_Sign(), which
+    //needs both). On a successful verification, re-derive the verifying key's hierarchy proof and compute the
+    //TPMT_TK_VERIFIED digest HMAC(proof, TPM_ST_VERIFIED || digest || keyName) — the mirror image of the creation
+    //ticket's name || creationHash order (Part 2, clause 10.7.4). A failed verification needs no ticket at all, so
+    //the rejection is decided here rather than the pure transition (mirrors CertifyObjectCreationAsync).
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the ticket-digest buffer transfers to the returned TpmSignatureVerified, then to the TpmVerifySignatureResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> VerifySignatureEccAsync(TpmVerifySignatureAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TpmEccSigningBackend backend = context.SigningBackend
+            ?? throw new InvalidOperationException("TPM2_VerifySignature() over an ECC key requires a signing backend, but none was supplied.");
+
+        bool verified = await backend.VerifyDigest(
+            action.PublicPoint, action.Digest, action.Signature, action.Curve, cancellationToken).ConfigureAwait(false);
+
+        if(!verified)
+        {
+            return new TpmSignatureVerified(TpmRcConstants.TPM_RC_SIGNATURE, 0, null, 0);
+        }
+
+        using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context.ProofSeed, action.KeyHierarchy, context.Pool, cancellationToken).ConfigureAwait(false);
+        IMemoryOwner<byte> ticketDigest = await ComputeVerifiedTicketDigestAsync(
+            proof.Memory[..CreationDigestSize], action.Digest, action.KeyName, context.Pool, cancellationToken).ConfigureAwait(false);
+
+        return new TpmSignatureVerified(TpmRcConstants.TPM_RC_SUCCESS, action.KeyHierarchy, ticketDigest, CreationDigestSize);
+    }
+
+    //The RSA counterpart of VerifySignatureEccAsync: same verify-then-ticket flow, verified through the injected
+    //RSA backend's verify delegate under the requested RSA scheme.
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the ticket-digest buffer transfers to the returned TpmSignatureVerified, then to the TpmVerifySignatureResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> VerifySignatureRsaAsync(TpmRsaVerifySignatureAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TpmRsaSigningBackend backend = context.RsaSigningBackend
+            ?? throw new InvalidOperationException("TPM2_VerifySignature() over an RSA key requires an RSA signing backend, but none was supplied.");
+
+        bool verified = await backend.VerifyDigest(
+            action.PrivateKey, action.Digest, action.Signature, action.Scheme, action.HashAlg, cancellationToken).ConfigureAwait(false);
+
+        if(!verified)
+        {
+            return new TpmSignatureVerified(TpmRcConstants.TPM_RC_SIGNATURE, 0, null, 0);
+        }
+
+        using IMemoryOwner<byte> proof = await DeriveHierarchyProofAsync(context.ProofSeed, action.KeyHierarchy, context.Pool, cancellationToken).ConfigureAwait(false);
+        IMemoryOwner<byte> ticketDigest = await ComputeVerifiedTicketDigestAsync(
+            proof.Memory[..CreationDigestSize], action.Digest, action.KeyName, context.Pool, cancellationToken).ConfigureAwait(false);
+
+        return new TpmSignatureVerified(TpmRcConstants.TPM_RC_SUCCESS, action.KeyHierarchy, ticketDigest, CreationDigestSize);
+    }
+
+    //verifiedTicket digest = HMAC_contextAlg(proof, TPM_ST_VERIFIED || digest || keyName) (TPM 2.0 Library Part 2,
+    //clause 10.7.4) — the mirror image of ComputeCreationTicketDigestAsync's TPM_ST_CREATION || Name ||
+    //creationHash field order.
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the ticket-digest buffer transfers to the caller, which releases it via a using declaration.")]
+    private static async ValueTask<IMemoryOwner<byte>> ComputeVerifiedTicketDigestAsync(
+        ReadOnlyMemory<byte> proof, ReadOnlyMemory<byte> digest, ReadOnlyMemory<byte> keyName, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        int messageSize = sizeof(ushort) + digest.Length + keyName.Length;
+        using IMemoryOwner<byte> message = pool.Rent(messageSize);
+        WriteVerifiedTicketMessage(message.Memory.Span[..messageSize], digest.Span, keyName.Span);
+
+        using HmacValue hmac = await CryptographicKeyEvents.ComputeHmacAsync(
+            message.Memory[..messageSize], proof, CreationDigestSize, CryptoTags.HmacSha256Value, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        IMemoryOwner<byte> owner = pool.Rent(CreationDigestSize);
+        try
+        {
+            hmac.AsReadOnlySpan().CopyTo(owner.Memory.Span[..CreationDigestSize]);
+
+            return owner;
+        }
+        catch
+        {
+            owner.Dispose();
+            throw;
+        }
+    }
+
+    //The verified-ticket HMAC message: TPM_ST_VERIFIED (UINT16) || digest || Name.
+    private static void WriteVerifiedTicketMessage(Span<byte> destination, ReadOnlySpan<byte> digest, ReadOnlySpan<byte> keyName)
+    {
+        var writer = new TpmWriter(destination);
+        writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_VERIFIED);
+        writer.WriteBytes(digest);
+        writer.WriteBytes(keyName);
+    }
+
     //Copies octets into a pooled buffer sized to hold them (at least one octet so an empty payload still rents a
     //valid buffer). Ownership transfers to the caller; the caller disposes it after the octets are framed out.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -2480,6 +2573,22 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 }
 
                 return TryParseNvCertify(ref reader, header.Tag, out input, out malformedResponseCode);
+            }
+            case TpmCcConstants.TPM_CC_VerifySignature:
+            {
+                //TPM2_VerifySignature() signs nothing itself, but this slice's verify capability lives on the same
+                //ECC/RSA signing-backend seam-bundles as the attest commands (TpmEccSigningBackend.VerifyDigest /
+                //TpmRsaSigningBackend.VerifyDigest), so it is gated the identical way: without the ECC backend the
+                //simulated TPM cannot honour it, so answer the faithful TPM_RC_COMMAND_CODE rather than entering an
+                //effect it cannot run (mirrors Certify/CertifyCreation/GetTime/NV_Certify's admission gate).
+                if(SigningBackend is null)
+                {
+                    malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
+
+                    return false;
+                }
+
+                return TryParseVerifySignature(ref reader, header.Tag, out input, out malformedResponseCode);
             }
             case TpmCcConstants.TPM_CC_PCR_Read:
             {
@@ -3665,6 +3774,117 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         return true;
     }
 
+    //TPM2_VerifySignature() authorizes no entity — keyHandle needs no authorization at all (Part 3, clause 20.1) —
+    //so only the no-sessions form is modelled; a sessions tag would carry an authorization area this command has
+    //no handle for. Its wire layout after the header is: handle area (@keyHandle, 1 handle), then parameters
+    //(digest as TPM2B_DIGEST, signature as TPMT_SIGNATURE: sigAlg selecting the ECDSA r/s TPM2B pair or the single
+    //RSA TPM2B signature). Each TPM2B is read through the already bounds-checked TryReadTpm2b, mirroring the
+    //command-input parsing convention used throughout this file, rather than the host-side TpmuSignature.Parse
+    //(built for trusted response parsing, where an out-of-bounds size throws instead of failing closed).
+    private static bool TryParseVerifySignature(ref TpmReader reader, ushort tag, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_NO_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_BAD_TAG;
+
+            return false;
+        }
+
+        //Handle area: @keyHandle (the key whose public part verifies the signature).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint keyHandle = reader.ReadUInt32();
+
+        //Parameter: digest (TPM2B_DIGEST) — the digest the signature is claimed to be over.
+        if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> digest, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: signature (TPMT_SIGNATURE) — sigAlg (TPMI_ALG_SIG_SCHEME) selects the union member.
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        var sigAlg = (TpmAlgIdConstants)reader.ReadUInt16();
+        if(sigAlg is not (TpmAlgIdConstants.TPM_ALG_ECDSA or TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SCHEME;
+
+            return false;
+        }
+
+        if(reader.Remaining < sizeof(ushort))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        var hashAlg = (TpmAlgIdConstants)reader.ReadUInt16();
+
+        ReadOnlyMemory<byte> signature;
+        if(sigAlg == TpmAlgIdConstants.TPM_ALG_ECDSA)
+        {
+            //TPMS_SIGNATURE_ECDSA: signatureR then signatureS, each a TPM2B_ECC_PARAMETER — concatenated into one
+            //IEEE P1363 r ‖ s buffer, the shape the verify delegate takes (the mirror of how the response
+            //serializer splits a P1363 signature into r and s when framing TPM2_Sign()/TPM2_Certify() and friends).
+            if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> signatureR, out malformedResponseCode))
+            {
+                return false;
+            }
+
+            if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> signatureS, out malformedResponseCode))
+            {
+                return false;
+            }
+
+            signature = ConcatenateEcdsaSignature(signatureR, signatureS);
+        }
+        else
+        {
+            //TPMS_SIGNATURE_RSA: the whole signature as one TPM2B_PUBLIC_KEY_RSA.
+            if(!TryReadTpm2b(ref reader, out ReadOnlyMemory<byte> rsaSignature, out malformedResponseCode))
+            {
+                return false;
+            }
+
+            signature = rsaSignature;
+        }
+
+        //signature is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        input = new TpmVerifySignatureRequested(keyHandle, digest, sigAlg, hashAlg, signature);
+
+        return true;
+
+        static ReadOnlyMemory<byte> ConcatenateEcdsaSignature(ReadOnlyMemory<byte> r, ReadOnlyMemory<byte> s)
+        {
+            byte[] concatenated = new byte[r.Length + s.Length];
+            r.Span.CopyTo(concatenated);
+            s.Span.CopyTo(concatenated.AsSpan(r.Length));
+
+            return concatenated;
+        }
+    }
+
     //TPM2_MakeCredential() takes no authorization (it uses only the credential key's public area), so its wire layout
     //after the header is: handle area (@handle — 1 handle, the credential key, no auth), then parameters (credential
     //as TPM2B_DIGEST, objectName as TPM2B_NAME). It is framed with TPM_ST_NO_SESSIONS (TPM 2.0 Library Part 3, clause
@@ -4703,6 +4923,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         IMemoryOwner<byte>? nvCertifyInfoBuffer = (intent as TpmNvCertifyResponse)?.CertifyInfo;
         Signature? nvCertifySignature = (intent as TpmNvCertifyResponse)?.Signature;
 
+        //The VerifySignature intent owns only the ticket-digest buffer — no attest, no signature (unlike every
+        //other attest-family intent above).
+        IMemoryOwner<byte>? verifySignatureTicketDigest = (intent as TpmVerifySignatureResponse)?.TicketDigest;
+
         //The Quote intent likewise owns the marshaled attest buffer and the signature; release them in the finally
         //once framed. The PCR_Read intent's octets are the echoed selection and references into durable bank state,
         //so nothing is disposed for it.
@@ -4770,6 +4994,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     (sizeof(ushort) + nvCertify.CertifyInfoLength)
                     + (nvCertify.SignatureScheme == TpmAlgIdConstants.TPM_ALG_ECDSA ? (4 * sizeof(ushort)) : (3 * sizeof(ushort)))
                     + nvCertify.Signature.Length,
+
+                //validation (TPMT_TK_VERIFIED): tag (UINT16) + hierarchy (UINT32) + digest (TPM2B_DIGEST) — no
+                //attest and no signature, unlike every other attest-family response above.
+                TpmVerifySignatureResponse verifySignature =>
+                    sizeof(ushort) + sizeof(uint) + (sizeof(ushort) + verifySignature.TicketDigestLength),
 
                 //pcrUpdateCounter (UINT32) + pcrSelectionOut (TPML_PCR_SELECTION echoed) + pcrValues (TPML_DIGEST).
                 TpmPcrReadResponse pcrRead =>
@@ -5053,6 +5282,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                         break;
                     }
+                    case TpmVerifySignatureResponse verifySignatureResponse:
+                    {
+                        //validation (TPMT_TK_VERIFIED): tag (TPM_ST_VERIFIED) + hierarchy + digest (TPM2B_DIGEST) —
+                        //the HMAC over TPM_ST_VERIFIED || digest || keyName under the verifying key's re-derived
+                        //hierarchy proof. No attest, no TPMT_SIGNATURE — the odd one out among the attest-family
+                        //responses above.
+                        writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_VERIFIED);
+                        writer.WriteUInt32(verifySignatureResponse.Hierarchy);
+                        writer.WriteTpm2b(verifySignatureResponse.TicketDigest.Memory.Span[..verifySignatureResponse.TicketDigestLength]);
+
+                        break;
+                    }
                     case TpmPcrReadResponse pcrReadResponse:
                     {
                         //pcrUpdateCounter (UINT32): zero this slice (no register has been extended).
@@ -5200,6 +5441,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             timeSignature?.Dispose();
             nvCertifyInfoBuffer?.Dispose();
             nvCertifySignature?.Dispose();
+            verifySignatureTicketDigest?.Dispose();
             quotedBuffer?.Dispose();
             quoteSignature?.Dispose();
             credentialBlobBuffer?.Dispose();

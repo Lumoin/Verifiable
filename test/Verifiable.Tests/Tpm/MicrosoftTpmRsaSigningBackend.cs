@@ -36,7 +36,7 @@ internal static class MicrosoftTpmRsaSigningBackend
     /// Creates a signing backend whose key generation and digest signing run on the framework RSA implementation.
     /// </summary>
     /// <returns>The signing backend to inject into a <see cref="TpmSimulator"/>.</returns>
-    public static TpmRsaSigningBackend Create() => new(GenerateKeyAsync, SignDigestAsync);
+    public static TpmRsaSigningBackend Create() => new(GenerateKeyAsync, SignDigestAsync, VerifyDigestAsync);
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented private-key and modulus buffers transfers to the returned carriers, which the simulator disposes.")]
@@ -77,6 +77,35 @@ internal static class MicrosoftTpmRsaSigningBackend
         byte[] signatureBytes = rsa.SignHash(digest.ToArray(), hashName, padding);
 
         return ValueTask.FromResult(new Signature(CopyToPooled(signatureBytes, pool), CryptoTags.Rsa2048Signature));
+    }
+
+    /// <summary>
+    /// Verifies a signature over a pre-computed digest against the RSA key's retained private-key encoding,
+    /// modelling the public-key operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause
+    /// 20.1). The framework RSA object derives its public modulus and exponent from the imported private key, so
+    /// no standalone public encoding is needed. Never re-hashes the digest, mirroring <see cref="SignDigestAsync"/>.
+    /// </summary>
+    /// <param name="privateKey">The verifying key's retained private key, in the backend's own encoding.</param>
+    /// <param name="digest">The digest the signature is claimed to be over.</param>
+    /// <param name="signature">The signature to verify.</param>
+    /// <param name="scheme">The RSA signing scheme (<c>TPM_ALG_RSASSA</c> or <c>TPM_ALG_RSAPSS</c>).</param>
+    /// <param name="hashAlg">The scheme's hash algorithm.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns><see langword="true"/> when the signature verifies; otherwise <see langword="false"/>.</returns>
+    private static ValueTask<bool> VerifyDigestAsync(
+        ReadOnlyMemory<byte> privateKey, ReadOnlyMemory<byte> digest, ReadOnlyMemory<byte> signature, TpmAlgIdConstants scheme, TpmAlgIdConstants hashAlg, CancellationToken cancellationToken)
+    {
+        using RSA rsa = RSA.Create();
+        rsa.ImportRSAPrivateKey(privateKey.Span, out _);
+
+        RSASignaturePadding padding = ResolvePadding(scheme);
+        HashAlgorithmName hashName = ResolveHash(hashAlg);
+
+        //VerifyHash checks the supplied digest directly — no re-hashing — exactly as TPM2_VerifySignature() over a
+        //caller-supplied TPM2B_DIGEST does.
+        bool verified = rsa.VerifyHash(digest.Span, signature.Span, hashName, padding);
+
+        return ValueTask.FromResult(verified);
     }
 
     private static RSASignaturePadding ResolvePadding(TpmAlgIdConstants scheme) => scheme switch
