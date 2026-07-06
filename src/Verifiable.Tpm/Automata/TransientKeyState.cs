@@ -26,6 +26,13 @@ namespace Verifiable.Tpm.Automata;
 /// </para>
 /// </remarks>
 /// <param name="Handle">The transient handle assigned to the object.</param>
+/// <param name="Hierarchy">
+/// The permanent hierarchy handle the object was created under (TPM 2.0 Library Part 1, clause 16). Every
+/// object this simulator creates today is a primary directly under a permanent hierarchy, so the hierarchy's
+/// own Qualified Name is trivially its 4-octet big-endian handle value; retaining it here lets a later
+/// <c>TPM2_Certify()</c> / <c>TPM2_Quote()</c> compute this object's real Qualified Name
+/// (<see cref="TpmObjectName.ComputeQualifiedNameAsync"/>) instead of collapsing it to the plain Name.
+/// </param>
 /// <param name="KeyType">The key's algorithm (<c>TPM_ALG_ECC</c> or <c>TPM_ALG_RSA</c>), selecting the signing backend.</param>
 /// <param name="Curve">The ECC curve the key lives on (unused for an RSA key).</param>
 /// <param name="PrivateKey">The retained private key: an ECC scalar (unsigned big-endian at the curve field width) or an RSA private key in the backend's encoding.</param>
@@ -45,6 +52,7 @@ namespace Verifiable.Tpm.Automata;
 /// </param>
 public sealed record TransientKeyState(
     uint Handle,
+    uint Hierarchy,
     TpmAlgIdConstants KeyType,
     TpmEccCurveConstants Curve,
     ReadOnlyMemory<byte> PrivateKey,

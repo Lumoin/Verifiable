@@ -228,22 +228,21 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             TpmSealDataAction sealAction => await SealDataAsync(sealAction, context, cancellationToken).ConfigureAwait(false),
             TpmLoadObjectAction loadAction => await LoadObjectAsync(loadAction, context, cancellationToken).ConfigureAwait(false),
             TpmCertifyAction certifyAction => await CertifyObjectAsync(certifyAction, context, cancellationToken).ConfigureAwait(false),
+            TpmRsaCertifyAction rsaCertifyAction => await CertifyObjectRsaAsync(rsaCertifyAction, context, cancellationToken).ConfigureAwait(false),
             TpmQuoteAction quoteAction => await QuoteObjectAsync(quoteAction, context, cancellationToken).ConfigureAwait(false),
             TpmStartHmacSessionAction startHmacAction => await StartHmacSessionAsync(startHmacAction, context, cancellationToken).ConfigureAwait(false),
             TpmEncryptRandomAction encryptRandomAction => await EncryptRandomOverSessionAsync(encryptRandomAction, context, cancellationToken).ConfigureAwait(false),
             TpmUnsealDataAction unsealAction => await UnsealOverSessionsAsync(unsealAction, context, cancellationToken).ConfigureAwait(false),
             TpmMakeCredentialAction makeCredentialAction => await MakeCredentialAsync(makeCredentialAction, context, cancellationToken).ConfigureAwait(false),
             TpmActivateCredentialAction activateCredentialAction => await ActivateCredentialAsync(activateCredentialAction, context, cancellationToken).ConfigureAwait(false),
+            TpmComputeNvNameAction computeNvNameAction => await ComputeNvNameForPolicyAsync(computeNvNameAction, context, cancellationToken).ConfigureAwait(false),
             _ => throw new NotSupportedException($"No executor is registered for action '{action.GetType().Name}'.")
         };
 
-    //SHA-256 digest size: the width of the object Name digest, the creation hash, the ticket digest, and the
-    //derived hierarchy proof. The simulator models a TPM whose nameAlg and context integrity algorithm are
-    //SHA-256, matching the templates it serves.
+    //SHA-256 digest size: the width of the creation hash, the ticket digest, and the derived hierarchy proof. The
+    //simulator models a TPM whose context integrity algorithm is SHA-256 regardless of nameAlg (the object Name
+    //itself is nameAlg-agile — see TpmObjectName — but the creation by-products this constant sizes are not).
     private const int CreationDigestSize = 32;
-
-    //The object Name: nameAlg (UINT16) followed by the nameAlg digest of the public area (TPM 2.0 Part 1, clause 16).
-    private const int ObjectNameSize = sizeof(ushort) + CreationDigestSize;
 
     //The marshaled TPMS_CREATION_DATA for a primary under a permanent hierarchy: empty pcrSelect (UINT32 count 0),
     //pcrDigest (TPM2B of the SHA-256 digest), locality (BYTE), parentNameAlg (UINT16 = TPM_ALG_NULL), parentName
@@ -275,15 +274,19 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             (outPublic, keyState) = BuildKeyArtifacts(action, key, context.Pool);
         }
 
-        //name = nameAlg || H(TPMT_PUBLIC), computed once: retained on the key state (so a later TPM2_Certify() can
-        //bind it into the attestation without recomputing) and shared with the creation by-products.
-        using IMemoryOwner<byte> name = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
-        keyState = keyState with { Name = name.Memory.Span[..ObjectNameSize].ToArray() };
+        //name = nameAlg || H_nameAlg(TPMT_PUBLIC), computed once: retained on the key state (so a later
+        //TPM2_Certify() can bind it into the attestation without recomputing) and shared with the creation
+        //by-products. The Name width depends on nameAlg (agile per TpmObjectName), so its length travels with it.
+        (IMemoryOwner<byte> name, int nameLength) = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
+        using(name)
+        {
+            keyState = keyState with { Name = name.Memory.Span[..nameLength].ToArray() };
 
-        (IMemoryOwner<byte> creationByProducts, int creationByProductsLength) =
-            await BuildCreationByProductsAsync(name.Memory[..ObjectNameSize], action.Hierarchy, context.ProofSeed, includeName: true, context.Pool, cancellationToken).ConfigureAwait(false);
+            (IMemoryOwner<byte> creationByProducts, int creationByProductsLength) =
+                await BuildCreationByProductsAsync(name.Memory[..nameLength], action.Hierarchy, context.ProofSeed, includeName: true, context.Pool, cancellationToken).ConfigureAwait(false);
 
-        return new TpmPrimaryKeyCreated(outPublic, keyState, creationByProducts, creationByProductsLength);
+            return new TpmPrimaryKeyCreated(outPublic, keyState, creationByProducts, creationByProductsLength);
+        }
     }
 
     //Splits the generated point into its X and Y coordinates, builds the exported public area, and copies the
@@ -308,7 +311,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //asynchronous digest seam, which this synchronous point-splitting step must not cross). The SEC1 point is
         //retained so a later ECDH-based command can use this object's public key (TPM 2.0 Library Part 1, clause 24).
         var keyState = new TransientKeyState(
-            action.Handle, TpmAlgIdConstants.TPM_ALG_ECC, action.Curve, scalar.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, point.ToArray());
+            action.Handle, action.Hierarchy, TpmAlgIdConstants.TPM_ALG_ECC, action.Curve, scalar.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, point.ToArray());
 
         return (outPublic, keyState);
     }
@@ -331,15 +334,19 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             (outPublic, keyState) = BuildRsaKeyArtifacts(action, key, context.Pool);
         }
 
-        //name = nameAlg || H(TPMT_PUBLIC), computed once: retained on the key state and shared with the by-products
-        //(the Name hashes the marshaled TPMT_PUBLIC, which for an RSA key carries the modulus).
-        using IMemoryOwner<byte> name = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
-        keyState = keyState with { Name = name.Memory.Span[..ObjectNameSize].ToArray() };
+        //name = nameAlg || H_nameAlg(TPMT_PUBLIC), computed once: retained on the key state and shared with the
+        //by-products (the Name hashes the marshaled TPMT_PUBLIC, which for an RSA key carries the modulus). The
+        //Name width depends on nameAlg (agile per TpmObjectName), so its length travels with it.
+        (IMemoryOwner<byte> name, int nameLength) = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
+        using(name)
+        {
+            keyState = keyState with { Name = name.Memory.Span[..nameLength].ToArray() };
 
-        (IMemoryOwner<byte> creationByProducts, int creationByProductsLength) =
-            await BuildCreationByProductsAsync(name.Memory[..ObjectNameSize], action.Hierarchy, context.ProofSeed, includeName: true, context.Pool, cancellationToken).ConfigureAwait(false);
+            (IMemoryOwner<byte> creationByProducts, int creationByProductsLength) =
+                await BuildCreationByProductsAsync(name.Memory[..nameLength], action.Hierarchy, context.ProofSeed, includeName: true, context.Pool, cancellationToken).ConfigureAwait(false);
 
-        return new TpmPrimaryKeyCreated(outPublic, keyState, creationByProducts, creationByProductsLength);
+            return new TpmPrimaryKeyCreated(outPublic, keyState, creationByProducts, creationByProductsLength);
+        }
     }
 
     //Builds the exported public area carrying the generated modulus and copies the private key into durable
@@ -358,7 +365,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //digest seam, which this synchronous key-copying step must not cross). An RSA key carries no SEC1 point, so
         //the retained public point is empty (the ECDH-based credential commands model only ECC credential keys).
         var keyState = new TransientKeyState(
-            action.Handle, TpmAlgIdConstants.TPM_ALG_RSA, default, privateKey.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, ReadOnlyMemory<byte>.Empty);
+            action.Handle, action.Hierarchy, TpmAlgIdConstants.TPM_ALG_RSA, default, privateKey.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, ReadOnlyMemory<byte>.Empty);
 
         return (outPublic, keyState);
     }
@@ -401,7 +408,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         if(includeName)
         {
-            total += sizeof(ushort) + ObjectNameSize;                                 //name (TPM2B_NAME).
+            total += sizeof(ushort) + name.Length;                                    //name (TPM2B_NAME); width is nameAlg-agile.
         }
 
         IMemoryOwner<byte> owner = pool.Rent(total);
@@ -421,10 +428,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             writer.WriteUInt16((ushort)CreationDigestSize);
             writer.WriteBytes(ticketDigest.Memory.Span[..CreationDigestSize]);
 
-            //The Name follows only for TPM2_CreatePrimary(); TPM2_Create() returns no Name.
+            //The Name follows only for TPM2_CreatePrimary(); TPM2_Create() returns no Name. Its width is
+            //nameAlg-agile, so it is framed from the caller-supplied slice's own length, not a fixed constant.
             if(includeName)
             {
-                writer.WriteUInt16((ushort)ObjectNameSize);
+                writer.WriteUInt16((ushort)name.Length);
                 writer.WriteBytes(name.Span);
             }
 
@@ -438,10 +446,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     //name = nameAlg || H_nameAlg(marshaled TPMT_PUBLIC) (TPM 2.0 Library Part 1, clause 16). Marshals the public
-    //area and delegates the digest+framing to ComputeObjectNameFromBytesAsync.
+    //area and delegates the nameAlg-agile digest+framing to the shared TpmObjectName helper.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the Name buffer transfers to the caller, which releases it via a using declaration.")]
-    private static async ValueTask<IMemoryOwner<byte>> ComputeObjectNameAsync(Tpm2bPublic outPublic, TpmAlgIdConstants nameAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeObjectNameAsync(Tpm2bPublic outPublic, TpmAlgIdConstants nameAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         int publicSize = outPublic.PublicArea.GetSerializedSize();
         using IMemoryOwner<byte> marshaled = pool.Rent(publicSize);
@@ -452,29 +460,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     //name = nameAlg || H_nameAlg(TPMT_PUBLIC) computed over already-marshaled public-area bytes — the form
     //TPM2_Load() has (it receives the marshaled TPMT_PUBLIC in inPublic) and the digest step ComputeObjectNameAsync
-    //shares. The Name is a fixed nameAlg (UINT16) followed by the nameAlg digest (TPM 2.0 Library Part 1, clause 16).
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the Name buffer transfers to the caller, which releases it after framing.")]
-    private static async ValueTask<IMemoryOwner<byte>> ComputeObjectNameFromBytesAsync(ReadOnlyMemory<byte> publicAreaBytes, TpmAlgIdConstants nameAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
-    {
-        using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
-            publicAreaBytes, CreationDigestSize, CryptoTags.Sha256Digest, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        IMemoryOwner<byte> name = pool.Rent(ObjectNameSize);
-        try
-        {
-            Span<byte> nameSpan = name.Memory.Span[..ObjectNameSize];
-            BinaryPrimitives.WriteUInt16BigEndian(nameSpan, (ushort)nameAlg);
-            digest.AsReadOnlySpan().CopyTo(nameSpan[sizeof(ushort)..]);
-
-            return name;
-        }
-        catch
-        {
-            name.Dispose();
-            throw;
-        }
-    }
+    //shares. Delegates to the shared nameAlg-agile TpmObjectName helper (TPM 2.0 Library Part 1, clause 16).
+    private static ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeObjectNameFromBytesAsync(ReadOnlyMemory<byte> publicAreaBytes, TpmAlgIdConstants nameAlg, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        TpmObjectName.ComputeNameAsync(publicAreaBytes, (ushort)nameAlg, pool, cancellationToken);
 
     //Marshals the TPMT_PUBLIC into its canonical wire form (no TPM2B size prefix) — the hash input for the Name.
     private static void MarshalPublicArea(Tpm2bPublic outPublic, Span<byte> destination)
@@ -647,15 +635,19 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             (outPublic, keyState) = BuildStorageParentArtifacts(action, key, context.Pool);
         }
 
-        //name = nameAlg || H(TPMT_PUBLIC), computed once from the exported public area (which now carries the
-        //generated point): retained on the parent state and shared with the creation by-products.
-        using IMemoryOwner<byte> name = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
-        keyState = keyState with { Name = name.Memory.Span[..ObjectNameSize].ToArray() };
+        //name = nameAlg || H_nameAlg(TPMT_PUBLIC), computed once from the exported public area (which now carries
+        //the generated point): retained on the parent state and shared with the creation by-products. The Name
+        //width depends on nameAlg (agile per TpmObjectName), so its length travels with it.
+        (IMemoryOwner<byte> name, int nameLength) = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
+        using(name)
+        {
+            keyState = keyState with { Name = name.Memory.Span[..nameLength].ToArray() };
 
-        (IMemoryOwner<byte> creationByProducts, int creationByProductsLength) =
-            await BuildCreationByProductsAsync(name.Memory[..ObjectNameSize], action.Hierarchy, context.ProofSeed, includeName: true, context.Pool, cancellationToken).ConfigureAwait(false);
+            (IMemoryOwner<byte> creationByProducts, int creationByProductsLength) =
+                await BuildCreationByProductsAsync(name.Memory[..nameLength], action.Hierarchy, context.ProofSeed, includeName: true, context.Pool, cancellationToken).ConfigureAwait(false);
 
-        return new TpmPrimaryKeyCreated(outPublic, keyState, creationByProducts, creationByProductsLength);
+            return new TpmPrimaryKeyCreated(outPublic, keyState, creationByProducts, creationByProductsLength);
+        }
     }
 
     //Splits the generated point into its X and Y coordinates, builds the exported storage public area carrying the
@@ -680,7 +672,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //asynchronous digest seam, which this synchronous point-splitting step must not cross). The SEC1 point is
         //retained so credential protection (the endorsement key is a storage parent) can use this object's public key.
         var keyState = new TransientKeyState(
-            action.Handle, TpmAlgIdConstants.TPM_ALG_ECC, action.Curve, scalar.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, point.ToArray());
+            action.Handle, action.Hierarchy, TpmAlgIdConstants.TPM_ALG_ECC, action.Curve, scalar.ToArray(), ReadOnlyMemory<byte>.Empty, action.Attributes, point.ToArray());
 
         return (outPublic, keyState);
     }
@@ -699,12 +691,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         //The sealed object is not loaded, so its Name is not retained; it is still computed to key the creation
         //ticket HMAC (TPM 2.0 Library Part 2, clause 10.7). No handle is allocated, so nothing carries the Name past here.
-        using IMemoryOwner<byte> name = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
+        (IMemoryOwner<byte> name, int nameLength) = await ComputeObjectNameAsync(outPublic, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
+        using(name)
+        {
+            (IMemoryOwner<byte> creationByProducts, int creationByProductsLength) =
+                await BuildCreationByProductsAsync(name.Memory[..nameLength], action.ParentHandle, context.ProofSeed, includeName: false, context.Pool, cancellationToken).ConfigureAwait(false);
 
-        (IMemoryOwner<byte> creationByProducts, int creationByProductsLength) =
-            await BuildCreationByProductsAsync(name.Memory[..ObjectNameSize], action.ParentHandle, context.ProofSeed, includeName: false, context.Pool, cancellationToken).ConfigureAwait(false);
-
-        return new TpmObjectSealed(privateBlob, privateBlobLength, outPublic, creationByProducts, creationByProductsLength);
+            return new TpmObjectSealed(privateBlob, privateBlobLength, outPublic, creationByProducts, creationByProductsLength);
+        }
     }
 
     //TPM2_Load(): recover the sealed data from the wrapped blob (it is the simulator's own encoding, so the blob
@@ -715,17 +709,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Justification = "Ownership of the Name buffer transfers to the returned TpmObjectLoaded, then to the TpmLoadResponse intent, and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> LoadObjectAsync(TpmLoadObjectAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
-        IMemoryOwner<byte> name = await ComputeObjectNameFromBytesAsync(
+        (IMemoryOwner<byte> name, int nameLength) = await ComputeObjectNameFromBytesAsync(
             action.PublicAreaBytes, action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
 
-        return new TpmObjectLoaded(action.Handle, name, ObjectNameSize, action.Data, action.AuthPolicy);
+        return new TpmObjectLoaded(action.Handle, name, nameLength, action.Data, action.AuthPolicy);
     }
 
-    //TPM2_Certify(): marshal the CERTIFY attestation binding the certified object's Name and the caller nonce,
-    //hash it through the registered digest seam, and sign the digest with the signing key's retained scalar
-    //through the injected ECC backend (this slice models an ECC attestation key). Ownership of the marshaled
-    //attest and the signature flows to TpmObjectCertified, then to the TpmCertifyResponse intent, and is released
-    //by SerializeResponse after the TPM2B_ATTEST and TPMT_SIGNATURE are framed.
+    //TPM2_Certify(): compute the subject's and the signer's Qualified Names, marshal the CERTIFY attestation
+    //binding the certified object's Name and the caller nonce, hash it through the registered digest seam, and
+    //sign the digest with the signing key's retained scalar through the injected ECC backend (this slice models
+    //an ECC attestation key). Ownership of the marshaled attest and the signature flows to TpmObjectCertified,
+    //then to the TpmCertifyResponse intent, and is released by SerializeResponse after the TPM2B_ATTEST and
+    //TPMT_SIGNATURE are framed.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled attest and the signature transfers to the returned TpmObjectCertified, then to the TpmCertifyResponse intent, and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> CertifyObjectAsync(TpmCertifyAction action, TpmActionContext context, CancellationToken cancellationToken)
@@ -733,8 +728,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TpmEccSigningBackend backend = context.SigningBackend
             ?? throw new InvalidOperationException("TPM2_Certify() requires a signing backend, but none was supplied.");
 
-        (IMemoryOwner<byte> attest, int attestLength) = BuildCertifyAttest(
-            action.SubjectName.Span, action.SignerName.Span, action.QualifyingData.Span, context.Pool);
+        (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedCertifyAttestAsync(
+            action.SubjectName, action.SubjectHierarchy, action.SignerName, action.SignerHierarchy, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
         try
         {
             //The signature is over H_hashAlg(marshaled attest) — the exact bytes TPM2B_ATTEST carries and the host
@@ -754,28 +749,85 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
     }
 
+    //The RSA counterpart of CertifyObjectAsync: same Qualified Name computation and attestation marshaling, signed
+    //with the signing key's retained private key through the injected RSA backend under the requested RSA scheme.
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the marshaled attest and the signature transfers to the returned TpmObjectCertified, then to the TpmCertifyResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> CertifyObjectRsaAsync(TpmRsaCertifyAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TpmRsaSigningBackend backend = context.RsaSigningBackend
+            ?? throw new InvalidOperationException("TPM2_Certify() over an RSA key requires an RSA signing backend, but none was supplied.");
+
+        (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedCertifyAttestAsync(
+            action.SubjectName, action.SubjectHierarchy, action.SignerName, action.SignerHierarchy, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            //The signature is over H_hashAlg(marshaled attest), exactly as the ECC path (TPM 2.0 Library Part 3,
+            //clause 18.2; the sim models a SHA-256 signing scheme).
+            using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+                attest.Memory[..attestLength], CreationDigestSize, CryptoTags.Sha256Digest, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            Signature signature = await backend.SignDigest(
+                action.SignerPrivateKey, digest.AsReadOnlyMemory(), action.Scheme, action.HashAlg, context.Pool, cancellationToken).ConfigureAwait(false);
+
+            return new TpmObjectCertified(attest, attestLength, signature, action.Scheme, action.HashAlg);
+        }
+        catch
+        {
+            attest.Dispose();
+            throw;
+        }
+    }
+
+    //Computes the subject's and the signer's Qualified Names (TPM 2.0 Library Part 1, clause 16) and marshals the
+    //CERTIFY attestation from them — shared between the ECC and RSA TPM2_Certify() paths, which differ only in
+    //how they sign the resulting digest.
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
+    private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildSignedCertifyAttestAsync(
+        ReadOnlyMemory<byte> subjectName, uint subjectHierarchy, ReadOnlyMemory<byte> signerName, uint signerHierarchy,
+        ReadOnlyMemory<byte> qualifyingData, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        (IMemoryOwner<byte> subjectQualifiedName, int subjectQualifiedNameLength) =
+            await ComputeHierarchyQualifiedNameAsync(subjectHierarchy, subjectName, pool, cancellationToken).ConfigureAwait(false);
+        using(subjectQualifiedName)
+        {
+            (IMemoryOwner<byte> signerQualifiedName, int signerQualifiedNameLength) =
+                await ComputeHierarchyQualifiedNameAsync(signerHierarchy, signerName, pool, cancellationToken).ConfigureAwait(false);
+            using(signerQualifiedName)
+            {
+                return BuildCertifyAttest(
+                    subjectName.Span,
+                    subjectQualifiedName.Memory.Span[..subjectQualifiedNameLength],
+                    signerQualifiedName.Memory.Span[..signerQualifiedNameLength],
+                    qualifyingData.Span,
+                    pool);
+            }
+        }
+    }
+
     //Builds the marshaled TPMS_ATTEST for the CERTIFY case (TPM 2.0 Library Part 2, clause 10.12.12) into a pooled
     //buffer — the exact bytes the signature is over and the TPM2B_ATTEST wraps. Synchronous, so the spans never
-    //cross the digest/sign awaits. The fields the host verifies are cryptographically real: magic
-    //(TPM_GENERATED_VALUE), type (TPM_ST_ATTEST_CERTIFY), extraData (the caller nonce), and the attested
-    //TPMS_CERTIFY_INFO.name (the certified object's Name). The fields it does not verify are well-formed but
-    //simplified: qualifiedSigner is the signer's Name rather than its full Qualified Name; clockInfo and
-    //firmwareVersion are a fresh zero image; and the attested qualifiedName is the object Name rather than the full
-    //qualified-name hash (TPM 2.0 Library Part 1, clause 26.6) — each framed with valid TPM2B sizes so the
-    //production TpmsAttest.Parse codec parses the whole structure.
+    //cross the digest/sign awaits. Every field the host verifies is cryptographically real: magic
+    //(TPM_GENERATED_VALUE), type (TPM_ST_ATTEST_CERTIFY), extraData (the caller nonce), the attested
+    //TPMS_CERTIFY_INFO.name (the certified object's Name), qualifiedSigner (the signing key's real Qualified
+    //Name), and the attested qualifiedName (the certified object's real Qualified Name) — both Qualified Names
+    //computed by the caller (TPM 2.0 Library Part 1, clause 26.6). The fields it does not verify are well-formed
+    //but simplified: clockInfo and firmwareVersion are a fresh zero image — each framed with valid TPM2B sizes so
+    //the production TpmsAttest.Parse codec parses the whole structure.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static (IMemoryOwner<byte> Owner, int Length) BuildCertifyAttest(
-        ReadOnlySpan<byte> subjectName, ReadOnlySpan<byte> signerName, ReadOnlySpan<byte> nonce, MemoryPool<byte> pool)
+        ReadOnlySpan<byte> subjectName, ReadOnlySpan<byte> subjectQualifiedName, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, MemoryPool<byte> pool)
     {
         int total =
-            sizeof(uint) + sizeof(ushort)                    //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
-            + (sizeof(ushort) + signerName.Length)           //qualifiedSigner (TPM2B_NAME).
-            + (sizeof(ushort) + nonce.Length)                //extraData (TPM2B_DATA).
-            + TpmsClockInfo.SerializedSize                   //clockInfo (TPMS_CLOCK_INFO).
-            + sizeof(ulong)                                  //firmwareVersion.
-            + (sizeof(ushort) + subjectName.Length)          //attested.name (TPM2B_NAME).
-            + (sizeof(ushort) + subjectName.Length);         //attested.qualifiedName (TPM2B_NAME, simplified to the Name).
+            sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
+            + (sizeof(ushort) + signerQualifiedName.Length)          //qualifiedSigner (TPM2B_NAME).
+            + (sizeof(ushort) + nonce.Length)                        //extraData (TPM2B_DATA).
+            + TpmsClockInfo.SerializedSize                           //clockInfo (TPMS_CLOCK_INFO).
+            + sizeof(ulong)                                          //firmwareVersion.
+            + (sizeof(ushort) + subjectName.Length)                  //attested.name (TPM2B_NAME).
+            + (sizeof(ushort) + subjectQualifiedName.Length);        //attested.qualifiedName (TPM2B_NAME).
 
         IMemoryOwner<byte> owner = pool.Rent(total);
         try
@@ -784,17 +836,17 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
             writer.WriteUInt32(TpmConstants32.TPM_GENERATED_VALUE);
             writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_ATTEST_CERTIFY);
-            writer.WriteTpm2b(signerName);                                       //qualifiedSigner (simplified to the signer's Name).
+            writer.WriteTpm2b(signerQualifiedName);                              //qualifiedSigner: the signer's real Qualified Name.
             writer.WriteTpm2b(nonce);                                            //extraData: the caller's qualifyingData, echoed verbatim.
 
             //clockInfo and firmwareVersion are a fresh zero image; the host does not verify them.
             new TpmsClockInfo(0, 0, 0, TpmiYesNo.No).WriteTo(ref writer);
             writer.WriteUInt64(0);                                              //firmwareVersion.
 
-            //attested = TPMS_CERTIFY_INFO: the certified object's Name (the attested binding), then its
-            //qualifiedName (simplified to the Name — the host does not verify it).
+            //attested = TPMS_CERTIFY_INFO: the certified object's Name (the attested binding), then its real
+            //Qualified Name.
             writer.WriteTpm2b(subjectName);
-            writer.WriteTpm2b(subjectName);
+            writer.WriteTpm2b(subjectQualifiedName);
 
             return (owner, total);
         }
@@ -802,6 +854,32 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             owner.Dispose();
             throw;
+        }
+    }
+
+    //QN(hierarchy) for a permanent hierarchy handle is the handle itself (TPM 2.0 Library Part 1, clause 16) —
+    //every object this simulator creates is a primary directly under a permanent hierarchy, so no parent-chain
+    //walk is needed; the hierarchy's 4-octet big-endian handle value stands in directly as its own Qualified
+    //Name. The nameAlg is read back out of the object's own Name (its first two octets), the same algorithm the
+    //Qualified Name inherits.
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the Qualified Name buffer transfers to the caller, which releases it via a using declaration.")]
+    private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeHierarchyQualifiedNameAsync(
+        uint hierarchy, ReadOnlyMemory<byte> name, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        ushort nameAlg = BinaryPrimitives.ReadUInt16BigEndian(name.Span[..sizeof(ushort)]);
+
+        IMemoryOwner<byte> hierarchyHandle = pool.Rent(sizeof(uint));
+        try
+        {
+            BinaryPrimitives.WriteUInt32BigEndian(hierarchyHandle.Memory.Span[..sizeof(uint)], hierarchy);
+
+            return await TpmObjectName.ComputeQualifiedNameAsync(
+                hierarchyHandle.Memory[..sizeof(uint)], name, nameAlg, pool, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            hierarchyHandle.Dispose();
         }
     }
 
@@ -825,8 +903,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         using DigestValue pcrDigest = await CryptographicKeyEvents.ComputeDigestAsync(
             composite.Memory[..compositeLength], CreationDigestSize, CryptoTags.Sha256Digest, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        (IMemoryOwner<byte> attest, int attestLength) = BuildQuoteAttest(
-            action.SignerName.Span, action.QualifyingData.Span, action.PcrSelection.Span, pcrDigest.AsReadOnlySpan(), context.Pool);
+        IMemoryOwner<byte> attest;
+        int attestLength;
+        {
+            (IMemoryOwner<byte> signerQualifiedName, int signerQualifiedNameLength) =
+                await ComputeHierarchyQualifiedNameAsync(action.SignerHierarchy, action.SignerName, context.Pool, cancellationToken).ConfigureAwait(false);
+            using(signerQualifiedName)
+            {
+                (attest, attestLength) = BuildQuoteAttest(
+                    signerQualifiedName.Memory.Span[..signerQualifiedNameLength], action.QualifyingData.Span, action.PcrSelection.Span, pcrDigest.AsReadOnlySpan(), context.Pool);
+            }
+        }
+
         try
         {
             //The signature is over H_hashAlg(marshaled attest) — the exact bytes TPM2B_ATTEST carries and the host
@@ -885,25 +973,25 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //is TPMS_QUOTE_INFO, clause 10.12.1) into a pooled buffer — the exact bytes the signature is over and the
     //TPM2B_ATTEST wraps. Synchronous, so the spans never cross the digest/sign awaits. The fields the host verifies
     //are cryptographically real: magic (TPM_GENERATED_VALUE), type (TPM_ST_ATTEST_QUOTE), extraData (the caller
-    //nonce), and the attested TPMS_QUOTE_INFO { pcrSelect echoed verbatim, pcrDigest computed over the real PCR
-    //values }. The fields it does not verify are well-formed but simplified: qualifiedSigner is the signer's Name
-    //rather than its full Qualified Name (TPM 2.0 Library Part 1, clause 26.6); clockInfo and firmwareVersion are a
-    //fresh zero image — each framed with valid TPM2B sizes so the production TpmsAttest.Parse codec parses the
-    //whole structure. The pcrSelect is the caller's TPML_PCR_SELECTION echoed verbatim (the same octets the host
-    //produced), so it round-trips through TpmsQuoteInfo.Parse exactly.
+    //nonce), qualifiedSigner (the signing key's real Qualified Name, TPM 2.0 Library Part 1, clause 26.6), and the
+    //attested TPMS_QUOTE_INFO { pcrSelect echoed verbatim, pcrDigest computed over the real PCR values }. The fields
+    //it does not verify are well-formed but simplified: clockInfo and firmwareVersion are a fresh zero image — each
+    //framed with valid TPM2B sizes so the production TpmsAttest.Parse codec parses the whole structure. The
+    //pcrSelect is the caller's TPML_PCR_SELECTION echoed verbatim (the same octets the host produced), so it
+    //round-trips through TpmsQuoteInfo.Parse exactly.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static (IMemoryOwner<byte> Owner, int Length) BuildQuoteAttest(
-        ReadOnlySpan<byte> signerName, ReadOnlySpan<byte> nonce, ReadOnlySpan<byte> pcrSelection, ReadOnlySpan<byte> pcrDigest, MemoryPool<byte> pool)
+        ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, ReadOnlySpan<byte> pcrSelection, ReadOnlySpan<byte> pcrDigest, MemoryPool<byte> pool)
     {
         int total =
-            sizeof(uint) + sizeof(ushort)                    //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
-            + (sizeof(ushort) + signerName.Length)           //qualifiedSigner (TPM2B_NAME).
-            + (sizeof(ushort) + nonce.Length)                //extraData (TPM2B_DATA).
-            + TpmsClockInfo.SerializedSize                   //clockInfo (TPMS_CLOCK_INFO).
-            + sizeof(ulong)                                  //firmwareVersion.
-            + pcrSelection.Length                            //attested.pcrSelect (TPML_PCR_SELECTION, echoed verbatim).
-            + (sizeof(ushort) + pcrDigest.Length);           //attested.pcrDigest (TPM2B_DIGEST).
+            sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
+            + (sizeof(ushort) + signerQualifiedName.Length)          //qualifiedSigner (TPM2B_NAME).
+            + (sizeof(ushort) + nonce.Length)                        //extraData (TPM2B_DATA).
+            + TpmsClockInfo.SerializedSize                           //clockInfo (TPMS_CLOCK_INFO).
+            + sizeof(ulong)                                          //firmwareVersion.
+            + pcrSelection.Length                                    //attested.pcrSelect (TPML_PCR_SELECTION, echoed verbatim).
+            + (sizeof(ushort) + pcrDigest.Length);                   //attested.pcrDigest (TPM2B_DIGEST).
 
         IMemoryOwner<byte> owner = pool.Rent(total);
         try
@@ -912,7 +1000,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
             writer.WriteUInt32(TpmConstants32.TPM_GENERATED_VALUE);
             writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_ATTEST_QUOTE);
-            writer.WriteTpm2b(signerName);                                       //qualifiedSigner (simplified to the signer's Name).
+            writer.WriteTpm2b(signerQualifiedName);                              //qualifiedSigner: the signer's real Qualified Name.
             writer.WriteTpm2b(nonce);                                            //extraData: the caller's qualifyingData, echoed verbatim.
 
             //clockInfo and firmwareVersion are a fresh zero image; the host does not verify them.
@@ -1551,6 +1639,27 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //plaintext held the recovered credential; zero it before returning the buffer to the pool.
             plaintext.Memory.Span[..encIdentity.Length].Clear();
         }
+    }
+
+    //TPM2_PolicyNV(): marshal the NV Index's TPMS_NV_PUBLIC and compute its Name (nameAlg || H_nameAlg(TPMS_NV_PUBLIC),
+    //TPM 2.0 Library Part 1, clause 16) through the shared nameAlg-agile TpmObjectName helper and the registered
+    //asynchronous digest seam — TPM digests belong there, not the sync HashFunctionDelegate seam a pure transition
+    //could reach on its own. Feeds the computed Name back with the pending assertion's arguments so the PolicyNV
+    //continuation transition can extend the session's policyDigest.
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the computed Name buffer transfers to the returned TpmNvNameComputedForPolicy and is released by the PolicyNV continuation transition once the digest extension consumes it.")]
+    private static async ValueTask<TpmSimulatorInput> ComputeNvNameForPolicyAsync(TpmComputeNvNameAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        using var nvPublic = new TpmsNvPublic(action.NvIndex, action.NameAlg, action.Attributes, Tpm2bDigest.Empty, action.DataSize);
+        int publicSize = nvPublic.SerializedSize;
+        using IMemoryOwner<byte> marshaled = context.Pool.Rent(publicSize);
+        var writer = new TpmWriter(marshaled.Memory.Span[..publicSize]);
+        nvPublic.WriteTo(ref writer);
+
+        (IMemoryOwner<byte> name, int nameLength) = await TpmObjectName.ComputeNameAsync(
+            marshaled.Memory[..publicSize], (ushort)action.NameAlg, context.Pool, cancellationToken).ConfigureAwait(false);
+
+        return new TpmNvNameComputedForPolicy(action.PolicySession, name, nameLength, action.OperandB, action.Offset, action.Operation);
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -3767,10 +3876,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 //data (TPM2B_MAX_NV_BUFFER) carrying the octets read from the NV Index.
                 TpmNvReadDataResponse nvReadData => sizeof(ushort) + nvReadData.Data.Length,
 
-                //certifyInfo (TPM2B_ATTEST) + signature (TPMT_SIGNATURE): sigAlg + hash + r (TPM2B) + s (TPM2B),
-                //r and s splitting the IEEE P1363 signature at its half (the same ECDSA framing as TPM2_Sign()).
+                //certifyInfo (TPM2B_ATTEST) + signature (TPMT_SIGNATURE): sigAlg + hash + either the ECDSA r/s
+                //TPM2B pair or the single RSA TPM2B signature (the same framing TPM2_Sign() uses).
                 TpmCertifyResponse certify =>
-                    (sizeof(ushort) + certify.CertifyInfoLength) + (4 * sizeof(ushort)) + certify.Signature.Length,
+                    (sizeof(ushort) + certify.CertifyInfoLength)
+                    + (certify.SignatureScheme == TpmAlgIdConstants.TPM_ALG_ECDSA ? (4 * sizeof(ushort)) : (3 * sizeof(ushort)))
+                    + certify.Signature.Length,
 
                 //pcrUpdateCounter (UINT32) + pcrSelectionOut (TPML_PCR_SELECTION echoed) + pcrValues (TPML_DIGEST).
                 TpmPcrReadResponse pcrRead =>
@@ -3920,23 +4031,32 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                         //certifyInfo (TPM2B_ATTEST): the marshaled TPMS_ATTEST the signature is over.
                         writer.WriteTpm2b(certifyResponse.CertifyInfo.Memory.Span[..certifyResponse.CertifyInfoLength]);
 
-                        //signature (TPMT_SIGNATURE): sigAlg + hash + the ECDSA r/s, the same framing as TPM2_Sign().
+                        //signature (TPMT_SIGNATURE): sigAlg + hash + either the ECDSA r/s pair or the single RSA
+                        //signature, the same framing TPM2_Sign() uses.
                         ReadOnlySpan<byte> certifySignatureBytes = certifyResponse.Signature.AsReadOnlySpan();
                         writer.WriteUInt16((ushort)certifyResponse.SignatureScheme);  //sigAlg: the TPMU_SIGNATURE selector.
                         writer.WriteUInt16((ushort)certifyResponse.HashAlg);          //hash inside the signature member.
 
-                        //TPMS_SIGNATURE_ECDSA: r and s are the equal-width halves of the IEEE P1363 signature, so its
-                        //length is even and the split at the midpoint is exact. An odd length would mean the backend
-                        //did not return canonical P1363 r ‖ s.
-                        if((certifySignatureBytes.Length & 1) != 0)
+                        if(certifyResponse.SignatureScheme == TpmAlgIdConstants.TPM_ALG_ECDSA)
                         {
-                            throw new InvalidOperationException(
-                                $"An ECDSA signature must be IEEE P1363 r ‖ s of even length so r and s are equal width; got {certifySignatureBytes.Length} octets.");
-                        }
+                            //TPMS_SIGNATURE_ECDSA: r and s are the equal-width halves of the IEEE P1363 signature,
+                            //so its length is even and the split at the midpoint is exact. An odd length would
+                            //mean the backend did not return canonical P1363 r ‖ s.
+                            if((certifySignatureBytes.Length & 1) != 0)
+                            {
+                                throw new InvalidOperationException(
+                                    $"An ECDSA signature must be IEEE P1363 r ‖ s of even length so r and s are equal width; got {certifySignatureBytes.Length} octets.");
+                            }
 
-                        int certifyFieldWidth = certifySignatureBytes.Length / 2;
-                        writer.WriteTpm2b(certifySignatureBytes[..certifyFieldWidth]);   //signatureR (TPM2B_ECC_PARAMETER).
-                        writer.WriteTpm2b(certifySignatureBytes[certifyFieldWidth..]);   //signatureS (TPM2B_ECC_PARAMETER).
+                            int certifyFieldWidth = certifySignatureBytes.Length / 2;
+                            writer.WriteTpm2b(certifySignatureBytes[..certifyFieldWidth]);   //signatureR (TPM2B_ECC_PARAMETER).
+                            writer.WriteTpm2b(certifySignatureBytes[certifyFieldWidth..]);   //signatureS (TPM2B_ECC_PARAMETER).
+                        }
+                        else
+                        {
+                            //TPMS_SIGNATURE_RSA: the whole signature as one TPM2B_PUBLIC_KEY_RSA.
+                            writer.WriteTpm2b(certifySignatureBytes);
+                        }
 
                         break;
                     }

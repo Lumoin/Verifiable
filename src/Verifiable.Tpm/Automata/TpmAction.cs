@@ -172,20 +172,22 @@ public sealed record TpmLoadObjectAction(
 
 /// <summary>
 /// Declares that the simulator must attest a loaded object before the next transition. Emitted by the
-/// <c>TPM2_Certify()</c> transition; the effectful loop marshals a <c>TPMS_ATTEST</c> of type
-/// <c>TPM_ST_ATTEST_CERTIFY</c> that binds the certified object's Name and the caller nonce, signs
-/// <c>H_hashAlg(attest)</c> with the signing key's retained scalar through the injected
+/// <c>TPM2_Certify()</c> transition; the effectful loop computes the subject's and the signer's Qualified Names,
+/// marshals a <c>TPMS_ATTEST</c> of type <c>TPM_ST_ATTEST_CERTIFY</c> that binds the certified object's Name and
+/// the caller nonce, signs <c>H_hashAlg(attest)</c> with the signing key's retained scalar through the injected
 /// <see cref="TpmEccSigningBackend"/>, and feeds the marshaled attest and signature back as a
 /// <see cref="TpmObjectCertified"/> input (TPM 2.0 Library Part 3, clause 18.2; Part 2, clause 10.12.12).
 /// </summary>
 /// <remarks>
 /// The transition resolves both command handles against the loaded-object table and folds their retained fields
-/// into this action — the certified object's Name and the signing key's Name, scalar, and curve — so the effect
-/// needs no automaton state and captures nothing. This slice models an elliptic-curve signing key (ECDSA), as the
-/// signing paths do.
+/// into this action — the certified object's Name and hierarchy, and the signing key's Name, hierarchy, scalar,
+/// and curve — so the effect needs no automaton state and captures nothing. This slice models an elliptic-curve
+/// signing key (ECDSA), as the signing paths do.
 /// </remarks>
 /// <param name="SubjectName">The certified object's Name (<c>nameAlg ‖ H(TPMT_PUBLIC)</c>), attested in <c>TPMS_CERTIFY_INFO.name</c>.</param>
-/// <param name="SignerName">The signing key's Name, framed as the attestation's <c>qualifiedSigner</c> (a simplification of its Qualified Name, which the verifier does not check; TPM 2.0 Library Part 2, clause 10.12.12).</param>
+/// <param name="SubjectHierarchy">The permanent hierarchy the certified object was created under, from which its Qualified Name is derived.</param>
+/// <param name="SignerName">The signing key's Name.</param>
+/// <param name="SignerHierarchy">The permanent hierarchy the signing key was created under, from which its Qualified Name (the attestation's <c>qualifiedSigner</c>) is derived.</param>
 /// <param name="QualifyingData">The caller nonce echoed verbatim into the attestation's <c>extraData</c>.</param>
 /// <param name="SignerPrivateKey">The signing key's retained ECC scalar, unsigned big-endian.</param>
 /// <param name="SignerCurve">The ECC curve the signing scalar lives on.</param>
@@ -193,7 +195,9 @@ public sealed record TpmLoadObjectAction(
 /// <param name="HashAlg">The signing scheme's hash algorithm, hashed over the marshaled attest and framed inside the signature.</param>
 public sealed record TpmCertifyAction(
     ReadOnlyMemory<byte> SubjectName,
+    uint SubjectHierarchy,
     ReadOnlyMemory<byte> SignerName,
+    uint SignerHierarchy,
     ReadOnlyMemory<byte> QualifyingData,
     ReadOnlyMemory<byte> SignerPrivateKey,
     TpmEccCurveConstants SignerCurve,
@@ -201,19 +205,54 @@ public sealed record TpmCertifyAction(
     TpmAlgIdConstants HashAlg): TpmAction;
 
 /// <summary>
+/// Declares that the simulator must attest a loaded object before the next transition, signed with an RSA key —
+/// the RSA counterpart of <see cref="TpmCertifyAction"/>. Emitted by the <c>TPM2_Certify()</c> transition when
+/// the signing key is RSA; the effectful loop computes the subject's and the signer's Qualified Names, marshals
+/// the same <c>TPMS_ATTEST</c> of type <c>TPM_ST_ATTEST_CERTIFY</c>, signs <c>H_hashAlg(attest)</c> with the
+/// signing key's retained private key through the injected <see cref="TpmRsaSigningBackend"/> under the
+/// requested RSA scheme, and feeds the marshaled attest and signature back as a <see cref="TpmObjectCertified"/>
+/// input (TPM 2.0 Library Part 3, clause 18.2; Part 2, clause 10.12.12).
+/// </summary>
+/// <remarks>
+/// The transition resolves both command handles against the loaded-object table and folds their retained fields
+/// into this action — the certified object's Name and hierarchy, and the signing key's Name, hierarchy, and
+/// private key — so the effect needs no automaton state and captures nothing.
+/// </remarks>
+/// <param name="SubjectName">The certified object's Name (<c>nameAlg ‖ H(TPMT_PUBLIC)</c>), attested in <c>TPMS_CERTIFY_INFO.name</c>.</param>
+/// <param name="SubjectHierarchy">The permanent hierarchy the certified object was created under, from which its Qualified Name is derived.</param>
+/// <param name="SignerName">The signing key's Name.</param>
+/// <param name="SignerHierarchy">The permanent hierarchy the signing key was created under, from which its Qualified Name (the attestation's <c>qualifiedSigner</c>) is derived.</param>
+/// <param name="QualifyingData">The caller nonce echoed verbatim into the attestation's <c>extraData</c>.</param>
+/// <param name="SignerPrivateKey">The signing key's retained private key, in the backend's own encoding.</param>
+/// <param name="Scheme">The RSA signing scheme (<c>TPM_ALG_RSASSA</c> or <c>TPM_ALG_RSAPSS</c>) to apply.</param>
+/// <param name="HashAlg">The signing scheme's hash algorithm, hashed over the marshaled attest and framed inside the signature.</param>
+public sealed record TpmRsaCertifyAction(
+    ReadOnlyMemory<byte> SubjectName,
+    uint SubjectHierarchy,
+    ReadOnlyMemory<byte> SignerName,
+    uint SignerHierarchy,
+    ReadOnlyMemory<byte> QualifyingData,
+    ReadOnlyMemory<byte> SignerPrivateKey,
+    TpmAlgIdConstants Scheme,
+    TpmAlgIdConstants HashAlg): TpmAction;
+
+/// <summary>
 /// Declares that the simulator must quote a set of Platform Configuration Registers before the next transition.
 /// Emitted by the <c>TPM2_Quote()</c> transition; the effectful loop computes the PCR composite digest over the
-/// selected register values, marshals a <c>TPMS_ATTEST</c> of type <c>TPM_ST_ATTEST_QUOTE</c> that binds that
-/// composite and the caller nonce, signs <c>H_hashAlg(attest)</c> with the signing key's retained scalar through
-/// the injected <see cref="TpmEccSigningBackend"/>, and feeds the marshaled attest and signature back as a
-/// <see cref="TpmObjectQuoted"/> input (TPM 2.0 Library Part 3, clause 18.4; Part 2, clauses 10.12.12 and 10.12.1).
+/// selected register values and the signer's Qualified Name, marshals a <c>TPMS_ATTEST</c> of type
+/// <c>TPM_ST_ATTEST_QUOTE</c> that binds that composite and the caller nonce, signs <c>H_hashAlg(attest)</c> with
+/// the signing key's retained scalar through the injected <see cref="TpmEccSigningBackend"/>, and feeds the
+/// marshaled attest and signature back as a <see cref="TpmObjectQuoted"/> input (TPM 2.0 Library Part 3, clause
+/// 18.4; Part 2, clauses 10.12.12 and 10.12.1).
 /// </summary>
 /// <remarks>
 /// The transition resolves the signing-key handle against the loaded-object table and gathers the selected PCR
-/// values from the durable bank, folding both into this action, so the effect needs no automaton state and
-/// captures nothing. This slice models an elliptic-curve signing key (ECDSA), as the signing paths do.
+/// values from the durable bank, folding both (plus the signer's hierarchy) into this action, so the effect
+/// needs no automaton state and captures nothing. This slice models an elliptic-curve signing key (ECDSA), as
+/// the signing paths do.
 /// </remarks>
-/// <param name="SignerName">The signing key's Name, framed as the attestation's <c>qualifiedSigner</c> (a simplification of its Qualified Name, which the verifier does not check; TPM 2.0 Library Part 1, clause 26.6).</param>
+/// <param name="SignerName">The signing key's Name.</param>
+/// <param name="SignerHierarchy">The permanent hierarchy the signing key was created under, from which its Qualified Name (the attestation's <c>qualifiedSigner</c>) is derived.</param>
 /// <param name="QualifyingData">The caller nonce echoed verbatim into the attestation's <c>extraData</c>.</param>
 /// <param name="SignerPrivateKey">The signing key's retained ECC scalar, unsigned big-endian.</param>
 /// <param name="SignerCurve">The ECC curve the signing scalar lives on.</param>
@@ -223,6 +262,7 @@ public sealed record TpmCertifyAction(
 /// <param name="PcrValues">The selected register values in ascending PCR-index order, concatenated and hashed into the attested <c>pcrDigest</c>.</param>
 public sealed record TpmQuoteAction(
     ReadOnlyMemory<byte> SignerName,
+    uint SignerHierarchy,
     ReadOnlyMemory<byte> QualifyingData,
     ReadOnlyMemory<byte> SignerPrivateKey,
     TpmEccCurveConstants SignerCurve,
@@ -378,3 +418,34 @@ public sealed record TpmActivateCredentialAction(
     ReadOnlyMemory<byte> CredentialKeyPublicPoint,
     TpmEccCurveConstants CredentialKeyCurve,
     TpmAlgIdConstants NameAlg): TpmAction;
+
+/// <summary>
+/// Declares that the simulator must compute an NV Index's Name before the next transition, so
+/// <c>TPM2_PolicyNV()</c>'s policyDigest extension can bind it (TPM 2.0 Library Part 3, clause 23.9; Part 1,
+/// clause 16). Emitted by the <c>TPM2_PolicyNV()</c> transition; the effectful loop marshals the Index's
+/// <c>TPMS_NV_PUBLIC</c> and computes <c>nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c> through the registered digest
+/// seam, then feeds the Name back with the pending assertion's arguments as a
+/// <see cref="TpmNvNameComputedForPolicy"/> input so a second transition can extend the session's policyDigest.
+/// </summary>
+/// <remarks>
+/// The simulator's modelled NV Indexes carry a fixed <c>TPM_ALG_SHA256</c> nameAlg (this model's universal NV
+/// Name algorithm) rather than a caller-chosen one, so <see cref="NameAlg"/> is not yet wire-agile — carried
+/// here so a future NV nameAlg agility pass only touches this action's construction, not the digest routing.
+/// </remarks>
+/// <param name="PolicySession">The policy session whose policyDigest the assertion extends.</param>
+/// <param name="NvIndex">The NV Index handle, folded into the marshaled <c>TPMS_NV_PUBLIC</c>.</param>
+/// <param name="Attributes">The Index's current attributes (<c>TPMA_NV</c>), folded into the marshaled <c>TPMS_NV_PUBLIC</c>.</param>
+/// <param name="DataSize">The Index's declared data size, folded into the marshaled <c>TPMS_NV_PUBLIC</c>.</param>
+/// <param name="NameAlg">The Name algorithm the marshaled <c>TPMS_NV_PUBLIC</c> carries.</param>
+/// <param name="OperandB">The comparison operand the pending assertion carries.</param>
+/// <param name="Offset">The octet offset into the NV Index data the pending assertion carries.</param>
+/// <param name="Operation">The <c>TPM_EO</c> comparison operation the pending assertion carries.</param>
+public sealed record TpmComputeNvNameAction(
+    uint PolicySession,
+    uint NvIndex,
+    TpmaNv Attributes,
+    ushort DataSize,
+    TpmAlgIdConstants NameAlg,
+    ReadOnlyMemory<byte> OperandB,
+    ushort Offset,
+    ushort Operation): TpmAction;

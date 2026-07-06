@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading;
@@ -84,7 +85,19 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         Assert.IsTrue(attest.ExtraData.Span.SequenceEqual(Nonce), "extraData must echo the caller's qualifyingData nonce.");
         Assert.IsNotNull(attest.Attested.Quote);
 
-        //2. Signature: over the RAW attestation bytes, against the AK public key reconstructed from the
+        //2. Qualified Name realism: qualifiedSigner must equal the AK's independent off-TPM recomputation
+        //nameAlg || H(hierarchyHandle || Name) (TPM 2.0 Library Part 1, clause 16) — and must NOT equal the plain
+        //Name (the regression a Name/QN collapse would otherwise pass).
+        byte[] expectedSignerQn = await ComputeQualifiedNameAsync(
+            (uint)TpmRh.TPM_RH_OWNER, ak.Name.Span.ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            attest.QualifiedSigner.Span.SequenceEqual(expectedSignerQn),
+            "qualifiedSigner must equal the AK's independently recomputed Qualified Name.");
+        Assert.IsFalse(
+            attest.QualifiedSigner.Span.SequenceEqual(ak.Name.Span),
+            "qualifiedSigner must not collapse to the AK's plain Name.");
+
+        //3. Signature: over the RAW attestation bytes, against the AK public key reconstructed from the
         //simulator's exported public area only (firewalled — no shared in-memory state).
         byte[] attestDigest = await ComputeSha256Async(quote.Quoted.GetRawBytes().ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -109,7 +122,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
             ecdsa.VerifyHash(attestDigest, p1363Signature),
             "The quote signature must verify over the raw attestation bytes against the AK's exported public key.");
 
-        //3. PCR binding: re-read the same PCRs and recompute the composite digest the simulator signed.
+        //4. PCR binding: re-read the same PCRs and recompute the composite digest the simulator signed.
         byte[] expectedPcrDigest = await ReadAndComputePcrCompositeAsync(tpm, registry, pool).ConfigureAwait(false);
         Assert.IsTrue(
             attest.Attested.Quote!.PcrDigest.AsReadOnlySpan().SequenceEqual(expectedPcrDigest),
@@ -371,6 +384,36 @@ internal sealed class TpmInHouseSimulatorQuoteTests
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return digest.AsReadOnlySpan().ToArray();
+    }
+
+    /// <summary>
+    /// Recomputes an object's Qualified Name independently: <c>nameAlg || H(hierarchyHandle || Name)</c> (TPM 2.0
+    /// Library Part 1, clause 16), through the registered digest seam. Every object this simulator quotes with is
+    /// a primary created directly under a permanent hierarchy, so the hierarchy's own Qualified Name is its
+    /// 4-octet big-endian handle value — this test never calls the production <c>TpmObjectName</c> helper,
+    /// matching the file's firewalled, off-TPM oracle style.
+    /// </summary>
+    /// <param name="hierarchy">The permanent hierarchy handle the object was created under.</param>
+    /// <param name="name">The object's own Name.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The recomputed Qualified Name.</returns>
+    private static async Task<byte[]> ComputeQualifiedNameAsync(uint hierarchy, ReadOnlyMemory<byte> name, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        ushort nameAlg = BinaryPrimitives.ReadUInt16BigEndian(name.Span[..sizeof(ushort)]);
+        Assert.AreEqual((ushort)TpmAlgIdConstants.TPM_ALG_SHA256, nameAlg, "This test assumes a SHA-256 nameAlg.");
+
+        byte[] message = new byte[sizeof(uint) + name.Length];
+        BinaryPrimitives.WriteUInt32BigEndian(message, hierarchy);
+        name.Span.CopyTo(message.AsSpan(sizeof(uint)));
+
+        byte[] digest = await ComputeSha256Async(message, pool, cancellationToken).ConfigureAwait(false);
+
+        byte[] qualifiedName = new byte[sizeof(ushort) + digest.Length];
+        BinaryPrimitives.WriteUInt16BigEndian(qualifiedName, nameAlg);
+        digest.CopyTo(qualifiedName.AsSpan(sizeof(ushort)));
+
+        return qualifiedName;
     }
 
     /// <summary>

@@ -50,6 +50,9 @@ internal sealed class TpmInHouseSimulatorCertifyTests
     /// <summary>The number of bytes in a NIST P-256 coordinate or in an ECDSA r/s component.</summary>
     private const int P256ComponentSize = 32;
 
+    /// <summary>The RSA modulus size in bits used by the RSA certify tests.</summary>
+    private const ushort Rsa2048KeyBits = 2048;
+
     /// <summary>The fixed caller nonce (qualifyingData) echoed into the attestation's extraData.</summary>
     private static byte[] Nonce { get; } = "Certify nonce for the in-house TPM."u8.ToArray();
 
@@ -103,6 +106,27 @@ internal sealed class TpmInHouseSimulatorCertifyTests
         //Cross-check: the recomputation matches the Name the simulator returned for the subject at creation.
         Assert.IsTrue(expectedName.AsSpan().SequenceEqual(subject.Name.Span),
             "The independently recomputed Name must match the simulator-reported subject Name.");
+
+        //2b. Qualified Name realism: qualifiedSigner and attested.certify.qualifiedName must equal the
+        //independent off-TPM recomputation nameAlg || H(hierarchyHandle || Name) — and must NOT equal the plain
+        //Name (the regression a Name/QN collapse would otherwise pass).
+        byte[] expectedSignerQn = await ComputeQualifiedNameAsync(
+            (uint)TpmRh.TPM_RH_ENDORSEMENT, ak.Name.Span.ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            attest.QualifiedSigner.Span.SequenceEqual(expectedSignerQn),
+            "qualifiedSigner must equal the AK's independently recomputed Qualified Name.");
+        Assert.IsFalse(
+            attest.QualifiedSigner.Span.SequenceEqual(ak.Name.Span),
+            "qualifiedSigner must not collapse to the AK's plain Name.");
+
+        byte[] expectedSubjectQn = await ComputeQualifiedNameAsync(
+            (uint)TpmRh.TPM_RH_OWNER, subject.Name.Span.ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            attest.Attested.Certify!.QualifiedName.Span.SequenceEqual(expectedSubjectQn),
+            "attested.certify.qualifiedName must equal the subject's independently recomputed Qualified Name.");
+        Assert.IsFalse(
+            attest.Attested.Certify!.QualifiedName.Span.SequenceEqual(subject.Name.Span),
+            "attested.certify.qualifiedName must not collapse to the subject's plain Name.");
 
         //3. Signature: over the RAW attestation bytes, against the AK public key reconstructed from the
         //simulator's exported public area only.
@@ -180,6 +204,128 @@ internal sealed class TpmInHouseSimulatorCertifyTests
         Assert.AreEqual(TpmRcConstants.TPM_RC_HANDLE, certifyResult.ResponseCode);
     }
 
+    [TestMethod]
+    public async Task RsaCertifyVerifiesAgainstInHouseSimulator()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        //The subject (certified) key under the owner hierarchy and the RSA AK (signer) under the endorsement
+        //hierarchy: distinct hierarchy seeds give genuinely distinct keys, so this is a real cross-key
+        //certification rather than a self-certify.
+        using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+        using CreatePrimaryResponse ak = await CreateRsaSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+
+        var rsaParameters = new RSAParameters
+        {
+            Modulus = ak.OutPublic.PublicArea.Unique.GetRsaModulus().ToArray(),
+            Exponent = [0x01, 0x00, 0x01]
+        };
+
+        await CertifyAndVerifyRsaAsync(tpm, registry, pool, subject, ak, rsaParameters, usePss: false).ConfigureAwait(false);
+        await CertifyAndVerifyRsaAsync(tpm, registry, pool, subject, ak, rsaParameters, usePss: true).ConfigureAwait(false);
+    }
+
+    [TestMethod]
+    public async Task CertifyWithSchemeMismatchedToSignerKeyTypeReturnsScheme()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        //An ECC signing key certified with an RSA scheme (RSASSA) is a genuine scheme/key-type mismatch, distinct
+        //from an unresolved handle (TPM 2.0 Library Part 3, clause 18.2).
+        using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+        using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+
+        using TpmPasswordSession objectAuth = TpmPasswordSession.CreateEmpty(pool);
+        using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
+        using CertifyInput certifyInput = CertifyInput.ForRsaSsa(
+            subject.ObjectHandle, ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+
+        TpmResult<CertifyResponse> certifyResult = await TpmCommandExecutor.ExecuteAsync<CertifyResponse>(
+            tpm, certifyInput, [objectAuth, signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SCHEME, certifyResult.ResponseCode);
+    }
+
+    /// <summary>
+    /// Certifies the subject with the RSA AK under the given scheme through the production command path,
+    /// verifies the attestation off-TPM (magic/type/nonce/Name/Qualified Name), and verifies the signature against
+    /// the AK's exported modulus with an independent RSA verifier.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="subject">The certified object's CreatePrimary response.</param>
+    /// <param name="ak">The RSA attestation key's CreatePrimary response.</param>
+    /// <param name="rsaParameters">The public key reconstructed from the AK's exported modulus.</param>
+    /// <param name="usePss">When <see langword="true"/>, certifies and verifies RSAPSS; otherwise RSASSA (PKCS#1 v1.5).</param>
+    private async Task CertifyAndVerifyRsaAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, CreatePrimaryResponse subject, CreatePrimaryResponse ak, RSAParameters rsaParameters, bool usePss)
+    {
+        using TpmPasswordSession objectAuth = TpmPasswordSession.CreateEmpty(pool);
+        using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
+        using CertifyInput certifyInput = usePss
+            ? CertifyInput.ForRsaPss(subject.ObjectHandle, ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pool)
+            : CertifyInput.ForRsaSsa(subject.ObjectHandle, ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+
+        TpmResult<CertifyResponse> certifyResult = await TpmCommandExecutor.ExecuteAsync<CertifyResponse>(
+            tpm, certifyInput, [objectAuth, signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string schemeName = usePss ? "RSAPSS" : "RSASSA";
+        Assert.IsTrue(certifyResult.IsSuccess, $"TPM2_Certify ({schemeName}) failed: '{certifyResult.ResponseCode}'.");
+
+        using CertifyResponse certify = certifyResult.Value;
+        Assert.AreEqual(usePss ? TpmAlgIdConstants.TPM_ALG_RSAPSS : TpmAlgIdConstants.TPM_ALG_RSASSA, certify.SignatureAlgorithm);
+        Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_SHA256, certify.HashAlgorithm);
+
+        //1. Attestation envelope: TPM-generated marker, certify type, and the nonce echoed verbatim.
+        TpmsAttest attest = certify.CertifyInfo.AttestationData;
+        Assert.AreEqual(TpmConstants32.TPM_GENERATED_VALUE, attest.Magic, "A genuine TPM attestation is stamped with TPM_GENERATED_VALUE.");
+        Assert.AreEqual(TpmStConstants.TPM_ST_ATTEST_CERTIFY, attest.Type);
+        Assert.IsTrue(attest.ExtraData.Span.SequenceEqual(Nonce), "extraData must echo the caller's qualifyingData nonce.");
+        Assert.IsNotNull(attest.Attested.Certify);
+
+        //2. Name binding: firewalled recomputation from the wire-exported public area.
+        byte[] expectedName = await ComputeObjectNameAsync(subject.OutPublic, pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            attest.Attested.Certify!.Name.Span.SequenceEqual(expectedName),
+            "The certified Name must equal the subject's Name recomputed from its exported public area.");
+
+        //3. Qualified Name realism: qualifiedSigner and attested.certify.qualifiedName must equal the independent
+        //off-TPM recomputation and must NOT equal the plain Name.
+        byte[] expectedSignerQn = await ComputeQualifiedNameAsync(
+            (uint)TpmRh.TPM_RH_ENDORSEMENT, ak.Name.Span.ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            attest.QualifiedSigner.Span.SequenceEqual(expectedSignerQn),
+            "qualifiedSigner must equal the RSA AK's independently recomputed Qualified Name.");
+        Assert.IsFalse(
+            attest.QualifiedSigner.Span.SequenceEqual(ak.Name.Span),
+            "qualifiedSigner must not collapse to the RSA AK's plain Name.");
+
+        byte[] expectedSubjectQn = await ComputeQualifiedNameAsync(
+            (uint)TpmRh.TPM_RH_OWNER, subject.Name.Span.ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            attest.Attested.Certify!.QualifiedName.Span.SequenceEqual(expectedSubjectQn),
+            "attested.certify.qualifiedName must equal the subject's independently recomputed Qualified Name.");
+        Assert.IsFalse(
+            attest.Attested.Certify!.QualifiedName.Span.SequenceEqual(subject.Name.Span),
+            "attested.certify.qualifiedName must not collapse to the subject's plain Name.");
+
+        //4. Signature: over the RAW attestation bytes, against the RSA AK public key reconstructed from the
+        //simulator's exported modulus only.
+        byte[] attestDigest = await ComputeSha256Async(certify.CertifyInfo.GetRawBytes().ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
+        RSASignaturePadding padding = usePss ? RSASignaturePadding.Pss : RSASignaturePadding.Pkcs1;
+        using RSA rsa = RSA.Create(rsaParameters);
+        Assert.IsTrue(
+            rsa.VerifyHash(attestDigest, certify.Signature.RsaSignature.Buffer.ToArray(), HashAlgorithmName.SHA256, padding),
+            $"The {schemeName} certify signature must verify against the RSA AK's exported modulus.");
+    }
+
     /// <summary>
     /// Creates a primary ECC P-256 signing key under the given hierarchy and returns the response (the caller
     /// owns it).
@@ -209,6 +355,30 @@ internal sealed class TpmInHouseSimulatorCertifyTests
     }
 
     /// <summary>
+    /// Creates a primary RSA-2048 signing key under the given hierarchy and returns the response (the caller owns
+    /// it). A NULL scheme makes this an unrestricted signing key, so the scheme (RSASSA or RSAPSS) is chosen per
+    /// <c>TPM2_Certify()</c>, as a real caller would.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="hierarchy">The hierarchy under which to create the key.</param>
+    /// <returns>The CreatePrimary response.</returns>
+    private async Task<CreatePrimaryResponse> CreateRsaSigningPrimaryAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+    {
+        using CreatePrimaryInput input = CreatePrimaryInput.ForRsaSigningKey(
+            hierarchy, password: null, keyBits: Rsa2048KeyBits, TpmtRsaScheme.Null, pool, noDa: true);
+
+        using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"CreatePrimary (RSA 2048, {hierarchy}) failed: '{result.ResponseCode}'.");
+
+        return result.Value;
+    }
+
+    /// <summary>
     /// Recomputes a loaded object's Name from its exported public area: <c>nameAlg || H_nameAlg(TPMT_PUBLIC)</c>
     /// (TPM 2.0 Library Part 1, clause 16), through the registered digest seam. The test keys use a SHA-256 nameAlg.
     /// </summary>
@@ -232,6 +402,36 @@ internal sealed class TpmInHouseSimulatorCertifyTests
     }
 
     /// <summary>
+    /// Recomputes an object's Qualified Name independently: <c>nameAlg || H(hierarchyHandle || Name)</c> (TPM 2.0
+    /// Library Part 1, clause 16), through the registered digest seam. Every object this simulator certifies is a
+    /// primary created directly under a permanent hierarchy, so the hierarchy's own Qualified Name is its 4-octet
+    /// big-endian handle value — this test never calls the production <c>TpmObjectName</c> helper, matching the
+    /// file's firewalled, off-TPM oracle style.
+    /// </summary>
+    /// <param name="hierarchy">The permanent hierarchy handle the object was created under.</param>
+    /// <param name="name">The object's own Name.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The recomputed Qualified Name.</returns>
+    private static async Task<byte[]> ComputeQualifiedNameAsync(uint hierarchy, ReadOnlyMemory<byte> name, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        ushort nameAlg = BinaryPrimitives.ReadUInt16BigEndian(name.Span[..sizeof(ushort)]);
+        Assert.AreEqual((ushort)TpmAlgIdConstants.TPM_ALG_SHA256, nameAlg, "This test assumes a SHA-256 nameAlg.");
+
+        byte[] message = new byte[sizeof(uint) + name.Length];
+        BinaryPrimitives.WriteUInt32BigEndian(message, hierarchy);
+        name.Span.CopyTo(message.AsSpan(sizeof(uint)));
+
+        byte[] digest = await ComputeSha256Async(message, pool, cancellationToken).ConfigureAwait(false);
+
+        byte[] qualifiedName = new byte[sizeof(ushort) + digest.Length];
+        BinaryPrimitives.WriteUInt16BigEndian(qualifiedName, nameAlg);
+        digest.CopyTo(qualifiedName.AsSpan(sizeof(ushort)));
+
+        return qualifiedName;
+    }
+
+    /// <summary>
     /// Marshals the exported public area into its canonical TPMT_PUBLIC wire form (no TPM2B size prefix) — the
     /// hash input the object Name is computed over.
     /// </summary>
@@ -249,15 +449,19 @@ internal sealed class TpmInHouseSimulatorCertifyTests
     }
 
     /// <summary>
-    /// Creates a simulator with the ECC (BouncyCastle) signing backend wired, powers it on, and brings it through
-    /// <c>TPM2_Startup(CLEAR)</c> into the operational phase. The ECC backend is required so the simulator services
-    /// <c>TPM2_CreatePrimary()</c> (both keys) and signs the attestation for <c>TPM2_Certify()</c>.
+    /// Creates a simulator with both the ECC (BouncyCastle) and RSA (framework) signing backends wired, powers it
+    /// on, and brings it through <c>TPM2_Startup(CLEAR)</c> into the operational phase. Both backends are required
+    /// so the simulator services <c>TPM2_CreatePrimary()</c> for either key type and signs the attestation for
+    /// <c>TPM2_Certify()</c> with either an ECC or an RSA attestation key.
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-certify", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator(
+            "tpm-in-house-certify",
+            signingBackend: BouncyCastleTpmEccSigningBackend.Create(),
+            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

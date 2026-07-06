@@ -414,7 +414,7 @@ public sealed record TpmObjectLoaded(
 /// <param name="ObjectHandle">The loaded object being certified (its Name is the attested binding).</param>
 /// <param name="SignHandle">The loaded signing key that attests, whose retained scalar signs the marshaled attestation.</param>
 /// <param name="QualifyingData">The caller nonce echoed into the attestation's <c>extraData</c>, copied into durable model memory.</param>
-/// <param name="SignatureScheme">The signing scheme algorithm (<c>TPM_ALG_ECDSA</c> this slice).</param>
+/// <param name="SignatureScheme">The signing scheme algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>, dispatched on the signing key's type).</param>
 /// <param name="SchemeHashAlg">The signing scheme's hash algorithm.</param>
 public sealed record TpmCertifyRequested(
     uint ObjectHandle,
@@ -431,7 +431,7 @@ public sealed record TpmCertifyRequested(
 /// <param name="CertifyInfo">The pooled buffer holding the marshaled <c>TPMS_ATTEST</c> (the exact bytes the signature is over); ownership flows to the <c>TpmCertifyResponse</c> and is released by <see cref="TpmSimulator"/> once framed.</param>
 /// <param name="CertifyInfoLength">The number of valid octets in <paramref name="CertifyInfo"/>.</param>
 /// <param name="Signature">The signature over <c>H_hashAlg(certifyInfo)</c>; ownership flows to the <c>TpmCertifyResponse</c> and is released once framed.</param>
-/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>), selecting how the signature is framed.</param>
+/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>), selecting how the signature is framed.</param>
 /// <param name="HashAlg">The signing scheme's hash algorithm, framed inside the signature.</param>
 public sealed record TpmObjectCertified(
     IMemoryOwner<byte> CertifyInfo,
@@ -659,6 +659,25 @@ public sealed record TpmPolicyNvRequested(
     uint AuthHandle,
     uint NvIndex,
     uint PolicySession,
+    ReadOnlyMemory<byte> OperandB,
+    ushort Offset,
+    ushort Operation): TpmSimulatorInput;
+
+/// <summary>
+/// The result of executing a <see cref="TpmComputeNvNameAction"/>: the NV Index's computed Name, fed back with
+/// the pending assertion's arguments so the transition can extend the policy session's policyDigest and frame
+/// the <c>TPM2_PolicyNV()</c> response. Internal to the effect loop; never arrives from the command transport.
+/// </summary>
+/// <param name="PolicySession">The policy session whose policyDigest the assertion extends.</param>
+/// <param name="NvName">The pooled buffer holding the NV Index's computed Name; released once the digest extension consumes it.</param>
+/// <param name="NvNameLength">The number of valid octets in <paramref name="NvName"/>.</param>
+/// <param name="OperandB">The comparison operand the pending assertion carries.</param>
+/// <param name="Offset">The octet offset into the NV Index data the pending assertion carries.</param>
+/// <param name="Operation">The <c>TPM_EO</c> comparison operation the pending assertion carries.</param>
+public sealed record TpmNvNameComputedForPolicy(
+    uint PolicySession,
+    IMemoryOwner<byte> NvName,
+    int NvNameLength,
     ReadOnlyMemory<byte> OperandB,
     ushort Offset,
     ushort Operation): TpmSimulatorInput;

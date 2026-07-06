@@ -69,6 +69,7 @@ public static class TpmLifecycleTransitions
                 TpmUnsealedOverSessions unsealedOverSessions => OnUnsealedOverSessions(state, unsealedOverSessions),
                 TpmCredentialMade credentialMade => OnCredentialMade(state, credentialMade),
                 TpmCredentialActivated credentialActivated => OnCredentialActivated(state, credentialActivated),
+                TpmNvNameComputedForPolicy nvNameComputedForPolicy => OnNvNameComputedForPolicy(state, nvNameComputedForPolicy),
                 _ => OnExternalInput(state, input, cancellationToken)
             };
 
@@ -572,6 +573,13 @@ public static class TpmLifecycleTransitions
     //public area and the durable key state, and feeds them back as a TpmPrimaryKeyCreated input.
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnCreatePrimary(TpmSimulatorState state, TpmCreatePrimaryRequested request)
     {
+        //An unsupported nameAlg cannot be computed (TpmObjectName), so it is rejected up front rather than
+        //defaulted (TPM 2.0 Library Part 3, CreatePrimary error conditions: an unsupported hash is TPM_RC_HASH).
+        if(!IsSupportedNameAlg(request.NameAlg))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_CreatePrimary, TpmRcConstants.TPM_RC_HASH);
+        }
+
         uint handle = state.NextObjectHandle;
 
         return Transition(
@@ -589,6 +597,11 @@ public static class TpmLifecycleTransitions
     //feeds it back as the same TpmPrimaryKeyCreated input the ECC path uses.
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnCreateRsaPrimary(TpmSimulatorState state, TpmCreateRsaPrimaryRequested request)
     {
+        if(!IsSupportedNameAlg(request.NameAlg))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_CreatePrimary, TpmRcConstants.TPM_RC_HASH);
+        }
+
         uint handle = state.NextObjectHandle;
 
         return Transition(
@@ -653,6 +666,11 @@ public static class TpmLifecycleTransitions
     //them back as the same TpmPrimaryKeyCreated input the signing paths use.
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnCreateStorageParent(TpmSimulatorState state, TpmCreateStorageParentRequested request)
     {
+        if(!IsSupportedNameAlg(request.NameAlg))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_CreatePrimary, TpmRcConstants.TPM_RC_HASH);
+        }
+
         uint handle = state.NextObjectHandle;
 
         return Transition(
@@ -680,6 +698,11 @@ public static class TpmLifecycleTransitions
         if(!IsStorageParent(parent.Attributes))
         {
             return Reject(state, TpmCcConstants.TPM_CC_Create, TpmRcConstants.TPM_RC_TYPE);
+        }
+
+        if(!IsSupportedNameAlg(request.NameAlg))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_Create, TpmRcConstants.TPM_RC_HASH);
         }
 
         return Transition(
@@ -722,6 +745,11 @@ public static class TpmLifecycleTransitions
         if(request.ObjectType != TpmAlgIdConstants.TPM_ALG_KEYEDHASH)
         {
             return Reject(state, TpmCcConstants.TPM_CC_Load, TpmRcConstants.TPM_RC_TYPE);
+        }
+
+        if(!IsSupportedNameAlg(request.NameAlg))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_Load, TpmRcConstants.TPM_RC_HASH);
         }
 
         uint handle = state.NextObjectHandle;
@@ -875,10 +903,12 @@ public static class TpmLifecycleTransitions
 
     //TPM2_Certify() has a signing key attest that another loaded object's Name is present in the same TPM, over a
     //caller nonce (Part 3, clause 18.2). Both handles must resolve to loaded transient objects; a missing one is
-    //TPM_RC_HANDLE. This slice signs with an ECC attestation key, so a non-ECC signer is TPM_RC_SCHEME (the ECDSA
-    //scheme is incompatible with the key). The attestation needs an effect (marshal and sign), so the transition
-    //resolves both objects, folds their retained fields into a TpmCertifyAction, and leaves no response yet;
-    //OnObjectCertified frames the result. No handle is allocated — TPM2_Certify() returns no object handle.
+    //TPM_RC_HANDLE. The signing scheme is dispatched on the signer's key type — TPM_ALG_ECDSA for an ECC key,
+    //TPM_ALG_RSASSA/TPM_ALG_RSAPSS for an RSA key (mirroring OnSign) — and a scheme incompatible with the key's
+    //type is TPM_RC_SCHEME. The attestation needs an effect (compute the Qualified Names, marshal, and sign), so
+    //the transition resolves both objects, folds their retained fields into the matching action, and leaves no
+    //response yet; OnObjectCertified frames the result. No handle is allocated — TPM2_Certify() returns no
+    //object handle.
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnCertify(TpmSimulatorState state, TpmCertifyRequested request)
     {
         if(!state.TransientObjects.TryGetValue(request.ObjectHandle, out TransientKeyState? subject))
@@ -891,16 +921,28 @@ public static class TpmLifecycleTransitions
             return Reject(state, TpmCcConstants.TPM_CC_Certify, TpmRcConstants.TPM_RC_HANDLE);
         }
 
-        if(signer.KeyType != TpmAlgIdConstants.TPM_ALG_ECC)
+        TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
         {
+            (TpmAlgIdConstants.TPM_ALG_RSA, TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS) =>
+                new TpmRsaCertifyAction(
+                    subject.Name, subject.Hierarchy, signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg),
+            (TpmAlgIdConstants.TPM_ALG_ECC, TpmAlgIdConstants.TPM_ALG_ECDSA) =>
+                new TpmCertifyAction(
+                    subject.Name, subject.Hierarchy, signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg),
+            _ => null
+        };
+
+        if(action is null)
+        {
+            //A scheme incompatible with the signer's key type — e.g. an ECDSA scheme against an RSA key, or vice
+            //versa — fails closed rather than silently coercing to the key's native scheme.
             return Reject(state, TpmCcConstants.TPM_CC_Certify, TpmRcConstants.TPM_RC_SCHEME);
         }
 
         return Transition(
             state with
             {
-                NextAction = new TpmCertifyAction(
-                    subject.Name, signer.Name, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg),
+                NextAction = action,
                 ResponseIntent = null
             },
             "Certify:Requested");
@@ -1050,7 +1092,7 @@ public static class TpmLifecycleTransitions
             state with
             {
                 NextAction = new TpmQuoteAction(
-                    signer.Name, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg, request.PcrSelection, pcrValues),
+                    signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg, request.PcrSelection, pcrValues),
                 ResponseIntent = null
             },
             "Quote:Requested");
@@ -1328,11 +1370,44 @@ public static class TpmLifecycleTransitions
             return Reject(state, TpmCcConstants.TPM_CC_PolicyNV, TpmRcConstants.TPM_RC_HANDLE);
         }
 
-        byte[] nvName = ComputeNvName(index);
-        byte[] updated = new byte[TpmPolicyDigest.Size(session.PolicyHash)];
-        _ = TpmPolicyDigest.ExtendForNv(session.PolicyDigest.Span, request.OperandB.Span, request.Offset, request.Operation, nvName, session.PolicyHash, updated);
+        //The Index's Name needs the asynchronous digest seam (TPM digests belong there, not the sync seam a pure
+        //transition could reach on its own), so the transition declares a TpmComputeNvNameAction carrying the
+        //Index's public-area fields and the pending assertion's arguments, and leaves no response yet;
+        //OnNvNameComputedForPolicy extends the policyDigest once the Name comes back.
+        return Transition(
+            state with
+            {
+                NextAction = new TpmComputeNvNameAction(
+                    request.PolicySession, index.NvIndex, index.Attributes, index.DataSize, TpmAlgIdConstants.TPM_ALG_SHA256, request.OperandB, request.Offset, request.Operation),
+                ResponseIntent = null
+            },
+            "PolicyNV:Requested");
+    }
 
-        return StorePolicyDigest(state, session, updated, new TpmHeaderOnlyResponse(TpmRcConstants.TPM_RC_SUCCESS), "PolicyNV");
+    //Extends the policy session's policyDigest with the NV Index's computed Name and completes TPM2_PolicyNV()
+    //(TPM 2.0 Library Part 3, clause 23.9). See the single-source-of-truth note on OnPolicyCommandCode. The
+    //session was already resolved by OnPolicyNv and cannot vanish before this feedback arrives (the automaton is
+    //single-threaded, so no other command interleaves), exactly as every other action feedback in this file
+    //trusts its resolved state without re-checking.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnNvNameComputedForPolicy(TpmSimulatorState state, TpmNvNameComputedForPolicy computed)
+    {
+        using(computed.NvName)
+        {
+            PolicySessionState session = state.PolicySessions[computed.PolicySession];
+            byte[] updated = new byte[TpmPolicyDigest.Size(session.PolicyHash)];
+            _ = TpmPolicyDigest.ExtendForNv(
+                session.PolicyDigest.Span, computed.OperandB.Span, computed.Offset, computed.Operation,
+                computed.NvName.Memory.Span[..computed.NvNameLength], session.PolicyHash, updated);
+
+            return Transition(
+                state with
+                {
+                    NextAction = NullAction.Instance,
+                    PolicySessions = state.PolicySessions.SetItem(session.Handle, session with { PolicyDigest = updated }),
+                    ResponseIntent = new TpmHeaderOnlyResponse(TpmRcConstants.TPM_RC_SUCCESS)
+                },
+                "PolicyNV:Completed");
+        }
     }
 
     //TPM2_FlushContext() removes a loaded policy session or transient object from TPM memory (Part 3, clause 28.4).
@@ -1534,38 +1609,21 @@ public static class TpmLifecycleTransitions
         return false;
     }
 
-    //Computes an NV Index Name (nameAlg || H_nameAlg(TPMS_NV_PUBLIC)) from the simulator's NV Index state (TPM 2.0
-    //Library Part 1, clause 16). The hash is taken through the registered digest seam (never a direct framework
-    //hash), as the object-Name computation is. The simulator models SHA-256 as its universal Name algorithm and the
-    //modelled Indexes carry an empty authPolicy, so the marshaled TPMS_NV_PUBLIC reproduces the host prediction
-    //exactly. Synchronous, with its scratch buffer pooled and released before returning.
-    private static byte[] ComputeNvName(NvIndexState index)
-    {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        const int nameAlgSize = 32;                 //SHA-256 digest width — the sim's universal Name algorithm.
-
-        using var nvPublic = new TpmsNvPublic(index.NvIndex, TpmAlgIdConstants.TPM_ALG_SHA256, index.Attributes, Tpm2bDigest.Empty, index.DataSize);
-        int publicSize = nvPublic.SerializedSize;
-        using IMemoryOwner<byte> owner = pool.Rent(publicSize);
-        Span<byte> publicArea = owner.Memory.Span[..publicSize];
-        var writer = new TpmWriter(publicArea);
-        nvPublic.WriteTo(ref writer);
-
-        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
-            owner.Memory.Span[..publicSize], nameAlgSize, CryptoTags.Sha256Digest, pool);
-
-        byte[] name = new byte[sizeof(ushort) + nameAlgSize];
-        BinaryPrimitives.WriteUInt16BigEndian(name, (ushort)TpmAlgIdConstants.TPM_ALG_SHA256);
-        digest.AsReadOnlySpan().CopyTo(name.AsSpan(sizeof(ushort)));
-
-        return name;
-    }
-
     //The policy hash algorithms the enhanced-authorization digest formula actually computes (TpmPolicyDigest.Hash).
     //SHA-1 is intentionally excluded: advertising it here while the fold cannot compute it left a session that
     //faulted on its first assertion, so StartAuthSession now rejects it up front with TPM_RC_HASH.
     private static bool IsSupportedPolicyHash(TpmAlgIdConstants hash) =>
         hash is TpmAlgIdConstants.TPM_ALG_SHA256
+            or TpmAlgIdConstants.TPM_ALG_SHA384
+            or TpmAlgIdConstants.TPM_ALG_SHA512;
+
+    //The Name algorithms TpmObjectName can actually compute (TPM 2.0 Library Part 1, clause 16). SHA-1 is
+    //included here (unlike IsSupportedPolicyHash's exclusion) because the profile this model serves still lists
+    //it as a valid object nameAlg; an unsupported value is rejected up front with TPM_RC_HASH rather than
+    //defaulted, so a caller can never silently get a SHA-256 Name for a different requested nameAlg.
+    private static bool IsSupportedNameAlg(TpmAlgIdConstants nameAlg) =>
+        nameAlg is TpmAlgIdConstants.TPM_ALG_SHA1
+            or TpmAlgIdConstants.TPM_ALG_SHA256
             or TpmAlgIdConstants.TPM_ALG_SHA384
             or TpmAlgIdConstants.TPM_ALG_SHA512;
 

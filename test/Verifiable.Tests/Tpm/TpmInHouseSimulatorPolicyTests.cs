@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tpm;
@@ -426,7 +427,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
                 using PolicyGetDigestResponse digest = digestResult.Value;
 
                 //policyDigest = H(zeros || TPM_CC_PolicyNV || H(operandB || offset || operation) || nvName).
-                byte[] nvName = ComputeNvName(NvIndex, PolicyHash, attributes, DataSize, pool);
+                byte[] nvName = await ComputeNvNameAsync(NvIndex, PolicyHash, attributes, DataSize, pool, TestContext.CancellationToken).ConfigureAwait(false);
                 byte[] predicted = new byte[size];
                 Span<byte> zero = stackalloc byte[size];
                 zero.Clear();
@@ -488,15 +489,17 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     }
 
     /// <summary>
-    /// Computes an NV Index Name (<c>nameAlg || H(TPMS_NV_PUBLIC)</c>) from its public-area fields.
+    /// Computes an NV Index Name (<c>nameAlg || H(TPMS_NV_PUBLIC)</c>) from its public-area fields, through the
+    /// registered digest seam (not a direct framework hash).
     /// </summary>
     /// <param name="nvIndex">The NV Index handle.</param>
     /// <param name="nameAlg">The Name hash algorithm (SHA-256).</param>
     /// <param name="attributes">The Index attributes, exactly as stored (include TPMA_NV_WRITTEN once written).</param>
     /// <param name="dataSize">The data area size.</param>
     /// <param name="pool">The memory pool.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The Name bytes.</returns>
-    private static byte[] ComputeNvName(uint nvIndex, TpmAlgIdConstants nameAlg, TpmaNv attributes, ushort dataSize, MemoryPool<byte> pool)
+    private static async Task<byte[]> ComputeNvNameAsync(uint nvIndex, TpmAlgIdConstants nameAlg, TpmaNv attributes, ushort dataSize, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         using var nvPublic = new TpmsNvPublic(nvIndex, nameAlg, attributes, Tpm2bDigest.Empty, dataSize);
         int publicSize = nvPublic.SerializedSize;
@@ -505,9 +508,12 @@ internal sealed class TpmInHouseSimulatorPolicyTests
         var writer = new TpmWriter(publicArea);
         nvPublic.WriteTo(ref writer);
 
+        using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+            owner.Memory[..publicSize], 32, CryptoTags.Sha256Digest, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
         byte[] name = new byte[sizeof(ushort) + 32];
         BinaryPrimitives.WriteUInt16BigEndian(name, (ushort)nameAlg);
-        _ = SHA256.HashData(publicArea, name.AsSpan(sizeof(ushort)));
+        digest.AsReadOnlySpan().CopyTo(name.AsSpan(sizeof(ushort)));
 
         return name;
     }
