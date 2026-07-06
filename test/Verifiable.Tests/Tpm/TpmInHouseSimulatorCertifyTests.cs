@@ -253,6 +253,69 @@ internal sealed class TpmInHouseSimulatorCertifyTests
     }
 
     /// <summary>
+    /// Verifies that a storage parent (RESTRICTED|DECRYPT, no SIGN_ENCRYPT) as the certify's signHandle is
+    /// rejected with <c>TPM_RC_KEY</c>: "If the sign attribute is not SET in the key referenced by signHandle then
+    /// the TPM shall return TPM_RC_KEY" (TPM 2.0 Library Part 3, clause 18.1).
+    /// </summary>
+    [TestMethod]
+    public async Task CertifyWithNonSigningKeyReturnsKey()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+        using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+
+        using TpmPasswordSession objectAuth = TpmPasswordSession.CreateEmpty(pool);
+        using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
+        using CertifyInput certifyInput = CertifyInput.ForEcdsa(
+            subject.ObjectHandle, parent.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+
+        TpmResult<CertifyResponse> certifyResult = await TpmCommandExecutor.ExecuteAsync<CertifyResponse>(
+            tpm, certifyInput, [objectAuth, signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_KEY, certifyResult.ResponseCode);
+    }
+
+    /// <summary>
+    /// Verifies the TPM2B_DATA qualifyingData size bound (TPM 2.0 Library Part 2, clause 10.4.3: bounded by the
+    /// size of a marshaled TPMT_HA, 66 octets for the largest supported digest): a 66-octet qualifyingData
+    /// succeeds, and a 67-octet qualifyingData is rejected with <c>TPM_RC_SIZE</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task CertifyWithOversizedQualifyingDataReturnsSize()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse subject = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+        using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+
+        byte[] atBound = new byte[Tpm2bData.MaxSize];
+        byte[] overBound = new byte[Tpm2bData.MaxSize + 1];
+
+        using TpmPasswordSession atBoundObjectAuth = TpmPasswordSession.CreateEmpty(pool);
+        using TpmPasswordSession atBoundSignAuth = TpmPasswordSession.CreateEmpty(pool);
+        using CertifyInput atBoundInput = CertifyInput.ForEcdsa(subject.ObjectHandle, ak.ObjectHandle, atBound, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        TpmResult<CertifyResponse> atBoundResult = await TpmCommandExecutor.ExecuteAsync<CertifyResponse>(
+            tpm, atBoundInput, [atBoundObjectAuth, atBoundSignAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(atBoundResult.IsSuccess, $"A 66-octet qualifyingData is exactly at the TPM2B_DATA bound and must succeed: '{atBoundResult.ResponseCode}'.");
+        atBoundResult.Value.Dispose();
+
+        using TpmPasswordSession overBoundObjectAuth = TpmPasswordSession.CreateEmpty(pool);
+        using TpmPasswordSession overBoundSignAuth = TpmPasswordSession.CreateEmpty(pool);
+        using CertifyInput overBoundInput = CertifyInput.ForEcdsa(subject.ObjectHandle, ak.ObjectHandle, overBound, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        TpmResult<CertifyResponse> overBoundResult = await TpmCommandExecutor.ExecuteAsync<CertifyResponse>(
+            tpm, overBoundInput, [overBoundObjectAuth, overBoundSignAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, overBoundResult.ResponseCode);
+    }
+
+    /// <summary>
     /// Certifies the subject with the RSA AK under the given scheme through the production command path,
     /// verifies the attestation off-TPM (magic/type/nonce/Name/Qualified Name), and verifies the signature against
     /// the AK's exported modulus with an independent RSA verifier.
@@ -374,6 +437,29 @@ internal sealed class TpmInHouseSimulatorCertifyTests
         TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
             tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(result.IsSuccess, $"CreatePrimary (RSA 2048, {hierarchy}) failed: '{result.ResponseCode}'.");
+
+        return result.Value;
+    }
+
+    /// <summary>
+    /// Creates an ECC storage parent (RESTRICTED|DECRYPT, no SIGN_ENCRYPT) under the given hierarchy and returns
+    /// the response (the caller owns it) — a key that cannot sign, for the negative sign-attribute test.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="hierarchy">The hierarchy under which to create the parent.</param>
+    /// <returns>The CreatePrimary response.</returns>
+    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+    {
+        using CreatePrimaryInput input = CreatePrimaryInput.ForEccStorageParent(
+            hierarchy, authPassword: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
+
+        using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"CreatePrimary (ECC storage parent, {hierarchy}) failed: '{result.ResponseCode}'.");
 
         return result.Value;
     }

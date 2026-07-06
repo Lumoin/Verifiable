@@ -903,7 +903,9 @@ public static class TpmLifecycleTransitions
 
     //TPM2_Certify() has a signing key attest that another loaded object's Name is present in the same TPM, over a
     //caller nonce (Part 3, clause 18.2). Both handles must resolve to loaded transient objects; a missing one is
-    //TPM_RC_HANDLE. The signing scheme is dispatched on the signer's key type — TPM_ALG_ECDSA for an ECC key,
+    //TPM_RC_HANDLE. qualifyingData over the TPM2B_DATA bound (Part 2, clause 10.4.3) is TPM_RC_SIZE; a signer
+    //missing the sign attribute (Part 3, clause 18.1) is TPM_RC_KEY; an unsupported scheme hash algorithm is
+    //TPM_RC_HASH. The signing scheme is dispatched on the signer's key type — TPM_ALG_ECDSA for an ECC key,
     //TPM_ALG_RSASSA/TPM_ALG_RSAPSS for an RSA key (mirroring OnSign) — and a scheme incompatible with the key's
     //type is TPM_RC_SCHEME. The attestation needs an effect (compute the Qualified Names, marshal, and sign), so
     //the transition resolves both objects, folds their retained fields into the matching action, and leaves no
@@ -919,6 +921,21 @@ public static class TpmLifecycleTransitions
         if(!state.TransientObjects.TryGetValue(request.SignHandle, out TransientKeyState? signer))
         {
             return Reject(state, TpmCcConstants.TPM_CC_Certify, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        if(request.QualifyingData.Length > Tpm2bData.MaxSize)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_Certify, TpmRcConstants.TPM_RC_SIZE);
+        }
+
+        if(!CanSign(signer.Attributes))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_Certify, TpmRcConstants.TPM_RC_KEY);
+        }
+
+        if(!IsSupportedAttestHashAlg(request.SchemeHashAlg))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_Certify, TpmRcConstants.TPM_RC_HASH);
         }
 
         TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
@@ -1069,11 +1086,14 @@ public static class TpmLifecycleTransitions
 
     //TPM2_Quote() has a signing key attest the composite digest of a selected set of PCRs, over a caller nonce
     //(Part 3, clause 18.4). The signHandle must resolve to a loaded transient object; a missing one is
-    //TPM_RC_HANDLE. This slice signs with an ECC signing key, so a non-ECC signer is TPM_RC_SCHEME (the ECDSA
-    //scheme is incompatible with the key). The attestation needs an effect (compute the composite, marshal, and
-    //sign), so the transition resolves the signer, gathers the selected PCR values from the durable bank, folds
-    //them into a TpmQuoteAction, and leaves no response yet; OnObjectQuoted frames the result. No handle is
-    //allocated — TPM2_Quote() returns no object handle.
+    //TPM_RC_HANDLE. qualifyingData over the TPM2B_DATA bound (Part 2, clause 10.4.3) is TPM_RC_SIZE; a signer
+    //missing the sign attribute (Part 3, clause 18.1) is TPM_RC_KEY; an unsupported scheme hash algorithm is
+    //TPM_RC_HASH. The signing scheme is dispatched on the signer's key type — TPM_ALG_ECDSA for an ECC key,
+    //TPM_ALG_RSASSA/TPM_ALG_RSAPSS for an RSA key (mirroring OnCertify) — and a scheme incompatible with the
+    //key's type is TPM_RC_SCHEME. The attestation needs an effect (compute the composite, marshal, and sign), so
+    //the transition resolves the signer, gathers the selected PCR values from the durable bank, folds them into
+    //the matching action, and leaves no response yet; OnObjectQuoted frames the result. No handle is allocated —
+    //TPM2_Quote() returns no object handle.
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnQuote(TpmSimulatorState state, TpmQuoteRequested request)
     {
         if(!state.TransientObjects.TryGetValue(request.SignHandle, out TransientKeyState? signer))
@@ -1081,18 +1101,45 @@ public static class TpmLifecycleTransitions
             return Reject(state, TpmCcConstants.TPM_CC_Quote, TpmRcConstants.TPM_RC_HANDLE);
         }
 
-        if(signer.KeyType != TpmAlgIdConstants.TPM_ALG_ECC)
+        if(request.QualifyingData.Length > Tpm2bData.MaxSize)
         {
-            return Reject(state, TpmCcConstants.TPM_CC_Quote, TpmRcConstants.TPM_RC_SCHEME);
+            return Reject(state, TpmCcConstants.TPM_CC_Quote, TpmRcConstants.TPM_RC_SIZE);
+        }
+
+        if(!CanSign(signer.Attributes))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_Quote, TpmRcConstants.TPM_RC_KEY);
+        }
+
+        if(!IsSupportedAttestHashAlg(request.SchemeHashAlg))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_Quote, TpmRcConstants.TPM_RC_HASH);
         }
 
         ImmutableArray<ReadOnlyMemory<byte>> pcrValues = GatherSelectedPcrValues(state.Sha256PcrBank, request.PcrSelection);
 
+        TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
+        {
+            (TpmAlgIdConstants.TPM_ALG_RSA, TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS) =>
+                new TpmRsaQuoteAction(
+                    signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg, request.PcrSelection, pcrValues),
+            (TpmAlgIdConstants.TPM_ALG_ECC, TpmAlgIdConstants.TPM_ALG_ECDSA) =>
+                new TpmQuoteAction(
+                    signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg, request.PcrSelection, pcrValues),
+            _ => null
+        };
+
+        if(action is null)
+        {
+            //A scheme incompatible with the signer's key type — e.g. an ECDSA scheme against an RSA key, or vice
+            //versa — fails closed rather than silently coercing to the key's native scheme (mirrors OnCertify).
+            return Reject(state, TpmCcConstants.TPM_CC_Quote, TpmRcConstants.TPM_RC_SCHEME);
+        }
+
         return Transition(
             state with
             {
-                NextAction = new TpmQuoteAction(
-                    signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg, request.PcrSelection, pcrValues),
+                NextAction = action,
                 ResponseIntent = null
             },
             "Quote:Requested");
@@ -1624,6 +1671,23 @@ public static class TpmLifecycleTransitions
     private static bool IsSupportedNameAlg(TpmAlgIdConstants nameAlg) =>
         nameAlg is TpmAlgIdConstants.TPM_ALG_SHA1
             or TpmAlgIdConstants.TPM_ALG_SHA256
+            or TpmAlgIdConstants.TPM_ALG_SHA384
+            or TpmAlgIdConstants.TPM_ALG_SHA512;
+
+    //A signing key must carry the sign attribute to attest with TPM2_Certify() or TPM2_Quote() (TPM 2.0 Library
+    //Part 3, clause 18.1: "If the sign attribute is not SET in the key referenced by signHandle then the TPM
+    //shall return TPM_RC_KEY"). restricted does not gate either command (Part 1, clause 25.1, Table 24), so only
+    //SIGN_ENCRYPT is checked here.
+    private static bool CanSign(TpmaObject attributes) =>
+        (attributes & TpmaObject.SIGN_ENCRYPT) == TpmaObject.SIGN_ENCRYPT;
+
+    //The signing-scheme hash algorithms the attest digest computations actually hash with (TpmAlgIdExtensions'
+    //digest-tag mapping, which TpmSimulator's Certify/Quote effects use to drive the registered digest seam).
+    //SHA-1 is intentionally excluded from the signing-digest path in this codebase (mirrors
+    //IsSupportedPolicyHash); an unsupported value is rejected up front with TPM_RC_HASH rather than silently
+    //defaulted to SHA-256.
+    private static bool IsSupportedAttestHashAlg(TpmAlgIdConstants hashAlg) =>
+        hashAlg is TpmAlgIdConstants.TPM_ALG_SHA256
             or TpmAlgIdConstants.TPM_ALG_SHA384
             or TpmAlgIdConstants.TPM_ALG_SHA512;
 

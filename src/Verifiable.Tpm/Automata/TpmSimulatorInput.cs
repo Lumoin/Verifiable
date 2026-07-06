@@ -412,7 +412,7 @@ public sealed record TpmObjectLoaded(
 /// the supplied authorization values are not retained.
 /// </summary>
 /// <param name="ObjectHandle">The loaded object being certified (its Name is the attested binding).</param>
-/// <param name="SignHandle">The loaded signing key that attests, whose retained scalar signs the marshaled attestation.</param>
+/// <param name="SignHandle">The loaded signing key that attests, whose retained private key signs the marshaled attestation.</param>
 /// <param name="QualifyingData">The caller nonce echoed into the attestation's <c>extraData</c>, copied into durable model memory.</param>
 /// <param name="SignatureScheme">The signing scheme algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>, dispatched on the signing key's type).</param>
 /// <param name="SchemeHashAlg">The signing scheme's hash algorithm.</param>
@@ -454,10 +454,10 @@ public sealed record TpmPcrReadRequested(ReadOnlyMemory<byte> SelectionBytes): T
 /// authorization, so the password session is consumed by the parser; a quote is public, so the objects this slice
 /// quotes with carry empty auth and the supplied authorization value is not retained.
 /// </summary>
-/// <param name="SignHandle">The loaded signing key that attests, whose retained scalar signs the marshaled attestation.</param>
+/// <param name="SignHandle">The loaded signing key that attests, whose retained private key signs the marshaled attestation.</param>
 /// <param name="QualifyingData">The caller nonce echoed into the attestation's <c>extraData</c>, copied into durable model memory.</param>
-/// <param name="SignatureScheme">The signing scheme algorithm (<c>TPM_ALG_ECDSA</c> this slice).</param>
-/// <param name="SchemeHashAlg">The signing scheme's hash algorithm; the simulator also computes the PCR composite digest with it.</param>
+/// <param name="SignatureScheme">The signing scheme algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>, dispatched on the signing key's type).</param>
+/// <param name="SchemeHashAlg">The signing scheme's hash algorithm; the simulator computes both the attest digest and the PCR composite digest with it (TPM 2.0 Library Part 3, clause 18.4).</param>
 /// <param name="PcrSelection">The <c>TPML_PCR_SELECTION</c> wire bytes, captured verbatim to echo into the attestation and decoded against the PCR bank.</param>
 public sealed record TpmQuoteRequested(
     uint SignHandle,

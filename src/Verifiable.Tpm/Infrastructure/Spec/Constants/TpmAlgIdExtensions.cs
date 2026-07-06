@@ -1,3 +1,5 @@
+using Verifiable.Cryptography;
+
 namespace Verifiable.Tpm.Infrastructure.Spec.Constants;
 
 /// <summary>
@@ -108,5 +110,23 @@ public static class TpmAlgIdExtensions
     public static bool IsHashAlgorithm(this TpmAlgIdConstants algorithm)
     {
         return algorithm.GetDigestSize() is not null;
+    }
+
+    /// <summary>
+    /// Gets the <see cref="Tag"/> identifying digest values produced under this hash algorithm, for driving the
+    /// registered digest seam (<see cref="Verifiable.Cryptography.CryptographicKeyEvents.ComputeDigestAsync"/>)
+    /// with the caller's requested signing-scheme hash rather than a hardcoded algorithm.
+    /// </summary>
+    /// <param name="algorithm">The hash algorithm.</param>
+    /// <returns>The matching digest tag, or <see langword="null"/> if the algorithm has no registered digest tag.</returns>
+    public static Tag? GetDigestTag(this TpmAlgIdConstants algorithm)
+    {
+        return algorithm switch
+        {
+            TpmAlgIdConstants.TPM_ALG_SHA256 => CryptoTags.Sha256Digest,
+            TpmAlgIdConstants.TPM_ALG_SHA384 => CryptoTags.Sha384Digest,
+            TpmAlgIdConstants.TPM_ALG_SHA512 => CryptoTags.Sha512Digest,
+            _ => null
+        };
     }
 }

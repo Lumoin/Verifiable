@@ -1,7 +1,6 @@
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
@@ -215,8 +214,11 @@ internal sealed class TpmInHouseSimulatorPolicyTests
         int[] pcrIndices = [0];
 
         //On a trial session the TPM uses the caller's pcrDigest verbatim, so the prediction does not depend on
-        //live PCR contents — the test stays deterministic.
-        byte[] pcrDigest = SHA256.HashData("policy-pcr-test"u8);
+        //live PCR contents — the test stays deterministic. Computed through the registered digest seam (not a
+        //direct framework hash), matching this file's ComputeNvNameAsync convention.
+        using DigestValue pcrDigestValue = await CryptographicKeyEvents.ComputeDigestAsync(
+            "policy-pcr-test"u8.ToArray(), 32, CryptoTags.Sha256Digest, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        byte[] pcrDigest = pcrDigestValue.AsReadOnlySpan().ToArray();
 
         TpmResult<StartAuthSessionResponse> startResult = await tpm.StartTrialPolicySessionAsync(
             PolicyHash, TestContext.CancellationToken).ConfigureAwait(false);

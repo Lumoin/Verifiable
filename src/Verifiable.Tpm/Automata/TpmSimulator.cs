@@ -230,6 +230,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             TpmCertifyAction certifyAction => await CertifyObjectAsync(certifyAction, context, cancellationToken).ConfigureAwait(false),
             TpmRsaCertifyAction rsaCertifyAction => await CertifyObjectRsaAsync(rsaCertifyAction, context, cancellationToken).ConfigureAwait(false),
             TpmQuoteAction quoteAction => await QuoteObjectAsync(quoteAction, context, cancellationToken).ConfigureAwait(false),
+            TpmRsaQuoteAction rsaQuoteAction => await QuoteObjectRsaAsync(rsaQuoteAction, context, cancellationToken).ConfigureAwait(false),
             TpmStartHmacSessionAction startHmacAction => await StartHmacSessionAsync(startHmacAction, context, cancellationToken).ConfigureAwait(false),
             TpmEncryptRandomAction encryptRandomAction => await EncryptRandomOverSessionAsync(encryptRandomAction, context, cancellationToken).ConfigureAwait(false),
             TpmUnsealDataAction unsealAction => await UnsealOverSessionsAsync(unsealAction, context, cancellationToken).ConfigureAwait(false),
@@ -728,14 +729,20 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TpmEccSigningBackend backend = context.SigningBackend
             ?? throw new InvalidOperationException("TPM2_Certify() requires a signing backend, but none was supplied.");
 
+        int hashSize = action.HashAlg.GetDigestSize()
+            ?? throw new InvalidOperationException($"No digest size is registered for hash algorithm '{action.HashAlg}'.");
+        Tag hashTag = action.HashAlg.GetDigestTag()
+            ?? throw new InvalidOperationException($"No digest tag is registered for hash algorithm '{action.HashAlg}'.");
+
         (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedCertifyAttestAsync(
             action.SubjectName, action.SubjectHierarchy, action.SignerName, action.SignerHierarchy, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
         try
         {
             //The signature is over H_hashAlg(marshaled attest) — the exact bytes TPM2B_ATTEST carries and the host
-            //re-hashes to verify (TPM 2.0 Library Part 3, clause 18.2; the sim models a SHA-256 signing scheme).
+            //re-hashes to verify (TPM 2.0 Library Part 3, clause 18.2). The digest width and tag follow the
+            //caller's requested scheme hash (action.HashAlg), not a fixed SHA-256.
             using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
-                attest.Memory[..attestLength], CreationDigestSize, CryptoTags.Sha256Digest, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+                attest.Memory[..attestLength], hashSize, hashTag, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             Signature signature = await backend.SignDigest(
                 action.SignerPrivateKey, digest.AsReadOnlyMemory(), action.SignerCurve, context.Pool, cancellationToken).ConfigureAwait(false);
@@ -758,14 +765,21 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TpmRsaSigningBackend backend = context.RsaSigningBackend
             ?? throw new InvalidOperationException("TPM2_Certify() over an RSA key requires an RSA signing backend, but none was supplied.");
 
+        int hashSize = action.HashAlg.GetDigestSize()
+            ?? throw new InvalidOperationException($"No digest size is registered for hash algorithm '{action.HashAlg}'.");
+        Tag hashTag = action.HashAlg.GetDigestTag()
+            ?? throw new InvalidOperationException($"No digest tag is registered for hash algorithm '{action.HashAlg}'.");
+
         (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedCertifyAttestAsync(
             action.SubjectName, action.SubjectHierarchy, action.SignerName, action.SignerHierarchy, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
         try
         {
             //The signature is over H_hashAlg(marshaled attest), exactly as the ECC path (TPM 2.0 Library Part 3,
-            //clause 18.2; the sim models a SHA-256 signing scheme).
+            //clause 18.2). The digest width and tag follow the caller's requested scheme hash (action.HashAlg),
+            //not a fixed SHA-256 — the RSA backend's RSA.SignHash rejects a digest whose length disagrees with
+            //the hash algorithm it is told to sign under.
             using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
-                attest.Memory[..attestLength], CreationDigestSize, CryptoTags.Sha256Digest, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+                attest.Memory[..attestLength], hashSize, hashTag, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             Signature signature = await backend.SignDigest(
                 action.SignerPrivateKey, digest.AsReadOnlyMemory(), action.Scheme, action.HashAlg, context.Pool, cancellationToken).ConfigureAwait(false);
@@ -884,11 +898,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     }
 
     //TPM2_Quote(): compute the PCR composite digest over the selected register values, marshal the QUOTE
-    //attestation binding that composite (and the caller nonce), hash it through the registered digest seam, and
-    //sign the digest with the signing key's retained scalar through the injected ECC backend (this slice models an
-    //ECC signing key and a SHA-256 signing scheme). Ownership of the marshaled attest and the signature flows to
-    //TpmObjectQuoted, then to the TpmQuoteResponse intent, and is released by SerializeResponse after the
-    //TPM2B_ATTEST and TPMT_SIGNATURE are framed.
+    //attestation binding that composite (and the caller nonce), hash it through the registered digest seam under
+    //the signing scheme's own hash algorithm (action.HashAlg), and sign the digest with the signing key's retained
+    //scalar through the injected ECC backend (this slice models an ECC signing key; QuoteObjectRsaAsync is the RSA
+    //counterpart). Ownership of the marshaled attest and the signature flows to TpmObjectQuoted, then to the
+    //TpmQuoteResponse intent, and is released by SerializeResponse after the TPM2B_ATTEST and TPMT_SIGNATURE are
+    //framed.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled attest and the signature transfers to the returned TpmObjectQuoted, then to the TpmQuoteResponse intent, and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> QuoteObjectAsync(TpmQuoteAction action, TpmActionContext context, CancellationToken cancellationToken)
@@ -896,12 +911,18 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TpmEccSigningBackend backend = context.SigningBackend
             ?? throw new InvalidOperationException("TPM2_Quote() requires a signing backend, but none was supplied.");
 
+        int hashSize = action.HashAlg.GetDigestSize()
+            ?? throw new InvalidOperationException($"No digest size is registered for hash algorithm '{action.HashAlg}'.");
+        Tag hashTag = action.HashAlg.GetDigestTag()
+            ?? throw new InvalidOperationException($"No digest tag is registered for hash algorithm '{action.HashAlg}'.");
+
         //pcrDigest = H_hashAlg(concatenation of the selected PCR values in ascending PCR-index order) (TPM 2.0
         //Library Part 4, PCRComputeCurrentDigest). The composite is assembled in a pooled buffer, then hashed
-        //through the registered digest seam (the sim models a SHA-256 signing scheme).
+        //through the registered digest seam under the signing scheme's own hash algorithm (Part 3, clause 18.4:
+        //the PCR digest uses the hash of the signing scheme), not a fixed SHA-256.
         using IMemoryOwner<byte> composite = ConcatenatePcrValues(action.PcrValues, context.Pool, out int compositeLength);
         using DigestValue pcrDigest = await CryptographicKeyEvents.ComputeDigestAsync(
-            composite.Memory[..compositeLength], CreationDigestSize, CryptoTags.Sha256Digest, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+            composite.Memory[..compositeLength], hashSize, hashTag, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         IMemoryOwner<byte> attest;
         int attestLength;
@@ -918,14 +939,69 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         try
         {
             //The signature is over H_hashAlg(marshaled attest) — the exact bytes TPM2B_ATTEST carries and the host
-            //re-hashes to verify (TPM 2.0 Library Part 3, clause 18.4).
+            //re-hashes to verify (TPM 2.0 Library Part 3, clause 18.4). The digest width and tag follow the
+            //caller's requested scheme hash, not a fixed SHA-256.
             using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
-                attest.Memory[..attestLength], CreationDigestSize, CryptoTags.Sha256Digest, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+                attest.Memory[..attestLength], hashSize, hashTag, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             Signature signature = await backend.SignDigest(
                 action.SignerPrivateKey, digest.AsReadOnlyMemory(), action.SignerCurve, context.Pool, cancellationToken).ConfigureAwait(false);
 
-            return new TpmObjectQuoted(attest, attestLength, signature, TpmAlgIdConstants.TPM_ALG_ECDSA, action.HashAlg);
+            return new TpmObjectQuoted(attest, attestLength, signature, action.SignatureScheme, action.HashAlg);
+        }
+        catch
+        {
+            attest.Dispose();
+            throw;
+        }
+    }
+
+    //The RSA counterpart of QuoteObjectAsync: same PCR composite and attestation marshaling, signed with the
+    //signing key's retained private key through the injected RSA backend under the requested RSA scheme.
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the marshaled attest and the signature transfers to the returned TpmObjectQuoted, then to the TpmQuoteResponse intent, and is released by SerializeResponse after framing.")]
+    private static async ValueTask<TpmSimulatorInput> QuoteObjectRsaAsync(TpmRsaQuoteAction action, TpmActionContext context, CancellationToken cancellationToken)
+    {
+        TpmRsaSigningBackend backend = context.RsaSigningBackend
+            ?? throw new InvalidOperationException("TPM2_Quote() over an RSA key requires an RSA signing backend, but none was supplied.");
+
+        int hashSize = action.HashAlg.GetDigestSize()
+            ?? throw new InvalidOperationException($"No digest size is registered for hash algorithm '{action.HashAlg}'.");
+        Tag hashTag = action.HashAlg.GetDigestTag()
+            ?? throw new InvalidOperationException($"No digest tag is registered for hash algorithm '{action.HashAlg}'.");
+
+        //pcrDigest = H_hashAlg(concatenation of the selected PCR values in ascending PCR-index order), exactly as
+        //the ECC path, under the signing scheme's own hash algorithm (Part 3, clause 18.4: the PCR digest uses the
+        //hash of the signing scheme).
+        using IMemoryOwner<byte> composite = ConcatenatePcrValues(action.PcrValues, context.Pool, out int compositeLength);
+        using DigestValue pcrDigest = await CryptographicKeyEvents.ComputeDigestAsync(
+            composite.Memory[..compositeLength], hashSize, hashTag, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        IMemoryOwner<byte> attest;
+        int attestLength;
+        {
+            (IMemoryOwner<byte> signerQualifiedName, int signerQualifiedNameLength) =
+                await ComputeHierarchyQualifiedNameAsync(action.SignerHierarchy, action.SignerName, context.Pool, cancellationToken).ConfigureAwait(false);
+            using(signerQualifiedName)
+            {
+                (attest, attestLength) = BuildQuoteAttest(
+                    signerQualifiedName.Memory.Span[..signerQualifiedNameLength], action.QualifyingData.Span, action.PcrSelection.Span, pcrDigest.AsReadOnlySpan(), context.Pool);
+            }
+        }
+
+        try
+        {
+            //The signature is over H_hashAlg(marshaled attest), exactly as the ECC path (TPM 2.0 Library Part 3,
+            //clause 18.4). The digest width and tag follow the caller's requested scheme hash, not a fixed
+            //SHA-256 — the RSA backend's RSA.SignHash rejects a digest whose length disagrees with the hash
+            //algorithm it is told to sign under.
+            using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+                attest.Memory[..attestLength], hashSize, hashTag, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            Signature signature = await backend.SignDigest(
+                action.SignerPrivateKey, digest.AsReadOnlyMemory(), action.Scheme, action.HashAlg, context.Pool, cancellationToken).ConfigureAwait(false);
+
+            return new TpmObjectQuoted(attest, attestLength, signature, action.Scheme, action.HashAlg);
         }
         catch
         {
@@ -3887,9 +3963,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 TpmPcrReadResponse pcrRead =>
                     sizeof(uint) + pcrRead.SelectionBytes.Length + PcrValuesSerializedSize(pcrRead.PcrValues),
 
-                //quoted (TPM2B_ATTEST) + signature (TPMT_SIGNATURE): the same ECDSA framing as TPM2_Sign().
+                //quoted (TPM2B_ATTEST) + signature (TPMT_SIGNATURE): sigAlg + hash + either the ECDSA r/s
+                //TPM2B pair or the single RSA TPM2B signature (the same framing TPM2_Sign() uses).
                 TpmQuoteResponse quote =>
-                    (sizeof(ushort) + quote.QuotedLength) + (4 * sizeof(ushort)) + quote.Signature.Length,
+                    (sizeof(ushort) + quote.QuotedLength)
+                    + (quote.SignatureScheme == TpmAlgIdConstants.TPM_ALG_ECDSA ? (4 * sizeof(ushort)) : (3 * sizeof(ushort)))
+                    + quote.Signature.Length,
 
                 //sessionHandle (response handle) + nonceTPM (TPM2B_NONCE of the policy-hash width).
                 TpmStartAuthSessionResponse startAuthSession =>
@@ -4084,23 +4163,32 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                         //quoted (TPM2B_ATTEST): the marshaled TPMS_ATTEST the signature is over.
                         writer.WriteTpm2b(quoteResponse.Quoted.Memory.Span[..quoteResponse.QuotedLength]);
 
-                        //signature (TPMT_SIGNATURE): sigAlg + hash + the ECDSA r/s, the same framing as TPM2_Sign().
+                        //signature (TPMT_SIGNATURE): sigAlg + hash + either the ECDSA r/s pair or the single RSA
+                        //signature, the same framing TPM2_Sign() uses.
                         ReadOnlySpan<byte> quoteSignatureBytes = quoteResponse.Signature.AsReadOnlySpan();
                         writer.WriteUInt16((ushort)quoteResponse.SignatureScheme);  //sigAlg: the TPMU_SIGNATURE selector.
                         writer.WriteUInt16((ushort)quoteResponse.HashAlg);          //hash inside the signature member.
 
-                        //TPMS_SIGNATURE_ECDSA: r and s are the equal-width halves of the IEEE P1363 signature, so its
-                        //length is even and the split at the midpoint is exact. An odd length would mean the backend
-                        //did not return canonical P1363 r ‖ s.
-                        if((quoteSignatureBytes.Length & 1) != 0)
+                        if(quoteResponse.SignatureScheme == TpmAlgIdConstants.TPM_ALG_ECDSA)
                         {
-                            throw new InvalidOperationException(
-                                $"An ECDSA signature must be IEEE P1363 r ‖ s of even length so r and s are equal width; got {quoteSignatureBytes.Length} octets.");
-                        }
+                            //TPMS_SIGNATURE_ECDSA: r and s are the equal-width halves of the IEEE P1363 signature,
+                            //so its length is even and the split at the midpoint is exact. An odd length would
+                            //mean the backend did not return canonical P1363 r ‖ s.
+                            if((quoteSignatureBytes.Length & 1) != 0)
+                            {
+                                throw new InvalidOperationException(
+                                    $"An ECDSA signature must be IEEE P1363 r ‖ s of even length so r and s are equal width; got {quoteSignatureBytes.Length} octets.");
+                            }
 
-                        int quoteFieldWidth = quoteSignatureBytes.Length / 2;
-                        writer.WriteTpm2b(quoteSignatureBytes[..quoteFieldWidth]);   //signatureR (TPM2B_ECC_PARAMETER).
-                        writer.WriteTpm2b(quoteSignatureBytes[quoteFieldWidth..]);   //signatureS (TPM2B_ECC_PARAMETER).
+                            int quoteFieldWidth = quoteSignatureBytes.Length / 2;
+                            writer.WriteTpm2b(quoteSignatureBytes[..quoteFieldWidth]);   //signatureR (TPM2B_ECC_PARAMETER).
+                            writer.WriteTpm2b(quoteSignatureBytes[quoteFieldWidth..]);   //signatureS (TPM2B_ECC_PARAMETER).
+                        }
+                        else
+                        {
+                            //TPMS_SIGNATURE_RSA: the whole signature as one TPM2B_PUBLIC_KEY_RSA.
+                            writer.WriteTpm2b(quoteSignatureBytes);
+                        }
 
                         break;
                     }

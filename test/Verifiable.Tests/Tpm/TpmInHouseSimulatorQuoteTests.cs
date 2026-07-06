@@ -52,6 +52,9 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// <summary>The number of bytes in a NIST P-256 coordinate or in an ECDSA r/s component.</summary>
     private const int P256ComponentSize = 32;
 
+    /// <summary>The RSA modulus size in bits used by the RSA quote tests.</summary>
+    private const ushort Rsa2048KeyBits = 2048;
+
     /// <summary>The PCR bank the quote selects from.</summary>
     private const TpmAlgIdConstants PcrBank = TpmAlgIdConstants.TPM_ALG_SHA256;
 
@@ -123,7 +126,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
             "The quote signature must verify over the raw attestation bytes against the AK's exported public key.");
 
         //4. PCR binding: re-read the same PCRs and recompute the composite digest the simulator signed.
-        byte[] expectedPcrDigest = await ReadAndComputePcrCompositeAsync(tpm, registry, pool).ConfigureAwait(false);
+        byte[] expectedPcrDigest = await ReadAndComputePcrCompositeAsync(tpm, registry, pool, TpmAlgIdConstants.TPM_ALG_SHA256).ConfigureAwait(false);
         Assert.IsTrue(
             attest.Attested.Quote!.PcrDigest.AsReadOnlySpan().SequenceEqual(expectedPcrDigest),
             "The quote's pcrDigest must equal the hash of the concatenated selected PCR values.");
@@ -220,6 +223,209 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     }
 
     /// <summary>
+    /// Verifies an RSA-signed <c>TPM2_Quote()</c> (RSASSA and RSAPSS) end to end against the in-house simulator
+    /// (TPM 2.0 Library Part 3, clause 18.4): the attestation envelope, the independently recomputed
+    /// qualifiedSigner, the signature against the AK's exported modulus with the framework RSA verifier, and the
+    /// independently recomputed PCR composite digest.
+    /// </summary>
+    [TestMethod]
+    public async Task RsaQuoteVerifiesAgainstInHouseSimulator()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ak = await CreateRsaSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+
+        var rsaParameters = new RSAParameters
+        {
+            Modulus = ak.OutPublic.PublicArea.Unique.GetRsaModulus().ToArray(),
+            Exponent = [0x01, 0x00, 0x01]
+        };
+
+        await QuoteAndVerifyRsaAsync(tpm, registry, pool, ak, rsaParameters, TpmAlgIdConstants.TPM_ALG_SHA256, usePss: false).ConfigureAwait(false);
+        await QuoteAndVerifyRsaAsync(tpm, registry, pool, ak, rsaParameters, TpmAlgIdConstants.TPM_ALG_SHA256, usePss: true).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verifies that quoting with an ECC signer under an RSA scheme (RSASSA) is a genuine scheme/key-type
+    /// mismatch, rejected with <c>TPM_RC_SCHEME</c> rather than coerced to the key's native scheme (TPM 2.0
+    /// Library Part 3, clause 18.4).
+    /// </summary>
+    [TestMethod]
+    public async Task QuoteWithSchemeMismatchedToSignerKeyTypeReturnsScheme()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+
+        using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+        using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
+        using QuoteInput quoteInput = QuoteInput.ForRsaSsa(ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pcrSelection, pool);
+
+        TpmResult<QuoteResponse> quoteResult = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
+            tpm, quoteInput, [keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SCHEME, quoteResult.ResponseCode);
+    }
+
+    /// <summary>
+    /// Verifies that a storage parent (RESTRICTED|DECRYPT, no SIGN_ENCRYPT) as the quote's signHandle is rejected
+    /// with <c>TPM_RC_KEY</c>: "If the sign attribute is not SET in the key referenced by signHandle then the TPM
+    /// shall return TPM_RC_KEY" (TPM 2.0 Library Part 3, clause 18.1).
+    /// </summary>
+    [TestMethod]
+    public async Task QuoteWithNonSigningKeyReturnsKey()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+
+        using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+        using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
+        using QuoteInput quoteInput = QuoteInput.ForEcdsa(parent.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pcrSelection, pool);
+
+        TpmResult<QuoteResponse> quoteResult = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
+            tpm, quoteInput, [keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_KEY, quoteResult.ResponseCode);
+    }
+
+    /// <summary>
+    /// Verifies the TPM2B_DATA qualifyingData size bound (TPM 2.0 Library Part 2, clause 10.4.3: bounded by the
+    /// size of a marshaled TPMT_HA, 66 octets for the largest supported digest): a 66-octet qualifyingData
+    /// succeeds, and a 67-octet qualifyingData is rejected with <c>TPM_RC_SIZE</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task QuoteWithOversizedQualifyingDataReturnsSize()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+
+        byte[] atBound = new byte[Tpm2bData.MaxSize];
+        byte[] overBound = new byte[Tpm2bData.MaxSize + 1];
+
+        using TpmPasswordSession atBoundAuth = TpmPasswordSession.CreateEmpty(pool);
+        using TpmlPcrSelection atBoundSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
+        using QuoteInput atBoundInput = QuoteInput.ForEcdsa(ak.ObjectHandle, atBound, TpmAlgIdConstants.TPM_ALG_SHA256, atBoundSelection, pool);
+        TpmResult<QuoteResponse> atBoundResult = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
+            tpm, atBoundInput, [atBoundAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(atBoundResult.IsSuccess, $"A 66-octet qualifyingData is exactly at the TPM2B_DATA bound and must succeed: '{atBoundResult.ResponseCode}'.");
+        atBoundResult.Value.Dispose();
+
+        using TpmPasswordSession overBoundAuth = TpmPasswordSession.CreateEmpty(pool);
+        using TpmlPcrSelection overBoundSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
+        using QuoteInput overBoundInput = QuoteInput.ForEcdsa(ak.ObjectHandle, overBound, TpmAlgIdConstants.TPM_ALG_SHA256, overBoundSelection, pool);
+        TpmResult<QuoteResponse> overBoundResult = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
+            tpm, overBoundInput, [overBoundAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SIZE, overBoundResult.ResponseCode);
+    }
+
+    /// <summary>
+    /// Verifies that an RSA quote's attest digest and PCR composite digest are both computed under the requested
+    /// SHA-384 scheme hash, not a hardcoded SHA-256 (TPM 2.0 Library Part 3, clause 18.4): the independent RSA
+    /// oracle verifies with <see cref="HashAlgorithmName.SHA384"/> over a 48-byte digest, and the recomputed PCR
+    /// composite is likewise hashed with SHA-384.
+    /// </summary>
+    [TestMethod]
+    public async Task RsaQuoteWithSha384SchemeHashVerifies()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ak = await CreateRsaSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+
+        var rsaParameters = new RSAParameters
+        {
+            Modulus = ak.OutPublic.PublicArea.Unique.GetRsaModulus().ToArray(),
+            Exponent = [0x01, 0x00, 0x01]
+        };
+
+        await QuoteAndVerifyRsaAsync(tpm, registry, pool, ak, rsaParameters, TpmAlgIdConstants.TPM_ALG_SHA384, usePss: false).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Quotes the fixed PCR selection with the RSA AK under the given scheme and scheme hash through the
+    /// production command path, verifies the attestation off-TPM (magic/type/nonce/qualifiedSigner), verifies the
+    /// signature against the AK's exported modulus with an independent RSA verifier, and verifies the PCR binding
+    /// by independently recomputing the composite digest under the same scheme hash.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="ak">The RSA attestation key's CreatePrimary response.</param>
+    /// <param name="rsaParameters">The public key reconstructed from the AK's exported modulus.</param>
+    /// <param name="schemeHashAlg">The scheme hash algorithm to quote and verify under.</param>
+    /// <param name="usePss">When <see langword="true"/>, quotes and verifies RSAPSS; otherwise RSASSA (PKCS#1 v1.5).</param>
+    private async Task QuoteAndVerifyRsaAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, CreatePrimaryResponse ak, RSAParameters rsaParameters, TpmAlgIdConstants schemeHashAlg, bool usePss)
+    {
+        using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+        using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
+        using QuoteInput quoteInput = usePss
+            ? QuoteInput.ForRsaPss(ak.ObjectHandle, Nonce, schemeHashAlg, pcrSelection, pool)
+            : QuoteInput.ForRsaSsa(ak.ObjectHandle, Nonce, schemeHashAlg, pcrSelection, pool);
+
+        TpmResult<QuoteResponse> quoteResult = await TpmCommandExecutor.ExecuteAsync<QuoteResponse>(
+            tpm, quoteInput, [keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string schemeName = usePss ? "RSAPSS" : "RSASSA";
+        Assert.IsTrue(quoteResult.IsSuccess, $"TPM2_Quote ({schemeName}, {schemeHashAlg}) failed: '{quoteResult.ResponseCode}'.");
+
+        using QuoteResponse quote = quoteResult.Value;
+        Assert.AreEqual(usePss ? TpmAlgIdConstants.TPM_ALG_RSAPSS : TpmAlgIdConstants.TPM_ALG_RSASSA, quote.SignatureAlgorithm);
+        Assert.AreEqual(schemeHashAlg, quote.HashAlgorithm);
+
+        //1. Attestation envelope: TPM-generated marker, quote type, and the nonce echoed verbatim.
+        TpmsAttest attest = quote.Quoted.AttestationData;
+        Assert.AreEqual(TpmConstants32.TPM_GENERATED_VALUE, attest.Magic, "A genuine TPM attestation is stamped with TPM_GENERATED_VALUE.");
+        Assert.AreEqual(TpmStConstants.TPM_ST_ATTEST_QUOTE, attest.Type);
+        Assert.IsTrue(attest.ExtraData.Span.SequenceEqual(Nonce), "extraData must echo the caller's qualifyingData nonce.");
+        Assert.IsNotNull(attest.Attested.Quote);
+
+        //2. Qualified Name realism: qualifiedSigner must equal the AK's independent off-TPM recomputation and must
+        //NOT collapse to the plain Name (the regression a Name/QN collapse would otherwise pass).
+        byte[] expectedSignerQn = await ComputeQualifiedNameAsync(
+            (uint)TpmRh.TPM_RH_ENDORSEMENT, ak.Name.Span.ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            attest.QualifiedSigner.Span.SequenceEqual(expectedSignerQn),
+            "qualifiedSigner must equal the RSA AK's independently recomputed Qualified Name.");
+        Assert.IsFalse(
+            attest.QualifiedSigner.Span.SequenceEqual(ak.Name.Span),
+            "qualifiedSigner must not collapse to the RSA AK's plain Name.");
+
+        //3. Signature: over the RAW attestation bytes, against the RSA AK public key reconstructed from the
+        //simulator's exported modulus only.
+        byte[] attestDigest = await ComputeDigestAsync(quote.Quoted.GetRawBytes().ToArray(), schemeHashAlg, pool, TestContext.CancellationToken).ConfigureAwait(false);
+        RSASignaturePadding padding = usePss ? RSASignaturePadding.Pss : RSASignaturePadding.Pkcs1;
+        using RSA rsa = RSA.Create(rsaParameters);
+        Assert.IsTrue(
+            rsa.VerifyHash(attestDigest, quote.Signature.RsaSignature.Buffer.ToArray(), ToHashAlgorithmName(schemeHashAlg), padding),
+            $"The {schemeName} quote signature must verify against the RSA AK's exported modulus.");
+
+        //4. PCR binding: re-read the same PCRs and recompute the composite digest under the same scheme hash the
+        //simulator signed (Part 3, clause 18.4: the PCR digest uses the hash of the signing scheme).
+        byte[] expectedPcrDigest = await ReadAndComputePcrCompositeAsync(tpm, registry, pool, schemeHashAlg).ConfigureAwait(false);
+        Assert.IsTrue(
+            attest.Attested.Quote!.PcrDigest.AsReadOnlySpan().SequenceEqual(expectedPcrDigest),
+            "The quote's pcrDigest must equal the hash of the concatenated selected PCR values under the scheme hash.");
+    }
+
+    /// <summary>
     /// Creates a primary ECC P-256 signing key under the given hierarchy and returns the response (the caller
     /// owns it).
     /// </summary>
@@ -248,6 +454,53 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     }
 
     /// <summary>
+    /// Creates a primary RSA-2048 signing key under the given hierarchy and returns the response (the caller owns
+    /// it). A NULL scheme makes this an unrestricted signing key, so the scheme (RSASSA or RSAPSS) is chosen per
+    /// <c>TPM2_Quote()</c>, as a real caller would.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="hierarchy">The hierarchy under which to create the key.</param>
+    /// <returns>The CreatePrimary response.</returns>
+    private async Task<CreatePrimaryResponse> CreateRsaSigningPrimaryAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+    {
+        using CreatePrimaryInput input = CreatePrimaryInput.ForRsaSigningKey(
+            hierarchy, password: null, keyBits: Rsa2048KeyBits, TpmtRsaScheme.Null, pool, noDa: true);
+
+        using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"CreatePrimary (RSA 2048 AK, {hierarchy}) failed: '{result.ResponseCode}'.");
+
+        return result.Value;
+    }
+
+    /// <summary>
+    /// Creates an ECC storage parent (RESTRICTED|DECRYPT, no SIGN_ENCRYPT) under the given hierarchy and returns
+    /// the response (the caller owns it) — a key that cannot sign, for the negative sign-attribute test.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="hierarchy">The hierarchy under which to create the parent.</param>
+    /// <returns>The CreatePrimary response.</returns>
+    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+    {
+        using CreatePrimaryInput input = CreatePrimaryInput.ForEccStorageParent(
+            hierarchy, authPassword: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
+
+        using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"CreatePrimary (ECC storage parent, {hierarchy}) failed: '{result.ResponseCode}'.");
+
+        return result.Value;
+    }
+
+    /// <summary>
     /// Quotes the selected PCRs over the fixed nonce with the given signing key and returns the response (the
     /// caller owns it). A quote is public, so it carries an empty-auth password session.
     /// </summary>
@@ -271,15 +524,17 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     }
 
     /// <summary>
-    /// Reads the quoted PCRs and computes the composite digest the simulator signs into a quote: the SHA-256 hash
-    /// of the concatenation of the selected PCR values in ascending PCR-index order (TPM 2.0 Library Part 4,
-    /// <c>PCRComputeCurrentDigest</c>), through the registered digest seam.
+    /// Reads the quoted PCRs and computes the composite digest the simulator signs into a quote: the hash of the
+    /// concatenation of the selected PCR values in ascending PCR-index order (TPM 2.0 Library Part 4,
+    /// <c>PCRComputeCurrentDigest</c>), through the registered digest seam under the requested scheme hash (Part
+    /// 3, clause 18.4: the PCR digest uses the hash of the signing scheme).
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
+    /// <param name="hashAlg">The scheme hash algorithm the quote was signed under.</param>
     /// <returns>The expected composite PCR digest.</returns>
-    private async Task<byte[]> ReadAndComputePcrCompositeAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<byte[]> ReadAndComputePcrCompositeAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmAlgIdConstants hashAlg)
     {
         using PcrReadInput input = PcrReadInput.ForPcrs(PcrBank, PcrIndices, pool);
         TpmResult<PcrReadResponse> result = await TpmCommandExecutor.ExecuteAsync<PcrReadResponse>(
@@ -304,19 +559,23 @@ internal sealed class TpmInHouseSimulatorQuoteTests
             offset += value.Length;
         }
 
-        return await ComputeSha256Async(composite.Memory[..total], pool, TestContext.CancellationToken).ConfigureAwait(false);
+        return await ComputeDigestAsync(composite.Memory[..total], hashAlg, pool, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Creates a simulator with the ECC (BouncyCastle) signing backend wired, powers it on, and brings it through
-    /// <c>TPM2_Startup(CLEAR)</c> into the operational phase. The ECC backend is required so the simulator services
-    /// <c>TPM2_CreatePrimary()</c> and signs the attestation for <c>TPM2_Quote()</c>.
+    /// Creates a simulator with both the ECC (BouncyCastle) and RSA (framework) signing backends wired, powers it
+    /// on, and brings it through <c>TPM2_Startup(CLEAR)</c> into the operational phase. Both backends are required
+    /// so the simulator services <c>TPM2_CreatePrimary()</c> for either key type and signs the attestation for
+    /// <c>TPM2_Quote()</c> with either an ECC or an RSA attestation key.
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
     private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
     {
-        var simulator = new TpmSimulator("tpm-in-house-quote", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
+        var simulator = new TpmSimulator(
+            "tpm-in-house-quote",
+            signingBackend: BouncyCastleTpmEccSigningBackend.Create(),
+            rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 
@@ -385,6 +644,55 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
         return digest.AsReadOnlySpan().ToArray();
     }
+
+    /// <summary>
+    /// Computes a digest through the registered digest seam (not a direct framework hash), sized and tagged for
+    /// the requested hash algorithm — the scheme-hash-agile counterpart of <see cref="ComputeSha256Async"/> used
+    /// to recompute expected digests for an RSA quote signed under a non-SHA-256 scheme hash.
+    /// </summary>
+    /// <param name="message">The message to hash.</param>
+    /// <param name="hashAlg">The hash algorithm (SHA-256, SHA-384, or SHA-512).</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The digest, sized for <paramref name="hashAlg"/>.</returns>
+    private static async Task<byte[]> ComputeDigestAsync(ReadOnlyMemory<byte> message, TpmAlgIdConstants hashAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        (int outputByteLength, HashAlgorithmName algorithmName) = hashAlg switch
+        {
+            TpmAlgIdConstants.TPM_ALG_SHA256 => (32, HashAlgorithmName.SHA256),
+            TpmAlgIdConstants.TPM_ALG_SHA384 => (48, HashAlgorithmName.SHA384),
+            TpmAlgIdConstants.TPM_ALG_SHA512 => (64, HashAlgorithmName.SHA512),
+            _ => throw new NotSupportedException($"This test computes only SHA-256/384/512 digests; '{hashAlg}' is not supported.")
+        };
+
+        Tag tag = Tag.Create(algorithmName)
+            .With(Purpose.Digest)
+            .With(EncodingScheme.Raw)
+            .With(MaterialSemantics.Direct);
+
+        using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+            new ReadOnlySequence<byte>(message),
+            outputByteLength: outputByteLength,
+            tag: tag,
+            pool: pool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return digest.AsReadOnlySpan().ToArray();
+    }
+
+    /// <summary>
+    /// Maps a TPM hash algorithm identifier to the framework's <see cref="HashAlgorithmName"/>, for the
+    /// independent RSA verifier oracle (<see cref="RSA.VerifyHash(byte[], byte[], HashAlgorithmName, RSASignaturePadding)"/>).
+    /// </summary>
+    /// <param name="hashAlg">The hash algorithm.</param>
+    /// <returns>The matching framework hash algorithm name.</returns>
+    private static HashAlgorithmName ToHashAlgorithmName(TpmAlgIdConstants hashAlg) => hashAlg switch
+    {
+        TpmAlgIdConstants.TPM_ALG_SHA256 => HashAlgorithmName.SHA256,
+        TpmAlgIdConstants.TPM_ALG_SHA384 => HashAlgorithmName.SHA384,
+        TpmAlgIdConstants.TPM_ALG_SHA512 => HashAlgorithmName.SHA512,
+        _ => throw new NotSupportedException($"This test verifies only SHA-256/384/512 signatures; '{hashAlg}' is not supported.")
+    };
 
     /// <summary>
     /// Recomputes an object's Qualified Name independently: <c>nameAlg || H(hierarchyHandle || Name)</c> (TPM 2.0

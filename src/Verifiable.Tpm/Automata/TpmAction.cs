@@ -272,6 +272,39 @@ public sealed record TpmQuoteAction(
     ImmutableArray<ReadOnlyMemory<byte>> PcrValues): TpmAction;
 
 /// <summary>
+/// Declares that the simulator must quote a set of Platform Configuration Registers before the next transition,
+/// signed with an RSA key — the RSA counterpart of <see cref="TpmQuoteAction"/>. Emitted by the
+/// <c>TPM2_Quote()</c> transition when the signing key is RSA; the effectful loop computes the PCR composite
+/// digest over the selected register values and the signer's Qualified Name, marshals the same <c>TPMS_ATTEST</c>
+/// of type <c>TPM_ST_ATTEST_QUOTE</c>, signs <c>H_hashAlg(attest)</c> with the signing key's retained private key
+/// through the injected <see cref="TpmRsaSigningBackend"/> under the requested RSA scheme, and feeds the
+/// marshaled attest and signature back as a <see cref="TpmObjectQuoted"/> input (TPM 2.0 Library Part 3, clause
+/// 18.4; Part 2, clauses 10.12.12 and 10.12.1).
+/// </summary>
+/// <remarks>
+/// The transition resolves the signing-key handle against the loaded-object table and gathers the selected PCR
+/// values from the durable bank, folding both (plus the signer's hierarchy) into this action, so the effect
+/// needs no automaton state and captures nothing.
+/// </remarks>
+/// <param name="SignerName">The signing key's Name.</param>
+/// <param name="SignerHierarchy">The permanent hierarchy the signing key was created under, from which its Qualified Name (the attestation's <c>qualifiedSigner</c>) is derived.</param>
+/// <param name="QualifyingData">The caller nonce echoed verbatim into the attestation's <c>extraData</c>.</param>
+/// <param name="SignerPrivateKey">The signing key's retained private key, in the backend's own encoding.</param>
+/// <param name="Scheme">The RSA signing scheme (<c>TPM_ALG_RSASSA</c> or <c>TPM_ALG_RSAPSS</c>) to apply.</param>
+/// <param name="HashAlg">The signing scheme's hash algorithm, hashed over the marshaled attest and framed inside the signature.</param>
+/// <param name="PcrSelection">The caller's <c>TPML_PCR_SELECTION</c> wire bytes, echoed verbatim into the attested <c>TPMS_QUOTE_INFO.pcrSelect</c>.</param>
+/// <param name="PcrValues">The selected register values in ascending PCR-index order, concatenated and hashed into the attested <c>pcrDigest</c>.</param>
+public sealed record TpmRsaQuoteAction(
+    ReadOnlyMemory<byte> SignerName,
+    uint SignerHierarchy,
+    ReadOnlyMemory<byte> QualifyingData,
+    ReadOnlyMemory<byte> SignerPrivateKey,
+    TpmAlgIdConstants Scheme,
+    TpmAlgIdConstants HashAlg,
+    ReadOnlyMemory<byte> PcrSelection,
+    ImmutableArray<ReadOnlyMemory<byte>> PcrValues): TpmAction;
+
+/// <summary>
 /// Declares that the simulator must establish a bound, unsalted HMAC session before the next transition. Emitted
 /// by the <c>TPM2_StartAuthSession()</c> transition for an HMAC session; the effectful loop draws a fresh nonceTPM
 /// from the injected RNG, derives the session key via <c>KDFa</c> through the registered HMAC seam, and feeds both

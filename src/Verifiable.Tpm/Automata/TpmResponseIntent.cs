@@ -179,7 +179,8 @@ public sealed record TpmNvReadDataResponse(TpmRcConstants ResponseCode, ReadOnly
 /// </summary>
 /// <remarks>
 /// <see cref="CertifyInfo"/> is a pooled buffer holding the marshaled <c>TPMS_ATTEST</c> and <see cref="Signature"/>
-/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and the ECDSA <c>r</c>/<c>s</c> and then
+/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and, depending on
+/// <see cref="SignatureScheme"/>, either the ECDSA <c>r</c>/<c>s</c> pair or the single RSA signature, and then
 /// disposes both, as the terminal owner.
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
@@ -221,7 +222,8 @@ public sealed record TpmPcrReadResponse(
 /// </summary>
 /// <remarks>
 /// <see cref="Quoted"/> is a pooled buffer holding the marshaled <c>TPMS_ATTEST</c> and <see cref="Signature"/>
-/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and the ECDSA <c>r</c>/<c>s</c> and then
+/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and, depending on
+/// <see cref="SignatureScheme"/>, either the ECDSA <c>r</c>/<c>s</c> pair or the single RSA signature, and then
 /// disposes both, as the terminal owner.
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>

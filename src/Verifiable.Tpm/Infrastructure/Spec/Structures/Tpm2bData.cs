@@ -30,9 +30,10 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 public sealed class Tpm2bData: IDisposable
 {
     /// <summary>
-    /// Maximum size of the data buffer.
+    /// Maximum size of the data buffer: <c>sizeof(TPMT_HA)</c> — the 2-octet algorithm identifier plus the
+    /// largest supported digest (64 octets for SHA-512) (TPM 2.0 Library Part 2, clause 10.4.3).
     /// </summary>
-    public const int MaxSize = 64; // sizeof(TPMT_HA) - largest hash.
+    public const int MaxSize = sizeof(ushort) + 64;
 
     private static readonly Tpm2bData EmptyInstance = new();
 
