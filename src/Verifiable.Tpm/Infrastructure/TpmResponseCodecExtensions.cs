@@ -361,6 +361,69 @@ public static class TpmResponseCodecExtensions
         public static TpmResponseCodec Certify => TpmResponseCodec.Create(CertifyResponse.Parse);
 
         /// <summary>
+        /// Codec for TPM2_CertifyCreation response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>certifyInfo (TPM2B_ATTEST) - the signed attestation (a marshaled TPMS_ATTEST of type TPM_ST_ATTEST_CREATION).</description></item>
+        ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
+        /// </list>
+        /// <para>
+        /// The first response parameter, <c>certifyInfo</c>, is a sized buffer and so would be encrypt-eligible,
+        /// but an attestation is public by design, so it is left non-encryptable.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 18.3 - TPM2_CertifyCreation.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec CertifyCreation => TpmResponseCodec.Create(CertifyCreationResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_GetTime response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>timeInfo (TPM2B_ATTEST) - the signed attestation (a marshaled TPMS_ATTEST of type TPM_ST_ATTEST_TIME).</description></item>
+        ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
+        /// </list>
+        /// <para>
+        /// The first response parameter, <c>timeInfo</c>, is a sized buffer and so would be encrypt-eligible, but
+        /// an attestation is public by design, so it is left non-encryptable.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 18.7 - TPM2_GetTime.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec GetTime => TpmResponseCodec.Create(GetTimeResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_NV_Certify response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>certifyInfo (TPM2B_ATTEST) - the signed attestation (a marshaled TPMS_ATTEST of type TPM_ST_ATTEST_NV).</description></item>
+        ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
+        /// </list>
+        /// <para>
+        /// The first response parameter, <c>certifyInfo</c>, is a sized buffer and so would be encrypt-eligible,
+        /// but an attestation is public by design, so it is left non-encryptable.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 31.16 - TPM2_NV_Certify.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec NvCertify => TpmResponseCodec.Create(NvCertifyResponse.Parse);
+
+        /// <summary>
         /// Codec for TPM2_MakeCredential response.
         /// </summary>
         /// <remarks>

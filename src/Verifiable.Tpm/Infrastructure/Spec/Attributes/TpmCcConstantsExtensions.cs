@@ -158,6 +158,24 @@ public static partial class TpmCcConstantsExtensions
         TpmCcConstants.TPM_CC_Certify
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
 
+        //Section 18.3 - TPM2_CertifyCreation.
+        //Handle area: @signHandle (USER auth), objectHandle (no auth) - 2 handles, only signHandle requires auth.
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_CertifyCreation
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
+
+        //Section 18.7 - TPM2_GetTime.
+        //Handle area: @privacyAdminHandle (USER auth), @signHandle (USER auth) - 2 handles, both require auth.
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_GetTime
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
+
+        //Section 31.16 - TPM2_NV_Certify.
+        //Handle area: @signHandle (USER auth), @authHandle (USER auth), nvIndex (no auth) - 3 handles.
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_NV_Certify
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 3),
+
         //Section 12.6 - TPM2_MakeCredential.
         //Handle area: handle (1 handle, no auth - uses only the public area).
         //Response: no handles.

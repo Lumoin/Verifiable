@@ -494,6 +494,131 @@ public sealed record TpmObjectQuoted(
     TpmAlgIdConstants HashAlg): TpmSimulatorInput;
 
 /// <summary>
+/// A <c>TPM2_CertifyCreation()</c> command (TPM 2.0 Library Part 3, clause 18.3): a signing key attests that the
+/// object with a given Name was created by the TPM with a given creation hash, re-verified against the
+/// caller-supplied creation ticket. Only <see cref="SignHandle"/> requires authorization, so the parser consumes
+/// a single password session; <see cref="ObjectHandle"/> carries no session at all.
+/// </summary>
+/// <param name="SignHandle">The loaded signing key that attests, whose retained private key signs the marshaled attestation.</param>
+/// <param name="ObjectHandle">The loaded object whose creation is certified (its Name is the attested binding).</param>
+/// <param name="QualifyingData">The caller nonce echoed into the attestation's <c>extraData</c>, copied into durable model memory.</param>
+/// <param name="CreationHash">The creation hash the caller supplies, folded into the recomputed creation ticket and attested in <c>TPMS_CREATION_INFO.creationHash</c>.</param>
+/// <param name="SignatureScheme">The signing scheme algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>, dispatched on the signing key's type).</param>
+/// <param name="SchemeHashAlg">The signing scheme's hash algorithm.</param>
+/// <param name="TicketDigest">The digest carried by the caller-supplied <c>TPMT_TK_CREATION</c>, compared constant-time against the recomputed ticket.</param>
+public sealed record TpmCertifyCreationRequested(
+    uint SignHandle,
+    uint ObjectHandle,
+    ReadOnlyMemory<byte> QualifyingData,
+    ReadOnlyMemory<byte> CreationHash,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants SchemeHashAlg,
+    ReadOnlyMemory<byte> TicketDigest): TpmSimulatorInput;
+
+/// <summary>
+/// The result of executing a <see cref="TpmCertifyCreationAction"/> or <see cref="TpmRsaCertifyCreationAction"/>.
+/// Unlike <see cref="TpmObjectCertified"/>, the creation-ticket re-verification (TPM 2.0 Library Part 3, clause
+/// 18.3) needs the asynchronous digest/HMAC seam, so it happens inside the effect rather than the pure
+/// transition: a mismatched ticket yields <see cref="ResponseCode"/> <c>TPM_RC_TICKET</c> with no attestation
+/// data, mirroring <c>TpmCredentialActivated</c>'s integrity-check outcome. Internal to the effect loop; never
+/// arrives from the command transport.
+/// </summary>
+/// <param name="ResponseCode">
+/// <c>TPM_RC_SUCCESS</c> when the supplied creation ticket reproduced, in which case <paramref name="CertifyInfo"/>
+/// and <paramref name="Signature"/> carry the attestation; otherwise <c>TPM_RC_TICKET</c> with both null.
+/// </param>
+/// <param name="CertifyInfo">The pooled buffer holding the marshaled <c>TPMS_ATTEST</c> (the exact bytes the signature is over); ownership flows to the <c>TpmCertifyCreationResponse</c> and is released by <see cref="TpmSimulator"/> once framed.</param>
+/// <param name="CertifyInfoLength">The number of valid octets in <paramref name="CertifyInfo"/>.</param>
+/// <param name="Signature">The signature over <c>H_hashAlg(certifyInfo)</c>; ownership flows to the <c>TpmCertifyCreationResponse</c> and is released once framed.</param>
+/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>), selecting how the signature is framed.</param>
+/// <param name="HashAlg">The signing scheme's hash algorithm, framed inside the signature.</param>
+public sealed record TpmObjectCreationCertified(
+    TpmRcConstants ResponseCode,
+    IMemoryOwner<byte>? CertifyInfo,
+    int CertifyInfoLength,
+    Signature? Signature,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants HashAlg): TpmSimulatorInput;
+
+/// <summary>
+/// A <c>TPM2_GetTime()</c> command (TPM 2.0 Library Part 3, clause 18.7): a signing key attests the TPM's current
+/// time, over a caller nonce. Requires Endorsement authorization on <see cref="PrivacyAdminHandle"/> in addition
+/// to <see cref="SignHandle"/>'s own authorization, so the parser consumes two password sessions in handle order.
+/// </summary>
+/// <param name="PrivacyAdminHandle">The privacy administrator handle (TPMI_RH_ENDORSEMENT); only <c>TPM_RH_ENDORSEMENT</c> is a legal value.</param>
+/// <param name="SignHandle">The loaded signing key that attests, whose retained private key signs the marshaled attestation.</param>
+/// <param name="QualifyingData">The caller nonce echoed into the attestation's <c>extraData</c>, copied into durable model memory.</param>
+/// <param name="SignatureScheme">The signing scheme algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>, dispatched on the signing key's type).</param>
+/// <param name="SchemeHashAlg">The signing scheme's hash algorithm.</param>
+public sealed record TpmGetTimeRequested(
+    uint PrivacyAdminHandle,
+    uint SignHandle,
+    ReadOnlyMemory<byte> QualifyingData,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants SchemeHashAlg): TpmSimulatorInput;
+
+/// <summary>
+/// The result of executing a <see cref="TpmGetTimeAction"/> or <see cref="TpmRsaGetTimeAction"/>: the marshaled
+/// <c>TPMS_ATTEST</c> the effectful loop built and the signature over its digest, fed back so the transition can
+/// frame the <c>TPM2_GetTime()</c> response. Internal to the effect loop; never arrives from the command transport.
+/// </summary>
+/// <param name="TimeInfo">The pooled buffer holding the marshaled <c>TPMS_ATTEST</c> (the exact bytes the signature is over); ownership flows to the <c>TpmGetTimeResponse</c> and is released by <see cref="TpmSimulator"/> once framed.</param>
+/// <param name="TimeInfoLength">The number of valid octets in <paramref name="TimeInfo"/>.</param>
+/// <param name="Signature">The signature over <c>H_hashAlg(timeInfo)</c>; ownership flows to the <c>TpmGetTimeResponse</c> and is released once framed.</param>
+/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>), selecting how the signature is framed.</param>
+/// <param name="HashAlg">The signing scheme's hash algorithm, framed inside the signature.</param>
+public sealed record TpmTimeAttested(
+    IMemoryOwner<byte> TimeInfo,
+    int TimeInfoLength,
+    Signature Signature,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants HashAlg): TpmSimulatorInput;
+
+/// <summary>
+/// A <c>TPM2_NV_Certify()</c> command (TPM 2.0 Library Part 3, clause 31.16): a signing key attests the contents
+/// of an NV Index at a caller-chosen offset and size, over a caller nonce. Both <see cref="SignHandle"/> and
+/// <see cref="AuthHandle"/> require authorization, so the parser consumes two password sessions in handle order;
+/// only Index authorization (<see cref="AuthHandle"/> equal to <see cref="NvIndex"/>) is modelled.
+/// </summary>
+/// <param name="SignHandle">The loaded signing key that attests, whose retained private key signs the marshaled attestation.</param>
+/// <param name="AuthHandle">The authorization handle (<c>TPMI_RH_NV_AUTH</c>); for Index authorization this equals <paramref name="NvIndex"/>.</param>
+/// <param name="NvIndex">The NV Index whose contents are certified.</param>
+/// <param name="AuthSupplied">The authorization value the caller supplied for <paramref name="AuthHandle"/> (the password session's plaintext authValue), compared against the Index authValue.</param>
+/// <param name="QualifyingData">The caller nonce echoed into the attestation's <c>extraData</c>, copied into durable model memory.</param>
+/// <param name="SignatureScheme">The signing scheme algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>, dispatched on the signing key's type).</param>
+/// <param name="SchemeHashAlg">The signing scheme's hash algorithm.</param>
+/// <param name="Size">The number of octets to certify.</param>
+/// <param name="Offset">The octet offset into the Index data area.</param>
+public sealed record TpmNvCertifyRequested(
+    uint SignHandle,
+    uint AuthHandle,
+    uint NvIndex,
+    ReadOnlyMemory<byte> AuthSupplied,
+    ReadOnlyMemory<byte> QualifyingData,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants SchemeHashAlg,
+    ushort Size,
+    ushort Offset): TpmSimulatorInput;
+
+/// <summary>
+/// The result of executing a <see cref="TpmNvCertifyAction"/> or <see cref="TpmRsaNvCertifyAction"/>: the
+/// marshaled <c>TPMS_ATTEST</c> the effectful loop built and the signature over its digest, fed back so the
+/// transition can frame the <c>TPM2_NV_Certify()</c> response. Internal to the effect loop; never arrives from
+/// the command transport.
+/// </summary>
+/// <param name="CertifyInfo">The pooled buffer holding the marshaled <c>TPMS_ATTEST</c> (the exact bytes the signature is over); ownership flows to the <c>TpmNvCertifyResponse</c> and is released by <see cref="TpmSimulator"/> once framed.</param>
+/// <param name="CertifyInfoLength">The number of valid octets in <paramref name="CertifyInfo"/>.</param>
+/// <param name="Signature">The signature over <c>H_hashAlg(certifyInfo)</c>; ownership flows to the <c>TpmNvCertifyResponse</c> and is released once framed.</param>
+/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>), selecting how the signature is framed.</param>
+/// <param name="HashAlg">The signing scheme's hash algorithm, framed inside the signature.</param>
+public sealed record TpmNvIndexCertified(
+    IMemoryOwner<byte> CertifyInfo,
+    int CertifyInfoLength,
+    Signature Signature,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants HashAlg): TpmSimulatorInput;
+
+/// <summary>
 /// A <c>TPM2_StartAuthSession()</c> command (TPM 2.0 Library Part 3, clause 11.1) that starts a policy or trial
 /// policy session. The tests start unbound, unsalted sessions (tpmKey and bind both <c>TPM_RH_NULL</c>, empty
 /// nonceCaller and encryptedSalt, <c>TPM_ALG_NULL</c> symmetric), so only the fields the session model needs are

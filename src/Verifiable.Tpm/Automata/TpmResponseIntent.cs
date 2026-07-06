@@ -198,6 +198,81 @@ public sealed record TpmCertifyResponse(
     TpmAlgIdConstants HashAlg): TpmResponseIntent(ResponseCode);
 
 /// <summary>
+/// The successful response to <c>TPM2_CertifyCreation()</c>: the signed attestation as a <c>TPM2B_ATTEST</c>
+/// followed by the <c>TPMT_SIGNATURE</c> over its digest (TPM 2.0 Library Part 3, clause 18.3) — the same shape
+/// as <see cref="TpmCertifyResponse"/>.
+/// </summary>
+/// <remarks>
+/// <see cref="CertifyInfo"/> is a pooled buffer holding the marshaled <c>TPMS_ATTEST</c> and <see cref="Signature"/>
+/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and, depending on
+/// <see cref="SignatureScheme"/>, either the ECDSA <c>r</c>/<c>s</c> pair or the single RSA signature, and then
+/// disposes both, as the terminal owner.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="CertifyInfo">The pooled buffer holding the marshaled <c>TPMS_ATTEST</c>; disposed after framing.</param>
+/// <param name="CertifyInfoLength">The number of valid octets in <paramref name="CertifyInfo"/>.</param>
+/// <param name="Signature">The signature over the attestation digest; disposed after framing.</param>
+/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>), the <c>TPMU_SIGNATURE</c> selector.</param>
+/// <param name="HashAlg">The signing scheme's hash algorithm, framed inside the signature.</param>
+public sealed record TpmCertifyCreationResponse(
+    TpmRcConstants ResponseCode,
+    IMemoryOwner<byte> CertifyInfo,
+    int CertifyInfoLength,
+    Signature Signature,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants HashAlg): TpmResponseIntent(ResponseCode);
+
+/// <summary>
+/// The successful response to <c>TPM2_GetTime()</c>: the signed attestation as a <c>TPM2B_ATTEST</c> followed by
+/// the <c>TPMT_SIGNATURE</c> over its digest (TPM 2.0 Library Part 3, clause 18.7) — the same shape as
+/// <see cref="TpmCertifyResponse"/>.
+/// </summary>
+/// <remarks>
+/// <see cref="TimeInfo"/> is a pooled buffer holding the marshaled <c>TPMS_ATTEST</c> and <see cref="Signature"/>
+/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and, depending on
+/// <see cref="SignatureScheme"/>, either the ECDSA <c>r</c>/<c>s</c> pair or the single RSA signature, and then
+/// disposes both, as the terminal owner.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="TimeInfo">The pooled buffer holding the marshaled <c>TPMS_ATTEST</c>; disposed after framing.</param>
+/// <param name="TimeInfoLength">The number of valid octets in <paramref name="TimeInfo"/>.</param>
+/// <param name="Signature">The signature over the attestation digest; disposed after framing.</param>
+/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>), the <c>TPMU_SIGNATURE</c> selector.</param>
+/// <param name="HashAlg">The signing scheme's hash algorithm, framed inside the signature.</param>
+public sealed record TpmGetTimeResponse(
+    TpmRcConstants ResponseCode,
+    IMemoryOwner<byte> TimeInfo,
+    int TimeInfoLength,
+    Signature Signature,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants HashAlg): TpmResponseIntent(ResponseCode);
+
+/// <summary>
+/// The successful response to <c>TPM2_NV_Certify()</c>: the signed attestation as a <c>TPM2B_ATTEST</c> followed
+/// by the <c>TPMT_SIGNATURE</c> over its digest (TPM 2.0 Library Part 3, clause 31.16) — the same shape as
+/// <see cref="TpmCertifyResponse"/>.
+/// </summary>
+/// <remarks>
+/// <see cref="CertifyInfo"/> is a pooled buffer holding the marshaled <c>TPMS_ATTEST</c> and <see cref="Signature"/>
+/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and, depending on
+/// <see cref="SignatureScheme"/>, either the ECDSA <c>r</c>/<c>s</c> pair or the single RSA signature, and then
+/// disposes both, as the terminal owner.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="CertifyInfo">The pooled buffer holding the marshaled <c>TPMS_ATTEST</c>; disposed after framing.</param>
+/// <param name="CertifyInfoLength">The number of valid octets in <paramref name="CertifyInfo"/>.</param>
+/// <param name="Signature">The signature over the attestation digest; disposed after framing.</param>
+/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>), the <c>TPMU_SIGNATURE</c> selector.</param>
+/// <param name="HashAlg">The signing scheme's hash algorithm, framed inside the signature.</param>
+public sealed record TpmNvCertifyResponse(
+    TpmRcConstants ResponseCode,
+    IMemoryOwner<byte> CertifyInfo,
+    int CertifyInfoLength,
+    Signature Signature,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants HashAlg): TpmResponseIntent(ResponseCode);
+
+/// <summary>
 /// The successful response to <c>TPM2_PCR_Read()</c>: the PCR update counter, the selection actually read, and
 /// the selected register values (TPM 2.0 Library Part 3, clause 22.4).
 /// </summary>

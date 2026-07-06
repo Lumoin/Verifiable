@@ -63,7 +63,10 @@ public static class TpmLifecycleTransitions
                 TpmObjectSealed objectSealed => OnObjectSealed(state, objectSealed),
                 TpmObjectLoaded objectLoaded => OnObjectLoaded(state, objectLoaded),
                 TpmObjectCertified objectCertified => OnObjectCertified(state, objectCertified),
+                TpmObjectCreationCertified objectCreationCertified => OnObjectCreationCertified(state, objectCreationCertified),
                 TpmObjectQuoted objectQuoted => OnObjectQuoted(state, objectQuoted),
+                TpmTimeAttested timeAttested => OnTimeAttested(state, timeAttested),
+                TpmNvIndexCertified nvIndexCertified => OnNvIndexCertified(state, nvIndexCertified),
                 TpmHmacSessionStarted hmacSessionStarted => OnHmacSessionStarted(state, hmacSessionStarted),
                 TpmEncryptedRandomProduced encryptedRandom => OnEncryptedRandomProduced(state, encryptedRandom),
                 TpmUnsealedOverSessions unsealedOverSessions => OnUnsealedOverSessions(state, unsealedOverSessions),
@@ -133,8 +136,11 @@ public static class TpmLifecycleTransitions
             TpmUnsealRequested unseal => OnUnseal(state, unseal),
             TpmUnsealOverSessionsRequested unsealOverSessions => OnUnsealOverSessions(state, unsealOverSessions),
             TpmCertifyRequested certify => OnCertify(state, certify),
+            TpmCertifyCreationRequested certifyCreation => OnCertifyCreation(state, certifyCreation),
             TpmPcrReadRequested pcrRead => OnPcrRead(state, pcrRead),
             TpmQuoteRequested quote => OnQuote(state, quote),
+            TpmGetTimeRequested getTime => OnGetTime(state, getTime),
+            TpmNvCertifyRequested nvCertify => OnNvCertify(state, nvCertify),
             TpmStartAuthSessionRequested startAuthSession => OnStartAuthSession(state, startAuthSession),
             TpmStartHmacSessionRequested startHmacSession => OnStartHmacSession(state, startHmacSession),
             TpmGetRandomOverSessionRequested getRandomOverSession => OnGetRandomOverSession(state, getRandomOverSession),
@@ -976,6 +982,96 @@ public static class TpmLifecycleTransitions
             },
             "Certify:Completed");
 
+    //TPM2_CertifyCreation() has a signing key attest that objectHandle was created by the TPM with a given
+    //creation hash, re-verifying the caller-supplied creation ticket (Part 3, clause 18.3). Only signHandle and
+    //objectHandle need resolve to loaded transient objects; a missing one is TPM_RC_HANDLE — this scopes
+    //objectHandle to TPM2_CreatePrimary()/TPM2_Create()-minted keys (the TransientObjects table), matching the
+    //actual attestation-key use case; a TPM2_Load()-ed sealed object (which retains no Name) is out of scope and
+    //likewise answers TPM_RC_HANDLE, since it lives in a different table. qualifyingData over the TPM2B_DATA
+    //bound (Part 2, clause 10.4.3) is TPM_RC_SIZE; a signer missing the sign attribute (Part 3, clause 18.1) is
+    //TPM_RC_KEY; an unsupported scheme hash algorithm is TPM_RC_HASH. The signing scheme is dispatched on the
+    //signer's key type exactly as OnCertify does, and a scheme incompatible with the key's type is TPM_RC_SCHEME.
+    //The creation-ticket re-verification needs the asynchronous digest/HMAC seam, so it is folded into the
+    //effect (TpmCertifyCreationAction/TpmRsaCertifyCreationAction) rather than checked here; the transition
+    //resolves both objects, folds their retained fields into the matching action, and leaves no response yet.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnCertifyCreation(TpmSimulatorState state, TpmCertifyCreationRequested request)
+    {
+        if(!state.TransientObjects.TryGetValue(request.SignHandle, out TransientKeyState? signer))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_CertifyCreation, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        if(!state.TransientObjects.TryGetValue(request.ObjectHandle, out TransientKeyState? subject))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_CertifyCreation, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        if(request.QualifyingData.Length > Tpm2bData.MaxSize)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_CertifyCreation, TpmRcConstants.TPM_RC_SIZE);
+        }
+
+        if(!CanSign(signer.Attributes))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_CertifyCreation, TpmRcConstants.TPM_RC_KEY);
+        }
+
+        if(!IsSupportedAttestHashAlg(request.SchemeHashAlg))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_CertifyCreation, TpmRcConstants.TPM_RC_HASH);
+        }
+
+        TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
+        {
+            (TpmAlgIdConstants.TPM_ALG_RSA, TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS) =>
+                new TpmRsaCertifyCreationAction(
+                    subject.Name, subject.Hierarchy, signer.Name, signer.Hierarchy, request.QualifyingData, request.CreationHash,
+                    request.TicketDigest, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg),
+            (TpmAlgIdConstants.TPM_ALG_ECC, TpmAlgIdConstants.TPM_ALG_ECDSA) =>
+                new TpmCertifyCreationAction(
+                    subject.Name, subject.Hierarchy, signer.Name, signer.Hierarchy, request.QualifyingData, request.CreationHash,
+                    request.TicketDigest, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg),
+            _ => null
+        };
+
+        if(action is null)
+        {
+            //A scheme incompatible with the signer's key type — e.g. an ECDSA scheme against an RSA key, or vice
+            //versa — fails closed rather than silently coercing to the key's native scheme.
+            return Reject(state, TpmCcConstants.TPM_CC_CertifyCreation, TpmRcConstants.TPM_RC_SCHEME);
+        }
+
+        return Transition(
+            state with
+            {
+                NextAction = action,
+                ResponseIntent = null
+            },
+            "CertifyCreation:Requested");
+    }
+
+    //Frames the TPM2_CertifyCreation() response the effect produced: the signed attestation on a reproduced
+    //creation ticket, or the ticket-mismatch rejection (TPM_RC_TICKET) the effect's constant-time comparison
+    //found — mirroring OnCredentialActivated's success/rejection split, the only other place a rejection is
+    //decided inside the effect rather than the pure transition.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnObjectCreationCertified(TpmSimulatorState state, TpmObjectCreationCertified certified) =>
+        certified.CertifyInfo is { } certifyInfo
+            ? Transition(
+                state with
+                {
+                    NextAction = NullAction.Instance,
+                    ResponseIntent = new TpmCertifyCreationResponse(
+                        TpmRcConstants.TPM_RC_SUCCESS, certifyInfo, certified.CertifyInfoLength, certified.Signature!, certified.SignatureScheme, certified.HashAlg)
+                },
+                "CertifyCreation:Completed")
+            : Transition(
+                state with
+                {
+                    NextAction = NullAction.Instance,
+                    ResponseIntent = new TpmHeaderOnlyResponse(certified.ResponseCode)
+                },
+                "CertifyCreation:Rejected");
+
     //TPM2_MakeCredential() wraps a credential secret to a credential key's public area, bound to an object's Name
     //(Part 3, clause 12.6; the credential protection scheme is Part 1, clause 24). The credential key (the
     //endorsement key) must be a loaded restricted-decrypt ECC key carrying an exported point; a missing handle is
@@ -1253,6 +1349,196 @@ public static class TpmLifecycleTransitions
                     TpmRcConstants.TPM_RC_SUCCESS, quoted.Quoted, quoted.QuotedLength, quoted.Signature, quoted.SignatureScheme, quoted.HashAlg)
             },
             "Quote:Completed");
+
+    //TPM2_GetTime() has a signing key attest the TPM's current time, over a caller nonce (Part 3, clause 18.7).
+    //privacyAdminHandle is fixed to TPM_RH_ENDORSEMENT (its TPMI_RH_ENDORSEMENT interface type's only legal
+    //value); any other value is rejected the same way OnNvDefineSpace rejects an authHandle other than
+    //TPM_RH_OWNER (TPM_RC_HANDLE) — the map carried no explicit RC for this case, so this mirrors that identical
+    //fixed-handle precedent. signHandle must resolve to a loaded transient object; a missing one is
+    //TPM_RC_HANDLE. qualifyingData over the TPM2B_DATA bound is TPM_RC_SIZE; a signer missing the sign attribute
+    //is TPM_RC_KEY; an unsupported scheme hash algorithm is TPM_RC_HASH. The signing scheme is dispatched on the
+    //signer's key type exactly as OnCertify/OnQuote do, and a scheme incompatible with the key's type is
+    //TPM_RC_SCHEME. The attestation needs an effect (marshal the zero-time image and sign), so the transition
+    //resolves the signer, folds its retained fields into the matching action, and leaves no response yet.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnGetTime(TpmSimulatorState state, TpmGetTimeRequested request)
+    {
+        if(request.PrivacyAdminHandle != (uint)TpmRh.TPM_RH_ENDORSEMENT)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_GetTime, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        if(!state.TransientObjects.TryGetValue(request.SignHandle, out TransientKeyState? signer))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_GetTime, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        if(request.QualifyingData.Length > Tpm2bData.MaxSize)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_GetTime, TpmRcConstants.TPM_RC_SIZE);
+        }
+
+        if(!CanSign(signer.Attributes))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_GetTime, TpmRcConstants.TPM_RC_KEY);
+        }
+
+        if(!IsSupportedAttestHashAlg(request.SchemeHashAlg))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_GetTime, TpmRcConstants.TPM_RC_HASH);
+        }
+
+        TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
+        {
+            (TpmAlgIdConstants.TPM_ALG_RSA, TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS) =>
+                new TpmRsaGetTimeAction(signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg),
+            (TpmAlgIdConstants.TPM_ALG_ECC, TpmAlgIdConstants.TPM_ALG_ECDSA) =>
+                new TpmGetTimeAction(signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg),
+            _ => null
+        };
+
+        if(action is null)
+        {
+            //A scheme incompatible with the signer's key type — e.g. an ECDSA scheme against an RSA key, or vice
+            //versa — fails closed rather than silently coercing to the key's native scheme (mirrors OnCertify).
+            return Reject(state, TpmCcConstants.TPM_CC_GetTime, TpmRcConstants.TPM_RC_SCHEME);
+        }
+
+        return Transition(
+            state with
+            {
+                NextAction = action,
+                ResponseIntent = null
+            },
+            "GetTime:Requested");
+    }
+
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnTimeAttested(TpmSimulatorState state, TpmTimeAttested attested) =>
+        Transition(
+            state with
+            {
+                NextAction = NullAction.Instance,
+                ResponseIntent = new TpmGetTimeResponse(
+                    TpmRcConstants.TPM_RC_SUCCESS, attested.TimeInfo, attested.TimeInfoLength, attested.Signature, attested.SignatureScheme, attested.HashAlg)
+            },
+            "GetTime:Completed");
+
+    //TPM2_NV_Certify() has a signing key attest the contents of an NV Index at a caller-chosen offset/size, over a
+    //caller nonce (Part 3, clause 31.16). Only the TPMS_NV_CERTIFY_INFO form is modelled (decision: a caller
+    //request for the zero-size/zero-offset TPMS_NV_DIGEST_CERTIFY_INFO form is unmodelled and rejected fail-closed
+    //with TPM_RC_COMMAND_CODE — the nearest documented "not implemented" code, mirroring how an unmodelled backend
+    //capability answers elsewhere in this simulator). signHandle must resolve to a loaded transient object and
+    //nvIndex to a defined Index; either missing is TPM_RC_HANDLE. qualifyingData/CanSign/hash-algorithm checks
+    //mirror OnCertify/OnQuote/OnGetTime exactly. The NV-specific checks then mirror OnNvRead: only Index
+    //authorization (authHandle == nvIndex) is modelled (else TPM_RC_AUTH_TYPE), the supplied authorization is
+    //compared constant-time against the Index authValue (a mismatch is TPM_RC_AUTH_FAIL for a DA-protected Index,
+    //TPM_RC_BAD_AUTH otherwise), an unwritten Index is TPM_RC_NV_UNINITIALIZED, and the requested window must lie
+    //within the Index's retained written extent (TPM_RC_NV_RANGE) — the model retains only the octets actually
+    //written (as OnNvRead's own bound already does), so this is the bound checked against rather than the
+    //Index's full declared dataSize. The signing scheme is dispatched on the signer's key type, and a scheme
+    //incompatible with the key's type is TPM_RC_SCHEME. The attestation needs an effect (compute the Index's Name,
+    //marshal, and sign), so the transition resolves both, slices the requested window, folds everything into the
+    //matching action, and leaves no response yet.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnNvCertify(TpmSimulatorState state, TpmNvCertifyRequested request)
+    {
+        if(!state.TransientObjects.TryGetValue(request.SignHandle, out TransientKeyState? signer))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Certify, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        if(!state.NvIndexes.TryGetValue(request.NvIndex, out NvIndexState? index))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Certify, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        if(request.QualifyingData.Length > Tpm2bData.MaxSize)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Certify, TpmRcConstants.TPM_RC_SIZE);
+        }
+
+        if(!CanSign(signer.Attributes))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Certify, TpmRcConstants.TPM_RC_KEY);
+        }
+
+        if(!IsSupportedAttestHashAlg(request.SchemeHashAlg))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Certify, TpmRcConstants.TPM_RC_HASH);
+        }
+
+        //The TPMS_NV_DIGEST_CERTIFY_INFO form (size and offset both zero, Part 3, clause 31.16) is not modelled.
+        if(request.Size == 0 && request.Offset == 0)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Certify, TpmRcConstants.TPM_RC_COMMAND_CODE);
+        }
+
+        //Only Index authorization (authHandle == nvIndex) is modelled this slice, mirroring OnNvRead/OnNvWrite.
+        if(request.AuthHandle != request.NvIndex)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Certify, TpmRcConstants.TPM_RC_AUTH_TYPE);
+        }
+
+        if(!CryptographicOperations.FixedTimeEquals(request.AuthSupplied.Span, index.AuthValue.Span))
+        {
+            TpmRcConstants failureCode = index.IsDaProtected
+                ? TpmRcConstants.TPM_RC_AUTH_FAIL
+                : TpmRcConstants.TPM_RC_BAD_AUTH;
+
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Certify, failureCode);
+        }
+
+        if(!index.IsWritten)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Certify, TpmRcConstants.TPM_RC_NV_UNINITIALIZED);
+        }
+
+        //The model retains only the octets actually written (its NvIndexState.Data grows with each write), so —
+        //as OnNvRead already does — the bound checked here is the retained written extent, not the Index's full
+        //declared dataSize; a request beyond it is equally TPM_RC_NV_RANGE.
+        if((long)request.Offset + request.Size > index.Data.Length)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Certify, TpmRcConstants.TPM_RC_NV_RANGE);
+        }
+
+        ReadOnlyMemory<byte> window = index.Data.Slice(request.Offset, request.Size);
+
+        TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
+        {
+            (TpmAlgIdConstants.TPM_ALG_RSA, TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS) =>
+                new TpmRsaNvCertifyAction(
+                    signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg,
+                    index.NvIndex, index.Attributes, index.DataSize, window, request.Offset),
+            (TpmAlgIdConstants.TPM_ALG_ECC, TpmAlgIdConstants.TPM_ALG_ECDSA) =>
+                new TpmNvCertifyAction(
+                    signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg,
+                    index.NvIndex, index.Attributes, index.DataSize, window, request.Offset),
+            _ => null
+        };
+
+        if(action is null)
+        {
+            //A scheme incompatible with the signer's key type — e.g. an ECDSA scheme against an RSA key, or vice
+            //versa — fails closed rather than silently coercing to the key's native scheme (mirrors OnCertify).
+            return Reject(state, TpmCcConstants.TPM_CC_NV_Certify, TpmRcConstants.TPM_RC_SCHEME);
+        }
+
+        return Transition(
+            state with
+            {
+                NextAction = action,
+                ResponseIntent = null
+            },
+            "NvCertify:Requested");
+    }
+
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnNvIndexCertified(TpmSimulatorState state, TpmNvIndexCertified certified) =>
+        Transition(
+            state with
+            {
+                NextAction = NullAction.Instance,
+                ResponseIntent = new TpmNvCertifyResponse(
+                    TpmRcConstants.TPM_RC_SUCCESS, certified.CertifyInfo, certified.CertifyInfoLength, certified.Signature, certified.SignatureScheme, certified.HashAlg)
+            },
+            "NvCertify:Completed");
 
     //Decodes a TPML_PCR_SELECTION and gathers the selected SHA-256 bank register values in ascending PCR-index
     //order — the order the PCR composite hashes them in (TPM 2.0 Library Part 4, PCRComputeCurrentDigest) and the
@@ -1818,8 +2104,11 @@ public static class TpmLifecycleTransitions
             TpmUnsealRequested => TpmCcConstants.TPM_CC_Unseal,
             TpmUnsealOverSessionsRequested => TpmCcConstants.TPM_CC_Unseal,
             TpmCertifyRequested => TpmCcConstants.TPM_CC_Certify,
+            TpmCertifyCreationRequested => TpmCcConstants.TPM_CC_CertifyCreation,
             TpmPcrReadRequested => TpmCcConstants.TPM_CC_PCR_Read,
             TpmQuoteRequested => TpmCcConstants.TPM_CC_Quote,
+            TpmGetTimeRequested => TpmCcConstants.TPM_CC_GetTime,
+            TpmNvCertifyRequested => TpmCcConstants.TPM_CC_NV_Certify,
             TpmStartAuthSessionRequested => TpmCcConstants.TPM_CC_StartAuthSession,
             TpmStartHmacSessionRequested => TpmCcConstants.TPM_CC_StartAuthSession,
             TpmGetRandomOverSessionRequested => TpmCcConstants.TPM_CC_GetRandom,
