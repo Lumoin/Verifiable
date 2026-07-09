@@ -47,7 +47,7 @@ jobs:
 
     - name: Autobuild
       if: ${{ github.actor != 'dependabot[bot]' }}
-      uses: github/codeql-action/autobuild@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a
+      uses: github/codeql-action/autobuild@99df26d4f13ea111d4ec1a7dddef6063f76b97e9
 
     - name: CodeQL Analysis
       if: ${{ github.actor != 'dependabot[bot]' }}
