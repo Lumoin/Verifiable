@@ -202,6 +202,7 @@ public sealed record TpmLoadObjectAction(
 /// <param name="SignerCurve">The ECC curve the signing scalar lives on.</param>
 /// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c> this slice), selecting how the signature is framed.</param>
 /// <param name="HashAlg">The signing scheme's hash algorithm, hashed over the marshaled attest and framed inside the signature.</param>
+/// <param name="ClockSnapshot">The Clock/resetCount/restartCount/Safe snapshot folded from state after the per-command advance, framed as the attestation's <c>clockInfo</c>.</param>
 public sealed record TpmCertifyAction(
     ReadOnlyMemory<byte> SubjectName,
     uint SubjectHierarchy,
@@ -211,7 +212,8 @@ public sealed record TpmCertifyAction(
     ReadOnlyMemory<byte> SignerPrivateKey,
     TpmEccCurveConstants SignerCurve,
     TpmAlgIdConstants SignatureScheme,
-    TpmAlgIdConstants HashAlg): TpmAction;
+    TpmAlgIdConstants HashAlg,
+    TpmsClockInfo ClockSnapshot): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest a loaded object before the next transition, signed with an RSA key —
@@ -235,6 +237,7 @@ public sealed record TpmCertifyAction(
 /// <param name="SignerPrivateKey">The signing key's retained private key, in the backend's own encoding.</param>
 /// <param name="Scheme">The RSA signing scheme (<c>TPM_ALG_RSASSA</c> or <c>TPM_ALG_RSAPSS</c>) to apply.</param>
 /// <param name="HashAlg">The signing scheme's hash algorithm, hashed over the marshaled attest and framed inside the signature.</param>
+/// <param name="ClockSnapshot">The Clock/resetCount/restartCount/Safe snapshot folded from state after the per-command advance, framed as the attestation's <c>clockInfo</c>.</param>
 public sealed record TpmRsaCertifyAction(
     ReadOnlyMemory<byte> SubjectName,
     uint SubjectHierarchy,
@@ -243,7 +246,8 @@ public sealed record TpmRsaCertifyAction(
     ReadOnlyMemory<byte> QualifyingData,
     ReadOnlyMemory<byte> SignerPrivateKey,
     TpmAlgIdConstants Scheme,
-    TpmAlgIdConstants HashAlg): TpmAction;
+    TpmAlgIdConstants HashAlg,
+    TpmsClockInfo ClockSnapshot): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must quote a set of Platform Configuration Registers before the next transition.
@@ -269,6 +273,7 @@ public sealed record TpmRsaCertifyAction(
 /// <param name="HashAlg">The signing scheme's hash algorithm, hashed over the marshaled attest and framed inside the signature.</param>
 /// <param name="PcrSelection">The caller's <c>TPML_PCR_SELECTION</c> wire bytes, echoed verbatim into the attested <c>TPMS_QUOTE_INFO.pcrSelect</c>.</param>
 /// <param name="PcrValues">The selected register values in ascending PCR-index order, concatenated and hashed into the attested <c>pcrDigest</c>.</param>
+/// <param name="ClockSnapshot">The Clock/resetCount/restartCount/Safe snapshot folded from state after the per-command advance, framed as the attestation's <c>clockInfo</c>.</param>
 public sealed record TpmQuoteAction(
     ReadOnlyMemory<byte> SignerName,
     uint SignerHierarchy,
@@ -278,7 +283,8 @@ public sealed record TpmQuoteAction(
     TpmAlgIdConstants SignatureScheme,
     TpmAlgIdConstants HashAlg,
     ReadOnlyMemory<byte> PcrSelection,
-    ImmutableArray<ReadOnlyMemory<byte>> PcrValues): TpmAction;
+    ImmutableArray<ReadOnlyMemory<byte>> PcrValues,
+    TpmsClockInfo ClockSnapshot): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must quote a set of Platform Configuration Registers before the next transition,
@@ -303,6 +309,7 @@ public sealed record TpmQuoteAction(
 /// <param name="HashAlg">The signing scheme's hash algorithm, hashed over the marshaled attest and framed inside the signature.</param>
 /// <param name="PcrSelection">The caller's <c>TPML_PCR_SELECTION</c> wire bytes, echoed verbatim into the attested <c>TPMS_QUOTE_INFO.pcrSelect</c>.</param>
 /// <param name="PcrValues">The selected register values in ascending PCR-index order, concatenated and hashed into the attested <c>pcrDigest</c>.</param>
+/// <param name="ClockSnapshot">The Clock/resetCount/restartCount/Safe snapshot folded from state after the per-command advance, framed as the attestation's <c>clockInfo</c>.</param>
 public sealed record TpmRsaQuoteAction(
     ReadOnlyMemory<byte> SignerName,
     uint SignerHierarchy,
@@ -311,7 +318,8 @@ public sealed record TpmRsaQuoteAction(
     TpmAlgIdConstants Scheme,
     TpmAlgIdConstants HashAlg,
     ReadOnlyMemory<byte> PcrSelection,
-    ImmutableArray<ReadOnlyMemory<byte>> PcrValues): TpmAction;
+    ImmutableArray<ReadOnlyMemory<byte>> PcrValues,
+    TpmsClockInfo ClockSnapshot): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must re-verify a creation ticket and, if it reproduces, attest the certified
@@ -341,6 +349,7 @@ public sealed record TpmRsaQuoteAction(
 /// <param name="SignerCurve">The ECC curve the signing scalar lives on.</param>
 /// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c> this slice), selecting how the signature is framed.</param>
 /// <param name="HashAlg">The signing scheme's hash algorithm, hashed over the marshaled attest and framed inside the signature.</param>
+/// <param name="ClockSnapshot">The Clock/resetCount/restartCount/Safe snapshot folded from state after the per-command advance, framed as the attestation's <c>clockInfo</c>.</param>
 public sealed record TpmCertifyCreationAction(
     ReadOnlyMemory<byte> SubjectName,
     uint SubjectHierarchy,
@@ -352,7 +361,8 @@ public sealed record TpmCertifyCreationAction(
     ReadOnlyMemory<byte> SignerPrivateKey,
     TpmEccCurveConstants SignerCurve,
     TpmAlgIdConstants SignatureScheme,
-    TpmAlgIdConstants HashAlg): TpmAction;
+    TpmAlgIdConstants HashAlg,
+    TpmsClockInfo ClockSnapshot): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must re-verify a creation ticket and, if it reproduces, attest the certified
@@ -373,6 +383,7 @@ public sealed record TpmCertifyCreationAction(
 /// <param name="SignerPrivateKey">The signing key's retained private key, in the backend's own encoding.</param>
 /// <param name="Scheme">The RSA signing scheme (<c>TPM_ALG_RSASSA</c> or <c>TPM_ALG_RSAPSS</c>) to apply.</param>
 /// <param name="HashAlg">The signing scheme's hash algorithm, hashed over the marshaled attest and framed inside the signature.</param>
+/// <param name="ClockSnapshot">The Clock/resetCount/restartCount/Safe snapshot folded from state after the per-command advance, framed as the attestation's <c>clockInfo</c>.</param>
 public sealed record TpmRsaCertifyCreationAction(
     ReadOnlyMemory<byte> SubjectName,
     uint SubjectHierarchy,
@@ -383,16 +394,17 @@ public sealed record TpmRsaCertifyCreationAction(
     ReadOnlyMemory<byte> TicketDigest,
     ReadOnlyMemory<byte> SignerPrivateKey,
     TpmAlgIdConstants Scheme,
-    TpmAlgIdConstants HashAlg): TpmAction;
+    TpmAlgIdConstants HashAlg,
+    TpmsClockInfo ClockSnapshot): TpmAction;
 
 /// <summary>
-/// Declares that the simulator must attest the standing (all-zero) time image before the next transition.
-/// Emitted by the <c>TPM2_GetTime()</c> transition; the effectful loop marshals a <c>TPMS_ATTEST</c> of type
-/// <c>TPM_ST_ATTEST_TIME</c> whose <c>TPMS_TIME_ATTEST_INFO</c> reports zero time and the same all-zero
-/// <c>TPMS_CLOCK_INFO</c>/firmwareVersion every attest builder frames (this simulator models no clock state, a
-/// documented simplification — TPM 2.0 Library Part 3, clause 18.7), signs <c>H_hashAlg(attest)</c> with the
-/// signing key's retained scalar through the injected <see cref="TpmEccSigningBackend"/>, and feeds the marshaled
-/// attest and signature back as a <see cref="TpmTimeAttested"/> input.
+/// Declares that the simulator must attest the current time before the next transition. Emitted by the
+/// <c>TPM2_GetTime()</c> transition; the effectful loop marshals a <c>TPMS_ATTEST</c> of type
+/// <c>TPM_ST_ATTEST_TIME</c> whose <c>TPMS_TIME_ATTEST_INFO</c> reports the real Time and the same
+/// <c>TPMS_CLOCK_INFO</c>/firmwareVersion every attest builder frames (TPM 2.0 Library Part 3, clause 18.7;
+/// clause 36.7 — the envelope and nested copies agree), signs <c>H_hashAlg(attest)</c> with the signing key's
+/// retained scalar through the injected <see cref="TpmEccSigningBackend"/>, and feeds the marshaled attest and
+/// signature back as a <see cref="TpmTimeAttested"/> input.
 /// </summary>
 /// <remarks>
 /// The transition resolves the signing-key handle against the loaded-object table and folds its Name, hierarchy,
@@ -406,6 +418,8 @@ public sealed record TpmRsaCertifyCreationAction(
 /// <param name="SignerCurve">The ECC curve the signing scalar lives on.</param>
 /// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c> this slice), selecting how the signature is framed.</param>
 /// <param name="HashAlg">The signing scheme's hash algorithm, hashed over the marshaled attest and framed inside the signature.</param>
+/// <param name="Time">The time in milliseconds since the last startup, folded from state after the per-command advance, framed as the attested <c>TPMS_TIME_ATTEST_INFO.time</c>.</param>
+/// <param name="ClockSnapshot">The Clock/resetCount/restartCount/Safe snapshot folded from state after the per-command advance, framed both as the envelope's <c>clockInfo</c> and inside the attested <c>TPMS_TIME_ATTEST_INFO</c> (TPM 2.0 Library Part 1, clause 36.7 — the two copies agree).</param>
 public sealed record TpmGetTimeAction(
     ReadOnlyMemory<byte> SignerName,
     uint SignerHierarchy,
@@ -413,12 +427,14 @@ public sealed record TpmGetTimeAction(
     ReadOnlyMemory<byte> SignerPrivateKey,
     TpmEccCurveConstants SignerCurve,
     TpmAlgIdConstants SignatureScheme,
-    TpmAlgIdConstants HashAlg): TpmAction;
+    TpmAlgIdConstants HashAlg,
+    ulong Time,
+    TpmsClockInfo ClockSnapshot): TpmAction;
 
 /// <summary>
-/// Declares that the simulator must attest the standing (all-zero) time image before the next transition, signed
-/// with an RSA key — the RSA counterpart of <see cref="TpmGetTimeAction"/>. Emitted by the <c>TPM2_GetTime()</c>
-/// transition when the signing key is RSA; the effect builds the same zero-image attestation and signs
+/// Declares that the simulator must attest the current time before the next transition, signed with an RSA
+/// key — the RSA counterpart of <see cref="TpmGetTimeAction"/>. Emitted by the <c>TPM2_GetTime()</c>
+/// transition when the signing key is RSA; the effect builds the same real-time attestation and signs
 /// <c>H_hashAlg(attest)</c> with the signing key's retained private key through the injected
 /// <see cref="TpmRsaSigningBackend"/> under the requested RSA scheme (TPM 2.0 Library Part 3, clause 18.7).
 /// </summary>
@@ -428,13 +444,17 @@ public sealed record TpmGetTimeAction(
 /// <param name="SignerPrivateKey">The signing key's retained private key, in the backend's own encoding.</param>
 /// <param name="Scheme">The RSA signing scheme (<c>TPM_ALG_RSASSA</c> or <c>TPM_ALG_RSAPSS</c>) to apply.</param>
 /// <param name="HashAlg">The signing scheme's hash algorithm, hashed over the marshaled attest and framed inside the signature.</param>
+/// <param name="Time">The time in milliseconds since the last startup, folded from state after the per-command advance, framed as the attested <c>TPMS_TIME_ATTEST_INFO.time</c>.</param>
+/// <param name="ClockSnapshot">The Clock/resetCount/restartCount/Safe snapshot folded from state after the per-command advance, framed both as the envelope's <c>clockInfo</c> and inside the attested <c>TPMS_TIME_ATTEST_INFO</c> (TPM 2.0 Library Part 1, clause 36.7 — the two copies agree).</param>
 public sealed record TpmRsaGetTimeAction(
     ReadOnlyMemory<byte> SignerName,
     uint SignerHierarchy,
     ReadOnlyMemory<byte> QualifyingData,
     ReadOnlyMemory<byte> SignerPrivateKey,
     TpmAlgIdConstants Scheme,
-    TpmAlgIdConstants HashAlg): TpmAction;
+    TpmAlgIdConstants HashAlg,
+    ulong Time,
+    TpmsClockInfo ClockSnapshot): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest an NV Index's contents before the next transition. Emitted by the
@@ -464,6 +484,7 @@ public sealed record TpmRsaGetTimeAction(
 /// <param name="NvIndexDataSize">The Index's declared data size, folded into the marshaled <c>TPMS_NV_PUBLIC</c>.</param>
 /// <param name="NvContents">The requested window of the Index's retained data, attested verbatim in <c>TPMS_NV_CERTIFY_INFO.nvContents</c>.</param>
 /// <param name="Offset">The octet offset of <paramref name="NvContents"/> within the Index's data area, attested in <c>TPMS_NV_CERTIFY_INFO.offset</c>.</param>
+/// <param name="ClockSnapshot">The Clock/resetCount/restartCount/Safe snapshot folded from state after the per-command advance, framed as the attestation's <c>clockInfo</c>.</param>
 public sealed record TpmNvCertifyAction(
     ReadOnlyMemory<byte> SignerName,
     uint SignerHierarchy,
@@ -476,7 +497,8 @@ public sealed record TpmNvCertifyAction(
     TpmaNv NvIndexAttributes,
     ushort NvIndexDataSize,
     ReadOnlyMemory<byte> NvContents,
-    ushort Offset): TpmAction;
+    ushort Offset,
+    TpmsClockInfo ClockSnapshot): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest an NV Index's contents before the next transition, signed with an RSA
@@ -497,6 +519,7 @@ public sealed record TpmNvCertifyAction(
 /// <param name="NvIndexDataSize">The Index's declared data size, folded into the marshaled <c>TPMS_NV_PUBLIC</c>.</param>
 /// <param name="NvContents">The requested window of the Index's retained data, attested verbatim in <c>TPMS_NV_CERTIFY_INFO.nvContents</c>.</param>
 /// <param name="Offset">The octet offset of <paramref name="NvContents"/> within the Index's data area, attested in <c>TPMS_NV_CERTIFY_INFO.offset</c>.</param>
+/// <param name="ClockSnapshot">The Clock/resetCount/restartCount/Safe snapshot folded from state after the per-command advance, framed as the attestation's <c>clockInfo</c>.</param>
 public sealed record TpmRsaNvCertifyAction(
     ReadOnlyMemory<byte> SignerName,
     uint SignerHierarchy,
@@ -508,7 +531,8 @@ public sealed record TpmRsaNvCertifyAction(
     TpmaNv NvIndexAttributes,
     ushort NvIndexDataSize,
     ReadOnlyMemory<byte> NvContents,
-    ushort Offset): TpmAction;
+    ushort Offset,
+    TpmsClockInfo ClockSnapshot): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must establish a bound, unsalted HMAC session before the next transition. Emitted

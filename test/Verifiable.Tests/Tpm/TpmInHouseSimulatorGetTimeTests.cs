@@ -23,14 +23,15 @@ namespace Verifiable.Tests.Tpm;
 /// entirely in-process, with no external assets — through the same production command path the production code
 /// uses (<see cref="TpmCommandExecutor"/> with the real <see cref="GetTimeInput"/> and response codecs):
 /// <c>TPM2_CreatePrimary()</c> mints an attestation key (AK) under the endorsement hierarchy, then the AK attests
-/// the TPM's standing (zero) time image over a caller nonce.
+/// the TPM's real time image over a caller nonce.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The result is verified <b>off-TPM</b> from wire bytes only: the magic / type / nonce fields, that the attested
-/// time image is framed verbatim as an all-zero <c>TPMS_TIME_ATTEST_INFO</c> (this simulator models no clock
-/// state, a documented simplification — TPM 2.0 Library Part 3, clause 18.7), and the ECDSA/RSA signature over
-/// the raw attestation bytes against the AK's exported public key reconstructed from <c>outPublic</c> alone.
+/// time image carries the real Clock/Time/resetCount/restartCount/Safe/firmwareVersion snapshot the transition
+/// folded from state after the per-command advance (TPM 2.0 Library Part 1, clause 36; Part 3, clause 18.7), and
+/// the ECDSA/RSA signature over the raw attestation bytes against the AK's exported public key reconstructed
+/// from <c>outPublic</c> alone.
 /// </para>
 /// <para>
 /// Both handles require authorization (TPM 2.0 Library Part 3, clause 18.7, Table 96), so the executor is given
@@ -47,15 +48,29 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     private const ushort Rsa2048KeyBits = 2048;
 
     /// <summary>The fixed caller nonce (qualifyingData) echoed into the attestation's extraData.</summary>
-    private static byte[] Nonce { get; } = "GetTime nonce for the in-house TPM."u8.ToArray();
+    private static IMemoryOwner<byte> Nonce { get; } = RentLiteral("GetTime nonce for the in-house TPM."u8);
+
+    /// <summary>
+    /// The simulator's synthetic firmware version this test expects: a UINT32 major half of 1 and a minor
+    /// half of 184, mirroring <c>TpmSimulator</c>'s own <c>SimulatedFirmwareVersion</c> constant (TPM 2.0
+    /// Library Part 2, clause 10.12.12).
+    /// </summary>
+    private const ulong ExpectedFirmwareVersion = (1UL << 32) | 184UL;
 
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>Releases the pooled <see cref="Nonce"/> buffer shared across every test in this class.</summary>
+    [ClassCleanup]
+    public static void ClassCleanup()
+    {
+        Nonce.Dispose();
+    }
+
     /// <summary>
-    /// Verifies a full ECDSA P-256 get-time round trip: the standing zero-time image is framed verbatim, the
-    /// nonce is echoed, qualifiedSigner is the AK's real (non-collapsed) Qualified Name, and the signature
-    /// verifies against the AK's exported public key (TPM 2.0 Library Part 3, clause 18.7).
+    /// Verifies a full ECDSA P-256 get-time round trip: the real time image is attested, the nonce is echoed,
+    /// qualifiedSigner is the AK's real (non-collapsed) Qualified Name, and the signature verifies against the
+    /// AK's exported public key (TPM 2.0 Library Part 3, clause 18.7).
     /// </summary>
     [TestMethod]
     public async Task EcdsaP256GetTimeVerifiesAgainstInHouseSimulator()
@@ -69,7 +84,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
 
         using TpmPasswordSession privacyAdminAuth = TpmPasswordSession.CreateEmpty(pool);
         using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
-        using GetTimeInput getTimeInput = GetTimeInput.ForEcdsa(ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        using GetTimeInput getTimeInput = GetTimeInput.ForEcdsa(ak.ObjectHandle, Nonce.Memory.Span, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
 
         TpmResult<GetTimeResponse> result = await TpmCommandExecutor.ExecuteAsync<GetTimeResponse>(
             tpm, getTimeInput, [privacyAdminAuth, signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -129,6 +144,55 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     }
 
     /// <summary>
+    /// Verifies that <c>Clock</c> and <c>Time</c> strictly increase across two sequential
+    /// <c>TPM2_GetTime()</c> calls within one power cycle, while <c>resetCount</c>/<c>restartCount</c> stay
+    /// stable (TPM 2.0 Library Part 1, clause 36.1: each dispatched command advances the free-running
+    /// counters by one fixed quantum).
+    /// </summary>
+    [TestMethod]
+    public async Task GetTimeAdvancesMonotonicallyAcrossCalls()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+
+        using GetTimeResponse first = await IssueGetTimeAsync(tpm, registry, pool, ak).ConfigureAwait(false);
+        using GetTimeResponse second = await IssueGetTimeAsync(tpm, registry, pool, ak).ConfigureAwait(false);
+
+        TpmsTimeAttestInfo firstTimeInfo = first.TimeInfo.AttestationData.Attested.Time!.Value;
+        TpmsTimeAttestInfo secondTimeInfo = second.TimeInfo.AttestationData.Attested.Time!.Value;
+
+        Assert.IsGreaterThan(firstTimeInfo.Time.ClockInfo.Clock, secondTimeInfo.Time.ClockInfo.Clock, "Clock must strictly increase across two sequential commands.");
+        Assert.IsGreaterThan(firstTimeInfo.Time.Time, secondTimeInfo.Time.Time, "Time must strictly increase across two sequential commands within one power cycle.");
+        Assert.AreEqual(firstTimeInfo.Time.ClockInfo.ResetCount, secondTimeInfo.Time.ClockInfo.ResetCount, "resetCount must stay stable within one power cycle.");
+        Assert.AreEqual(firstTimeInfo.Time.ClockInfo.RestartCount, secondTimeInfo.Time.ClockInfo.RestartCount, "restartCount must stay stable within one power cycle.");
+    }
+
+    /// <summary>
+    /// Issues one <c>TPM2_GetTime()</c> against the AK and returns the parsed response (the caller owns it).
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="ak">The attestation key's CreatePrimary response.</param>
+    /// <returns>The parsed get-time response.</returns>
+    private async Task<GetTimeResponse> IssueGetTimeAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, CreatePrimaryResponse ak)
+    {
+        using TpmPasswordSession privacyAdminAuth = TpmPasswordSession.CreateEmpty(pool);
+        using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
+        using GetTimeInput getTimeInput = GetTimeInput.ForEcdsa(ak.ObjectHandle, Nonce.Memory.Span, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+
+        TpmResult<GetTimeResponse> result = await TpmCommandExecutor.ExecuteAsync<GetTimeResponse>(
+            tpm, getTimeInput, [privacyAdminAuth, signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"TPM2_GetTime failed: '{result.ResponseCode}'.");
+
+        return result.Value;
+    }
+
+    /// <summary>
     /// Verifies that a privacyAdminHandle other than <see cref="TpmRh.TPM_RH_ENDORSEMENT"/> is rejected: this
     /// simulator mirrors the <c>TPM2_NV_DefineSpace()</c> fixed-handle precedent (a wrong provisioning handle is
     /// <c>TPM_RC_HANDLE</c>) since TPMI_RH_ENDORSEMENT has exactly one legal value (TPM 2.0 Library Part 3,
@@ -147,7 +211,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
         using TpmPasswordSession privacyAdminAuth = TpmPasswordSession.CreateEmpty(pool);
         using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
         using GetTimeInput getTimeInput = GetTimeInput.Create(
-            TpmRh.TPM_RH_OWNER, ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+            TpmRh.TPM_RH_OWNER, ak.ObjectHandle, Nonce.Memory.Span, TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
 
         TpmResult<GetTimeResponse> result = await TpmCommandExecutor.ExecuteAsync<GetTimeResponse>(
             tpm, getTimeInput, [privacyAdminAuth, signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -172,7 +236,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
 
         using TpmPasswordSession privacyAdminAuth = TpmPasswordSession.CreateEmpty(pool);
         using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
-        using GetTimeInput getTimeInput = GetTimeInput.ForRsaSsa(ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        using GetTimeInput getTimeInput = GetTimeInput.ForRsaSsa(ak.ObjectHandle, Nonce.Memory.Span, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
 
         TpmResult<GetTimeResponse> result = await TpmCommandExecutor.ExecuteAsync<GetTimeResponse>(
             tpm, getTimeInput, [privacyAdminAuth, signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -197,8 +261,8 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
         using TpmPasswordSession privacyAdminAuth = TpmPasswordSession.CreateEmpty(pool);
         using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
         using GetTimeInput getTimeInput = usePss
-            ? GetTimeInput.ForRsaPss(ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pool)
-            : GetTimeInput.ForRsaSsa(ak.ObjectHandle, Nonce, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+            ? GetTimeInput.ForRsaPss(ak.ObjectHandle, Nonce.Memory.Span, TpmAlgIdConstants.TPM_ALG_SHA256, pool)
+            : GetTimeInput.ForRsaSsa(ak.ObjectHandle, Nonce.Memory.Span, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
 
         TpmResult<GetTimeResponse> result = await TpmCommandExecutor.ExecuteAsync<GetTimeResponse>(
             tpm, getTimeInput, [privacyAdminAuth, signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -221,9 +285,11 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
     }
 
     /// <summary>
-    /// Asserts the envelope (magic/type/nonce), that the attested time image is the standing all-zero
-    /// <c>TPMS_TIME_ATTEST_INFO</c> framed verbatim, and qualifiedSigner against an independent (non-collapsed)
-    /// Qualified Name recomputation.
+    /// Asserts the envelope (magic/type/nonce), that the attested time image carries the real
+    /// Clock/Time/resetCount/restartCount/Safe/firmwareVersion snapshot — both the envelope-level
+    /// <c>TPMS_ATTEST.clockInfo</c> and the nested <c>TPMS_TIME_ATTEST_INFO</c> copy agree (TPM 2.0 Library
+    /// Part 1, clause 36.7) — and qualifiedSigner against an independent (non-collapsed) Qualified Name
+    /// recomputation.
     /// </summary>
     /// <param name="getTime">The parsed get-time response.</param>
     /// <param name="ak">The attestation key's CreatePrimary response.</param>
@@ -233,16 +299,22 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
         TpmsAttest attest = getTime.TimeInfo.AttestationData;
         Assert.AreEqual(TpmConstants32.TPM_GENERATED_VALUE, attest.Magic, "A genuine TPM attestation is stamped with TPM_GENERATED_VALUE.");
         Assert.AreEqual(TpmStConstants.TPM_ST_ATTEST_TIME, attest.Type);
-        Assert.IsTrue(attest.ExtraData.Span.SequenceEqual(Nonce), "extraData must echo the caller's qualifyingData nonce.");
+        Assert.IsTrue(attest.ExtraData.Span.SequenceEqual(Nonce.Memory.Span), "extraData must echo the caller's qualifyingData nonce.");
         Assert.IsNotNull(attest.Attested.Time);
 
         TpmsTimeAttestInfo timeInfo = attest.Attested.Time!.Value;
-        Assert.AreEqual(0ul, timeInfo.Time.Time, "This simulator models no clock state; the standing time image is zero.");
-        Assert.AreEqual(0ul, timeInfo.Time.ClockInfo.Clock, "The zero-clock image's Clock must be zero.");
-        Assert.AreEqual(0u, timeInfo.Time.ClockInfo.ResetCount, "The zero-clock image's resetCount must be zero.");
-        Assert.AreEqual(0u, timeInfo.Time.ClockInfo.RestartCount, "The zero-clock image's restartCount must be zero.");
-        Assert.IsFalse(timeInfo.Time.ClockInfo.Safe.IsYes, "The zero-clock image's Safe must be NO (Part 2, clause 10.11.5's fallback for no Clock implementation).");
-        Assert.AreEqual(0ul, timeInfo.FirmwareVersion, "This simulator models no firmware version; it is zero.");
+        Assert.IsGreaterThan(0ul, timeInfo.Time.Time, "Time must be real: > 0 after at least CreatePrimary and GetTime have each advanced it by one quantum.");
+        Assert.IsGreaterThan(0ul, timeInfo.Time.ClockInfo.Clock, "Clock must be real: > 0 after Startup, CreatePrimary, and GetTime have each advanced it by one quantum.");
+        Assert.AreEqual(1u, timeInfo.Time.ClockInfo.ResetCount, "A fresh simulator's single Startup(CLEAR) is exactly one TPM Reset (Part 1, clause 36.4).");
+        Assert.AreEqual(0u, timeInfo.Time.ClockInfo.RestartCount, "No Restart or Resume has occurred in this fresh simulator's single power cycle.");
+        Assert.IsTrue(timeInfo.Time.ClockInfo.Safe.IsYes, "A fresh simulator's very first Reset is Safe: no prior Clock value could ever have been reported (Part 1, clause 36.3).");
+        Assert.AreEqual(ExpectedFirmwareVersion, timeInfo.FirmwareVersion, "The simulator reports its fixed synthetic firmware version.");
+
+        Assert.AreEqual(attest.ClockInfo.Clock, timeInfo.Time.ClockInfo.Clock, "The envelope-level clockInfo and the nested TPMS_TIME_ATTEST_INFO copy must agree (Part 1, clause 36.7).");
+        Assert.AreEqual(attest.ClockInfo.ResetCount, timeInfo.Time.ClockInfo.ResetCount, "The envelope-level clockInfo and the nested copy must agree on resetCount.");
+        Assert.AreEqual(attest.ClockInfo.RestartCount, timeInfo.Time.ClockInfo.RestartCount, "The envelope-level clockInfo and the nested copy must agree on restartCount.");
+        Assert.AreEqual(attest.ClockInfo.Safe.IsYes, timeInfo.Time.ClockInfo.Safe.IsYes, "The envelope-level clockInfo and the nested copy must agree on Safe.");
+        Assert.AreEqual(ExpectedFirmwareVersion, attest.FirmwareVersion, "The envelope-level firmwareVersion must equal the nested copy's.");
 
         byte[] expectedSignerQn = await ComputeQualifiedNameAsync(
             (uint)TpmRh.TPM_RH_ENDORSEMENT, ak.Name.Span.ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -436,5 +508,19 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Rents a buffer from <see cref="BaseMemoryPool.Shared"/> sized to <paramref name="literal"/> and copies the
+    /// literal's bytes into it, so a fixed test constant is pool-backed rather than a naked array.
+    /// </summary>
+    /// <param name="literal">The compile-time literal bytes to copy into pooled memory.</param>
+    /// <returns>A pooled owner holding exactly <paramref name="literal"/>'s bytes.</returns>
+    private static IMemoryOwner<byte> RentLiteral(ReadOnlySpan<byte> literal)
+    {
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(literal.Length);
+        literal.CopyTo(owner.Memory.Span);
+
+        return owner;
     }
 }

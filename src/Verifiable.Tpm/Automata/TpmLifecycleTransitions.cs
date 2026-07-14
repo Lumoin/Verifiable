@@ -44,6 +44,12 @@ public static class TpmLifecycleTransitions
     public const int MaxRandomBytes = 64;
 
     /// <summary>
+    /// The largest value <c>TPM2_ClockSet()</c> may set <c>Clock</c> to (TPM 2.0 Library Part 1, clause 36.3:
+    /// "the value of Clock may not be advanced beyond FF FF 00 00 00 00 00 00(16)").
+    /// </summary>
+    public const ulong MaxClockValue = 0xFFFF_0000_0000_0000UL;
+
+    /// <summary>
     /// Creates the transition delegate for a TPM lifecycle automaton.
     /// </summary>
     /// <returns>The transition function.</returns>
@@ -115,6 +121,18 @@ public static class TpmLifecycleTransitions
             return Reject(state, commandCode, responseCode);
         }
 
+        //Every admitted command advances the free-running Time/Clock counters by one fixed quantum before
+        //dispatch (TPM 2.0 Library Part 1, clause 36.1: "Time advances when the Time circuit is powered").
+        //This models a real TPM's oscillator as one quantum per submitted command rather than reading a real
+        //wall clock, preserving this function's no-I/O, no-randomness contract. A rejected command (handled
+        //above) performs no Clock-relevant work, matching real-TPM behaviour; TPM2_Startup() overrides Time
+        //back to zero for the Reset/Restart/Resume sequence it completes, but never Clock.
+        state = state with
+        {
+            Time = state.Time + state.ClockAdvanceQuantumMs,
+            Clock = state.Clock + state.ClockAdvanceQuantumMs
+        };
+
         return input switch
         {
             TpmStartupRequested startup => OnStartup(state, startup.StartupType),
@@ -141,6 +159,8 @@ public static class TpmLifecycleTransitions
             TpmPcrReadRequested pcrRead => OnPcrRead(state, pcrRead),
             TpmQuoteRequested quote => OnQuote(state, quote),
             TpmGetTimeRequested getTime => OnGetTime(state, getTime),
+            TpmReadClockRequested => OnReadClock(state),
+            TpmClockSetRequested clockSet => OnClockSet(state, clockSet),
             TpmNvCertifyRequested nvCertify => OnNvCertify(state, nvCertify),
             TpmVerifySignatureRequested verifySignature => OnVerifySignature(state, verifySignature),
             TpmStartAuthSessionRequested startAuthSession => OnStartAuthSession(state, startAuthSession),
@@ -161,18 +181,52 @@ public static class TpmLifecycleTransitions
         };
     }
 
+    //Startup(CLEAR) is a TPM Reset when it is preceded by Shutdown(CLEAR) or no orderly shutdown at all, or a
+    //TPM Restart when it is preceded by Shutdown(STATE); Startup(STATE) after a Shutdown(STATE) is a TPM
+    //Resume (Part 3, clause 9.3). Restart and Resume increment restartCount and leave resetCount untouched; a
+    //Reset increments resetCount and resets restartCount to zero (Part 1, clauses 36.4-36.5). Every one of the
+    //three resets Time to zero (Time counts from the last _TPM_Init/Startup, clause 36.2) but never Clock
+    //(clause 36.3) — overriding only the Time half of the per-command advance OnCommand already applied for
+    //this very Startup dispatch. A Reset's ClockSafe becomes YES when it followed an orderly Shutdown(CLEAR)
+    //or is this TPM's very first Reset (resetCount was zero, so no prior Clock value could ever have been
+    //reported, per clause 36.3's "not a repeat of a previously reported value" definition); otherwise NO — a
+    //Reset with neither of those conditions is a disorderly restart this simulator cannot distinguish further
+    //(the skeleton's own disorderly-power-loss simplification, noted on LastOrderlyShutdown). Two further
+    //simplifications, tracked on the roadmap rather than modelled: no periodic NV Clock save is modelled (Part
+    //1, clause 36.3's volatile/non-volatile Clock split collapses to the one volatile field), and the clause
+    //36.7 resetCount/restartCount/firmwareVersion obfuscation for a signer outside the Platform/Endorsement
+    //hierarchy is not applied — every attestation reports the raw counters and firmware version regardless of
+    //which hierarchy the signing key belongs to.
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnStartup(TpmSimulatorState state, TpmSuConstants startupType) =>
         startupType switch
         {
-            //Startup(CLEAR): TPM Reset or TPM Restart — always becomes operational (clause 10.2.3.2).
+            //Startup(CLEAR) after Shutdown(STATE): TPM Restart.
+            TpmSuConstants.TPM_SU_CLEAR when state.LastOrderlyShutdown == TpmSuConstants.TPM_SU_STATE => Transition(
+                state with
+                {
+                    Phase = TpmLifecyclePhase.Operational,
+                    LastOrderlyShutdown = null,
+                    Time = 0ul,
+                    RestartCount = state.RestartCount + 1,
+                    ResponseIntent = new TpmHeaderOnlyResponse(TpmRcConstants.TPM_RC_SUCCESS)
+                },
+                "Startup:Restart"),
+
+            //Startup(CLEAR) after Shutdown(CLEAR) or no orderly shutdown: TPM Reset.
             TpmSuConstants.TPM_SU_CLEAR => Transition(
                 state with
                 {
                     Phase = TpmLifecyclePhase.Operational,
                     LastOrderlyShutdown = null,
+                    Time = 0ul,
+                    ResetCount = state.ResetCount + 1,
+                    RestartCount = 0u,
+                    ClockSafe = state.LastOrderlyShutdown == TpmSuConstants.TPM_SU_CLEAR || state.ResetCount == 0u
+                        ? TpmiYesNo.Yes
+                        : TpmiYesNo.No,
                     ResponseIntent = new TpmHeaderOnlyResponse(TpmRcConstants.TPM_RC_SUCCESS)
                 },
-                "Startup:Clear"),
+                "Startup:Reset"),
 
             //Startup(STATE) after a Shutdown(STATE): TPM Resume.
             TpmSuConstants.TPM_SU_STATE when state.LastOrderlyShutdown == TpmSuConstants.TPM_SU_STATE => Transition(
@@ -180,9 +234,11 @@ public static class TpmLifecycleTransitions
                 {
                     Phase = TpmLifecyclePhase.Operational,
                     LastOrderlyShutdown = null,
+                    Time = 0ul,
+                    RestartCount = state.RestartCount + 1,
                     ResponseIntent = new TpmHeaderOnlyResponse(TpmRcConstants.TPM_RC_SUCCESS)
                 },
-                "Startup:State"),
+                "Startup:Resume"),
 
             //Startup(STATE) without a preserved Shutdown(STATE): no state to restore (clause 10.2.3.2).
             TpmSuConstants.TPM_SU_STATE => Reject(state, TpmCcConstants.TPM_CC_Startup, TpmRcConstants.TPM_RC_VALUE),
@@ -947,14 +1003,15 @@ public static class TpmLifecycleTransitions
             return Reject(state, TpmCcConstants.TPM_CC_Certify, TpmRcConstants.TPM_RC_HASH);
         }
 
+        TpmsClockInfo clockSnapshot = new(state.Clock, state.ResetCount, state.RestartCount, state.ClockSafe);
         TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
         {
             (TpmAlgIdConstants.TPM_ALG_RSA, TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS) =>
                 new TpmRsaCertifyAction(
-                    subject.Name, subject.Hierarchy, signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg),
+                    subject.Name, subject.Hierarchy, signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg, clockSnapshot),
             (TpmAlgIdConstants.TPM_ALG_ECC, TpmAlgIdConstants.TPM_ALG_ECDSA) =>
                 new TpmCertifyAction(
-                    subject.Name, subject.Hierarchy, signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg),
+                    subject.Name, subject.Hierarchy, signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg, clockSnapshot),
             _ => null
         };
 
@@ -1023,16 +1080,17 @@ public static class TpmLifecycleTransitions
             return Reject(state, TpmCcConstants.TPM_CC_CertifyCreation, TpmRcConstants.TPM_RC_HASH);
         }
 
+        TpmsClockInfo clockSnapshot = new(state.Clock, state.ResetCount, state.RestartCount, state.ClockSafe);
         TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
         {
             (TpmAlgIdConstants.TPM_ALG_RSA, TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS) =>
                 new TpmRsaCertifyCreationAction(
                     subject.Name, subject.Hierarchy, signer.Name, signer.Hierarchy, request.QualifyingData, request.CreationHash,
-                    request.TicketDigest, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg),
+                    request.TicketDigest, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg, clockSnapshot),
             (TpmAlgIdConstants.TPM_ALG_ECC, TpmAlgIdConstants.TPM_ALG_ECDSA) =>
                 new TpmCertifyCreationAction(
                     subject.Name, subject.Hierarchy, signer.Name, signer.Hierarchy, request.QualifyingData, request.CreationHash,
-                    request.TicketDigest, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg),
+                    request.TicketDigest, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg, clockSnapshot),
             _ => null
         };
 
@@ -1314,15 +1372,16 @@ public static class TpmLifecycleTransitions
         }
 
         ImmutableArray<ReadOnlyMemory<byte>> pcrValues = GatherSelectedPcrValues(state.Sha256PcrBank, request.PcrSelection);
+        TpmsClockInfo clockSnapshot = new(state.Clock, state.ResetCount, state.RestartCount, state.ClockSafe);
 
         TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
         {
             (TpmAlgIdConstants.TPM_ALG_RSA, TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS) =>
                 new TpmRsaQuoteAction(
-                    signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg, request.PcrSelection, pcrValues),
+                    signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg, request.PcrSelection, pcrValues, clockSnapshot),
             (TpmAlgIdConstants.TPM_ALG_ECC, TpmAlgIdConstants.TPM_ALG_ECDSA) =>
                 new TpmQuoteAction(
-                    signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg, request.PcrSelection, pcrValues),
+                    signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg, request.PcrSelection, pcrValues, clockSnapshot),
             _ => null
         };
 
@@ -1360,8 +1419,9 @@ public static class TpmLifecycleTransitions
     //TPM_RC_HANDLE. qualifyingData over the TPM2B_DATA bound is TPM_RC_SIZE; a signer missing the sign attribute
     //is TPM_RC_KEY; an unsupported scheme hash algorithm is TPM_RC_HASH. The signing scheme is dispatched on the
     //signer's key type exactly as OnCertify/OnQuote do, and a scheme incompatible with the key's type is
-    //TPM_RC_SCHEME. The attestation needs an effect (marshal the zero-time image and sign), so the transition
-    //resolves the signer, folds its retained fields into the matching action, and leaves no response yet.
+    //TPM_RC_SCHEME. The attestation needs an effect (marshal the real time/clockInfo image and sign), so the
+    //transition resolves the signer, folds its retained fields plus the already-advanced state.Time and clock
+    //snapshot into the matching action, and leaves no response yet.
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnGetTime(TpmSimulatorState state, TpmGetTimeRequested request)
     {
         if(request.PrivacyAdminHandle != (uint)TpmRh.TPM_RH_ENDORSEMENT)
@@ -1389,12 +1449,13 @@ public static class TpmLifecycleTransitions
             return Reject(state, TpmCcConstants.TPM_CC_GetTime, TpmRcConstants.TPM_RC_HASH);
         }
 
+        TpmsClockInfo clockSnapshot = new(state.Clock, state.ResetCount, state.RestartCount, state.ClockSafe);
         TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
         {
             (TpmAlgIdConstants.TPM_ALG_RSA, TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS) =>
-                new TpmRsaGetTimeAction(signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg),
+                new TpmRsaGetTimeAction(signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg, state.Time, clockSnapshot),
             (TpmAlgIdConstants.TPM_ALG_ECC, TpmAlgIdConstants.TPM_ALG_ECDSA) =>
-                new TpmGetTimeAction(signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg),
+                new TpmGetTimeAction(signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg, state.Time, clockSnapshot),
             _ => null
         };
 
@@ -1423,6 +1484,54 @@ public static class TpmLifecycleTransitions
                     TpmRcConstants.TPM_RC_SUCCESS, attested.TimeInfo, attested.TimeInfoLength, attested.Signature, attested.SignatureScheme, attested.HashAlg)
             },
             "GetTime:Completed");
+
+    //TPM2_ReadClock() returns the current TPMS_TIME_INFO straight from state: no handles, no authorization, and
+    //no signature (Part 3, clause 29.1) — structurally identical to OnPcrRead, the other command answerable
+    //purely from already-resident state.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnReadClock(TpmSimulatorState state) =>
+        Transition(
+            state with
+            {
+                ResponseIntent = new TpmReadClockResponse(
+                    TpmRcConstants.TPM_RC_SUCCESS,
+                    new TpmsTimeInfo(state.Time, new TpmsClockInfo(state.Clock, state.ResetCount, state.RestartCount, state.ClockSafe)))
+            },
+            "ReadClock");
+
+    //TPM2_ClockSet() advances Clock forward, authorized by the owner hierarchy (Part 3, clause 29.2); the
+    //Platform-hierarchy arm (TPM_RH_PLATFORM plus physical presence) is not modelled this slice, so a non-owner
+    //handle is TPM_RC_HANDLE, mirroring OnNvDefineSpace's fixed-provisioning-handle precedent. Owner
+    //authorization is not dictionary-attack protected (clause 17.8.1), so a wrong owner authValue is a plain
+    //bad-authorization, compared constant-time so a mismatch leaks no timing about the secret. newTime older
+    //than the current (already per-command-advanced) Clock, or past the clause 36.3 ceiling of
+    //FF FF 00 00 00 00 00 00(16), is TPM_RC_VALUE with Clock left unchanged. A successful set marks ClockSafe
+    //YES: an explicitly caller-set Clock is, by construction, a value never previously reported.
+    private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnClockSet(TpmSimulatorState state, TpmClockSetRequested request)
+    {
+        if(request.AuthHandle != (uint)TpmRh.TPM_RH_OWNER)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_ClockSet, TpmRcConstants.TPM_RC_HANDLE);
+        }
+
+        if(!CryptographicOperations.FixedTimeEquals(request.OwnerAuthSupplied.Span, state.OwnerAuth.Span))
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_ClockSet, TpmRcConstants.TPM_RC_BAD_AUTH);
+        }
+
+        if(request.NewTime < state.Clock || request.NewTime > MaxClockValue)
+        {
+            return Reject(state, TpmCcConstants.TPM_CC_ClockSet, TpmRcConstants.TPM_RC_VALUE);
+        }
+
+        return Transition(
+            state with
+            {
+                Clock = request.NewTime,
+                ClockSafe = TpmiYesNo.Yes,
+                ResponseIntent = new TpmHeaderOnlyResponse(TpmRcConstants.TPM_RC_SUCCESS)
+            },
+            "ClockSet");
+    }
 
     //TPM2_NV_Certify() has a signing key attest the contents of an NV Index at a caller-chosen offset/size, over a
     //caller nonce (Part 3, clause 31.16). Only the TPMS_NV_CERTIFY_INFO form is modelled (decision: a caller
@@ -1502,17 +1611,18 @@ public static class TpmLifecycleTransitions
         }
 
         ReadOnlyMemory<byte> window = index.Data.Slice(request.Offset, request.Size);
+        TpmsClockInfo clockSnapshot = new(state.Clock, state.ResetCount, state.RestartCount, state.ClockSafe);
 
         TpmAction? action = (signer.KeyType, request.SignatureScheme) switch
         {
             (TpmAlgIdConstants.TPM_ALG_RSA, TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS) =>
                 new TpmRsaNvCertifyAction(
                     signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, request.SignatureScheme, request.SchemeHashAlg,
-                    index.NvIndex, index.Attributes, index.DataSize, window, request.Offset),
+                    index.NvIndex, index.Attributes, index.DataSize, window, request.Offset, clockSnapshot),
             (TpmAlgIdConstants.TPM_ALG_ECC, TpmAlgIdConstants.TPM_ALG_ECDSA) =>
                 new TpmNvCertifyAction(
                     signer.Name, signer.Hierarchy, request.QualifyingData, signer.PrivateKey, signer.Curve, request.SignatureScheme, request.SchemeHashAlg,
-                    index.NvIndex, index.Attributes, index.DataSize, window, request.Offset),
+                    index.NvIndex, index.Attributes, index.DataSize, window, request.Offset, clockSnapshot),
             _ => null
         };
 
@@ -2180,6 +2290,8 @@ public static class TpmLifecycleTransitions
             TpmPcrReadRequested => TpmCcConstants.TPM_CC_PCR_Read,
             TpmQuoteRequested => TpmCcConstants.TPM_CC_Quote,
             TpmGetTimeRequested => TpmCcConstants.TPM_CC_GetTime,
+            TpmReadClockRequested => TpmCcConstants.TPM_CC_ReadClock,
+            TpmClockSetRequested => TpmCcConstants.TPM_CC_ClockSet,
             TpmNvCertifyRequested => TpmCcConstants.TPM_CC_NV_Certify,
             TpmVerifySignatureRequested => TpmCcConstants.TPM_CC_VerifySignature,
             TpmStartAuthSessionRequested => TpmCcConstants.TPM_CC_StartAuthSession,

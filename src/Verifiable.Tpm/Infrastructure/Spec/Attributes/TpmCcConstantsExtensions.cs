@@ -170,6 +170,18 @@ public static partial class TpmCcConstantsExtensions
         TpmCcConstants.TPM_CC_GetTime
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
 
+        //Section 29.1 - TPM2_ReadClock.
+        //Handle area: none (0 handles) - the only zero-handle attest-adjacent command in this simulator.
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_ReadClock
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 0),
+
+        //Section 29.2 - TPM2_ClockSet.
+        //Handle area: @auth (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_ClockSet
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
         //Section 31.16 - TPM2_NV_Certify.
         //Handle area: @signHandle (USER auth), @authHandle (USER auth), nvIndex (no auth) - 3 handles.
         //Response: no handles.

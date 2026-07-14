@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Immutable;
 using Verifiable.Foundation.Automata;
+using Verifiable.Tpm.Infrastructure.Spec.Structures;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Automata;
@@ -36,6 +37,38 @@ namespace Verifiable.Tpm.Automata;
 /// Determines whether a subsequent <c>Startup(STATE)</c> can resume (TPM 2.0 Library Part 1, clause
 /// 10.2.3.2). A disorderly power loss is not modelled in this skeleton: power-on is always the orderly
 /// <c>_TPM_Init</c>, which preserves a recorded shutdown until a startup consumes it.
+/// </param>
+/// <param name="Clock">
+/// The free-running, advance-only clock in milliseconds (TPM 2.0 Library Part 1, clause 36.3): never rolled
+/// back by a startup of any kind, only advanced by <see cref="ClockAdvanceQuantumMs"/> per dispatched command
+/// (<c>TpmLifecycleTransitions.OnCommand</c>) or set forward by a successful <c>TPM2_ClockSet()</c>.
+/// </param>
+/// <param name="Time">
+/// The time in milliseconds since the last <c>_TPM_Init</c>/<c>TPM2_Startup()</c> (TPM 2.0 Library Part 1,
+/// clause 36.2): advances with <see cref="Clock"/> on every dispatched command and is reset to zero by every
+/// <c>TPM2_Startup()</c> (Reset, Restart, and Resume alike), unlike <see cref="Clock"/>.
+/// </param>
+/// <param name="ResetCount">
+/// The count of TPM Resets since the last <c>TPM2_Clear()</c> (TPM 2.0 Library Part 1, clause 36.4):
+/// incremented on every TPM Reset, reset to zero only by <c>TPM2_Clear()</c> (not modelled).
+/// </param>
+/// <param name="RestartCount">
+/// The count of TPM Restarts and Resumes since the last TPM Reset (TPM 2.0 Library Part 1, clause 36.5):
+/// incremented on every TPM Restart or TPM Resume, reset to zero by a TPM Reset.
+/// </param>
+/// <param name="ClockSafe">
+/// Whether the reported <see cref="Clock"/> value is guaranteed not to repeat a previously reported one
+/// (TPM 2.0 Library Part 1, clause 36.3). Set to <see cref="TpmiYesNo.Yes"/> by a successful
+/// <c>TPM2_ClockSet()</c> (TPM 2.0 Library Part 3, clause 29.2) and by a TPM Reset that either followed an
+/// orderly <c>TPM2_Shutdown(CLEAR)</c> or is this TPM's very first Reset (<see cref="ResetCount"/> was zero
+/// beforehand, so no prior <see cref="Clock"/> value could ever have been reported); <see cref="TpmiYesNo.No"/>
+/// after a TPM Reset with neither of those conditions — a Reset this simulator cannot distinguish from a
+/// disorderly power loss following prior operation.
+/// </param>
+/// <param name="ClockAdvanceQuantumMs">
+/// The fixed number of milliseconds <see cref="Clock"/> and <see cref="Time"/> advance for every admitted
+/// command, fixed at construction (the simulator's stand-in for a real TPM's free-running Time oscillator,
+/// TPM 2.0 Library Part 1, clause 36.1) and unaffected by any transition.
 /// </param>
 /// <param name="FailedTries">
 /// The dictionary-attack failure counter (<c>failedTries</c>, reported as <c>TPM_PT_LOCKOUT_COUNTER</c>):
@@ -120,6 +153,12 @@ public sealed record TpmSimulatorState(
     TpmSelfTestBehavior ConfiguredSelfTest,
     TpmSelfTestStatus SelfTest,
     TpmSuConstants? LastOrderlyShutdown,
+    ulong Clock,
+    ulong Time,
+    uint ResetCount,
+    uint RestartCount,
+    TpmiYesNo ClockSafe,
+    ulong ClockAdvanceQuantumMs,
     uint FailedTries,
     uint MaxTries,
     uint RecoveryTime,
@@ -175,6 +214,12 @@ public sealed record TpmSimulatorState(
     public const uint DefaultLockoutRecoverySeconds = 86400;
 
     /// <summary>
+    /// The default <see cref="ClockAdvanceQuantumMs"/> for a freshly powered-off simulated TPM: one millisecond
+    /// per dispatched command.
+    /// </summary>
+    public const ulong DefaultClockAdvanceQuantumMs = 1UL;
+
+    /// <summary>
     /// Gets a value indicating whether the TPM is in dictionary-attack Lockout mode, i.e. the failure
     /// counter has reached the tolerated maximum (TPM 2.0 Library Part 1, clause 17.8.3). The spec
     /// states <c>failedTries == maxTries</c>; this uses <c>&gt;=</c> defensively so an overshoot can
@@ -185,18 +230,25 @@ public sealed record TpmSimulatorState(
 
     /// <summary>
     /// Creates the initial state of a simulated TPM: powered off, awaiting <c>_TPM_Init</c>, with the
-    /// default dictionary-attack parameters.
+    /// default dictionary-attack parameters and clock/reset counters all at their zero baseline.
     /// </summary>
     /// <param name="tpmId">The stable identifier of this simulated TPM.</param>
     /// <param name="configuredSelfTest">The modelled self-test behaviour.</param>
+    /// <param name="clockAdvanceQuantumMs">The fixed per-command clock advance, in milliseconds.</param>
     /// <returns>A powered-off state.</returns>
-    public static TpmSimulatorState PoweredOff(string tpmId, TpmSelfTestBehavior configuredSelfTest) =>
+    public static TpmSimulatorState PoweredOff(string tpmId, TpmSelfTestBehavior configuredSelfTest, ulong clockAdvanceQuantumMs = DefaultClockAdvanceQuantumMs) =>
         new(
             tpmId,
             TpmLifecyclePhase.PoweredOff,
             configuredSelfTest,
             TpmSelfTestStatus.NotRun,
             null,
+            0ul,
+            0ul,
+            0u,
+            0u,
+            TpmiYesNo.Yes,
+            clockAdvanceQuantumMs,
             0u,
             DefaultMaxTries,
             DefaultRecoveryTimeSeconds,

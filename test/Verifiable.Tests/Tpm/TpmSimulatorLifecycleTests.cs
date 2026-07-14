@@ -299,7 +299,7 @@ internal sealed class TpmSimulatorLifecycleTests
         }
 
         Assert.AreEqual("TpmInit", entries[0].Label);
-        Assert.AreEqual("Startup:Clear", entries[1].Label);
+        Assert.AreEqual("Startup:Reset", entries[1].Label, "A fresh simulator's first Startup(CLEAR), with no prior orderly shutdown, is a TPM Reset (Part 3, clause 9.3).");
     }
 
     [TestMethod]

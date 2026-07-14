@@ -248,6 +248,17 @@ public sealed record TpmGetTimeResponse(
     TpmAlgIdConstants HashAlg): TpmResponseIntent(ResponseCode);
 
 /// <summary>
+/// The successful response to <c>TPM2_ReadClock()</c>: the current <c>TPMS_TIME_INFO</c>, uncertified and
+/// unsigned (TPM 2.0 Library Part 3, clause 29.1).
+/// </summary>
+/// <remarks>
+/// <see cref="CurrentTime"/> is a value type read straight from state, so nothing is disposed after framing.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="CurrentTime">The current Time/Clock/resetCount/restartCount/Safe snapshot.</param>
+public sealed record TpmReadClockResponse(TpmRcConstants ResponseCode, TpmsTimeInfo CurrentTime): TpmResponseIntent(ResponseCode);
+
+/// <summary>
 /// The successful response to <c>TPM2_NV_Certify()</c>: the signed attestation as a <c>TPM2B_ATTEST</c> followed
 /// by the <c>TPMT_SIGNATURE</c> over its digest (TPM 2.0 Library Part 3, clause 31.16) — the same shape as
 /// <see cref="TpmCertifyResponse"/>.

@@ -403,6 +403,28 @@ public static class TpmResponseCodecExtensions
         public static TpmResponseCodec GetTime => TpmResponseCodec.Create(GetTimeResponse.Parse);
 
         /// <summary>
+        /// Codec for TPM2_ReadClock response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>currentTime (TPMS_TIME_INFO) - the current Time/Clock/resetCount/restartCount/Safe snapshot, uncertified and unsigned.</description></item>
+        /// </list>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 29.1 - TPM2_ReadClock.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec ReadClock => TpmResponseCodec.Create(ReadClockResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_ClockSet response. This command has no response handles and no response parameters
+        /// (TPM 2.0 Library Part 3, Section 29.2).
+        /// </summary>
+        public static TpmResponseCodec ClockSet => TpmResponseCodec.NoParameters(ClockSetResponse.Instance);
+
+        /// <summary>
         /// Codec for TPM2_NV_Certify response.
         /// </summary>
         /// <remarks>

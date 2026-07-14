@@ -125,7 +125,20 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// entropy, or a fixed value to make the creation tickets reproducible. When empty (the default), the seed
     /// defaults to the TPM identifier, keeping the default deterministic and reproducible. Copied on capture.
     /// </param>
-    public TpmSimulator(string tpmId, TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes, FillEntropyDelegate? rng = null, TimeProvider? timeProvider = null, TpmEccSigningBackend? signingBackend = null, TpmRsaSigningBackend? rsaSigningBackend = null, ReadOnlyMemory<byte> seed = default)
+    /// <param name="clockAdvanceQuantumMs">
+    /// The fixed number of milliseconds <c>Clock</c> and <c>Time</c> advance for every admitted command — the
+    /// simulator's stand-in for a real TPM's free-running Time oscillator (TPM 2.0 Library Part 1, clause
+    /// 36.1), fixed at construction like <paramref name="selfTest"/>. Defaults to one millisecond per command.
+    /// </param>
+    public TpmSimulator(
+        string tpmId,
+        TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes,
+        FillEntropyDelegate? rng = null,
+        TimeProvider? timeProvider = null,
+        TpmEccSigningBackend? signingBackend = null,
+        TpmRsaSigningBackend? rsaSigningBackend = null,
+        ReadOnlyMemory<byte> seed = default,
+        ulong clockAdvanceQuantumMs = TpmSimulatorState.DefaultClockAdvanceQuantumMs)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tpmId);
 
@@ -136,7 +149,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         ProofSeed = seed.IsEmpty ? Encoding.UTF8.GetBytes(tpmId) : seed.ToArray();
         Automaton = new PushdownAutomaton<TpmSimulatorState, TpmSimulatorInput, TpmSimulatorStackSymbol>(
             runId: tpmId,
-            initialState: TpmSimulatorState.PoweredOff(tpmId, selfTest),
+            initialState: TpmSimulatorState.PoweredOff(tpmId, selfTest, clockAdvanceQuantumMs),
             initialStackSymbol: TpmSimulatorStackSymbol.Lifecycle,
             transition: TpmLifecycleTransitions.Create(),
             acceptPredicate: static state => state.Phase == TpmLifecyclePhase.Operational,
@@ -252,6 +265,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //simulator models a TPM whose context integrity algorithm is SHA-256 regardless of nameAlg (the object Name
     //itself is nameAlg-agile — see TpmObjectName — but the creation by-products this constant sizes are not).
     private const int CreationDigestSize = 32;
+
+    //The simulator's synthetic firmware version, reported in every attestation's firmwareVersion field (TPM 2.0
+    //Library Part 2, clause 10.12.12): a UINT32 major half of 1 and a minor half of 184, the same v184
+    //spec-corpus revision TPM2_GetCapability() reports as TPM_PT_REVISION (TpmLifecycleTransitions.SimSpecRevision),
+    //so the two surfaces agree on which spec edition this TPM models.
+    private const ulong SimulatedFirmwareVersion = (1UL << 32) | 184UL;
 
     //The marshaled TPMS_CREATION_DATA for a primary under a permanent hierarchy: empty pcrSelect (UINT32 count 0),
     //pcrDigest (TPM2B of the SHA-256 digest), locality (BYTE), parentNameAlg (UINT16 = TPM_ALG_NULL), parentName
@@ -743,7 +762,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             ?? throw new InvalidOperationException($"No digest tag is registered for hash algorithm '{action.HashAlg}'.");
 
         (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedCertifyAttestAsync(
-            action.SubjectName, action.SubjectHierarchy, action.SignerName, action.SignerHierarchy, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
+            action.SubjectName, action.SubjectHierarchy, action.SignerName, action.SignerHierarchy, action.QualifyingData, action.ClockSnapshot, context.Pool, cancellationToken).ConfigureAwait(false);
         try
         {
             //The signature is over H_hashAlg(marshaled attest) — the exact bytes TPM2B_ATTEST carries and the host
@@ -779,7 +798,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             ?? throw new InvalidOperationException($"No digest tag is registered for hash algorithm '{action.HashAlg}'.");
 
         (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedCertifyAttestAsync(
-            action.SubjectName, action.SubjectHierarchy, action.SignerName, action.SignerHierarchy, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
+            action.SubjectName, action.SubjectHierarchy, action.SignerName, action.SignerHierarchy, action.QualifyingData, action.ClockSnapshot, context.Pool, cancellationToken).ConfigureAwait(false);
         try
         {
             //The signature is over H_hashAlg(marshaled attest), exactly as the ECC path (TPM 2.0 Library Part 3,
@@ -808,7 +827,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildSignedCertifyAttestAsync(
         ReadOnlyMemory<byte> subjectName, uint subjectHierarchy, ReadOnlyMemory<byte> signerName, uint signerHierarchy,
-        ReadOnlyMemory<byte> qualifyingData, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> qualifyingData, TpmsClockInfo clockInfo, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         (IMemoryOwner<byte> subjectQualifiedName, int subjectQualifiedNameLength) =
             await ComputeHierarchyQualifiedNameAsync(subjectHierarchy, subjectName, pool, cancellationToken).ConfigureAwait(false);
@@ -823,6 +842,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     subjectQualifiedName.Memory.Span[..subjectQualifiedNameLength],
                     signerQualifiedName.Memory.Span[..signerQualifiedNameLength],
                     qualifyingData.Span,
+                    clockInfo,
                     pool);
             }
         }
@@ -834,13 +854,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //(TPM_GENERATED_VALUE), type (TPM_ST_ATTEST_CERTIFY), extraData (the caller nonce), the attested
     //TPMS_CERTIFY_INFO.name (the certified object's Name), qualifiedSigner (the signing key's real Qualified
     //Name), and the attested qualifiedName (the certified object's real Qualified Name) — both Qualified Names
-    //computed by the caller (TPM 2.0 Library Part 1, clause 26.6). The fields it does not verify are well-formed
-    //but simplified: clockInfo and firmwareVersion are a fresh zero image — each framed with valid TPM2B sizes so
-    //the production TpmsAttest.Parse codec parses the whole structure.
+    //computed by the caller (TPM 2.0 Library Part 1, clause 26.6). clockInfo is the real Clock/resetCount/
+    //restartCount/Safe snapshot the transition folded from state after the per-command advance; firmwareVersion
+    //is the simulator's fixed synthetic identity.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static (IMemoryOwner<byte> Owner, int Length) BuildCertifyAttest(
-        ReadOnlySpan<byte> subjectName, ReadOnlySpan<byte> subjectQualifiedName, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, MemoryPool<byte> pool)
+        ReadOnlySpan<byte> subjectName, ReadOnlySpan<byte> subjectQualifiedName, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, TpmsClockInfo clockInfo, MemoryPool<byte> pool)
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
@@ -861,9 +881,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             writer.WriteTpm2b(signerQualifiedName);                              //qualifiedSigner: the signer's real Qualified Name.
             writer.WriteTpm2b(nonce);                                            //extraData: the caller's qualifyingData, echoed verbatim.
 
-            //clockInfo and firmwareVersion are a fresh zero image; the host does not verify them.
-            new TpmsClockInfo(0, 0, 0, TpmiYesNo.No).WriteTo(ref writer);
-            writer.WriteUInt64(0);                                              //firmwareVersion.
+            clockInfo.WriteTo(ref writer);
+            writer.WriteUInt64(SimulatedFirmwareVersion);
 
             //attested = TPMS_CERTIFY_INFO: the certified object's Name (the attested binding), then its real
             //Qualified Name.
@@ -940,7 +959,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             using(signerQualifiedName)
             {
                 (attest, attestLength) = BuildQuoteAttest(
-                    signerQualifiedName.Memory.Span[..signerQualifiedNameLength], action.QualifyingData.Span, action.PcrSelection.Span, pcrDigest.AsReadOnlySpan(), context.Pool);
+                    signerQualifiedName.Memory.Span[..signerQualifiedNameLength], action.QualifyingData.Span, action.PcrSelection.Span, pcrDigest.AsReadOnlySpan(), action.ClockSnapshot, context.Pool);
             }
         }
 
@@ -993,7 +1012,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             using(signerQualifiedName)
             {
                 (attest, attestLength) = BuildQuoteAttest(
-                    signerQualifiedName.Memory.Span[..signerQualifiedNameLength], action.QualifyingData.Span, action.PcrSelection.Span, pcrDigest.AsReadOnlySpan(), context.Pool);
+                    signerQualifiedName.Memory.Span[..signerQualifiedNameLength], action.QualifyingData.Span, action.PcrSelection.Span, pcrDigest.AsReadOnlySpan(), action.ClockSnapshot, context.Pool);
             }
         }
 
@@ -1058,15 +1077,15 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //TPM2B_ATTEST wraps. Synchronous, so the spans never cross the digest/sign awaits. The fields the host verifies
     //are cryptographically real: magic (TPM_GENERATED_VALUE), type (TPM_ST_ATTEST_QUOTE), extraData (the caller
     //nonce), qualifiedSigner (the signing key's real Qualified Name, TPM 2.0 Library Part 1, clause 26.6), and the
-    //attested TPMS_QUOTE_INFO { pcrSelect echoed verbatim, pcrDigest computed over the real PCR values }. The fields
-    //it does not verify are well-formed but simplified: clockInfo and firmwareVersion are a fresh zero image — each
-    //framed with valid TPM2B sizes so the production TpmsAttest.Parse codec parses the whole structure. The
-    //pcrSelect is the caller's TPML_PCR_SELECTION echoed verbatim (the same octets the host produced), so it
-    //round-trips through TpmsQuoteInfo.Parse exactly.
+    //attested TPMS_QUOTE_INFO { pcrSelect echoed verbatim, pcrDigest computed over the real PCR values }. clockInfo
+    //is the real Clock/resetCount/restartCount/Safe snapshot the transition folded from state after the
+    //per-command advance; firmwareVersion is the simulator's fixed synthetic identity. The pcrSelect is the
+    //caller's TPML_PCR_SELECTION echoed verbatim (the same octets the host produced), so it round-trips through
+    //TpmsQuoteInfo.Parse exactly.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static (IMemoryOwner<byte> Owner, int Length) BuildQuoteAttest(
-        ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, ReadOnlySpan<byte> pcrSelection, ReadOnlySpan<byte> pcrDigest, MemoryPool<byte> pool)
+        ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, ReadOnlySpan<byte> pcrSelection, ReadOnlySpan<byte> pcrDigest, TpmsClockInfo clockInfo, MemoryPool<byte> pool)
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
@@ -1087,9 +1106,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             writer.WriteTpm2b(signerQualifiedName);                              //qualifiedSigner: the signer's real Qualified Name.
             writer.WriteTpm2b(nonce);                                            //extraData: the caller's qualifyingData, echoed verbatim.
 
-            //clockInfo and firmwareVersion are a fresh zero image; the host does not verify them.
-            new TpmsClockInfo(0, 0, 0, TpmiYesNo.No).WriteTo(ref writer);
-            writer.WriteUInt64(0);                                              //firmwareVersion.
+            clockInfo.WriteTo(ref writer);
+            writer.WriteUInt64(SimulatedFirmwareVersion);
 
             //attested = TPMS_QUOTE_INFO: the caller's PCR selection echoed verbatim (the full TPML_PCR_SELECTION),
             //then the composite digest the TPM computed over the selected PCR values.
@@ -1128,7 +1146,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             ?? throw new InvalidOperationException($"No digest tag is registered for hash algorithm '{action.HashAlg}'.");
 
         (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedCreationAttestAsync(
-            action.SubjectName, action.CreationHash, action.SignerHierarchy, action.SignerName, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
+            action.SubjectName, action.CreationHash, action.SignerHierarchy, action.SignerName, action.QualifyingData, action.ClockSnapshot, context.Pool, cancellationToken).ConfigureAwait(false);
         try
         {
             using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
@@ -1167,7 +1185,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             ?? throw new InvalidOperationException($"No digest tag is registered for hash algorithm '{action.HashAlg}'.");
 
         (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedCreationAttestAsync(
-            action.SubjectName, action.CreationHash, action.SignerHierarchy, action.SignerName, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
+            action.SubjectName, action.CreationHash, action.SignerHierarchy, action.SignerName, action.QualifyingData, action.ClockSnapshot, context.Pool, cancellationToken).ConfigureAwait(false);
         try
         {
             using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
@@ -1208,7 +1226,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildSignedCreationAttestAsync(
         ReadOnlyMemory<byte> subjectName, ReadOnlyMemory<byte> creationHash, uint signerHierarchy, ReadOnlyMemory<byte> signerName,
-        ReadOnlyMemory<byte> qualifyingData, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> qualifyingData, TpmsClockInfo clockInfo, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         (IMemoryOwner<byte> signerQualifiedName, int signerQualifiedNameLength) =
             await ComputeHierarchyQualifiedNameAsync(signerHierarchy, signerName, pool, cancellationToken).ConfigureAwait(false);
@@ -1219,6 +1237,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 creationHash.Span,
                 signerQualifiedName.Memory.Span[..signerQualifiedNameLength],
                 qualifyingData.Span,
+                clockInfo,
                 pool);
         }
     }
@@ -1227,12 +1246,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //pooled buffer — the exact bytes the signature is over and the TPM2B_ATTEST wraps. Every field the host
     //verifies is cryptographically real: magic, type (TPM_ST_ATTEST_CREATION), extraData, qualifiedSigner, the
     //attested TPMS_CREATION_INFO.objectName (the certified object's real Name), and creationHash (the
-    //caller-supplied value the re-verified ticket bound). clockInfo/firmwareVersion are a fresh zero image, as
-    //the Certify/Quote builders already frame.
+    //caller-supplied value the re-verified ticket bound). clockInfo is the real Clock/resetCount/restartCount/
+    //Safe snapshot the transition folded from state after the per-command advance; firmwareVersion is the
+    //simulator's fixed synthetic identity.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static (IMemoryOwner<byte> Owner, int Length) BuildCreationAttest(
-        ReadOnlySpan<byte> subjectName, ReadOnlySpan<byte> creationHash, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, MemoryPool<byte> pool)
+        ReadOnlySpan<byte> subjectName, ReadOnlySpan<byte> creationHash, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, TpmsClockInfo clockInfo, MemoryPool<byte> pool)
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
@@ -1253,9 +1273,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             writer.WriteTpm2b(signerQualifiedName);                              //qualifiedSigner: the signer's real Qualified Name.
             writer.WriteTpm2b(nonce);                                            //extraData: the caller's qualifyingData, echoed verbatim.
 
-            //clockInfo and firmwareVersion are a fresh zero image; the host does not verify them.
-            new TpmsClockInfo(0, 0, 0, TpmiYesNo.No).WriteTo(ref writer);
-            writer.WriteUInt64(0);                                              //firmwareVersion.
+            clockInfo.WriteTo(ref writer);
+            writer.WriteUInt64(SimulatedFirmwareVersion);
 
             //attested = TPMS_CREATION_INFO: the certified object's real Name, then the caller-supplied creation
             //hash the re-verified ticket bound.
@@ -1271,7 +1290,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
     }
 
-    //TPM2_GetTime(): marshal the TIME attestation over the standing zero-time image and the signer's real
+    //TPM2_GetTime(): marshal the TIME attestation over the real Time/clockInfo snapshot and the signer's real
     //Qualified Name, hash it through the registered digest seam under the signing scheme's own hash algorithm,
     //and sign the digest with the signing key's retained scalar through the injected ECC backend.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -1287,7 +1306,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             ?? throw new InvalidOperationException($"No digest tag is registered for hash algorithm '{action.HashAlg}'.");
 
         (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedTimeAttestAsync(
-            action.SignerHierarchy, action.SignerName, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
+            action.SignerHierarchy, action.SignerName, action.QualifyingData, action.Time, action.ClockSnapshot, context.Pool, cancellationToken).ConfigureAwait(false);
         try
         {
             using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
@@ -1305,8 +1324,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
     }
 
-    //The RSA counterpart of AttestTimeAsync: same zero-time attestation marshaling, signed with the signing key's
-    //retained private key through the injected RSA backend under the requested RSA scheme.
+    //The RSA counterpart of AttestTimeAsync: same real-clock attestation marshaling, signed with the signing
+    //key's retained private key through the injected RSA backend under the requested RSA scheme.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled attest and the signature transfers to the returned TpmTimeAttested, then to the TpmGetTimeResponse intent, and is released by SerializeResponse after framing.")]
     private static async ValueTask<TpmSimulatorInput> AttestTimeRsaAsync(TpmRsaGetTimeAction action, TpmActionContext context, CancellationToken cancellationToken)
@@ -1320,7 +1339,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             ?? throw new InvalidOperationException($"No digest tag is registered for hash algorithm '{action.HashAlg}'.");
 
         (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedTimeAttestAsync(
-            action.SignerHierarchy, action.SignerName, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
+            action.SignerHierarchy, action.SignerName, action.QualifyingData, action.Time, action.ClockSnapshot, context.Pool, cancellationToken).ConfigureAwait(false);
         try
         {
             using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
@@ -1343,25 +1362,24 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildSignedTimeAttestAsync(
-        uint signerHierarchy, ReadOnlyMemory<byte> signerName, ReadOnlyMemory<byte> qualifyingData, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        uint signerHierarchy, ReadOnlyMemory<byte> signerName, ReadOnlyMemory<byte> qualifyingData, ulong time, TpmsClockInfo clockInfo, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         (IMemoryOwner<byte> signerQualifiedName, int signerQualifiedNameLength) =
             await ComputeHierarchyQualifiedNameAsync(signerHierarchy, signerName, pool, cancellationToken).ConfigureAwait(false);
         using(signerQualifiedName)
         {
-            return BuildTimeAttest(signerQualifiedName.Memory.Span[..signerQualifiedNameLength], qualifyingData.Span, pool);
+            return BuildTimeAttest(signerQualifiedName.Memory.Span[..signerQualifiedNameLength], qualifyingData.Span, time, clockInfo, pool);
         }
     }
 
     //Builds the marshaled TPMS_ATTEST for the TIME case (TPM 2.0 Library Part 2, clause 10.12.2) into a pooled
-    //buffer. The attested TPMS_TIME_ATTEST_INFO reports the standing zero-time image: this simulator models no
-    //clock state (Clock/resetCount/restartCount), so time=0 and its own clockInfo copy are a fresh zero image
-    //with Safe=NO — the spec's own fallback for "TPM implementation does not implement Clock" (Part 2, clause
-    //10.11.5) — the same documented simplification the envelope's own clockInfo/firmwareVersion already use. The
-    //clockInfo-realism roadmap item stays open; this is not a clock model.
+    //buffer. The attested TPMS_TIME_ATTEST_INFO reports the real Time and clockInfo the transition folded from
+    //state after the per-command advance; the SAME clockInfo snapshot is written both at the envelope level and
+    //inside the nested TPMS_TIME_ATTEST_INFO (TPM 2.0 Library Part 1, clause 36.7 — the two copies agree).
+    //firmwareVersion is likewise the same simulator-fixed constant in both places.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
-    private static (IMemoryOwner<byte> Owner, int Length) BuildTimeAttest(ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, MemoryPool<byte> pool)
+    private static (IMemoryOwner<byte> Owner, int Length) BuildTimeAttest(ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, ulong time, TpmsClockInfo clockInfo, MemoryPool<byte> pool)
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
@@ -1381,13 +1399,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             writer.WriteTpm2b(signerQualifiedName);                              //qualifiedSigner: the signer's real Qualified Name.
             writer.WriteTpm2b(nonce);                                            //extraData: the caller's qualifyingData, echoed verbatim.
 
-            //clockInfo and firmwareVersion (the TPMS_ATTEST envelope copy) are a fresh zero image; the host does
-            //not verify them.
-            new TpmsClockInfo(0, 0, 0, TpmiYesNo.No).WriteTo(ref writer);
-            writer.WriteUInt64(0);                                              //firmwareVersion.
+            clockInfo.WriteTo(ref writer);
+            writer.WriteUInt64(SimulatedFirmwareVersion);
 
-            //attested = TPMS_TIME_ATTEST_INFO: time=0, its own zero clockInfo copy (Safe=NO), firmwareVersion=0.
-            new TpmsTimeAttestInfo(new TpmsTimeInfo(0, new TpmsClockInfo(0, 0, 0, TpmiYesNo.No)), 0).WriteTo(ref writer);
+            //attested = TPMS_TIME_ATTEST_INFO: the real time, the same clockInfo snapshot as the envelope copy,
+            //and the same firmware-version constant.
+            new TpmsTimeAttestInfo(new TpmsTimeInfo(time, clockInfo), SimulatedFirmwareVersion).WriteTo(ref writer);
 
             return (owner, total);
         }
@@ -1415,7 +1432,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedNvCertifyAttestAsync(
             action.NvIndex, action.NvIndexAttributes, action.NvIndexDataSize, action.Offset, action.NvContents,
-            action.SignerHierarchy, action.SignerName, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
+            action.SignerHierarchy, action.SignerName, action.QualifyingData, action.ClockSnapshot, context.Pool, cancellationToken).ConfigureAwait(false);
         try
         {
             using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
@@ -1449,7 +1466,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         (IMemoryOwner<byte> attest, int attestLength) = await BuildSignedNvCertifyAttestAsync(
             action.NvIndex, action.NvIndexAttributes, action.NvIndexDataSize, action.Offset, action.NvContents,
-            action.SignerHierarchy, action.SignerName, action.QualifyingData, context.Pool, cancellationToken).ConfigureAwait(false);
+            action.SignerHierarchy, action.SignerName, action.QualifyingData, action.ClockSnapshot, context.Pool, cancellationToken).ConfigureAwait(false);
         try
         {
             using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
@@ -1476,7 +1493,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildSignedNvCertifyAttestAsync(
         uint nvIndex, TpmaNv nvIndexAttributes, ushort nvIndexDataSize, ushort offset, ReadOnlyMemory<byte> nvContents,
-        uint signerHierarchy, ReadOnlyMemory<byte> signerName, ReadOnlyMemory<byte> qualifyingData, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        uint signerHierarchy, ReadOnlyMemory<byte> signerName, ReadOnlyMemory<byte> qualifyingData, TpmsClockInfo clockInfo, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         (IMemoryOwner<byte> indexName, int indexNameLength) =
             await ComputeNvIndexNameAsync(nvIndex, nvIndexAttributes, nvIndexDataSize, pool, cancellationToken).ConfigureAwait(false);
@@ -1492,6 +1509,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     nvContents.Span,
                     signerQualifiedName.Memory.Span[..signerQualifiedNameLength],
                     qualifyingData.Span,
+                    clockInfo,
                     pool);
             }
         }
@@ -1518,12 +1536,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //Builds the marshaled TPMS_ATTEST for the NV case (TPM 2.0 Library Part 2, clause 10.12.8) into a pooled
     //buffer. Every field the host verifies is cryptographically real: magic, type (TPM_ST_ATTEST_NV), extraData,
     //qualifiedSigner, the attested TPMS_NV_CERTIFY_INFO.indexName (the Index's real Name), offset, and nvContents
-    //(the retained octets at that offset). clockInfo/firmwareVersion are a fresh zero image, as the Certify/Quote
-    //builders already frame.
+    //(the retained octets at that offset). clockInfo is the real Clock/resetCount/restartCount/Safe snapshot the
+    //transition folded from state after the per-command advance; firmwareVersion is the simulator's fixed
+    //synthetic identity.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static (IMemoryOwner<byte> Owner, int Length) BuildNvCertifyAttest(
-        ReadOnlySpan<byte> indexName, ushort offset, ReadOnlySpan<byte> nvContents, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, MemoryPool<byte> pool)
+        ReadOnlySpan<byte> indexName, ushort offset, ReadOnlySpan<byte> nvContents, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, TpmsClockInfo clockInfo, MemoryPool<byte> pool)
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
@@ -1545,9 +1564,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             writer.WriteTpm2b(signerQualifiedName);                              //qualifiedSigner: the signer's real Qualified Name.
             writer.WriteTpm2b(nonce);                                            //extraData: the caller's qualifyingData, echoed verbatim.
 
-            //clockInfo and firmwareVersion are a fresh zero image; the host does not verify them.
-            new TpmsClockInfo(0, 0, 0, TpmiYesNo.No).WriteTo(ref writer);
-            writer.WriteUInt64(0);                                              //firmwareVersion.
+            clockInfo.WriteTo(ref writer);
+            writer.WriteUInt64(SimulatedFirmwareVersion);
 
             //attested = TPMS_NV_CERTIFY_INFO: the Index's real Name, the requested offset, then the requested
             //window of retained NV contents.
@@ -2347,10 +2365,32 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         public ReadOnlyMemory<byte> ProofSeed { get; } = proofSeed;
     }
 
-    //Bridges the runner's value-threaded step to the live automaton (design decision D2: one live
-    //automaton per simulated TPM holds the state of record). The runner threads back exactly the
-    //(state, step count) the previous call returned, so the live automaton and the threaded values
-    //stay in lockstep; reading the automaton here is therefore equivalent to using the arguments.
+    /// <summary>
+    /// Bridges the runner's value-threaded step to the live automaton (design decision D2: one live
+    /// automaton per simulated TPM holds the state of record). The runner threads back exactly the
+    /// (state, step count) the previous call returned, so the live automaton and the threaded values
+    /// stay in lockstep; reading the automaton here is therefore equivalent to using the arguments.
+    /// </summary>
+    /// <remarks>
+    /// On a fault or halt, <see cref="PushdownAutomaton{TState, TInput, TStackSymbol}.CurrentState"/> is left
+    /// exactly as it was before the call, including whatever <c>NextAction</c> the prior successful
+    /// transition set. Returning that unchanged state to <see cref="PdaRunner.StepWithEffectsAsync"/>'s
+    /// action loop — whose only exit condition is <c>NextAction</c> clearing — would make it re-dispatch the
+    /// already-executed action without bound, or (on the first step of a command) let
+    /// <see cref="SubmitAsync"/> re-serialize the previous command's stale response intent. Surfacing both
+    /// outcomes as an exception stops the loop immediately instead.
+    /// </remarks>
+    /// <param name="currentState">The state threaded back from the previous step.</param>
+    /// <param name="currentStepCount">The step count threaded back from the previous step.</param>
+    /// <param name="input">The input to apply.</param>
+    /// <param name="time">The time provider threaded by the runner; the automaton owns its own <see cref="TimeProvider"/> for trace timestamps.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The resulting (state, step count) pair.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The automaton's transition faulted (its <see cref="PushdownAutomaton{TState, TInput, TStackSymbol}.FaultException"/>
+    /// is carried as <see cref="Exception.InnerException"/>), or halted because no transition is defined for
+    /// <paramref name="input"/>.
+    /// </exception>
     private async ValueTask<(TpmSimulatorState State, int StepCount)> StepCoreAsync(
         TpmSimulatorState currentState,
         int currentStepCount,
@@ -2358,7 +2398,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         TimeProvider time,
         CancellationToken cancellationToken)
     {
-        _ = await Automaton.StepAsync(input, cancellationToken).ConfigureAwait(false);
+        bool stepped = await Automaton.StepAsync(input, cancellationToken).ConfigureAwait(false);
+        if(!stepped)
+        {
+            throw Automaton.IsFaulted
+                ? new InvalidOperationException("The TPM simulator automaton's transition faulted.", Automaton.FaultException)
+                : new InvalidOperationException("The TPM simulator automaton halted: no transition is defined for the current input.");
+        }
 
         return (Automaton.CurrentState, Automaton.StepCount);
     }
@@ -2526,10 +2572,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             }
             case TpmCcConstants.TPM_CC_Certify:
             {
-                //The Certify slice signs the attestation with an ECC signing key; without the ECC backend the
-                //simulated TPM cannot honour it, so answer the faithful TPM_RC_COMMAND_CODE rather than entering
-                //an effect it cannot run.
-                if(SigningBackend is null)
+                //The Certify slice signs the attestation with an ECC or RSA signing key (dispatched on the
+                //resolved signer's own key type); without any asymmetric backend the simulated TPM cannot
+                //honour it, so answer the faithful TPM_RC_COMMAND_CODE rather than entering an effect it
+                //cannot run.
+                if(SigningBackend is null && RsaSigningBackend is null)
                 {
                     malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
 
@@ -2541,9 +2588,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             case TpmCcConstants.TPM_CC_CertifyCreation:
             {
                 //The CertifyCreation slice signs the attestation with an ECC or RSA signing key exactly like
-                //Certify; without the ECC backend the simulated TPM cannot honour it, so answer the faithful
-                //TPM_RC_COMMAND_CODE rather than entering an effect it cannot run.
-                if(SigningBackend is null)
+                //Certify; without any asymmetric backend the simulated TPM cannot honour it, so answer the
+                //faithful TPM_RC_COMMAND_CODE rather than entering an effect it cannot run.
+                if(SigningBackend is null && RsaSigningBackend is null)
                 {
                     malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
 
@@ -2554,7 +2601,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             }
             case TpmCcConstants.TPM_CC_GetTime:
             {
-                if(SigningBackend is null)
+                //The GetTime slice signs the time attestation with an ECC or RSA signing key, exactly like
+                //Certify; without any asymmetric backend the simulated TPM cannot honour it, so answer the
+                //faithful TPM_RC_COMMAND_CODE rather than entering an effect it cannot run.
+                if(SigningBackend is null && RsaSigningBackend is null)
                 {
                     malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
 
@@ -2563,9 +2613,24 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 return TryParseGetTime(ref reader, header.Tag, out input, out malformedResponseCode);
             }
+            case TpmCcConstants.TPM_CC_ReadClock:
+            {
+                //TPM2_ReadClock() reads durable clock state and needs no backend, no handles, and no
+                //parameters at all (Part 3, clause 29.1) — mirrors TPM_CC_PCR_Read's unconditional admission.
+                input = new TpmReadClockRequested();
+
+                break;
+            }
+            case TpmCcConstants.TPM_CC_ClockSet:
+            {
+                return TryParseClockSet(ref reader, header.Tag, out input, out malformedResponseCode);
+            }
             case TpmCcConstants.TPM_CC_NV_Certify:
             {
-                if(SigningBackend is null)
+                //The NV_Certify slice signs the NV attestation with an ECC or RSA signing key, exactly like
+                //Certify; without any asymmetric backend the simulated TPM cannot honour it, so answer the
+                //faithful TPM_RC_COMMAND_CODE rather than entering an effect it cannot run.
+                if(SigningBackend is null && RsaSigningBackend is null)
                 {
                     malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
 
@@ -2578,10 +2643,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 //TPM2_VerifySignature() signs nothing itself, but this slice's verify capability lives on the same
                 //ECC/RSA signing-backend seam-bundles as the attest commands (TpmEccSigningBackend.VerifyDigest /
-                //TpmRsaSigningBackend.VerifyDigest), so it is gated the identical way: without the ECC backend the
-                //simulated TPM cannot honour it, so answer the faithful TPM_RC_COMMAND_CODE rather than entering an
-                //effect it cannot run (mirrors Certify/CertifyCreation/GetTime/NV_Certify's admission gate).
-                if(SigningBackend is null)
+                //TpmRsaSigningBackend.VerifyDigest), so it is gated the identical way: without any asymmetric
+                //backend the simulated TPM cannot honour it, so answer the faithful TPM_RC_COMMAND_CODE rather
+                //than entering an effect it cannot run (mirrors Certify/CertifyCreation/GetTime/NV_Certify's
+                //admission gate).
+                if(SigningBackend is null && RsaSigningBackend is null)
                 {
                     malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
 
@@ -2598,10 +2664,10 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             }
             case TpmCcConstants.TPM_CC_Quote:
             {
-                //The Quote slice signs the attestation with an ECC signing key; without the ECC backend the
-                //simulated TPM cannot honour it, so answer the faithful TPM_RC_COMMAND_CODE rather than entering
-                //an effect it cannot run.
-                if(SigningBackend is null)
+                //The Quote slice signs the attestation with an ECC or RSA signing key; without any asymmetric
+                //backend the simulated TPM cannot honour it, so answer the faithful TPM_RC_COMMAND_CODE rather
+                //than entering an effect it cannot run.
+                if(SigningBackend is null && RsaSigningBackend is null)
                 {
                     malformedResponseCode = TpmRcConstants.TPM_RC_COMMAND_CODE;
 
@@ -3674,6 +3740,59 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         input = new TpmGetTimeRequested(privacyAdminHandle, signHandle, qualifyingData, signatureScheme, schemeHashAlg);
+
+        return true;
+    }
+
+    //TPM2_ClockSet() is authorized by the owner hierarchy, so its wire layout after the header is: handle area
+    //(@auth, 1 handle), authorization area (a single password session), then the parameter newTime (UINT64)
+    //(Part 3, clause 29.2).
+    private static bool TryParseClockSet(ref TpmReader reader, ushort tag, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    {
+        input = null;
+        malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
+
+        if(tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_AUTH_MISSING;
+
+            return false;
+        }
+
+        //Handle area: @auth (the provisioning hierarchy).
+        if(reader.Remaining < sizeof(uint))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        uint authHandle = reader.ReadUInt32();
+
+        if(!TryReadPasswordAuthArea(ref reader, out ReadOnlyMemory<byte> ownerAuth, out malformedResponseCode))
+        {
+            return false;
+        }
+
+        //Parameter: newTime (UINT64) — the requested new Clock setting.
+        if(reader.Remaining < sizeof(ulong))
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_INSUFFICIENT;
+
+            return false;
+        }
+
+        ulong newTime = reader.ReadUInt64();
+
+        //newTime is the final parameter; no octets may follow it (Part 3, 5.2).
+        if(reader.Remaining != 0)
+        {
+            malformedResponseCode = TpmRcConstants.TPM_RC_SIZE;
+
+            return false;
+        }
+
+        input = new TpmClockSetRequested(authHandle, ownerAuth, newTime);
 
         return true;
     }
@@ -5000,6 +5119,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 TpmVerifySignatureResponse verifySignature =>
                     sizeof(ushort) + sizeof(uint) + (sizeof(ushort) + verifySignature.TicketDigestLength),
 
+                //currentTime (TPMS_TIME_INFO, fixed layout): the uncertified Time/Clock/resetCount/restartCount/Safe snapshot.
+                TpmReadClockResponse => TpmsTimeInfo.SerializedSize,
+
                 //pcrUpdateCounter (UINT32) + pcrSelectionOut (TPML_PCR_SELECTION echoed) + pcrValues (TPML_DIGEST).
                 TpmPcrReadResponse pcrRead =>
                     sizeof(uint) + pcrRead.SelectionBytes.Length + PcrValuesSerializedSize(pcrRead.PcrValues),
@@ -5291,6 +5413,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                         writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_VERIFIED);
                         writer.WriteUInt32(verifySignatureResponse.Hierarchy);
                         writer.WriteTpm2b(verifySignatureResponse.TicketDigest.Memory.Span[..verifySignatureResponse.TicketDigestLength]);
+
+                        break;
+                    }
+                    case TpmReadClockResponse readClockResponse:
+                    {
+                        //currentTime (TPMS_TIME_INFO): fixed layout, no TPM2B wrapping.
+                        readClockResponse.CurrentTime.WriteTo(ref writer);
 
                         break;
                     }

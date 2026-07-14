@@ -36,7 +36,7 @@ namespace Verifiable.Tpm.Automata;
 /// </remarks>
 public static class TpmCommandPreconditions
 {
-    private static readonly FrozenDictionary<TpmCcConstants, FrozenSet<TpmLifecyclePhase>> CommandTable =
+    private static FrozenDictionary<TpmCcConstants, FrozenSet<TpmLifecyclePhase>> CommandTable { get; } =
         new Dictionary<TpmCcConstants, FrozenSet<TpmLifecyclePhase>>
         {
             [TpmCcConstants.TPM_CC_Startup] = new[] { TpmLifecyclePhase.Initializing }.ToFrozenSet(),
@@ -58,6 +58,8 @@ public static class TpmCommandPreconditions
             [TpmCcConstants.TPM_CC_Certify] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_CertifyCreation] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_GetTime] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_ReadClock] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_ClockSet] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_NV_Certify] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_VerifySignature] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_PCR_Read] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),

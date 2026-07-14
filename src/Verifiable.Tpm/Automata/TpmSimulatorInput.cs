@@ -575,6 +575,26 @@ public sealed record TpmTimeAttested(
     TpmAlgIdConstants HashAlg): TpmSimulatorInput;
 
 /// <summary>
+/// A <c>TPM2_ReadClock()</c> command (TPM 2.0 Library Part 3, clause 29.1). Reads the current
+/// <c>TPMS_TIME_INFO</c> — uncertified, unsigned Time/Clock/resetCount/restartCount — with no handles and no
+/// authorization.
+/// </summary>
+public sealed record TpmReadClockRequested: TpmSimulatorInput;
+
+/// <summary>
+/// A <c>TPM2_ClockSet()</c> command (TPM 2.0 Library Part 3, clause 29.2). Advances <c>Clock</c> forward to
+/// <see cref="NewTime"/>, authorized by the owner hierarchy; the Platform-hierarchy arm is not modelled this
+/// slice.
+/// </summary>
+/// <param name="AuthHandle">The provisioning hierarchy authorizing the set (<c>TPM_RH_OWNER</c> in this slice).</param>
+/// <param name="OwnerAuthSupplied">The authorization value the caller supplied for the provisioning hierarchy (the password session's plaintext authValue).</param>
+/// <param name="NewTime">The requested new <c>Clock</c> value, in milliseconds.</param>
+public sealed record TpmClockSetRequested(
+    uint AuthHandle,
+    ReadOnlyMemory<byte> OwnerAuthSupplied,
+    ulong NewTime): TpmSimulatorInput;
+
+/// <summary>
 /// A <c>TPM2_NV_Certify()</c> command (TPM 2.0 Library Part 3, clause 31.16): a signing key attests the contents
 /// of an NV Index at a caller-chosen offset and size, over a caller nonce. Both <see cref="SignHandle"/> and
 /// <see cref="AuthHandle"/> require authorization, so the parser consumes two password sessions in handle order;
